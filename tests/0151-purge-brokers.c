@@ -140,7 +140,6 @@ static void fetch_metadata(rd_kafka_t *rk,
  *                                    action.
  *        @param await_verification If `rd_false`, the verification is
  *                                  done only after last action.
- *        @return The opaque set in the `rd_kafka_t` handle.
  */
 #define TEST_ACTION_REMOVE_BROKER         0
 #define TEST_ACTION_ADD_BROKER            1
@@ -148,7 +147,7 @@ static void fetch_metadata(rd_kafka_t *rk,
 #define TEST_ACTION_SET_UP_BROKER         3
 #define TEST_ACTION_SET_GROUP_COORDINATOR 4
 #define TEST_GROUP                        "topic1"
-static void *do_test_add_remove_brokers0(
+static void do_test_add_remove_brokers0(
     int32_t initial_cluster_size,
     int32_t actions[][2],
     size_t action_cnt,
@@ -162,7 +161,6 @@ static void *do_test_add_remove_brokers0(
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         size_t action = 0;
-        void *opaque;
 
         cluster = test_mock_cluster_new(initial_cluster_size, &bootstraps);
 
@@ -247,10 +245,8 @@ static void *do_test_add_remove_brokers0(
         TEST_SAY("Test verification complete\n");
         rd_atomic32_set(&verification_complete, 1);
 
-        opaque = rd_kafka_opaque(rk);
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(cluster);
-        return opaque;
 }
 
 /**
@@ -391,7 +387,6 @@ static void do_test_remove_then_add(void) {
         SUB_TEST_QUICK();
         rd_atomic32_init(&do_test_remove_then_add_received_terminate, 0);
         rd_atomic32_init(&verification_complete, 0);
-        test_conf_log_interceptor_t *log_interceptor;
 
         int32_t expected_brokers_cnt[] = {3, 3, 2, 3};
 
@@ -404,12 +399,13 @@ static void do_test_remove_then_add(void) {
             {TEST_ACTION_ADD_BROKER, 1},
         };
 
-        log_interceptor = do_test_add_remove_brokers0(
+        do_test_add_remove_brokers0(
             3, actions, RD_ARRAY_SIZE(actions), expected_broker_ids,
             expected_brokers_cnt, do_test_remove_then_add_edit_configuration_cb,
             NULL, do_test_remove_then_add_await_after_action_cb);
 
         rd_free(log_interceptor);
+        log_interceptor = NULL;
         SUB_TEST_PASS();
 }
 
@@ -461,7 +457,7 @@ do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb(int action) {
 static rd_bool_t
 do_test_down_then_up_no_rebootstrap_loop_await_after_action_cb(int action) {
         if (action == 1) {
-                rd_sleep(5);
+                rd_sleep(6);
         }
         return rd_false;
 }
@@ -493,18 +489,24 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb,
             do_test_down_then_up_no_rebootstrap_loop_await_after_action_cb);
 
-        /* With connections that go always to the broker without previous
-         * connections (the re-bootstrapped one) we get 5 re-bootstrap
-         * sequences. Given a 90% probability of selecting the learned broker
-         * there's a 10% probability of selecting the bootstrap one.
-         * The expected value is 0.5, we expect <= 3 here. */
+        /* With a rebootstrap every time the bootstrap brokers are removed
+         * we get 6 re-bootstrap sequences.
+         * With the fix we require connection to all learned brokers before
+         * reaching all brokers down again.
+         * In this case we have to connect to the bootstrap broker
+         * and the learned broker, 2s in the slowest case as it depends
+         * on periodic 10s brokers refresh timer too.
+         * We expect 5 or less re-bootstrap sequences. */
         TEST_ASSERT(
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt) <=
-                3,
-            "Expected <= 3 re-bootstrap sequences, got %d",
+                5,
+            "Expected <= 5 re-bootstrap sequences, got %d",
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt));
+
+        rd_free(log_interceptor);
+        log_interceptor = NULL;
         SUB_TEST_PASS();
 }
 

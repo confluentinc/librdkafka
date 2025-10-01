@@ -2061,6 +2061,25 @@ static void rd_kafka_1s_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 }
 
 /**
+ * @brief Reset broker down reported flag for all brokers.
+ *        In case it was set to 1 it will be reset to 0 and
+ *        the broker down count will be decremented.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_rdlock()
+ * @locality any
+ */
+void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_atomic32_set(&rkb->rkb_down_reported, 0) == 1)
+                        rd_atomic32_sub(&rk->rk_broker_down_cnt, 1);
+        }
+        rd_kafka_rdunlock(rk);
+}
+
+/**
  * @brief Re-bootstrap timer callback.
  *
  * @locality rdkafka main thread
@@ -2087,6 +2106,9 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
 
         rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
 
+        rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 1);
+        rd_kafka_reset_any_broker_down_reported(rk);
+
         if (rk->rk_conf.brokerlist) {
                 rd_kafka_brokers_add0(
                         rk,
@@ -2098,7 +2120,7 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_rdlock(rk);
         if (rd_list_cnt(&rk->additional_brokerlists) == 0) {
                 rd_kafka_rdunlock(rk);
-                return;
+                goto done;
         }
 
         rd_list_init_copy(&additional_brokerlists, &rk->additional_brokerlists);
@@ -2113,6 +2135,8 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
                          * names even if requested */);
         }
         rd_list_destroy(&additional_brokerlists);
+done:
+        rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 0);
 }
 
 static void rd_kafka_stats_emit_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
@@ -2377,6 +2401,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_atomic32_init(&rk->rk_logical_broker_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_up_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_down_cnt, 0);
+        rd_atomic32_init(&rk->rk_rebootstrap_in_progress, 0);
 
         rk->rk_rep             = rd_kafka_q_new(rk);
         rk->rk_ops             = rd_kafka_q_new(rk);
@@ -2433,7 +2458,15 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 RD_KAFKA_SASL_OAUTHBEARER_METHOD_OIDC &&
             !rk->rk_conf.sasl.oauthbearer.token_refresh_cb) {
                 /* Use JWT bearer */
-                if (rk->rk_conf.sasl.oauthbearer.grant_type ==
+                rk->rk_conf.sasl.oauthbearer.builtin_token_refresh_cb = rd_true;
+
+                if (rk->rk_conf.sasl.oauthbearer.metadata_authentication.type ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS) {
+                        rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+                            &rk->rk_conf,
+                            rd_kafka_oidc_token_metadata_azure_imds_refresh_cb);
+                } else if (
+                    rk->rk_conf.sasl.oauthbearer.grant_type ==
                     RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {
                         rd_kafka_conf_set_oauthbearer_token_refresh_cb(
                             &rk->rk_conf,
@@ -2808,32 +2841,62 @@ fail:
 
 /**
  * Schedules a rebootstrap of the cluster immediately.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_timers_lock()
+ * @locality any
  */
 void rd_kafka_rebootstrap(rd_kafka_t *rk) {
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return;
 
-        rd_kafka_timer_start_oneshot(&rk->rk_timers, &rk->rebootstrap_tmr,
-                                     rd_true /*restart*/, 0,
-                                     rd_kafka_rebootstrap_tmr_cb, NULL);
+        if (rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 1) == 0) {
+                /* Only when not already in progress 0 -> 1.
+                 * After setting down a learned broker it could reconnect and
+                 * disconnect again before previous reboostrap completes,
+                 * causing a new re-bootstrap. */
+                rd_kafka_timer_start_oneshot(
+                    &rk->rk_timers, &rk->rebootstrap_tmr, rd_true /*restart*/,
+                    0, rd_kafka_rebootstrap_tmr_cb, NULL);
+        }
 }
 
 /**
- * Restarts rebootstrap timer with the configured interval.
+ * Starts rebootstrap timer with the configured interval. Only if not
+ * started or stopped.
  *
  * @locks none
+ * @locks_acquired rd_kafka_timers_lock()
  * @locality any
  */
-void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk) {
+void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk) {
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return;
 
         rd_kafka_timer_start_oneshot(
-            &rk->rk_timers, &rk->rebootstrap_tmr, rd_true /*restart*/,
+            &rk->rk_timers, &rk->rebootstrap_tmr, rd_false /*don't restart*/,
             rk->rk_conf.metadata_recovery_rebootstrap_trigger_ms * 1000LL,
             rd_kafka_rebootstrap_tmr_cb, NULL);
+}
+
+/**
+ * Stops rebootstrap timer, for example after a successful metadata response.
+ *
+ * @return 1 if the timer was started (before being stopped), else 0.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_timers_lock()
+ * @locality any
+ */
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk) {
+        if (rk->rk_conf.metadata_recovery_strategy ==
+            RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
+                return 0;
+
+        return rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
+                                   rd_true /* lock */);
 }
 
 /**
@@ -3750,6 +3813,7 @@ rd_kafka_resp_err_t rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
         struct rd_kafka_partition_leader *leader;
         rd_list_t leaders;
         rd_kafka_resp_err_t err;
+        int tmout;
 
         partitions = rd_kafka_topic_partition_list_new(1);
         rktpar =
@@ -3796,9 +3860,13 @@ rd_kafka_resp_err_t rd_kafka_query_watermark_offsets(rd_kafka_t *rk,
 
         /* Wait for reply (or timeout) */
         while (state.err == RD_KAFKA_RESP_ERR__IN_PROGRESS) {
-                rd_kafka_q_serve(rkq, RD_POLL_INFINITE, 0,
-                                 RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb,
-                                 NULL);
+                tmout = rd_timeout_remains(ts_end);
+                if (rd_timeout_expired(tmout)) {
+                        state.err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                        break;
+                }
+                rd_kafka_q_serve(rkq, tmout, 0, RD_KAFKA_Q_CB_CALLBACK,
+                                 rd_kafka_poll_cb, NULL);
         }
 
         rd_kafka_q_destroy_owner(rkq);

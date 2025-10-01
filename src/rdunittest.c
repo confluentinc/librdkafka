@@ -480,6 +480,7 @@ int rd_unittest(void) {
 #endif
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
+            {"feature", unittest_feature},
             {NULL}};
         int i;
         const char *match = rd_getenv("RD_UT_TEST", NULL);

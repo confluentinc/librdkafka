@@ -528,6 +528,8 @@ static void test_producer_latency_first_message(int case_number) {
 }
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         int case_number;
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);

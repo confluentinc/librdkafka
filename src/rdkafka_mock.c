@@ -1362,8 +1362,14 @@ static void rd_kafka_mock_connection_io(rd_kafka_mock_cluster_t *mcluster,
                 }
         }
 
-        if (events & (POLLERR | POLLHUP)) {
-                rd_kafka_mock_connection_close(mconn, "Disconnected");
+        if (events & POLLERR) {
+                rd_kafka_mock_connection_close(mconn,
+                                               "Disconnected: "
+                                               "Error condition");
+                return;
+        }
+        if (events & POLLHUP) {
+                rd_kafka_mock_connection_close(mconn, "Disconnected: Hang up");
                 return;
         }
 

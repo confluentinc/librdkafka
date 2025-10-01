@@ -262,11 +262,6 @@ you will end up with:
    (`librdkafka.so.1` or `librdkafka.1.dylib` on OSX).
 
 
-**NOTE**: Due to libsasl2/cyrus-sasl's dynamically loaded plugins, it is
-not possible for us to provide a self-contained static library with
-GSSAPI/Kerberos support.
-
-
 
 ### The artifact pipeline
 

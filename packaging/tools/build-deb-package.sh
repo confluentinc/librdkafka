@@ -20,7 +20,7 @@ apt-get update
 
 # Install debian packaging tools and librdkafka build dependencies
 apt-get install -y git-buildpackage debhelper \
-        zlib1g-dev libssl-dev libsasl2-dev liblz4-dev
+        zlib1g-dev libssl-dev liblz4-dev
 
 
 # Clone the librdkafka git repo to a new location to avoid messing

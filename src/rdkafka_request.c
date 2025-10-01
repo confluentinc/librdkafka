@@ -2845,6 +2845,10 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_update_i32(rkbuf, of_TopicArrayCnt, -1);
                 }
                 /* v9+: keep 0, varint encoded null, all topics */
+                else if (ApiVersion >= 9) {
+                        /* v9+: varint encoded empty array (1), brokers only */
+                        rd_kafka_buf_finalize_null_arraycnt(rkbuf, of_TopicArrayCnt);
+                }
 
                 rkbuf->rkbuf_u.Metadata.all_topics = 1;
                 rd_rkb_dbg(rkb, METADATA, "METADATA",

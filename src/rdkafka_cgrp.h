@@ -361,6 +361,17 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_atomic32_t rkcg_subscription_version; /**< Subscription version */
 
+        struct {
+                int32_t subscription_version; /**< Version of
+                                               *   rkcg_subscription
+                                               *   at time of
+                                               *   last change. */
+                rd_ts_t rk_ts_metadata;       /**< Timestamp of
+                                               *   last metadata
+                                               *   request at last
+                                               *   change. */
+        } rkcg_subscribed_topics_cache;
+
         /* Protected by rd_kafka_*lock() */
         struct {
                 rd_ts_t ts_rebalance;       /* Timestamp of

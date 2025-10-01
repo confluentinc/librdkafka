@@ -307,9 +307,7 @@ int main_0106_cgrp_sess_timeout(int argc, char **argv) {
          * Partitions will stay assigned and fetchable
          * when there's no communication with the
          * coordinator, but the messages won't be
-         * committed.
-         * TODO: see if session timeout can be received by
-         * the broker and be enforced locally too. */
+         * committed. */
         if (test_consumer_group_protocol_classic()) {
                 do_test_commit_on_lost();
         }

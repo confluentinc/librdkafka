@@ -33,39 +33,6 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h" /* for Kafka driver */
 
-/**
- * @brief Version-aware partition list printing that avoids leader epoch APIs 
- *        on older versions
- */
-static void safe_print_partition_list(
-    const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
-                if (rd_kafka_version() >= 0x020100ff) {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
-                                 ") %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 rd_kafka_topic_partition_get_leader_epoch(
-                                     &partitions->elems[i]),
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                } else {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                }
-        }
-}
 
 /**
  * KafkaConsumer balanced group with multithreading tests
@@ -181,7 +148,7 @@ static void rebalance_cb(rd_kafka_t *rk,
         if (memberid)
                 free(memberid);
 
-        safe_print_partition_list(partitions);
+        test_print_partition_list_with_errors(partitions);
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:

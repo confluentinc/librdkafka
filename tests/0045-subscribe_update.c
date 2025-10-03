@@ -40,39 +40,6 @@
  *  - replica rack changes (using mock broker)
  */
 
-/**
- * @brief Version-aware partition list printing that avoids leader epoch APIs 
- *        on older versions
- */
-static void safe_print_partition_list(
-    const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
-                if (rd_kafka_version() >= 0x020100ff) {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
-                                 ") %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 rd_kafka_topic_partition_get_leader_epoch(
-                                     &partitions->elems[i]),
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                } else {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                }
-        }
-}
 
 
 
@@ -105,7 +72,7 @@ static void await_assignment(const char *pfx,
         tps = rd_kafka_event_topic_partition_list(rkev);
 
         TEST_SAY("%s: assignment:\n", pfx);
-        safe_print_partition_list(tps);
+        test_print_partition_list_with_errors(tps);
 
         va_start(ap, topic_cnt);
         for (i = 0; i < topic_cnt; i++) {

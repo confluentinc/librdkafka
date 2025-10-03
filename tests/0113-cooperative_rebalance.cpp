@@ -2763,30 +2763,6 @@ static int rebalance_cnt;
 static rd_kafka_resp_err_t rebalance_exp_event;
 static rd_bool_t rebalance_exp_lost;
 
-extern void test_print_partition_list(
-    const rd_kafka_topic_partition_list_t *partitions);
-
-/* Safe version of test_print_partition_list that works with older librdkafka versions */
-static void safe_print_partition_list(const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                const rd_kafka_topic_partition_t *p = &partitions->elems[i];
-                int64_t leader_epoch = -1;
-
-                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
-                if (rd_kafka_version() >= 0x020100ff) {
-                        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(p);
-                }
-
-                if (leader_epoch != -1) {
-                        TEST_SAY("  %s [%d] offset %"PRId64" leader epoch %"PRId64"\n",
-                                p->topic, p->partition, p->offset, leader_epoch);
-                } else {
-                        TEST_SAY("  %s [%d] offset %"PRId64"\n",
-                                p->topic, p->partition, p->offset);
-                }
-        }
-}
 
 
 static void rebalance_cb(rd_kafka_t *rk,
@@ -2797,7 +2773,7 @@ static void rebalance_cb(rd_kafka_t *rk,
   TEST_SAY("Rebalance #%d: %s: %d partition(s)\n", rebalance_cnt,
            rd_kafka_err2name(err), parts->cnt);
 
-  safe_print_partition_list(parts);
+  test_print_partition_list_no_errors(parts);
 
   TEST_ASSERT(err == rebalance_exp_event ||
                   rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -3234,7 +3210,7 @@ static void v_rebalance_cb(rd_kafka_t *rk,
            rd_kafka_err2name(err), parts->cnt,
            rd_kafka_assignment_lost(rk) ? " - assignment lost" : "");
 
-  safe_print_partition_list(parts);
+  test_print_partition_list_no_errors(parts);
 
   if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
     test_consumer_incremental_assign("assign", rk, parts);

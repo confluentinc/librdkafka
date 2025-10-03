@@ -114,39 +114,6 @@ static void expect_match(struct expect *exp,
         }
 }
 
-/**
- * @brief Version-aware partition list printing that avoids leader epoch APIs 
- *        on older versions
- */
-static void safe_print_partition_list(
-    const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
-                if (rd_kafka_version() >= 0x020100ff) {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
-                                 ") %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 rd_kafka_topic_partition_get_leader_epoch(
-                                     &partitions->elems[i]),
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                } else {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                }
-        }
-}
 
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
@@ -158,7 +125,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 
         TEST_SAY("rebalance_cb: %s with %d partition(s)\n",
                  rd_kafka_err2str(err), parts->cnt);
-        safe_print_partition_list(parts);
+        test_print_partition_list_with_errors(parts);
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:

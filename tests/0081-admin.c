@@ -55,27 +55,6 @@ static int safe_partition_list_and_offsets_cmp(const rd_kafka_topic_partition_li
         return 0;
 }
 
-/* Safe version of safe_print_partition_list that works with older librdkafka versions */
-static void safe_print_partition_list(const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                const rd_kafka_topic_partition_t *p = &partitions->elems[i];
-                int64_t leader_epoch = -1;
-
-                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
-                if (rd_kafka_version() >= 0x020100ff) {
-                        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(p);
-                }
-
-                if (leader_epoch != -1) {
-                        TEST_SAY("  %s [%d] offset %"PRId64" leader epoch %"PRId64"\n",
-                                p->topic, p->partition, p->offset, leader_epoch);
-                } else {
-                        TEST_SAY("  %s [%d] offset %"PRId64"\n",
-                                p->topic, p->partition, p->offset);
-                }
-        }
-}
 #include "rdkafka.h"
 #include "../src/rdstring.h"
 
@@ -2666,9 +2645,9 @@ static void do_test_DeleteRecords(const char *what,
         rd_kafka_topic_partition_list_sort(results, NULL, NULL);
 
         TEST_SAY("Input partitions:\n");
-        safe_print_partition_list(offsets);
+        test_print_partition_list_no_errors(offsets);
         TEST_SAY("Result partitions:\n");
-        safe_print_partition_list(results);
+        test_print_partition_list_no_errors(results);
 
         TEST_ASSERT(offsets->cnt == results->cnt,
                     "expected DeleteRecords_result_offsets to return %d items, "
@@ -3475,7 +3454,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
                             rd_kafka_MemberDescription_host(member));
                         /* This is just to make sure the returned memory
                          * is valid. */
-                        safe_print_partition_list(partitions);
+                        test_print_partition_list_no_errors(partitions);
                 } else {
                         TEST_ASSERT(state == RD_KAFKA_CONSUMER_GROUP_STATE_DEAD,
                                     "Expected Dead state, got %s.",
@@ -4440,9 +4419,9 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         if (safe_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
-                safe_print_partition_list(orig_offsets);
+                test_print_partition_list_no_errors(orig_offsets);
                 TEST_SAY("committed() list:\n");
-                safe_print_partition_list(committed);
+                test_print_partition_list_no_errors(committed);
                 TEST_FAIL("committed offsets don't match");
         }
 
@@ -4527,9 +4506,9 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         if (safe_partition_list_and_offsets_cmp(deleted, to_delete)) {
                 TEST_SAY("Result list:\n");
-                safe_print_partition_list(deleted);
+                test_print_partition_list_no_errors(deleted);
                 TEST_SAY("Partitions passed to DeleteConsumerGroupOffsets:\n");
-                safe_print_partition_list(to_delete);
+                test_print_partition_list_no_errors(to_delete);
                 TEST_FAIL("deleted/requested offsets don't match");
         }
 
@@ -4559,10 +4538,10 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
             rd_kafka_committed(consumer, committed, tmout_multip(5 * 1000)));
 
         TEST_SAY("Original committed offsets:\n");
-        safe_print_partition_list(orig_offsets);
+        test_print_partition_list_no_errors(orig_offsets);
 
         TEST_SAY("Committed offsets after delete:\n");
-        safe_print_partition_list(committed);
+        test_print_partition_list_no_errors(committed);
 
         rd_kafka_topic_partition_list_t *expected = offsets;
         if (sub_consumer)
@@ -4570,9 +4549,9 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
 
         if (safe_partition_list_and_offsets_cmp(committed, expected)) {
                 TEST_SAY("expected list:\n");
-                safe_print_partition_list(expected);
+                test_print_partition_list_no_errors(expected);
                 TEST_SAY("committed() list:\n");
-                safe_print_partition_list(committed);
+                test_print_partition_list_no_errors(committed);
                 TEST_FAIL("committed offsets don't match");
         }
 
@@ -4731,9 +4710,9 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 if (safe_partition_list_and_offsets_cmp(committed,
                                                         orig_offsets)) {
                         TEST_SAY("commit() list:\n");
-                        safe_print_partition_list(orig_offsets);
+                        test_print_partition_list_no_errors(orig_offsets);
                         TEST_SAY("committed() list:\n");
-                        safe_print_partition_list(committed);
+                        test_print_partition_list_no_errors(committed);
                         TEST_FAIL("committed offsets don't match");
                 }
                 rd_kafka_topic_partition_list_destroy(committed);
@@ -4828,9 +4807,9 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
 
         if (safe_partition_list_and_offsets_cmp(alterd, to_alter)) {
                 TEST_SAY("Result list:\n");
-                safe_print_partition_list(alterd);
+                test_print_partition_list_no_errors(alterd);
                 TEST_SAY("Partitions passed to AlterConsumerGroupOffsets:\n");
-                safe_print_partition_list(to_alter);
+                test_print_partition_list_no_errors(to_alter);
                 TEST_FAIL("altered/requested offsets don't match");
         }
 
@@ -4866,16 +4845,16 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                         expected = orig_offsets;
                 }
                 TEST_SAY("Original committed offsets:\n");
-                safe_print_partition_list(orig_offsets);
+                test_print_partition_list_no_errors(orig_offsets);
 
                 TEST_SAY("Committed offsets after alter:\n");
-                safe_print_partition_list(committed);
+                test_print_partition_list_no_errors(committed);
 
                 if (safe_partition_list_and_offsets_cmp(committed, expected)) {
                         TEST_SAY("expected list:\n");
-                        safe_print_partition_list(expected);
+                        test_print_partition_list_no_errors(expected);
                         TEST_SAY("committed() list:\n");
-                        safe_print_partition_list(committed);
+                        test_print_partition_list_no_errors(committed);
                         TEST_FAIL("committed offsets don't match");
                 }
                 rd_kafka_topic_partition_list_destroy(committed);
@@ -5016,9 +4995,9 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         if (safe_partition_list_and_offsets_cmp(committed, orig_offsets)) {
                 TEST_SAY("commit() list:\n");
-                safe_print_partition_list(orig_offsets);
+                test_print_partition_list_no_errors(orig_offsets);
                 TEST_SAY("committed() list:\n");
-                safe_print_partition_list(committed);
+                test_print_partition_list_no_errors(committed);
                 TEST_FAIL("committed offsets don't match");
         }
 
@@ -5093,9 +5072,9 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
 
         if (safe_partition_list_and_offsets_cmp(listd, orig_offsets)) {
                 TEST_SAY("Result list:\n");
-                safe_print_partition_list(listd);
+                test_print_partition_list_no_errors(listd);
                 TEST_SAY("Partitions passed to ListConsumerGroupOffsets:\n");
-                safe_print_partition_list(orig_offsets);
+                test_print_partition_list_no_errors(orig_offsets);
                 TEST_FAIL("listd/requested offsets don't match");
         }
 

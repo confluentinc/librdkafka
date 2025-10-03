@@ -5022,6 +5022,64 @@ void test_print_partition_list(
 }
 
 /**
+ * @brief Print partition list with error information (version-safe)
+ */
+void test_print_partition_list_with_errors(
+    const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
+                                 ") %s%s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 partitions->elems[i].offset,
+                                 rd_kafka_topic_partition_get_leader_epoch(
+                                     &partitions->elems[i]),
+                                 partitions->elems[i].err ? ": " : "",
+                                 partitions->elems[i].err
+                                     ? rd_kafka_err2str(partitions->elems[i].err)
+                                     : "");
+                } else {
+                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 partitions->elems[i].offset,
+                                 partitions->elems[i].err ? ": " : "",
+                                 partitions->elems[i].err
+                                     ? rd_kafka_err2str(partitions->elems[i].err)
+                                     : "");
+                }
+        }
+}
+
+/**
+ * @brief Print partition list without error fields
+ */
+void test_print_partition_list_no_errors(
+    const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                const rd_kafka_topic_partition_t *p = &partitions->elems[i];
+                int64_t leader_epoch = -1;
+
+                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(p);
+                }
+
+                if (leader_epoch != -1) {
+                        TEST_SAY("  %s [%d] offset %"PRId64" leader epoch %"PRId64"\n",
+                                p->topic, p->partition, p->offset, leader_epoch);
+                } else {
+                        TEST_SAY("  %s [%d] offset %"PRId64"\n",
+                                p->topic, p->partition, p->offset);
+                }
+        }
+}
+
+/**
  * @brief Compare two lists, returning 0 if equal.
  *
  * @remark The lists may be sorted by this function.

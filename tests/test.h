@@ -728,6 +728,10 @@ void test_any_conf_set(rd_kafka_conf_t *conf,
 rd_kafka_topic_partition_list_t *test_topic_partitions(int cnt, ...);
 void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions);
+void test_print_partition_list_with_errors(
+    const rd_kafka_topic_partition_list_t *partitions);
+void test_print_partition_list_no_errors(
+    const rd_kafka_topic_partition_list_t *partitions);
 int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
                             rd_kafka_topic_partition_list_t *bl);
 int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,

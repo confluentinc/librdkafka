@@ -50,38 +50,6 @@ typedef struct _consumer_s {
         int curr_line;
 } _consumer_t;
 
-/**
- * @brief Safe version of test_print_partition_list that works with older librdkafka versions
- */
-static void safe_print_partition_list(
-    const rd_kafka_topic_partition_list_t *partitions) {
-        int i;
-        for (i = 0; i < partitions->cnt; i++) {
-                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
-                if (rd_kafka_version() >= 0x020100ff) {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
-                                 ") %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 rd_kafka_topic_partition_get_leader_epoch(
-                                     &partitions->elems[i]),
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                } else {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
-                }
-        }
-}
 
 /**
  * @brief Call poll until a rebalance has been triggered
@@ -155,7 +123,7 @@ static void rebalance_cb(rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 TEST_SAY("line %d: %s Assignment (%d partition(s)):\n",
                          c->curr_line, rd_kafka_name(rk), parts->cnt);
-                safe_print_partition_list(parts);
+                test_print_partition_list_with_errors(parts);
 
                 c->partition_cnt = parts->cnt;
                 c->assigned_at   = test_clock();

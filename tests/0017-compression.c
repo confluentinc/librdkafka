@@ -133,6 +133,9 @@ int main_0017_compression(int argc, char **argv) {
                 rd_kafka_destroy(rk_c);
         }
 
+        for (i = 0; codecs[i] != NULL; i++)
+                rd_free(topics[i]);
 
+                
         return 0;
 }

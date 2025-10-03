@@ -247,14 +247,6 @@ int main_0042_many_topics(int argc, char **argv) {
                 assign_consume_many(topics, topic_cnt, testid);
         }
 
-        /* Delete all topics */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                for (i = 0; i < topic_cnt; i++) {
-                }
-                rd_kafka_destroy(del_rk);
-        }
-
         for (i = 0; i < topic_cnt; i++)
                 free(topics[i]);
         free(topics);

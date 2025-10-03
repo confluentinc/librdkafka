@@ -170,6 +170,5 @@ int main_0015_offsets_seek(int argc, char **argv) {
 
         do_seek(topic, testid, msg_cnt, rd_true /*without timeout*/);
 
-
         return 0;
 }

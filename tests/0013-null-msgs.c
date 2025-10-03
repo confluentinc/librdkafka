@@ -464,7 +464,6 @@ static void test_produce_consume(void) {
         consume_messages_with_queues(testid, topic, partition_cnt, msgcnt);
         verify_consumed_msg_check();
 
-
         return;
 }
 

@@ -269,11 +269,5 @@ int main_0040_io_event(int argc, char **argv) {
         _close(fds[1]);
 #endif
 
-        /* Delete the topic */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                rd_kafka_destroy(del_rk);
-        }
-
         return 0;
 }

@@ -501,7 +501,6 @@ static void test_produce_consume(const char *offset_store_method) {
 
         verify_consumed_msg_reset(0);
 
-
         return;
 }
 

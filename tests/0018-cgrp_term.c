@@ -327,7 +327,6 @@ static void do_test(rd_bool_t with_queue) {
                     "multiple times\n",
                     consumed_msg_cnt - msg_cnt, msg_cnt);
 
-
         SUB_TEST_PASS();
 }
 

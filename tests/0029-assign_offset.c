@@ -207,7 +207,5 @@ int main_0029_assign_offset(int argc, char **argv) {
                 TIMING_STOP(&t_hl);
         }
 
-
-
         return 0;
 }

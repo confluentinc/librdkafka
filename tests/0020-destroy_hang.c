@@ -126,7 +126,6 @@ static int nonexist_part(void) {
                 rd_kafka_destroy(rk);
         }
 
-
         return 0;
 }
 

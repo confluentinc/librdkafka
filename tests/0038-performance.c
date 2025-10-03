@@ -125,7 +125,5 @@ int main_0038_performance(int argc, char **argv) {
                 1000000.0f,
             (float)(msgcnt /
                     ((double)TIMING_DURATION(&t_consume) / 1000000.0f)));
-
-
         return 0;
 }

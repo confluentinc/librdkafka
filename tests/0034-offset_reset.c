@@ -147,8 +147,6 @@ int main_0034_offset_reset(int argc, char **argv) {
          * Should return error. */
         do_test_reset(topic, partition, "error", msgcnt + 5, 0, 0, 0, 1);
 
-
-
         return 0;
 }
 

@@ -293,12 +293,6 @@ static void do_test_non_exist_and_partchange(void) {
         rd_kafka_queue_destroy(queue);
         rd_kafka_destroy(rk);
 
-        /* Delete the topic_a */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                rd_kafka_destroy(del_rk);
-        }
-
         rd_free(topic_a);
 
         SUB_TEST_PASS();
@@ -378,12 +372,6 @@ static void do_test_regex(void) {
         test_consumer_close(rk);
         rd_kafka_queue_destroy(queue);
         rd_kafka_destroy(rk);
-
-        /* Delete the topics */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                rd_kafka_destroy(del_rk);
-        }
 
         rd_free(base_topic);
         rd_free(topic_b);

@@ -141,7 +141,6 @@ static void do_test_consume_batch(void) {
                 rd_kafka_topic_destroy(rkts[i]);
         }
 
-
         rd_kafka_queue_destroy(rkq);
 
         rd_kafka_destroy(rk);
@@ -276,7 +275,6 @@ int main_0022_consume_batch(int argc, char **argv) {
                 TEST_SAY("SKIPPING: consume_batch_non_existent_topic - requires librdkafka version >= 2.2.0 (current: 0x%08x)\n",
                          rd_kafka_version());
         }
-        
         return 0;
 }
 

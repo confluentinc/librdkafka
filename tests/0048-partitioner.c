@@ -94,7 +94,6 @@ static void do_test_failed_partitioning(void) {
 
         rd_kafka_topic_destroy(rkt);
         
-        /* Delete the topic */
         rd_kafka_destroy(rk);
 }
 
@@ -276,12 +275,6 @@ static void do_test_partitioners(void) {
         for (pi = 0; ptest[pi].partitioner; pi++) {
                 do_test_partitioner(topic, ptest[pi].partitioner, _MSG_CNT,
                                     keys, ptest[pi].exp_part);
-        }
-        
-        /* Delete the topic */
-        {
-                rd_kafka_t *del_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
-                rd_kafka_destroy(del_rk);
         }
 }
 

@@ -75,6 +75,5 @@ int main_0028_long_topicnames(int argc, char **argv) {
         /* Consume messages */
         test_consume_msgs_easy(NULL, topic, testid, -1, msgcnt, NULL);
 
-
         return 0;
 }

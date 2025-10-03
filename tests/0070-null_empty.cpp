@@ -89,6 +89,7 @@ static void do_test_null_empty(bool api_version_request) {
                  api_version_request ? "true" : "false");
   Test::conf_set(conf, "acks", "all");
 
+  
   std::string errstr;
   RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
   if (!p)

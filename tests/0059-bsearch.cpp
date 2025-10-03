@@ -100,14 +100,9 @@ class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
     if (!msg.msg_opaque())
       return;
         RdKafka::MessageTimestamp ts = msg.timestamp();
-    if (test_k2_cluster) {
-      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
-          ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
-        Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
-    } else {
-      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
-        Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
-    }
+    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+        ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+      Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
     golden_timestamp = ts.timestamp;
     golden_offset    = msg.offset();
   }
@@ -213,16 +208,10 @@ static void do_test_bsearch(void) {
                                     itcnt > 0);
 
     RdKafka::MessageTimestamp ts = msg->timestamp();
-    if (test_k2_cluster) {
-      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
-          ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
-        Test::Fail(tostr() << "Expected CreateTime or LogAppendTime timestamp, not " << ts.type
-                             << " at offset " << msg->offset());
-    } else {
-      if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
-        Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
-                             << " at offset " << msg->offset());
-    }
+    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+        ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+      Test::Fail(tostr() << "Expected CreateTime or LogAppendTime timestamp, not " << ts.type
+                           << " at offset " << msg->offset());
 
     Test::Say(1, tostr() << "Message at offset " << msg->offset()
                          << " with timestamp " << ts.timestamp << "\n");

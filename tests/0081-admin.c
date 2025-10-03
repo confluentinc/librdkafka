@@ -120,7 +120,7 @@ static void do_test_CreateTopics(const char *what,
         const rd_kafka_topic_result_t **restopics;
         size_t restopic_cnt;
         int metadata_tmout;
-        int num_replicas = 3;  // Force replication factor to 3 for cluster policy
+        int num_replicas = 3;  
         int32_t *replicas;
 
         /* Ensure we don't try to use more replicas than available brokers */

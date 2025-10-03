@@ -189,6 +189,5 @@ int main_0008_reqacks(int argc, char **argv) {
                 rd_kafka_destroy(rk);
         }
 
-
         return 0;
 }

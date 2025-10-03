@@ -93,7 +93,6 @@ static void do_test_failed_partitioning(void) {
         test_flush(rk, 5000);
 
         rd_kafka_topic_destroy(rkt);
-        
         rd_kafka_destroy(rk);
 }
 

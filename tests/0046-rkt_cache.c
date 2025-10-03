@@ -59,7 +59,6 @@ int main_0046_rkt_cache(int argc, char **argv) {
         }
 
         rd_kafka_topic_destroy(rkt);
-        
         rd_kafka_destroy(rk);
 
         return 0;

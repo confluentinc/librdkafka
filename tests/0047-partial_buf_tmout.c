@@ -92,7 +92,6 @@ int main_0047_partial_buf_tmout(int argc, char **argv) {
         TEST_ASSERT(got_timeout_err > 0);
 
         rd_kafka_topic_destroy(rkt);
-        
         rd_kafka_destroy(rk);
 
         return 0;

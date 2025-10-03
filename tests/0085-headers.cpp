@@ -341,6 +341,8 @@ extern "C" {
 int main_0085_headers(int argc, char **argv) {
   topic = Test::mk_topic_name("0085-headers", 1);
 
+  Test::create_topic_wait_exists(NULL, topic.c_str(), -1, -1, 5000);
+
   RdKafka::Conf *conf;
   std::string errstr;
 

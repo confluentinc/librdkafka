@@ -60,6 +60,8 @@ int main_0001_multiobj(int argc, char **argv) {
                 if (!topic)
                         topic = test_mk_topic_name("0001", 0);
 
+                test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
                 TIMING_START(&t_full, "full create-produce-destroy cycle");
                 rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
@@ -91,9 +93,9 @@ int main_0001_multiobj(int argc, char **argv) {
                 TIMING_STOP(&t_full);
 
                 /* Topic is created on the first iteration. */
-                if (i > 0)
-                        TIMING_ASSERT(&t_full, 0, 999);
-                else
+                if (i > 0) 
+                        TIMING_ASSERT(&t_full, 0, tmout_multip(999));
+                else 
                         /* Allow metadata propagation. */
                         rd_sleep(1);
         }

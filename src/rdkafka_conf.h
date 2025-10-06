@@ -470,7 +470,10 @@ struct rd_kafka_conf_s {
 
         rd_kafkap_str_t *client_rack;
 
-        int is_share_consumer; /**< Is this a share consumer? */
+        struct {
+                int is_share_consumer; /**< Is this a share consumer? */
+                int max_poll_records;  /**< Max records returned per poll */
+        } share;
 
         /*
          * Producer configuration

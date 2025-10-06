@@ -387,6 +387,12 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         /** > 0 if this broker thread is terminating */
         rd_atomic32_t termination_in_progress;
+
+        /**
+         * Whether a share fetch should_fetch set is enqueued on
+         * this broker's op queue or not.
+         */
+        rd_bool_t rkb_share_fetch_enqueued;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

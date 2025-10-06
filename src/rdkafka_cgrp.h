@@ -377,6 +377,14 @@ typedef struct rd_kafka_cgrp_s {
         /* Timestamp of last rebalance start */
         rd_ts_t rkcg_ts_rebalance_start;
 
+        struct {
+                size_t last_partition_picked;            /* For round-robin
+                                                          * partition picking */
+                rd_kafka_timer_t share_fetch_fanout_tmr; /**< Timer for
+                                                          *   share fetch
+                                                          *   fanout */
+
+        } rkcg_share;
 } rd_kafka_cgrp_t;
 
 

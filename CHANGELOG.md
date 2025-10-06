@@ -1,3 +1,14 @@
+# confluent-kafka-javascript 1.6.0
+
+v1.6.0 is a feature release. It is supported for all usage.
+
+### Enhancements
+
+1. References librdkafka v2.12.0. Refer to the [librdkafka v2.12.0 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.12.0) for more information.
+2. OAuth OIDC method example for Kafka metadata based authentication with
+  an Azure IMDS endpoint using an attached managed identity as principal (#377).
+
+
 # confluent-kafka-javascript 1.5.0
 
 v1.5.0 is a feature release. It is supported for all usage.

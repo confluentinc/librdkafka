@@ -917,7 +917,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
       "C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 25);
 
   test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
-  test_sleep(5);
+  sleep_for(5);
 
   Test::subscribe(c1, topic_name);
 
@@ -947,7 +947,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
     // Additional delay in polling loop to allow rebalance events to fully propagate
     // This prevents the rapid-fire rebalancing that causes assignment confusion
     if (c2_subscribed)
-      test_sleep(3);
+      sleep_for(3);
 
   }
 
@@ -1107,7 +1107,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
 
   // Ensure topic metadata is fully propagated before subscribing
   test_wait_topic_exists(c1->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c1, topic_name);
 
@@ -1130,7 +1130,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
 
     // Additional delay in polling loop to allow rebalance events to fully propagate
     if (c2_subscribed && !done) {
-      test_sleep(1);
+      sleep_for(1);
     }
   }
 
@@ -1175,7 +1175,7 @@ static void d_change_subscription_add_topic(rd_bool_t close_consumer) {
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name_1);
 
@@ -1235,7 +1235,7 @@ static void e_change_subscription_remove_topic(rd_bool_t close_consumer) {
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name_1, topic_name_2);
 
@@ -1351,7 +1351,7 @@ static void f_assign_call_cooperative() {
                     &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name);
 
@@ -1458,7 +1458,7 @@ static void g_incremental_assign_call_eager() {
       "C_1", group_name, "roundrobin", &additional_conf, &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name);
 
@@ -1503,7 +1503,7 @@ static void h_delete_topic() {
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name_1, topic_name_2);
 
@@ -1681,7 +1681,7 @@ static void k_add_partition() {
                     &rebalance_cb, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name);
 
@@ -1761,7 +1761,7 @@ static void l_unsubscribe() {
   test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
   test_wait_topic_exists(c1->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c1, topic_name_1, topic_name_2);
 
@@ -1883,7 +1883,7 @@ static void m_unsubscribe_2() {
   RdKafka::KafkaConsumer *c =
       make_consumer("C_1", group_name, "cooperative-sticky", NULL, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name.c_str(), tmout_multip(10 * 1000));
-  test_sleep(3);
+  sleep_for(3);
 
   Test::subscribe(c, topic_name);
 
@@ -2247,7 +2247,7 @@ static void s_subscribe_when_rebalancing(int variation) {
   test_wait_topic_exists(c->c_ptr(), topic_name_2.c_str(), tmout_multip(10 * 1000));
   test_wait_topic_exists(c->c_ptr(), topic_name_3.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   if (variation == 2 || variation == 4 || variation == 6) {
     /* Pre-cache metadata for all topics. */
@@ -2313,7 +2313,7 @@ static void t_max_poll_interval_exceeded(int variation) {
   test_wait_topic_exists(c1->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
   test_wait_topic_exists(c2->c_ptr(), topic_name_1.c_str(), tmout_multip(10 * 1000));
 
-  test_sleep(5);
+  sleep_for(5);
   Test::subscribe(c1, topic_name_1);
   Test::subscribe(c2, topic_name_1);
 
@@ -2338,7 +2338,7 @@ static void t_max_poll_interval_exceeded(int variation) {
           << "Both consumers are assigned to topic " << topic_name_1
           << ". WAITING 7 seconds for max.poll.interval.ms to be exceeded\n");
       both_have_been_assigned = true;
-      test_sleep(5);
+      sleep_for(5);
     }
 
     if (Test::assignment_partition_count(c2, NULL) == 2 &&
@@ -2348,7 +2348,7 @@ static void t_max_poll_interval_exceeded(int variation) {
     }
 
     if (both_have_been_assigned) {
-      test_sleep(2);
+      sleep_for(2);
     }
   }
 
@@ -2358,10 +2358,10 @@ static void t_max_poll_interval_exceeded(int variation) {
           tostr() << "Expected consumer 1 lost revoke count to be 0, not: "
                   << rebalance_cb1.lost_call_cnt);
     /* Allow more time for max poll interval processing in cloud environments */
-    test_sleep(2);
+    sleep_for(2);
     Test::poll_once(c1,
                     tmout_multip(500)); /* Eat the max poll interval exceeded error message */
-    test_sleep(1);
+    sleep_for(1);
     Test::poll_once(c1,
                    tmout_multip(500)); /* Trigger the rebalance_cb with lost partitions */
 
@@ -2373,7 +2373,7 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   if (variation == 3) {
     /* Last poll will cause a rejoin, wait that the rejoin happens. */
-    test_sleep(5);
+    sleep_for(5);
     expected_cb2_revoke_call_cnt++;
   }
 
@@ -3225,7 +3225,7 @@ static void v_rebalance_cb(rd_kafka_t *rk,
 
       TEST_SAY("Attempting manual commit after unassign, in 2 seconds..\n");
       /* Sleep enough to have the generation-id bumped by rejoin. */
-      test_sleep(2);
+      sleep_for(2);
       commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
               TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
                         commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
@@ -3292,7 +3292,7 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
 
   test_create_topic_wait_exists(p, topic, partition_cnt, -1, tmout_multip(5000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3348,7 +3348,7 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
         TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
                     "Expected not error or ILLEGAL_GENERATION, got: %s",
                     rd_kafka_err2str(err));
-        test_sleep(3);
+        sleep_for(3);
         
       }
     } while (poll_result1 == 0 || poll_result2 == 0);
@@ -3380,7 +3380,7 @@ static void x_incremental_rebalances(void) {
 
   test_create_topic_wait_exists(NULL, topic, 6, -1, tmout_multip(5000));
 
-  test_sleep(3);
+  sleep_for(3);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {
@@ -3405,7 +3405,7 @@ static void x_incremental_rebalances(void) {
   TEST_SAY("%s: joining\n", rd_kafka_name(c[1]));
   test_consumer_subscribe(c[1], topic);
   test_consumer_wait_assignment(c[1], rd_true /*poll*/);
-  test_sleep(3);
+  sleep_for(3);
   if (test_consumer_group_protocol_classic()) {
     test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
                                     topic, 4, topic, 5, NULL);
@@ -3422,7 +3422,7 @@ static void x_incremental_rebalances(void) {
   TEST_SAY("%s: joining\n", rd_kafka_name(c[2]));
   test_consumer_subscribe(c[2], topic);
   test_consumer_wait_assignment(c[2], rd_true /*poll*/);
-  test_sleep(3);
+  sleep_for(3);
   if (test_consumer_group_protocol_classic()) {
     test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,
                                     topic, 5, NULL);

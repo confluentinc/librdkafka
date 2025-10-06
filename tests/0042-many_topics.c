@@ -237,7 +237,7 @@ int main_0042_many_topics(int argc, char **argv) {
         for (i = 0; i < topic_cnt; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
                 test_create_topic_if_auto_create_disabled(NULL, topics[i], -1);
-                test_sleep(3);
+                sleep_for(3);
         }
 
         produce_many(topics, topic_cnt, testid);

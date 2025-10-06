@@ -78,7 +78,7 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
                 test_wait_topic_exists(rk, topic[i], tmout_multip(5000)); 
 
-                test_sleep(5); 
+                sleep_for(5); 
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                                   (msgcnt / TOPIC_CNT) * i,
@@ -120,7 +120,7 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
 
         /* Only run test_consumer_poll_no_msgs if librdkafka version > 2.3.0 */
         if (rd_kafka_version() > 0x02030000) {
-                test_sleep(3);
+                sleep_for(3);
                 test_consumer_poll_no_msgs("consume", rk, testid, 5000);
         } else {
                 TEST_SAY("Skipping no-messages verification: requires librdkafka version > 2.3.0\n");

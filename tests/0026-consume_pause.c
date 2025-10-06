@@ -263,7 +263,7 @@ static void consume_pause_resume_after_reassign(void) {
         test_create_topic_wait_exists(NULL, topic, (int)partition + 1, -1,
                                       10 * 1000);
 
-        test_sleep(2);
+        sleep_for(2);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);

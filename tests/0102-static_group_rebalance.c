@@ -174,7 +174,7 @@ static void do_test_static_group_rebalance(void) {
         test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(5000));
         test_wait_topic_exists(NULL, topic, tmout_multip(5000));
 
-        test_sleep(3);
+        sleep_for(3);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_set(conf, "max.poll.interval.ms", "9000");
@@ -295,7 +295,7 @@ static void do_test_static_group_rebalance(void) {
                 test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, -1,
                                               30000);
                 /* Additional wait to ensure topic metadata is fully propagated */
-                test_sleep(3);
+                sleep_for(3);
 
                 /* Await revocation */
                 rebalance_start        = test_clock();

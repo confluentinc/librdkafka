@@ -168,7 +168,7 @@ int main_0099_commit_metadata(int argc, char **argv) {
 
         /* Wait for topic metadata to propagate to avoid race conditions */
         test_wait_topic_exists(NULL, topic, tmout_multip(10000));
-        test_sleep(3);
+        sleep_for(3);
 
         origin_toppar = rd_kafka_topic_partition_list_new(1);
 

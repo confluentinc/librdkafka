@@ -1002,11 +1002,11 @@ const char *test_get_available_acks(const char *wanted_acks) {
 
 /**
  * @brief Sleep with configurable multiplier (only if multiplier > 0)
- * @param base_sleep_ms Base sleep time in milliseconds
+ * @param wait_time Sleep time in seconds
  */
-void test_sleep(int base_sleep_ms) {
+void sleep_for(int wait_time) {
         if (test_sleep_multiplier > 0.0) {
-                int sleep_time = (int)(base_sleep_ms * test_sleep_multiplier);
+                int sleep_time = (int)(wait_time * test_sleep_multiplier);
                 rd_sleep(sleep_time);
         }
         /* If multiplier is 0, don't sleep at all */

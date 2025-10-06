@@ -191,7 +191,7 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
         /* Create topic */
         test_create_topic_wait_exists(consumer, topic, part_cnt_1, -1, 5000);
 
-        test_sleep(5);
+        sleep_for(5);
 
         /* Start consumer */
         test_consumer_subscribe(consumer, topic);
@@ -220,7 +220,7 @@ static void do_test_create_delete_create(int part_cnt_1, int part_cnt_2) {
         /* Re-create topic */
         test_create_topic_wait_exists(consumer, topic, part_cnt_2, -1, 5000);
 
-        test_sleep(5);
+        sleep_for(5);
 
         mtx_lock(&value_mtx);
         value = "after";

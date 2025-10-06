@@ -77,7 +77,7 @@ int main_0040_io_event(int argc, char **argv) {
         test_create_topic(rk_p, topic, 3, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
         test_wait_topic_exists(rk_p, topic, 10000);
-        test_sleep(3);
+        sleep_for(3);
 
         test_conf_init(&conf, &tconf, 0);
         rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
@@ -91,7 +91,7 @@ int main_0040_io_event(int argc, char **argv) {
         queue = rd_kafka_queue_get_consumer(rk_c);
 
         test_consumer_subscribe(rk_c, topic);
-        test_sleep(5);
+        sleep_for(5);
 
 #ifndef _WIN32
         r = pipe(fds);

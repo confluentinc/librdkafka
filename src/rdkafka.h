@@ -3058,7 +3058,25 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
 
 RD_EXPORT
-rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf, char *errstr, size_t errstr_size);
+rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
+                                        char *errstr,
+                                        size_t errstr_size);
+
+/**
+ * @brief Consume a batch of messages from the share consumer instance.
+ *
+ * @param rk         Share consumer instance.
+ * @param timeout_ms Maximum time to block waiting for messages.
+ * @param rkmessages Output array of messages - this must be preallocated with
+ * at least enough capacity for size max.poll.records.
+ * @param rkmessages_size Output number of messages returned in rkmessages.
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_share_consume_batch(rd_kafka_t *rk,
+                             int timeout_ms,
+                             rd_kafka_message_t **rkmessages /* out */,
+                             size_t *rkmessages_size /* out */);
 
 /**
  * @brief Destroy Kafka handle.

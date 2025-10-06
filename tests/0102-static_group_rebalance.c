@@ -177,8 +177,10 @@ static void do_test_static_group_rebalance(void) {
         sleep_for(3);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        test_conf_set(conf, "max.poll.interval.ms", "9000");
-        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms",
+                      tsprintf("%d", tmout_multip(9000)));
+        test_conf_set(conf, "session.timeout.ms",
+                      tsprintf("%d", tmout_multip(6000)));
         test_conf_set(conf, "auto.offset.reset", "earliest");
         /* Keep this interval higher than cluster metadata propagation
          * time to make sure no additional rebalances are triggered
@@ -511,7 +513,7 @@ static void do_test_fenced_member_classic(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic_wait_exists(NULL, topic, 3, 1, tmout_multip(60000));
+        test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(60000));
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");
@@ -604,7 +606,7 @@ static void do_test_fenced_member_consumer(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic_wait_exists(NULL, topic, 3, 1, tmout_multip(60000));
+        test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(60000));
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");

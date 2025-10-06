@@ -56,7 +56,8 @@ static void do_test_fetch_max_bytes(void) {
 
   std::string topic = Test::mk_topic_name("0082-fetch_max_bytes", 1);
 
-  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), partcnt);
+  Test::create_topic(NULL, topic.c_str(), partcnt, -1);
+  test_wait_topic_exists(NULL, topic.c_str(), tmout_multip(10000));
 
   /* Produce messages to partitions */
   for (int32_t p = 0; p < (int32_t)partcnt; p++) {
@@ -68,10 +69,8 @@ static void do_test_fetch_max_bytes(void) {
   Test::conf_init(&conf, NULL, tmout_multip(10));
   Test::conf_set(conf, "group.id", topic);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
-  /* We try to fetch 20 Megs per partition, but only allow 1 Meg
-   * as total response size, this ends up serving the first batch from the
-   * first partition.
-   * receive.message.max.bytes is set low to trigger the original bug,
+  /* We try to fetch 20 Megs per partition, but limit total response size.
+   * receive.message.max.bytes is set to trigger the original bug behavior,
    * but this value is now adjusted upwards automatically by rd_kafka_new()
    * to hold both fetch.max.bytes and the protocol / batching overhead.
    * Prior to the introduction of fetch.max.bytes the fetcher code
@@ -87,8 +86,8 @@ static void do_test_fetch_max_bytes(void) {
    * larger than fetch.max.bytes.
    */
   Test::conf_set(conf, "max.partition.fetch.bytes", "20000000"); /* ~20MB */
-  Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
-  Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
+  Test::conf_set(conf, "fetch.max.bytes", "5000000");            /* ~5MB */
+  Test::conf_set(conf, "receive.message.max.bytes", "5000512");  /* ~5MB+512 */
 
 
 

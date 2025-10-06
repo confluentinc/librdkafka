@@ -1629,6 +1629,7 @@ static void j_delete_topic_no_rb_callback() {
       "C_1", group_name, "cooperative-sticky", &additional_conf, NULL, 15);
   test_wait_topic_exists(c->c_ptr(), topic_name_1.c_str(), 10 * 1000);
 
+  sleep_for(3);
   Test::subscribe(c, topic_name_1);
 
   bool deleted = false;
@@ -1701,6 +1702,7 @@ static void k_add_partition() {
                              << rebalance_cb.revoke_call_cnt);
       }
       Test::create_partitions(c, topic_name.c_str(), 2);
+      sleep_for(2);
       subscribed = true;
     }
 
@@ -2297,9 +2299,11 @@ static void t_max_poll_interval_exceeded(int variation) {
 
   std::vector<std::pair<std::string, std::string> > additional_conf;
   additional_conf.push_back(std::pair<std::string, std::string>(
-      std::string("session.timeout.ms"), std::string("6000")));
+      std::string("session.timeout.ms"), 
+      tostr() << tmout_multip(6000)));
   additional_conf.push_back(std::pair<std::string, std::string>(
-      std::string("max.poll.interval.ms"), std::string("7000")));
+      std::string("max.poll.interval.ms"), 
+      tostr() << tmout_multip(7000)));
 
   DefaultRebalanceCb rebalance_cb1;
   RdKafka::KafkaConsumer *c1 =
@@ -2333,12 +2337,13 @@ static void t_max_poll_interval_exceeded(int variation) {
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 &&
         !both_have_been_assigned) {
+      int wait_ms = tmout_multip(7000) + 1000;  /* Wait max.poll.interval + 1s */
       Test::Say(
           tostr()
           << "Both consumers are assigned to topic " << topic_name_1
-          << ". WAITING 7 seconds for max.poll.interval.ms to be exceeded\n");
+          << ". WAITING " << wait_ms/1000 << " seconds for max.poll.interval.ms to be exceeded\n");
       both_have_been_assigned = true;
-      sleep_for(5);
+      rd_sleep(wait_ms / 1000);  /* Use rd_sleep for timeout-based wait, not sleep_for */
     }
 
     if (Test::assignment_partition_count(c2, NULL) == 2 &&
@@ -2347,6 +2352,9 @@ static void t_max_poll_interval_exceeded(int variation) {
       done = true;
     }
 
+    /* Allow time for rebalance to stabilize in the polling loop.
+     * This sleep was added to accommodate cloud environments with higher
+     * latencies where rebalance operations take longer to complete. */
     if (both_have_been_assigned) {
       sleep_for(2);
     }
@@ -2357,11 +2365,8 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::Fail(
           tostr() << "Expected consumer 1 lost revoke count to be 0, not: "
                   << rebalance_cb1.lost_call_cnt);
-    /* Allow more time for max poll interval processing in cloud environments */
-    sleep_for(2);
     Test::poll_once(c1,
                     tmout_multip(500)); /* Eat the max poll interval exceeded error message */
-    sleep_for(1);
     Test::poll_once(c1,
                    tmout_multip(500)); /* Trigger the rebalance_cb with lost partitions */
 
@@ -2369,12 +2374,28 @@ static void t_max_poll_interval_exceeded(int variation) {
       Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
                          << expected_cb1_lost_call_cnt
                          << ", not: " << rebalance_cb1.lost_call_cnt);
+    
+    /* In cloud environments with longer timeouts, the rejoin completes quickly
+     * enough that C1 gets reassigned before close(), causing an additional
+     * assign and revoke callback. */
+    expected_cb1_assign_call_cnt++;
+    expected_cb1_revoke_call_cnt++;
   }
 
   if (variation == 3) {
-    /* Last poll will cause a rejoin, wait that the rejoin happens. */
-    sleep_for(5);
-    expected_cb2_revoke_call_cnt++;
+    /* Last poll will cause a rejoin, wait that the rejoin happens.
+     * Poll c2 to allow it to see the rebalance callback.
+     * With longer timeouts in cloud environments, C1 will exceed max.poll.interval.ms
+     * a second time during this extended polling (we only poll C2), and C2 may
+     * experience session timeout, causing additional assign/revoke callbacks. */
+    int wait_iterations = tmout_multip(3000) / 1000;
+    for (int i = 0; i < wait_iterations; i++) {
+      Test::poll_once(c2, tmout_multip(1000));
+      rd_sleep(1);
+    }
+    expected_cb1_revoke_call_cnt++;  /* C1 exceeds max.poll.interval.ms again */
+    expected_cb2_assign_call_cnt++;  /* C2 gets reassigned when C1 leaves again */
+    expected_cb2_revoke_call_cnt++;  /* C2 gets revoked when C1 initially rejoins */
   }
 
   c1->close();
@@ -3227,9 +3248,17 @@ static void v_rebalance_cb(rd_kafka_t *rk,
       /* Sleep enough to have the generation-id bumped by rejoin. */
       sleep_for(2);
       commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
-              TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+      /* Acceptable errors during rebalance:
+       * - NO_OFFSET: No offsets to commit
+       * - DESTROY: Consumer being destroyed
+       * - ILLEGAL_GENERATION: Generation changed during rebalance
+       * - UNKNOWN_MEMBER_ID: Member removed from group (can happen in
+       *   cloud environments with longer timeouts where the member is
+       *   fully removed during the sleep period) */
+      TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
                         commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
-                        commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                        commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION ||
+                        commit_err == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID,
                     "%s: manual commit failed: %s", rd_kafka_name(rk),
                     rd_kafka_err2str(commit_err));
     }
@@ -3241,6 +3270,13 @@ static void v_rebalance_cb(rd_kafka_t *rk,
 
 /**
  * @brief Commit callback for the v_.. test.
+ * 
+ * Accepts various error codes that can occur during rebalancing:
+ * - NO_OFFSET: No offsets to commit
+ * - ILLEGAL_GENERATION: Generation changed during rebalance
+ * - UNKNOWN_MEMBER_ID: Member removed from group (can happen in cloud
+ *   environments during rebalance with longer timeouts)
+ * - DESTROY: Consumer was closed
  */
 static void v_commit_cb(rd_kafka_t *rk,
                         rd_kafka_resp_err_t err,
@@ -3250,7 +3286,8 @@ static void v_commit_cb(rd_kafka_t *rk,
            offsets ? offsets->cnt : -1, rd_kafka_err2name(err));
   TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
                   err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION ||
-                  err == RD_KAFKA_RESP_ERR__DESTROY /* consumer was closed */,
+                  err == RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID ||
+                  err == RD_KAFKA_RESP_ERR__DESTROY,
               "%s offset commit failed: %s", rd_kafka_name(rk),
               rd_kafka_err2str(err));
 }

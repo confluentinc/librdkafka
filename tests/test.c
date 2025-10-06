@@ -65,7 +65,6 @@ int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
-int test_k2_cluster                        = 0; /**< K2 cluster mode */
 char *test_supported_acks                   = NULL; /**< Supported acks values */
 static double test_sleep_multiplier         = 0.0; /**< Sleep time multiplier */
 static char *test_skip_numbers              = NULL; /**< Comma-separated list of test numbers to skip */
@@ -819,8 +818,6 @@ static void test_init(void) {
                 test_auto_create_enabled =
                     !rd_strcasecmp(tmp, "true") || !strcmp(tmp, "1");
 
-        if ((tmp = test_getenv("CLUSTER_TYPE", NULL)))
-                test_k2_cluster = !rd_strcasecmp(tmp, "K2");
 
 #ifdef _WIN32
         test_init_win32();
@@ -2176,10 +2173,6 @@ int main(int argc, char **argv) {
         if (test_concurrent_max > 1)
                 test_timeout_multiplier += (double)test_concurrent_max / 3;
 
-        /* K2 clusters may have higher latency and need more time for fetch operations */
-        if (test_k2_cluster)
-                test_timeout_multiplier += 2.0;
-
         TEST_SAY("Tests to run     : %s\n",
                  tests_to_run ? tests_to_run : "all");
         if (subtests_to_run)
@@ -2218,9 +2211,6 @@ int main(int argc, char **argv) {
         }
         if (test_sleep_multiplier > 0.0) {
                 TEST_SAY("Test sleep multiplier: %.1fx\n", test_sleep_multiplier);
-        }
-        if (test_k2_cluster) {
-                TEST_SAY("Test K2 Cluster: enabled (+2.0x timeout multiplier)\n");
         }
         if (test_skip_numbers) {
                 TEST_SAY("Test skip numbers: %s\n", test_skip_numbers);

@@ -60,9 +60,6 @@ static void do_test_fetch_max_bytes(void) {
 
   /* Produce messages to partitions */
   for (int32_t p = 0; p < (int32_t)partcnt; p++) {
-    if (test_k2_cluster) {
-      Test::Say(tostr() << "K2: Producing " << msgcnt << " messages to partition " << p);
-    }
     test_produce_msgs_easy_size(topic.c_str(), 0, p, msgcnt, msgsize);
   }
 
@@ -71,7 +68,7 @@ static void do_test_fetch_max_bytes(void) {
   Test::conf_init(&conf, NULL, tmout_multip(10));
   Test::conf_set(conf, "group.id", topic);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
-  /* We try to fetch 20 Megs per partition, but only allow 1 Meg (or 4 Meg for K2)
+  /* We try to fetch 20 Megs per partition, but only allow 1 Meg
    * as total response size, this ends up serving the first batch from the
    * first partition.
    * receive.message.max.bytes is set low to trigger the original bug,
@@ -88,21 +85,10 @@ static void do_test_fetch_max_bytes(void) {
    * value is no longer over-written:
    * receive.message.max.bytes must be configured to be at least 512 bytes
    * larger than fetch.max.bytes.
-   * 
-   * K2 clusters have a higher minimum requirement for receive.message.max.bytes
-   * (4MB vs 1MB), so we adjust all fetch limits proportionally for K2 clusters.
    */
-  /* K2 clusters require higher receive.message.max.bytes minimum (4MB vs 1MB) */
   Test::conf_set(conf, "max.partition.fetch.bytes", "20000000"); /* ~20MB */
-  if (test_k2_cluster) {
-    Test::Say("K2 cluster mode: using 5MB fetch limits, increased timeouts\n");
-    Test::conf_set(conf, "fetch.max.bytes", "5000000");            /* ~5MB */
-    Test::conf_set(conf, "receive.message.max.bytes", "5000512");  /* ~5MB+512 */
-  } else {
-    Test::Say("Standard mode: using 1MB fetch limits\n");
-    Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
-    Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
-  }
+  Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
+  Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
 
 
 
@@ -129,16 +115,10 @@ static void do_test_fetch_max_bytes(void) {
     RdKafka::Message *msg = c->consume(consume_timeout);
     switch (msg->err()) {
     case RdKafka::ERR__TIMED_OUT:
-      if (test_k2_cluster && cnt > 0) {
-        Test::Say(tostr() << "K2 timeout: consumed " << cnt << "/" << msgcnt << " messages so far, continuing...");
-      }
       break;
 
     case RdKafka::ERR_NO_ERROR:
       cnt++;
-      if (test_k2_cluster && (cnt % 5 == 0 || cnt == msgcnt)) {
-        Test::Say(tostr() << "K2 progress: consumed " << cnt << "/" << msgcnt << " messages");
-      }
       break;
 
     default:

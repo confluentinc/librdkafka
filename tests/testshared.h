@@ -60,9 +60,6 @@ extern int tmout_multip(int msecs);
 /** @brief true if tests should run in quick-mode (faster, less data) */
 extern int test_quick;
 
-/** @brief true if tests should run in K2 cluster mode (acks=-1, higher limits) */
-extern int test_k2_cluster;
-
 /** @brief Supported acks values configuration */
 extern char *test_supported_acks;
 

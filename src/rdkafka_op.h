@@ -189,6 +189,8 @@ typedef enum {
         RD_KAFKA_OP_ELECTLEADERS,         /**< Admin:
                                            *   ElectLeaders
                                            *   u.admin_request */
+        RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
+                                    applicable. */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

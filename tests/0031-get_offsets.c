@@ -158,6 +158,8 @@ int main_0031_get_offsets(int argc, char **argv) {
         test_timing_t t_qry, t_get;
         uint64_t testid;
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, 0, msgcnt);
 

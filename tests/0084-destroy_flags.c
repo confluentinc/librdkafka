@@ -126,9 +126,9 @@ static void do_test_destroy_flags(const char *topic,
         TIMING_STOP(&t_destroy);
 
         if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
-                TIMING_ASSERT_LATER(&t_destroy, 0, 200);
+                TIMING_ASSERT_LATER(&t_destroy, 0, tmout_multip(200));
         else
-                TIMING_ASSERT_LATER(&t_destroy, 0, 1000);
+                TIMING_ASSERT_LATER(&t_destroy, 0, tmout_multip(1000));
 
         if (args->consumer_subscribe &&
             !(destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)) {
@@ -171,7 +171,7 @@ static void destroy_flags(int local_mode) {
         /* Create the topic to avoid not-yet-auto-created-topics being
          * subscribed to (and thus raising an error). */
         if (!local_mode) {
-                test_create_topic_wait_exists(NULL, topic, 3, 1, 5000);
+                test_create_topic_wait_exists(NULL, topic, 3, -1, 5000);
         }
 
         for (i = 0; i < (int)RD_ARRAYSIZE(args); i++) {

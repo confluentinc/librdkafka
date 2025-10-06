@@ -80,6 +80,7 @@ static void do_test_commit_cb(void) {
   RdKafka::ErrorCode err;
   std::string topic = Test::mk_topic_name("0060-op_prio", 1);
 
+  test_create_topic_if_auto_create_disabled(NULL, topic.c_str(), 1);
   test_produce_msgs_easy(topic.c_str(), 0, 0, msgcnt);
 
   /*

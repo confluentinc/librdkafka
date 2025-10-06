@@ -54,13 +54,29 @@ static void do_test_clusterid(void) {
   /*
    * Create client with lacking protocol support.
    */
-  Test::conf_init(&conf, NULL, 10);
-  Test::conf_set(conf, "api.version.request", "false");
-  Test::conf_set(conf, "broker.version.fallback", "0.9.0");
-  RdKafka::Producer *p_bad = RdKafka::Producer::create(conf, errstr);
-  if (!p_bad)
-    Test::Fail("Failed to create client: " + errstr);
-  delete conf;
+  {
+    Test::conf_init(&conf, NULL, 10);
+    Test::conf_set(conf, "api.version.request", "false");
+    Test::conf_set(conf, "broker.version.fallback", "0.9.0");
+    RdKafka::Producer *p_bad = RdKafka::Producer::create(conf, errstr);
+    if (!p_bad)
+      Test::Fail("Failed to create client: " + errstr);
+    delete conf;
+
+    /*
+     * Try bad producer, should return empty string.
+     */
+    std::string clusterid_bad_1 = p_bad->clusterid(tmout_multip(2000));
+    if (!clusterid_bad_1.empty())
+      Test::Fail("bad producer(w timeout): ClusterId should be empty, not " +
+                 clusterid_bad_1);
+    std::string clusterid_bad_2 = p_bad->clusterid(0);
+    if (!clusterid_bad_2.empty())
+      Test::Fail("bad producer(0): ClusterId should be empty, not " +
+                 clusterid_bad_2);
+
+    delete p_bad;
+  }
 
 
   std::string clusterid;
@@ -84,20 +100,7 @@ static void do_test_clusterid(void) {
     Test::Fail("Good ClusterId mismatch: " + clusterid_good_1 +
                " != " + clusterid_good_2);
 
-  /*
-   * Try bad producer, should return empty string.
-   */
-  std::string clusterid_bad_1 = p_bad->clusterid(tmout_multip(2000));
-  if (!clusterid_bad_1.empty())
-    Test::Fail("bad producer(w timeout): ClusterId should be empty, not " +
-               clusterid_bad_1);
-  std::string clusterid_bad_2 = p_bad->clusterid(0);
-  if (!clusterid_bad_2.empty())
-    Test::Fail("bad producer(0): ClusterId should be empty, not " +
-               clusterid_bad_2);
-
   delete p_good;
-  delete p_bad;
 }
 
 
@@ -125,34 +128,37 @@ static void do_test_controllerid(void) {
   /*
    * Create client with lacking protocol support.
    */
-  Test::conf_init(&conf, NULL, 10);
-  Test::conf_set(conf, "api.version.request", "false");
-  Test::conf_set(conf, "broker.version.fallback", "0.9.0");
-  RdKafka::Producer *p_bad = RdKafka::Producer::create(conf, errstr);
-  if (!p_bad)
-    Test::Fail("Failed to create client: " + errstr);
-  delete conf;
+  RdKafka::Producer *p_bad = NULL;
+  {
+    Test::conf_init(&conf, NULL, 10);
+    Test::conf_set(conf, "api.version.request", "false");
+    Test::conf_set(conf, "broker.version.fallback", "0.9.0");
+    p_bad = RdKafka::Producer::create(conf, errstr);
+    if (!p_bad)
+      Test::Fail("Failed to create client: " + errstr);
+    delete conf;
+  }
 
-  /*
-   * good producer, give the first call a timeout to allow time
-   * for background metadata requests to finish.
-   */
-  int32_t controllerid_good_1 = p_good->controllerid(tmout_multip(2000));
-  if (controllerid_good_1 == -1)
-    Test::Fail("good producer(w timeout): Controllerid is -1");
-  Test::Say(tostr() << "good producer(w timeout): Controllerid "
-                    << controllerid_good_1 << "\n");
+    /*
+     * good producer, give the first call a timeout to allow time
+     * for background metadata requests to finish.
+     */
+    int32_t controllerid_good_1 = p_good->controllerid(tmout_multip(2000));
+    if (controllerid_good_1 == -1)
+      Test::Fail("good producer(w timeout): Controllerid is -1");
+    Test::Say(tostr() << "good producer(w timeout): Controllerid "
+                      << controllerid_good_1 << "\n");
 
-  /* Then retrieve a cached copy. */
-  int32_t controllerid_good_2 = p_good->controllerid(0);
-  if (controllerid_good_2 == -1)
-    Test::Fail("good producer(0): Controllerid is -1");
-  Test::Say(tostr() << "good producer(0): Controllerid " << controllerid_good_2
-                    << "\n");
+    /* Then retrieve a cached copy. */
+    int32_t controllerid_good_2 = p_good->controllerid(0);
+    if (controllerid_good_2 == -1)
+      Test::Fail("good producer(0): Controllerid is -1");
+    Test::Say(tostr() << "good producer(0): Controllerid " << controllerid_good_2
+                      << "\n");
 
-  if (controllerid_good_1 != controllerid_good_2)
-    Test::Fail(tostr() << "Good Controllerid mismatch: " << controllerid_good_1
-                       << " != " << controllerid_good_2);
+    if (controllerid_good_1 != controllerid_good_2)
+      Test::Fail(tostr() << "Good Controllerid mismatch: " << controllerid_good_1
+                         << " != " << controllerid_good_2);
 
   /*
    * Try bad producer, should return -1
@@ -173,6 +179,11 @@ static void do_test_controllerid(void) {
 
 extern "C" {
 int main_0063_clusterid(int argc, char **argv) {
+  if (test_needs_auth()) {
+    Test::Skip("Legacy client tests (api.version.request=false) require PLAINTEXT but cluster uses SSL/SASL\n");
+    return 0;
+  }
+  
   do_test_clusterid();
   do_test_controllerid();
   return 0;

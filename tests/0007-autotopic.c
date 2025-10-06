@@ -85,13 +85,16 @@ int main_0007_autotopic(int argc, char **argv) {
         int msgcnt = 10;
         int i;
 
+        if (!test_check_auto_create_topic()) {
+                TEST_SKIP(
+                    "NOTE! This test requires "
+                    "auto.create.topics.enable=true to be configured on "
+                    "the broker!\n");
+                return 0;
+        }
+
         /* Generate unique topic name */
         test_conf_init(&conf, &topic_conf, 10);
-
-        TEST_SAY(
-            "\033[33mNOTE! This test requires "
-            "auto.create.topics.enable=true to be configured on "
-            "the broker!\033[0m\n");
 
         /* Set delivery report callback */
         rd_kafka_conf_set_dr_cb(conf, dr_cb);
@@ -99,8 +102,8 @@ int main_0007_autotopic(int argc, char **argv) {
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0007_autotopic", 1),
-                                 topic_conf);
+        const char *topic = test_mk_topic_name("0007_autotopic", 1);
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 

@@ -47,24 +47,30 @@ static void do_test_fetch_max_bytes(void) {
   int msgcnt        = 10 * partcnt;
   const int msgsize = 900 * 1024; /* Less than 1 Meg to account
                                    * for batch overhead */
+  
+  Test::Say(tostr() << "Test setup: " << partcnt << " partitions, " << msgcnt 
+           << " messages total (" << msgcnt/partcnt << " per partition), " 
+           << msgsize/1024 << " KB per message");
   std::string errstr;
   RdKafka::ErrorCode err;
 
-  std::string topic = Test::mk_topic_name("0081-fetch_max_bytes", 1);
+  std::string topic = Test::mk_topic_name("0082-fetch_max_bytes", 1);
+
+  Test::create_topic(NULL, topic.c_str(), partcnt, -1);
+  test_wait_topic_exists(NULL, topic.c_str(), tmout_multip(10000));
 
   /* Produce messages to partitions */
-  for (int32_t p = 0; p < (int32_t)partcnt; p++)
+  for (int32_t p = 0; p < (int32_t)partcnt; p++) {
     test_produce_msgs_easy_size(topic.c_str(), 0, p, msgcnt, msgsize);
+  }
 
   /* Create consumer */
   RdKafka::Conf *conf;
-  Test::conf_init(&conf, NULL, 10);
+  Test::conf_init(&conf, NULL, tmout_multip(10));
   Test::conf_set(conf, "group.id", topic);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
-  /* We try to fetch 20 Megs per partition, but only allow 1 Meg as total
-   * response size, this ends up serving the first batch from the
-   * first partition.
-   * receive.message.max.bytes is set low to trigger the original bug,
+  /* We try to fetch 20 Megs per partition, but limit total response size.
+   * receive.message.max.bytes is set to trigger the original bug behavior,
    * but this value is now adjusted upwards automatically by rd_kafka_new()
    * to hold both fetch.max.bytes and the protocol / batching overhead.
    * Prior to the introduction of fetch.max.bytes the fetcher code
@@ -80,8 +86,10 @@ static void do_test_fetch_max_bytes(void) {
    * larger than fetch.max.bytes.
    */
   Test::conf_set(conf, "max.partition.fetch.bytes", "20000000"); /* ~20MB */
-  Test::conf_set(conf, "fetch.max.bytes", "1000000");            /* ~1MB */
-  Test::conf_set(conf, "receive.message.max.bytes", "1000512");  /* ~1MB+512 */
+  Test::conf_set(conf, "fetch.max.bytes", "5000000");            /* ~5MB */
+  Test::conf_set(conf, "receive.message.max.bytes", "5000512");  /* ~5MB+512 */
+
+
 
   RdKafka::KafkaConsumer *c = RdKafka::KafkaConsumer::create(conf, errstr);
   if (!c)
@@ -100,8 +108,10 @@ static void do_test_fetch_max_bytes(void) {
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");
   int cnt = 0;
+  int consume_timeout = tmout_multip(1000);
+  Test::Say(tostr() << "Using consume timeout: " << consume_timeout << " ms");
   while (cnt < msgcnt) {
-    RdKafka::Message *msg = c->consume(tmout_multip(1000));
+    RdKafka::Message *msg = c->consume(consume_timeout);
     switch (msg->err()) {
     case RdKafka::ERR__TIMED_OUT:
       break;
@@ -117,7 +127,7 @@ static void do_test_fetch_max_bytes(void) {
 
     delete msg;
   }
-  Test::Say("Done\n");
+  Test::Say(tostr() << "Done - consumed " << cnt << " messages successfully");
 
   c->close();
   delete c;

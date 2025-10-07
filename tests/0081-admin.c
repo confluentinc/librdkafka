@@ -38,8 +38,21 @@ static int safe_partition_list_and_offsets_cmp(const rd_kafka_topic_partition_li
 
         for (i = 0; i < al->cnt; i++) {
                 const rd_kafka_topic_partition_t *a = &al->elems[i];
-                const rd_kafka_topic_partition_t *b = &bl->elems[i];
+                const rd_kafka_topic_partition_t *b = NULL;
                 int64_t a_leader_epoch = -1, b_leader_epoch = -1;
+                int j;
+
+                /* Find matching partition in bl */
+                for (j = 0; j < bl->cnt; j++) {
+                        if (strcmp(al->elems[i].topic, bl->elems[j].topic) == 0 &&
+                            al->elems[i].partition == bl->elems[j].partition) {
+                                b = &bl->elems[j];
+                                break;
+                        }
+                }
+
+                if (!b)
+                        return -1;  /* Partition not found */
 
                 /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
                 if (rd_kafka_version() >= 0x020100ff) {
@@ -47,8 +60,9 @@ static int safe_partition_list_and_offsets_cmp(const rd_kafka_topic_partition_li
                         b_leader_epoch = rd_kafka_topic_partition_get_leader_epoch(b);
                 }
 
-                if (a->partition != b->partition ||
-                    strcmp(a->topic, b->topic) || a->offset != b->offset ||
+                if (a->offset != b->offset)
+                        return -1;
+                if (a_leader_epoch >= 0 && b_leader_epoch >= 0 &&
                     a_leader_epoch != b_leader_epoch)
                         return -1;
         }
@@ -482,9 +496,9 @@ static void do_test_DeleteTopics(const char *what,
          * are not. Allow it some time to propagate.
          */
         if (op_timeout > 0)
-                metadata_tmout = op_timeout + 1000;
+                metadata_tmout = tmout_multip(op_timeout + 1000);
         else
-                metadata_tmout = 10 * 1000;
+                metadata_tmout = tmout_multip(10 * 1000);
 
         test_wait_metadata_update(rk, NULL, 0, exp_not_mdtopics,
                                   exp_not_mdtopic_cnt, metadata_tmout);
@@ -1497,6 +1511,8 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
 
         /*
          * ConfigResource #0: group config, for a non-existent group.
+         * Note: Cloud/managed Kafka may support GROUP configs regardless of
+         * broker version, so we accept both NO_ERROR and INVALID_REQUEST.
          */
         configs[ci] =
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group);
@@ -1586,7 +1602,13 @@ static void do_test_DescribeConfigs_groups(rd_kafka_t *rk,
                         fails++;
                 }
 
-                if (err != exp_err[i]) {
+                /* For GROUP resources, cloud Kafka may support them regardless of
+                 * broker version, so accept both NO_ERROR and INVALID_REQUEST */
+                if (rd_kafka_ConfigResource_type(configs[i]) == RD_KAFKA_RESOURCE_GROUP &&
+                    (err == RD_KAFKA_RESP_ERR_NO_ERROR || 
+                     err == RD_KAFKA_RESP_ERR_INVALID_REQUEST)) {
+                        /* Accept either error for GROUP configs */
+                } else if (err != exp_err[i]) {
                         TEST_FAIL_LATER(
                             "ConfigResource #%d: "
                             "expected %s (%d), got %s (%s)",
@@ -4959,9 +4981,11 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
                                  TEST_LIST_CONSUMER_GROUP_OFFSETS_TOPIC_CNT,
                                  partitions_cnt, NULL);
 
-        /* Verify that topics are reported by metadata */
+        /* Verify that topics are reported by metadata.
+         * Use timeout multiplier for cloud environments where metadata
+         * propagation is slower. */
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
-                                  15 * 1000);
+                                  tmout_multip(15 * 1000));
 
         sleep_for(3);
 

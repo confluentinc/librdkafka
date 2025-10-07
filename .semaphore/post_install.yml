@@ -38,7 +38,7 @@ blocks:
             - env_var: NODE_VERSION
               values: ["18", "20", "21", "22", "23", "24"]
           commands:
-            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+            - .semaphore/docker_run_with_volumes.sh "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
   - name: "Debian-based OS (arm64)"
     dependencies: [ ]
@@ -57,7 +57,7 @@ blocks:
             - env_var: NODE_VERSION
               values: ["18", "20", "21", "22", "23", "24"]
           commands:
-            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+            - .semaphore/docker_run_with_volumes.sh "$DOCKER_IMAGE" /v/ci/post-install/install-debian.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
   - name: "Alpine-based OS (amd64)"
     dependencies: [ ]
@@ -74,7 +74,7 @@ blocks:
             - env_var: NODE_VERSION
               values: ["18", "20", "21", "22", "23", "24"]
           commands:
-            - docker run -v "$(pwd):/v" "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+            - .semaphore/docker_run_with_volumes.sh "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
   - name: "Alpine-based OS (arm64)"
     dependencies: [ ]
@@ -91,7 +91,7 @@ blocks:
             - env_var: NODE_VERSION
               values: ["18", "20", "21", "22", "23", "24"]
           commands:
-            - docker run -v "$(pwd):/v" "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+            - .semaphore/docker_run_with_volumes.sh "node:${NODE_VERSION}-alpine" /v/ci/post-install/install-alpine.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
   - name: "RHEL-based OS (amd64)"
     dependencies: [ ]
@@ -110,7 +110,7 @@ blocks:
             - env_var: NODE_VERSION
               values: ["18", "20", "21", "22", "23", "24"]
           commands:
-            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+            - .semaphore/docker_run_with_volumes.sh "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
   - name: "RHEL-based OS (arm64)"
     dependencies: [ ]
@@ -129,7 +129,7 @@ blocks:
             - env_var: NODE_VERSION
               values: ["18", "20", "21", "22", "23", "24"]
           commands:
-            - docker run -v "$(pwd):/v" "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
+            - .semaphore/docker_run_with_volumes.sh "$DOCKER_IMAGE" /v/ci/post-install/install-rhel.sh "$NODE_VERSION" "$LIBRARY_VERSION"
 
   - name: "Mac (Intel)"
     dependencies: [ ]

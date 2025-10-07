@@ -30,7 +30,7 @@ global_job_config:
       - git submodule update --init --recursive
   epilogue:
     commands:
-      -  if [[ $(command cache) ]]; then cache store "$LIBRDKAFKA_COMMIT_HASH" deps/librdkafka; done
+      -  if [[ $(command cache) ]]; then cache store "$LIBRDKAFKA_COMMIT_HASH" deps/librdkafka; fi
 
 blocks:
   - name: "Linux amd64 (musl): Build and test"
@@ -47,7 +47,7 @@ blocks:
       jobs:
         - name: "Build from source and test for musl"
           commands:
-            - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker-alpine.sh
+            - .semaphore/docker_run_with_volumes.sh node:18-alpine /v/.semaphore/build-docker-alpine.sh
 
   - name: "Linux arm64 (musl): Build and test"
     run:
@@ -63,7 +63,7 @@ blocks:
       jobs:
         - name: "Build from source and test for musl"
           commands:
-              - docker run -v "$(pwd):/v" node:18-alpine /v/.semaphore/build-docker-alpine.sh
+              - .semaphore/docker_run_with_volumes.sh node:18-alpine /v/.semaphore/build-docker-alpine.sh
 
   - name: "Linux amd64: Build and test"
     run:
@@ -230,7 +230,7 @@ blocks:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-bullseye /v/.semaphore/build-docker-debian.sh
+            - .semaphore/docker_run_with_volumes.sh node:${NODE_VERSION}-bullseye /v/.semaphore/build-docker-debian.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
@@ -267,7 +267,7 @@ blocks:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-${PLATFORM}-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-bullseye /v/.semaphore/build-docker-debian.sh
+            - .semaphore/docker_run_with_volumes.sh node:${NODE_VERSION}-bullseye /v/.semaphore/build-docker-debian.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
@@ -304,7 +304,7 @@ blocks:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-alpine /v/.semaphore/build-docker-alpine.sh
+            - .semaphore/docker_run_with_volumes.sh node:${NODE_VERSION}-alpine /v/.semaphore/build-docker-alpine.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 
@@ -341,7 +341,7 @@ blocks:
             - export NODE_VERSION=$(echo $NODE_VERSION_ABI | cut -d, -f1)
             - export NODE_ABI=$(echo $NODE_VERSION_ABI | cut -d, -f2)
             - export ARTIFACT_KEY="confluent-kafka-javascript-${SEMAPHORE_GIT_TAG_NAME}-node-v${NODE_ABI}-linux-${LIBC}-${ARCHITECTURE}.tar.gz"
-            - docker run -v "$(pwd):/v" node:${NODE_VERSION}-alpine /v/.semaphore/build-docker-alpine.sh
+            - .semaphore/docker_run_with_volumes.sh node:${NODE_VERSION}-alpine /v/.semaphore/build-docker-alpine.sh
             - ls build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}
             - artifact push workflow "build/stage/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}" --destination "releases/${SEMAPHORE_GIT_TAG_NAME}/${ARTIFACT_KEY}"
 

@@ -711,7 +711,7 @@ static void do_test_consume_batch_eof_position(void) {
         err = rd_kafka_position(consumer, positions);
         TEST_ASSERT(!err, "rd_kafka_position failed: %s", rd_kafka_err2str(err));
 
-        /* Get consumer position after EOF */
+        /* Extract the position value from the partition list */
         position_after_eof = positions->elems[0].offset;
 
         TEST_SAY(

@@ -25,7 +25,6 @@ global_job_config:
   prologue:
     commands:
       - checkout
-      - export LIBRDKAFKA_COMMIT_HASH="librdkafka_$(git submodule status deps/librdkafka | cut -d' ' -f1)"
       - git submodule update --init --recursive
   epilogue:
     commands:

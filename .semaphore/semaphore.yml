@@ -26,7 +26,6 @@ global_job_config:
     commands:
       - checkout
       - export LIBRDKAFKA_COMMIT_HASH="librdkafka_$(git submodule status deps/librdkafka | cut -d' ' -f1)"
-      - if [[ $(command cache) ]]; then cache restore "$LIBRDKAFKA_COMMIT_HASH" ; fi
       - git submodule update --init --recursive
   epilogue:
     commands:
@@ -106,7 +105,6 @@ blocks:
       prologue:
         commands:
           - export CKJS_LINKING=dynamic
-          - if [[ $(command cache) ]]; then cache restore; fi
           - npm run install-from-source
           - if [[ $(command cache) ]]; then cache store; fi
       jobs:

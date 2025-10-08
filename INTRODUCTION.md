@@ -1881,7 +1881,6 @@ static void rebalance_cb (rd_kafka_t *rk,
 ```
 **Note:**
 - The `partitions` list contains **only partitions being added or revoked**, not the full partition list as in the classic `rd_kafka_assign()`.
-- Incremental assignors (including range) are **supported in both classic and KIP-848 protocols**, but this callback is required for KIP-848.
 
 <a name="upgrade-and-downgrade"></a>
 #### Upgrade and Downgrade

@@ -1697,9 +1697,11 @@ the original fatal error code and reason.
 To read more about static group membership, see [KIP-345](https://cwiki.apache.org/confluence/display/KAFKA/KIP-345%3A+Introduce+static+membership+protocol+to+reduce+consumer+rebalances).
 
 <a name="next-generation-consumer-group-protocol-kip-848"></a>
-### Next Generation Consumer Group Protocol (KIP-848)
+### Next Generation Consumer Group Protocol ([KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol))
 
-Starting with **librdkafka 2.12.0** (GA release), the next generation consumer group rebalance protocol defined in **[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)** is **production-ready**.
+Starting with **librdkafka v2.12.0** (GA release), the next generation consumer group rebalance protocol defined in **[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)** is **production-ready**.
+
+**Note:** The new consumer group protocol defined in [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) is not enabled by default. There are few contract change associated with the new protocol and might cause breaking changes. `group.protocol` configuration property dictates whether to use the new `consumer` protocol or older `classic` protocol. It defaults to `classic` if not provided.
 
 <a name="overview"></a>
 #### Overview
@@ -1707,8 +1709,8 @@ Starting with **librdkafka 2.12.0** (GA release), the next generation consumer g
   The **Group Leader role** (consumer member) is removed. Assignments are calculated by the **Group Coordinator (broker)** and distributed via **heartbeats**.
 
 - **Requirements:**
-  - Broker version **4.0.0+**
-  - librdkafka version **2.12.0+**: GA (production-ready)
+  - Broker version: **v4.0.0+**
+  - librdkafka version: **v2.12.0+**: GA (production-ready)
 
 - **Enablement (client-side):**
   - `group.protocol=consumer`
@@ -1717,7 +1719,7 @@ Starting with **librdkafka 2.12.0** (GA release), the next generation consumer g
 <a name="available-features"></a>
 #### Available Features
 
-All KIP-848 features are supported including:
+All [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) features are supported including:
 
 - Subscription to one or more topics, including **regular expression (regex) subscriptions**
 - Rebalance callbacks (**incremental only**)
@@ -1892,10 +1894,10 @@ static void rebalance_cb (rd_kafka_t *rk,
 
 
 <a name="migration-checklist-next-gen-protocol--kip-848"></a>
-#### Migration Checklist (Next-Gen Protocol / KIP-848)
+#### Migration Checklist (Next-Gen Protocol / [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol))
 
-1. Upgrade to **librdkafka ≥ 2.12.0** (GA release)
-2. Run against **Kafka brokers ≥ 4.0.0**
+1. Upgrade to **librdkafka ≥ v2.12.0** (GA release)
+2. Run against **Kafka brokers ≥ v4.0.0**
 3. Set `group.protocol=consumer`
 4. Optionally set `group.remote.assignor`; leave `NULL` for broker-controlled (default: `uniform`), valid options: `uniform` or `range`
 5. Replace deprecated configs with new ones
@@ -2349,7 +2351,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
 | KIP-881 - Rack-aware Partition Assignment for Kafka Consumers            | 3.5.0                       | Supported                                                                                     |
-| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 4.0.0                       | Preview                                                                                       |
+| KIP-848 - The Next Generation of the Consumer Rebalance Protocol         | 4.0.0                       | Supported                                                                                     |
 | KIP-899 - Allow producer and consumer clients to rebootstrap             | 3.8.0                       | Supported                                                                                     |
 | KIP-951 - Leader discovery optimisations for the client                  | 3.7.0                       | Supported                                                                                     |
 | KIP-1082 - Require Client-Generated IDs over the ConsumerGroupHeartbeat  | 4.0.0                       | Supported                                                                                     |

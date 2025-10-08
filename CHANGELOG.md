@@ -6,7 +6,9 @@ librdkafka v2.12.0 is a feature release:
 
 Starting with **librdkafka 2.12.0**, the next generation consumer group rebalance protocol defined in **[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)** is **production-ready**. Please refer the following [migration guide](INTRODUCTION.md#next-generation-consumer-group-protocol-kip-848) for moving from `classic` to `consumer` protocol.
 
-## Other changes
+**Note:** The new consumer group protocol defined in [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) is not enabled by default. There are few contract change associated with the new protocol and might cause breaking changes. `group.protocol` configuration property dictates whether to use the new `consumer` protocol or older `classic` protocol. It defaults to `classic` if not provided.
+
+## Enhancements and Fixes
 * Support for OAUTHBEARER metadata based authentication types,
   starting with Azure IMDS. [Introduction available](INTRODUCTION.md#oauthbearer-oidc-metadata-authentication) (#5155).
 * Fix compression types read issue in GetTelemetrySubscriptions response

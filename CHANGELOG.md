@@ -18,6 +18,7 @@ Starting with **librdkafka 2.12.0**, the next generation consumer group rebalanc
 * Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
 * Fix double free of headers in `rd_kafka_produceva` method (@blindspotbounty, #4628).
 * Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry (#5201).
+* New [walkthrough](https://github.com/confluentinc/librdkafka/wiki/Using-SASL-GSSAPI-with-librdkafka-in-a-cross%E2%80%90realm-scenario-with-Windows-SSPI-and-MIT-Kerberos) in the Wiki about configuring Kafka cross-realm authentication between Windows SSPI and MIT Kerberos.
 
 
 ## Fixes

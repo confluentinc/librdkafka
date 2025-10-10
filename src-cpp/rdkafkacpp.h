@@ -1436,8 +1436,17 @@ class RD_EXPORT Conf {
   virtual Conf::ConfResult get(
       SslCertificateVerifyCb *&ssl_cert_verify_cb) const = 0;
 
-  /** @brief Dump configuration names and values to list containing
-   *         name,value tuples */
+  /** @brief Dump configuration names and values to a list containing
+   *         name,value tuples.
+   *
+   *  @remark Ownership: The returned std::list<std::string> is heap-allocated.
+   *  The caller owns the list and must delete it when done, e.g.:
+   *  @code
+   *    std::list<std::string> *lst = conf->dump();
+   *    // ... use lst ...
+   *    delete lst;
+   *  @endcode
+   */
   virtual std::list<std::string> *dump() = 0;
 
   /** @brief Use with \p name = \c \"consume_cb\" */

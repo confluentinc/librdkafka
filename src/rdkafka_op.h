@@ -726,6 +726,16 @@ struct rd_kafka_op_s {
                         void (*cb)(rd_kafka_t *rk, void *rkb);
                 } terminated;
 
+                struct {
+                        /** Whether this broker should share-fetch nonzero
+                         * messages. */
+                        rd_bool_t should_fetch;
+
+                        /** Absolute timeout left to complete this share-fetch.
+                         */
+                        rd_ts_t abs_timeout;
+                } share_fetch;
+
         } rko_u;
 };
 

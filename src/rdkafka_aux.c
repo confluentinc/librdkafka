@@ -65,8 +65,6 @@ const int16_t rd_kafka_topic_result_replication_factor(
 const rd_kafka_ConfigEntry_t **
 rd_kafka_topic_result_configs(const rd_kafka_topic_result_t *topicres,
                               size_t *cntp) {
-        if (!*cntp)
-                return NULL;
         *cntp = rd_list_cnt(&topicres->configs);
         return (const rd_kafka_ConfigEntry_t **)topicres->configs.rl_elems;
 }

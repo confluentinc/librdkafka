@@ -595,7 +595,9 @@ int rd_kafka_buf_read_TopicConfigErrorCode(
     rd_kafka_buf_t *rkbuf,
     rd_kafka_resp_err_t *topic_config_err) {
         const int log_decode_errors = LOG_ERR;
-        rd_kafka_buf_read_i16(rkbuf, topic_config_err);
+        int16_t err_code;
+        rd_kafka_buf_read_i16(rkbuf, &err_code);
+        *topic_config_err = err_code;
         rd_kafka_buf_skip_tags(rkbuf);
         return 1;
 err_parse:

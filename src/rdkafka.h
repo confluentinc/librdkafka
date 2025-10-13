@@ -7016,6 +7016,7 @@ RD_EXPORT const int16_t rd_kafka_topic_result_replication_factor(
 /**
  * @returns the configuration entries for the given topic result,
  *         or NULL if not applicable.
+ * @param topicres Topic result object.
  * @param cntp Pointer to variable that will be set to the number
  *            of entries in the returned array.
  * @remark lifetime of the returned array and entries is the same as the

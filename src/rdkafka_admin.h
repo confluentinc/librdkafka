@@ -237,6 +237,19 @@ struct rd_kafka_ConfigEntry_s {
 };
 
 /**
+ * @brief Create new ConfigEntry
+ *
+ * @param name Config entry name
+ * @param name_len Length of name, or -1 to use strlen()
+ * @param value Config entry value, or NULL
+ * @param value_len Length of value, or -1 to use strlen()
+ */
+rd_kafka_ConfigEntry_t *rd_kafka_ConfigEntry_new0(const char *name,
+                                                  size_t name_len,
+                                                  const char *value,
+                                                  size_t value_len);
+
+/**
  * @brief A cluster ConfigResource constisting of:
  *         - resource type (BROKER, TOPIC)
  *         - configuration property name

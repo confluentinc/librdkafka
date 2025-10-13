@@ -6989,6 +6989,42 @@ rd_kafka_topic_result_error_string(const rd_kafka_topic_result_t *topicres);
 RD_EXPORT const char *
 rd_kafka_topic_result_name(const rd_kafka_topic_result_t *topicres);
 
+
+/*! Apache Kafka configuration entry. */
+typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
+
+/**
+ * @returns the error code for the topic configuration operation
+ */
+RD_EXPORT const rd_kafka_resp_err_t rd_kafka_topic_result_topic_config_error(
+    const rd_kafka_topic_result_t *topicres);
+
+/**
+ * @returns the number of partitions for the given topic result,
+ *          or -1 if not applicable.
+ */
+RD_EXPORT const int32_t
+rd_kafka_topic_result_num_partitions(const rd_kafka_topic_result_t *topicres);
+
+/**
+ * @returns the replication factor for the given topic result,
+ *         or -1 if not applicable.
+ */
+RD_EXPORT const int16_t rd_kafka_topic_result_replication_factor(
+    const rd_kafka_topic_result_t *topicres);
+
+/**
+ * @returns the configuration entries for the given topic result,
+ *         or NULL if not applicable.
+ * @param cntp Pointer to variable that will be set to the number
+ *            of entries in the returned array.
+ * @remark lifetime of the returned array and entries is the same as the
+ *        \p topicres.
+ */
+RD_EXPORT const rd_kafka_ConfigEntry_t **
+rd_kafka_topic_result_configs(const rd_kafka_topic_result_t *topicres,
+                              size_t *cntp);
+
 /**
  * @brief Group result provides per-group operation result information.
  *
@@ -7801,9 +7837,6 @@ typedef enum rd_kafka_ConfigSource_t {
 RD_EXPORT const char *
 rd_kafka_ConfigSource_name(rd_kafka_ConfigSource_t confsource);
 
-
-/*! Apache Kafka configuration entry. */
-typedef struct rd_kafka_ConfigEntry_s rd_kafka_ConfigEntry_t;
 
 /**
  * @returns the configuration property name

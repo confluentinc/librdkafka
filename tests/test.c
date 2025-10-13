@@ -5186,6 +5186,18 @@ void test_admin_create_topic(rd_kafka_t *use_rk,
                     rd_kafka_topic_result_name(terr[0]),
                     rd_kafka_topic_result_error_string(terr[0]));
 
+        TEST_ASSERT(rd_kafka_topic_result_num_partitions(terr[0]) ==
+                        partition_cnt,
+                    "Topic %s expected %d partitions, got %d",
+                    rd_kafka_topic_result_name(terr[0]), partition_cnt,
+                    rd_kafka_topic_result_num_partitions(terr[0]));
+
+        TEST_ASSERT(rd_kafka_topic_result_replication_factor(terr[0]) ==
+                        replication_factor,
+                    "Topic %s expected replication factor %d, got %d",
+                    rd_kafka_topic_result_name(terr[0]), replication_factor,
+                    rd_kafka_topic_result_replication_factor(terr[0]));
+
         rd_kafka_event_destroy(rkev);
 
         rd_kafka_queue_destroy(rkqu);

@@ -2069,6 +2069,23 @@ rd_kafka_resp_err_t rd_kafka_NewTopic_set_config(rd_kafka_NewTopic_t *new_topic,
 }
 
 
+static int rd_kafkap_CreateTopics_result_tags_parse(
+    rd_kafka_buf_t *rkbuf,
+    uint64_t tagtype,
+    uint64_t taglen,
+    rd_kafka_resp_err_t *topic_config_err) {
+        switch (tagtype) {
+        case 0: /* TopicConfigErrorCode */
+                if (rd_kafka_buf_read_TopicConfigErrorCode(
+                        rkbuf, topic_config_err) == -1)
+                        goto err_parse;
+                return 1;
+        default:
+                return 0;
+        }
+err_parse:
+        return -1;
+}
 
 /**
  * @brief Parse CreateTopicsResponse and create ADMIN_RESULT op.
@@ -2084,16 +2101,17 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_t *rk              = rkb->rkb_rk;
         rd_kafka_op_t *rko_result   = NULL;
         int32_t topic_cnt;
+        int16_t ApiVersion = rd_kafka_buf_ApiVersion(reply);
         int i;
 
-        if (rd_kafka_buf_ApiVersion(reply) >= 2) {
+        if (ApiVersion >= 2) {
                 int32_t Throttle_Time;
                 rd_kafka_buf_read_i32(reply, &Throttle_Time);
                 rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
         }
 
         /* #topics */
-        rd_kafka_buf_read_i32(reply, &topic_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &topic_cnt, RD_KAFKAP_TOPICS_MAX);
 
         if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -2116,12 +2134,13 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
                 char *this_errstr         = NULL;
                 rd_kafka_topic_result_t *terr;
                 rd_kafka_NewTopic_t skel;
-                int orig_pos;
+                int orig_pos, j;
+                int32_t configs_cnt;
 
                 rd_kafka_buf_read_str(reply, &ktopic);
                 rd_kafka_buf_read_i16(reply, &error_code);
 
-                if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                if (ApiVersion >= 1)
                         rd_kafka_buf_read_str(reply, &error_msg);
 
                 /* For non-blocking CreateTopicsRequests the broker
@@ -2149,6 +2168,39 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
                 terr = rd_kafka_topic_result_new(ktopic.str,
                                                  RD_KAFKAP_STR_LEN(&ktopic),
                                                  error_code, this_errstr);
+
+                if (ApiVersion >= 5) {
+                        /*Number of partitions*/
+                        rd_kafka_buf_read_i32(reply, &terr->num_partitions);
+                        /*Replication factor*/
+                        rd_kafka_buf_read_i16(reply, &terr->replication_factor);
+                        rd_kafka_buf_read_arraycnt(reply, &configs_cnt,
+                                                   RD_KAFKAP_CONFIGS_MAX);
+                        for (j = 0; j < configs_cnt; j++) {
+                                rd_kafkap_str_t name, value;
+                                rd_kafka_ConfigEntry_t *entry;
+
+                                rd_kafka_buf_read_str(reply, &name);
+                                rd_kafka_buf_read_str(reply, &value);
+
+                                entry = rd_kafka_ConfigEntry_new0(
+                                    name.str, RD_KAFKAP_STR_LEN(&name),
+                                    value.str, RD_KAFKAP_STR_LEN(&value));
+
+                                rd_kafka_buf_read_bool(reply,
+                                                       &entry->a.is_readonly);
+                                rd_kafka_buf_read_i8(reply, &entry->a.source);
+                                rd_kafka_buf_read_bool(reply,
+                                                       &entry->a.is_sensitive);
+                                rd_kafka_buf_skip_tags(reply);
+
+                                rd_list_add(&terr->configs, entry);
+                        }
+
+                        rd_kafka_buf_read_tags(
+                            reply, rd_kafkap_CreateTopics_result_tags_parse,
+                            &terr->topic_config_err);
+                }
 
                 /* As a convenience to the application we insert topic result
                  * in the same order as they were requested. The broker
@@ -2763,10 +2815,10 @@ static void rd_kafka_ConfigEntry_free(void *ptr) {
  * @param value Config entry value, or NULL
  * @param value_len Length of value, or -1 to use strlen()
  */
-static rd_kafka_ConfigEntry_t *rd_kafka_ConfigEntry_new0(const char *name,
-                                                         size_t name_len,
-                                                         const char *value,
-                                                         size_t value_len) {
+rd_kafka_ConfigEntry_t *rd_kafka_ConfigEntry_new0(const char *name,
+                                                  size_t name_len,
+                                                  const char *value,
+                                                  size_t value_len) {
         rd_kafka_ConfigEntry_t *entry;
 
         if (!name)

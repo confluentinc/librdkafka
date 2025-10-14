@@ -100,7 +100,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
+        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
 
 
 /**
@@ -5187,14 +5187,9 @@ void test_admin_create_topic(rd_kafka_t *use_rk,
                     rd_kafka_topic_result_error_string(terr[0]));
 
         if (rd_kafka_topic_result_topic_config_error(terr[0]) ==
-            RD_KAFKA_RESP_ERR_NO_ERROR) {
-                printf(
-                    "Topic %s created with %d partitions and "
-                    "replication factor %d and topic config err: %d\n",
-                    rd_kafka_topic_result_name(terr[0]),
-                    rd_kafka_topic_result_num_partitions(terr[0]),
-                    rd_kafka_topic_result_replication_factor(terr[0]),
-                    rd_kafka_topic_result_topic_config_error(terr[0]));
+                RD_KAFKA_RESP_ERR_NO_ERROR &&
+            rd_kafka_topic_result_error(terr[0]) !=
+                RD_KAFKA_RESP_ERR_TOPIC_ALREADY_EXISTS) {
                 TEST_ASSERT(rd_kafka_topic_result_num_partitions(terr[0]) ==
                                 partition_cnt,
                             "Topic %s expected %d partitions, got %d",

@@ -3058,7 +3058,16 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
 
 RD_EXPORT
-rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf, char *errstr, size_t errstr_size);
+rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
+                                        char *errstr,
+                                        size_t errstr_size);
+
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_share_consume_batch(rd_kafka_t *rk,
+                             int timeout_ms,
+                             rd_kafka_message_t ***rkmessages /* out */,
+                             size_t *rkmessages_size /* out */);
 
 /**
  * @brief Destroy Kafka handle.

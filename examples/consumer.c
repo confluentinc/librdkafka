@@ -165,8 +165,8 @@ int main(int argc, char **argv) {
         }
 
 
-        if (rd_kafka_conf_set(conf, "debug", "cgrp", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        if (rd_kafka_conf_set(conf, "debug", "cgrp", errstr, sizeof(errstr)) !=
+            RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -237,9 +237,20 @@ int main(int argc, char **argv) {
          * Start polling for messages. */
 
         while (run) {
-                rd_kafka_message_t *rkm;
+                rd_kafka_message_t *rkm = NULL;
 
-                rkm = rd_kafka_consumer_poll(rk, 100);
+                // rkm = rd_kafka_consumer_poll(rk, 100);
+                rd_kafka_error_t *error;
+
+                // fprintf(stderr, "Calling consume_batch\n");
+                error = rd_kafka_share_consume_batch(rk, 1000, NULL, NULL);
+                if (error) {
+                        fprintf(stderr, "%% Consume error: %s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
                 if (!rkm)
                         continue; /* Timeout: no message within 100ms,
                                    *  try again. This short timeout allows

@@ -191,6 +191,8 @@ typedef enum {
                                            *   u.admin_request */
         RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
                                     applicable. */
+        RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
+
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -734,7 +736,20 @@ struct rd_kafka_op_s {
                         /** Absolute timeout left to complete this share-fetch.
                          */
                         rd_ts_t abs_timeout;
+
+                        /** Target broker to which op is sent. */
+                        rd_kafka_broker_t *target_broker;
                 } share_fetch;
+
+                struct {
+                        /** Absolute timeout for share fetch fanout operation.
+                         */
+                        rd_ts_t abs_timeout;
+
+                        /** Is this a retry, or the first attempt of this poll?
+                         * Retries only have should_fetch=true request sent. */
+                        rd_bool_t is_retry;
+                } share_fetch_fanout;
 
         } rko_u;
 };

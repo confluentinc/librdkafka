@@ -2898,6 +2898,7 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
         rd_kafka_broker_t *selected_rkb = NULL;
         rd_kafka_topic_partition_list_t *partitions =
             rkcg->rkcg_current_assignment;
+        //     rkcg->rkcg_toppars; /* TODO: use rkcg->rkcg_toppars instead. */
         int32_t broker_id = -1;
         size_t i;
         rd_kafka_topic_partition_t *partition;
@@ -2964,10 +2965,8 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                 ? rd_kafka_broker_name(rko->rko_u.share_fetch.target_broker)
                 : "none");
 
-        rd_kafka_broker_lock(rko->rko_u.share_fetch.target_broker);
         rko->rko_u.share_fetch.target_broker->rkb_share_fetch_enqueued =
             rd_false;
-        rd_kafka_broker_unlock(rko->rko_u.share_fetch.target_broker);
 
         if (rko->rko_error) {
                 rd_kafka_dbg(rk, CGRP, "SHARE", "Share fetch failed: %s",
@@ -3028,7 +3027,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                         continue;
                 }
 
-                rd_kafka_broker_lock(rkb);
                 if (rkb->rkb_share_fetch_enqueued) {
                         rd_kafka_broker_unlock(rkb);
                         rd_kafka_dbg(rk, CGRP, "SHARE",
@@ -3038,7 +3036,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                         continue;
                 }
                 rkb->rkb_share_fetch_enqueued = rd_true;
-                rd_kafka_broker_unlock(rkb);
 
                 rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
                 rko->rko_u.share_fetch.abs_timeout =
@@ -3065,14 +3062,15 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 rd_kafka_error_t *
 rd_kafka_share_consume_batch(rd_kafka_t *rk,
                              int timeout_ms,
-                             rd_kafka_message_t ***rkmessages /* out */,
+                             rd_kafka_message_t **rkmessages /* out */,
                              size_t *rkmessages_size /* out */) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_q_t *rkq;
         rd_kafka_op_t *rko;
-        rd_ts_t now         = rd_clock();
-        rd_ts_t abs_timeout = rd_timeout_init0(now, timeout_ms);
-        int cnt             = 0;
+        rd_ts_t now                   = rd_clock();
+        rd_ts_t abs_timeout           = rd_timeout_init0(now, timeout_ms);
+        int cnt                       = 0;
+        const size_t max_poll_records = 100; /* TODO: change. */
 
         if (!RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -3092,8 +3090,6 @@ rd_kafka_share_consume_batch(rd_kafka_t *rk,
                                           "rd_kafka_share_consume_batch(): "
                                           "Consumer group not initialized");
 
-        rd_kafka_app_poll_start(rk, rkcg->rkcg_q, now, timeout_ms);
-
         /* If we have any pending items on the consumer queue, don't issue new
          * requests, rather, deal with them first. */
         if (likely(rd_kafka_q_len(rkcg->rkcg_q) == 0)) {
@@ -3109,46 +3105,15 @@ rd_kafka_share_consume_batch(rd_kafka_t *rk,
                 rd_kafka_q_enq(rk->rk_ops, fanout_rko);
         }
 
-        while ((rko = rd_kafka_q_pop(rkcg->rkcg_q,
-                                     rd_timeout_remains_us(abs_timeout), 0))) {
-                rd_kafka_op_res_t res;
-
-                cnt++;
-                res = rd_kafka_poll_cb(rk, rkcg->rkcg_q, rko,
-                                       RD_KAFKA_Q_CB_RETURN, NULL);
-                /* Ignore anything that's not PASS or YIELD, as it's handled
-                 * already. */
-                if (res == RD_KAFKA_OP_RES_YIELD) {
-                        // TODO: Finish handling yields.
-                        break;
-                }
-
-                if (res != RD_KAFKA_OP_RES_PASS)
-                        continue;
-
-                switch (rko->rko_type) {
-                case RD_KAFKA_OP_FETCH:
-                        /* Messages - for now, ignore. */
-                        rd_kafka_dbg(
-                            rk, CGRP, "SHARE",
-                            "Ignoring msg at offset %d from share fetch",
-                            rd_kafka_message_get(rko)->offset);
-                        rd_kafka_op_destroy(rko);
-                        break;
-
-                default:
-                        rd_kafka_log(rk, LOG_WARNING, "SHARE",
-                                     "Ignoring unexpected op %s in "
-                                     "rd_kafka_share_consume_batch()",
-                                     rd_kafka_op2str(rko->rko_type));
-                        rd_kafka_op_destroy(rko);
-                        break;
-                }
-        }
-
-        rd_kafka_dbg(rk, CGRP, "SHARE",
-                     "Returning from share consume batch after %d ops", cnt);
-        rd_kafka_app_polled(rk, rkcg->rkcg_q);
+        /* At this point, there's no reason to deviate from what we already do
+         * for returning multiple messages to the user, as the orchestration
+         * is handled by the main thread. Later on, we needed, we might need
+         * a custom loop if we need any changes. */
+        *rkmessages_size = rd_kafka_q_serve_rkmessages(
+            rkcg->rkcg_q, timeout_ms, /* Use this timeout directly as prior
+                             operations aren't blocking, so no need to
+                             re-convert the abs_timeout into a relative one*/
+            rkmessages, max_poll_records);
 
         return NULL;
 }

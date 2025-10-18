@@ -2673,6 +2673,14 @@ class RD_EXPORT KafkaConsumer : public virtual Handle {
    */
   static KafkaConsumer *create(const Conf *conf, std::string &errstr);
 
+  /**
+   * @brief Creates a KafkaConsumer where messages and rebalance events can
+   *        be consumed independently by calling \p consume() or \p poll().
+   *
+   * @sa KafkaConsumer::create()
+   */
+  static KafkaConsumer *create_with_poll(const Conf *conf, std::string &errstr);
+
   virtual ~KafkaConsumer() = 0;
 
 

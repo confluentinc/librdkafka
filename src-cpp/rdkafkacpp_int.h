@@ -1341,9 +1341,13 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
   ~KafkaConsumerImpl() {
     if (rk_)
       rd_kafka_destroy_flags(rk_, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+    if (rk_queue_main_)
+      rd_kafka_queue_destroy(rk_queue_main_);
   }
 
   static KafkaConsumer *create(Conf *conf, std::string &errstr);
+  static KafkaConsumer *create_with_poll(Conf *conf, std::string &errstr);
+  int poll(int timeout_ms) override;
 
   ErrorCode assignment(std::vector<TopicPartition *> &partitions);
   bool assignment_lost();
@@ -1440,6 +1444,14 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
     rd_kafka_topic_partition_list_destroy(c_parts);
     return static_cast<ErrorCode>(err);
   }
+
+ private:
+  bool consumer_queue_forwarding_enabled_ = true;
+  rd_kafka_queue_t *rk_queue_main_        = nullptr;
+  static RdKafka::KafkaConsumer *create(const RdKafka::Conf *conf,
+                                        std::string &errstr,
+                                        bool independent_consume);
+  friend class KafkaConsumer;
 };
 
 

@@ -34,9 +34,22 @@
 RdKafka::KafkaConsumer::~KafkaConsumer() {
 }
 
+RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create_with_poll(
+    const RdKafka::Conf *conf,
+    std::string &errstr) {
+  return RdKafka::KafkaConsumerImpl::create(conf, errstr, true);
+}
+
 RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create(
     const RdKafka::Conf *conf,
     std::string &errstr) {
+  return RdKafka::KafkaConsumerImpl::create(conf, errstr, false);
+}
+
+RdKafka::KafkaConsumer *RdKafka::KafkaConsumerImpl::create(
+    const RdKafka::Conf *conf,
+    std::string &errstr,
+    bool independent_consume) {
   char errbuf[512];
   const RdKafka::ConfImpl *confimpl =
       dynamic_cast<const RdKafka::ConfImpl *>(conf);
@@ -72,10 +85,14 @@ RdKafka::KafkaConsumer *RdKafka::KafkaConsumer::create(
     return NULL;
   }
 
-  rkc->rk_ = rk;
+  rkc->rk_                                = rk;
+  rkc->consumer_queue_forwarding_enabled_ = !independent_consume;
 
   /* Redirect handle queue to cgrp's queue to provide a single queue point */
-  rd_kafka_poll_set_consumer(rk);
+  if (rkc->consumer_queue_forwarding_enabled_)
+    rd_kafka_poll_set_consumer(rk);
+  else
+    rkc->rk_queue_main_ = rd_kafka_queue_get_main(rk);
 
   return rkc;
 }
@@ -106,10 +123,29 @@ RdKafka::ErrorCode RdKafka::KafkaConsumerImpl::unsubscribe() {
   return static_cast<RdKafka::ErrorCode>(rd_kafka_unsubscribe(this->rk_));
 }
 
+int RdKafka::KafkaConsumerImpl::poll(int timeout_ms) {
+  if (consumer_queue_forwarding_enabled_)
+    throw std::runtime_error(
+        "KafkaConsumerImpl::poll(): cannot be called when "
+        "independent consume mode is disabled");
+
+  rd_kafka_message_t *rkmessage;
+  rkmessage = rd_kafka_consumer_poll(this->rk_, timeout_ms);
+  if (rkmessage) {
+    rd_kafka_message_destroy(rkmessage);
+    throw std::runtime_error(
+        "KafkaConsumerImpl::poll(): cannot serve messages");
+  }
+  return 0;
+}
+
 RdKafka::Message *RdKafka::KafkaConsumerImpl::consume(int timeout_ms) {
   rd_kafka_message_t *rkmessage;
 
-  rkmessage = rd_kafka_consumer_poll(this->rk_, timeout_ms);
+  if (consumer_queue_forwarding_enabled_)
+    rkmessage = rd_kafka_consumer_poll(this->rk_, timeout_ms);
+  else
+    rkmessage = rd_kafka_consume_queue(this->rk_queue_main_, timeout_ms);
 
   if (!rkmessage)
     return new RdKafka::MessageImpl(RD_KAFKA_CONSUMER, NULL,

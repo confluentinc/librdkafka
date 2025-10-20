@@ -28,6 +28,8 @@ global_job_config:
     # Shows plain output from docker build (no progress bars)
     - name: BUILDKIT_PROGRESS
       value: plain
+    - name: MACOSX_DEPLOYMENT_TARGET
+      value: '13'
 
 blocks:
   - name: 'OSX arm64/m1'

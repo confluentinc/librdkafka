@@ -1,3 +1,19 @@
+# librdkafka v2.12.1
+
+librdkafka v2.12.1 is a maintenance release:
+
+* Restored macOS binaries compatibility with macOS 13 and 14 (#5219).
+
+
+## Fixes
+
+### General fixes
+
+* Fix to restore macOS 13 and 14 compatibility in prebuilt binaries present in `librdkafka.redist`.
+  Happening since 2.12.0 (#5219).
+
+
+
 # librdkafka v2.12.0
 
 librdkafka v2.12.0 is a feature release:

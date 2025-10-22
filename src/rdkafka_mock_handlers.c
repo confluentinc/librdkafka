@@ -2155,10 +2155,10 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
         /* Epoch */
         rd_kafka_buf_read_i16(rkbuf, &pid.epoch);
         /* #Topics */
-        rd_kafka_buf_read_i32(rkbuf, &TopicsCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
 
         /* Response: #Results */
-        rd_kafka_buf_write_i32(resp, TopicsCnt);
+        rd_kafka_buf_write_arraycnt(resp, TopicsCnt);
 
         /* Inject error */
         all_err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -2183,9 +2183,10 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_kstr(resp, &Topic);
 
                 /* #Partitions */
-                rd_kafka_buf_read_i32(rkbuf, &PartsCnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartsCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
                 /* Response: #Partitions */
-                rd_kafka_buf_write_i32(resp, PartsCnt);
+                rd_kafka_buf_write_arraycnt(resp, PartsCnt);
 
                 mtopic = rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
 
@@ -2206,7 +2207,13 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
+
+                        rd_kafka_buf_write_tags_empty(resp);
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);
+
+                rd_kafka_buf_write_tags_empty(resp);
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -3015,12 +3022,12 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_LeaveGroup] = {0, 4, 4, rd_kafka_mock_handle_LeaveGroup},
         [RD_KAFKAP_SyncGroup]  = {0, 4, 4, rd_kafka_mock_handle_SyncGroup},
         [RD_KAFKAP_AddPartitionsToTxn] =
-            {0, 1, -1, rd_kafka_mock_handle_AddPartitionsToTxn},
-        [RD_KAFKAP_AddOffsetsToTxn] = {0, 1, -1,
+            {0, 3, 3, rd_kafka_mock_handle_AddPartitionsToTxn},
+        [RD_KAFKAP_AddOffsetsToTxn] = {0, 3, 3,
                                        rd_kafka_mock_handle_AddOffsetsToTxn},
         [RD_KAFKAP_TxnOffsetCommit] = {0, 3, 3,
                                        rd_kafka_mock_handle_TxnOffsetCommit},
-        [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
+        [RD_KAFKAP_EndTxn]          = {0, 3, 3, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =

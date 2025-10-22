@@ -442,8 +442,9 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
         test_consumer_subscribe(rk, topic);
         sleep_for(2);
 
-        event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
-                                (int)(test_timeout_multiplier * tmout_multip(10000)));
+        event = test_wait_event(
+            polling_queue, RD_KAFKA_EVENT_REBALANCE,
+            (int)(test_timeout_multiplier * tmout_multip(10000)));
         TEST_ASSERT(event, "Should get a rebalance event for the group rejoin");
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
@@ -501,7 +502,8 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
         test_consumer_subscribe(rk, topic);
         sleep_for(3);
         rd_kafka_poll(rk, 10);
-        TEST_SAY("Polled and sleeping again for 6s. Max poll should be reset\n");
+        TEST_SAY(
+            "Polled and sleeping again for 6s. Max poll should be reset\n");
         sleep_for(3);
 
         /* Poll should work */
@@ -511,7 +513,7 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 }
 
 int main_0089_max_poll_interval(int argc, char **argv) {
-     
+
         if (rd_kafka_version() >= 0x020100ff) {
                 do_test();
                 do_test_with_log_queue();
@@ -522,6 +524,6 @@ int main_0089_max_poll_interval(int argc, char **argv) {
         } else {
                 do_test();
         }
-        
+
         return 0;
 }

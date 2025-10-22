@@ -383,7 +383,7 @@ static void test_per_message_partition_flag(void) {
         test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
                                       30000);
 
-         sleep_for(3);
+        sleep_for(3);
 
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
@@ -527,7 +527,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
 
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
-         sleep_for(5);
+        sleep_for(5);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -655,7 +655,8 @@ static void test_message_single_partition_record_fail(int variation) {
         const char *confs_set_compact[] = {"cleanup.policy", "SET", "compact"};
 
         // Step 2: Change from compact to compact,delete
-        const char *confs_set_mixed[] = {"cleanup.policy", "SET", "compact,delete"};
+        const char *confs_set_mixed[] = {"cleanup.policy", "SET",
+                                         "compact,delete"};
 
         // Revert back to delete at the end
         const char *confs_set_delete[] = {"cleanup.policy", "SET", "delete"};
@@ -691,13 +692,16 @@ static void test_message_single_partition_record_fail(int variation) {
         sleep_for(1);
 
         // Step 2: compact → compact,delete (if supported by the environment)
-        TEST_SAY("Step 2: Attempting to change cleanup.policy to compact,delete\n");
+        TEST_SAY(
+            "Step 2: Attempting to change cleanup.policy to compact,delete\n");
         rd_kafka_resp_err_t err = test_IncrementalAlterConfigs_simple(
             rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_mixed, 1);
 
         // If mixed policy is not supported, fall back to just compact
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
-            TEST_SAY("Mixed policy not supported, continuing with compact only\n");
+                TEST_SAY(
+                    "Mixed policy not supported, continuing with compact "
+                    "only\n");
         }
 
         /* Create messages */
@@ -761,8 +765,8 @@ static void test_message_single_partition_record_fail(int variation) {
                 TEST_ASSERT(valid_message_cnt == 90);
 
         TEST_SAY("Reverting cleanup.policy back to delete\n");
-        test_IncrementalAlterConfigs_simple(
-            rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_delete, 1);
+        test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
+                                            topic_name, confs_set_delete, 1);
 
         if (fails)
                 TEST_FAIL("%i failures, see previous errors", fails);

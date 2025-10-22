@@ -41,15 +41,15 @@ static void do_test_store_unassigned(void) {
         rd_kafka_topic_partition_list_t *parts;
         rd_kafka_resp_err_t err;
         rd_kafka_message_t *rkmessage;
-        char metadata[] = "metadata";  /* Available since librdkafka 2.2.0 */
+        char metadata[] = "metadata"; /* Available since librdkafka 2.2.0 */
         const int64_t proper_offset = 900, bad_offset = 300;
 
         SUB_TEST_QUICK();
 
         test_create_topic_if_auto_create_disabled(NULL, topic, -1);
-        
+
         sleep_for(3);
-        
+
         test_produce_msgs_easy(topic, 0, 0, 1000);
 
         test_conf_init(&conf, NULL, 30);
@@ -66,10 +66,12 @@ static void do_test_store_unassigned(void) {
         TEST_SAY("Consume one message\n");
         test_consumer_poll_once(c, NULL, tmout_multip(3000));
 
-        parts->elems[0].offset        = proper_offset;
-        if (rd_kafka_version() >= 0x02020000) {  /* Metadata handling available since librdkafka 2.2.0 */
+        parts->elems[0].offset = proper_offset;
+        if (rd_kafka_version() >= 0x02020000) { /* Metadata handling available
+                                                   since librdkafka 2.2.0 */
                 parts->elems[0].metadata_size = sizeof metadata;
-                parts->elems[0].metadata      = malloc(parts->elems[0].metadata_size);
+                parts->elems[0].metadata =
+                    malloc(parts->elems[0].metadata_size);
                 memcpy(parts->elems[0].metadata, metadata,
                        parts->elems[0].metadata_size);
         }
@@ -83,8 +85,9 @@ static void do_test_store_unassigned(void) {
         TEST_SAY("Unassigning partitions and trying to store again\n");
         TEST_CALL_ERR__(rd_kafka_assign(c, NULL));
 
-        parts->elems[0].offset        = bad_offset;
-        if (rd_kafka_version() >= 0x02020000) {  /* Metadata cleanup available since librdkafka 2.2.0 */
+        parts->elems[0].offset = bad_offset;
+        if (rd_kafka_version() >= 0x02020000) { /* Metadata cleanup available
+                                                   since librdkafka 2.2.0 */
                 parts->elems[0].metadata_size = 0;
                 rd_free(parts->elems[0].metadata);
                 parts->elems[0].metadata = NULL;
@@ -125,23 +128,26 @@ static void do_test_store_unassigned(void) {
                     "offset %" PRId64 ", not %" PRId64,
                     proper_offset, rkmessage->offset);
 
-        if (rd_kafka_version() >= 0x02020000) {  /* Metadata testing available since librdkafka 2.2.0 */
+        if (rd_kafka_version() >= 0x02020000) { /* Metadata testing available
+                                                   since librdkafka 2.2.0 */
                 TEST_SAY(
                     "Retrieving committed offsets to verify committed offset "
                     "metadata\n");
                 rd_kafka_topic_partition_list_t *committed_toppar;
                 committed_toppar = rd_kafka_topic_partition_list_new(1);
                 rd_kafka_topic_partition_list_add(committed_toppar, topic, 0);
-                TEST_CALL_ERR__(
-                    rd_kafka_committed(c, committed_toppar, tmout_multip(3000)));
+                TEST_CALL_ERR__(rd_kafka_committed(c, committed_toppar,
+                                                   tmout_multip(3000)));
                 TEST_ASSERT(committed_toppar->elems[0].offset == proper_offset,
-                            "Expected committed offset to be %" PRId64 ", not %" PRId64,
+                            "Expected committed offset to be %" PRId64
+                            ", not %" PRId64,
                             proper_offset, committed_toppar->elems[0].offset);
                 TEST_ASSERT(committed_toppar->elems[0].metadata != NULL,
                             "Expected metadata to not be NULL");
-                TEST_ASSERT(strcmp(committed_toppar->elems[0].metadata, metadata) == 0,
-                            "Expected metadata to be %s, not %s", metadata,
-                            (char *)committed_toppar->elems[0].metadata);
+                TEST_ASSERT(
+                    strcmp(committed_toppar->elems[0].metadata, metadata) == 0,
+                    "Expected metadata to be %s, not %s", metadata,
+                    (char *)committed_toppar->elems[0].metadata);
 
                 TEST_SAY("Storing next offset without metadata\n");
                 parts->elems[0].offset = proper_offset + 1;
@@ -151,24 +157,29 @@ static void do_test_store_unassigned(void) {
                 TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false));
 
                 TEST_SAY(
-                    "Retrieving committed offset to verify empty committed offset "
+                    "Retrieving committed offset to verify empty committed "
+                    "offset "
                     "metadata\n");
                 rd_kafka_topic_partition_list_t *committed_toppar_empty;
                 committed_toppar_empty = rd_kafka_topic_partition_list_new(1);
-                rd_kafka_topic_partition_list_add(committed_toppar_empty, topic, 0);
-                TEST_CALL_ERR__(
-                    rd_kafka_committed(c, committed_toppar_empty, tmout_multip(3000)));
-                TEST_ASSERT(committed_toppar_empty->elems[0].offset ==
-                                proper_offset + 1,
-                            "Expected committed offset to be %" PRId64 ", not %" PRId64,
-                            proper_offset + 1, committed_toppar_empty->elems[0].offset);
+                rd_kafka_topic_partition_list_add(committed_toppar_empty, topic,
+                                                  0);
+                TEST_CALL_ERR__(rd_kafka_committed(c, committed_toppar_empty,
+                                                   tmout_multip(3000)));
+                TEST_ASSERT(
+                    committed_toppar_empty->elems[0].offset ==
+                        proper_offset + 1,
+                    "Expected committed offset to be %" PRId64 ", not %" PRId64,
+                    proper_offset + 1, committed_toppar_empty->elems[0].offset);
                 TEST_ASSERT(committed_toppar_empty->elems[0].metadata == NULL,
                             "Expected metadata to be NULL");
                 rd_kafka_topic_partition_list_destroy(committed_toppar);
                 rd_kafka_topic_partition_list_destroy(committed_toppar_empty);
         } else {
-                TEST_SAY("SKIPPING: Metadata testing - requires librdkafka version >= 2.2.0 (current: 0x%08x)\n",
-                         rd_kafka_version());
+                TEST_SAY(
+                    "SKIPPING: Metadata testing - requires librdkafka version "
+                    ">= 2.2.0 (current: 0x%08x)\n",
+                    rd_kafka_version());
         }
 
         rd_kafka_message_destroy(rkmessage);

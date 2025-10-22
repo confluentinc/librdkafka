@@ -42,7 +42,6 @@
 
 
 
-
 /**
  * Wait for REBALANCE ASSIGN event and perform assignment
  *
@@ -249,9 +248,9 @@ static void do_test_non_exist_and_partchange(void) {
          * - Verify updated assignment
          */
         test_create_partitions(rk, topic_a, 4);
-        
+
         sleep_for(2);
-        
+
         await_revoke("#2", rk, queue);
 
         await_assignment("#2: more partitions", rk, queue, 1, topic_a, 4);
@@ -386,18 +385,22 @@ static void do_test_topic_remove(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         if (rd_kafka_version() >= 0x020100ff) {
-                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_f);
                 test_create_topic_wait_exists(NULL, topic_f, parts_f, -1, 5000);
 
-                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_g);
                 test_create_topic_wait_exists(NULL, topic_g, parts_g, -1, 5000);
-                
+
                 sleep_for(2);
         } else {
-                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_f);
                 test_create_topic(NULL, topic_f, parts_f, -1);
 
-                TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_g);
                 test_create_topic(NULL, topic_g, parts_g, -1);
 
                 sleep_for(3);
@@ -432,7 +435,8 @@ static void do_test_topic_remove(void) {
 
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
 
-        /* Version-specific wait for consumer group to recognize topic deletion */
+        /* Version-specific wait for consumer group to recognize topic deletion
+         */
         if (rd_kafka_version() >= 0x020100ff) {
                 sleep_for(5);
         }
@@ -741,13 +745,16 @@ static void do_test_replica_rack_change_leader_no_rack_mock(
 static void do_test_resubscribe_with_regex() {
         /* Generate unique test run ID for topic isolation */
         char *test_run_id = rd_strdup(test_str_id_generate_tmp());
-        char *topic1  = rd_strdup(test_mk_topic_name(tsprintf("topic_regex1_%s", test_run_id), 1));
-        char *topic2  = rd_strdup(test_mk_topic_name(tsprintf("topic_regex2_%s", test_run_id), 1));
+        char *topic1      = rd_strdup(
+            test_mk_topic_name(tsprintf("topic_regex1_%s", test_run_id), 1));
+        char *topic2 = rd_strdup(
+            test_mk_topic_name(tsprintf("topic_regex2_%s", test_run_id), 1));
         char *topic_a = rd_strdup(test_mk_topic_name("topic_a", 1));
         char *group   = rd_strdup(
             tsprintf("group_test_sub_regex_%s", test_str_id_generate_tmp()));
         /* Create regex pattern specific to this test run */
-        char *topic_regex_pattern = rd_strdup(tsprintf("^.*topic_regex[12]_%s.*", test_run_id));
+        char *topic_regex_pattern =
+            rd_strdup(tsprintf("^.*topic_regex[12]_%s.*", test_run_id));
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_queue_t *queue;
@@ -799,9 +806,9 @@ static void do_test_resubscribe_with_regex() {
         /* Subscribe to topic1 */
         TEST_SAY("Subscribing to %s\n", topic1);
         test_consumer_subscribe(rk, topic1);
-        
+
         sleep_for(3);
-        
+
         /* Wait for assignment */
         await_assignment("Assignment for topic1", rk, queue, 1, topic1, 4);
 
@@ -815,9 +822,9 @@ static void do_test_resubscribe_with_regex() {
         /* Subscribe to topic2 */
         TEST_SAY("Subscribing to %s\n", topic2);
         test_consumer_subscribe(rk, topic2);
-        
+
         sleep_for(3);
-        
+
         /* Wait for assignment */
         await_assignment("Assignment for topic2", rk, queue, 1, topic2, 4);
 
@@ -853,7 +860,7 @@ static void do_test_resubscribe_with_regex() {
         /* Subscribe to regex and topic_a literal */
         TEST_SAY("Subscribing to regex %s and topic_a\n", topic_regex_pattern);
         test_consumer_subscribe_multi(rk, 2, topic_regex_pattern, topic_a);
-        
+
         sleep_for(3);
         /* Wait for assignment */
         if (test_consumer_group_protocol_classic()) {

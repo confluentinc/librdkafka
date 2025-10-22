@@ -264,16 +264,22 @@ static void do_test_consume_batch_non_existent_topic(void) {
 
 int main_0022_consume_batch(int argc, char **argv) {
         do_test_consume_batch();
-        
-        if (rd_kafka_version() >= 0x02020000) {  /* consume_batch_non_existent_topic available since librdkafka 2.2.0 */
+
+        if (rd_kafka_version() >=
+            0x02020000) { /* consume_batch_non_existent_topic available since
+                             librdkafka 2.2.0 */
                 if (test_consumer_group_protocol_classic()) {
                         do_test_consume_batch_non_existent_topic();
                 } else {
-                        TEST_SAY("SKIPPING: consume_batch_non_existent_topic - requires classic consumer group protocol\n");
+                        TEST_SAY(
+                            "SKIPPING: consume_batch_non_existent_topic - "
+                            "requires classic consumer group protocol\n");
                 }
         } else {
-                TEST_SAY("SKIPPING: consume_batch_non_existent_topic - requires librdkafka version >= 2.2.0 (current: 0x%08x)\n",
-                         rd_kafka_version());
+                TEST_SAY(
+                    "SKIPPING: consume_batch_non_existent_topic - requires "
+                    "librdkafka version >= 2.2.0 (current: 0x%08x)\n",
+                    rd_kafka_version());
         }
         return 0;
 }

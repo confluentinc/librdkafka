@@ -98,16 +98,18 @@ int main_0008_reqacks(int argc, char **argv) {
         /* Try different request.required.acks settings (issue #75) */
         /* Test all standard acks values, but skip unsupported ones */
         int start_acks = -1;
-        int end_acks = 1;
-        
+        int end_acks   = 1;
+
         TEST_SAY("Testing acks values -1, 0, 1 (skipping unsupported ones)\n");
         for (reqacks = start_acks; reqacks <= end_acks; reqacks++) {
                 char tmp[10];
-                
+
                 /* Convert acks value to string and check if supported */
                 rd_snprintf(tmp, sizeof(tmp), "%d", reqacks);
                 if (!test_is_acks_supported(tmp)) {
-                        TEST_SAY("Skipping acks=%d (not supported by cluster)\n", reqacks);
+                        TEST_SAY(
+                            "Skipping acks=%d (not supported by cluster)\n",
+                            reqacks);
                         continue;
                 }
 

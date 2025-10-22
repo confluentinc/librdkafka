@@ -183,7 +183,8 @@ int main_0099_commit_metadata(int argc, char **argv) {
         /* Make sure it's interpreted as bytes.
          * To fail before the fix it needs to be configured
          * with HAVE_STRNDUP */
-        if (rd_kafka_version() > 0x02050300) {  /* Only run null byte test if librdkafka version > 2.5.3 */
+        if (rd_kafka_version() > 0x02050300) { /* Only run null byte test if
+                                                  librdkafka version > 2.5.3 */
                 metadata[5] = '\0';
         }
 

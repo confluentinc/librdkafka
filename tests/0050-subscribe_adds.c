@@ -76,9 +76,9 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
 
                 test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
-                test_wait_topic_exists(rk, topic[i], tmout_multip(5000)); 
+                test_wait_topic_exists(rk, topic[i], tmout_multip(5000));
 
-                sleep_for(5); 
+                sleep_for(5);
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                                   (msgcnt / TOPIC_CNT) * i,
@@ -123,7 +123,9 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
                 sleep_for(3);
                 test_consumer_poll_no_msgs("consume", rk, testid, 5000);
         } else {
-                TEST_SAY("Skipping no-messages verification: requires librdkafka version > 2.3.0\n");
+                TEST_SAY(
+                    "Skipping no-messages verification: requires librdkafka "
+                    "version > 2.3.0\n");
         }
 
 

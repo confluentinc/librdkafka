@@ -430,10 +430,11 @@ int test_check_auto_create_topic(void);
 void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
                                                const char *topicname,
                                                int partition_cnt);
-void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
-                                                           const char *topicname,
-                                                           int partition_cnt,
-                                                           const char **configs);
+void test_create_topic_if_auto_create_disabled_with_configs(
+    rd_kafka_t *use_rk,
+    const char *topicname,
+    int partition_cnt,
+    const char **configs);
 
 #ifdef _RDKAFKA_H_
 rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,

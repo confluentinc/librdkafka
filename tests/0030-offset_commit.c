@@ -538,7 +538,7 @@ static void do_nonexist_commit(void) {
 
 int main_0030_offset_commit(int argc, char **argv) {
 
-        topic  = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        topic = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         test_create_topic_if_auto_create_disabled(NULL, topic, -1);
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
 
@@ -547,8 +547,11 @@ int main_0030_offset_commit(int argc, char **argv) {
         do_nonexist_commit();
 
         if (rd_kafka_version() >= 0x020100ff) {
-                TEST_SAY("Skipping offset tests (require librdkafka < 2.1.0 due to leader epoch APIs), "
-                         "current version: %s\n", rd_kafka_version_str());
+                TEST_SAY(
+                    "Skipping offset tests (require librdkafka < 2.1.0 due to "
+                    "leader epoch APIs), "
+                    "current version: %s\n",
+                    rd_kafka_version_str());
                 rd_free(topic);
                 return 0;
         }

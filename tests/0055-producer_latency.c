@@ -128,12 +128,13 @@ static int verify_latency(struct latconf *latconf) {
             latconf->rtt + 5.0 /* broker ProduceRequest handling time, maybe */;
 
         ext_overhead *= test_timeout_multiplier;
-        
-        /* Add extra overhead only for slow environments (timeout multiplier > 1) */
+
+        /* Add extra overhead only for slow environments (timeout multiplier >
+         * 1) */
         if (test_timeout_multiplier > 1.0) {
                 ext_overhead += 1000.0;
         }
-        
+
 
         avg = latconf->sum / (float)latconf->cnt;
 
@@ -357,23 +358,35 @@ int main_0055_producer_latency(int argc, char **argv) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         for (latconf = latconfs; latconf->name; latconf++) {
-                if (strstr(latconf->name, "no acks") && !test_is_acks_supported("0")) {
-                        TEST_SAY("Skipping %s test (acks=0 not supported)\n", latconf->name);
+                if (strstr(latconf->name, "no acks") &&
+                    !test_is_acks_supported("0")) {
+                        TEST_SAY("Skipping %s test (acks=0 not supported)\n",
+                                 latconf->name);
                         continue;
                 }
-                
-                /* Skip idempotence tests if idempotent producer tests are disabled */
-                if (strstr(latconf->name, "idempotence") && (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
-                        TEST_SAY("Skipping %s test (idempotent producer tests disabled)\n", latconf->name);
+
+                /* Skip idempotence tests if idempotent producer tests are
+                 * disabled */
+                if (strstr(latconf->name, "idempotence") &&
+                    (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        TEST_SAY(
+                            "Skipping %s test (idempotent producer tests "
+                            "disabled)\n",
+                            latconf->name);
                         continue;
                 }
-                
-                /* Skip transaction tests if idempotent producer tests are disabled */
-                if (strstr(latconf->name, "transactions") && (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
-                        TEST_SAY("Skipping %s test (idempotent producer tests disabled)\n", latconf->name);
+
+                /* Skip transaction tests if idempotent producer tests are
+                 * disabled */
+                if (strstr(latconf->name, "transactions") &&
+                    (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        TEST_SAY(
+                            "Skipping %s test (idempotent producer tests "
+                            "disabled)\n",
+                            latconf->name);
                         continue;
                 }
-                
+
                 test_producer_latency(topic, latconf);
         }
 
@@ -385,18 +398,21 @@ int main_0055_producer_latency(int argc, char **argv) {
         for (latconf = latconfs; latconf->name; latconf++) {
                 /* Skip configurations based on test configuration */
                 int should_skip = 0;
-                
-                if (strstr(latconf->name, "no acks") && !test_is_acks_supported("0")) {
+
+                if (strstr(latconf->name, "no acks") &&
+                    !test_is_acks_supported("0")) {
                         should_skip = 1;
-                } else if ((strstr(latconf->name, "idempotence") || strstr(latconf->name, "transactions")) &&
+                } else if ((strstr(latconf->name, "idempotence") ||
+                            strstr(latconf->name, "transactions")) &&
                            (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
                         should_skip = 1;
                 }
-                
+
                 if (should_skip) {
-                        TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s%s\n",
-                                 latconf->name, "-", "SKIP", "SKIP", "-", "-", "-", "-", "-",
-                                 _C_YEL "  SKIPPED");
+                        TEST_SAY(
+                            "%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s%s\n",
+                            latconf->name, "-", "SKIP", "SKIP", "-", "-", "-",
+                            "-", "-", _C_YEL "  SKIPPED");
                         continue;
                 }
                 TEST_SAY("%-40s %9s  %6d..%-6d  %7g  %9g %9g %9g %8d%s\n",
@@ -575,12 +591,14 @@ static void test_producer_latency_first_message(int case_number) {
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
         int case_number;
-        
+
         if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster tests require PLAINTEXT but cluster uses SSL/SASL\n");
+                TEST_SKIP(
+                    "Mock cluster tests require PLAINTEXT but cluster uses "
+                    "SSL/SASL\n");
                 return 0;
         }
-        
+
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);
         }

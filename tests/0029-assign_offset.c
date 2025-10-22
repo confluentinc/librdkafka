@@ -106,8 +106,10 @@ static void rebalance_cb(rd_kafka_t *rk,
 
 int main_0029_assign_offset(int argc, char **argv) {
         if (rd_kafka_version() < 0x020100ff) {
-                TEST_SKIP("Test requires librdkafka >= 2.1.0 (leader epoch APIs), "
-                         "current version: %s\n", rd_kafka_version_str());
+                TEST_SKIP(
+                    "Test requires librdkafka >= 2.1.0 (leader epoch APIs), "
+                    "current version: %s\n",
+                    rd_kafka_version_str());
                 return 0;
         }
 
@@ -130,7 +132,7 @@ int main_0029_assign_offset(int argc, char **argv) {
 
         test_create_topic_if_auto_create_disabled(rk, topic, partitions);
 
-        rkt    = test_create_producer_topic(rk, topic, NULL);
+        rkt = test_create_producer_topic(rk, topic, NULL);
         test_wait_topic_exists(rk, topic, 5000);
 
         parts = rd_kafka_topic_partition_list_new(partitions);

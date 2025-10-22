@@ -79,7 +79,7 @@ int main_0003_msgmaxsize(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char errstr[512];
-        const char* topic;
+        const char *topic;
 
         static const struct {
                 ssize_t keylen;

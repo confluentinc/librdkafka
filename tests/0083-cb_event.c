@@ -97,7 +97,7 @@ int main_0083_cb_event(int argc, char **argv) {
         testid = test_id_generate();
         topic  = test_mk_topic_name(__FUNCTION__, 1);
 
-        rk_p  = test_create_producer();
+        rk_p = test_create_producer();
         test_create_topic_if_auto_create_disabled(rk_p, topic, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
         test_wait_topic_exists(rk_p, topic, 5000);

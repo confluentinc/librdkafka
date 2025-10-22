@@ -103,7 +103,7 @@ int main_0007_autotopic(int argc, char **argv) {
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         const char *topic = test_mk_topic_name("0007_autotopic", 1);
-        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+        rkt               = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 

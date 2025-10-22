@@ -50,7 +50,7 @@ int main_0112_assign_unknown_part(int argc, char **argv) {
         c = test_create_consumer(topic, NULL, NULL, NULL);
 
         TEST_SAY("Creating topic %s with 1 partition\n", topic);
-        test_create_topic_wait_exists(c, topic, 1, -1, tmout_multip(1000)); 
+        test_create_topic_wait_exists(c, topic, 1, -1, tmout_multip(1000));
 
         sleep_for(3);
 

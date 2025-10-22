@@ -65,9 +65,10 @@ int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
-char *test_supported_acks                   = NULL; /**< Supported acks values */
-static double test_sleep_multiplier         = 0.0; /**< Sleep time multiplier */
-static char *test_skip_numbers              = NULL; /**< Comma-separated list of test numbers to skip */
+char *test_supported_acks                  = NULL; /**< Supported acks values */
+static double test_sleep_multiplier        = 0.0;  /**< Sleep time multiplier */
+static char *test_skip_numbers =
+    NULL; /**< Comma-separated list of test numbers to skip */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -106,7 +107,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
+        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
 
 
 /**
@@ -915,14 +916,14 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
 int test_should_skip_number(const char *test_number) {
         char *skip_list, *token, *saveptr;
         int should_skip = 0;
-        
+
         if (!test_skip_numbers || !*test_skip_numbers)
                 return 0;
-        
+
         TEST_LOCK();
         skip_list = rd_strdup(test_skip_numbers);
         TEST_UNLOCK();
-        
+
         token = strtok_r(skip_list, ",", &saveptr);
         while (token) {
                 /* Trim whitespace */
@@ -931,14 +932,14 @@ int test_should_skip_number(const char *test_number) {
                 char *end = token + strlen(token) - 1;
                 while (end > token && (*end == ' ' || *end == '\t'))
                         *end-- = '\0';
-                
+
                 if (!strcmp(token, test_number)) {
                         should_skip = 1;
                         break;
                 }
                 token = strtok_r(NULL, ",", &saveptr);
         }
-        
+
         rd_free(skip_list);
         return should_skip;
 }
@@ -951,48 +952,51 @@ int test_should_skip_number(const char *test_number) {
 int test_is_acks_supported(const char *acks_value) {
         char *supported_list, *token, *saveptr;
         int is_supported = 0;
-        
+
         if (!test_supported_acks) {
-                /* If no supported acks configured, assume all standard values are supported */
-                return (!strcmp(acks_value, "-1") || 
-                        !strcmp(acks_value, "0") || 
+                /* If no supported acks configured, assume all standard values
+                 * are supported */
+                return (!strcmp(acks_value, "-1") || !strcmp(acks_value, "0") ||
                         !strcmp(acks_value, "1"));
         }
-        
+
         /* Parse the comma-separated list of supported acks values */
         supported_list = rd_strdup(test_supported_acks);
-        token = strtok_r(supported_list, ",", &saveptr);
-        
+        token          = strtok_r(supported_list, ",", &saveptr);
+
         while (token != NULL) {
                 /* Trim whitespace */
-                while (*token == ' ' || *token == '\t') token++;
+                while (*token == ' ' || *token == '\t')
+                        token++;
                 char *end = token + strlen(token) - 1;
-                while (end > token && (*end == ' ' || *end == '\t')) *end-- = '\0';
-                
+                while (end > token && (*end == ' ' || *end == '\t'))
+                        *end-- = '\0';
+
                 if (!strcmp(token, acks_value)) {
                         is_supported = 1;
                         break;
                 }
                 token = strtok_r(NULL, ",", &saveptr);
         }
-        
+
         rd_free(supported_list);
         return is_supported;
 }
 
 /**
  * @brief Check if test should run with the requested acks value
- * @param wanted_acks The acks value the test wants (e.g., "1", "0", "-1", "all")
+ * @param wanted_acks The acks value the test wants (e.g., "1", "0", "-1",
+ * "all")
  * @returns The acks value to use, or NULL if test should be skipped
  */
 const char *test_get_available_acks(const char *wanted_acks) {
         /* Handle "all" as equivalent to "-1" */
         if (!strcmp(wanted_acks, "all"))
                 wanted_acks = "-1";
-                
+
         if (test_is_acks_supported(wanted_acks))
                 return wanted_acks;
-        
+
         /* Not supported - test should be skipped */
         return NULL;
 }
@@ -1632,7 +1636,8 @@ static void run_tests(int argc, char **argv) {
                 if ((test_neg_flags & ~test_flags) & test->flags)
                         skip_reason = "Filtered due to negative test flags";
                 if (test_should_skip_number(testnum))
-                        skip_reason = "Skipped by test.skip.numbers configuration";
+                        skip_reason =
+                            "Skipped by test.skip.numbers configuration";
                 if (test_broker_version &&
                     (test->minver > test_broker_version ||
                      (test->maxver && test->maxver < test_broker_version))) {
@@ -2203,14 +2208,18 @@ int main(int argc, char **argv) {
                 TEST_SAY("Test Idempotent Producer: enabled\n");
         }
         if (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)
-                TEST_SAY("Test Idempotent Producer: skipping idempotent tests\n");
+                TEST_SAY(
+                    "Test Idempotent Producer: skipping idempotent tests\n");
         if (test_supported_acks) {
                 TEST_SAY("Test supported acks: %s\n", test_supported_acks);
         } else {
-                TEST_SAY("Test supported acks: -1,0,1 (default - all standard values)\n");
+                TEST_SAY(
+                    "Test supported acks: -1,0,1 (default - all standard "
+                    "values)\n");
         }
         if (test_sleep_multiplier > 0.0) {
-                TEST_SAY("Test sleep multiplier: %.1fx\n", test_sleep_multiplier);
+                TEST_SAY("Test sleep multiplier: %.1fx\n",
+                         test_sleep_multiplier);
         }
         if (test_skip_numbers) {
                 TEST_SAY("Test skip numbers: %s\n", test_skip_numbers);
@@ -5018,28 +5027,31 @@ void test_print_partition_list_with_errors(
     const rd_kafka_topic_partition_list_t *partitions) {
         int i;
         for (i = 0; i < partitions->cnt; i++) {
-                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch APIs) */
+                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch
+                 * APIs) */
                 if (rd_kafka_version() >= 0x020100ff) {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " (epoch %" PRId32
-                                 ") %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 rd_kafka_topic_partition_get_leader_epoch(
-                                     &partitions->elems[i]),
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
+                        TEST_SAY(
+                            " %s [%" PRId32 "] offset %" PRId64
+                            " (epoch %" PRId32 ") %s%s\n",
+                            partitions->elems[i].topic,
+                            partitions->elems[i].partition,
+                            partitions->elems[i].offset,
+                            rd_kafka_topic_partition_get_leader_epoch(
+                                &partitions->elems[i]),
+                            partitions->elems[i].err ? ": " : "",
+                            partitions->elems[i].err
+                                ? rd_kafka_err2str(partitions->elems[i].err)
+                                : "");
                 } else {
-                        TEST_SAY(" %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
-                                 partitions->elems[i].topic,
-                                 partitions->elems[i].partition,
-                                 partitions->elems[i].offset,
-                                 partitions->elems[i].err ? ": " : "",
-                                 partitions->elems[i].err
-                                     ? rd_kafka_err2str(partitions->elems[i].err)
-                                     : "");
+                        TEST_SAY(
+                            " %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
+                            partitions->elems[i].topic,
+                            partitions->elems[i].partition,
+                            partitions->elems[i].offset,
+                            partitions->elems[i].err ? ": " : "",
+                            partitions->elems[i].err
+                                ? rd_kafka_err2str(partitions->elems[i].err)
+                                : "");
                 }
         }
 }
@@ -5052,19 +5064,23 @@ void test_print_partition_list_no_errors(
         int i;
         for (i = 0; i < partitions->cnt; i++) {
                 const rd_kafka_topic_partition_t *p = &partitions->elems[i];
-                int64_t leader_epoch = -1;
+                int64_t leader_epoch                = -1;
 
-                /* Only call leader epoch API if available (librdkafka >= 2.1.0) */
+                /* Only call leader epoch API if available (librdkafka >= 2.1.0)
+                 */
                 if (rd_kafka_version() >= 0x020100ff) {
-                        leader_epoch = rd_kafka_topic_partition_get_leader_epoch(p);
+                        leader_epoch =
+                            rd_kafka_topic_partition_get_leader_epoch(p);
                 }
 
                 if (leader_epoch != -1) {
-                        TEST_SAY("  %s [%d] offset %"PRId64" leader epoch %"PRId64"\n",
-                                p->topic, p->partition, p->offset, leader_epoch);
+                        TEST_SAY("  %s [%d] offset %" PRId64
+                                 " leader epoch %" PRId64 "\n",
+                                 p->topic, p->partition, p->offset,
+                                 leader_epoch);
                 } else {
-                        TEST_SAY("  %s [%d] offset %"PRId64"\n",
-                                p->topic, p->partition, p->offset);
+                        TEST_SAY("  %s [%d] offset %" PRId64 "\n", p->topic,
+                                 p->partition, p->offset);
                 }
         }
 }
@@ -5674,7 +5690,7 @@ int test_check_auto_create_topic(void) {
         if (test_auto_create_enabled != -1)
                 return test_auto_create_enabled;
 
-        topic = test_mk_topic_name("autocreatetest", 1);
+        topic     = test_mk_topic_name("autocreatetest", 1);
         mdt.topic = (char *)topic;
 
         test_conf_init(&conf, NULL, 0);
@@ -5733,10 +5749,11 @@ void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
  * @param partition_cnt The number of partitions to create.
  * @param configs Topic configurations (key-value pairs), or NULL for defaults.
  */
-void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
-                                                           const char *topicname,
-                                                           int partition_cnt,
-                                                           const char **configs) {
+void test_create_topic_if_auto_create_disabled_with_configs(
+    rd_kafka_t *use_rk,
+    const char *topicname,
+    int partition_cnt,
+    const char **configs) {
         if (test_check_auto_create_topic()) {
                 return;
         }
@@ -5747,7 +5764,8 @@ void test_create_topic_if_auto_create_disabled_with_configs(rd_kafka_t *use_rk,
         /* If auto topic creation is not enabled, create the topic */
         if (configs) {
                 /* Use admin API with custom configs */
-                test_admin_create_topic(use_rk, topicname, partition_cnt, -1, configs);
+                test_admin_create_topic(use_rk, topicname, partition_cnt, -1,
+                                        configs);
         } else {
                 /* Use existing flow with broker default values */
                 test_create_topic(use_rk, topicname, partition_cnt, -1);
@@ -6786,8 +6804,9 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
                 char errstr[512];
                 /* Use broker default replication factor (-1) */
                 int replication_factor = -1;
-                new_topics[i] = rd_kafka_NewTopic_new(
-                    topics[i], num_partitions, replication_factor, errstr, sizeof(errstr));
+                new_topics[i] = rd_kafka_NewTopic_new(topics[i], num_partitions,
+                                                      replication_factor,
+                                                      errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
                             "Failed to NewTopic(\"%s\", %d) #%" PRIusz ": %s",
                             topics[i], num_partitions, i, errstr);
@@ -6960,27 +6979,27 @@ rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
 
 /**
  * @brief Convenience wrapper to delete a single topic
- * 
+ *
  * @param rk Kafka client handle
  * @param topic_name Name of the topic to delete
  */
 void test_delete_topic_simple(rd_kafka_t *rk, const char *topic_name) {
         char *topics[1];
         rd_kafka_resp_err_t err;
-        
+
         if (!topic_name) {
                 TEST_SAY("Skipping topic deletion: topic_name is NULL\n");
                 return;
         }
-        
+
         topics[0] = (char *)topic_name;
-        
+
         TEST_SAY("Deleting topic: %s\n", topic_name);
         err = test_DeleteTopics_simple(rk, NULL, topics, 1, NULL);
-        
+
         if (err) {
-                TEST_WARN("Failed to delete topic %s: %s\n", 
-                         topic_name, rd_kafka_err2str(err));
+                TEST_WARN("Failed to delete topic %s: %s\n", topic_name,
+                          rd_kafka_err2str(err));
         } else {
                 TEST_SAY("Successfully deleted topic: %s\n", topic_name);
         }

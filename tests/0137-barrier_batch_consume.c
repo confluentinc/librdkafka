@@ -73,7 +73,9 @@ static int consumer_batch_queue(void *arg) {
         TIMING_STOP(&t_cons);
 
         for (i = 0; i < msg_cnt; i++) {
-                if (rd_kafka_version() >= 0x02020000) {  /* Enhanced error handling available since librdkafka 2.2.0 */
+                if (rd_kafka_version() >=
+                    0x02020000) { /* Enhanced error handling available since
+                                     librdkafka 2.2.0 */
                         rd_kafka_message_t *rkm = rkmessage[i];
                         if (rkm->err) {
                                 TEST_WARN("Consumer error: %s: %s\n",
@@ -88,7 +90,8 @@ static int consumer_batch_queue(void *arg) {
                                     testid);
                         }
                 } else {
-                        if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0) {
+                        if (test_msgver_add_msg(rk, arguments->mv,
+                                                rkmessage[i]) == 0) {
                                 TEST_FAIL(
                                     "The message is not from testid "
                                     "%" PRId64,
@@ -99,9 +102,11 @@ static int consumer_batch_queue(void *arg) {
         TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
                  msg_cnt, arguments->consume_msg_cnt,
                  arguments->expected_msg_cnt);
-        if (rd_kafka_version() >= 0x02020000) {  /* Enhanced error handling available since librdkafka 2.2.0 */
+        if (rd_kafka_version() >=
+            0x02020000) { /* Enhanced error handling available since
+                             librdkafka 2.2.0 */
                 TEST_ASSERT(msg_cnt - err_cnt == arguments->expected_msg_cnt,
-                            "consumed %d messages (%d errors), expected %d", 
+                            "consumed %d messages (%d errors), expected %d",
                             msg_cnt, err_cnt, arguments->expected_msg_cnt);
         } else {
                 TEST_ASSERT(msg_cnt == arguments->expected_msg_cnt,

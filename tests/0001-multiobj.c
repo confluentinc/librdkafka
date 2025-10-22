@@ -93,9 +93,9 @@ int main_0001_multiobj(int argc, char **argv) {
                 TIMING_STOP(&t_full);
 
                 /* Topic is created on the first iteration. */
-                if (i > 0) 
+                if (i > 0)
                         TIMING_ASSERT(&t_full, 0, tmout_multip(999));
-                else 
+                else
                         /* Allow metadata propagation. */
                         rd_sleep(1);
         }

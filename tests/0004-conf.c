@@ -511,25 +511,19 @@ int main_0004_conf(int argc, char **argv) {
         int i;
         const char *topic;
         static const char *gconfs[] = {
-            "message.max.bytes",
-            "12345", /* int property */
-            "client.id",
-            "my id", /* string property */
-            "debug",
-            "topic,metadata,interceptor", /* S2F property */
-            "topic.blacklist",
-            "__.*", /* #778 */
-            "auto.offset.reset",
-            "earliest", /* Global->Topic fallthru */
+            "message.max.bytes", "12345",          /* int property */
+            "client.id", "my id",                  /* string property */
+            "debug", "topic,metadata,interceptor", /* S2F property */
+            "topic.blacklist", "__.*",             /* #778 */
+            "auto.offset.reset", "earliest",       /* Global->Topic fallthru */
 #if WITH_ZLIB
-            "compression.codec",
-            "gzip", /* S2I property */
+            "compression.codec", "gzip", /* S2I property */
 #endif
 #if defined(_WIN32)
-            "ssl.ca.certificate.stores",
-            "Intermediate ,, Root ,",
+            "ssl.ca.certificate.stores", "Intermediate ,, Root ,",
 #endif
-            /* client.dns.lookup was introduced in librdkafka 2.2.0+ - skip for 2.1.x library */
+            /* client.dns.lookup was introduced in librdkafka 2.2.0+ - skip
+               for 2.1.x library */
             NULL};
         static const char *tconfs[] = {"request.required.acks",
                                        "-1", /* int */
@@ -558,9 +552,10 @@ int main_0004_conf(int argc, char **argv) {
 
         /* Add client.dns.lookup if librdkafka version >= 2.2.0 */
         if (rd_kafka_version() >= 0x02020000) {
-                if (rd_kafka_conf_set(conf, "client.dns.lookup", 
-                                      "resolve_canonical_bootstrap_servers_only", errstr,
-                                      sizeof(errstr)) != RD_KAFKA_CONF_OK)
+                if (rd_kafka_conf_set(
+                        conf, "client.dns.lookup",
+                        "resolve_canonical_bootstrap_servers_only", errstr,
+                        sizeof(errstr)) != RD_KAFKA_CONF_OK)
                         TEST_FAIL("%s\n", errstr);
         }
 
@@ -728,7 +723,8 @@ int main_0004_conf(int argc, char **argv) {
         }
 
 #if WITH_OAUTHBEARER_OIDC
-        /* HTTPS CA configuration tests - https.ca.pem available since librdkafka 2.2.0 */
+        /* HTTPS CA configuration tests - https.ca.pem available since
+         * librdkafka 2.2.0 */
         if (rd_kafka_version() >= 0x02020000) {
                 {
                         TEST_SAY(
@@ -744,19 +740,22 @@ int main_0004_conf(int argc, char **argv) {
 
                         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
                                           sizeof(errstr));
+                        TEST_ASSERT(!rk,
+                                    "Expected rd_kafka_new() to fail, but it "
+                                    "succeeded");
                         TEST_ASSERT(
-                            !rk, "Expected rd_kafka_new() to fail, but it succeeded");
-                        TEST_ASSERT(!strcmp(errstr,
-                                            "`https.ca.location` and "
-                                            "`https.ca.pem` are mutually exclusive"),
-                                    "Expected rd_kafka_new() to fail with: "
-                                    "\"`https.ca.location` and `https.ca.pem` "
-                                    "are mutually exclusive\", got: \"%s\"",
-                                    errstr);
+                            !strcmp(errstr,
+                                    "`https.ca.location` and "
+                                    "`https.ca.pem` are mutually exclusive"),
+                            "Expected rd_kafka_new() to fail with: "
+                            "\"`https.ca.location` and `https.ca.pem` "
+                            "are mutually exclusive\", got: \"%s\"",
+                            errstr);
                         rd_kafka_conf_destroy(conf);
                 }
         }
-        if (rd_kafka_version() >= 0x02020000) {  /* https.ca.location available since librdkafka 2.2.0 */
+        if (rd_kafka_version() >= 0x02020000) { /* https.ca.location available
+                                                   since librdkafka 2.2.0 */
                 {
                         TEST_SAY(
                             "Verify that https.ca.location gives an error when "
@@ -769,20 +768,23 @@ int main_0004_conf(int argc, char **argv) {
 
                         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
                                           sizeof(errstr));
+                        TEST_ASSERT(!rk,
+                                    "Expected rd_kafka_new() to fail, but it "
+                                    "succeeded");
                         TEST_ASSERT(
-                            !rk, "Expected rd_kafka_new() to fail, but it succeeded");
-                        TEST_ASSERT(!strcmp(errstr,
-                                            "`https.ca.location` must be "
-                                            "an existing file or directory"),
-                                    "Expected rd_kafka_new() to fail with: "
-                                    "\"`https.ca.location` must be "
-                                    "an existing file or directory\", got: \"%s\"",
-                                    errstr);
+                            !strcmp(errstr,
+                                    "`https.ca.location` must be "
+                                    "an existing file or directory"),
+                            "Expected rd_kafka_new() to fail with: "
+                            "\"`https.ca.location` must be "
+                            "an existing file or directory\", got: \"%s\"",
+                            errstr);
                         rd_kafka_conf_destroy(conf);
                 }
                 {
                         TEST_SAY(
-                            "Verify that https.ca.location doesn't give an error when "
+                            "Verify that https.ca.location doesn't give an "
+                            "error when "
                             "set to `probe`\n");
 
                         conf = rd_kafka_conf_new();
@@ -791,14 +793,17 @@ int main_0004_conf(int argc, char **argv) {
 
                         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
                                           sizeof(errstr));
-                        TEST_ASSERT(
-                            rk, "Expected rd_kafka_new() not to fail, but it failed");
+                        TEST_ASSERT(rk,
+                                    "Expected rd_kafka_new() not to fail, but "
+                                    "it failed");
 
                         rd_kafka_destroy(rk);
                 }
         } else {
-                TEST_SAY("SKIPPING: https.ca.location tests - requires librdkafka version >= 2.2.0 (current: 0x%08x)\n",
-                         rd_kafka_version());
+                TEST_SAY(
+                    "SKIPPING: https.ca.location tests - requires librdkafka "
+                    "version >= 2.2.0 (current: 0x%08x)\n",
+                    rd_kafka_version());
         }
 #endif /* WITH_OAUTHBEARER_OIDC */
 

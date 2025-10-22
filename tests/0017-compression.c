@@ -136,6 +136,6 @@ int main_0017_compression(int argc, char **argv) {
         for (i = 0; codecs[i] != NULL; i++)
                 rd_free(topics[i]);
 
-                
+
         return 0;
 }

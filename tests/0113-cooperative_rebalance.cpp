@@ -1813,11 +1813,9 @@ static void l_unsubscribe() {
       "C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 30);
   Test::subscribe(c2, topic_name_1, topic_name_2);
 
-  bool done                        = false;
-  bool unsubscribed                = false;
-  int expected_cb1_assign_call_cnt = 1;
-  int expected_cb1_revoke_call_cnt = 1;
-  int expected_cb2_assign_call_cnt = 1;
+  bool done         = false;
+  bool unsubscribed = false;
+
 
   while (!done) {
     Test::poll_once(c1, 500);
@@ -1845,7 +1843,6 @@ static void l_unsubscribe() {
       Test::Say("Unsubscribing consumer 1 from both topics\n");
       c1->unsubscribe();
       unsubscribed = true;
-      expected_cb2_assign_call_cnt++;
     }
 
     if (unsubscribed && Test::assignment_partition_count(c1, NULL) == 0 &&

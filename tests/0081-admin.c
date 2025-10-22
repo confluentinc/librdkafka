@@ -3624,7 +3624,8 @@ static void do_test_DescribeTopics(const char *what,
         rd_kafka_queue_t *q;
 #define TEST_DESCRIBE_TOPICS_CNT 3
         char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
-        rd_kafka_TopicCollection_t *topics, *empty_topics;
+        rd_kafka_TopicCollection_t *topics       = NULL;
+        rd_kafka_TopicCollection_t *empty_topics = NULL;
         rd_kafka_AdminOptions_t *options;
         rd_kafka_event_t *rkev;
         const rd_kafka_error_t *error;

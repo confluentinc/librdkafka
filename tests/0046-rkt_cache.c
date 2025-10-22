@@ -46,7 +46,6 @@ int main_0046_rkt_cache(int argc, char **argv) {
         int i;
 
         rk = test_create_producer();
-        test_create_topic_if_auto_create_disabled(rk, topic, -1);
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         for (i = 0; i < 100; i++) {

@@ -73,7 +73,7 @@ do_test_produce_consumer_with_OIDC(const char *test_name,
         p1 = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
 
         topic = test_mk_topic_name("0126-oauthbearer_oidc", 1);
-        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+        test_create_topic_wait_exists(p1, topic, 1, -1, 5000);
         TEST_SAY("Topic: %s is created\n", topic);
 
         test_produce_msgs2(p1, topic, testid, 0, 0, 1, NULL, 0);

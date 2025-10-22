@@ -123,9 +123,9 @@ struct test {
                            *   stated */
 #define TEST_F_SOCKEM 0x8 /**< Test requires socket emulation. */
 #define TEST_F_IDEMPOTENT_PRODUCER                                             \
-        0x10              /**< Test requires idempotent (or transactional)     \
-                           *   producer to be supported by broker. */
-        int minver;       /**< Limit tests to broker version range. */
+        0x10        /**< Test requires idempotent (or transactional)           \
+                     *   producer to be supported by broker. */
+        int minver; /**< Limit tests to broker version range. */
         int maxver;
 
         const char *extra; /**< Extra information to print in test_summary. */

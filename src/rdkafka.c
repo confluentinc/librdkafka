@@ -2950,31 +2950,83 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
 }
 
 rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
-                                                rd_kafka_op_t *rko) {
+                                                rd_kafka_op_t *rko_orig) {
         rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
-        rd_kafka_dbg(
-            rk, TOPIC, "SHAREFETCH",
-            "Fetch share reply: %s, should_fetch=%d, broker=%s",
-            rd_kafka_err2str(rko->rko_err), rko->rko_u.share_fetch.should_fetch,
-            rko->rko_u.share_fetch.target_broker
-                ? rd_kafka_broker_name(rko->rko_u.share_fetch.target_broker)
-                : "none");
+        rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
+                     "Fetch share reply: %s, should_fetch=%d, broker=%s",
+                     rd_kafka_err2str(rko_orig->rko_err),
+                     rko_orig->rko_u.share_fetch.should_fetch,
+                     rko_orig->rko_u.share_fetch.target_broker
+                         ? rd_kafka_broker_name(
+                               rko_orig->rko_u.share_fetch.target_broker)
+                         : "none");
 
-        rko->rko_u.share_fetch.target_broker->rkb_share_fetch_enqueued =
+        rko_orig->rko_u.share_fetch.target_broker->rkb_share_fetch_enqueued =
             rd_false;
 
-        if (rko->rko_error) {
-                rd_kafka_dbg(rk, CGRP, "SHARE", "Share fetch failed: %s",
-                             rd_kafka_error_string(rko->rko_error));
-                /* Retry fetching if there is any amount of time left. */
-                // if (rko->rko_u.share_fetch.should_fetch &&
-                //     rd_timeout_remains(rko->rko_u.share_fetch.abs_timeout)) {
+        if (rko_orig->rko_error || rko_orig->rko_err) {
+                rd_kafka_dbg(
+                    rk, CGRP, "SHARE",
+                    "Share fetch failed: %s, timeout remains: %d, should-fetch "
+                    "= %d",
+                    rko_orig->rko_error
+                        ? rd_kafka_error_name(rko_orig->rko_error)
+                        : rd_kafka_err2name(rko_orig->rko_err),
+                    rd_timeout_remains(rko_orig->rko_u.share_fetch.abs_timeout),
+                    rko_orig->rko_u.share_fetch.should_fetch);
 
-                // }
+                /* Retry fetching if there is any amount of time left. For other
+                 * errors, let them drop and be retried on the next poll. */
+                /* TODO: KIP-932: Are there errors for which we should not
+                 * retry, and rather propagate those errors to user? In that
+                 * case, we must write to the rkcg queue. */
+                if (rko_orig->rko_u.share_fetch.should_fetch &&
+                    rd_timeout_remains(
+                        rko_orig->rko_u.share_fetch.abs_timeout)) {
+
+                        rd_kafka_op_t *rko =
+                            rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+                        rd_kafka_broker_t *rkb =
+                            rko_orig->rko_u.share_fetch.target_broker;
+                        rko->rko_u.share_fetch.abs_timeout =
+                            rko_orig->rko_u.share_fetch.abs_timeout;
+                        rko->rko_u.share_fetch.should_fetch = rd_true;
+                        rd_kafka_broker_keep(rkb);
+                        rko->rko_u.share_fetch.target_broker = rkb;
+                        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+
+                        rd_kafka_dbg(
+                            rk, CGRP, "SHAREFETCH",
+                            "Retrying share fetch op on broker %s after eror"
+                            "(%s fetch)",
+                            rd_kafka_broker_name(rkb),
+                            rko->rko_u.share_fetch.should_fetch ? "should" : "should not");
+
+                        /* TODO: KIP-932: Are there errors where we should back
+                         * this off by running it on a timer?*/
+                        rd_kafka_q_enq(rkb->rkb_ops, rko);
+                }
         }
 
         return RD_KAFKA_OP_RES_HANDLED;
 }
+
+rd_kafka_op_res_t
+rd_kafka_share_fetch_fanout_reply_op(rd_kafka_t *rk, rd_kafka_op_t *rko_orig) {
+        rd_kafka_message_t *rkm;
+        rd_kafka_op_t *rko;
+        if (!rko_orig->rko_err && !rko_orig->rko_error)
+                return RD_KAFKA_OP_RES_HANDLED;
+
+        /* TODO: KIP-932: Add error handling - either retries, or user-level
+         * propagation, later. */
+        rd_kafka_dbg(
+            rk, CGRP, "SHARE", "Encountered error in SHARE_FETCH_FANOUT: %s",
+            rko_orig->rko_err ? rd_kafka_err2name(rko_orig->rko_err)
+                              : rd_kafka_error_name(rko_orig->rko_error));
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
 /**
  * @locality main thread
  */
@@ -3011,7 +3063,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_kafka_op_t *rko;
+                rd_kafka_op_t *rko_sf;
 
                 if (rd_kafka_broker_or_instance_terminating(rkb) ||
                     RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
@@ -3032,20 +3084,22 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 }
                 rkb->rkb_share_fetch_enqueued = rd_true;
 
-                rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
-                rko->rko_u.share_fetch.abs_timeout =
+                rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+                rko_sf->rko_u.share_fetch.abs_timeout =
                     rko->rko_u.share_fetch_fanout.abs_timeout;
-                rko->rko_u.share_fetch.should_fetch = (rkb == selected_rkb);
+                rko_sf->rko_u.share_fetch.should_fetch = (rkb == selected_rkb);
                 rd_kafka_broker_keep(rkb);
-                rko->rko_u.share_fetch.target_broker = rkb;
-                rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+                rko_sf->rko_u.share_fetch.target_broker = rkb;
+                rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
 
                 rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                              "Enqueuing share fetch op on broker %s "
-                             "(%sfetch)",
+                             "(%s fetch)",
                              rd_kafka_broker_name(rkb),
-                             rko->rko_u.share_fetch.should_fetch ? "" : "no-");
-                rd_kafka_q_enq(rkb->rkb_ops, rko);
+                             rko_sf->rko_u.share_fetch.should_fetch
+                                 ? "should"
+                                 : "should not");
+                rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
         }
         rd_kafka_rdunlock(rk);
 
@@ -3072,14 +3126,6 @@ rd_kafka_share_consume_batch(rd_kafka_t *rk,
                                           "rd_kafka_share_consume_batch(): "
                                           "rk is not a shared consumer");
 
-        // Steps:
-        // 0. Check if we're a part of consumer group yet or not
-        // 1. Check if there's anything still in the fetch queue - and if so,
-        // don't issue fetch ops
-        // 2. If not, select broker for share fetch and issue fetch ops to all
-        // brokers
-        // 3. Wait on consumer group queue for either messages or errors
-
         if (unlikely(!(rkcg = rd_kafka_cgrp_get(rk))))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "rd_kafka_share_consume_batch(): "
@@ -3089,7 +3135,9 @@ rd_kafka_share_consume_batch(rd_kafka_t *rk,
          * requests, rather, deal with them first. */
         if (likely(rd_kafka_q_len(rkcg->rkcg_q) == 0)) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
-                             "Issuing share fetch fanout to main thread");
+                             "Issuing share fetch fanout to main thread with "
+                             "abs_timeout = %lld and now=%lld",
+                             abs_timeout, now);
                 rd_kafka_op_t *fanout_rko =
                     rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT,
                                        rd_kafka_share_fetch_fanout_op);
@@ -3107,7 +3155,7 @@ rd_kafka_share_consume_batch(rd_kafka_t *rk,
         *rkmessages_size = rd_kafka_q_serve_rkmessages(
             rkcg->rkcg_q, timeout_ms, /* Use this timeout directly as prior
                              operations aren't blocking, so no need to
-                             re-convert the abs_timeout into a relative one*/
+                             re-convert the abs_timeout into a relative one.*/
             rkmessages, max_poll_records);
 
         return NULL;
@@ -4568,9 +4616,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
                 rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
-                rd_kafka_dbg(rk, TOPIC, "SHAREFETCH",
-                             "Fetch share fanout reply: %s",
-                             rd_kafka_err2str(rko->rko_err));
+                rd_kafka_share_fetch_fanout_reply_op(rk, rko);
                 break;
 
         default:

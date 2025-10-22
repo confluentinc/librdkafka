@@ -513,13 +513,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH:
-                /* TODO KIP-932: Add destruction code. */
                 RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
                            rd_kafka_broker_destroy);
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* No dynamic resources to clean up */
+                /* No heap-allocated resources to clean up */
                 break;
 
         default:

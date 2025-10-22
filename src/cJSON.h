@@ -89,7 +89,7 @@ CJSON_EXPORT_SYMBOLS does
 /* project version */
 #define CJSON_VERSION_MAJOR 1
 #define CJSON_VERSION_MINOR 7
-#define CJSON_VERSION_PATCH 14
+#define CJSON_VERSION_PATCH 19
 
 #include <stddef.h>
 
@@ -147,6 +147,12 @@ typedef int cJSON_bool;
  * them. This is to prevent stack overflows. */
 #ifndef CJSON_NESTING_LIMIT
 #define CJSON_NESTING_LIMIT 1000
+#endif
+
+/* Limits the length of circular references can be before cJSON rejects to parse
+ * them. This is to prevent stack overflows. */
+#ifndef CJSON_CIRCULAR_LIMIT
+#define CJSON_CIRCULAR_LIMIT 10000
 #endif
 
 /* returns the version of cJSON as a string */
@@ -319,13 +325,11 @@ cJSON_ReplaceItemInObjectCaseSensitive(cJSON *object,
 CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse);
 /* Duplicate will create a new, identical cJSON item to the one you pass, in new
  * memory that will need to be released. With recurse!=0, it will duplicate any
- * children connected to the item.
- * The item->next and ->prev pointers are always zero on return from Duplicate.
- */
+ * children connected to the item. The item->next and ->prev pointers are always
+ * zero on return from Duplicate. */
 /* Recursively compare two cJSON items for equality. If either a or b is NULL or
- * invalid, they will be considered unequal.
- * case_sensitive determines if object keys are treated case sensitive (1) or
- * case insensitive (0) */
+ * invalid, they will be considered unequal. case_sensitive determines if object
+ * keys are treated case sensitive (1) or case insensitive (0) */
 CJSON_PUBLIC(cJSON_bool)
 cJSON_Compare(const cJSON *const a,
               const cJSON *const b,
@@ -333,8 +337,8 @@ cJSON_Compare(const cJSON *const a,
 
 /* Minify a strings, remove blank characters(such as ' ', '\t', '\r', '\n') from
  * strings. The input pointer json cannot point to a read-only address area,
- * such as a string constant,
- * but should point to a readable and writable adress area. */
+ * such as a string constant, but should point to a readable and writable
+ * address area. */
 CJSON_PUBLIC(void) cJSON_Minify(char *json);
 
 /* Helper functions for creating and adding items to an object at the same time.
@@ -380,6 +384,15 @@ CJSON_PUBLIC(double) cJSON_SetNumberHelper(cJSON *object, double number);
  * of object is cJSON_String */
 CJSON_PUBLIC(char *)
 cJSON_SetValuestring(cJSON *object, const char *valuestring);
+
+/* If the object is not a boolean type this does nothing and returns
+ * cJSON_Invalid else it returns the new type*/
+#define cJSON_SetBoolValue(object, boolValue)                                  \
+        ((object != NULL && ((object)->type & (cJSON_False | cJSON_True)))     \
+             ? (object)->type =                                                \
+                   ((object)->type & (~(cJSON_False | cJSON_True))) |          \
+                   ((boolValue) ? cJSON_True : cJSON_False)                    \
+             : cJSON_Invalid)
 
 /* Macro for iterating over an array or object */
 #define cJSON_ArrayForEach(element, array)                                       \

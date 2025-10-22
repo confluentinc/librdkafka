@@ -3559,6 +3559,17 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 /* This is only temporary handling for testing to avoid crashing
                  * on assert  - the code below will automatically enqueue a
                  * reply which is not the final behaviour. */
+                /* Insert errors randomly for testing, remove this code once
+                 * actual errors can be tested via the mock broker. */
+                // if (rd_jitter(0, 10) > 7) {
+                //         rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
+                //                    "Injecting error! %s : %d",
+                //                    rd_kafka_broker_name(rkb),
+                //                    rko->rko_u.share_fetch.should_fetch);
+
+                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
+                //         rko = NULL;
+                // }
                 break;
 
         default:

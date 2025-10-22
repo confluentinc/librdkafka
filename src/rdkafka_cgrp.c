@@ -5406,6 +5406,64 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
         return rd_atomic32_add(&rkcg->rkcg_subscription_version, 1);
 }
 
+static rd_bool_t
+rd_kafka_cgrp_stale_subscribed_topics_cache(rd_kafka_cgrp_t *rkcg) {
+        rd_bool_t stale = rd_false;
+        int32_t current_subscription_version =
+            rd_atomic32_get(&rkcg->rkcg_subscription_version);
+        rd_ts_t current_ts_metadata = rkcg->rkcg_rk->rk_ts_metadata;
+
+        stale = rkcg->rkcg_subscribed_topics_cache.rk_ts_metadata !=
+                    current_ts_metadata ||
+                rkcg->rkcg_subscribed_topics_cache.subscription_version !=
+                    current_subscription_version;
+        if (stale) {
+                rkcg->rkcg_subscribed_topics_cache.rk_ts_metadata =
+                    current_ts_metadata;
+                rkcg->rkcg_subscribed_topics_cache.subscription_version =
+                    current_subscription_version;
+        }
+        return stale;
+}
+
+static rd_bool_t
+rd_kafka_cgrp_set_subscribed_topics_from_subscription(rd_kafka_cgrp_t *rkcg) {
+        rd_list_t *tinfos;
+        rd_kafka_topic_partition_list_t *errored;
+
+        if (!rd_kafka_cgrp_stale_subscribed_topics_cache(rkcg))
+                return rd_false; /* Not stale, no change */
+
+        /*
+         * Unmatched topics will be added to the errored list.
+         */
+        errored = rd_kafka_topic_partition_list_new(0);
+
+        /*
+         * Create a list of the topics in metadata that matches our subscription
+         */
+        tinfos = rd_list_new(rkcg->rkcg_subscription->cnt,
+                             rd_kafka_topic_info_destroy_free);
+
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
+                rd_kafka_metadata_topic_match(rkcg->rkcg_rk, tinfos,
+                                              rkcg->rkcg_subscription, errored);
+        else
+                rd_kafka_metadata_topic_filter(
+                    rkcg->rkcg_rk, tinfos, rkcg->rkcg_subscription, errored);
+
+        /*
+         * Propagate consumer errors for any non-existent or errored topics.
+         * The function takes ownership of errored.
+         */
+        rd_kafka_propagate_consumer_topic_errors(
+            rkcg, errored, "Subscribed topic not available");
+
+        /*
+         * Update effective list of topics (takes ownership of \c tinfos)
+         */
+        return rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos);
+}
 
 /**
  * @brief Handle a new subscription that is modifying an existing subscription
@@ -5418,11 +5476,10 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
                                   rd_kafka_topic_partition_list_t *rktparlist) {
         rd_kafka_topic_partition_list_t *unsubscribing_topics;
         rd_kafka_topic_partition_list_t *revoking;
-        rd_list_t *tinfos;
-        rd_kafka_topic_partition_list_t *errored;
         int metadata_age;
         int old_cnt = rkcg->rkcg_subscription->cnt;
         int32_t cgrp_subscription_version;
+        rd_bool_t changed = rd_false;
 
         /* Topics in rkcg_subscribed_topics that don't match any pattern in
            the new subscription. */
@@ -5477,27 +5534,10 @@ rd_kafka_cgrp_modify_subscription(rd_kafka_cgrp_t *rkcg,
         if (unsubscribing_topics)
                 rd_kafka_topic_partition_list_destroy(unsubscribing_topics);
 
-        /* Create a list of the topics in metadata that matches the new
-         * subscription */
-        tinfos = rd_list_new(rkcg->rkcg_subscription->cnt,
-                             rd_kafka_topic_info_destroy_free);
 
-        /* Unmatched topics will be added to the errored list. */
-        errored = rd_kafka_topic_partition_list_new(0);
+        changed = rd_kafka_cgrp_set_subscribed_topics_from_subscription(rkcg);
 
-        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
-                rd_kafka_metadata_topic_match(rkcg->rkcg_rk, tinfos,
-                                              rkcg->rkcg_subscription, errored);
-        else
-                rd_kafka_metadata_topic_filter(
-                    rkcg->rkcg_rk, tinfos, rkcg->rkcg_subscription, errored);
-
-        /* Propagate consumer errors for any non-existent or errored topics.
-         * The function takes ownership of errored. */
-        rd_kafka_propagate_consumer_topic_errors(
-            rkcg, errored, "Subscribed topic not available");
-
-        if (rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos) && !revoking) {
+        if (changed && !revoking) {
                 rd_kafka_cgrp_rejoin(rkcg, "Subscription modified");
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
         }
@@ -6891,7 +6931,6 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
         return result;
 }
 
-
 /**
  * @brief Check if the latest metadata affects the current subscription:
  * - matched topic added
@@ -6903,9 +6942,7 @@ rd_kafka_cgrp_owned_but_not_exist_partitions(rd_kafka_cgrp_t *rkcg) {
  */
 void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join) {
-        rd_list_t *tinfos;
-        rd_kafka_topic_partition_list_t *errored;
-        rd_bool_t changed;
+        rd_bool_t changed = rd_false;
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
 
@@ -6915,36 +6952,7 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
         if (!rkcg->rkcg_subscription || rkcg->rkcg_subscription->cnt == 0)
                 return;
 
-        /*
-         * Unmatched topics will be added to the errored list.
-         */
-        errored = rd_kafka_topic_partition_list_new(0);
-
-        /*
-         * Create a list of the topics in metadata that matches our subscription
-         */
-        tinfos = rd_list_new(rkcg->rkcg_subscription->cnt,
-                             rd_kafka_topic_info_destroy_free);
-
-        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION)
-                rd_kafka_metadata_topic_match(rkcg->rkcg_rk, tinfos,
-                                              rkcg->rkcg_subscription, errored);
-        else
-                rd_kafka_metadata_topic_filter(
-                    rkcg->rkcg_rk, tinfos, rkcg->rkcg_subscription, errored);
-
-
-        /*
-         * Propagate consumer errors for any non-existent or errored topics.
-         * The function takes ownership of errored.
-         */
-        rd_kafka_propagate_consumer_topic_errors(
-            rkcg, errored, "Subscribed topic not available");
-
-        /*
-         * Update effective list of topics (takes ownership of \c tinfos)
-         */
-        changed = rd_kafka_cgrp_update_subscribed_topics(rkcg, tinfos);
+        changed = rd_kafka_cgrp_set_subscribed_topics_from_subscription(rkcg);
 
         if (!do_join ||
             (!changed &&

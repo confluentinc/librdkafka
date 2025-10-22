@@ -295,6 +295,7 @@ struct rd_kafka_conf_s {
                 char *keystore_location;
                 char *keystore_password;
                 int endpoint_identification;
+                char *endpoint_hostname;
                 int enable_verify;
                 int (*cert_verify_cb)(rd_kafka_t *rk,
                                       const char *broker_name,

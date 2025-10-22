@@ -102,7 +102,7 @@ class DrCb : public RdKafka::DeliveryReportCb {
  * The pair is Toppar,msg_cnt_per_partition.
  * The Toppar is topic,partition_cnt.
  */
-static void produce_msgs(vector<pair<Toppar, int>> partitions) {
+static void produce_msgs(vector<pair<Toppar, int> > partitions) {
         RdKafka::Conf *conf;
         Test::conf_init(&conf, NULL, 0);
 
@@ -114,7 +114,7 @@ static void produce_msgs(vector<pair<Toppar, int>> partitions) {
                 Test::Fail("Failed to create producer: " + errstr);
         delete conf;
 
-        for (vector<pair<Toppar, int>>::iterator it = partitions.begin();
+        for (vector<pair<Toppar, int> >::iterator it = partitions.begin();
              it != partitions.end(); it++) {
                 for (int part = 0; part < it->first.partition; part++) {
                         for (int i = 0; i < it->second; i++) {
@@ -143,12 +143,12 @@ static RdKafka::KafkaConsumer *
 make_consumer(string client_id,
               string group_id,
               string assignment_strategy,
-              vector<pair<string, string>> *additional_conf,
+              vector<pair<string, string> > *additional_conf,
               RdKafka::RebalanceCb *rebalance_cb,
               int timeout_s) {
         std::string bootstraps;
         std::string errstr;
-        std::vector<std::pair<std::string, std::string>>::iterator itr;
+        std::vector<std::pair<std::string, std::string> >::iterator itr;
 
         RdKafka::Conf *conf;
         Test::conf_init(&conf, NULL, timeout_s);
@@ -1441,7 +1441,7 @@ static void f_assign_call_cooperative() {
         std::string group_name =
             Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -1579,7 +1579,7 @@ static void g_incremental_assign_call_eager() {
         std::string group_name =
             Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -1625,7 +1625,7 @@ static void h_delete_topic() {
         std::string group_name =
             Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -1705,7 +1705,7 @@ static void i_delete_topic_2() {
         std::string group_name =
             Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -1768,7 +1768,7 @@ static void j_delete_topic_no_rb_callback() {
         std::string group_name =
             Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -1824,7 +1824,7 @@ static void k_add_partition() {
         std::string group_name =
             Test::mk_unique_group_name("0113-cooperative_rebalance");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -2151,7 +2151,7 @@ static void n_wildcard() {
         const string topic_regex  = "^" + topic_base_name + "_.";
         const string group_name = Test::mk_unique_group_name("0113-n_wildcard");
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("topic.metadata.refresh.interval.ms"),
             std::string("3000")));
@@ -2576,7 +2576,7 @@ static void t_max_poll_interval_exceeded(int variation) {
             Test::mk_unique_group_name("0113-cooperative_rebalance");
         test_create_topic(NULL, topic_name_1.c_str(), 2, -1);
 
-        std::vector<std::pair<std::string, std::string>> additional_conf;
+        std::vector<std::pair<std::string, std::string> > additional_conf;
         additional_conf.push_back(std::pair<std::string, std::string>(
             std::string("session.timeout.ms"), tostr() << tmout_multip(6000)));
         additional_conf.push_back(std::pair<std::string, std::string>(
@@ -2819,7 +2819,7 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
          * Seed all partitions with the same number of messages so we later can
          * verify that consumption is working.
          */
-        vector<pair<Toppar, int>> ptopics;
+        vector<pair<Toppar, int> > ptopics;
         ptopics.push_back(pair<Toppar, int>(
             Toppar(topic_name_1, N_PARTS_PER_TOPIC), N_MSGS_PER_PARTITION));
         ptopics.push_back(pair<Toppar, int>(
@@ -2833,10 +2833,10 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
          */
 
         /* consumer -> currently subscribed topics */
-        map<int, vector<string>> consumer_topics;
+        map<int, vector<string> > consumer_topics;
 
         /* topic -> consumers subscribed to topic */
-        map<string, set<int>> topic_consumers;
+        map<string, set<int> > topic_consumers;
 
         /* The subscription alternatives that consumers
          * alter between in the playbook. */

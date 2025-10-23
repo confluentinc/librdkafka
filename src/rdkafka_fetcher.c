@@ -1123,6 +1123,7 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                                         void *opaque) {
 
         rd_kafka_op_t *rko_orig = opaque;
+        rkb->rkb_share_fetch_session.epoch++;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 rd_kafka_op_reply(rko_orig, err);

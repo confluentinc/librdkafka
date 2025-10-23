@@ -478,6 +478,17 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 rd_atomic64_t rx_ver_drops;      /**< Consumer: outdated message
                                                   *             drops. */
         } rktp_c;
+
+        /*
+         * TODO KIP-932: Change this according to need. Currently very basic. Not even handling GAP.
+         * Sends ACCEPT blindly with implicit acknowledgement.
+         */
+
+        struct {
+                int64_t first_offset;
+                int64_t last_offset;
+                int16_t delivery_count;
+        } rktp_share_acknowledge;
 };
 
 /**

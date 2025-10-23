@@ -294,6 +294,9 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
                      rkt->rkt_topic->str, rktp->rktp_partition, rktp,
                      &rktp->rktp_refcnt, func, line);
 
+        rktp->rktp_share_acknowledge.first_offset = RD_KAFKA_OFFSET_INVALID;
+        rktp->rktp_share_acknowledge.last_offset = RD_KAFKA_OFFSET_INVALID;
+
         return rd_kafka_toppar_keep(rktp);
 }
 

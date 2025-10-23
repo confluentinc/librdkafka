@@ -1422,6 +1422,8 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                         err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
+        printf(" +++++++++++++++++++ Received %d messages\n", msetr->msetr_msgcnt);
+
         rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
                    "Enqueue %i %smessage(s) (%" PRId64
                    " bytes, %d ops) on %s [%" PRId32

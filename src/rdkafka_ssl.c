@@ -593,8 +593,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s",
-                   name_for_verify);
+                   "Enabled endpoint identification using %s %s",
+                   is_ip ? "IP address" : "hostname", name_for_verify);
 
         return 0;
 

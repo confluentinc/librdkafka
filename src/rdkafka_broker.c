@@ -3509,15 +3509,15 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         break;
                 }
 
-                if(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                   "Connection not up: Sending connect in progress as reply");
-                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
-                        break;
-                }
+                // if(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
+                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                //                    "Connection not up: Sending connect in progress as reply");
+                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
+                //         break;
+                // }
 
-                rkb->rkb_fetching = rd_true;
-                
+                rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
+
                 rko = NULL; /* the rko is reused for the reply */
 
                 break;
@@ -4342,15 +4342,9 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
         while (!rd_kafka_broker_terminating(rkb) &&
                rkb->rkb_state == initial_state &&
                abs_timeout > (now = rd_clock())) {
-                rd_ts_t min_backoff;
+                rd_ts_t min_backoff = abs_timeout;
 
                 rd_kafka_broker_unlock(rkb);
-
-                /* Serve toppars */
-                min_backoff = rd_kafka_broker_consumer_toppars_serve(rkb);
-                if (rkb->rkb_ts_fetch_backoff > now &&
-                    rkb->rkb_ts_fetch_backoff < min_backoff)
-                        min_backoff = rkb->rkb_ts_fetch_backoff;
 
                 if (rkb->rkb_toppar_cnt > 0 &&
                     rkb->rkb_share_fetch_session.epoch >= 0 &&
@@ -4358,24 +4352,6 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                         /* There are partitions to fetch but the
                          * connection is not up. */
                         rkb->rkb_persistconn.internal++;
-                }
-
-                /* Send Fetch request message for all underflowed toppars
-                 * if the connection is up and there are no outstanding
-                 * fetch requests for this connection. */
-                if (!rkb->rkb_fetching &&
-                    rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
-                        if (min_backoff < now) {
-                                rd_kafka_broker_fetch_toppars(rkb, now);
-                                min_backoff = abs_timeout;
-                        } else if (min_backoff < RD_TS_MAX)
-                                rd_rkb_dbg(rkb, FETCH, "FETCH",
-                                           "Fetch backoff for %" PRId64 "ms",
-                                           (min_backoff - now) / 1000);
-                } else {
-                        /* Nothing needs to be done, next wakeup
-                         * is from ops, state change, IO, or this timeout */
-                        min_backoff = abs_timeout;
                 }
 
                 /* Check and move retry buffers */

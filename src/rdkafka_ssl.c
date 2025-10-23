@@ -450,6 +450,45 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
 }
 
 /**
+ * @brief Normalize hostname for SSL certificate verification.
+ *
+ * Strips trailing dot from hostname as X.509 certificates (per RFC 5280)
+ * don't include them in Subject Alternative Names (SANs).
+ * The trailing dot is used in DNS to indicate an absolute FQDN,
+ * but certificate SANs use a different representation without it.
+ *
+ * @param hostname Input hostname (may have trailing dot)
+ * @param normalized Output buffer for normalized hostname
+ * @param size Size of output buffer
+ *
+ * @returns The normalized hostname (same as \p normalized)
+ *
+ * @remark This function is exposed for testing via ENABLE_DEVEL.
+ */
+#if ENABLE_DEVEL
+RD_EXPORT
+#else
+static
+#endif
+const char *
+rd_kafka_ssl_normalize_hostname(const char *hostname,
+                                 char *normalized,
+                                 size_t size) {
+        size_t len;
+
+        rd_snprintf(normalized, size, "%s", hostname);
+        len = strlen(normalized);
+
+        /* Strip trailing dot (unless it's a single dot) */
+        if (len > 1 && normalized[len - 1] == '.') {
+                normalized[len - 1] = '\0';
+        }
+
+        return normalized;
+}
+
+
+/**
  * @brief Set TLSEXT hostname for SNI and optionally enable
  *        SSL endpoint identification verification.
  *
@@ -459,6 +498,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   char *errstr,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
+        char name_for_verify[RD_KAFKA_NODENAME_SIZE];
         char *t;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
@@ -470,13 +510,17 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         if ((t = strrchr(name, ':')))
                 *t = '\0';
 
+        /* Normalize hostname (remove trailing dot) for both SNI and certificate verification */
+        rd_kafka_ssl_normalize_hostname(name, name_for_verify,
+                                         sizeof(name_for_verify));
+
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (strchr(name, ':') &&
-                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
-                            strlen(name)) ||
-              /*ipv4*/ strspn(name, "0123456789.") == strlen(name)) &&
-            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
+        if (!(/*ipv6*/ (strchr(name_for_verify, ':') &&
+                        strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
+                            strlen(name_for_verify)) ||
+              /*ipv4*/ strspn(name_for_verify, "0123456789.") == strlen(name_for_verify)) &&
+            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #endif
 
@@ -484,30 +528,40 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
+        /* Log if we stripped a trailing dot */
+        if (strcmp(name, name_for_verify) != 0) {
+                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
+                           "Stripped trailing dot from hostname for "
+                           "certificate verification: %s -> %s",
+                           name, name_for_verify);
+        }
+
         /* Check if connecting to an IP address */
         rd_bool_t is_ip = rd_false;
-        if (/*ipv6*/ (strchr(name, ':') &&
-                      strspn(name, "0123456789abcdefABCDEF:.[]%") ==
-                          strlen(name)) ||
-            /*ipv4*/ strspn(name, "0123456789.") == strlen(name)) {
+        if (/*ipv6*/ (strchr(name_for_verify, ':') &&
+                      strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
+                          strlen(name_for_verify)) ||
+            /*ipv4*/ strspn(name_for_verify, "0123456789.") == strlen(name_for_verify)) {
                 is_ip = rd_true;
         }
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
+        if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
+                goto fail;
         /* OpenSSL 1.1.0+ has SSL_set1_host for hostnames
          * but IP addresses should use the IP-specific function */
         if (is_ip) {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
                 /* Use IP-specific function for proper IP matching */
                 X509_VERIFY_PARAM *param = SSL_get0_param(rktrans->rktrans_ssl);
-                if (!X509_VERIFY_PARAM_set1_ip_asc(param, name))
+                if (!X509_VERIFY_PARAM_set1_ip_asc(param, name_for_verify))
                         goto fail;
 #else
-                if (!SSL_set1_host(rktrans->rktrans_ssl, name))
+                if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
                         goto fail;
 #endif
         } else {
-                if (!SSL_set1_host(rktrans->rktrans_ssl, name))
+                if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
                         goto fail;
         }
 #elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
@@ -516,13 +570,17 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
+                if (!X509_VERIFY_PARAM_set1_host(param, name_for_verify,
+                                                 strnlen(name_for_verify,
+                                                        sizeof(name_for_verify))))
+                        goto fail;
                 /* Use IP-specific function for IP addresses */
                 if (is_ip) {
-                        if (!X509_VERIFY_PARAM_set1_ip_asc(param, name))
+                        if (!X509_VERIFY_PARAM_set1_ip_asc(param, name_for_verify))
                                 goto fail;
                 } else {
-                        if (!X509_VERIFY_PARAM_set1_host(param, name,
-                                                 strnlen(name, sizeof(name))))
+                        if (!X509_VERIFY_PARAM_set1_host(param, name_for_verify,
+                                                 strnlen(name_for_verify, sizeof(name_for_verify))))
                                 goto fail;
                 }
         }
@@ -535,8 +593,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using %s %s",
-                   is_ip ? "IP address" : "hostname", name);
+                   "Enabled endpoint identification using hostname %s",
+                   name_for_verify);
 
         return 0;
 

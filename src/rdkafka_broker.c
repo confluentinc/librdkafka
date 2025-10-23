@@ -3493,24 +3493,22 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                    "Ignoring SHARE_FETCH op: "
                                    "instance or broker is terminating");
                         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
-                        break;
-                }
-
-                if(rkb->rkb_fetching) {
+                } else if(rkb->rkb_fetching) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                    "Ignoring SHARE_FETCH op: "
                                    "already fetching");
                         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
-                        break;
+                } else if(rko->rko_u.share_fetch.should_fetch) {
+                        rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
                 }
 
-                if (!rko->rko_u.share_fetch.should_fetch) {
-                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                   "Ignoring SHARE_FETCH op: "
-                                   "should_fetch is false");
-                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__NOOP);
-                        break;
-                }
+                // if (!rko->rko_u.share_fetch.should_fetch) {
+                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                //                    "Ignoring SHARE_FETCH op: "
+                //                    "should_fetch is false");
+                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__NOOP);
+                //         break;
+                // }
 
                 // if(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
                 //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
@@ -3518,8 +3516,6 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
                 //         break;
                 // }
-
-                rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
 
                 rko = NULL; /* the rko is reused for the reply */
 

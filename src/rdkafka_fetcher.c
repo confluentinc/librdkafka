@@ -1392,13 +1392,13 @@ void rd_kafka_ShareFetchRequest(
                         /* AcknowledgementBatches */
                         if (rktp->rktp_share_acknowledge.first_offset >= 0) {
                                 /* For now we only support ACCEPT */
-                                rd_kafka_buf_write_i32(rkbuf, 1); /* ArrayCnt = 1 */
+                                rd_kafka_buf_write_arraycnt(rkbuf, 1); /* ArrayCnt = 1 */
                                 /* FirstOffset */
                                 rd_kafka_buf_write_i64(rkbuf, rktp->rktp_share_acknowledge.first_offset);
                                 /* LastOffset */
                                 rd_kafka_buf_write_i64(rkbuf, rktp->rktp_share_acknowledge.last_offset);
                                 /* AcknowledgementType */
-                                rd_kafka_buf_write_i32(rkbuf, 1); /* ArrayCnt = 1 */
+                                rd_kafka_buf_write_arraycnt(rkbuf, 1); /* ArrayCnt = 1 */
                                 rd_kafka_buf_write_i8(rkbuf, 1); /* ACCEPT */
                                 /* Acknowledgement tags */
                                 rd_kafka_buf_write_tags_empty(rkbuf);

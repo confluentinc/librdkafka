@@ -617,6 +617,11 @@ static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans) {
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SSLVERIFY",
                    "Broker SSL certificate verified");
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SSLVERIFY",
+                   "TLS version: %s, Cipher: %s",
+                   SSL_get_version(rktrans->rktrans_ssl),
+                   SSL_get_cipher(rktrans->rktrans_ssl));
+
         return 0;
 }
 
@@ -1884,6 +1889,22 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 rd_snprintf(errstr, errstr_size, "SSL_CTX_new() failed: ");
                 goto fail;
         }
+
+        /* Force TLS version to 1.3 for testing */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Failed to set minimum TLS version to 1.3");
+                goto fail;
+        }
+        if (!SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Failed to set maximum TLS version to 1.3");
+                goto fail;
+        }
+        rd_kafka_dbg(rk, SECURITY, "SSL",
+                     "TLS version restricted to 1.3 only (min=1.3, max=1.3)");
+#endif
 
 #ifdef SSL_OP_NO_SSLv3
         /* Disable SSLv3 (unsafe) */

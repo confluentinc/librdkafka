@@ -745,10 +745,6 @@ struct rd_kafka_op_s {
                         /** Absolute timeout for share fetch fanout operation.
                          */
                         rd_ts_t abs_timeout;
-
-                        /** Is this a retry, or the first attempt of this poll?
-                         * Retries only have should_fetch=true request sent. */
-                        rd_bool_t is_retry;
                 } share_fetch_fanout;
 
         } rko_u;

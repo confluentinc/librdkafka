@@ -2923,10 +2923,8 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
         rd_kafka_topic_partition_list_t *partitions =
             rkcg->rkcg_current_assignment;
         //     rkcg->rkcg_toppars; /* TODO: use rkcg->rkcg_toppars instead. */
-        int32_t broker_id = -1;
         size_t i;
         rd_kafka_topic_partition_t *partition;
-
 
         if (!partitions || partitions->cnt == 0) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
@@ -2939,13 +2937,14 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
          * has a leader. */
         rd_kafka_dbg(rk, CGRP, "SHARE",
                      "Selecting broker for share fetch from %d assigned "
-                     "partitions, offset = %d",
+                     "partitions, last picked index = %" PRIusz,
                      partitions->cnt, rkcg->rkcg_share.last_partition_picked);
 
-        for (i = 0; i < partitions->cnt && !selected_rkb; i++) {
+        for (i = 0; i < (size_t)partitions->cnt; i++) {
                 rd_kafka_toppar_t *rktp;
                 rkcg->rkcg_share.last_partition_picked += 1;
-                if (rkcg->rkcg_share.last_partition_picked >= partitions->cnt)
+                if (rkcg->rkcg_share.last_partition_picked >=
+                    (size_t)partitions->cnt)
                         rkcg->rkcg_share.last_partition_picked = 0;
                 partition =
                     &partitions->elems[rkcg->rkcg_share.last_partition_picked];
@@ -2970,16 +2969,59 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                 }
 
                 rd_kafka_toppar_destroy(rktp);
-        }
 
-        rd_kafka_dbg(rk, CGRP, "SHARE", "Selected broker %s for share fetch",
-                     selected_rkb ? rd_kafka_broker_name(selected_rkb)
-                                  : "none");
+                if (selected_rkb)
+                        break;
+        }
         return selected_rkb;
 }
 
+/**
+ * @brief Timer callback for reenequeing SHARE_FETCH_FANOUT after a backoff.
+ * @locality main thread
+ * @locks none
+ */
+static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
+                                                 void *arg) {
+        rd_kafka_op_t *rko = arg;
+        rd_kafka_t *rk     = rkts->rkts_rk;
+
+        rd_kafka_dbg(rk, CGRP, "SHARE", "Re-enqueing SHARE_FETCH_FANOUT");
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+/**
+ * @brief Enqueue a SHARE_FETCH_FANOUT op on the main queue.
+ * @param backoff_ms If >0 the op will be enqueued after this many milliseconds.
+ * Else, it will be immediate.
+ * @locality any thread
+ */
+static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
+                                                     rd_ts_t abs_timeout,
+                                                     int backoff_ms) {
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+        rd_kafka_op_t *rko    = rd_kafka_op_new_cb(
+            rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
+        rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
+        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+
+        if (backoff_ms > 0)
+                rd_kafka_timer_start_oneshot(
+                    &rk->rk_timers, &rkcg->rkcg_share.share_fetch_fanout_tmr,
+                    rd_true, backoff_ms * 1000,
+                    rd_kafka_share_fetch_fanout_renqueue, rko);
+        else
+                rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+/**
+ * Handles RD_KAFKA_OP_SHARE_FETCH | RD_KAFKA_OP_REPLY.
+ * @locality main thread
+ */
 rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                                                 rd_kafka_op_t *rko_orig) {
+        rd_kafka_resp_err_t err;
+
         rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                      "Fetch share reply: %s, should_fetch=%d, broker=%s",
@@ -2993,70 +3035,91 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         rko_orig->rko_u.share_fetch.target_broker->rkb_share_fetch_enqueued =
             rd_false;
 
-        if (rko_orig->rko_error || rko_orig->rko_err) {
-                rd_kafka_dbg(
-                    rk, CGRP, "SHARE",
-                    "Share fetch failed: %s, timeout remains: %d, should-fetch "
-                    "= %d",
-                    rko_orig->rko_error
-                        ? rd_kafka_error_name(rko_orig->rko_error)
-                        : rd_kafka_err2name(rko_orig->rko_err),
-                    rd_timeout_remains(rko_orig->rko_u.share_fetch.abs_timeout),
-                    rko_orig->rko_u.share_fetch.should_fetch);
+        if (!rko_orig->rko_err && !rko_orig->rko_error)
+                return RD_KAFKA_OP_RES_HANDLED;
 
-                /* Retry fetching if there is any amount of time left. For other
-                 * errors, let them drop and be retried on the next poll. */
-                /* TODO: KIP-932: Are there errors for which we should not
-                 * retry, and rather propagate those errors to user? In that
-                 * case, we must write to the rkcg queue. */
-                if (rko_orig->rko_u.share_fetch.should_fetch &&
-                    rd_timeout_remains(
-                        rko_orig->rko_u.share_fetch.abs_timeout)) {
+        /* Retry fetching if there is any amount of time left. For other
+         * errors, let them drop and be retried on the next poll. */
+        /* TODO: KIP-932: Are there errors for which we should not
+         * retry, and rather propagate those errors to user? In that
+         * case, we must write to the rkcg queue. */
+        if (!rko_orig->rko_u.share_fetch.should_fetch ||
+            !rd_timeout_remains(rko_orig->rko_u.share_fetch.abs_timeout))
+                return RD_KAFKA_OP_RES_HANDLED;
 
-                        rd_kafka_op_t *rko =
-                            rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
-                        rd_kafka_broker_t *rkb =
-                            rko_orig->rko_u.share_fetch.target_broker;
-                        rko->rko_u.share_fetch.abs_timeout =
-                            rko_orig->rko_u.share_fetch.abs_timeout;
-                        rko->rko_u.share_fetch.should_fetch = rd_true;
-                        rd_kafka_broker_keep(rkb);
-                        rko->rko_u.share_fetch.target_broker = rkb;
-                        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+        if (rko_orig->rko_error)
+                err = rd_kafka_error_code(rko_orig->rko_error);
 
-                        rd_kafka_dbg(
-                            rk, CGRP, "SHAREFETCH",
-                            "Retrying share fetch op on broker %s after eror"
-                            "(%s fetch)",
-                            rd_kafka_broker_name(rkb),
-                            rko->rko_u.share_fetch.should_fetch ? "should" : "should not");
+        switch (err) {
+        /* For some errors, don't resend at all.
+         * This list of errors is incomplete. */
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__DESTROY:
+        case RD_KAFKA_RESP_ERR__UNKNOWN_GROUP:
+        case RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS: /* This should not happen. */
+        case RD_KAFKA_RESP_ERR__STATE:
+        case RD_KAFKA_RESP_ERR__AUTHENTICATION:
+        case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED: /* Do we need more
+                                                              handling for fatal
+                                                              errors? */
+                break;
 
-                        /* TODO: KIP-932: Are there errors where we should back
-                         * this off by running it on a timer?*/
-                        rd_kafka_q_enq(rkb->rkb_ops, rko);
-                }
+        /* For other cases, resend to separate broker after a backoff. The
+         * fanout op will back us off automatically if there is no broker
+         * available. */
+        default:
+                rd_kafka_share_fetch_fanout_with_backoff(
+                    rk, rko_orig->rko_u.share_fetch.abs_timeout,
+                    0 /* no backoff */);
+                break;
         }
 
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
+/**
+ * Handles RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY.
+ * @locality main thread
+ */
 rd_kafka_op_res_t
 rd_kafka_share_fetch_fanout_reply_op(rd_kafka_t *rk, rd_kafka_op_t *rko_orig) {
-        rd_kafka_message_t *rkm;
-        rd_kafka_op_t *rko;
+        rd_kafka_resp_err_t err;
+
         if (!rko_orig->rko_err && !rko_orig->rko_error)
                 return RD_KAFKA_OP_RES_HANDLED;
+
+        err = rko_orig->rko_err;
+        if (rko_orig->rko_error)
+                err = rd_kafka_error_code(rko_orig->rko_error);
 
         /* TODO: KIP-932: Add error handling - either retries, or user-level
          * propagation, later. */
         rd_kafka_dbg(
-            rk, CGRP, "SHARE", "Encountered error in SHARE_FETCH_FANOUT: %s",
-            rko_orig->rko_err ? rd_kafka_err2name(rko_orig->rko_err)
-                              : rd_kafka_error_name(rko_orig->rko_error));
+            rk, CGRP, "SHARE",
+            "Encountered error in SHARE_FETCH_FANOUT: %s, remains: %d",
+            rd_kafka_err2name(err),
+            rd_timeout_remains(rko_orig->rko_u.share_fetch_fanout.abs_timeout));
+
+        switch (err) {
+        /* Some errors need not be retried. */
+        case RD_KAFKA_RESP_ERR__DESTROY:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+                break;
+
+        /* Some errors may be retried - with a constant backoff. */
+        default:
+                rd_kafka_share_fetch_fanout_with_backoff(
+                    rk, rko_orig->rko_u.share_fetch_fanout.abs_timeout,
+                    /* TODO: KIP-932: Consider setting this to retry_backoff_ms
+                       or to a constant.*/
+                    rk->rk_conf.retry_backoff_max_ms);
+                break;
+        }
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
 /**
+ * Op callback for RD_KAFKA_OP_SHARE_FETCH_FANOUT.
  * @locality main thread
  */
 rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
@@ -3066,9 +3129,26 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
         rd_kafka_error_t *error;
         rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
         rd_kafka_op_t *reply_rko;
+        rd_ts_t abs_timeout = rko->rko_u.share_fetch_fanout.abs_timeout;
 
         /* We should never have enqueued this op if we didn't have the rkcg */
         rd_assert(rkcg);
+
+        if (rd_timeout_remains(abs_timeout) <= 0) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "Not issuing SHARE_FETCH_FANOUT: timeout expired");
+
+                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__TIMED_OUT,
+                                           "rd_kafka_share_fetch_fanout_op(): "
+                                           "Share fetch fanout op timed out");
+
+                reply_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH_FANOUT |
+                                            RD_KAFKA_OP_REPLY);
+                reply_rko->rko_error                            = error;
+                reply_rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
+                rd_kafka_replyq_enq(&rko->rko_replyq, reply_rko, 0);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
 
         if (!(selected_rkb = rd_kafka_share_select_broker(rk, rkcg))) {
                 error =
@@ -3078,17 +3158,17 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 
                 reply_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH_FANOUT |
                                             RD_KAFKA_OP_REPLY);
-                reply_rko->rko_error = error;
+                reply_rko->rko_error                            = error;
+                reply_rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
                 rd_kafka_replyq_enq(&rko->rko_replyq, reply_rko, 0);
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
         /* Issue fetch requests to all brokers */
         rd_kafka_dbg(rk, CGRP, "SHARE",
-                     "Selected broker %s for share fetch, issuing "
-                     "fetch requests to all %d brokers",
-                     rd_kafka_broker_name(selected_rkb),
-                     rd_atomic32_get(&rk->rk_broker_cnt));
+                     "Selected broker %s for fetching messages, issuing fetch "
+                     "requests to necessary brokers",
+                     rd_kafka_broker_name(selected_rkb));
 
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -3114,8 +3194,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 rkb->rkb_share_fetch_enqueued = rd_true;
 
                 rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
-                rko_sf->rko_u.share_fetch.abs_timeout =
-                    rko->rko_u.share_fetch_fanout.abs_timeout;
+                rko_sf->rko_u.share_fetch.abs_timeout  = abs_timeout;
                 rko_sf->rko_u.share_fetch.should_fetch = (rkb == selected_rkb);
                 rd_kafka_broker_keep(rkb);
                 rko_sf->rko_u.share_fetch.target_broker = rkb;
@@ -3137,18 +3216,18 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
-rd_kafka_error_t *
-rd_kafka_share_consume_batch(rd_kafka_t *rk,
-                             int timeout_ms,
-                             rd_kafka_message_t **rkmessages /* out */,
-                             size_t *rkmessages_size /* out */) {
+rd_kafka_error_t *rd_kafka_share_consume_batch(
+    rd_kafka_t *rk,
+    int timeout_ms,
+    /* There is some benefit to making this ***rkmessages and allocating it
+       within this function, but on the flipside this means that it will always
+       be allocated on the heap. */
+    rd_kafka_message_t **rkmessages /* out */,
+    size_t *rkmessages_size /* out */) {
         rd_kafka_cgrp_t *rkcg;
-        rd_kafka_q_t *rkq;
-        rd_kafka_op_t *rko;
-        rd_ts_t now                   = rd_clock();
-        rd_ts_t abs_timeout           = rd_timeout_init0(now, timeout_ms);
-        int cnt                       = 0;
-        const size_t max_poll_records = 100; /* TODO: change. */
+        rd_ts_t now             = rd_clock();
+        rd_ts_t abs_timeout     = rd_timeout_init0(now, timeout_ms);
+        size_t max_poll_records = (size_t)rk->rk_conf.share.max_poll_records;
 
         if (!RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -3165,16 +3244,10 @@ rd_kafka_share_consume_batch(rd_kafka_t *rk,
         if (likely(rd_kafka_q_len(rkcg->rkcg_q) == 0)) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
                              "Issuing share fetch fanout to main thread with "
-                             "abs_timeout = %lld and now=%lld",
-                             abs_timeout, now);
-                rd_kafka_op_t *fanout_rko =
-                    rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT,
-                                       rd_kafka_share_fetch_fanout_op);
-                fanout_rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
-                fanout_rko->rko_u.share_fetch_fanout.is_retry    = rd_false;
-                fanout_rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
-
-                rd_kafka_q_enq(rk->rk_ops, fanout_rko);
+                             "abs_timeout = %" PRId64,
+                             abs_timeout);
+                rd_kafka_share_fetch_fanout_with_backoff(rk, abs_timeout,
+                                                         0 /* no backoff */);
         }
 
         /* At this point, there's no reason to deviate from what we already do
@@ -4645,7 +4718,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
                 rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
-                rd_kafka_share_fetch_fanout_reply_op(rk, rko);
+                res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
                 break;
 
         default:

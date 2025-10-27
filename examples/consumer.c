@@ -247,7 +247,7 @@ int main(int argc, char **argv) {
                 rd_kafka_error_t *error;
 
                 // fprintf(stderr, "Calling consume_batch\n");
-                error = rd_kafka_share_consume_batch(rk, 1000, rkmessages,
+                error = rd_kafka_share_consume_batch(rk, 5000, rkmessages,
                                                      &rcvd_msgs);
                 if (error) {
                         fprintf(stderr, "%% Consume error: %s\n",

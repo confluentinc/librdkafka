@@ -3035,13 +3035,11 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                                                               errors? */
                 break;
 
-        /* For other cases, resend to separate broker after a backoff. The
-         * fanout op will back us off automatically if there is no broker
-         * available. */
+        /* For other cases, resend to separate broker after a backoff. */
         default:
                 rd_kafka_share_fetch_fanout_with_backoff(
                     rk, rko_orig->rko_u.share_fetch.abs_timeout,
-                    0 /* no backoff */);
+                    rk->rk_conf.retry_backoff_max_ms);
                 break;
         }
 

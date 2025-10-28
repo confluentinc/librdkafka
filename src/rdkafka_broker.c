@@ -3495,10 +3495,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                    "Ignoring SHARE_FETCH op: "
                                    "already fetching");
                         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
-                } else if(rko->rko_u.share_fetch.should_fetch) {
-                        rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
                 }
 
+                rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
+                
                 // if (!rko->rko_u.share_fetch.should_fetch) {
                 //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                 //                    "Ignoring SHARE_FETCH op: "

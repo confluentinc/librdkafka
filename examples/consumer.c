@@ -236,8 +236,7 @@ int main(int argc, char **argv) {
          * since a rebalance may happen at any time.
          * Start polling for messages. */
 
-        rd_kafka_message_t **rkmessages =
-            (rd_kafka_message_t **)malloc(sizeof(rd_kafka_message_t *) * 100);
+        rd_kafka_message_t *rkmessages[500];
         while (run) {
                 rd_kafka_message_t *rkm = NULL;
                 size_t rcvd_msgs        = 0;

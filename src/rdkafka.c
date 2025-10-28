@@ -3254,7 +3254,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          * for returning multiple messages to the user, as the orchestration
          * is handled by the main thread. Later on, we needed, we might need
          * a custom loop if we need any changes. */
-        *rkmessages_size = rd_kafka_q_serve_rkmessages(
+        *rkmessages_size = rd_kafka_q_serve_share_rkmessages(
             rkcg->rkcg_q, timeout_ms, /* Use this timeout directly as prior
                              operations aren't blocking, so no need to
                              re-convert the abs_timeout into a relative one.*/

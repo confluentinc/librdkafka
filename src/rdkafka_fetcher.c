@@ -1095,8 +1095,8 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         }
 
 // done:
-        if (rkt)
-                rd_kafka_topic_destroy0(rkt);
+        RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
+        RD_IF_FREE(rkt, rd_kafka_topic_destroy0);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:

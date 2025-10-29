@@ -42,9 +42,9 @@
 
 
 int main_0038_performance(int argc, char **argv) {
-        const char *topic   = test_mk_topic_name(__FUNCTION__, 1);
-        const int partition = 0;
-        const int msgsize   = 100;
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const int partition    = 0;
+        const int msgsize      = 100;
         const char *acks_value = "1";
         uint64_t testid;
         rd_kafka_conf_t *conf;

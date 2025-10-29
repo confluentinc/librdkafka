@@ -105,7 +105,8 @@ static void rebalance_cb(rd_kafka_t *rk,
         _consumer_t *c = opaque;
 
         /* Accept both REVOKE and ASSIGN as valid rebalance events during
-         * unsubscribe. Some clusters may send ASSIGN directly instead of REVOKE.
+         * unsubscribe. Some clusters may send ASSIGN directly instead of
+         * REVOKE.
          */
         if (c->expected_rb_event == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS &&
             err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {

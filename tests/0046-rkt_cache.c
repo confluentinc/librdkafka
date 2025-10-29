@@ -45,7 +45,7 @@ int main_0046_rkt_cache(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         int i;
 
-        rk = test_create_producer();
+        rk  = test_create_producer();
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         for (i = 0; i < 100; i++) {

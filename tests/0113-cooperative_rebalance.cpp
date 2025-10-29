@@ -2797,13 +2797,12 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
     /* Verify consumer assignments */
     int counts[N_CONSUMERS];
     map<Toppar, RdKafka::KafkaConsumer *> all_assignments;
-    Test::Say(tostr()
-              << "Consumer assignments "
-              << "(subscription_variation " << subscription_variation << ") "
-              << (stabilized ? "(stabilized) " : "")
-              << (use_rebalance_cb ? "(use_rebalance_cb)"
-                                   : "(no rebalance cb)")
-              << ":\n");
+    Test::Say(tostr() << "Consumer assignments "
+                      << "(subscription_variation " << subscription_variation
+                      << ") " << (stabilized ? "(stabilized) " : "")
+                      << (use_rebalance_cb ? "(use_rebalance_cb)"
+                                           : "(no rebalance cb)")
+                      << ":\n");
     for (int i = 0; i < N_CONSUMERS; i++) {
       bool last_rebalance_stabilized =
           stabilized &&

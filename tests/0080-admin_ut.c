@@ -815,7 +815,7 @@ static void do_test_DescribeTopics(const char *what,
         const char *topic_names[TEST_DESCRIBE_TOPICS_CNT];
         rd_kafka_TopicCollection_t *topics = NULL;
         rd_kafka_AdminOptions_t *options   = NULL;
-        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        int exp_timeout                    = MY_SOCKET_TIMEOUT_MS;
         int i;
         char errstr[512];
         const char *errstr2;

@@ -35,7 +35,7 @@
 #test.supported.acks=-1,0,1      
 #test.supported.acks=0           
 
-# Multiplies explicit sleep_for() delays for cluster state propagation (set 0 to skip sleeps)
+# Multiplies explicit test_wait_for_metadata_propagation() delays for cluster state propagation (set 0 to skip sleeps)
 # Different from test.timeout.multiplier which multiplies API operation timeouts (can't be disabled)
 #test.sleep.multiplier=2.0      (cloud)
 #test.sleep.multiplier=0         

@@ -124,7 +124,7 @@ static void do_test_CreateTopics(const char *what,
 
         /* Ensure we don't try to use more replicas than available brokers */
         if (num_replicas > (int)avail_broker_cnt) {
-            num_replicas = (int)avail_broker_cnt;
+                num_replicas = (int)avail_broker_cnt;
         }
 
         SUB_TEST_QUICK(
@@ -974,7 +974,7 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                                     errstr2 ? errstr2 : "");
                                 fails++;
                         }
-                } else                 if (err != exp_err[i]) {
+                } else if (err != exp_err[i]) {
                         /* Accept UNKNOWN_TOPIC_OR_PART for topic configs as
                          * some environments may restrict topic config
                          * alterations */
@@ -993,7 +993,8 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
                                     err == RD_KAFKA_RESP_ERR_INVALID_REQUEST)) {
                                 TEST_SAY(
                                     "accepting %s for group config "
-                                    "(group config support varies by Kafka version)\n",
+                                    "(group config support varies by Kafka "
+                                    "version)\n",
                                     rd_kafka_err2name(err));
                         } else {
                                 TEST_FAIL_LATER(
@@ -1300,7 +1301,7 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                     errstr2 ? errstr2 : "");
                                 fails++;
                         }
-                } else                 if (err != exp_err[i]) {
+                } else if (err != exp_err[i]) {
                         /* Accept UNKNOWN_TOPIC_OR_PART for topic configs as
                          * some environments may restrict topic config
                          * alterations */
@@ -1319,7 +1320,8 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
                                     err == RD_KAFKA_RESP_ERR_INVALID_REQUEST)) {
                                 TEST_SAY(
                                     "accepting %s for group config "
-                                    "(group config support varies by Kafka version)\n",
+                                    "(group config support varies by Kafka "
+                                    "version)\n",
                                     rd_kafka_err2name(err));
                         } else {
                                 TEST_FAIL_LATER(

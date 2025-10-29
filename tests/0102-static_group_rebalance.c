@@ -208,7 +208,7 @@ static void do_test_static_group_rebalance(void) {
         rebalance_start        = test_clock();
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         test_consumer_subscribe(c[0].rk, topics);
-        
+
         /*
          * Static members enforce `max.poll.interval.ms` which may prompt
          * an unwanted rebalance while the other consumer awaits its assignment.
@@ -216,16 +216,17 @@ static void do_test_static_group_rebalance(void) {
          * interleave calls to poll while awaiting our assignment to avoid
          * unexpected rebalances being triggered.
          */
-        
-        /* Wait for consumer 0 to get initial (unbalanced) assignment of all partitions */
+
+        /* Wait for consumer 0 to get initial (unbalanced) assignment of all
+         * partitions */
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
                                              &c[0].assigned_at, 10000)) {
                 /* Just polling c[0] */
         }
-        
+
         /* Reset timestamp after c[0] has initial assignment */
         rebalance_start = test_clock();
-        
+
         /* Now subscribe consumer 1 to trigger rebalance */
         test_consumer_subscribe(c[1].rk, topics);
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;

@@ -204,9 +204,11 @@ static void do_test_static_group_rebalance(void) {
 
         test_wait_topic_exists(c[1].rk, topic, tmout_multip(5000));
 
+        /* Subscribe consumer 0 first to get all partitions */
+        rebalance_start        = test_clock();
+        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         test_consumer_subscribe(c[0].rk, topics);
-        test_consumer_subscribe(c[1].rk, topics);
-
+        
         /*
          * Static members enforce `max.poll.interval.ms` which may prompt
          * an unwanted rebalance while the other consumer awaits its assignment.
@@ -214,27 +216,29 @@ static void do_test_static_group_rebalance(void) {
          * interleave calls to poll while awaiting our assignment to avoid
          * unexpected rebalances being triggered.
          */
-        rebalance_start        = test_clock();
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        /* Wait for one consumer to get initial (unbalanced) assignment */
-        while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 10000)) {
-                /* keep consumer 0 alive while consumer 1 awaits initial
-                 * assignment */
-                c[0].curr_line = __LINE__;
-                test_consumer_poll_once(c[0].rk, &mv, 0);
+        
+        /* Wait for consumer 0 to get initial (unbalanced) assignment of all partitions */
+        while (!static_member_wait_rebalance(&c[0], rebalance_start,
+                                             &c[0].assigned_at, 10000)) {
+                /* Just polling c[0] */
         }
+        
+        /* Reset timestamp after c[0] has initial assignment */
+        rebalance_start = test_clock();
+        
+        /* Now subscribe consumer 1 to trigger rebalance */
+        test_consumer_subscribe(c[1].rk, topics);
+        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
 
         /* Skip complex rebalance tests on older librdkafka versions */
         if (rd_kafka_version() >= 0x020100ff) {
-                /* Consumer 1 (which got all partitions) should revoke them */
-                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-                while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                                     &c[1].revoked_at, 10000)) {
-                        /* keep consumer 0 alive during revoke phase */
-                        c[0].curr_line = __LINE__;
-                        test_consumer_poll_once(c[0].rk, &mv, 0);
+                /* Consumer 0 (which got all partitions) should revoke them */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                while (!static_member_wait_rebalance(&c[0], rebalance_start,
+                                                     &c[0].revoked_at, 10000)) {
+                        /* keep consumer 1 alive during revoke phase */
+                        c[1].curr_line = __LINE__;
+                        test_consumer_poll_once(c[1].rk, &mv, 0);
                 }
 
                 /* Both consumers should now get balanced assignments */
@@ -243,13 +247,13 @@ static void do_test_static_group_rebalance(void) {
 
                 /* Wait for both to get their new assignments */
                 while (!static_member_wait_rebalance(
-                    &c[0], rebalance_start, &c[0].assigned_at, 10000)) {
-                        c[1].curr_line = __LINE__;
-                        test_consumer_poll_once(c[1].rk, &mv, 0);
+                    &c[1], rebalance_start, &c[1].assigned_at, 10000)) {
+                        c[0].curr_line = __LINE__;
+                        test_consumer_poll_once(c[0].rk, &mv, 0);
                 }
 
-                static_member_expect_rebalance(&c[1], rebalance_start,
-                                               &c[1].assigned_at, 10000);
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].assigned_at, 10000);
 
                 /* Additional polling to ensure all assignments are fully
                  * settled */

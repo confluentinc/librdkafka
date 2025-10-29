@@ -119,7 +119,7 @@ static void test_single_partition(void) {
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -255,7 +255,7 @@ static void test_partitioner(void) {
         topic = test_mk_topic_name("0011_partitioner", 1);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
@@ -383,7 +383,7 @@ static void test_per_message_partition_flag(void) {
         test_create_topic_wait_exists(rk, topic_name, topic_num_partitions, -1,
                                       30000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
 
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
@@ -527,7 +527,7 @@ static void test_message_partitioner_wo_per_message_flag(void) {
 
         topic = test_mk_topic_name("0011", 0);
         test_create_topic_if_auto_create_disabled(rk, topic, 3);
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -650,15 +650,19 @@ static void test_message_single_partition_record_fail(int variation) {
 
         SUB_TEST_QUICK();
 
-        // Modified for Confluent Cloud compatibility:
-        // Step 1: Change from default (delete) to compact
+        /* Some broker configurations do not support directly changing
+         * cleanup.policy from 'compact' to 'delete'. This test uses a
+         * multi-step approach: first set to 'compact', then to
+         * 'compact,delete' (if supported), and finally revert to 'delete'.
+         */
+        /* Step 1: Change from default (delete) to compact */
         const char *confs_set_compact[] = {"cleanup.policy", "SET", "compact"};
 
-        // Step 2: Change from compact to compact,delete
+        /* Step 2: Change from compact to compact,delete */
         const char *confs_set_mixed[] = {"cleanup.policy", "SET",
                                          "compact,delete"};
 
-        // Revert back to delete at the end
+        /* Revert back to delete at the end */
         const char *confs_set_delete[] = {"cleanup.policy", "SET", "delete"};
 
         test_conf_init(&conf, &topic_conf, 20);
@@ -679,25 +683,25 @@ static void test_message_single_partition_record_fail(int variation) {
             rd_kafka_name(rk));
 
         test_create_topic_if_auto_create_disabled(rk, topic_name, -1);
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
         rkt = rd_kafka_topic_new(rk, topic_name, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
         test_wait_topic_exists(rk, topic_name, 5000);
 
-        // Step 1: delete → compact
+        /* Step 1: delete → compact */
         TEST_SAY("Step 1: Changing cleanup.policy from delete to compact\n");
         test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_TOPIC,
                                             topic_name, confs_set_compact, 1);
-        sleep_for(1);
+        test_wait_for_metadata_propagation(1);
 
-        // Step 2: compact → compact,delete (if supported by the environment)
+        /* Step 2: compact → compact,delete (if supported by the environment) */
         TEST_SAY(
             "Step 2: Attempting to change cleanup.policy to compact,delete\n");
         rd_kafka_resp_err_t err = test_IncrementalAlterConfigs_simple(
             rk, RD_KAFKA_RESOURCE_TOPIC, topic_name, confs_set_mixed, 1);
 
-        // If mixed policy is not supported, fall back to just compact
+        /* If mixed policy is not supported, fall back to just compact */
         if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 TEST_SAY(
                     "Mixed policy not supported, continuing with compact "

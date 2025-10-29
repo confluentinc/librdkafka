@@ -56,21 +56,20 @@ static void test_producer_partition_cnt_change(void) {
         int msgcnt              = test_quick ? 500 : 100000;
         test_timing_t t_destroy;
         int produced = 0;
+        int topic_wait_timeout  = tmout_multip(5000);
+        int msg_timeout_ms      = tmout_multip(10000);
 
         test_conf_init(&conf, NULL, 20);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        int topic_wait_timeout = tmout_multip(5000);
         test_create_topic_wait_exists(rk, topic, partition_cnt / 2, -1,
                                       topic_wait_timeout);
-        sleep_for(3);
-        int msg_timeout_ms = tmout_multip(10000);
+        test_wait_for_metadata_propagation(3);
 
 
-        rkt = test_create_topic_object(
-            rk, topic, "message.timeout.ms",
-            tsprintf("%d", tmout_multip(msg_timeout_ms)), NULL);
+        rkt = test_create_topic_object(rk, topic, "message.timeout.ms",
+                                        tsprintf("%d", msg_timeout_ms), NULL);
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,
                                  msgcnt / 2, NULL, 100, 0, &produced);
@@ -78,7 +77,7 @@ static void test_producer_partition_cnt_change(void) {
         test_create_partitions(rk, topic, partition_cnt);
 
         test_wait_topic_exists(rk, topic, topic_wait_timeout);
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, msgcnt / 2,
                                  msgcnt / 2, NULL, 100, 0, &produced);

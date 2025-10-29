@@ -84,6 +84,7 @@ int main_0007_autotopic(int argc, char **argv) {
         char msg[128];
         int msgcnt = 10;
         int i;
+        const char *topic;
 
         if (!test_check_auto_create_topic()) {
                 TEST_SKIP(
@@ -102,8 +103,8 @@ int main_0007_autotopic(int argc, char **argv) {
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        const char *topic = test_mk_topic_name("0007_autotopic", 1);
-        rkt               = rd_kafka_topic_new(rk, topic, topic_conf);
+        topic = test_mk_topic_name("0007_autotopic", 1);
+        rkt   = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 

@@ -64,7 +64,7 @@ static void do_test_consume_batch(void) {
                 test_create_topic_if_auto_create_disabled(NULL, topics[i],
                                                           partition_cnt);
                 test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
 
                 for (p = 0; p < partition_cnt; p++)
                         test_produce_msgs_easy(topics[i], testid, p,
@@ -139,6 +139,7 @@ static void do_test_consume_batch(void) {
                 }
 
                 rd_kafka_topic_destroy(rkts[i]);
+                rd_free(topics[i]);
         }
 
         rd_kafka_queue_destroy(rkq);

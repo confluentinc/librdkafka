@@ -334,11 +334,11 @@ static int do_test(const char *assignor) {
                                  test_run_id),
                         0));
 
-        /* Produce messages to topics to ensure creation. */
+        /* Create topics explicitly and produce messages. */
         for (i = 0; i < topic_cnt; i++) {
-                test_create_topic_if_auto_create_disabled(NULL, topics[i], 1);
+                test_create_topic(NULL, topics[i], 1, 1);
                 test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
                 test_produce_msgs_easy(topics[i], testid, RD_KAFKA_PARTITION_UA,
                                        msgcnt);
         }

@@ -158,7 +158,7 @@ static void do_test_consume_batch_with_seek(void) {
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -250,7 +250,7 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -357,7 +357,7 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
 
         for (p = 0; p < partition_cnt; p++)
@@ -456,7 +456,7 @@ static void do_test_consume_batch_store_offset(void) {
 
         test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,

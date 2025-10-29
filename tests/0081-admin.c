@@ -1366,7 +1366,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         /*
          * ConfigResource #0: topic config, no config entries.
@@ -1500,7 +1500,7 @@ retry_describe:
                                     exp_err[i], rd_kafka_err2name(err),
                                     errstr2 ? errstr2 : "");
                                 rd_kafka_event_destroy(rkev);
-                                sleep_for(1);
+                                test_wait_for_metadata_propagation(1);
                                 goto retry_describe;
                         }
 
@@ -1861,7 +1861,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
         /* Wait for ACL propagation. */
-        sleep_for(2);
+        test_wait_for_metadata_propagation(2);
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -2277,7 +2277,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 3, NULL);
 
         /* Wait for ACL propagation. */
-        sleep_for(2);
+        test_wait_for_metadata_propagation(2);
 
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
@@ -2299,7 +2299,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        sleep_for(2);
+        test_wait_for_metadata_propagation(2);
 
         /*
          * Wait for result
@@ -2418,7 +2418,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        sleep_for(1);
+        test_wait_for_metadata_propagation(1);
 
         /*
          * Wait for result
@@ -2613,7 +2613,7 @@ static void do_test_DeleteRecords(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   metadata_timeout_update);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         /* Produce 100 msgs / partition */
         for (i = 0; i < MY_DEL_RECORDS_CNT; i++) {
@@ -2652,7 +2652,7 @@ static void do_test_DeleteRecords(const char *what,
 
         del_records = rd_kafka_DeleteRecords_new(offsets);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         TIMING_START(&timing, "DeleteRecords");
         TEST_SAY("Call DeleteRecords\n");
@@ -2685,7 +2685,7 @@ static void do_test_DeleteRecords(const char *what,
                 rd_kafka_event_destroy(rkev);
         }
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
         /* Convert event to proper result */
         res = rd_kafka_event_DeleteRecords_result(rkev);
         TEST_ASSERT(res, "expected DeleteRecords_result, not %s",
@@ -2718,7 +2718,7 @@ static void do_test_DeleteRecords(const char *what,
                     "expected DeleteRecords_result_offsets to return %d items, "
                     "not %d",
                     offsets->cnt, results->cnt);
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         for (i = 0; i < results->cnt; i++) {
                 const rd_kafka_topic_partition_t *input  = &offsets->elems[i];
@@ -2900,7 +2900,7 @@ static void do_test_DeleteGroups(const char *what,
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         for (i = 0; i < MY_DEL_GROUPS_CNT; i++) {
                 char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
@@ -3213,7 +3213,7 @@ static void do_test_ListConsumerGroups(const char *what,
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         for (i = 0; i < TEST_LIST_CONSUMER_GROUPS_CNT; i++) {
                 char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
@@ -3341,7 +3341,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         /* Verify that topics are reported by metadata */
         test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
@@ -3547,7 +3547,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
         }
 
         /* Wait session timeout + 1s. Because using static group membership */
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -3687,7 +3687,7 @@ static void do_test_DescribeTopics(const char *what,
                                                   tmout_multip(5000));
                 }
 
-                sleep_for(2);
+                test_wait_for_metadata_propagation(2);
 
                 options = rd_kafka_AdminOptions_new(
                     rk, RD_KAFKA_ADMIN_OP_DESCRIBETOPICS);
@@ -3867,7 +3867,7 @@ static void do_test_DescribeTopics(const char *what,
                 rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
                 /* Wait for ACL propagation. */
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
 
                 /* Call DescribeTopics. */
                 options = rd_kafka_AdminOptions_new(
@@ -3943,7 +3943,7 @@ static void do_test_DescribeTopics(const char *what,
                 rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
                 /* Wait for ACL propagation. */
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
         } else {
                 TEST_SAY(
                     "SKIPPING: DescribeTopics function - requires librdkafka "
@@ -4117,7 +4117,7 @@ static void do_test_DescribeCluster(const char *what,
         test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         /* Call DescribeCluster. */
         options =
@@ -4180,7 +4180,7 @@ static void do_test_DescribeCluster(const char *what,
         test_DeleteAcls_simple(rk, NULL, &acl_bindings_delete, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings_delete);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
 done:
         TEST_LATER_CHECK();
@@ -4251,12 +4251,12 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         /* Create the topic. */
         test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         /* Produce 100 msgs */
         test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         /* Create and consumer (and consumer group). */
         group_id = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
@@ -4345,7 +4345,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* It seems to be taking some time on the cluster for the ACLs to
          * propagate for a group.*/
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         options = rd_kafka_AdminOptions_new(
             rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
@@ -4412,7 +4412,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        sleep_for(2);
+        test_wait_for_metadata_propagation(2);
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
         test_DeleteTopics_simple(rk, q, &topic, 1, NULL);
@@ -4508,7 +4508,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   15 * 1000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         consumer = test_create_consumer(groupid, NULL, NULL, NULL);
 
@@ -4785,7 +4785,7 @@ static void do_test_AlterConsumerGroupOffsets(const char *what,
                 test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt,
                                           NULL, 0, 15 * 1000);
 
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
 
                 consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -5082,7 +5082,7 @@ static void do_test_ListConsumerGroupOffsets(const char *what,
         test_wait_metadata_update(rk, exp_mdtopics, exp_mdtopic_cnt, NULL, 0,
                                   tmout_multip(15 * 1000));
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         consumer = test_create_consumer(group_id, NULL, NULL, NULL);
 
@@ -5408,7 +5408,7 @@ static void do_test_UserScramCredentials(const char *what,
 #endif
 
         /* Wait for user propagation. */
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         /* Credential should be retrieved */
         options = rd_kafka_AdminOptions_new(
@@ -5523,7 +5523,7 @@ final_checks:
 #endif
 
         /* Wait for user propagation. */
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         /* Credential doesn't exist anymore for this user */
 
@@ -5640,7 +5640,7 @@ static void do_test_ListOffsets(const char *what,
 
         test_wait_topic_exists(rk, topic, 5000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         p = test_create_producer();
         for (i = 0; i < RD_ARRAY_SIZE(timestamps); i++) {

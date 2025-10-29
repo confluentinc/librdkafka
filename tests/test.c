@@ -1007,10 +1007,10 @@ const char *test_get_available_acks(const char *wanted_acks) {
 }
 
 /**
- * @brief Sleep with configurable multiplier (only if multiplier > 0)
- * @param wait_time Sleep time in seconds
+ * @brief Wait for metadata propagation across the cluster
+ * @param wait_time Sleep time in seconds (applies test_sleep_multiplier)
  */
-void sleep_for(int wait_time) {
+void test_wait_for_metadata_propagation(int wait_time) {
         if (test_sleep_multiplier > 0.0) {
                 int sleep_time = (int)(wait_time * test_sleep_multiplier);
                 rd_sleep(sleep_time);

@@ -105,7 +105,7 @@ static void rebalance_cb(rd_kafka_t *rk,
         _consumer_t *c = opaque;
 
         /* Accept both REVOKE and ASSIGN as valid rebalance events during
-         * unsubscribe Some clusters may send ASSIGN directly instead of REVOKE
+         * unsubscribe. Some clusters may send ASSIGN directly instead of REVOKE.
          */
         if (c->expected_rb_event == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS &&
             err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
@@ -113,7 +113,6 @@ static void rebalance_cb(rd_kafka_t *rk,
                     "line %d: %s: Got ASSIGN instead of expected REVOKE "
                     "(acceptable behavior)\n",
                     c->curr_line, rd_kafka_name(rk));
-                /* Accept ASSIGN as valid alternative to REVOKE */
         } else {
                 TEST_ASSERT(c->expected_rb_event == err,
                             "line %d: %s: Expected rebalance event %s got %s\n",
@@ -177,7 +176,7 @@ static void do_test_static_group_rebalance(void) {
         test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(5000));
         test_wait_topic_exists(NULL, topic, tmout_multip(5000));
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_set(conf, "max.poll.interval.ms",
@@ -306,7 +305,7 @@ static void do_test_static_group_rebalance(void) {
                                               1, -1, 30000);
                 /* Additional wait to ensure topic metadata is fully propagated
                  */
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
 
                 /* Await revocation */
                 rebalance_start        = test_clock();

@@ -45,6 +45,7 @@ int main_0038_performance(int argc, char **argv) {
         const char *topic   = test_mk_topic_name(__FUNCTION__, 1);
         const int partition = 0;
         const int msgsize   = 100;
+        const char *acks_value = "1";
         uint64_t testid;
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
@@ -64,7 +65,6 @@ int main_0038_performance(int argc, char **argv) {
                 TEST_SKIP("acks=1 not supported by this cluster\n");
                 return 0;
         }
-        const char *acks_value = "1";
 
         TEST_SAY("Producing %d messages of size %d to %s [%d] with acks=%s\n",
                  msgcnt, (int)msgsize, topic, partition, acks_value);

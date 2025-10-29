@@ -193,7 +193,7 @@ int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 int test_set_special_conf(const char *name, const char *val, int *timeoutp);
 int test_is_acks_supported(const char *acks_value);
 const char *test_get_available_acks(const char *wanted_acks);
-void sleep_for(int wait_time);
+void test_wait_for_metadata_propagation(int wait_time);
 int test_should_skip_number(const char *test_number);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
@@ -444,6 +444,6 @@ rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
                                              void *opaque);
 
 void test_delete_topic_simple(rd_kafka_t *rk, const char *topic_name);
-#endif
+#endif /* _RDKAFKA_H_ */
 
 #endif /* _TESTSHARED_H_ */

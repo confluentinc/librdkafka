@@ -100,6 +100,8 @@ class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
     if (!msg.msg_opaque())
       return;
     RdKafka::MessageTimestamp ts = msg.timestamp();
+    /* Accept both CreateTime and LogAppendTime due to a bug in some cloud
+     * provider where timestamp type is not returned correctly. */
     if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
         ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
       Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
@@ -212,6 +214,8 @@ static void do_test_bsearch(void) {
                                     itcnt > 0);
 
     RdKafka::MessageTimestamp ts = msg->timestamp();
+    /* Accept both CreateTime and LogAppendTime due to a bug in some cloud
+     * provider where timestamp type is not returned correctly. */
     if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
         ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
       Test::Fail(tostr() << "Expected CreateTime or "

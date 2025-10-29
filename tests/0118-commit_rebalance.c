@@ -62,7 +62,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 
                 /* Give the closing consumer some time to handle the
                  * unassignment and leave so that the coming commit fails. */
-                sleep_for(3);
+                test_wait_for_metadata_propagation(3);
 
                 /* Committing after unassign will trigger an
                  * Illegal generation error from the broker, which would
@@ -103,7 +103,7 @@ int main_0118_commit_rebalance(int argc, char **argv) {
 
         test_create_topic_if_auto_create_disabled(NULL, topic, 3);
 
-        sleep_for(5);
+        test_wait_for_metadata_propagation(5);
 
         test_produce_msgs_easy_v(topic, 0, RD_KAFKA_PARTITION_UA, 0, msgcnt, 10,
                                  NULL);

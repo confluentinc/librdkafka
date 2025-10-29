@@ -85,6 +85,8 @@ int main_0008_reqacks(int argc, char **argv) {
         int reqacks;
         int idbase        = 0;
         const char *topic = NULL;
+        int start_acks    = -1;
+        int end_acks      = 1;
 
         TEST_SAY(
             "\033[33mNOTE! This test requires at "
@@ -97,9 +99,6 @@ int main_0008_reqacks(int argc, char **argv) {
 
         /* Try different request.required.acks settings (issue #75) */
         /* Test all standard acks values, but skip unsupported ones */
-        int start_acks = -1;
-        int end_acks   = 1;
-
         TEST_SAY("Testing acks values -1, 0, 1 (skipping unsupported ones)\n");
         for (reqacks = start_acks; reqacks <= end_acks; reqacks++) {
                 char tmp[10];

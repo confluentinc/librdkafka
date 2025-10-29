@@ -127,10 +127,10 @@ static void do_test_strategy_ordering(const char *assignor,
         topic = test_mk_topic_name("0132-strategy_ordering", 1);
         test_create_topic_wait_exists(NULL, topic, _PART_CNT, -1, 5000);
 
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         test_wait_topic_exists(NULL, topic, tmout_multip(10000));
-        sleep_for(3);
+        test_wait_for_metadata_propagation(3);
 
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 

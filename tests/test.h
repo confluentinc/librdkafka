@@ -679,6 +679,28 @@ void test_consumer_verify_assignment0(const char *func,
         test_consumer_verify_assignment0(__FUNCTION__, __LINE__, rk,           \
                                          fail_immediately, __VA_ARGS__)
 
+rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
+    const char *func,
+    int line,
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *expected_assignment);
+#define test_consumer_verify_assignment_topic_partition_list(                  \
+    rk, expected_assignment)                                                   \
+        test_consumer_verify_assignment_topic_partition_list0(                 \
+            __FUNCTION__, __LINE__, rk, expected_assignment)
+
+void test_consumer_wait_assignment_topic_partition_list0(
+    const char *func,
+    int line,
+    rd_kafka_t *rk,
+    rd_bool_t do_poll,
+    const rd_kafka_topic_partition_list_t *expected_assignment,
+    int timeout_ms);
+#define test_consumer_wait_assignment_topic_partition_list(                    \
+    rk, do_poll, expected_assignment, timeout_ms)                              \
+        test_consumer_wait_assignment_topic_partition_list0(                   \
+            __FUNCTION__, __LINE__, rk, do_poll, expected_assignment,          \
+            timeout_ms)
 
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,
@@ -779,6 +801,7 @@ void test_prepare_msg(uint64_t testid,
 
 #if WITH_SOCKEM
 void test_socket_enable(rd_kafka_conf_t *conf);
+void *test_socket_find(struct test *test, sockem_t *skm);
 void test_socket_close_all(struct test *test, int reinit);
 int test_socket_sockem_set_all(const char *key, int val);
 void test_socket_sockem_set(int s, const char *key, int value);

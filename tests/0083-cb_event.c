@@ -100,10 +100,10 @@ int main_0083_cb_event(int argc, char **argv) {
         rk_p = test_create_producer();
         test_create_topic_if_auto_create_disabled(rk_p, topic, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-        test_wait_topic_exists(rk_p, topic, 5000);
-        err = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
+        err   = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
         TEST_ASSERT(!err, "Topic auto creation failed: %s",
                     rd_kafka_err2str(err));
+        test_wait_topic_exists(rk_p, topic, 5000);
 
         test_conf_init(&conf, &tconf, 0);
         rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);

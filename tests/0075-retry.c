@@ -60,6 +60,8 @@ static struct {
         int term;
         /* Number of created sockets */
         int num_sockets;
+        /* Current test, available to all threads as it's not TLS */
+        struct test *test_curr;
 } ctrl;
 
 static int ctrl_thrd_main(void *arg) {
@@ -70,6 +72,10 @@ static int ctrl_thrd_main(void *arg) {
                 int64_t now;
 
                 cnd_timedwait_ms(&ctrl.cnd, &ctrl.lock, 10);
+                if (!test_socket_find(ctrl.test_curr, ctrl.skm))
+                        /* Socket was closed and destroyed when
+                         * releasing the lock. */
+                        break;
 
                 if (ctrl.cmd.ts_at) {
                         ctrl.next.ts_at = ctrl.cmd.ts_at;
@@ -181,14 +187,26 @@ static void do_test_low_socket_timeout(const char *topic) {
 
         mtx_init(&ctrl.lock, mtx_plain);
         cnd_init(&ctrl.cnd);
+        ctrl.test_curr = test_curr;
 
         TEST_SAY("Test Metadata request retries on timeout\n");
+
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "socket.timeout.ms", "1000");
         test_conf_set(conf, "socket.max.fails", "12345");
         test_conf_set(conf, "retry.backoff.ms", "5000");
         test_conf_set(conf, "retry.backoff.max.ms", "5000");
+        /* Sparse re-connect interval depends on `reconnect.backoff.ms` / 2
+         * increasing it allows to saturate the sparse re-connect interval
+         * and avoid to concurrent connects: the first for setting the bootstrap
+         * brokers and the second for adding a new topic to get metadata for.
+         * This way the test is more reliable especially when using valgrind
+         * as it needs to keep the last connection only,
+         * to add a delay later. */
+        test_conf_set(conf, "reconnect.backoff.ms", "2000");
+
         /* Avoid api version requests (with their own timeout) to get in
          * the way of our test */
         test_conf_set(conf, "api.version.request", "false");
@@ -198,7 +216,6 @@ static void do_test_low_socket_timeout(const char *topic) {
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         rkt = test_create_producer_topic(rk, topic, NULL);
-        test_wait_topic_exists(rk, topic, 5000);
 
         TEST_SAY("Waiting for sockem connect..\n");
         mtx_lock(&ctrl.lock);

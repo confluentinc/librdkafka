@@ -299,6 +299,10 @@ struct rd_kafka_s {
          *   that have had at least one connection attempt
          *   and are configured or learned. */
         rd_atomic32_t rk_broker_down_cnt;
+        /**  Set to 1 when there's a re-bootstrap in progress.
+         *   Set to 0 when the re-bootstrap is done.
+         *   Accessed from the main thread and the broker threads. */
+        rd_atomic32_t rk_rebootstrap_in_progress;
 
         /**< Additional bootstrap servers list.
          *   contains all brokers added through rd_kafka_brokers_add().
@@ -1247,6 +1251,10 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
 
 void rd_kafka_rebootstrap(rd_kafka_t *rk);
 
-void rd_kafka_rebootstrap_tmr_restart(rd_kafka_t *rk);
+void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk);
+
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk);
+
+void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_INT_H_ */

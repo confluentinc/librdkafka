@@ -590,6 +590,8 @@ static void test_producer_latency_first_message(int case_number) {
 }
 
 int main_0055_producer_latency_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         int case_number;
 
         if (test_needs_auth()) {

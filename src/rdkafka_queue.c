@@ -869,6 +869,122 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         return cnt;
 }
 
+int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
+                                int timeout_ms,
+                                rd_kafka_message_t **rkmessages,
+                                size_t rkmessages_size) {
+        unsigned int cnt = 0;
+        TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
+        struct rd_kafka_op_tailq ctrl_msg_q =
+            TAILQ_HEAD_INITIALIZER(ctrl_msg_q);
+        rd_kafka_op_t *rko, *next;
+        rd_kafka_t *rk = rkq->rkq_rk;
+        rd_kafka_q_t *fwdq;
+        rd_ts_t abs_timeout;
+
+        mtx_lock(&rkq->rkq_lock);
+        if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
+                /* Since the q_pop may block we need to release the parent
+                 * queue's lock. */
+                mtx_unlock(&rkq->rkq_lock);
+                cnt = rd_kafka_q_serve_share_rkmessages(fwdq, timeout_ms, rkmessages,
+                                                  rkmessages_size);
+                rd_kafka_q_destroy(fwdq);
+                return cnt;
+        }
+
+        mtx_unlock(&rkq->rkq_lock);
+
+        abs_timeout = rd_timeout_init(timeout_ms);
+
+        rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
+
+        rd_kafka_yield_thread = 0;
+        while (cnt < rkmessages_size) {
+                rd_kafka_op_res_t res;
+
+                mtx_lock(&rkq->rkq_lock);
+
+                while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+                       !rd_kafka_q_check_yield(rkq) &&
+                       /* Only do a timed wait if no messages are ready, if we
+                          have gotten even one message, just return with it. */
+                       cnt == 0 &&
+                       cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
+                                         abs_timeout) == thrd_success)
+                        ;
+
+                rd_kafka_q_mark_served(rkq);
+
+                if (!rko) {
+                        mtx_unlock(&rkq->rkq_lock);
+                        break; /* Timed out */
+                }
+
+                rd_kafka_q_deq0(rkq, rko);
+
+                mtx_unlock(&rkq->rkq_lock);
+
+                if (rd_kafka_op_version_outdated(rko, 0)) {
+                        /* Outdated op, put on discard queue */
+                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                        continue;
+                }
+
+                /* Serve non-FETCH callbacks */
+                res =
+                    rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
+                if (res == RD_KAFKA_OP_RES_KEEP ||
+                    res == RD_KAFKA_OP_RES_HANDLED) {
+                        /* Callback served, rko is destroyed (if HANDLED). */
+                        continue;
+                } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
+                                    rd_kafka_yield_thread)) {
+                        /* Yield. */
+                        break;
+                }
+                rd_dassert(res == RD_KAFKA_OP_RES_PASS);
+
+                /* If this is a control messages, don't return message to
+                 * application. Add it to a tmp queue from where we can store
+                 * the offset and destroy the op */
+                if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                        TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
+                        continue;
+                }
+
+                /* Get rkmessage from rko and append to array. */
+                rkmessages[cnt++] = rd_kafka_message_get(rko);
+        }
+
+        /* NOTE: KIP-932:
+         * For a share consumer, we are not using version barriers, and ideally,
+         * tmpq should be empty. However, the discard code is retained as
+         * non-share-consumer might still be around. This assert exists to spot
+         * any issues as they arise during testing.*/
+        rd_dassert(TAILQ_EMPTY(&tmpq));
+
+        /* Discard non-desired and already handled ops */
+        next = TAILQ_FIRST(&tmpq);
+        while (next) {
+                rko  = next;
+                next = TAILQ_NEXT(next, rko_link);
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Discard ctrl msgs */
+        next = TAILQ_FIRST(&ctrl_msg_q);
+        while (next) {
+                rko                     = next;
+                next                    = TAILQ_NEXT(next, rko_link);
+                rd_kafka_op_destroy(rko);
+        }
+
+        rd_kafka_app_polled(rk, rkq);
+
+        return cnt;
+}
+
 
 
 void rd_kafka_queue_destroy(rd_kafka_queue_t *rkqu) {

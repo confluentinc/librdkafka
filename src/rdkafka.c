@@ -2839,6 +2839,49 @@ fail:
         return NULL;
 }
 
+rd_kafka_t *rd_kafka_share_consumer_new(
+        rd_kafka_conf_t *conf, char *errstr, size_t errstr_size) {
+        rd_kafka_t *rk;
+        char errstr_internal[512];
+        rd_kafka_conf_res_t res;
+
+        if (conf == NULL) {
+                rd_snprintf(errstr, errstr_size,
+                            "rd_kafka_share_consumer_new(): "
+                            "conf argument must not be NULL");
+                return NULL;
+        }
+
+        res = rd_kafka_conf_set(conf, "share.consumer", "true", errstr_internal,
+                          sizeof(errstr_internal));
+        if (res != RD_KAFKA_CONF_OK) {
+                rd_snprintf(errstr, errstr_size,
+                            "rd_kafka_share_consumer_new(): "
+                            "Failed to set share.consumer=true: %s",
+                            errstr_internal);
+                return NULL;
+        }
+
+
+        res = rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr_internal,
+                          sizeof(errstr_internal));
+        if (res != RD_KAFKA_CONF_OK) {
+                rd_snprintf(errstr, errstr_size,
+                            "rd_kafka_share_consumer_new(): "
+                            "Failed to set group.protocol=consumer: %s",
+                            errstr_internal);
+                return NULL;
+        }
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, errstr_size);
+        if (!rk) {
+                /* If rd_kafka_new() failed it will have set the last error
+                 * and filled out errstr, so we don't need to do that here. */
+                return NULL;
+        }
+        return rk;
+}
+
 /**
  * Schedules a rebootstrap of the cluster immediately.
  *

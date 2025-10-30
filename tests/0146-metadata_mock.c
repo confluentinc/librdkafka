@@ -168,11 +168,9 @@ static void do_test_fast_metadata_refresh(int variation) {
                     mcluster, topic, RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
         }
 
-        test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
-        
+        test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);        
         /* Wait some time for seeing the retries */
         rd_sleep(3);
-
 
         if (variation == 1) {
                 /* Clear topic error to stop the retries */

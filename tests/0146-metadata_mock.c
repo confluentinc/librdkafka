@@ -143,7 +143,7 @@ static void do_test_fast_metadata_refresh(int variation) {
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
 
-        test_conf_init(&conf, NULL, 20);
+        test_conf_init(&conf, NULL, 10);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
@@ -170,8 +170,6 @@ static void do_test_fast_metadata_refresh(int variation) {
 
         test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
 
-        /* Wait some time for seeing the retries */
-        rd_sleep(5);
 
         if (variation == 1) {
                 /* Clear topic error to stop the retries */

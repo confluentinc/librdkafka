@@ -5392,11 +5392,15 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
  */
 rd_kafka_Uuid_t rd_kafka_Uuid_random() {
         int i;
-        unsigned char rand_values_bytes[16] = {0};
+        union {
+                unsigned char bytes[16];
+                uint64_t uint64s[2];
+        } rand_values                    = {{0}};
+        unsigned char *rand_values_bytes = rand_values.bytes;
+        uint64_t *rand_values_uint64     = rand_values.uint64s;
         unsigned char *rand_values_app;
         rd_kafka_Uuid_t ret = RD_KAFKA_UUID_ZERO;
-        uint64_t msb, lsb;
-        
+
         for (i = 0; i < 16; i += 2) {
                 uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
                 /* No need to convert endianess here because it's still only
@@ -5411,11 +5415,8 @@ rd_kafka_Uuid_t rd_kafka_Uuid_random() {
         rand_values_bytes[8] &= 0x3f; /* clear variant */
         rand_values_bytes[8] |= 0x80; /* IETF variant */
 
-        /* Use memcpy to avoid alignment issues */
-        memcpy(&msb, &rand_values_bytes[0], sizeof(msb));
-        memcpy(&lsb, &rand_values_bytes[8], sizeof(lsb));
-        ret.most_significant_bits  = be64toh(msb);
-        ret.least_significant_bits = be64toh(lsb);
+        ret.most_significant_bits  = be64toh(rand_values_uint64[0]);
+        ret.least_significant_bits = be64toh(rand_values_uint64[1]);
         return ret;
 }
 

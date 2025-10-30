@@ -1876,11 +1876,12 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         create_err =
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 2, NULL);
 
-        /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(2);
-
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
+
+        /* Wait for ACL propagation across cluster.
+         * ACLs can take significant time to propagate in test environments. */
+        test_wait_for_metadata_propagation(5);
 
         acl_bindings_describe = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic_name,
@@ -2292,11 +2293,12 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         create_err =
             test_CreateAcls_simple(rk, NULL, acl_bindings_create, 3, NULL);
 
-        /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(2);
-
         TEST_ASSERT(!create_err, "create error: %s",
                     rd_kafka_err2str(create_err));
+
+        /* Wait for ACL propagation across cluster.
+         * ACLs can take significant time to propagate in test environments. */
+        test_wait_for_metadata_propagation(5);
 
         admin_options_delete =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEACLS);
@@ -2315,7 +2317,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(2);
+        test_wait_for_metadata_propagation(5);
 
         /*
          * Wait for result
@@ -2434,7 +2436,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(1);
+        test_wait_for_metadata_propagation(5);
 
         /*
          * Wait for result
@@ -3260,6 +3262,9 @@ static void do_test_ListConsumerGroups(const char *what,
                 rd_kafka_AdminOptions_destroy(option_group_protocol_not_in_use);
         }
 
+        /* Wait for consumers to fully leave groups before deletion. */
+        test_wait_for_metadata_propagation(5);
+
         test_DeleteGroups_simple(rk, NULL, (char **)list_consumer_groups,
                                  TEST_LIST_CONSUMER_GROUPS_CNT, NULL);
 
@@ -3562,8 +3567,11 @@ static void do_test_DescribeConsumerGroups(const char *what,
                 rd_kafka_destroy(rks[i]);
         }
 
-        /* Wait session timeout + 1s. Because using static group membership */
-        test_wait_for_metadata_propagation(3);
+        /* Wait for consumers to fully leave the group before deletion.
+         * Static membership (group.instance.id) requires waiting for
+         * session timeout (5s) to expire before broker removes members.
+         */
+        test_wait_for_metadata_propagation(5);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -3883,7 +3891,7 @@ static void do_test_DescribeTopics(const char *what,
                 rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
                 /* Wait for ACL propagation. */
-                test_wait_for_metadata_propagation(3);
+                test_wait_for_metadata_propagation(5);
 
                 /* Call DescribeTopics. */
                 options = rd_kafka_AdminOptions_new(
@@ -3959,7 +3967,7 @@ static void do_test_DescribeTopics(const char *what,
                 rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
                 /* Wait for ACL propagation. */
-                test_wait_for_metadata_propagation(3);
+                test_wait_for_metadata_propagation(5);
         } else {
                 TEST_SAY(
                     "SKIPPING: DescribeTopics function - requires librdkafka "
@@ -4361,7 +4369,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* It seems to be taking some time on the cluster for the ACLs to
          * propagate for a group.*/
-        test_wait_for_metadata_propagation(3);
+        test_wait_for_metadata_propagation(5);
 
         options = rd_kafka_AdminOptions_new(
             rk, RD_KAFKA_ADMIN_OP_DESCRIBECONSUMERGROUPS);
@@ -4428,7 +4436,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
         /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(2);
+        test_wait_for_metadata_propagation(5);
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
         test_DeleteTopics_simple(rk, q, &topic, 1, NULL);

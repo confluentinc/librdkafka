@@ -3404,10 +3404,10 @@ void rd_kafka_handle_SaslAuthenticate(rd_kafka_t *rk,
                 rd_kafka_buf_read_i64(rkbuf, &session_lifetime_ms);
 
                 if (session_lifetime_ms)
-                        rd_kafka_dbg(
-                            rk, SECURITY, "REAUTH",
-                            "Received session lifetime %" PRId64 " ms from broker",
-                            session_lifetime_ms);
+                        rd_kafka_dbg(rk, SECURITY, "REAUTH",
+                                     "Received session lifetime %" PRId64
+                                     " ms from broker",
+                                     session_lifetime_ms);
                 rd_kafka_broker_start_reauth_timer(rkb, session_lifetime_ms);
         }
 

@@ -181,7 +181,8 @@ cmd_incremental_alter_configs(rd_kafka_conf_t *conf, int argc, char **argv) {
                 char *config_name     = argv[i * 5 + 3];
                 char *config_value    = argv[i * 5 + 4];
                 rd_kafka_ConfigResource_t *config;
-                rd_kafka_AlterConfigOpType_t op_type = RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET;
+                rd_kafka_AlterConfigOpType_t op_type =
+                    RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET;
                 rd_kafka_ResourceType_t restype =
                     !strcmp(restype_s, "TOPIC")    ? RD_KAFKA_RESOURCE_TOPIC
                     : !strcmp(restype_s, "BROKER") ? RD_KAFKA_RESOURCE_BROKER

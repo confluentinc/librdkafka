@@ -1498,9 +1498,9 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
         char reason[512];
         va_list ap;
         char astr[128];
-        
+
         va_start(ap, fmt);
-        
+
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
                 rd_kafka_cgrp_consumer_rejoin(rkcg, fmt, ap);
                 va_end(ap);

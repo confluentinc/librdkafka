@@ -29,7 +29,7 @@ SMOKE_TESTS?=0000,0001,0004,0012,0017,0022,0030,0039,0049,0087,0103
 # Use C++ compiler as linker
 CC_LD=$(CXX)
 
-all: $(BIN) $(UTILS) run_par
+all: $(BIN) $(UTILS) topic_cleanup run_par
 
 #
 # These targets spin up a cluster and runs the test suite
@@ -98,7 +98,7 @@ delete_topics:
 
 .PHONY:
 
-build: $(BIN) interceptor_test
+build: $(BIN) interceptor_test topic_cleanup
 
 test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 

@@ -5863,17 +5863,17 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                  */
         }
 
-        // /* CreateAcls */
-        // do_test_CreateAcls(rk, mainq, 0);
-        // do_test_CreateAcls(rk, mainq, 1);
+        /* CreateAcls */
+        do_test_CreateAcls(rk, mainq, 0);
+        do_test_CreateAcls(rk, mainq, 1);
 
-        // /* DescribeAcls */
-        // do_test_DescribeAcls(rk, mainq, 0);
-        // do_test_DescribeAcls(rk, mainq, 1);
+        /* DescribeAcls */
+        do_test_DescribeAcls(rk, mainq, 0);
+        do_test_DescribeAcls(rk, mainq, 1);
 
-        // /* DeleteAcls */
-        // do_test_DeleteAcls(rk, mainq, 0);
-        // do_test_DeleteAcls(rk, mainq, 1);
+        /* DeleteAcls */
+        do_test_DeleteAcls(rk, mainq, 0);
+        do_test_DeleteAcls(rk, mainq, 1);
 
         /* AlterConfigs */
         do_test_AlterConfigs(rk, mainq);

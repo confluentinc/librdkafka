@@ -137,6 +137,8 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
                 rd_kafka_group_list_destroy(grplist);
         }
 
+        if (fails > 0)
+                TEST_FAIL("Failed to list %d group(s)", fails);
 
         if (seen_all != seen)
                 return 0;

@@ -1498,12 +1498,14 @@ static void rd_kafka_cgrp_rejoin(rd_kafka_cgrp_t *rkcg, const char *fmt, ...) {
         char reason[512];
         va_list ap;
         char astr[128];
+        
+        va_start(ap, fmt);
+        
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
                 rd_kafka_cgrp_consumer_rejoin(rkcg, fmt, ap);
+                va_end(ap);
                 return;
         }
-
-        va_start(ap, fmt);
         rd_vsnprintf(reason, sizeof(reason), fmt, ap);
         va_end(ap);
 
@@ -1677,7 +1679,6 @@ static void rd_kafka_cooperative_protocol_adjust_assignment(
         int i;
         int expected_max_assignment_size;
         int total_assigned = 0;
-        int not_revoking   = 0;
         size_t par_cnt     = 0;
         const rd_kafka_topic_partition_t *toppar;
         const PartitionMemberInfo_t *pmi;
@@ -1743,7 +1744,6 @@ static void rd_kafka_cooperative_protocol_adjust_assignment(
                                                   toppar->partition);
 
                 total_assigned++;
-                not_revoking++;
         }
 
         /* For ready-to-migrate-partitions, it is safe to move them

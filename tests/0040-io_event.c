@@ -63,7 +63,6 @@ int main_0040_io_event(int argc, char **argv) {
         int wait_multiplier = 1;
         struct pollfd pfd;
         int r;
-        rd_kafka_resp_err_t err;
         enum { _NOPE, _YEP, _REBALANCE } expecting_io = _REBALANCE;
 
 #ifdef _WIN32

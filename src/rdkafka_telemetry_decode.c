@@ -523,7 +523,7 @@ unit_test_telemetry_decode_error(void *opaque, const char *error, ...) {
 }
 
 int unit_test_telemetry(rd_kafka_type_t rk_type,
-                        rd_kafka_telemetry_producer_metric_name_t metric_name,
+                        int metric_name, /* Accepts both producer and consumer metric enums */
                         const char *expected_name,
                         const char *expected_description,
                         rd_kafka_telemetry_metric_type_t expected_type,

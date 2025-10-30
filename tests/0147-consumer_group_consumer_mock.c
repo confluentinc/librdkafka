@@ -688,7 +688,7 @@ typedef enum test_variation_unknown_topic_id_t {
 } test_variation_unknown_topic_id_t;
 
 static const char *
-test_variation_unknown_topic_id_name(test_variation_t variation) {
+test_variation_unknown_topic_id_name(test_variation_unknown_topic_id_t variation) {
         switch (variation) {
         case TEST_VARIATION_UNKNOWN_TOPIC_ID_ONE_TOPIC:
                 return "one topic";

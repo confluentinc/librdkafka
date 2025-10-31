@@ -5795,7 +5795,7 @@ int test_check_auto_create_topic(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t err;
         const char *topic;
-        rd_kafka_metadata_topic_t mdt;
+        rd_kafka_metadata_topic_t mdt = RD_ZERO_INIT;
         int fails;
 
         if (test_auto_create_enabled != -1)

@@ -3262,8 +3262,10 @@ static void do_test_ListConsumerGroups(const char *what,
                 rd_kafka_AdminOptions_destroy(option_group_protocol_not_in_use);
         }
 
-        /* Wait for consumers to fully leave groups before deletion. */
-        test_wait_for_metadata_propagation(5);
+        /* Wait for consumers to fully leave groups before deletion.
+         * Need to wait longer than session timeout (6s) plus propagation time,
+         * especially in cloud environments. */
+        test_wait_for_metadata_propagation(10);
 
         test_DeleteGroups_simple(rk, NULL, (char **)list_consumer_groups,
                                  TEST_LIST_CONSUMER_GROUPS_CNT, NULL);
@@ -3569,9 +3571,10 @@ static void do_test_DescribeConsumerGroups(const char *what,
 
         /* Wait for consumers to fully leave the group before deletion.
          * Static membership (group.instance.id) requires waiting for
-         * session timeout (5s) to expire before broker removes members.
+         * session timeout (6s) to expire before broker removes members.
+         * Use 10s to account for cloud environment latency.
          */
-        test_wait_for_metadata_propagation(5);
+        test_wait_for_metadata_propagation(10);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -4435,8 +4438,9 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
         test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL);
         rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-        /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(5);
+        /* Wait for ACL propagation and consumer group to fully close.
+         * Use 10s to account for session timeout (6s) and cloud latency. */
+        test_wait_for_metadata_propagation(10);
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
         test_DeleteTopics_simple(rk, q, &topic, 1, NULL);

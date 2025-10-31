@@ -94,14 +94,14 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
 
   int received       = 0;
   int in_profile_cnt = 0;
-  int dmax           = backoff_ms + test_timeout_multiplier * 30;
+  int dmax           = backoff_ms + (int)(test_timeout_multiplier * 30);
 
   int64_t ts_consume = test_clock();
 
   while (received < 5) {
     /* Wait more than dmax to count out of profile messages.
      * Different for first message, that is skipped. */
-    int consume_timeout = received == 0 ? 1500 * test_timeout_multiplier : dmax;
+    int consume_timeout = received == 0 ? (int)(1500 * test_timeout_multiplier) : dmax;
     RdKafka::Message *msg = c->consume(consume_timeout);
     if (msg->err() == RdKafka::ERR__TIMED_OUT) {
       delete msg;
@@ -109,7 +109,7 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
     }
 
     rd_ts_t now     = test_clock();
-    int latency     = (now - ts_consume) / 1000;
+    int latency     = (int)((now - ts_consume) / 1000);
     ts_consume      = now;
     bool in_profile = latency <= dmax;
 

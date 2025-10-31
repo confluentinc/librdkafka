@@ -61,10 +61,11 @@ static void do_test_consume_batch(void) {
         for (i = 0; i < topic_cnt; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
 
-                test_create_topic_if_auto_create_disabled(NULL, topics[i],
-                                                          partition_cnt);
-                test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
-                test_wait_for_metadata_propagation(3);
+                /* Explicitly create topic for cloud/K2 environments where
+                 * auto-create may be slow or disabled */
+                test_create_topic(NULL, topics[i], partition_cnt, 1);
+                test_wait_topic_exists(NULL, topics[i], tmout_multip(30000));
+                test_wait_for_metadata_propagation(5);
 
                 for (p = 0; p < partition_cnt; p++)
                         test_produce_msgs_easy(topics[i], testid, p,

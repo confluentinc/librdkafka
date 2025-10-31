@@ -37,6 +37,8 @@
 
 #ifdef _WIN32
 #include <direct.h> /* _getcwd */
+/* Windows uses strtok_s instead of strtok_r */
+#define strtok_r strtok_s
 #else
 #include <sys/wait.h> /* waitpid */
 #endif

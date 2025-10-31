@@ -73,26 +73,46 @@ static int consumer_batch_queue(void *arg) {
         TIMING_STOP(&t_cons);
 
         for (i = 0; i < msg_cnt; i++) {
-                rd_kafka_message_t *rkm = rkmessage[i];
-                if (rkm->err) {
-                        TEST_WARN("Consumer error: %s: %s\n",
-                                  rd_kafka_err2name(rkm->err),
-                                  rd_kafka_message_errstr(rkm));
-                        err_cnt++;
-                } else if (test_msgver_add_msg(rk, arguments->mv,
-                                               rkmessage[i]) == 0) {
-                        TEST_FAIL(
-                            "The message is not from testid "
-                            "%" PRId64,
-                            testid);
+                if (rd_kafka_version() >=
+                    0x02020000) { /* Enhanced error handling available since
+                                     librdkafka 2.2.0 */
+                        rd_kafka_message_t *rkm = rkmessage[i];
+                        if (rkm->err) {
+                                TEST_WARN("Consumer error: %s: %s\n",
+                                          rd_kafka_err2name(rkm->err),
+                                          rd_kafka_message_errstr(rkm));
+                                err_cnt++;
+                        } else if (test_msgver_add_msg(rk, arguments->mv,
+                                                       rkmessage[i]) == 0) {
+                                TEST_FAIL(
+                                    "The message is not from testid "
+                                    "%" PRId64,
+                                    testid);
+                        }
+                } else {
+                        if (test_msgver_add_msg(rk, arguments->mv,
+                                                rkmessage[i]) == 0) {
+                                TEST_FAIL(
+                                    "The message is not from testid "
+                                    "%" PRId64,
+                                    testid);
+                        }
                 }
         }
         TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
                  msg_cnt, arguments->consume_msg_cnt,
                  arguments->expected_msg_cnt);
-        TEST_ASSERT((msg_cnt - err_cnt) == arguments->expected_msg_cnt,
-                    "consumed %d messages, %d errors, expected %d", msg_cnt,
-                    err_cnt, arguments->expected_msg_cnt);
+        if (rd_kafka_version() >=
+            0x02020000) { /* Enhanced error handling available since
+                             librdkafka 2.2.0 */
+                TEST_ASSERT(msg_cnt - err_cnt == arguments->expected_msg_cnt,
+                            "consumed %d messages (%d errors), expected %d",
+                            msg_cnt, err_cnt, arguments->expected_msg_cnt);
+        } else {
+                TEST_ASSERT(msg_cnt == arguments->expected_msg_cnt,
+                            "consumed %d messages, expected %d", msg_cnt,
+                            arguments->expected_msg_cnt);
+        }
 
         for (i = 0; i < msg_cnt; i++) {
                 rd_kafka_message_destroy(rkmessage[i]);
@@ -136,7 +156,9 @@ static void do_test_consume_batch_with_seek(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        test_wait_for_metadata_propagation(3);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -226,7 +248,9 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        test_wait_for_metadata_propagation(3);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -331,7 +355,10 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        test_wait_for_metadata_propagation(3);
+
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -427,7 +454,9 @@ static void do_test_consume_batch_store_offset(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 5000);
+
+        test_wait_for_metadata_propagation(3);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -508,7 +537,7 @@ static void do_test_consume_batch_control_msgs(void) {
 
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic_wait_exists(producer, topic, partition_cnt, 1, 5000);
+        test_create_topic_wait_exists(producer, topic, partition_cnt, -1, 5000);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(producer, 30 * 1000));
 
@@ -609,11 +638,20 @@ static void do_test_consume_batch_control_msgs(void) {
 
 
 int main_0137_barrier_batch_consume(int argc, char **argv) {
-        do_test_consume_batch_with_seek();
-        do_test_consume_batch_store_offset();
-        do_test_consume_batch_with_pause_and_resume_different_batch();
-        do_test_consume_batch_with_pause_and_resume_same_batch();
-        do_test_consume_batch_control_msgs();
+        if (rd_kafka_version() >= 0x020b00ff) {
+                do_test_consume_batch_with_seek();
+                do_test_consume_batch_store_offset();
+                do_test_consume_batch_with_pause_and_resume_different_batch();
+                do_test_consume_batch_with_pause_and_resume_same_batch();
+        } else {
+                do_test_consume_batch_with_seek();
+        }
 
+        return 0;
+}
+
+
+int main_0137_barrier_batch_consume_idempotent(int argc, char **argv) {
+        do_test_consume_batch_control_msgs();
         return 0;
 }

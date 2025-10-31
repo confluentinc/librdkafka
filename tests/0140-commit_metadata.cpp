@@ -54,7 +54,9 @@ static void test_commit_metadata() {
   delete conf;
 
   Test::Say("Create topic.\n");
-  Test::create_topic_wait_exists(consumer, topic.c_str(), 1, 1, 5000);
+  Test::create_topic_wait_exists(consumer, topic.c_str(), 1, -1, 5000);
+
+  test_wait_for_metadata_propagation(3);
 
   Test::Say("Commit offsets.\n");
   std::vector<RdKafka::TopicPartition *> offsets;

@@ -471,6 +471,8 @@ static void do_test_conf_copy(const char *topic) {
 int main_0064_interceptors(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         do_test_producer(topic);
 
         do_test_consumer(topic);

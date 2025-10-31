@@ -61,7 +61,8 @@ static void await_assignment(const char *pfx,
         int exp_part_cnt = 0;
 
         TEST_SAY("%s: waiting for assignment\n", pfx);
-        rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 30000);
+        rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE,
+                               tmout_multip(30000));
         if (!rkev)
                 TEST_FAIL("timed out waiting for assignment");
         TEST_ASSERT(rd_kafka_event_error(rkev) ==
@@ -71,7 +72,7 @@ static void await_assignment(const char *pfx,
         tps = rd_kafka_event_topic_partition_list(rkev);
 
         TEST_SAY("%s: assignment:\n", pfx);
-        test_print_partition_list(tps);
+        test_print_partition_list_with_errors(tps);
 
         va_start(ap, topic_cnt);
         for (i = 0; i < topic_cnt; i++) {
@@ -115,7 +116,8 @@ await_revoke(const char *pfx, rd_kafka_t *rk, rd_kafka_queue_t *queue) {
         rd_kafka_topic_partition_list_t *tps;
 
         TEST_SAY("%s: waiting for revoke\n", pfx);
-        rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 30000);
+        rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE,
+                               tmout_multip(30000));
         if (!rkev)
                 TEST_FAIL("timed out waiting for revoke");
         TEST_ASSERT(rd_kafka_event_error(rkev) ==
@@ -235,7 +237,9 @@ static void do_test_non_exist_and_partchange(void) {
         await_no_rebalance("#1: empty", rk, queue, 10000);
 
         TEST_SAY("#1: creating topic %s\n", topic_a);
-        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
+
+        test_wait_for_metadata_propagation(2);
 
         await_assignment("#1: proper", rk, queue, 1, topic_a, 2);
 
@@ -245,7 +249,10 @@ static void do_test_non_exist_and_partchange(void) {
          * - Increase the partition count
          * - Verify updated assignment
          */
-        test_kafka_topics("--alter --topic %s --partitions 4", topic_a);
+        test_create_partitions(rk, topic_a, 4);
+
+        test_wait_for_metadata_propagation(2);
+
         await_revoke("#2", rk, queue);
 
         await_assignment("#2: more partitions", rk, queue, 1, topic_a, 4);
@@ -295,23 +302,27 @@ static void do_test_regex(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_b);
-        test_create_topic_wait_exists(NULL, topic_b, 2, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_b, 2, -1, 5000);
 
         TEST_SAY("Regex: Subscribing to %s & %s & %s\n", topic_b, topic_d,
                  topic_e);
         test_consumer_subscribe(rk, tsprintf("^%s_[bde]$", base_topic));
 
+        test_wait_for_metadata_propagation(2);
+
         await_assignment("Regex: just one topic exists", rk, queue, 1, topic_b,
                          2);
 
         TEST_SAY("Regex: creating topic %s (not subscribed)\n", topic_c);
-        test_create_topic_wait_exists(NULL, topic_c, 4, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_c, 4, -1, 5000);
 
         /* Should not see a rebalance since no topics are matched. */
         await_no_rebalance("Regex: empty", rk, queue, 10000);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
-        test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_d, 1, -1, 5000);
+
+        test_wait_for_metadata_propagation(2);
 
         if (test_consumer_group_protocol_classic())
                 await_revoke("Regex: rebalance after topic creation", rk,
@@ -375,11 +386,27 @@ static void do_test_topic_remove(void) {
         rk = test_create_consumer(test_str_id_generate_tmp(), NULL, conf, NULL);
         queue = rd_kafka_queue_get_consumer(rk);
 
-        TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-        test_create_topic_wait_exists(NULL, topic_f, parts_f, 1, 5000);
+        if (rd_kafka_version() >= 0x020100ff) {
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_f);
+                test_create_topic_wait_exists(NULL, topic_f, parts_f, -1, 5000);
 
-        TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-        test_create_topic_wait_exists(NULL, topic_g, parts_g, 1, 5000);
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_g);
+                test_create_topic_wait_exists(NULL, topic_g, parts_g, -1, 5000);
+
+                test_wait_for_metadata_propagation(2);
+        } else {
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_f);
+                test_create_topic(NULL, topic_f, parts_f, -1);
+
+                TEST_SAY("Topic removal: creating topic %s (subscribed)\n",
+                         topic_g);
+                test_create_topic(NULL, topic_g, parts_g, -1);
+
+                test_wait_for_metadata_propagation(3);
+        }
 
         TEST_SAY("Topic removal: Subscribing to %s & %s\n", topic_f, topic_g);
         topics = rd_kafka_topic_partition_list_new(2);
@@ -392,22 +419,48 @@ static void do_test_topic_remove(void) {
                     rd_kafka_err2str(err));
         rd_kafka_topic_partition_list_destroy(topics);
 
+        /* Version-specific wait for assignment */
+        if (rd_kafka_version() >= 0x020100ff) {
+                test_wait_for_metadata_propagation(5);
+        }
+
         await_assignment("Topic removal: both topics exist", rk, queue, 2,
                          topic_f, parts_f, topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_f);
-        test_kafka_topics("--delete --topic %s", topic_f);
+        test_delete_topic(rk, topic_f);
+
+        /* Version-specific wait for topic deletion propagation */
+        if (rd_kafka_version() >= 0x020100ff) {
+                test_wait_for_metadata_propagation(8);
+        }
 
         await_revoke("Topic removal: rebalance after topic removal", rk, queue);
+
+        /* Version-specific wait for consumer group to recognize topic deletion
+         */
+        if (rd_kafka_version() >= 0x020100ff) {
+                test_wait_for_metadata_propagation(5);
+        }
 
         await_assignment("Topic removal: one topic exists", rk, queue, 1,
                          topic_g, parts_g);
 
         TEST_SAY("Topic removal: removing %s\n", topic_g);
-        test_kafka_topics("--delete --topic %s", topic_g);
+        test_delete_topic(rk, topic_g);
+
+        /* Version-specific wait for second topic deletion propagation */
+        if (rd_kafka_version() >= 0x020100ff) {
+                test_wait_for_metadata_propagation(8);
+        }
 
         await_revoke("Topic removal: rebalance after 2nd topic removal", rk,
                      queue);
+
+        /* Version-specific final cleanup and propagation wait */
+        if (rd_kafka_version() >= 0x020100ff) {
+                test_wait_for_metadata_propagation(5);
+        }
 
         /* Should not see another rebalance since all topics now removed */
         await_no_rebalance("Topic removal: empty", rk, queue, 10000);
@@ -692,11 +745,18 @@ static void do_test_replica_rack_change_leader_no_rack_mock(
  * unsubcribe with regular topic names and regex.
  */
 static void do_test_resubscribe_with_regex() {
-        char *topic1  = rd_strdup(test_mk_topic_name("topic_regex1", 1));
-        char *topic2  = rd_strdup(test_mk_topic_name("topic_regex2", 1));
+        /* Generate unique test run ID for topic isolation */
+        char *test_run_id = rd_strdup(test_str_id_generate_tmp());
+        char *topic1      = rd_strdup(
+            test_mk_topic_name(tsprintf("topic_regex1_%s", test_run_id), 1));
+        char *topic2 = rd_strdup(
+            test_mk_topic_name(tsprintf("topic_regex2_%s", test_run_id), 1));
         char *topic_a = rd_strdup(test_mk_topic_name("topic_a", 1));
         char *group   = rd_strdup(
             tsprintf("group_test_sub_regex_%s", test_str_id_generate_tmp()));
+        /* Create regex pattern specific to this test run */
+        char *topic_regex_pattern =
+            rd_strdup(tsprintf("^.*topic_regex[12]_%s.*", test_run_id));
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_queue_t *queue;
@@ -705,6 +765,7 @@ static void do_test_resubscribe_with_regex() {
 
         /**
          * Topic resubscribe with regex test:
+         * - Create unique test run ID (added as suffix to topic names)
          * - Create topic topic_regex1 & topic_regex2
          * - Subscribe to topic_regex1
          * - Verify topic_regex1 assignment
@@ -725,13 +786,16 @@ static void do_test_resubscribe_with_regex() {
          */
 
         TEST_SAY("Creating topic %s\n", topic1);
-        test_create_topic_wait_exists(NULL, topic1, 4, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic1, 4, -1, 5000);
+        test_wait_for_metadata_propagation(5);
 
         TEST_SAY("Creating topic %s\n", topic2);
-        test_create_topic_wait_exists(NULL, topic2, 4, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic2, 4, -1, 5000);
+        test_wait_for_metadata_propagation(5);
 
         TEST_SAY("Creating topic %s\n", topic_a);
-        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic_a, 2, -1, 5000);
+        test_wait_for_metadata_propagation(5);
 
         test_conf_init(&conf, NULL, 60);
 
@@ -742,6 +806,7 @@ static void do_test_resubscribe_with_regex() {
         /* Subscribe to topic1 */
         TEST_SAY("Subscribing to %s\n", topic1);
         test_consumer_subscribe(rk, topic1);
+
         /* Wait for assignment */
         await_assignment("Assignment for topic1", rk, queue, 1, topic1, 4);
 
@@ -754,6 +819,7 @@ static void do_test_resubscribe_with_regex() {
         /* Subscribe to topic2 */
         TEST_SAY("Subscribing to %s\n", topic2);
         test_consumer_subscribe(rk, topic2);
+
         /* Wait for assignment */
         await_assignment("Assignment for topic2", rk, queue, 1, topic2, 4);
 
@@ -763,27 +829,33 @@ static void do_test_resubscribe_with_regex() {
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
-        /* Subscribe to regex ^.*topic_regex.* */
-        TEST_SAY("Subscribing to regex ^.*topic_regex.*\n");
-        test_consumer_subscribe(rk, "^.*topic_regex.*");
+        /* Subscribe to regex specific to this test run */
+        TEST_SAY("Subscribing to regex %s\n", topic_regex_pattern);
+        test_consumer_subscribe(rk, topic_regex_pattern);
         if (!test_consumer_group_protocol_classic()) {
                 /** Regex matching is async on the broker side for KIP-848
                  * protocol. */
-                rd_sleep(5);
+                test_wait_for_metadata_propagation(3);
         }
         /* Wait for assignment */
         await_assignment("Assignment for topic1 and topic2", rk, queue, 2,
                          topic1, 4, topic2, 4);
 
-        /* Unsubscribe from regex ^.*topic_regex.* */
-        TEST_SAY("Unsubscribing from regex ^.*topic_regex.*\n");
+        /* Unsubscribe from regex */
+        TEST_SAY("Unsubscribing from regex %s\n", topic_regex_pattern);
         rd_kafka_unsubscribe(rk);
+        test_wait_for_metadata_propagation(2);
         /* Wait for revocation */
         await_revoke("Revocation after unsubscribing", rk, queue);
 
-        /* Subscribe to regex ^.*topic_regex.* and topic_a literal */
-        TEST_SAY("Subscribing to regex ^.*topic_regex.* and topic_a\n");
-        test_consumer_subscribe_multi(rk, 2, "^.*topic_regex.*", topic_a);
+        /* Ensure topic_a is visible before mixed subscription */
+        test_wait_for_metadata_propagation(2);
+
+        /* Subscribe to regex and topic_a literal */
+        TEST_SAY("Subscribing to regex %s and topic_a\n", topic_regex_pattern);
+        test_consumer_subscribe_multi(rk, 2, topic_regex_pattern, topic_a);
+
+        test_wait_for_metadata_propagation(3);
         /* Wait for assignment */
         if (test_consumer_group_protocol_classic()) {
                 await_assignment("Assignment for topic1, topic2 and topic_a",
@@ -801,6 +873,7 @@ static void do_test_resubscribe_with_regex() {
         /* Unsubscribe */
         TEST_SAY("Unsubscribing\n");
         rd_kafka_unsubscribe(rk);
+        test_wait_for_metadata_propagation(2);
         await_revoke("Revocation after unsubscribing", rk, queue);
 
         /* Cleanup */
@@ -817,6 +890,8 @@ static void do_test_resubscribe_with_regex() {
         rd_free(topic2);
         rd_free(topic_a);
         rd_free(group);
+        rd_free(test_run_id);
+        rd_free(topic_regex_pattern);
 
         SUB_TEST_PASS();
 }

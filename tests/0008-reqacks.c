@@ -85,6 +85,8 @@ int main_0008_reqacks(int argc, char **argv) {
         int reqacks;
         int idbase        = 0;
         const char *topic = NULL;
+        int start_acks    = -1;
+        int end_acks      = 1;
 
         TEST_SAY(
             "\033[33mNOTE! This test requires at "
@@ -96,8 +98,19 @@ int main_0008_reqacks(int argc, char **argv) {
             "all brokers!\033[0m\n");
 
         /* Try different request.required.acks settings (issue #75) */
-        for (reqacks = -1; reqacks <= 1; reqacks++) {
+        /* Test all standard acks values, but skip unsupported ones */
+        TEST_SAY("Testing acks values -1, 0, 1 (skipping unsupported ones)\n");
+        for (reqacks = start_acks; reqacks <= end_acks; reqacks++) {
                 char tmp[10];
+
+                /* Convert acks value to string and check if supported */
+                rd_snprintf(tmp, sizeof(tmp), "%d", reqacks);
+                if (!test_is_acks_supported(tmp)) {
+                        TEST_SAY(
+                            "Skipping acks=%d (not supported by cluster)\n",
+                            reqacks);
+                        continue;
+                }
 
                 test_conf_init(&conf, &topic_conf, 10);
 
@@ -129,6 +142,8 @@ int main_0008_reqacks(int argc, char **argv) {
                     "Created    kafka instance %s with required acks %d, "
                     "expecting status %d\n",
                     rd_kafka_name(rk), reqacks, exp_status);
+
+                test_create_topic_if_auto_create_disabled(rk, topic, 1);
 
                 rkt = rd_kafka_topic_new(rk, topic, topic_conf);
                 if (!rkt)

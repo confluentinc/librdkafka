@@ -106,6 +106,10 @@ static void test_invalid_topic(void) {
 
 extern "C" {
 int main_0057_invalid_topic(int argc, char **argv) {
+  if (!test_check_auto_create_topic()) {
+    Test::Say("Skipping test since auto-create topic is not enabled\n");
+    return 0;
+  }
   test_invalid_topic();
   return 0;
 }

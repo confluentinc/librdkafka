@@ -5392,10 +5392,15 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
  */
 rd_kafka_Uuid_t rd_kafka_Uuid_random() {
         int i;
-        unsigned char rand_values_bytes[16] = {0};
-        uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
+        union {
+                unsigned char bytes[16];
+                uint64_t uint64s[2];
+        } rand_values                    = {{0}};
+        unsigned char *rand_values_bytes = rand_values.bytes;
+        uint64_t *rand_values_uint64     = rand_values.uint64s;
         unsigned char *rand_values_app;
         rd_kafka_Uuid_t ret = RD_KAFKA_UUID_ZERO;
+
         for (i = 0; i < 16; i += 2) {
                 uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
                 /* No need to convert endianess here because it's still only

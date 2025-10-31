@@ -64,6 +64,8 @@ int main_0092_mixed_msgver(int argc, char **argv) {
 
         rk = test_create_producer();
 
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
+
         /* Produce messages */
         for (cnt = 0; cnt < msgcnt; cnt++) {
                 rd_kafka_resp_err_t err;

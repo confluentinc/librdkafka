@@ -61,7 +61,9 @@ static void do_test(void) {
 
         testid = test_id_generate();
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+
+        test_wait_for_metadata_propagation(5);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -212,7 +214,9 @@ static void do_test_with_log_queue(void) {
 
         testid = test_id_generate();
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+
+        test_wait_for_metadata_propagation(5);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -380,7 +384,9 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
             "%d",
             forward_to_another_q, forward_to_consumer_q);
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+
+        test_wait_for_metadata_propagation(5);
 
         test_str_id_generate(groupid, sizeof(groupid));
         test_conf_init(&conf, NULL, 60);
@@ -432,8 +438,13 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
             "group leave", rk, rd_kafka_event_topic_partition_list(event));
         rd_kafka_event_destroy(event);
 
-        event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
-                                (int)(test_timeout_multiplier * 10000));
+        test_wait_for_metadata_propagation(2);
+        test_consumer_subscribe(rk, topic);
+        test_wait_for_metadata_propagation(2);
+
+        event = test_wait_event(
+            polling_queue, RD_KAFKA_EVENT_REBALANCE,
+            (int)(test_timeout_multiplier * tmout_multip(10000)));
         TEST_ASSERT(event, "Should get a rebalance event for the group rejoin");
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
@@ -471,8 +482,10 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 
         SUB_TEST();
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
         uint64_t testid = test_id_generate();
+
+        test_wait_for_metadata_propagation(5);
 
         test_produce_msgs_easy(topic, testid, -1, 100);
 
@@ -487,12 +500,11 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
         rd_kafka_poll_set_consumer(rk);
 
         test_consumer_subscribe(rk, topic);
-        TEST_SAY("Subscribed to %s and sleeping for 5 s\n", topic);
-        rd_sleep(5);
+        test_wait_for_metadata_propagation(3);
         rd_kafka_poll(rk, 10);
         TEST_SAY(
             "Polled and sleeping again for 6s. Max poll should be reset\n");
-        rd_sleep(6);
+        test_wait_for_metadata_propagation(3);
 
         /* Poll should work */
         rd_kafka_poll(rk, 10);
@@ -501,11 +513,17 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 }
 
 int main_0089_max_poll_interval(int argc, char **argv) {
-        do_test();
-        do_test_with_log_queue();
-        do_test_rejoin_after_interval_expire(rd_false, rd_false);
-        do_test_rejoin_after_interval_expire(rd_true, rd_false);
-        do_test_rejoin_after_interval_expire(rd_false, rd_true);
-        do_test_max_poll_reset_with_consumer_cb();
+
+        if (rd_kafka_version() >= 0x020100ff) {
+                do_test();
+                do_test_with_log_queue();
+                do_test_rejoin_after_interval_expire(rd_false, rd_false);
+                do_test_rejoin_after_interval_expire(rd_true, rd_false);
+                do_test_rejoin_after_interval_expire(rd_false, rd_true);
+                do_test_max_poll_reset_with_consumer_cb();
+        } else {
+                do_test();
+        }
+
         return 0;
 }

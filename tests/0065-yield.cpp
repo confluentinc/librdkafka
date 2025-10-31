@@ -87,6 +87,8 @@ static void do_test_producer(bool do_yield) {
     Test::Fail("Failed to create producer: " + errstr);
   delete conf;
 
+  test_create_topic_if_auto_create_disabled(p->c_ptr(), topic.c_str(), -1);
+
   dr.p = p;
 
   Test::Say(tostr() << (do_yield ? "Yield: " : "Dont Yield: ") << "Producing "

@@ -897,7 +897,6 @@ static int rd_kafka_broker_bufq_timeout_scan(rd_kafka_broker_t *rkb,
                                              int log_first_n) {
         rd_kafka_buf_t *rkbuf, *tmp;
         int cnt = 0;
-        int idx = -1;
         const rd_kafka_buf_t *holb;
 
 restart:
@@ -905,8 +904,6 @@ restart:
 
         TAILQ_FOREACH_SAFE(rkbuf, &rkbq->rkbq_bufs, rkbuf_link, tmp) {
                 rd_kafka_broker_state_t pre_state, post_state;
-
-                idx++;
 
                 if (likely(now && rkbuf->rkbuf_ts_timeout > now))
                         continue;

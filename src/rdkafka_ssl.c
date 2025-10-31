@@ -459,7 +459,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   char *errstr,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
+        char name_for_verify[RD_KAFKA_NODENAME_SIZE];
         char *t;
+        size_t name_len;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
         rd_snprintf(name, sizeof(name), "%s",
@@ -484,8 +486,25 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
+        /* Prepare hostname for certificate verification.
+         * Strip trailing dot as X.509 certificates (per RFC 5280) don't
+         * include them in Subject Alternative Names (SANs).
+         * The trailing dot is used in DNS to indicate an absolute FQDN,
+         * but certificate SANs use a different representation without it.
+         * See: https://github.com/confluentinc/librdkafka/issues/4348
+         *      https://github.com/openssl/openssl/issues/11560 */
+        rd_snprintf(name_for_verify, sizeof(name_for_verify), "%s", name);
+        name_len = strlen(name_for_verify);
+        if (name_len > 1 && name_for_verify[name_len - 1] == '.') {
+                name_for_verify[name_len - 1] = '\0';
+                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
+                           "Stripped trailing dot from hostname for "
+                           "certificate verification: %s -> %s",
+                           name, name_for_verify);
+        }
+
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name))
+        if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
@@ -493,8 +512,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
-                if (!X509_VERIFY_PARAM_set1_host(param, name,
-                                                 strnlen(name, sizeof(name))))
+                if (!X509_VERIFY_PARAM_set1_host(param, name_for_verify,
+                                                 strnlen(name_for_verify,
+                                                        sizeof(name_for_verify))))
                         goto fail;
         }
 #else
@@ -506,7 +526,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s", name);
+                   "Enabled endpoint identification using hostname %s",
+                   name_for_verify);
 
         return 0;
 

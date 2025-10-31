@@ -1,3 +1,25 @@
+# librdkafka v2.11.2 (WIP)
+
+librdkafka v2.11.2 is a maintenance release:
+
+* Fix SSL certificate verification failure when brokers advertise hostnames
+  with trailing dots (#4348).
+
+
+## Fixes
+
+### SSL/Security fixes
+
+* Issues: #4348.
+  SSL certificate verification now works correctly when brokers advertise
+  hostnames with trailing dots (absolute FQDNs). The trailing dot is now
+  stripped before certificate verification as X.509 certificates don't include
+  trailing dots in Subject Alternative Names (SANs), while it's retained for
+  SNI (Server Name Indication). This commonly occurs with Kubernetes DNS or
+  other systems that return absolute FQDNs.
+  Happening since SSL endpoint identification was introduced in v0.9.3.
+
+
 # librdkafka v2.11.1
 
 librdkafka v2.11.1 is a maintenance release:
@@ -85,7 +107,7 @@ librdkafka v2.11.0 is a feature release:
 
 librdkafka v2.10.1 is a maintenance release:
 
-* Fix to add locks when updating the metadata cache for the consumer 
+* Fix to add locks when updating the metadata cache for the consumer
   after no broker connection is available (@marcin-krystianc, #5066).
 * Fix to the re-bootstrap case when `bootstrap.servers` is `NULL` and
   brokers were added manually through `rd_kafka_brokers_add` (#5067).
@@ -179,7 +201,7 @@ librdkafka v2.10.0 is a feature release:
 - Deprecated and disallowed the following properties for the `consumer` group protocol:
   - `session.timeout.ms`
   - `heartbeat.interval.ms`
-  - `group.protocol.type`  
+  - `group.protocol.type`
   Attempting to set any of these will result in an error.
 - Enhanced handling for `subscribe()` and `unsubscribe()` edge cases.
 
@@ -194,7 +216,7 @@ librdkafka v2.10.0 is a feature release:
   removed along with their threads. Brokers and their threads are added back
   when they appear in a Metadata RPC response again. When no brokers are left
   or they're not reachable, the client will start a re-bootstrap sequence
-  by default. `metadata.recovery.strategy` controls this, 
+  by default. `metadata.recovery.strategy` controls this,
   which defaults to `rebootstrap`.
   Setting `metadata.recovery.strategy` to `none` avoids any re-bootstrapping and
   leaves only the broker received in last successful metadata response.
@@ -319,7 +341,7 @@ librdkafka v2.10.0 is a feature release:
    during a rebalance.
    Happening since v1.6.0 (#4908)
  * Issues: #4970
-   When switching to a different leader a consumer could wait 500ms 
+   When switching to a different leader a consumer could wait 500ms
    (`fetch.error.backoff.ms`) before starting to fetch again. The fetch backoff wasn't reset when joining the new broker.
    Solved by resetting it, given it's not needed to backoff
    the first fetch on a different node. This way faster leader switches are
@@ -432,7 +454,7 @@ librdkafka v2.6.1 is a maintenance release:
 ### General fixes
 
 * SASL/SCRAM authentication fix: avoid concatenating
-  client side nonce once more, as it's already prepended in 
+  client side nonce once more, as it's already prepended in
   server sent nonce.
   librdkafka was incorrectly concatenating the client side nonce again, leading to [this fix](https://github.com/apache/kafka/commit/0a004562b8475d48a9961d6dab3a6aa24021c47f) being made on AK side, released with 3.8.1, with `endsWith` instead of `equals`.
   Happening since v0.0.99 (#4895).
@@ -447,7 +469,7 @@ librdkafka v2.6.1 is a maintenance release:
   A consumer configured with the `cooperative-sticky` partition assignment
   strategy could get stuck in an infinite loop, with corresponding spike of
   main thread CPU usage.
-  That happened with some particular orders of members and potential 
+  That happened with some particular orders of members and potential
   assignable partitions.
   Solved by removing the infinite loop cause.
   Happening since: 1.6.0 (#4800).
@@ -495,7 +517,7 @@ librdkafka v2.6.0 is a feature release:
 ### Consumer fixes
 
  * Issues: #4806
-   Fix for permanent fetch errors when brokers support a Fetch RPC version greater than 12 
+   Fix for permanent fetch errors when brokers support a Fetch RPC version greater than 12
    but cluster is configured to use an inter broker protocol that is less than 2.8.
    In this case returned topic ids are zero valued and Fetch has to fall back
    to version 12, using topic names.
@@ -523,7 +545,7 @@ Happening since 2.5.0 (#4826).
 # librdkafka v2.5.0
 
 > [!WARNING]
-This version has introduced a regression in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription. 
+This version has introduced a regression in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription.
 >
 > You won't face any problem if:
 > * Broker doesn't support [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability).
@@ -531,7 +553,7 @@ This version has introduced a regression in which an assert is triggered during 
 > * [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) feature is disabled on the client side. This is enabled by default. Set configuration `enable.metrics.push` to `false`.
 > * If [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) is enabled on the broker side and there is no subscription configured there.
 > * If [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) is enabled on the broker side with subscriptions that match the [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) metrics defined on the client.
-> 
+>
 > Having said this, we strongly recommend using `v2.5.3` and above to not face this regression at all.
 
 librdkafka v2.5.0 is a feature release.
@@ -542,7 +564,7 @@ librdkafka v2.5.0 is a feature release.
 * Fix for an idempotent producer error, with a message batch not reconstructed
   identically when retried (#4750)
 * Removed support for CentOS 6 and CentOS 7 (#4775).
-* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client 
+* [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability) Client
   metrics and observability (#4721).
 
 ## Upgrade considerations

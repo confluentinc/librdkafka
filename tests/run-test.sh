@@ -61,26 +61,28 @@ for mode in $MODES; do
     export TEST_MODE=$mode
     case "$mode" in
 	valgrind)
-	    if ! echo "$ARGS" | grep -q "test.timeout.multiplier"; then
-	        VALGRIND_ARGS_EXTRA="test.timeout.multiplier=4"
-	    fi
+	    VALGRIND_CONF=$(mktemp /tmp/test.conf.valgrind.XXXXXX)
+	    echo "test.timeout.multiplier=5" > $VALGRIND_CONF
+	    export RDKAFKA_TEST_CONF=$VALGRIND_CONF
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
 		     --errors-for-leak-kinds=all \
 		     --track-origins=yes \
                      --track-fds=yes \
 		     $SUPP $GEN_SUPP \
-		$TEST $ARGS $VALGRIND_ARGS_EXTRA
+		$TEST $ARGS
 	    RET=$?
+	    rm -f $VALGRIND_CONF
 	    ;;
 	helgrind)
-	    if ! echo "$ARGS" | grep -q "test.timeout.multiplier"; then
-	        HELGRIND_ARGS_EXTRA="test.timeout.multiplier=5"
-	    fi
+	    HELGRIND_CONF=$(mktemp /tmp/test.conf.helgrind.XXXXXX)
+	    echo "test.timeout.multiplier=5" > $HELGRIND_CONF
+	    export RDKAFKA_TEST_CONF=$HELGRIND_CONF
 	    valgrind $VALGRIND_ARGS --tool=helgrind \
                      --sim-hints=no-nptl-pthread-stackcache \
                      $SUPP $GEN_SUPP \
-		$TEST $ARGS $HELGRIND_ARGS_EXTRA
+		$TEST $ARGS
 	    RET=$?
+	    rm -f $HELGRIND_CONF
 	    ;;
 	cachegrind|callgrind)
 	    valgrind $VALGRIND_ARGS --tool=$mode \
@@ -89,12 +91,13 @@ for mode in $MODES; do
 	    RET=$?
 	    ;;
 	drd)
-	    if ! echo "$ARGS" | grep -q "test.timeout.multiplier"; then
-	        DRD_ARGS_EXTRA="test.timeout.multiplier=6"
-	    fi
+	    DRD_CONF=$(mktemp /tmp/test.conf.drd.XXXXXX)
+	    echo "test.timeout.multiplier=5" > $DRD_CONF
+	    export RDKAFKA_TEST_CONF=$DRD_CONF
 	    valgrind $VALGRIND_ARGS --tool=drd $SUPP $GEN_SUPP \
-		$TEST $ARGS $DRD_ARGS_EXTRA
+		$TEST $ARGS
 	    RET=$?
+	    rm -f $DRD_CONF
 	    ;;
         callgrind)
 	    valgrind $VALGRIND_ARGS --tool=callgrind $SUPP $GEN_SUPP \

@@ -1382,7 +1382,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
-        test_wait_for_metadata_propagation(5);
+        test_wait_for_metadata_propagation(10);
 
         /*
          * ConfigResource #0: topic config, no config entries.
@@ -1881,7 +1881,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         /* Wait for ACL propagation across cluster.
          * ACLs can take significant time to propagate in test environments. */
-        test_wait_for_metadata_propagation(5);
+        test_wait_for_metadata_propagation(10);
 
         acl_bindings_describe = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic_name,
@@ -2298,7 +2298,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         /* Wait for ACL propagation across cluster.
          * ACLs can take significant time to propagate in test environments. */
-        test_wait_for_metadata_propagation(5);
+        test_wait_for_metadata_propagation(10);
 
         admin_options_delete =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEACLS);
@@ -2316,8 +2316,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                             q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
-        /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(5);
+        /* Wait for ACL propagation in test environments. */
+        test_wait_for_metadata_propagation(10);
 
         /*
          * Wait for result
@@ -2435,8 +2435,8 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
                             q);
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
-        /* Wait for ACL propagation. */
-        test_wait_for_metadata_propagation(5);
+        /* Wait for ACL propagation in test environments. */
+        test_wait_for_metadata_propagation(10);
 
         /*
          * Wait for result
@@ -3893,8 +3893,8 @@ static void do_test_DescribeTopics(const char *what,
                     test_CreateAcls_simple(rk, NULL, acl_bindings, 1, NULL));
                 rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-                /* Wait for ACL propagation. */
-                test_wait_for_metadata_propagation(5);
+                /* Wait for ACL propagation in test environments. */
+                test_wait_for_metadata_propagation(10);
 
                 /* Call DescribeTopics. */
                 options = rd_kafka_AdminOptions_new(
@@ -3969,8 +3969,8 @@ static void do_test_DescribeTopics(const char *what,
                     test_DeleteAcls_simple(rk, NULL, acl_bindings, 1, NULL));
                 rd_kafka_AclBinding_destroy(acl_bindings[0]);
 
-                /* Wait for ACL propagation. */
-                test_wait_for_metadata_propagation(5);
+                /* Wait for ACL propagation in test environments. */
+                test_wait_for_metadata_propagation(10);
         } else {
                 TEST_SAY(
                     "SKIPPING: DescribeTopics function - requires librdkafka "

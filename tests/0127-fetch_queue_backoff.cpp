@@ -101,7 +101,8 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
   while (received < 5) {
     /* Wait more than dmax to count out of profile messages.
      * Different for first message, that is skipped. */
-    int consume_timeout = received == 0 ? (int)(1500 * test_timeout_multiplier) : dmax;
+    int consume_timeout =
+        received == 0 ? (int)(1500 * test_timeout_multiplier) : dmax;
     RdKafka::Message *msg = c->consume(consume_timeout);
     if (msg->err() == RdKafka::ERR__TIMED_OUT) {
       delete msg;

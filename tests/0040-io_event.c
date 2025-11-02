@@ -89,9 +89,6 @@ int main_0040_io_event(int argc, char **argv) {
 
         queue = rd_kafka_queue_get_consumer(rk_c);
 
-        test_consumer_subscribe(rk_c, topic);
-        test_wait_for_metadata_propagation(5);
-
 #ifndef _WIN32
         r = pipe(fds);
 #else
@@ -102,30 +99,12 @@ int main_0040_io_event(int argc, char **argv) {
 
         rd_kafka_queue_io_event_enable(queue, fds[1], "1", 1);
 
+        test_consumer_subscribe(rk_c, topic);
+        rd_sleep(1);
+
         pfd.fd      = fds[0];
         pfd.events  = POLLIN;
         pfd.revents = 0;
-
-        /* Handle initial rebalance by polling consumer queue directly */
-        for (int i = 0; i < 3; i++) {
-                rd_kafka_event_t *rkev = rd_kafka_queue_poll(queue, 1000);
-                if (rkev) {
-                        if (rd_kafka_event_type(rkev) ==
-                            RD_KAFKA_EVENT_REBALANCE) {
-                                if (rd_kafka_event_error(rkev) ==
-                                    RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                                        test_consumer_assign_by_rebalance_protocol(
-                                            "rebalance", rk_c,
-                                            rd_kafka_event_topic_partition_list(
-                                                rkev));
-                                        expecting_io = _NOPE;
-                                }
-                        }
-                        rd_kafka_event_destroy(rkev);
-                        if (expecting_io != _REBALANCE)
-                                break;
-                }
-        }
 
         /**
          * 1) Wait for rebalance event

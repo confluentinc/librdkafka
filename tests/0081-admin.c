@@ -1881,7 +1881,7 @@ do_test_DescribeAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         /* Wait for ACL propagation across cluster.
          * ACLs can take significant time to propagate in test environments. */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         acl_bindings_describe = rd_kafka_AclBindingFilter_new(
             RD_KAFKA_RESOURCE_TOPIC, topic_name,
@@ -2298,7 +2298,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
 
         /* Wait for ACL propagation across cluster.
          * ACLs can take significant time to propagate in test environments. */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         admin_options_delete =
             rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DELETEACLS);
@@ -2317,7 +2317,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation in test environments. */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         /*
          * Wait for result
@@ -2436,7 +2436,7 @@ do_test_DeleteAcls(rd_kafka_t *rk, rd_kafka_queue_t *useq, int version) {
         TIMING_ASSERT_LATER(&timing, 0, 50);
 
         /* Wait for ACL propagation in test environments. */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         /*
          * Wait for result
@@ -3265,7 +3265,7 @@ static void do_test_ListConsumerGroups(const char *what,
         /* Wait for consumers to fully leave groups before deletion.
          * Need to wait longer than session timeout (6s) plus propagation time,
          * especially in cloud environments. */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         test_DeleteGroups_simple(rk, NULL, (char **)list_consumer_groups,
                                  TEST_LIST_CONSUMER_GROUPS_CNT, NULL);
@@ -3574,7 +3574,7 @@ static void do_test_DescribeConsumerGroups(const char *what,
          * session timeout (6s) to expire before broker removes members.
          * Use 10s to account for cloud environment latency.
          */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         test_DeleteGroups_simple(rk, NULL, (char **)describe_groups,
                                  known_groups, NULL);
@@ -4440,7 +4440,7 @@ do_test_DescribeConsumerGroups_with_authorized_ops(const char *what,
 
         /* Wait for ACL propagation and consumer group to fully close.
          * Use 10s to account for session timeout (6s) and cloud latency. */
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(10);
 
         test_DeleteGroups_simple(rk, NULL, &group_id, 1, NULL);
         test_DeleteTopics_simple(rk, q, &topic, 1, NULL);

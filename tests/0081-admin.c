@@ -5436,7 +5436,7 @@ static void do_test_UserScramCredentials(const char *what,
 #endif
 
         /* Wait for user propagation. */
-        test_wait_for_metadata_propagation(3);
+        rd_sleep(10);
 
         /* Credential should be retrieved */
         options = rd_kafka_AdminOptions_new(

@@ -76,7 +76,7 @@ static int partition_cnt    = 0;
 static int eof_cnt          = 0;
 static int with_dr          = 1;
 static int read_hdrs        = 0;
-static int test_duration    = 0; 
+static int test_duration    = 0;
 
 
 static void stop(int sig) {
@@ -88,15 +88,14 @@ static void stop(int sig) {
 /**
  * @brief Logger callback to capture and display TLS version information
  */
-static void logger_cb(const rd_kafka_t *rk,
-                      int level,
-                      const char *fac,
-                      const char *buf) {
+static void
+logger_cb(const rd_kafka_t *rk, int level, const char *fac, const char *buf) {
         /* Display TLS connection info */
         if (strstr(fac, "SSLVERIFY") && strstr(buf, "TLS version:")) {
-                fprintf(stderr, "\n[INFO] TLS Connection Established: %s\n\n", buf);
+                fprintf(stderr, "\n[INFO] TLS Connection Established: %s\n\n",
+                        buf);
         }
-        
+
         /* Print warnings and errors to stderr */
         fprintf(stderr, "%%%d|%s|%s: %s\n", level, rd_kafka_name(rk), fac, buf);
 }
@@ -614,14 +613,19 @@ print_stats(rd_kafka_t *rk, int mode, int otype, const char *compression) {
                         /* Add time remaining for duration-based tests */
                         if (test_duration > 0 && cnt.t_start > 0) {
                                 rd_ts_t elapsed_us = now - cnt.t_start;
-                                rd_ts_t duration_us = (rd_ts_t)test_duration * 1000 * 1000;
+                                rd_ts_t duration_us =
+                                    (rd_ts_t)test_duration * 1000 * 1000;
                                 if (elapsed_us < duration_us) {
-                                        int remaining_secs = (int)((duration_us - elapsed_us) / 1000000);
-                                        extra_of += rd_snprintf(extra + extra_of, sizeof(extra) - extra_of,
-                                                               ", %ds remaining", remaining_secs);
+                                        int remaining_secs =
+                                            (int)((duration_us - elapsed_us) /
+                                                  1000000);
+                                        extra_of += rd_snprintf(
+                                            extra + extra_of,
+                                            sizeof(extra) - extra_of,
+                                            ", %ds remaining", remaining_secs);
                                 }
                         }
-                        
+
                         printf("%% %" PRIu64
                                " messages produced "
                                "(%" PRIu64
@@ -1196,8 +1200,10 @@ int main(int argc, char **argv) {
                     "  -H <name[=value]> Add header to message (producer)\n"
                     "  -H parse     Read message headers (consumer)\n"
                     "  -c <cnt>     Messages to transmit/receive\n"
-                    "  -E <seconds> Run test for specified duration in seconds (producer)\n"
-                    "               Cannot be used with -c. When used, sends unlimited messages\n"
+                    "  -E <seconds> Run test for specified duration in seconds "
+                    "(producer)\n"
+                    "               Cannot be used with -c. When used, sends "
+                    "unlimited messages\n"
                     "               until time expires.\n"
                     "  -x <cnt>     Hard exit after transmitting <cnt> "
                     "messages (producer)\n"
@@ -1424,8 +1430,10 @@ int main(int argc, char **argv) {
 
                 /* Handle time-based testing */
                 if (test_duration > 0) {
-                        printf("%% Sending messages of size %i bytes for %i seconds\n",
-                               msgsize, test_duration);
+                        printf(
+                            "%% Sending messages of size %i bytes for %i "
+                            "seconds\n",
+                            msgsize, test_duration);
                         msgcnt = -1; /* Unlimited messages */
                 } else if (msgcnt == -1) {
                         printf("%% Sending messages of size %i bytes\n",
@@ -1470,15 +1478,20 @@ int main(int argc, char **argv) {
                         /* Check if test duration has elapsed */
                         if (test_duration > 0) {
                                 rd_ts_t elapsed_us = rd_clock() - cnt.t_start;
-                                rd_ts_t duration_us = (rd_ts_t)test_duration * 1000 * 1000; /* seconds to microseconds */
+                                rd_ts_t duration_us =
+                                    (rd_ts_t)test_duration * 1000 *
+                                    1000; /* seconds to microseconds */
                                 if (elapsed_us >= duration_us) {
                                         if (verbosity >= 1)
-                                                printf("%% Test duration of %d seconds reached, stopping...\n",
-                                                       test_duration);
+                                                printf(
+                                                    "%% Test duration of %d "
+                                                    "seconds reached, "
+                                                    "stopping...\n",
+                                                    test_duration);
                                         break;
                                 }
                         }
-                        
+
                         /* Send/Produce message. */
 
                         if (idle) {
@@ -1580,7 +1593,8 @@ int main(int argc, char **argv) {
 
                 /* Wait for messages to be delivered */
                 if (test_duration > 0) {
-                        /* For time-based tests, flush remaining messages with timeout */
+                        /* For time-based tests, flush remaining messages with
+                         * timeout */
                         rd_kafka_flush(rk, 5000); /* 5 second flush timeout */
                 } else {
                         /* For count-based tests, wait for all deliveries */

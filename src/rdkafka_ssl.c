@@ -1890,22 +1890,6 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
                 goto fail;
         }
 
-        /* Force TLS version to 1.3 for testing */
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
-        if (!SSL_CTX_set_min_proto_version(ctx, TLS1_3_VERSION)) {
-                rd_snprintf(errstr, errstr_size,
-                            "Failed to set minimum TLS version to 1.3");
-                goto fail;
-        }
-        if (!SSL_CTX_set_max_proto_version(ctx, TLS1_3_VERSION)) {
-                rd_snprintf(errstr, errstr_size,
-                            "Failed to set maximum TLS version to 1.3");
-                goto fail;
-        }
-        rd_kafka_dbg(rk, SECURITY, "SSL",
-                     "TLS version restricted to 1.3 only (min=1.3, max=1.3)");
-#endif
-
 #ifdef SSL_OP_NO_SSLv3
         /* Disable SSLv3 (unsafe) */
         SSL_CTX_set_options(ctx, SSL_OP_NO_SSLv3);

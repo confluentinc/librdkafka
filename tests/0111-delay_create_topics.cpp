@@ -107,6 +107,9 @@ static void do_test_producer(bool timeout_too_short) {
 
   Test::create_topic(NULL, topic.c_str(), 1, -1);
 
+  /* Wait for topic to propagate to brokers */
+  rd_sleep(3);
+
   p->flush(tmout_multip(10 * 1000));
 
   if (!dr_cb.ok)

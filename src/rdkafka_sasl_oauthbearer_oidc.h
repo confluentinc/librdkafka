@@ -28,9 +28,19 @@
 
 #ifndef _RDKAFKA_SASL_OAUTHBEARER_OIDC_H_
 #define _RDKAFKA_SASL_OAUTHBEARER_OIDC_H_
-void rd_kafka_oidc_token_refresh_cb(rd_kafka_t *rk,
-                                    const char *oauthbearer_config,
-                                    void *opaque);
+void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
+                                               const char *oauthbearer_config,
+                                               void *opaque);
+
+void rd_kafka_oidc_token_client_credentials_refresh_cb(
+    rd_kafka_t *rk,
+    const char *oauthbearer_config,
+    void *opaque);
+
+void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
+    rd_kafka_t *rk,
+    const char *oauthbearer_config,
+    void *opaque);
 
 int unittest_sasl_oauthbearer_oidc(void);
 

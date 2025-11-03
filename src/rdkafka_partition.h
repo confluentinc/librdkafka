@@ -292,13 +292,14 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int32_t rktp_fetch_version; /* Op version of curr fetch.
                                        (broker thread) */
 
-        enum { RD_KAFKA_TOPPAR_FETCH_NONE = 0,
-               RD_KAFKA_TOPPAR_FETCH_STOPPING,
-               RD_KAFKA_TOPPAR_FETCH_STOPPED,
-               RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
-               RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
-               RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
-               RD_KAFKA_TOPPAR_FETCH_ACTIVE,
+        enum {
+                RD_KAFKA_TOPPAR_FETCH_NONE = 0,
+                RD_KAFKA_TOPPAR_FETCH_STOPPING,
+                RD_KAFKA_TOPPAR_FETCH_STOPPED,
+                RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY,
+                RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_VALIDATE_EPOCH_WAIT,
+                RD_KAFKA_TOPPAR_FETCH_ACTIVE,
         } rktp_fetch_state; /* Broker thread's state */
 
 #define RD_KAFKA_TOPPAR_FETCH_IS_STARTED(fetch_state)                          \
@@ -433,6 +434,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
 #define RD_KAFKA_TOPPAR_F_ASSIGNED                                             \
         0x2000 /**< Toppar is part of the consumer                             \
                 *   assignment. */
+#define RD_KAFKA_TOPPAR_F_VALIDATING                                           \
+        0x4000 /**< Toppar is currently requesting validation. */
 
         /*
          * Timers
@@ -647,6 +650,8 @@ void rd_kafka_toppar_offset_fetch(rd_kafka_toppar_t *rktp,
 void rd_kafka_toppar_offset_request(rd_kafka_toppar_t *rktp,
                                     rd_kafka_fetch_pos_t query_pos,
                                     int backoff_ms);
+
+void rd_kafka_toppar_purge_internal_fetch_queue_maybe(rd_kafka_toppar_t *rktp);
 
 int rd_kafka_toppar_purge_queues(rd_kafka_toppar_t *rktp,
                                  int purge_flags,
@@ -1004,6 +1009,12 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_get_err(
     const rd_kafka_topic_partition_list_t *rktparlist);
 
 int rd_kafka_topic_partition_list_regex_cnt(
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
+rd_kafka_topic_partition_list_t *rd_kafka_topic_partition_list_remove_regexes(
+    const rd_kafka_topic_partition_list_t *rktparlist);
+
+rd_kafkap_str_t *rd_kafka_topic_partition_list_combine_regexes(
     const rd_kafka_topic_partition_list_t *rktparlist);
 
 void *rd_kafka_topic_partition_list_copy_opaque(const void *src, void *opaque);

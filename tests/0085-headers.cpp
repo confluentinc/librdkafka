@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -357,6 +358,8 @@ int main_0085_headers(int argc, char **argv) {
 
   delete conf;
 
+  Test::create_topic_wait_exists(p, topic.c_str(), 1, -1, 5000);
+
   std::vector<RdKafka::TopicPartition *> parts;
   parts.push_back(RdKafka::TopicPartition::create(
       topic, 0, RdKafka::Topic::OFFSET_BEGINNING));
@@ -379,6 +382,7 @@ int main_0085_headers(int argc, char **argv) {
   test_failed_produce();
   test_assignment_op();
 
+  Test::delete_topic(p, topic.c_str());
   c->close();
   delete c;
   delete p;

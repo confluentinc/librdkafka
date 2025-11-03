@@ -54,9 +54,10 @@
  * @brief Per-connection state
  */
 struct rd_kafka_sasl_scram_state {
-        enum { RD_KAFKA_SASL_SCRAM_STATE_CLIENT_FIRST_MESSAGE,
-               RD_KAFKA_SASL_SCRAM_STATE_SERVER_FIRST_MESSAGE,
-               RD_KAFKA_SASL_SCRAM_STATE_CLIENT_FINAL_MESSAGE,
+        enum {
+                RD_KAFKA_SASL_SCRAM_STATE_CLIENT_FIRST_MESSAGE,
+                RD_KAFKA_SASL_SCRAM_STATE_SERVER_FIRST_MESSAGE,
+                RD_KAFKA_SASL_SCRAM_STATE_CLIENT_FINAL_MESSAGE,
         } state;
         rd_chariov_t cnonce;         /* client c-nonce */
         rd_chariov_t first_msg_bare; /* client-first-message-bare */
@@ -253,10 +254,9 @@ static char *rd_kafka_sasl_safe_string(const char *str) {
  * @brief Build client-final-message-without-proof
  * @remark out->ptr will be allocated and must be freed.
  */
-static void rd_kafka_sasl_scram_build_client_final_message_wo_proof(
-    struct rd_kafka_sasl_scram_state *state,
-    const char *snonce,
-    rd_chariov_t *out) {
+static void
+rd_kafka_sasl_scram_build_client_final_message_wo_proof(const char *snonce,
+                                                        rd_chariov_t *out) {
         const char *attr_c = "biws"; /* base64 encode of "n,," */
 
         /*
@@ -264,11 +264,9 @@ static void rd_kafka_sasl_scram_build_client_final_message_wo_proof(
          *            channel-binding "," nonce [","
          *            extensions]
          */
-        out->size = strlen("c=,r=") + strlen(attr_c) + state->cnonce.size +
-                    strlen(snonce);
-        out->ptr = rd_malloc(out->size + 1);
-        rd_snprintf(out->ptr, out->size + 1, "c=%s,r=%.*s%s", attr_c,
-                    (int)state->cnonce.size, state->cnonce.ptr, snonce);
+        out->size = strlen("c=,r=") + strlen(attr_c) + strlen(snonce);
+        out->ptr  = rd_malloc(out->size + 1);
+        rd_snprintf(out->ptr, out->size + 1, "c=%s,r=%s", attr_c, snonce);
 }
 
 
@@ -338,7 +336,7 @@ static int rd_kafka_sasl_scram_build_client_final_message(
 
         /* client-final-message-without-proof */
         rd_kafka_sasl_scram_build_client_final_message_wo_proof(
-            state, server_nonce, &client_final_msg_wo_proof);
+            server_nonce, &client_final_msg_wo_proof);
 
         /* AuthMessage     := client-first-message-bare + "," +
          *                    server-first-message + "," +

@@ -47,13 +47,14 @@ struct expect {
         int exp_err;        /* expected error from subscribe() */
         int stat[4];        /* per exp status */
         int fails;
-        enum { _EXP_NONE,
-               _EXP_FAIL,
-               _EXP_OK,
-               _EXP_ASSIGN,
-               _EXP_REVOKE,
-               _EXP_ASSIGNED,
-               _EXP_REVOKED,
+        enum {
+                _EXP_NONE,
+                _EXP_FAIL,
+                _EXP_OK,
+                _EXP_ASSIGN,
+                _EXP_REVOKE,
+                _EXP_ASSIGNED,
+                _EXP_REVOKED,
         } result;
 };
 
@@ -135,7 +136,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                             exp->name, exp->result);
                 }
                 expect_match(exp, parts);
-                test_consumer_assign("rebalance", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           parts);
                 exp->result = _EXP_ASSIGNED;
                 break;
 
@@ -147,7 +149,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                             exp->name, exp->result);
                 }
 
-                test_consumer_unassign("rebalance", rk);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             parts);
                 exp->result = _EXP_REVOKED;
                 break;
 
@@ -374,7 +377,7 @@ static int do_test(const char *assignor) {
                     .name = rd_strdup(tsprintf("%s: regex 0&1", assignor)),
                     .sub  = {rd_strdup(tsprintf(
                                 "^.*[tToOpPiIcC]_0+[12]_[^_]+_%s", groupid)),
-                            NULL},
+                             NULL},
                     .exp  = {topics[0], topics[1], NULL}};
 
                 fails += test_subscribe(rk, &expect);
@@ -387,7 +390,7 @@ static int do_test(const char *assignor) {
                     .name = rd_strdup(tsprintf("%s: regex 2", assignor)),
                     .sub  = {rd_strdup(
                                 tsprintf("^.*TOOTHPIC_000._._%s", groupid)),
-                            NULL},
+                             NULL},
                     .exp  = {topics[2], NULL}};
 
                 fails += test_subscribe(rk, &expect);
@@ -401,7 +404,7 @@ static int do_test(const char *assignor) {
                                                "nonexistent(not seen)",
                                                assignor)),
                     .sub  = {rd_strdup(tsprintf("^.*_000[34]_..?_%s", groupid)),
-                            NULL},
+                             NULL},
                     .exp  = {topics[2], NULL}};
 
                 fails += test_subscribe(rk, &expect);
@@ -421,8 +424,22 @@ static int do_test(const char *assignor) {
                 rd_free(expect.name);
         }
 
+        {
+                struct expect expect = {
+                    .name = rd_strdup(
+                        tsprintf("%s: multiple regex 1&2 matches", assignor)),
+                    .sub = {"^.*regex_subscribe_to.*",
+                            "^.*regex_subscribe_TOO.*", NULL},
+                    .exp = {topics[1], topics[2], NULL}};
+
+                fails += test_subscribe(rk, &expect);
+                rd_free(expect.name);
+        }
 
         test_consumer_close(rk);
+
+        for (i = 0; i < topic_cnt; i++)
+                test_delete_topic(rk, topics[i]);
 
         rd_kafka_destroy(rk);
 
@@ -434,11 +451,10 @@ static int do_test(const char *assignor) {
 
 
 int main_0033_regex_subscribe(int argc, char **argv) {
-        if (test_consumer_group_protocol_generic()) {
-                /* FIXME: when regexes will be supported by KIP-848 */
-                do_test("range");
-                do_test("roundrobin");
-        }
+
+        do_test("range");
+        do_test("roundrobin");
+
         return 0;
 }
 

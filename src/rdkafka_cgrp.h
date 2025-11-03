@@ -230,9 +230,33 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
-         *  completes. The waiting subscription is stored here.
-         *  Mutually exclusive with rkcg_next_subscription. */
+         *  completes. The waiting subscription is stored here. */
         rd_kafka_topic_partition_list_t *rkcg_next_subscription;
+
+        /**
+         * Subscription regex pattern. All the provided regex patterns are
+         * stored as a single string with each pattern separated by '|'.
+         *
+         * Only applicable for the consumer protocol introduced in KIP-848.
+         *
+         * rkcg_subscription = rkcg_subscription_topics +
+         * rkcg_subscription_regex
+         */
+        rd_kafkap_str_t *rkcg_subscription_regex;
+
+        /**
+         * Full topic names extracted out from the rkcg_subscription.
+         *
+         * Only applicable for the consumer protocol introduced in KIP-848.
+         *
+         *  For the consumer protocol, this field doesn't include regex
+         *  subscriptions. For that please refer `rkcg_subscription_regex`
+         *
+         * rkcg_subscription = rkcg_subscription_topics +
+         * rkcg_subscription_regex
+         */
+        rd_kafka_topic_partition_list_t *rkcg_subscription_topics;
+
         /** If a (un)SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be posponed until after the rebalance
          *  completes. This flag is used to signal a waiting unsubscribe
@@ -312,6 +336,8 @@ typedef struct rd_kafka_cgrp_s {
          *  incremental unassign. */
         rd_bool_t rkcg_rebalance_rejoin;
 
+        rd_ts_t rkcg_ts_last_err;          /* Timestamp of last error
+                                            * propagated to application */
         rd_kafka_resp_err_t rkcg_last_err; /* Last error propagated to
                                             * application.
                                             * This is for silencing
@@ -333,6 +359,8 @@ typedef struct rd_kafka_cgrp_s {
 
         rd_atomic32_t rkcg_terminated; /**< Consumer has been closed */
 
+        rd_atomic32_t rkcg_subscription_version; /**< Subscription version */
+
         /* Protected by rd_kafka_*lock() */
         struct {
                 rd_ts_t ts_rebalance;       /* Timestamp of
@@ -345,6 +373,9 @@ typedef struct rd_kafka_cgrp_s {
                                              * of last rebalance
                                              * assignment */
         } rkcg_c;
+
+        /* Timestamp of last rebalance start */
+        rd_ts_t rkcg_ts_rebalance_start;
 
 } rd_kafka_cgrp_t;
 
@@ -400,6 +431,12 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join);
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
+#define rd_kafka_cgrp_same_subscription_version(rk_cgrp,                       \
+                                                cgrp_subscription_version)     \
+        ((rk_cgrp) &&                                                          \
+         (cgrp_subscription_version == -1 ||                                   \
+          rd_atomic32_get(&(rk_cgrp)->rkcg_subscription_version) ==            \
+              cgrp_subscription_version))
 
 void rd_kafka_cgrp_assigned_offsets_commit(
     rd_kafka_cgrp_t *rkcg,

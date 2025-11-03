@@ -81,6 +81,7 @@ int main_0047_partial_buf_tmout(int argc, char **argv) {
 
         rkt = test_create_producer_topic(rk, topic, "message.timeout.ms", "300",
                                          NULL);
+        test_wait_topic_exists(rk, topic, 5000);
 
         while (got_timeout_err == 0) {
                 test_produce_msgs_nowait(rk, rkt, 0, RD_KAFKA_PARTITION_UA, 0,

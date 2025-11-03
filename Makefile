@@ -9,6 +9,7 @@ DOC_FILES+=	LICENSE LICENSES.txt INTRODUCTION.md README.md \
 
 PKGNAME?=	librdkafka
 VERSION?=	$(shell python3 packaging/get_version.py src/rdkafka.h)
+SHELL	=	/bin/sh
 
 # Jenkins CI integration
 BUILD_NUMBER ?= 1
@@ -79,7 +80,7 @@ rpm: distclean
 	$(MAKE) -C packaging/rpm
 
 LICENSES.txt: .PHONY
-	@(for i in LICENSE LICENSE.*[^~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
+	@(for i in LICENSE LICENSE.*[!~] ; do (echo "$$i" ; echo "--------------------------------------------------------------" ; cat $$i ; echo "" ; echo "") ; done) > $@.tmp
 	@cmp $@ $@.tmp || mv -f $@.tmp $@ ; rm -f $@.tmp
 
 

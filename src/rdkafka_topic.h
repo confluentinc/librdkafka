@@ -159,12 +159,14 @@ struct rd_kafka_topic_s {
         rd_refcnt_t rkt_app_refcnt; /**< Number of active rkt's new()ed
                                      *   by application. */
 
-        enum { RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
-               RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
-               RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
-               RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
-                                            * state, such as auth failure. */
+        enum {
+                RD_KAFKA_TOPIC_S_UNKNOWN,   /* No cluster information yet */
+                RD_KAFKA_TOPIC_S_EXISTS,    /* Topic exists in cluster */
+                RD_KAFKA_TOPIC_S_NOTEXISTS, /* Topic is not known in cluster */
+                RD_KAFKA_TOPIC_S_ERROR,     /* Topic exists but is in an errored
+                                             * state, such as auth failure. */
         } rkt_state;
+        rd_ts_t rkt_ts_state; /**< State change time. */
 
         int rkt_flags;
 #define RD_KAFKA_TOPIC_F_LEADER_UNAVAIL                                        \
@@ -289,7 +291,7 @@ rd_kafka_topic_info_t *rd_kafka_topic_info_new_with_rack(
     const char *topic,
     int partition_cnt,
     const rd_kafka_metadata_partition_internal_t *mdpi);
-void rd_kafka_topic_info_destroy(rd_kafka_topic_info_t *ti);
+void rd_kafka_topic_info_destroy_free(void *ti);
 
 int rd_kafka_topic_match(rd_kafka_t *rk,
                          const char *pattern,
@@ -301,6 +303,10 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
                                   const char *reason);
 
 int rd_kafka_toppar_delegate_to_leader(rd_kafka_toppar_t *rktp);
+
+void rd_kafka_toppar_undelegate(rd_kafka_toppar_t *rktp);
+
+void rd_kafka_toppar_forget_leader(rd_kafka_toppar_t *rktp);
 
 rd_kafka_resp_err_t rd_kafka_topics_leader_query_sync(rd_kafka_t *rk,
                                                       int all_topics,
@@ -314,8 +320,8 @@ void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
         rd_kafka_topic_leader_query0(rk, rkt, 1 /*lock*/,                      \
                                      rd_false /*dont force*/)
 
-#define rd_kafka_topic_fast_leader_query(rk)                                   \
-        rd_kafka_metadata_fast_leader_query(rk)
+#define rd_kafka_topic_fast_leader_query(rk, force)                            \
+        rd_kafka_metadata_fast_leader_query(rk, force)
 
 void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
                                    rd_list_t *topics,

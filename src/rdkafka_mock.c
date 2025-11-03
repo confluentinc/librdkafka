@@ -39,6 +39,8 @@
 #include "rdkafka_mock_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_mock.h"
+#include "rdunittest.h"
+
 #include <stdarg.h>
 
 typedef struct rd_kafka_mock_request_s rd_kafka_mock_request_t;
@@ -47,6 +49,8 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster);
 static rd_kafka_mock_request_t *
 rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us);
 static void rd_kafka_mock_request_free(void *element);
+static void rd_kafka_mock_coord_remove(rd_kafka_mock_cluster_t *mcluster,
+                                       int32_t broker_id);
 
 static rd_kafka_mock_broker_t *
 rd_kafka_mock_broker_find(const rd_kafka_mock_cluster_t *mcluster,
@@ -435,16 +439,22 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
         int replica_cnt = RD_MIN(replication_factor, mcluster->broker_cnt);
         rd_kafka_mock_broker_t *mrkb;
         int i = 0;
-        int first_replica =
-            (mpart->id * replication_factor) % mcluster->broker_cnt;
+        int first_replica;
         int skipped = 0;
 
         if (mpart->replicas)
                 rd_free(mpart->replicas);
 
-        mpart->replicas    = rd_calloc(replica_cnt, sizeof(*mpart->replicas));
+        mpart->replicas    = replica_cnt
+                                 ? rd_calloc(replica_cnt, sizeof(*mpart->replicas))
+                                 : NULL;
         mpart->replica_cnt = replica_cnt;
+        if (replica_cnt == 0) {
+                rd_kafka_mock_partition_set_leader0(mpart, NULL);
+                return;
+        }
 
+        first_replica = (mpart->id * replication_factor) % mcluster->broker_cnt;
 
         /* Use a predictable, determininistic order on a per-topic basis.
          *
@@ -918,6 +928,23 @@ static void rd_kafka_mock_cluster_io_add(rd_kafka_mock_cluster_t *mcluster,
         mcluster->fd_cnt++;
 }
 
+/**
+ * @brief Reassign partition replicas to broker, after deleting or
+ *        adding a new one.
+ */
+static void
+rd_kafka_mock_cluster_reassign_partitions(rd_kafka_mock_cluster_t *mcluster) {
+        rd_kafka_mock_topic_t *mtopic;
+        TAILQ_FOREACH(mtopic, &mcluster->topics, link) {
+                int i;
+                for (i = 0; i < mtopic->partition_cnt; i++) {
+                        rd_kafka_mock_partition_t *mpart =
+                            &mtopic->partitions[i];
+                        rd_kafka_mock_partition_assign_replicas(
+                            mpart, mpart->replica_cnt);
+                }
+        }
+}
 
 static void rd_kafka_mock_connection_close(rd_kafka_mock_connection_t *mconn,
                                            const char *reason) {
@@ -1335,8 +1362,14 @@ static void rd_kafka_mock_connection_io(rd_kafka_mock_cluster_t *mcluster,
                 }
         }
 
-        if (events & (POLLERR | POLLHUP)) {
-                rd_kafka_mock_connection_close(mconn, "Disconnected");
+        if (events & POLLERR) {
+                rd_kafka_mock_connection_close(mconn,
+                                               "Disconnected: "
+                                               "Error condition");
+                return;
+        }
+        if (events & POLLHUP) {
+                rd_kafka_mock_connection_close(mconn, "Disconnected: Hang up");
                 return;
         }
 
@@ -1564,10 +1597,36 @@ static void rd_kafka_mock_broker_destroy(rd_kafka_mock_broker_t *mrkb) {
         if (mrkb->rack)
                 rd_free(mrkb->rack);
 
+        rd_kafka_mock_coord_remove(mrkb->cluster, mrkb->id);
+
         TAILQ_REMOVE(&mrkb->cluster->brokers, mrkb, link);
         mrkb->cluster->broker_cnt--;
 
         rd_free(mrkb);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
+                                  int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
+                                             int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_ADD;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
 
@@ -1664,16 +1723,28 @@ static int rd_kafka_mock_broker_new_listener(rd_kafka_mock_cluster_t *mcluster,
 
 
 static rd_kafka_mock_broker_t *
-rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
+rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster,
+                         int32_t broker_id,
+                         rd_kafka_resp_err_t *err) {
         rd_kafka_mock_broker_t *mrkb;
         rd_socket_t listen_s;
         struct sockaddr_in sin = {
             .sin_family = AF_INET,
             .sin_addr   = {.s_addr = htonl(INADDR_LOOPBACK)}};
 
-        listen_s = rd_kafka_mock_broker_new_listener(mcluster, &sin);
-        if (listen_s == -1)
+        if (rd_kafka_mock_broker_find(mcluster, broker_id)) {
+                if (err)
+                        *err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                /* A broker with this id already exists. */
                 return NULL;
+        }
+
+        listen_s = rd_kafka_mock_broker_new_listener(mcluster, &sin);
+        if (listen_s == -1) {
+                if (err)
+                        *err = RD_KAFKA_RESP_ERR__TRANSPORT;
+                return NULL;
+        }
 
         /*
          * Create mock broker object
@@ -1698,6 +1769,8 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id) {
 
         if (rd_kafka_mock_broker_start_listener(mrkb) == -1) {
                 rd_kafka_mock_broker_destroy(mrkb);
+                if (err)
+                        *err = RD_KAFKA_RESP_ERR__TRANSPORT;
                 return NULL;
         }
 
@@ -1804,6 +1877,20 @@ rd_kafka_mock_coord_set(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_INSERT_TAIL(&mcluster->coords, mcoord, link);
 
         return mcoord;
+}
+
+/**
+ * @brief Remove coordinator by broker id.
+ */
+void rd_kafka_mock_coord_remove(rd_kafka_mock_cluster_t *mcluster,
+                                int32_t broker_id) {
+        rd_kafka_mock_coord_t *mcoord, *tmp;
+
+        TAILQ_FOREACH_SAFE(mcoord, &mcluster->coords, link, tmp) {
+                if (mcoord->broker_id == broker_id) {
+                        rd_kafka_mock_coord_destroy(mcluster, mcoord);
+                }
+        }
 }
 
 
@@ -2205,6 +2292,31 @@ rd_kafka_mock_broker_set_rack(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+void rd_kafka_mock_broker_set_host_port(rd_kafka_mock_cluster_t *cluster,
+                                        int32_t broker_id,
+                                        const char *host,
+                                        int port) {
+        rd_kafka_mock_broker_t *mrkb;
+
+        mtx_lock(&cluster->lock);
+        TAILQ_FOREACH(mrkb, &cluster->brokers, link) {
+                if (mrkb->id == broker_id) {
+                        rd_kafka_dbg(
+                            cluster->rk, MOCK, "MOCK",
+                            "Broker %" PRId32
+                            ": Setting advertised listener from %s:%d to %s:%d",
+                            broker_id, mrkb->advertised_listener, mrkb->port,
+                            host, port);
+                        rd_snprintf(mrkb->advertised_listener,
+                                    sizeof(mrkb->advertised_listener), "%s",
+                                    host);
+                        mrkb->port = port;
+                        break;
+                }
+        }
+        mtx_unlock(&cluster->lock);
+}
+
 rd_kafka_resp_err_t
 rd_kafka_mock_coordinator_set(rd_kafka_mock_cluster_t *mcluster,
                               const char *key_type,
@@ -2326,6 +2438,11 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = NULL;
                 break;
 
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
+                rd_kafka_mock_broker_destroy(mrkb);
+                rd_kafka_mock_cluster_reassign_partitions(mcluster);
+                break;
+
         default:
                 RD_BUG("Unhandled mock cmd %d", rko->rko_u.mock.cmd);
                 break;
@@ -2380,6 +2497,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_partition_t *mpart;
         rd_kafka_mock_broker_t *mrkb;
         size_t i;
+        rd_kafka_resp_err_t err;
 
         switch (rko->rko_u.mock.cmd) {
         case RD_KAFKA_MOCK_CMD_TOPIC_CREATE:
@@ -2490,8 +2608,16 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
+        case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
+        case RD_KAFKA_MOCK_CMD_BROKER_ADD:
+                if (!rd_kafka_mock_broker_new(mcluster,
+                                              rko->rko_u.mock.broker_id, &err))
+                        return err;
+
+                rd_kafka_mock_cluster_reassign_partitions(mcluster);
+                break;
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,
                                              rko->rko_u.mock.str,
@@ -2534,6 +2660,14 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+void rd_kafka_mock_group_initial_rebalance_delay_ms(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t delay_ms) {
+        mtx_lock(&mcluster->lock);
+        mcluster->defaults.group_initial_rebalance_delay_ms = delay_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
 
 static rd_kafka_op_res_t
 rd_kafka_mock_cluster_op_serve(rd_kafka_t *rk,
@@ -2570,7 +2704,8 @@ rd_kafka_mock_cluster_op_serve(rd_kafka_t *rk,
 static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_topic_t *mtopic;
         rd_kafka_mock_broker_t *mrkb;
-        rd_kafka_mock_cgrp_t *mcgrp;
+        rd_kafka_mock_cgrp_classic_t *mcgrp_classic;
+        rd_kafka_mock_cgrp_consumer_t *mcgrp_consumer;
         rd_kafka_mock_coord_t *mcoord;
         rd_kafka_mock_error_stack_t *errstack;
         thrd_t dummy_rkb_thread;
@@ -2583,8 +2718,11 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         while ((mrkb = TAILQ_FIRST(&mcluster->brokers)))
                 rd_kafka_mock_broker_destroy(mrkb);
 
-        while ((mcgrp = TAILQ_FIRST(&mcluster->cgrps)))
-                rd_kafka_mock_cgrp_destroy(mcgrp);
+        while ((mcgrp_classic = TAILQ_FIRST(&mcluster->cgrps_classic)))
+                rd_kafka_mock_cgrp_classic_destroy(mcgrp_classic);
+
+        while ((mcgrp_consumer = TAILQ_FIRST(&mcluster->cgrps_consumer)))
+                rd_kafka_mock_cgrp_consumer_destroy(mcgrp_consumer);
 
         while ((mcoord = TAILQ_FIRST(&mcluster->coords)))
                 rd_kafka_mock_coord_destroy(mcluster, mcoord);
@@ -2598,15 +2736,15 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         rd_list_destroy(&mcluster->request_list);
 
+        dummy_rkb_thread = mcluster->dummy_rkb->rkb_thread;
+
         /*
-         * Destroy dummy broker
+         * Destroy dummy broker.
+         * WARNING: This is last time we can read
+         * from dummy_rkb in this thread!
          */
         rd_kafka_q_enq(mcluster->dummy_rkb->rkb_ops,
                        rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
-
-        dummy_rkb_thread = mcluster->dummy_rkb->rkb_thread;
-
-        rd_kafka_broker_destroy(mcluster->dummy_rkb);
 
         if (thrd_join(dummy_rkb_thread, &ret) != thrd_success)
                 rd_assert(!*"failed to join mock dummy broker thread");
@@ -2680,7 +2818,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->brokers);
 
         for (i = 1; i <= broker_cnt; i++) {
-                if (!(mrkb = rd_kafka_mock_broker_new(mcluster, i))) {
+                if (!(mrkb = rd_kafka_mock_broker_new(mcluster, i, NULL))) {
                         rd_kafka_mock_cluster_destroy(mcluster);
                         return NULL;
                 }
@@ -2694,9 +2832,14 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->topics);
         mcluster->defaults.partition_cnt      = 4;
         mcluster->defaults.replication_factor = RD_MIN(3, broker_cnt);
-        mcluster->track_requests              = rd_false;
+        mcluster->defaults.group_initial_rebalance_delay_ms     = 3000;
+        mcluster->track_requests                                = rd_false;
+        mcluster->defaults.group_consumer_session_timeout_ms    = 30000;
+        mcluster->defaults.group_consumer_heartbeat_interval_ms = 3000;
 
-        TAILQ_INIT(&mcluster->cgrps);
+        TAILQ_INIT(&mcluster->cgrps_classic);
+
+        TAILQ_INIT(&mcluster->cgrps_consumer);
 
         TAILQ_INIT(&mcluster->coords);
 
@@ -2873,4 +3016,646 @@ int16_t rd_kafka_mock_request_api_key(rd_kafka_mock_request_t *mreq) {
 
 rd_ts_t rd_kafka_mock_request_timestamp(rd_kafka_mock_request_t *mreq) {
         return mreq->timestamp;
+}
+
+/* Unit tests */
+
+/**
+ * @brief Create a topic-partition list with vararg arguments.
+ *
+ * @param cnt Number of topic-partitions.
+ * @param ...vararg is a tuple of:
+ *           const char *topic_name
+ *           int32_t partition
+ *
+ * @remark The returned pointer ownership is transferred to the caller.
+ */
+static rd_kafka_topic_partition_list_t *ut_topic_partitions(int cnt, ...) {
+        va_list ap;
+        const char *topic_name;
+        int i = 0;
+
+        rd_kafka_topic_partition_list_t *rktparlist =
+            rd_kafka_topic_partition_list_new(cnt);
+        va_start(ap, cnt);
+        while (i < cnt) {
+                topic_name        = va_arg(ap, const char *);
+                int32_t partition = va_arg(ap, int32_t);
+
+                rd_kafka_topic_partition_list_add(rktparlist, topic_name,
+                                                  partition);
+                i++;
+        }
+        va_end(ap);
+
+        return rktparlist;
+}
+
+/**
+ * @brief Assert \p expected partition list is equal to \p actual.
+ *
+ * @param expected Expected partition list.
+ * @param actual Actual partition list.
+ * @return Comparation result.
+ */
+static int ut_assert_topic_partitions(rd_kafka_topic_partition_list_t *expected,
+                                      rd_kafka_topic_partition_list_t *actual) {
+        rd_bool_t equal;
+        char expected_str[256] = "";
+        char actual_str[256]   = "";
+
+        if (expected)
+                RD_UT_ASSERT(actual, "list should be not-NULL, but it's NULL");
+        else
+                RD_UT_ASSERT(!actual, "list should be NULL, but it's not-NULL");
+
+
+        if (!expected)
+                return 0;
+
+        equal = !rd_kafka_topic_partition_list_cmp(
+            actual, expected, rd_kafka_topic_partition_cmp);
+
+        if (!equal) {
+                rd_kafka_topic_partition_list_str(expected, expected_str,
+                                                  sizeof(expected_str),
+                                                  RD_KAFKA_FMT_F_NO_ERR);
+                rd_kafka_topic_partition_list_str(actual, actual_str,
+                                                  sizeof(actual_str),
+                                                  RD_KAFKA_FMT_F_NO_ERR);
+        }
+
+        RD_UT_ASSERT(equal, "list should be equal. Expected: %s, got: %s",
+                     expected_str, actual_str);
+        return 0;
+}
+
+/**
+ * @struct Fixture used for testing next assignment calculation.
+ */
+struct cgrp_consumer_member_next_assignment_fixture {
+        /** Current member epoch (after calling next assignment). */
+        int32_t current_member_epoch;
+        /** Current consumer assignment, if changed. */
+        rd_kafka_topic_partition_list_t *current_assignment;
+        /** Returned assignment, if expected. */
+        rd_kafka_topic_partition_list_t *returned_assignment;
+        /** Target assignment, if changed. */
+        rd_kafka_topic_partition_list_t *target_assignment;
+        /** Should simulate a disconnection and reconnection. */
+        rd_bool_t reconnected;
+        /** Should simulate a session time out. */
+        rd_bool_t session_timed_out;
+        /** Comment to log. */
+        const char *comment;
+};
+
+/**
+ * @brief Test next assignment calculation using passed \p fixtures.
+ *        using a new cluster with a topic with name \p topic and
+ *        \p partitions partitions.
+ *
+ * @param topic Topic name to create.
+ * @param partitions Topic partition.
+ * @param fixtures Array of fixtures for this test.
+ * @param fixtures_cnt Number of elements in \p fixtures.
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment0(
+    const char *topic,
+    int partitions,
+    struct cgrp_consumer_member_next_assignment_fixture *fixtures,
+    size_t fixtures_cnt) {
+        int failures                 = 0;
+        int32_t current_member_epoch = 0;
+        size_t i;
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        static rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_mock_cgrp_consumer_t *mcgrp;
+        rd_kafka_mock_cgrp_consumer_member_t *member;
+        char errstr[512];
+        rd_kafkap_str_t GroupId         = {.str = "group", .len = 5};
+        rd_kafkap_str_t MemberId        = {.str = "A", .len = 1};
+        rd_kafkap_str_t InstanceId      = {.len = -1};
+        rd_kafkap_str_t SubscribedTopic = {.str = topic, .len = strlen(topic)};
+        rd_kafkap_str_t SubscribedTopicRegex = RD_KAFKAP_STR_INITIALIZER_EMPTY;
+        struct rd_kafka_mock_connection_s *conn =
+            (struct rd_kafka_mock_connection_s
+                 *)1; /* fake connection instance */
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+        mcgrp    = rd_kafka_mock_cgrp_consumer_get(mcluster, &GroupId);
+        member   = rd_kafka_mock_cgrp_consumer_member_add(
+            mcgrp, conn, &MemberId, &InstanceId, &SubscribedTopic, 1,
+            &SubscribedTopicRegex);
+        mtopic = rd_kafka_mock_topic_new(mcluster, topic, partitions, 1);
+
+        for (i = 0; i < fixtures_cnt; i++) {
+                int j;
+                rd_kafka_topic_partition_list_t *current_assignment,
+                    *member_target_assignment, *next_assignment,
+                    *returned_assignment;
+
+                RD_UT_SAY("test fixture %" PRIusz ": %s", i,
+                          fixtures[i].comment);
+
+                if (fixtures[i].session_timed_out) {
+                        rd_kafka_mock_cgrp_consumer_member_leave(mcgrp, member,
+                                                                 rd_false);
+                        member = rd_kafka_mock_cgrp_consumer_member_add(
+                            mcgrp, conn, &MemberId, &InstanceId,
+                            &SubscribedTopic, 1, &SubscribedTopicRegex);
+                }
+
+                if (fixtures[i].reconnected) {
+                        rd_kafka_mock_cgrps_connection_closed(mcluster, conn);
+                        conn++;
+                        member = rd_kafka_mock_cgrp_consumer_member_add(
+                            mcgrp, conn, &MemberId, &InstanceId,
+                            &SubscribedTopic, 1, &SubscribedTopicRegex);
+                }
+
+                member_target_assignment = fixtures[i].target_assignment;
+                if (member_target_assignment) {
+                        rd_kafka_mock_cgrp_consumer_target_assignment_t
+                            *target_assignment;
+
+                        target_assignment =
+                            rd_kafka_mock_cgrp_consumer_target_assignment_new(
+                                (char **)&MemberId.str, 1,
+                                &member_target_assignment);
+
+                        rd_kafka_mock_cgrp_consumer_target_assignment(
+                            mcluster, GroupId.str, target_assignment);
+                        rd_kafka_mock_cgrp_consumer_target_assignment_destroy(
+                            target_assignment);
+                        rd_kafka_topic_partition_list_destroy(
+                            member_target_assignment);
+                }
+
+                current_assignment = fixtures[i].current_assignment;
+                if (current_assignment) {
+                        /* Set topic id */
+                        for (j = 0; j < current_assignment->cnt; j++) {
+                                rd_kafka_topic_partition_set_topic_id(
+                                    &current_assignment->elems[j], mtopic->id);
+                        }
+                }
+
+                next_assignment =
+                    rd_kafka_mock_cgrp_consumer_member_next_assignment(
+                        member, current_assignment, &current_member_epoch);
+                RD_IF_FREE(current_assignment,
+                           rd_kafka_topic_partition_list_destroy);
+                RD_UT_ASSERT(
+                    current_member_epoch == fixtures[i].current_member_epoch,
+                    "current member epoch after call. Expected: %" PRId32
+                    ", got: %" PRId32,
+                    fixtures[i].current_member_epoch, current_member_epoch);
+
+                returned_assignment = fixtures[i].returned_assignment;
+                failures += ut_assert_topic_partitions(returned_assignment,
+                                                       next_assignment);
+
+                RD_IF_FREE(next_assignment,
+                           rd_kafka_topic_partition_list_destroy);
+                RD_IF_FREE(returned_assignment,
+                           rd_kafka_topic_partition_list_destroy);
+        }
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+        return failures;
+}
+
+/**
+ * @brief Test case where multiple revocations are acked.
+ *        Only when they're acked member epoch is bumped
+ *        and a new partition is returned to the member.
+ *
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment1(void) {
+        RD_UT_SAY("Case 1: multiple revocations acked");
+
+        const char *topic = "topic";
+        struct cgrp_consumer_member_next_assignment_fixture fixtures[] = {
+            {
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 3",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment              = "Current assignment empty",
+                .current_member_epoch = 3,
+                .current_assignment   = ut_topic_partitions(0),
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0",
+                .current_member_epoch = 3,
+                .current_assignment   = ut_topic_partitions(1, topic, 0),
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 1),
+                .returned_assignment = NULL,
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1,2",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment = NULL,
+            },
+            {
+                .comment = "Target assignment 0,1,3. Returned assignment 0,1",
+                .current_member_epoch = 3,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
+                .current_assignment = NULL,
+                .returned_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 1),
+            },
+            {
+                .comment = "Target assignment 0,3. Returned assignment 0",
+                .current_member_epoch = 3,
+                .target_assignment = ut_topic_partitions(2, topic, 0, topic, 3),
+                .current_assignment  = NULL,
+                .returned_assignment = ut_topic_partitions(1, topic, 0),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 1),
+                .returned_assignment = NULL,
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment = "Current assignment 0. Returned assignment 0,3. "
+                           "Epoch 3 -> 5",
+                .current_member_epoch = 5,
+                .current_assignment   = ut_topic_partitions(1, topic, 0),
+                .returned_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 3),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 5,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,3",
+                .current_member_epoch = 5,
+                .current_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 3),
+                .returned_assignment = NULL,
+            },
+        };
+        return ut_cgrp_consumer_member_next_assignment0(
+            topic, 4, fixtures, RD_ARRAY_SIZE(fixtures));
+}
+
+/**
+ * @brief Test case where multiple revocations happen.
+ *        Only the first revocation is acked and after that
+ *        there's a reassignment and epoch bump.
+ *
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment2(void) {
+        RD_UT_SAY(
+            "Case 2: reassignment of revoked partition, partial revocation "
+            "acknowledge");
+
+        const char *topic = "topic";
+        struct cgrp_consumer_member_next_assignment_fixture fixtures[] = {
+            {
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 3",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment              = "Current assignment 0,1,2",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment = NULL,
+            },
+            {
+                .comment = "Target assignment 0,1,3. Returned assignment 0,1",
+                .current_member_epoch = 3,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
+                .current_assignment = NULL,
+                .returned_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 1),
+            },
+            {
+                .comment = "Target assignment 0,3. Returned assignment 0",
+                .current_member_epoch = 3,
+                .target_assignment = ut_topic_partitions(2, topic, 0, topic, 3),
+                .current_assignment  = NULL,
+                .returned_assignment = ut_topic_partitions(1, topic, 0),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 1),
+                .returned_assignment = NULL,
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment = "Target+Returned assignment 0,1,3. Epoch 3 -> 6",
+                .current_member_epoch = 6,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
+                .current_assignment = NULL,
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 6,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1,3",
+                .current_member_epoch = 6,
+                .current_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
+                .returned_assignment = NULL,
+            },
+        };
+        return ut_cgrp_consumer_member_next_assignment0(
+            topic, 4, fixtures, RD_ARRAY_SIZE(fixtures));
+}
+
+/**
+ * @brief Test case where multiple revocations happen.
+ *        They aren't acked but then a
+ *        reassignment of all the revoked partition happens, bumping the epoch.
+ *
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment3(void) {
+        RD_UT_SAY(
+            "Case 3: reassignment of revoked partition and new partition, no "
+            "revocation acknowledge");
+
+        const char *topic = "topic";
+        struct cgrp_consumer_member_next_assignment_fixture fixtures[] = {
+            {
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 3",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment              = "Current assignment 0,1,2",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment = NULL,
+            },
+            {
+                .comment = "Target assignment 0,1,3. Returned assignment 0,1",
+                .current_member_epoch = 3,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 3),
+                .current_assignment = NULL,
+                .returned_assignment =
+                    ut_topic_partitions(2, topic, 0, topic, 1),
+            },
+            {
+                .comment = "Target assignment 0,3. Returned assignment 0",
+                .current_member_epoch = 3,
+                .target_assignment = ut_topic_partitions(2, topic, 0, topic, 3),
+                .current_assignment  = NULL,
+                .returned_assignment = ut_topic_partitions(1, topic, 0),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment = "Target+Returned assignment 0,1,2,3. Epoch 3 -> 6",
+                .current_member_epoch = 6,
+                .target_assignment    = ut_topic_partitions(
+                    3, topic, 0, topic, 1, topic, 2, topic, 3, NULL),
+                .returned_assignment = ut_topic_partitions(
+                    3, topic, 0, topic, 1, topic, 2, topic, 3, NULL),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 6,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1,2,3",
+                .current_member_epoch = 6,
+                .current_assignment   = ut_topic_partitions(
+                    3, topic, 0, topic, 1, topic, 2, topic, 3, NULL),
+                .returned_assignment = NULL,
+            },
+        };
+        return ut_cgrp_consumer_member_next_assignment0(
+            topic, 4, fixtures, RD_ARRAY_SIZE(fixtures));
+}
+
+/**
+ * @brief Test case where a disconnection happens and after that
+ *        the client send its assignment again, with same member epoch,
+ *        and receives back the returned assignment, even if the same.
+ *
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment4(void) {
+        RD_UT_SAY("Case 4: reconciliation after disconnection");
+
+        const char *topic = "topic";
+        struct cgrp_consumer_member_next_assignment_fixture fixtures[] = {
+            {
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 3",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment              = "Current assignment empty",
+                .current_member_epoch = 3,
+                .current_assignment   = ut_topic_partitions(0),
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment = "Disconnected, resends current assignment. Returns "
+                           "assignment again",
+                .reconnected          = rd_true,
+                .current_member_epoch = 3,
+                .current_assignment   = ut_topic_partitions(0),
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment              = "Empty heartbeat",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment              = "Current assignment 0,1,2",
+                .current_member_epoch = 3,
+                .current_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment = NULL,
+            },
+        };
+        return ut_cgrp_consumer_member_next_assignment0(
+            topic, 3, fixtures, RD_ARRAY_SIZE(fixtures));
+}
+
+/**
+ * @brief Test case where a session timeout happens and then
+ *        the client receives a FENCED_MEMBER_EPOCH error,
+ *        revokes all of its partitions and rejoins with epoch 0.
+ *
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment5(void) {
+        RD_UT_SAY("Case 5: fenced consumer");
+
+        const char *topic = "topic";
+        struct cgrp_consumer_member_next_assignment_fixture fixtures[] = {
+            {
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 3",
+                .current_member_epoch = 3,
+                .current_assignment   = NULL,
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment = "Session times out, receives FENCED_MEMBER_EPOCH. "
+                           "Epoch 3 -> 0",
+                .session_timed_out    = rd_true,
+                .current_member_epoch = -1,
+                .current_assignment   = NULL,
+                .returned_assignment  = NULL,
+            },
+            {
+                .comment = "Target+Returned assignment 0,1,2. Epoch 0 -> 6",
+                .target_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .current_member_epoch = 4,
+                .current_assignment   = NULL,
+                .returned_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+            },
+            {
+                .comment              = "Current assignment 0,1,2",
+                .current_member_epoch = 4,
+                .current_assignment =
+                    ut_topic_partitions(3, topic, 0, topic, 1, topic, 2),
+                .returned_assignment = NULL,
+            },
+        };
+        return ut_cgrp_consumer_member_next_assignment0(
+            topic, 3, fixtures, RD_ARRAY_SIZE(fixtures));
+}
+
+/**
+ * @brief Test all next assignment calculation cases,
+ *        for KIP-848 consumer group type and collect
+ *        number of errors.
+ *
+ * @return Number of occurred errors.
+ */
+static int ut_cgrp_consumer_member_next_assignment(void) {
+        RD_UT_BEGIN();
+        int failures = 0;
+
+        failures += ut_cgrp_consumer_member_next_assignment1();
+        failures += ut_cgrp_consumer_member_next_assignment2();
+        failures += ut_cgrp_consumer_member_next_assignment3();
+        failures += ut_cgrp_consumer_member_next_assignment4();
+        failures += ut_cgrp_consumer_member_next_assignment5();
+
+        RD_UT_ASSERT(!failures, "some tests failed");
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Mock cluster unit tests
+ */
+int unittest_mock_cluster(void) {
+        int fails = 0;
+        fails += ut_cgrp_consumer_member_next_assignment();
+        return fails;
 }

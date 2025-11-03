@@ -167,6 +167,14 @@ rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     size_t estimated_part_cnt,
     const rd_kafka_topic_partition_field_t *fields);
 
+rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions_nullable(
+    rd_kafka_buf_t *rkbuf,
+    rd_bool_t use_topic_id,
+    rd_bool_t use_topic_name,
+    size_t estimated_part_cnt,
+    const rd_kafka_topic_partition_field_t *fields,
+    rd_bool_t *parse_err);
+
 int rd_kafka_buf_write_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     const rd_kafka_topic_partition_list_t *parts,
@@ -237,6 +245,9 @@ void rd_kafka_OffsetForLeaderEpochRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);
 
+int rd_kafka_handle_OffsetFetch_err_action(rd_kafka_broker_t *rkb,
+                                           rd_kafka_resp_err_t err,
+                                           rd_kafka_buf_t *request);
 
 rd_kafka_resp_err_t
 rd_kafka_handle_OffsetFetch(rd_kafka_t *rk,
@@ -347,6 +358,8 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              int16_t max_ApiVersion,
                                              const char **states,
                                              size_t states_cnt,
+                                             const char **types,
+                                             size_t types_cnt,
                                              rd_kafka_replyq_t replyq,
                                              rd_kafka_resp_cb_t *resp_cb,
                                              void *opaque);
@@ -379,7 +392,8 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
     const rd_kafkap_str_t *group_instance_id,
     const rd_kafkap_str_t *rack_id,
     int32_t rebalance_timeout_ms,
-    const rd_kafka_topic_partition_list_t *subscribe_topics,
+    const rd_kafka_topic_partition_list_t *subscribed_topics,
+    rd_kafkap_str_t *subscribed_topic_regex,
     const rd_kafkap_str_t *remote_assignor,
     const rd_kafka_topic_partition_list_t *current_assignments,
     rd_kafka_replyq_t replyq,
@@ -392,6 +406,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest(rd_kafka_broker_t *rkb,
                                              const char *reason,
                                              rd_bool_t allow_auto_create_topics,
                                              rd_bool_t cgrp_update,
+                                             int32_t cgrp_subscription_version,
                                              rd_bool_t force_racks,
                                              rd_kafka_op_t *rko);
 
@@ -404,6 +419,7 @@ rd_kafka_resp_err_t rd_kafka_MetadataRequest_resp_cb(
     rd_bool_t include_cluster_authorized_operations,
     rd_bool_t include_topic_authorized_operations,
     rd_bool_t cgrp_update,
+    int32_t cgrp_subscription_version,
     rd_bool_t force_racks,
     rd_kafka_resp_cb_t *resp_cb,
     rd_kafka_replyq_t replyq,
@@ -618,6 +634,25 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
                            rd_kafka_replyq_t replyq,
                            rd_kafka_resp_cb_t *resp_cb,
                            void *opaque);
+
+rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *elect_leaders /*(rd_kafka_EleactLeaders_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
+rd_kafka_error_t *
+rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
+                                      char **groups,
+                                      size_t group_cnt,
+                                      rd_bool_t include_authorized_operations,
+                                      rd_kafka_replyq_t replyq,
+                                      rd_kafka_resp_cb_t *resp_cb,
+                                      void *opaque);
 
 void rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(
     rd_tmpabuf_t *tbuf,

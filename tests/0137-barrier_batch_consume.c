@@ -47,7 +47,7 @@ typedef struct consumer_s {
 static int consumer_batch_queue(void *arg) {
         consumer_t *arguments = arg;
         int msg_cnt           = 0;
-        int i;
+        int i, err_cnt = 0;
         test_timing_t t_cons;
 
         rd_kafka_queue_t *rkq     = arguments->rkq;
@@ -72,19 +72,29 @@ static int consumer_batch_queue(void *arg) {
                                                     consume_msg_cnt);
         TIMING_STOP(&t_cons);
 
-        TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
-                 msg_cnt, arguments->consume_msg_cnt,
-                 arguments->expected_msg_cnt);
-        TEST_ASSERT(msg_cnt == arguments->expected_msg_cnt,
-                    "consumed %d messages, expected %d", msg_cnt,
-                    arguments->expected_msg_cnt);
-
         for (i = 0; i < msg_cnt; i++) {
-                if (test_msgver_add_msg(rk, arguments->mv, rkmessage[i]) == 0)
+                rd_kafka_message_t *rkm = rkmessage[i];
+                if (rkm->err) {
+                        TEST_WARN("Consumer error: %s: %s\n",
+                                  rd_kafka_err2name(rkm->err),
+                                  rd_kafka_message_errstr(rkm));
+                        err_cnt++;
+                } else if (test_msgver_add_msg(rk, arguments->mv,
+                                               rkmessage[i]) == 0) {
                         TEST_FAIL(
                             "The message is not from testid "
                             "%" PRId64,
                             testid);
+                }
+        }
+        TEST_SAY("%s consumed %d/%d/%d message(s)\n", rd_kafka_name(rk),
+                 msg_cnt, arguments->consume_msg_cnt,
+                 arguments->expected_msg_cnt);
+        TEST_ASSERT((msg_cnt - err_cnt) == arguments->expected_msg_cnt,
+                    "consumed %d messages, %d errors, expected %d", msg_cnt,
+                    err_cnt, arguments->expected_msg_cnt);
+
+        for (i = 0; i < msg_cnt; i++) {
                 rd_kafka_message_destroy(rkmessage[i]);
         }
 
@@ -126,7 +136,7 @@ static void do_test_consume_batch_with_seek(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -216,7 +226,7 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -321,7 +331,7 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -417,7 +427,7 @@ static void do_test_consume_batch_store_offset(void) {
         /* Produce messages */
         topic = test_mk_topic_name("0137-barrier_batch_consume", 1);
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 5000);
 
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
@@ -498,7 +508,7 @@ static void do_test_consume_batch_control_msgs(void) {
 
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_create_topic(producer, topic, partition_cnt, 1);
+        test_create_topic_wait_exists(producer, topic, partition_cnt, 1, 5000);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(producer, 30 * 1000));
 

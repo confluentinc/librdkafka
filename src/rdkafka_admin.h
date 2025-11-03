@@ -35,6 +35,11 @@
 #include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
+
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
+#include <openssl/rand.h>
+#endif
+
 #if WITH_SSL
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
@@ -108,6 +113,12 @@ struct rd_kafka_AdminOptions_s {
                                           *   to query for.
                                           *   Valid for: ListConsumerGroups.
                                           */
+
+        rd_kafka_confval_t
+            match_consumer_group_types; /**< PTR: list of consumer group types
+                                         *   to query for.
+                                         *   Valid for: ListConsumerGroups.
+                                         */
 
         rd_kafka_confval_t
             isolation_level; /**< INT:Isolation Level needed for list Offset
@@ -271,6 +282,38 @@ struct rd_kafka_ConfigResource_result_s {
                               *   List of config resources, sans config
                               *   but with response error values. */
 };
+
+/**
+ * @brief Resource type specific to config apis.
+ */
+typedef enum rd_kafka_ConfigResourceType_t {
+        RD_KAFKA_CONFIG_RESOURCE_UNKNOWN = 0,
+        RD_KAFKA_CONFIG_RESOURCE_TOPIC   = 2,
+        RD_KAFKA_CONFIG_RESOURCE_BROKER  = 4,
+        RD_KAFKA_CONFIG_RESOURCE_GROUP   = 32,
+} rd_kafka_ConfigResourceType_t;
+
+/**
+ * @brief Maps `rd_kafka_ResourceType_t` to `rd_kafka_ConfigResourceType_t`
+ *        for Config Apis. We are incorrectly using `rd_kafka_ResourceType_t` in
+ *        both Config Apis and ACL Apis. So, we need this function to map the
+ *        resource type internally to `rd_kafka_ConfigResourceType_t`. Like the
+ *        enum value for `GROUP` is 32 in Config Apis, but it is 3 for ACL Apis.
+ */
+rd_kafka_ConfigResourceType_t
+rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype);
+
+/**
+ * @brief Maps `rd_kafka_ConfigResourceType_t` to `rd_kafka_ResourceType_t`
+ *        for Config Apis. We are incorrectly using `rd_kafka_ResourceType_t` in
+ *        both Config Apis and ACL Apis. So, we need this function to map the
+ *        `rd_kafka_ConfigResourceType_t` internally to
+ *        `rd_kafka_ResourceType_t`. Like the enum value for `GROUP` is 32 in
+ *        Config Apis, but it is 3 for ACL Apis.
+ */
+rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
+    rd_kafka_ConfigResourceType_t config_resource_type);
+
 
 /**@}*/
 
@@ -445,6 +488,7 @@ struct rd_kafka_ConsumerGroupListing_s {
         /** Is it a simple consumer group? That means empty protocol_type. */
         rd_bool_t is_simple_consumer_group;
         rd_kafka_consumer_group_state_t state; /**< Consumer group state. */
+        rd_kafka_consumer_group_type_t type;   /**< Consumer group type. */
 };
 
 
@@ -483,6 +527,9 @@ struct rd_kafka_MemberDescription_s {
         char *group_instance_id;                /**< Group instance id */
         char *host;                             /**< Group member host */
         rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
+        rd_kafka_MemberAssignment_t
+            *target_assignment; /**< Target assignment. `NULL` for `classic`
+                                   protocol */
 };
 
 /**
@@ -502,6 +549,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         char *partition_assignor;
         /** Consumer group state. */
         rd_kafka_consumer_group_state_t state;
+        /** Consumer group type. */
+        rd_kafka_consumer_group_type_t type;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
         /** Count of operations allowed for topic. -1 indicates operations not
@@ -583,6 +632,29 @@ typedef struct rd_kafka_ClusterDescription_s {
                                      * NULL if operations were not requested */
 
 } rd_kafka_ClusterDescription_t;
+
+/**@}*/
+
+/**
+ * @name ElectLeaders
+ * @{
+ */
+
+/**
+ * @struct ElectLeaders request object
+ */
+struct rd_kafka_ElectLeaders_s {
+        rd_kafka_ElectionType_t election_type; /*Election Type*/
+        rd_kafka_topic_partition_list_t
+            *partitions; /*TopicPartitions for election*/
+};
+
+/**
+ * @struct ElectLeaders result object
+ */
+typedef struct rd_kafka_ElectLeadersResult_s {
+        rd_list_t partitions; /**< Type (rd_kafka_topic_partition_result_t *) */
+} rd_kafka_ElectLeadersResult_t;
 
 /**@}*/
 

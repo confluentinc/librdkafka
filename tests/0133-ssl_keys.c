@@ -53,7 +53,11 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
         SUB_TEST_QUICK("keystore type = %s, correct password = %s", type,
                        RD_STR_ToF(correct_password));
 
-        test_conf_init(&conf, NULL, 30);
+        /* Don't use test_conf_init otherwise
+         * key file configuration value conflicts
+         * with PEM string configuration,
+         * when running in --ssl mode. */
+        conf = rd_kafka_conf_new();
         test_conf_set(conf, "security.protocol", "SSL");
 
         if (!strcmp(type, "PKCS12")) {
@@ -74,17 +78,33 @@ static void do_test_ssl_keys(const char *type, rd_bool_t correct_password) {
                         test_conf_set(conf, "ssl.key.password",
                                       TEST_FIXTURES_KEY_PASSWORD);
                 else
-                        test_conf_set(conf, "ssl.keystore.password",
-                                      TEST_FIXTURES_KEYSTORE_PASSWORD
-                                      " and more");
+                        test_conf_set(conf, "ssl.key.password",
+                                      TEST_FIXTURES_KEY_PASSWORD " and more");
+        } else if (!strcmp(type, "PEM_STRING")) {
+                char buf[1024 * 50];
+                if (!test_read_file(TEST_CERTIFICATE_LOCATION, buf,
+                                    sizeof(buf)))
+                        TEST_FAIL("Failed to read certificate file\n");
+                test_conf_set(conf, "ssl.certificate.pem", buf);
+
+                if (!test_read_file(TEST_KEY_LOCATION, buf, sizeof(buf)))
+                        TEST_FAIL("Failed to read key file\n");
+                test_conf_set(conf, "ssl.key.pem", buf);
+
+                if (correct_password)
+                        test_conf_set(conf, "ssl.key.password",
+                                      TEST_FIXTURES_KEY_PASSWORD);
+                else
+                        test_conf_set(conf, "ssl.key.password",
+                                      TEST_FIXTURES_KEY_PASSWORD " and more");
         } else {
                 TEST_FAIL("Unexpected key type\n");
         }
 
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         if ((rk != NULL) != correct_password) {
-                TEST_FAIL("Expected rd_kafka creation to %s\n",
-                          correct_password ? "succeed" : "fail");
+                TEST_FAIL("Expected rd_kafka creation to %s: %s\n",
+                          correct_password ? "succeed" : "fail", errstr);
         }
 
         if (rk)
@@ -124,5 +144,7 @@ int main_0133_ssl_keys(int argc, char **argv) {
         do_test_ssl_keys("PKCS12", rd_false);
         do_test_ssl_keys("PEM", rd_true);
         do_test_ssl_keys("PEM", rd_false);
+        do_test_ssl_keys("PEM_STRING", rd_true);
+        do_test_ssl_keys("PEM_STRING", rd_false);
         return 0;
 }

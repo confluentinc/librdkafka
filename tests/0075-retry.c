@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,6 +58,10 @@ static struct {
 
         } next;
         int term;
+        /* Number of created sockets */
+        int num_sockets;
+        /* Current test, available to all threads as it's not TLS */
+        struct test *test_curr;
 } ctrl;
 
 static int ctrl_thrd_main(void *arg) {
@@ -67,6 +72,10 @@ static int ctrl_thrd_main(void *arg) {
                 int64_t now;
 
                 cnd_timedwait_ms(&ctrl.cnd, &ctrl.lock, 10);
+                if (!test_socket_find(ctrl.test_curr, ctrl.skm))
+                        /* Socket was closed and destroyed when
+                         * releasing the lock. */
+                        break;
 
                 if (ctrl.cmd.ts_at) {
                         ctrl.next.ts_at = ctrl.cmd.ts_at;
@@ -106,8 +115,16 @@ static int ctrl_thrd_main(void *arg) {
 static int connect_cb(struct test *test, sockem_t *skm, const char *id) {
 
         mtx_lock(&ctrl.lock);
+        if (ctrl.num_sockets < 1) {
+                /* Since librdkafka is decommissioning brokers,
+                 * first connection is with a bootstrap broker,
+                 * next one is with a learned one. */
+                ctrl.num_sockets++;
+                mtx_unlock(&ctrl.lock);
+                return 0;
+        }
         if (ctrl.skm) {
-                /* Reject all but the first connect */
+                /* Reject all but the first two connects */
                 mtx_unlock(&ctrl.lock);
                 return ECONNREFUSED;
         }
@@ -170,14 +187,26 @@ static void do_test_low_socket_timeout(const char *topic) {
 
         mtx_init(&ctrl.lock, mtx_plain);
         cnd_init(&ctrl.cnd);
+        ctrl.test_curr = test_curr;
 
         TEST_SAY("Test Metadata request retries on timeout\n");
+
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "socket.timeout.ms", "1000");
         test_conf_set(conf, "socket.max.fails", "12345");
         test_conf_set(conf, "retry.backoff.ms", "5000");
         test_conf_set(conf, "retry.backoff.max.ms", "5000");
+        /* Sparse re-connect interval depends on `reconnect.backoff.ms` / 2
+         * increasing it allows to saturate the sparse re-connect interval
+         * and avoid to concurrent connects: the first for setting the bootstrap
+         * brokers and the second for adding a new topic to get metadata for.
+         * This way the test is more reliable especially when using valgrind
+         * as it needs to keep the last connection only,
+         * to add a delay later. */
+        test_conf_set(conf, "reconnect.backoff.ms", "2000");
+
         /* Avoid api version requests (with their own timeout) to get in
          * the way of our test */
         test_conf_set(conf, "api.version.request", "false");
@@ -243,6 +272,14 @@ static void do_test_low_socket_timeout(const char *topic) {
 
 int main_0075_retry(int argc, char **argv) {
         const char *topic = test_mk_topic_name("0075_retry", 1);
+
+        if (test_needs_auth()) {
+                /* When authentication is involved there's the need
+                 * for additional SASL calls. These are delayed too and
+                 * it changes test timing. */
+                TEST_SKIP("Cannot run this test with SSL/SASL\n");
+                return 0;
+        }
 
         do_test_low_socket_timeout(topic);
 

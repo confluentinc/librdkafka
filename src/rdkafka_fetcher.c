@@ -677,7 +677,7 @@ static rd_kafka_resp_err_t rd_kafka_fetch_reply_handle_partition(
          * desynchronized clusters): if so ignore it. */
         tver_skel.rktp = rktp;
         tver           = rd_list_find(request->rkbuf_rktp_vers, &tver_skel,
-                            rd_kafka_toppar_ver_cmp);
+                                      rd_kafka_toppar_ver_cmp);
         rd_kafka_assert(NULL, tver);
         if (tver->rktp != rktp || tver->version < fetch_version) {
                 rd_rkb_dbg(rkb, MSG, "DROP",
@@ -943,7 +943,21 @@ static void rd_kafka_broker_fetch_reply(rd_kafka_t *rk,
         }
 }
 
+/**
+ * @brief Check if any toppars have a zero topic id.
+ *
+ */
+static rd_bool_t can_use_topic_ids(rd_kafka_broker_t *rkb) {
+        rd_kafka_toppar_t *rktp = rkb->rkb_active_toppar_next;
+        do {
+                if (RD_KAFKA_UUID_IS_ZERO(rktp->rktp_rkt->rkt_topic_id))
+                        return rd_false;
+        } while ((rktp = CIRCLEQ_LOOP_NEXT(&rkb->rkb_active_toppars, rktp,
+                                           rktp_activelink)) !=
+                 rkb->rkb_active_toppar_next);
 
+        return rd_true;
+}
 
 /**
  * @brief Build and send a Fetch request message for all underflowed toppars
@@ -979,7 +993,13 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_Fetch,
                                                           0, 16, NULL);
-        rkbuf      = rd_kafka_buf_new_flexver_request(
+
+        /* Fallback to version 12 if topic id is null which can happen if
+         * inter.broker.protocol.version is < 2.8 */
+        if (ApiVersion > 12 && !can_use_topic_ids(rkb))
+                ApiVersion = 12;
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_Fetch, 1,
             /* MaxWaitTime+MinBytes+MaxBytes+IsolationLevel+
              *   SessionId+Epoch+TopicCnt */
@@ -1207,12 +1227,32 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
  * @locality any
  * @locks toppar_lock() MUST be held
  */
-rd_bool_t rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
+static rd_bool_t rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(
     rd_kafka_toppar_t *rktp) {
         return rktp->rktp_op_version > rktp->rktp_fetch_version ||
                rd_kafka_fetch_pos_cmp(&rktp->rktp_next_fetch_start,
                                       &rktp->rktp_last_next_fetch_start) ||
                rktp->rktp_offsets.fetch_pos.offset == RD_KAFKA_OFFSET_INVALID;
+}
+
+/**
+ * @brief Return next fetch start position:
+ *        if it should start fetching from next fetch start
+ *        or continue with current fetch pos.
+ *
+ * @param rktp The toppar
+ *
+ * @returns Next fetch start position
+ *
+ * @locality any
+ * @locks toppar_lock() MUST be held
+ */
+rd_kafka_fetch_pos_t
+rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rd_kafka_toppar_t *rktp) {
+        if (rd_kafka_toppar_fetch_decide_start_from_next_fetch_start(rktp))
+                return rktp->rktp_next_fetch_start;
+        else
+                return rktp->rktp_offsets.fetch_pos;
 }
 
 /**

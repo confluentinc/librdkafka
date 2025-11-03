@@ -2,47 +2,68 @@
 #
 # Verifies RPM and DEB packages from Confluent Platform
 #
+base_url=$1
+platform=$2
+version=$3
 
-cpver=$1
-base_url=$2
-
-if [[ -z $base_url ]]; then
-    echo "Usage: $0 <CP-M.m-version> <base-url>"
+if [[ -z $base_url || -z $version ]]; then
+    echo "Usage: $0 <base-url> <platform> <version>"
     echo ""
-    echo " <CP-M.m-version> is the Major.minor version of CP, e.g., 5.3"
     echo " <base-url> is the release base bucket URL"
+    echo " <platform> is platform to verify (e.g. linux/amd64)"
+    echo " <version> is the expected version"
     exit 1
 fi
 
 thisdir="$( cd "$(dirname "$0")" ; pwd -P )"
 
-echo "#### Verifying RPM packages ####"
-docker run -v $thisdir:/v rockylinux:8 /v/verify-rpm.sh $cpver $base_url
-docker run -v $thisdir:/v rockylinux:9 /v/verify-rpm.sh $cpver $base_url
-rpm_status=$?
+verify_debian() {
+    local version=$2
+    docker run -v $thisdir:/v $1 /v/verify-deb.sh $base_url $version
+    deb_status=$?
+    if [[ $deb_status == 0 ]]; then
+        echo "SUCCESS: Debian based $1 $2 packages verified"
+    else
+        echo "ERROR: Debian based $1 $2 package verification failed"
+        exit 1
+    fi
+}
 
-echo "#### Verifying Debian packages ####"
-docker run -v $thisdir:/v debian:10 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v debian:11 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v debian:12 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v ubuntu:20.04 /v/verify-deb.sh $cpver $base_url
-docker run -v $thisdir:/v ubuntu:22.04 /v/verify-deb.sh $cpver $base_url
-deb_status=$?
+verify_rpm() {
+    local version=$2
+    docker run -v $thisdir:/v $1 /v/verify-rpm.sh $base_url $version
+    rpm_status=$?
+    if [[ $rpm_status == 0 ]]; then
+        echo "SUCCESS: RPM $1 $2 packages verified"
+    else
+        echo "ERROR: RPM $1 $2 package verification failed"
+        exit 1
+    fi
+}
 
+verify_rpm_distros() {
+    local platform=$1
+    local version=$2
+    echo "#### Verifying RPM packages for $platform ####"
+    # Last RHEL 8 version is 2.4.0
+    verify_rpm rockylinux:8 "2.4.0"
+    verify_rpm rockylinux:9 $version
+}
 
-if [[ $rpm_status == 0 ]]; then
-    echo "SUCCESS: RPM packages verified"
-else
-    echo "ERROR: RPM package verification failed"
-fi
+verify_debian_distros() {
+    local platform=$1
+    local version=$2
+    echo "#### Verifying Debian packages for $platform ####"
+    verify_debian debian:11 $version
+    verify_debian debian:12 $version
+    verify_debian ubuntu:20.04 $version
+    verify_debian ubuntu:22.04 $version
+    verify_debian ubuntu:24.04 $version
+}
 
-if [[ $deb_status == 0 ]]; then
-    echo "SUCCESS: Debian packages verified"
-else
-    echo "ERROR: Debian package verification failed"
-fi
+verify_distros() {
+    verify_rpm_distros $1 $2
+    verify_debian_distros $1 $2
+}
 
-if [[ $deb_status != 0 || $rpm_status != 0 ]]; then
-    exit 1
-fi
-
+verify_distros $platform $version

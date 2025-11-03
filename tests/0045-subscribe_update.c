@@ -101,7 +101,7 @@ static void await_assignment(const char *pfx,
         if (fails > 0)
                 TEST_FAIL("%s: assignment mismatch: see above", pfx);
 
-        rd_kafka_assign(rk, tps);
+        test_consumer_assign_by_rebalance_protocol("rebalance event", rk, tps);
         rd_kafka_event_destroy(rkev);
 }
 
@@ -112,6 +112,7 @@ static void await_assignment(const char *pfx,
 static void
 await_revoke(const char *pfx, rd_kafka_t *rk, rd_kafka_queue_t *queue) {
         rd_kafka_event_t *rkev;
+        rd_kafka_topic_partition_list_t *tps;
 
         TEST_SAY("%s: waiting for revoke\n", pfx);
         rkev = test_wait_event(queue, RD_KAFKA_EVENT_REBALANCE, 30000);
@@ -121,7 +122,10 @@ await_revoke(const char *pfx, rd_kafka_t *rk, rd_kafka_queue_t *queue) {
                         RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                     "expected REVOKE, got %s",
                     rd_kafka_err2str(rd_kafka_event_error(rkev)));
-        rd_kafka_assign(rk, NULL);
+        tps = rd_kafka_event_topic_partition_list(rkev);
+
+        test_consumer_unassign_by_rebalance_protocol("rebalance event", rk,
+                                                     tps);
         rd_kafka_event_destroy(rkev);
 }
 
@@ -231,7 +235,7 @@ static void do_test_non_exist_and_partchange(void) {
         await_no_rebalance("#1: empty", rk, queue, 10000);
 
         TEST_SAY("#1: creating topic %s\n", topic_a);
-        test_create_topic(NULL, topic_a, 2, 1);
+        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
 
         await_assignment("#1: proper", rk, queue, 1, topic_a, 2);
 
@@ -266,6 +270,7 @@ static void do_test_regex(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_queue_t *queue;
+        const char *rebalance_protocol;
 
         /**
          * Regex test:
@@ -290,8 +295,7 @@ static void do_test_regex(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_b);
-        test_create_topic(NULL, topic_b, 2, 1);
-        rd_sleep(1);  // FIXME: do check&wait loop instead
+        test_create_topic_wait_exists(NULL, topic_b, 2, 1, 5000);
 
         TEST_SAY("Regex: Subscribing to %s & %s & %s\n", topic_b, topic_d,
                  topic_e);
@@ -301,18 +305,26 @@ static void do_test_regex(void) {
                          2);
 
         TEST_SAY("Regex: creating topic %s (not subscribed)\n", topic_c);
-        test_create_topic(NULL, topic_c, 4, 1);
+        test_create_topic_wait_exists(NULL, topic_c, 4, 1, 5000);
 
         /* Should not see a rebalance since no topics are matched. */
         await_no_rebalance("Regex: empty", rk, queue, 10000);
 
         TEST_SAY("Regex: creating topic %s (subscribed)\n", topic_d);
-        test_create_topic(NULL, topic_d, 1, 1);
+        test_create_topic_wait_exists(NULL, topic_d, 1, 1, 5000);
 
-        await_revoke("Regex: rebalance after topic creation", rk, queue);
+        if (test_consumer_group_protocol_classic())
+                await_revoke("Regex: rebalance after topic creation", rk,
+                             queue);
 
-        await_assignment("Regex: two topics exist", rk, queue, 2, topic_b, 2,
-                         topic_d, 1);
+        rebalance_protocol = rd_kafka_rebalance_protocol(rk);
+        if (!strcmp(rebalance_protocol, "COOPERATIVE")) {
+                await_assignment("Regex: two topics exist", rk, queue, 1,
+                                 topic_d, 1);
+        } else {
+                await_assignment("Regex: two topics exist", rk, queue, 2,
+                                 topic_b, 2, topic_d, 1);
+        }
 
         test_consumer_close(rk);
         rd_kafka_queue_destroy(queue);
@@ -364,12 +376,10 @@ static void do_test_topic_remove(void) {
         queue = rd_kafka_queue_get_consumer(rk);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_f);
-        test_create_topic(NULL, topic_f, parts_f, 1);
+        test_create_topic_wait_exists(NULL, topic_f, parts_f, 1, 5000);
 
         TEST_SAY("Topic removal: creating topic %s (subscribed)\n", topic_g);
-        test_create_topic(NULL, topic_g, parts_g, 1);
-
-        rd_sleep(1);  // FIXME: do check&wait loop instead
+        test_create_topic_wait_exists(NULL, topic_g, parts_g, 1, 5000);
 
         TEST_SAY("Topic removal: Subscribing to %s & %s\n", topic_f, topic_g);
         topics = rd_kafka_topic_partition_list_new(2);
@@ -493,7 +503,7 @@ static void do_test_replica_rack_change_mock(const char *assignment_strategy,
         const char *topic        = "topic";
         const char *test_name    = tsprintf(
             "Replica rack changes (%s, subscription = \"%s\", %s client.rack, "
-            "%s replica.rack)",
+               "%s replica.rack)",
             assignment_strategy, subscription,
             use_client_rack ? "with" : "without",
             use_replica_rack ? "with" : "without");
@@ -677,6 +687,242 @@ static void do_test_replica_rack_change_leader_no_rack_mock(
         SUB_TEST_PASS();
 }
 
+/**
+ * Checking assignments and revocation operations for subscribe and
+ * unsubcribe with regular topic names and regex.
+ */
+static void do_test_resubscribe_with_regex() {
+        char *topic1  = rd_strdup(test_mk_topic_name("topic_regex1", 1));
+        char *topic2  = rd_strdup(test_mk_topic_name("topic_regex2", 1));
+        char *topic_a = rd_strdup(test_mk_topic_name("topic_a", 1));
+        char *group   = rd_strdup(
+            tsprintf("group_test_sub_regex_%s", test_str_id_generate_tmp()));
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *queue;
+
+        SUB_TEST("Resubscribe with Regex");
+
+        /**
+         * Topic resubscribe with regex test:
+         * - Create topic topic_regex1 & topic_regex2
+         * - Subscribe to topic_regex1
+         * - Verify topic_regex1 assignment
+         * - Unsubscribe
+         * - Verify revocation
+         * - Subscribe to topic_regex2
+         * - Verify topic_regex2 assignment
+         * - Unsubscribe
+         * - Verify revocation
+         * - Subscribe to regex ^.*topic_regex.*
+         * - Verify topic_regex1 & topic_regex2 assignment
+         * - Unsubscribe
+         * - Verify revocation
+         * - Subscribe to regex ^.*topic_regex.* and topic_a
+         * - Verify topic_regex1, topic_regex2 and topic_a assignment
+         * - Unsubscribe
+         * - Verify revocation
+         */
+
+        TEST_SAY("Creating topic %s\n", topic1);
+        test_create_topic_wait_exists(NULL, topic1, 4, 1, 5000);
+
+        TEST_SAY("Creating topic %s\n", topic2);
+        test_create_topic_wait_exists(NULL, topic2, 4, 1, 5000);
+
+        TEST_SAY("Creating topic %s\n", topic_a);
+        test_create_topic_wait_exists(NULL, topic_a, 2, 1, 5000);
+
+        test_conf_init(&conf, NULL, 60);
+
+        rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
+        rk    = test_create_consumer(group, NULL, conf, NULL);
+        queue = rd_kafka_queue_get_consumer(rk);
+
+        /* Subscribe to topic1 */
+        TEST_SAY("Subscribing to %s\n", topic1);
+        test_consumer_subscribe(rk, topic1);
+        /* Wait for assignment */
+        await_assignment("Assignment for topic1", rk, queue, 1, topic1, 4);
+
+        /* Unsubscribe from topic1 */
+        TEST_SAY("Unsubscribing from %s\n", topic1);
+        rd_kafka_unsubscribe(rk);
+        /* Wait for revocation */
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        /* Subscribe to topic2 */
+        TEST_SAY("Subscribing to %s\n", topic2);
+        test_consumer_subscribe(rk, topic2);
+        /* Wait for assignment */
+        await_assignment("Assignment for topic2", rk, queue, 1, topic2, 4);
+
+        /* Unsubscribe from topic2 */
+        TEST_SAY("Unsubscribing from %s\n", topic2);
+        rd_kafka_unsubscribe(rk);
+        /* Wait for revocation */
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        /* Subscribe to regex ^.*topic_regex.* */
+        TEST_SAY("Subscribing to regex ^.*topic_regex.*\n");
+        test_consumer_subscribe(rk, "^.*topic_regex.*");
+        if (!test_consumer_group_protocol_classic()) {
+                /** Regex matching is async on the broker side for KIP-848
+                 * protocol. */
+                rd_sleep(5);
+        }
+        /* Wait for assignment */
+        await_assignment("Assignment for topic1 and topic2", rk, queue, 2,
+                         topic1, 4, topic2, 4);
+
+        /* Unsubscribe from regex ^.*topic_regex.* */
+        TEST_SAY("Unsubscribing from regex ^.*topic_regex.*\n");
+        rd_kafka_unsubscribe(rk);
+        /* Wait for revocation */
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        /* Subscribe to regex ^.*topic_regex.* and topic_a literal */
+        TEST_SAY("Subscribing to regex ^.*topic_regex.* and topic_a\n");
+        test_consumer_subscribe_multi(rk, 2, "^.*topic_regex.*", topic_a);
+        /* Wait for assignment */
+        if (test_consumer_group_protocol_classic()) {
+                await_assignment("Assignment for topic1, topic2 and topic_a",
+                                 rk, queue, 3, topic1, 4, topic2, 4, topic_a,
+                                 2);
+        } else {
+                /* KIP-848 broker is assigning literal topics first in 1 HB call
+                 * and all the matched ones in later HB call*/
+                await_assignment("Assignment for topic_a", rk, queue, 1,
+                                 topic_a, 2);
+                await_assignment("Assignment for topic1 and topic2", rk, queue,
+                                 2, topic1, 4, topic2, 4);
+        }
+
+        /* Unsubscribe */
+        TEST_SAY("Unsubscribing\n");
+        rd_kafka_unsubscribe(rk);
+        await_revoke("Revocation after unsubscribing", rk, queue);
+
+        /* Cleanup */
+        test_delete_topic(rk, topic1);
+        test_delete_topic(rk, topic2);
+        test_delete_topic(rk, topic_a);
+
+        test_consumer_close(rk);
+        rd_kafka_queue_destroy(queue);
+
+        rd_kafka_destroy(rk);
+
+        rd_free(topic1);
+        rd_free(topic2);
+        rd_free(topic_a);
+        rd_free(group);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Create many topics and apply several subscription
+ *        updates, unsubscribing and re-subscribing too.
+ *        After changing some subscriptions verifies that the assignment
+ *        corresponds to last one.
+ *
+ * @param with_rebalance_cb Use a rebalance callback to perform the assignment.
+ *                          It needs to poll the consumer when awaiting for the
+ *                          assignment in this case.
+ */
+static void do_test_subscribe_many_updates(rd_bool_t with_rebalance_cb) {
+#define TOPIC_CNT 100
+        char *topics[TOPIC_CNT] = {0};
+        char *topic;
+        char *group;
+        size_t i;
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const int partition_cnt = 4;
+
+        SUB_TEST("%s", with_rebalance_cb ? "with rebalance callback"
+                                         : "without rebalance callback");
+
+        RD_ARRAY_FOREACH_INDEX(topic, topics, i) {
+                char topic_i[17];
+                rd_snprintf(topic_i, sizeof(topic_i), "topic%" PRIusz, i);
+                topics[i] = rd_strdup(test_mk_topic_name(topic_i, 1));
+        };
+        group = topics[0];
+
+        test_conf_init(&conf, NULL, 60);
+        if (with_rebalance_cb)
+                rd_kafka_conf_set_rebalance_cb(conf, test_rebalance_cb);
+        rk = test_create_consumer(group, NULL, conf, NULL);
+
+        TEST_SAY("Creating %d topics\n", TOPIC_CNT);
+        TEST_CALL_ERR__(test_CreateTopics_simple(rk, NULL, topics, TOPIC_CNT,
+                                                 partition_cnt, NULL));
+        test_wait_topic_exists(rk, topics[TOPIC_CNT - 1], 5000);
+        /* Give the cluster some more time to propagate metadata
+         * for TOPICS_CNT topics */
+        rd_sleep(1);
+
+        RD_ARRAY_FOREACH_INDEX(topic, topics, i) {
+                const int max_subscription_size = 5;
+                size_t j;
+                int k;
+                int subscription_size =
+                    RD_MIN(max_subscription_size, TOPIC_CNT - i);
+                int expected_assignment_cnt = subscription_size * partition_cnt;
+                rd_kafka_topic_partition_list_t *expected_assignment = NULL;
+
+                rd_kafka_topic_partition_list_t *subscription =
+                    rd_kafka_topic_partition_list_new(subscription_size);
+                rd_bool_t check_expected_assignment =
+                    (i % 5 == 0 || i == TOPIC_CNT - 1);
+                rd_bool_t do_unsubscribe = i % 7 == 0;
+
+                if (check_expected_assignment)
+                        expected_assignment = rd_kafka_topic_partition_list_new(
+                            expected_assignment_cnt);
+
+                for (j = i; j < i + subscription_size; j++) {
+                        rd_kafka_topic_partition_list_add(
+                            subscription, topics[j], RD_KAFKA_PARTITION_UA);
+                        /* We unsubscribe every 7 iteration and
+                         * we check assignments every 5 iteration so
+                         * at 7 * 5 we unsubscribe and check that assignment
+                         * is empty. */
+                        if (check_expected_assignment && !do_unsubscribe)
+                                for (k = 0; k < partition_cnt; k++)
+                                        rd_kafka_topic_partition_list_add(
+                                            expected_assignment, topics[j], k);
+                }
+                TEST_CALL_ERR__(rd_kafka_subscribe(rk, subscription));
+                rd_kafka_topic_partition_list_destroy(subscription);
+
+                if (do_unsubscribe)
+                        TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
+                if (check_expected_assignment) {
+                        test_consumer_wait_assignment_topic_partition_list(
+                            rk,
+                            /* poll when we have a rebalance callback */
+                            with_rebalance_cb, expected_assignment, 30000);
+                        rd_kafka_topic_partition_list_destroy(
+                            expected_assignment);
+                }
+        };
+
+        TEST_CALL_ERR__(
+            test_DeleteTopics_simple(rk, NULL, topics, TOPIC_CNT, NULL));
+        RD_ARRAY_FOREACH_INDEX(topic, topics, i) {
+                rd_free(topic);
+        };
+
+        test_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+#undef TOPIC_CNT
+}
+
 int main_0045_subscribe_update(int argc, char **argv) {
 
         if (!test_can_create_topics(1))
@@ -706,6 +952,8 @@ int main_0045_subscribe_update_topic_remove(int argc, char **argv) {
 
 
 int main_0045_subscribe_update_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         do_test_regex_many_mock("range", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_false);
         do_test_regex_many_mock("cooperative-sticky", rd_true);
@@ -713,12 +961,28 @@ int main_0045_subscribe_update_mock(int argc, char **argv) {
         return 0;
 }
 
+int main_0045_resubscribe_with_regex(int argc, char **argv) {
+        do_test_resubscribe_with_regex();
+        return 0;
+}
+
+int main_0045_subscribe_many_updates(int argc, char **argv) {
+        do_test_subscribe_many_updates(rd_false);
+        do_test_subscribe_many_updates(rd_true);
+        return 0;
+}
 
 int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
         int use_replica_rack = 0;
         int use_client_rack  = 0;
 
         TEST_SKIP_MOCK_CLUSTER(0);
+
+        /* KIP 848 Mock broker assignor isn't rack-aware. */
+        if (!test_consumer_group_protocol_classic()) {
+                TEST_SKIP("Test meaningful only with classic protocol\n");
+                return 0;
+        }
 
         for (use_replica_rack = 0; use_replica_rack < 2; use_replica_rack++) {
                 for (use_client_rack = 0; use_client_rack < 2;
@@ -737,9 +1001,9 @@ int main_0045_subscribe_update_racks_mock(int argc, char **argv) {
                             use_client_rack, use_replica_rack);
                 }
         }
-
-        /* Do not test with range assignor (yet) since it does not do rack aware
-         * assignment properly with the NULL rack, even for the Java client. */
+        /* Do not test with range assignor (yet) since it does not do
+         * rack aware assignment properly with the NULL rack, even for
+         * the Java client. */
         do_test_replica_rack_change_leader_no_rack_mock("cooperative-sticky");
 
         return 0;

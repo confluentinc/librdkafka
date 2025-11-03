@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,9 +63,7 @@ static void consume_pause(void) {
         test_conf_set(conf, "enable.partition.eof", "true");
         test_topic_conf_set(tconf, "auto.offset.reset", "smallest");
 
-        test_create_topic(NULL, topic, partition_cnt, 1);
-
-        test_wait_topic_exists(NULL, topic, 10 * 1000);
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, 1, 10 * 1000);
 
         /* Produce messages */
         testid =
@@ -260,9 +259,8 @@ static void consume_pause_resume_after_reassign(void) {
 
         test_conf_init(&conf, NULL, 60);
 
-        test_create_topic(NULL, topic, (int)partition + 1, 1);
-
-        test_wait_topic_exists(NULL, topic, 10 * 1000);
+        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, 1,
+                                      10 * 1000);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
@@ -380,7 +378,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                  * while auto.offset.reset is default at `latest`. */
 
                 parts->elems[0].offset = RD_KAFKA_OFFSET_BEGINNING;
-                test_consumer_assign("rebalance", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           parts);
                 TEST_SAY("Pausing partitions\n");
                 if ((err2 = rd_kafka_pause_partitions(rk, parts)))
                         TEST_FAIL("Failed to pause: %s",
@@ -391,7 +390,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                                   rd_kafka_err2str(err2));
                 break;
         default:
-                test_consumer_unassign("rebalance", rk);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             parts);
                 break;
         }
 }
@@ -419,9 +419,8 @@ static void consume_subscribe_assign_pause_resume(void) {
 
         test_conf_init(&conf, NULL, 20);
 
-        test_create_topic(NULL, topic, (int)partition + 1, 1);
-
-        test_wait_topic_exists(NULL, topic, 10 * 1000);
+        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, 1,
+                                      10 * 1000);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);
@@ -472,9 +471,8 @@ static void consume_seek_pause_resume(void) {
 
         test_conf_init(&conf, NULL, 20);
 
-        test_create_topic(NULL, topic, (int)partition + 1, 1);
-
-        test_wait_topic_exists(NULL, topic, 10 * 1000);
+        test_create_topic_wait_exists(NULL, topic, (int)partition + 1, 1,
+                                      10 * 1000);
 
         /* Produce messages */
         testid = test_produce_msgs_easy(topic, 0, partition, msgcnt);

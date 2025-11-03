@@ -2,22 +2,44 @@ version: v1.0
 name: 'librdkafka build and release artifact pipeline'
 agent:
   machine:
-    type: s1-prod-macos-13-5-arm64
+    type: s1-prod-ubuntu24-04-arm64-00
 execution_time_limit:
   hours: 3
+
+auto_cancel:
+  running:
+    when: "branch != 'master'"
+
 global_job_config:
   prologue:
     commands:
       - checkout
       - mkdir artifacts
       - mkdir dest
+  env_vars:
+    - name: CACHE_TAG
+      value: '7'
+    - name: CI
+      value: 'true'
+    - name: KAFKA_VERSION
+      value: '4.0.0'
+    - name: CP_VERSION
+      value: '8.0.0'
+    # Shows plain output from docker build (no progress bars)
+    - name: BUILDKIT_PROGRESS
+      value: plain
+    - name: MACOSX_DEPLOYMENT_TARGET
+      value: '13'
+
 blocks:
   - name: 'OSX arm64/m1'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
-          type: s1-prod-macos-13-5-arm64
+          type: s1-macos-15-arm64-8
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
@@ -40,10 +62,12 @@ blocks:
 
   - name: 'OSX x64'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
-          type: s1-prod-macos-13-5-amd64
+          type: s1-macos-15-amd64-6
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
@@ -73,31 +97,27 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu24-04-arm64-00
       jobs:
         - name: 'Style check'
           commands:
-            - sudo apt install -y clang-format-10 python3 python3-pip python3-setuptools
-            - python3 -m pip install -r packaging/tools/requirements.txt
-            - CLANG_FORMAT=clang-format-10 make style-check
-
+            - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG} packaging/tools/run-style-check.sh
 
   - name: 'Build documentation'
     dependencies: []
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu24-04-arm64-1
       jobs:
         - name: 'Generate documentation'
           commands:
-            - sudo apt install -y doxygen graphviz
-            - make docs
+            - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG} make docs
             - (cd staging-docs && tar cvzf ../artifacts/librdkafka-docs.tgz .)
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'
 
 
-  - name: 'Linux Ubuntu x64: source build'
+  - name: 'Linux Ubuntu amd64: source build'
     dependencies: []
     skip:
       # Skip for release tags, we don't want flaky CI tests
@@ -106,7 +126,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-1
       env_vars:
         - name: CFLAGS
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
@@ -122,25 +142,7 @@ blocks:
             - ./packaging/tools/build-configurations-checks.sh
         - name: 'Build and integration tests'
           commands:
-            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
-            - sudo dpkg -i rapidjson-dev.deb
-            - python3 -m pip install -U pip
-            - python3 -m pip -V
-            - (cd tests && python3 -m pip install -r requirements.txt)
-            - ./configure --install-deps
-            # split these up
-            - ./packaging/tools/rdutcoverage.sh
-            - make copyright-check
-            - make -j all examples check
-            - echo "Verifying that CONFIGURATION.md does not have manual changes"
-            - git diff --exit-code CONFIGURATION.md
-            - examples/rdkafka_example -X builtin.features
-            - ldd src/librdkafka.so.1
-            - ldd src-cpp/librdkafka++.so.1
-            - make -j -C tests build
-            - make -C tests run_local_quick
-            - DESTDIR="$PWD/dest" make install
-            - (cd tests && python3 -m trivup.clusters.KafkaCluster --version 3.4.0 --cmd 'make quick')
+            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG} ./packaging/tools/build-configurations-checks.sh
 
 
   - name: 'Linux x64: release artifact docker builds'
@@ -150,7 +152,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-1
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -189,10 +191,12 @@ blocks:
 
   - name: 'Linux arm64: release artifact docker builds'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-arm64-1
+          type: s1-prod-ubuntu24-04-arm64-1
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
@@ -231,6 +235,8 @@ blocks:
 
   - name: 'Windows x64: MinGW-w64'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -264,6 +270,8 @@ blocks:
 
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -275,19 +283,9 @@ blocks:
       prologue:
         commands:
           # install vcpkg in the parent directory.
-          - pwd
           - cd ..
           # Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
-          - cd librdkafka
-          - ..\vcpkg\vcpkg integrate install
-          # Install required packages.
-          - ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
-          - cd ..
-          - pwd
-          - ls vcpkg/
-          - echo $Env:VCPKG_ROOT
-          - pwd
           - cd librdkafka
       epilogue:
         commands:
@@ -328,7 +326,7 @@ blocks:
     task:
       agent:
         machine:
-          type: s1-prod-ubuntu20-04-amd64-2
+          type: s1-prod-ubuntu24-04-amd64-2
       jobs:
         - name: 'Build NuGet and static packages'
           commands:
@@ -360,3 +358,29 @@ blocks:
             # Upload all packages to project artifact store
             - artifact push project packages --destination librdkafka-packages-${SEMAPHORE_GIT_TAG_NAME}-${SEMAPHORE_WORKFLOW_ID}
             - echo Thank you
+
+promotions:
+  - name: Run local tests on all architectures and integration tests
+    pipeline_file: semaphore-integration.yml
+    auto_promote_on:
+      - result: passed
+        branch:
+        - "master"
+  # Manual promotion only, the auto promotion on master happens after 
+  # integration tests pass.
+  - name: Run all tests
+    pipeline_file: run-all-tests.yml
+    parameters:
+      env_vars:
+        - required: true
+          name: TEST_KAFKA_GIT_REF
+          default_value: 4.0.0
+        - required: true
+          name: TEST_TYPE
+          default_value: plaintext,ssl
+        - required: true
+          name: TEST_ARCHES
+          default_value: x86_64,aarch64
+        - required: true
+          name: TEST_PARALLEL
+          default_value: "1"

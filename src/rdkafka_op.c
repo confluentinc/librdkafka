@@ -122,7 +122,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:RD_KAFKA_OP_SET_TELEMETRY_BROKER",
             [RD_KAFKA_OP_TERMINATE_TELEMETRY] =
                 "REPLY:RD_KAFKA_OP_TERMINATE_TELEMETRY",
-
+            [RD_KAFKA_OP_ELECTLEADERS] = "REPLY:ELECTLEADERS",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -228,7 +228,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_PARTITION_JOIN]   = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_PARTITION_LEAVE]  = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_REBALANCE]        = sizeof(rko->rko_u.rebalance),
-            [RD_KAFKA_OP_TERMINATE]        = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_TERMINATE]        = sizeof(rko->rko_u.terminated),
             [RD_KAFKA_OP_COORD_QUERY]      = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SUBSCRIBE]        = sizeof(rko->rko_u.subscribe),
             [RD_KAFKA_OP_ASSIGN]           = sizeof(rko->rko_u.assign),
@@ -286,6 +286,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SET_TELEMETRY_BROKER] =
                 sizeof(rko->rko_u.telemetry_broker),
             [RD_KAFKA_OP_TERMINATE_TELEMETRY] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_ELECTLEADERS] = sizeof(rko->rko_u.admin_request),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -439,12 +440,18 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS:
         case RD_KAFKA_OP_LISTOFFSETS:
+        case RD_KAFKA_OP_ELECTLEADERS:
                 rd_kafka_replyq_destroy(&rko->rko_u.admin_request.replyq);
                 rd_list_destroy(&rko->rko_u.admin_request.args);
                 if (rko->rko_u.admin_request.options.match_consumer_group_states
                         .u.PTR) {
                         rd_list_destroy(rko->rko_u.admin_request.options
                                             .match_consumer_group_states.u.PTR);
+                }
+                if (rko->rko_u.admin_request.options.match_consumer_group_types
+                        .u.PTR) {
+                        rd_list_destroy(rko->rko_u.admin_request.options
+                                            .match_consumer_group_types.u.PTR);
                 }
                 rd_assert(!rko->rko_u.admin_request.fanout_parent);
                 RD_IF_FREE(rko->rko_u.admin_request.coordkey, rd_free);

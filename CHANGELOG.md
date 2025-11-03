@@ -1,7 +1,30 @@
+# librdkafka v2.12.1
+
+librdkafka v2.12.1 is a maintenance release:
+
+* Restored macOS binaries compatibility with macOS 13 and 14 (#5219).
+
+
+## Fixes
+
+### General fixes
+
+* Fix to restore macOS 13 and 14 compatibility in prebuilt binaries present in `librdkafka.redist`.
+  Happening since 2.12.0 (#5219).
+
+
+
 # librdkafka v2.12.0
 
 librdkafka v2.12.0 is a feature release:
 
+## [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) – General Availability
+
+Starting with **librdkafka 2.12.0**, the next generation consumer group rebalance protocol defined in **[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)** is **production-ready**. Please refer the following [migration guide](INTRODUCTION.md#next-generation-consumer-group-protocol-kip-848) for moving from `classic` to `consumer` protocol.
+
+**Note:** The new consumer group protocol defined in [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) is not enabled by default. There are few contract change associated with the new protocol and might cause breaking changes. `group.protocol` configuration property dictates whether to use the new `consumer` protocol or older `classic` protocol. It defaults to `classic` if not provided.
+
+## Enhancements and Fixes
 * Support for OAUTHBEARER metadata based authentication types,
   starting with Azure IMDS. [Introduction available](INTRODUCTION.md#oauthbearer-oidc-metadata-authentication) (#5155).
 * Fix compression types read issue in GetTelemetrySubscriptions response
@@ -11,6 +34,7 @@ librdkafka v2.12.0 is a feature release:
 * Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
 * Fix double free of headers in `rd_kafka_produceva` method (@blindspotbounty, #4628).
 * Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry (#5201).
+* New [walkthrough](https://github.com/confluentinc/librdkafka/wiki/Using-SASL-GSSAPI-with-librdkafka-in-a-cross%E2%80%90realm-scenario-with-Windows-SSPI-and-MIT-Kerberos) in the Wiki about configuring Kafka cross-realm authentication between Windows SSPI and MIT Kerberos.
 
 
 ## Fixes

@@ -1382,7 +1382,7 @@ static void do_test_DescribeConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
         test_CreateTopics_simple(rk, NULL, topics, 1, 1, NULL);
 
-        test_wait_for_metadata_propagation(10);
+        rd_sleep(4);
 
         /*
          * ConfigResource #0: topic config, no config entries.

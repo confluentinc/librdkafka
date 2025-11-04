@@ -71,6 +71,10 @@ describe('Producer > Flush', () => {
 
     it('times out if messages are pending',
         async () => {
+           const producer = createProducer({
+            }, {
+                'batch.num.messages': 1,
+            });
             await producer.connect();
             let messageSent = false;
 
@@ -82,6 +86,7 @@ describe('Producer > Flush', () => {
             /* Small timeout */
             await expect(producer.flush({ timeout: 1 })).rejects.toThrow(Kafka.KafkaJSTimeout);
             expect(messageSent).toBe(false);
+            await producer.disconnect();
         }
     );
 

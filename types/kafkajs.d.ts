@@ -244,7 +244,24 @@ export interface ConsumerConfig {
   partitionAssignors?: PartitionAssignors[],
 }
 
-export type ConsumerGlobalAndTopicConfig = ConsumerGlobalConfig & ConsumerTopicConfig;
+export interface JSConsumerConfig {
+  /**
+   * Maximum batch size passed in eachBatch calls.
+   * A value of -1 means no limit.
+   *
+   * @default 32
+   */
+  'js.consumer.max.batch.size'?: string | number,
+  /**
+   * Maximum cache size per worker in milliseconds based on the
+   * consume rate estimated through the eachMessage/eachBatch calls.
+   *
+   * @default 1500
+   */
+  'js.consumer.max.cache.size.per.worker.ms'?: string | number
+}
+
+export type ConsumerGlobalAndTopicConfig = ConsumerGlobalConfig & ConsumerTopicConfig & JSConsumerConfig;
 
 export interface ConsumerConstructorConfig extends ConsumerGlobalAndTopicConfig {
   kafkaJS?: ConsumerConfig;

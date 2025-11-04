@@ -89,7 +89,7 @@ function getPackageVersion(tag, branch) {
 
   // publish with a -devel suffix for EA and RC releases.
   if (tag.prerelease.length > 0) {
-    baseVersion += '-' + tag.prerelease.join('-');
+    baseVersion += '-' + tag.prerelease.join('.');
   }
 
   console.log(`Package version is "${baseVersion}"`);

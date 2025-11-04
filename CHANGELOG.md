@@ -1,3 +1,16 @@
+# confluent-kafka-javascript 1.7.0
+
+v1.7.0 is a feature release. It is supported for all usage.
+
+### Enhancements
+
+1. Configurable batch size through the `js.consumer.max.batch.size` property 
+   and cache size through the `js.consumer.max.cache.size.per.worker.ms` 
+   property (#393).
+2. Fix for at-least-once guarantee not ensured in case a seek happens on one
+partition and there are messages being fetched about other partitions (#393).
+
+
 # confluent-kafka-javascript 1.6.0
 
 v1.6.0 is a feature release. It is supported for all usage.

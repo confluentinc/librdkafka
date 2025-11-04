@@ -303,9 +303,14 @@ producerRun().then(consumerRun).catch(console.error);
   - The `heartbeat()` no longer needs to be called by the user in the `eachMessage/eachBatch` callback.
     Heartbeats are automatically managed by librdkafka.
   - The `partitionsConsumedConcurrently` is supported by both `eachMessage` and `eachBatch`.
-  - An API compatible version of `eachBatch` is available, but the batch size calculation is not
-    as per configured parameters, rather, a constant maximum size is configured internally. This is subject
-    to change.
+  - An API compatible version of `eachBatch` is available, maximum batch size
+    can be configured through the `js.consumer.max.batch.size` configuration property
+    and defaults to 32.  It is not dependent on the size of the produced batches
+    present on the broker, as these are constructed client-side. Similar to
+    the Java client configuration `max.poll.records`.
+    `js.consumer.max.cache.size.per.worker.ms` allows to
+    configure the cache size estimated based on consumption rate and defaults
+    to the cache being sized to 1.5s worth of messages.
     The property `eachBatchAutoResolve` is supported.
     Within the `eachBatch` callback, use of `uncommittedOffsets` is unsupported,
     and within the returned batch, `offsetLag` and `offsetLagLow` are supported.

@@ -412,6 +412,11 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
             partitions: partitions,
         });
 
+        // If you have a large consume time and consuming one message at a time,
+        // you need to have very small batch sizes to keep the concurrency up.
+        // It's to avoid having a too large cache and postponing the next fetch
+        // and so the rebalance too much.
+        const producer = createProducer({}, {'batch.num.messages': '1'});
         await producer.connect();
         await consumer.connect();
         await consumer.subscribe({ topic: topicName });
@@ -429,9 +434,8 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
                 inProgressMaxValue = Math.max(inProgress, inProgressMaxValue);
                 if (inProgressMaxValue >= expectedMaxConcurrentWorkers) {
                     maxConcurrentWorkersReached.resolve();
-                } else if (messagesConsumed.length > 2048) {
-                    await sleep(1000);
                 }
+                await sleep(100);
                 inProgress--;
             },
         });
@@ -448,6 +452,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
         await producer.send({ topic: topicName, messages });
         await maxConcurrentWorkersReached;
         expect(inProgressMaxValue).toBe(expectedMaxConcurrentWorkers);
+        await producer.disconnect();
     });
 
     it('consume GZIP messages', async () => {
@@ -612,6 +617,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
         let assigns = 0;
         let revokes = 0;
         let lost = 0;
+        let firstBatchProcessing;
         consumer = createConsumer({
             groupId,
             maxWaitTimeInMs: 100,
@@ -642,9 +648,6 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         let errors = false;
         let receivedMessages = 0;
-        const batchLengths = [1, 1, 2,
-                              /* cache reset */
-                              1, 1];
         consumer.run({
             partitionsConsumedConcurrently,
             eachBatchAutoResolve: true,
@@ -652,17 +655,14 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
                 receivedMessages++;
 
                 try {
-                    expect(event.batch.messages.length)
-                        .toEqual(batchLengths[receivedMessages - 1]);
-
-                    if (receivedMessages === 3) {
-                        expect(event.isStale()).toEqual(false);
-                        await sleep(7500);
-                        /* 7.5s 'processing'
-                         * doesn't exceed max poll interval.
-                         * Cache reset is transparent */
-                        expect(event.isStale()).toEqual(false);
-                    }
+                    expect(event.isStale()).toEqual(false);
+                    await sleep(7500);
+                    /* 7.5s 'processing'
+                     * doesn't exceed max poll interval.
+                     * Cache reset is transparent */
+                    expect(event.isStale()).toEqual(false);
+                    if (firstBatchProcessing === undefined)
+                        firstBatchProcessing = receivedMessages;
                 } catch (e) {
                     console.error(e);
                     errors = true;
@@ -686,6 +686,8 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
         /* Triggers revocation */
         await consumer.disconnect();
 
+        expect(firstBatchProcessing).toBeDefined();
+        expect(receivedMessages).toBeGreaterThan(firstBatchProcessing);
         /* First assignment */
         expect(assigns).toEqual(1);
         /* Revocation on disconnect */
@@ -732,13 +734,7 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         let errors = false;
         let receivedMessages = 0;
-        const batchLengths = [/* first we reach batches of 32 message and fetches of 64
-                               * max poll interval exceeded happens on second
-                               * 32 messages batch of the 64 msg fetch. */
-                              1, 1, 2, 2, 4, 4, 8, 8, 16, 16, 32, 32, 32, 32,
-                              /* max poll interval exceeded, 32 reprocessed +
-                               * 1 new message. */
-                              1, 1, 2, 2, 4, 4, 8, 8, 3];
+        let firstLongBatchProcessing;
         consumer.run({
             partitionsConsumedConcurrently,
             eachBatchAutoResolve: true,
@@ -746,17 +742,15 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
                 receivedMessages++;
 
                 try {
-                    expect(event.batch.messages.length)
-                        .toEqual(batchLengths[receivedMessages - 1]);
-
-                    if (receivedMessages === 13) {
+                    if (!firstLongBatchProcessing && event.batch.messages.length >= 32) {
                         expect(event.isStale()).toEqual(false);
                         await sleep(6000);
                         /* 6s 'processing'
                          * cache clearance starts at 7000 */
                         expect(event.isStale()).toEqual(false);
+                        firstLongBatchProcessing = receivedMessages;
                     }
-                    if ( receivedMessages === 14) {
+                    if (firstLongBatchProcessing && receivedMessages === firstLongBatchProcessing + 1) {
                         expect(event.isStale()).toEqual(false);
                         await sleep(10000);
                         /* 10s 'processing'
@@ -790,6 +784,9 @@ describe.each(cases)('Consumer - partitionsConsumedConcurrently = %s -', (partit
 
         /* Triggers revocation */
         await consumer.disconnect();
+
+        expect(firstLongBatchProcessing).toBeDefined();
+        expect(receivedMessages).toBeGreaterThan(firstLongBatchProcessing);
 
         /* First assignment + assignment after partitions lost */
         expect(assigns).toEqual(2);

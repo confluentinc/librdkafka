@@ -132,8 +132,7 @@ describe("fetchOffset function", () => {
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
 
-        messagesConsumed.push(message); // Populate messagesConsumed
-        if (messagesConsumed.length === 5) {
+        if (messagesConsumed.length === 4) {
           await consumer.commitOffsets([
             {
               topic,
@@ -142,6 +141,7 @@ describe("fetchOffset function", () => {
             },
           ]);
         }
+        messagesConsumed.push(message); // Populate messagesConsumed
       },
     });
 

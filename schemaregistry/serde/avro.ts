@@ -97,7 +97,7 @@ export class AvroSerializer extends Serializer implements AvroSerde {
       throw new SerializationError(
         `Invalid message at ${path.join('.')}, expected ${type}, got ${stringify(any)}`)
     }})
-    let msgBytes = avroType.toBuffer(msg)
+    let msgBytes = avroType.typeName === 'bytes' ? msg : avroType.toBuffer(msg)
     msgBytes = await this.executeRulesWithPhase(
       subject, topic, RulePhase.ENCODING, RuleMode.WRITE, null, info, msgBytes, null)
     return this.serializeSchemaId(topic, msgBytes, schemaId, headers)
@@ -204,18 +204,22 @@ export class AvroDeserializer extends Deserializer implements AvroSerde {
     let msg: any
     const msgBytes = payload
     if (migrations.length > 0) {
-      msg = writer.fromBuffer(msgBytes)
+      msg = writer.typeName === 'bytes' ? msgBytes : writer.fromBuffer(msgBytes)
       msg = await this.executeMigrations(migrations, subject, topic, msg)
     } else {
-      if (readerMeta != null) {
-        const [reader, ] = await this.toType(readerMeta)
-        if (reader.equals(writer)) {
-          msg = reader.fromBuffer(msgBytes)
-        } else {
-          msg = reader.fromBuffer(msgBytes, reader.createResolver(writer))
-        }
+      if (writer.typeName === 'bytes') {
+        msg = msgBytes
       } else {
-        msg = writer.fromBuffer(msgBytes)
+        if (readerMeta != null) {
+          const [reader, ] = await this.toType(readerMeta)
+          if (reader.equals(writer)) {
+            msg = reader.fromBuffer(msgBytes)
+          } else {
+            msg = reader.fromBuffer(msgBytes, reader.createResolver(writer))
+          }
+        } else {
+          msg = writer.fromBuffer(msgBytes)
+        }
       }
     }
     let target: SchemaInfo

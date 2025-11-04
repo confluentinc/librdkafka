@@ -75,6 +75,7 @@ export class RestService {
       this.setHeaders({ 'X-Forward': 'true' });
     }
     this.setHeaders({ 'Content-Type': 'application/vnd.schemaregistry.v1+json' });
+    this.setHeaders({ 'Accept-Version': '8.0' });
 
     this.handleBasicAuth(basicAuthCredentials);
     this.handleBearerAuth(maxRetries ?? 2, retriesWaitMs ?? 1000, retriesMaxWaitMs ?? 20000, bearerAuthCredentials);

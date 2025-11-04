@@ -148,7 +148,7 @@ class DekRegistryClient implements DekClient {
     const cacheKey = stringify({ kekName, subject, version, algorithm, deleted: false });
 
     return await this.dekMutex.runExclusive(async () => {
-      const dek = this.dekCache.get(cacheKey);
+      let dek = this.dekCache.get(cacheKey);
       if (dek) {
         return dek;
       }
@@ -159,19 +159,38 @@ class DekRegistryClient implements DekClient {
         algorithm,
         ...encryptedKeyMaterial && { encryptedKeyMaterial },
       };
-      kekName = encodeURIComponent(kekName);
 
-      const response = await this.restService.handleRequest<Dek>(
-        `/dek-registry/v1/keks/${kekName}/deks`,
-        'POST',
-        request);
-      this.dekCache.set(cacheKey, response.data);
+      dek = await this.createDek(kekName, request);
+      this.dekCache.set(cacheKey, dek);
 
       this.dekCache.delete(stringify({ kekName, subject, version: -1, algorithm, deleted: false }));
       this.dekCache.delete(stringify({ kekName, subject, version: -1, algorithm, deleted: true }));
 
-      return response.data;
+      return dek;
     });
+  }
+
+  private async createDek(kekName: string, request: Dek): Promise<Dek> {
+    try {
+      // Try newer API with subject in the path
+      const encodedKekName = encodeURIComponent(kekName);
+      const encodedSubject = encodeURIComponent(request.subject || '');
+      const path = `/dek-registry/v1/keks/${encodedKekName}/deks/${encodedSubject}`;
+
+      const response = await this.restService.handleRequest<Dek>(path, 'POST', request);
+      return response.data;
+    } catch (error: any) {
+      if (error.response && error.response.status === 405) {
+        // Try fallback to older API that does not have subject in the path
+        const encodedKekName = encodeURIComponent(kekName);
+        const path = `/dek-registry/v1/keks/${encodedKekName}/deks`;
+
+        const response = await this.restService.handleRequest<Dek>(path, 'POST', request);
+        return response.data;
+      } else {
+        throw error;
+      }
+    }
   }
 
   async getDek(kekName: string, subject: string,

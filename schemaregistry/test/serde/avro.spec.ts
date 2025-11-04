@@ -425,6 +425,22 @@ describe('AvroSerializer', () => {
     expect(obj2.boolField).toEqual(obj.boolField);
     expect(obj2.bytesField).toEqual(obj.bytesField);
   })
+  it('serialize bytes', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let ser = new AvroSerializer(client, SerdeType.VALUE, {autoRegisterSchemas: true})
+
+    let obj = Buffer.from([0x02, 0x03, 0x04])
+    let bytes = await ser.serialize(topic, obj)
+    expect(bytes).toEqual(Buffer.from([0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04]));
+
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, {})
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2).toEqual(obj);
+  })
   it('serialize nested', async () => {
     let conf: ClientConfig = {
       baseURLs: [baseURL],

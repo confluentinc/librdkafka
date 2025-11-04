@@ -2966,10 +2966,18 @@ void rd_kafka_broker_buf_retry(rd_kafka_broker_t *rkb, rd_kafka_buf_t *rkbuf) {
         rd_atomic64_add(&rkb->rkb_c.tx_retries, 1);
         /* In some cases, failed Produce requests do not increment the retry
          * count, see rd_kafka_handle_Produce_error. */
-        if (rkbuf->rkbuf_retries > 0)
-                backoff = (1 << (rkbuf->rkbuf_retries - 1)) *
+        if (rkbuf->rkbuf_retries > 0) {
+                int shift = rkbuf->rkbuf_retries - 1;
+
+                /* Cap shift at 34 to prevent overflow in final calculation.
+                 * Accounts for multiplication by retry_backoff_ms (max 300000)
+                 * and jitter (max 1200). */
+                if (shift > 34)
+                        shift = 34;
+
+                backoff = ((int64_t)1 << shift) *
                           (rkb->rkb_rk->rk_conf.retry_backoff_ms);
-        else
+        } else
                 backoff = rkb->rkb_rk->rk_conf.retry_backoff_ms;
 
         /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->

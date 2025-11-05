@@ -5551,7 +5551,7 @@ final_checks:
 #endif
 
         /* Wait for user propagation. */
-        test_wait_for_metadata_propagation(3);
+        rd_sleep(5);
 
         /* Credential doesn't exist anymore for this user */
 

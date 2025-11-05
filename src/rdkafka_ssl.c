@@ -450,6 +450,45 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
 }
 
 /**
+ * @brief Normalize hostname for SSL certificate verification.
+ *
+ * Strips trailing dot from hostname as X.509 certificates (per RFC 5280)
+ * don't include them in Subject Alternative Names (SANs).
+ * The trailing dot is used in DNS to indicate an absolute FQDN,
+ * but certificate SANs use a different representation without it.
+ *
+ * @param hostname Input hostname (may have trailing dot)
+ * @param normalized Output buffer for normalized hostname
+ * @param size Size of output buffer
+ *
+ * @returns The normalized hostname (same as \p normalized)
+ *
+ * @remark This function is exposed for testing via ENABLE_DEVEL.
+ */
+#if ENABLE_DEVEL
+RD_EXPORT
+#else
+static
+#endif
+const char *
+rd_kafka_ssl_normalize_hostname(const char *hostname,
+                                 char *normalized,
+                                 size_t size) {
+        size_t len;
+
+        rd_snprintf(normalized, size, "%s", hostname);
+        len = strlen(normalized);
+
+        /* Strip trailing dot (unless it's a single dot) */
+        if (len > 1 && normalized[len - 1] == '.') {
+                normalized[len - 1] = '\0';
+        }
+
+        return normalized;
+}
+
+
+/**
  * @brief Set TLSEXT hostname for SNI and optionally enable
  *        SSL endpoint identification verification.
  *
@@ -461,7 +500,6 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         char name[RD_KAFKA_NODENAME_SIZE];
         char name_for_verify[RD_KAFKA_NODENAME_SIZE];
         char *t;
-        size_t name_len;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
         rd_snprintf(name, sizeof(name), "%s",
@@ -486,16 +524,12 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
-        /* Prepare hostname for certificate verification.
-         * Strip trailing dot as X.509 certificates (per RFC 5280) don't
-         * include them in Subject Alternative Names (SANs).
-         * The trailing dot is used in DNS to indicate an absolute FQDN,
-         * but certificate SANs use a different representation without it.
-         */
-        rd_snprintf(name_for_verify, sizeof(name_for_verify), "%s", name);
-        name_len = strlen(name_for_verify);
-        if (name_len > 1 && name_for_verify[name_len - 1] == '.') {
-                name_for_verify[name_len - 1] = '\0';
+        /* Normalize hostname for certificate verification */
+        rd_kafka_ssl_normalize_hostname(name, name_for_verify,
+                                         sizeof(name_for_verify));
+
+        /* Log if we stripped a trailing dot */
+        if (strcmp(name, name_for_verify) != 0) {
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
                            "Stripped trailing dot from hostname for "
                            "certificate verification: %s -> %s",

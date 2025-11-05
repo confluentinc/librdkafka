@@ -510,23 +510,23 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         if ((t = strrchr(name, ':')))
                 *t = '\0';
 
+        /* Normalize hostname (remove trailing dot) for both SNI and certificate verification */
+        rd_kafka_ssl_normalize_hostname(name, name_for_verify,
+                                         sizeof(name_for_verify));
+
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (strchr(name, ':') &&
-                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
-                            strlen(name)) ||
-              /*ipv4*/ strspn(name, "0123456789.") == strlen(name)) &&
-            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
+        if (!(/*ipv6*/ (strchr(name_for_verify, ':') &&
+                        strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
+                            strlen(name_for_verify)) ||
+              /*ipv4*/ strspn(name_for_verify, "0123456789.") == strlen(name_for_verify)) &&
+            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #endif
 
         if (rktrans->rktrans_rkb->rkb_rk->rk_conf.ssl.endpoint_identification ==
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
-
-        /* Normalize hostname for certificate verification */
-        rd_kafka_ssl_normalize_hostname(name, name_for_verify,
-                                         sizeof(name_for_verify));
 
         /* Log if we stripped a trailing dot */
         if (strcmp(name, name_for_verify) != 0) {

@@ -603,7 +603,7 @@ Happening since 2.5.0 (#4826).
 # librdkafka v2.5.0
 
 > [!WARNING]
-This version has introduced a regression in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription. 
+This version has introduced a regression in which an assert is triggered during **PushTelemetry** call. This happens when no metric is matched on the client side among those requested by broker subscription.
 >
 > You won't face any problem if:
 > * Broker doesn't support [KIP-714](https://cwiki.apache.org/confluence/display/KAFKA/KIP-714%3A+Client+metrics+and+observability).

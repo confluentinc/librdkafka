@@ -63,7 +63,7 @@ static void do_test_consume_batch(void) {
 
                 /* Explicitly create topic for cloud/K2 environments where
                  * auto-create may be slow or disabled */
-                test_create_topic(NULL, topics[i], partition_cnt, 1);
+                test_create_topic(NULL, topics[i], partition_cnt, -1);
                 test_wait_topic_exists(NULL, topics[i], tmout_multip(30000));
                 test_wait_for_metadata_propagation(5);
 

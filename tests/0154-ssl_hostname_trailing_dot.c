@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2023, Confluent Inc.
+ * Copyright (c) 2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -115,7 +115,7 @@ static void test_trailing_dot_ssl_connection(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t err;
-        const char *topic = test_mk_topic_name("0137-ssl-trailing-dot", 1);
+        const char *topic = test_mk_topic_name("0154-ssl-trailing-dot", 1);
 
         test_conf_init(&conf, NULL, 60);
 
@@ -144,7 +144,7 @@ static void test_trailing_dot_ssl_connection(void) {
 #endif /* WITH_SSL */
 
 
-int main_0137_ssl_hostname_trailing_dot(int argc, char **argv) {
+int main_0154_ssl_hostname_trailing_dot(int argc, char **argv) {
 #if WITH_SSL
         test_trailing_dot_hostname();
         test_trailing_dot_ssl_connection();

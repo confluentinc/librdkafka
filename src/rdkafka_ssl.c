@@ -491,8 +491,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
          * include them in Subject Alternative Names (SANs).
          * The trailing dot is used in DNS to indicate an absolute FQDN,
          * but certificate SANs use a different representation without it.
-         * See: https://github.com/confluentinc/librdkafka/issues/4348
-         *      https://github.com/openssl/openssl/issues/11560 */
+         */
         rd_snprintf(name_for_verify, sizeof(name_for_verify), "%s", name);
         name_len = strlen(name_for_verify);
         if (name_len > 1 && name_for_verify[name_len - 1] == '.') {

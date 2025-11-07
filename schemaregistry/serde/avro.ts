@@ -316,6 +316,9 @@ async function transform(ctx: RuleContext, schema: Type, msg: any, fieldTransfor
       const recordSchema = schema as RecordType
       const record = msg as Record<string, any>
       for (const field of recordSchema.fields) {
+        if (!(field.name in record)) {
+          continue
+        }
         await transformField(ctx, recordSchema, field, record, fieldTransform)
       }
       return record

@@ -75,6 +75,41 @@ const demoSchema = `
   ]
 }
 `
+const demoSchemaWithMissing = `
+{
+  "name": "DemoSchema",
+  "type": "record",
+  "fields": [
+    {
+      "name": "intField",
+      "type": "int"
+    },
+    {
+      "name": "doubleField",
+      "type": "double"
+    },
+    {
+      "name": "stringField",
+      "type": "string",
+      "confluent:tags": [ "PII" ]
+    },
+    {
+      "name": "boolField",
+      "type": "boolean"
+    },
+    {
+      "name": "bytesField",
+      "type": "bytes",
+      "confluent:tags": [ "PII" ]
+    },
+    {
+      "name": "missing",
+      "type": ["null", "string"],
+      "default": null
+    }
+  ]
+}
+`
 const nameSchema = `
 {
   "type": "record",
@@ -905,6 +940,58 @@ describe('AvroSerializer', () => {
     expect(obj2.intField).toEqual(obj.intField);
     expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
     expect(obj2.stringField).toEqual('hi-suffix');
+    expect(obj2.boolField).toEqual(obj.boolField);
+    expect(obj2.bytesField).toEqual(obj.bytesField);
+  })
+  it('cel field transform missing prop', async () => {
+    let conf: ClientConfig = {
+      baseURLs: [baseURL],
+      cacheCapacity: 1000
+    }
+    let client = SchemaRegistryClient.newClient(conf)
+    let serConfig: AvroSerializerConfig = {
+      useLatestVersion: true,
+    }
+    let ser = new AvroSerializer(client, SerdeType.VALUE, serConfig)
+
+    let encRule: Rule = {
+      name: 'test-cel',
+      kind: 'TRANSFORM',
+      mode: RuleMode.WRITEREAD,
+      type: 'CEL_FIELD',
+      expr: "name == 'stringField' ; value + '-suffix'"
+    }
+    let ruleSet: RuleSet = {
+      domainRules: [encRule]
+    }
+
+    let info: SchemaInfo = {
+      schemaType: 'AVRO',
+      schema: demoSchemaWithMissing,
+      ruleSet
+    }
+
+    await client.register(subject, info, false)
+
+    let obj = {
+      intField: 123,
+      doubleField: 45.67,
+      stringField: 'hi',
+      boolField: true,
+      bytesField: Buffer.from([1, 2]),
+    }
+    let bytes = await ser.serialize(topic, obj)
+
+    let deserConfig: AvroDeserializerConfig = {
+      ruleConfig: {
+        secret: 'mysecret'
+      }
+    }
+    let deser = new AvroDeserializer(client, SerdeType.VALUE, deserConfig)
+    let obj2 = await deser.deserialize(topic, bytes)
+    expect(obj2.intField).toEqual(obj.intField);
+    expect(obj2.doubleField).toBeCloseTo(obj.doubleField, 0.001);
+    expect(obj2.stringField).toEqual('hi-suffix-suffix');
     expect(obj2.boolField).toEqual(obj.boolField);
     expect(obj2.bytesField).toEqual(obj.bytesField);
   })

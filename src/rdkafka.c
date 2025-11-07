@@ -2954,11 +2954,33 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
  */
 static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
                                                  void *arg) {
-        rd_kafka_op_t *rko = arg;
-        rd_kafka_t *rk     = rkts->rkts_rk;
+        rd_kafka_op_t *rko    = arg;
+        rd_kafka_t *rk        = rkts->rkts_rk;
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
 
         rd_kafka_dbg(rk, CGRP, "SHARE", "Re-enqueing SHARE_FETCH_FANOUT");
         rd_kafka_q_enq(rk->rk_ops, rko);
+        rkcg->rkcg_share.share_fetch_fanout_retry_op = NULL;
+}
+
+/**
+ * @brief Enqueue a SHARE_FETCH_FANOUT_RETRY op on the main queue
+ * @param backoff_ms Op will be enqueued after this many milliseconds.
+ * @locality main thread
+ */
+static void rd_kafka_share_fetch_fanout_with_backoff_retry(rd_kafka_t *rk,
+                                                           rd_ts_t abs_timeout,
+                                                           int backoff_ms) {
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+        rd_kafka_op_t *rko =
+            rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT_RETRY,
+                               rd_kafka_share_fetch_fanout_op);
+        rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
+        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+        rkcg->rkcg_share.share_fetch_fanout_retry_op = rko;
+        rd_kafka_timer_start_oneshot(
+            &rk->rk_timers, &rkcg->rkcg_share.share_fetch_fanout_tmr, rd_true,
+            backoff_ms * 1000, rd_kafka_share_fetch_fanout_renqueue, rko);
 }
 
 /**
@@ -2970,19 +2992,18 @@ static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
 static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                                                      rd_ts_t abs_timeout,
                                                      int backoff_ms) {
-        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
-        rd_kafka_op_t *rko    = rd_kafka_op_new_cb(
-            rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
-        rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
-        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
 
         if (backoff_ms > 0)
-                rd_kafka_timer_start_oneshot(
-                    &rk->rk_timers, &rkcg->rkcg_share.share_fetch_fanout_tmr,
-                    rd_true, backoff_ms * 1000,
-                    rd_kafka_share_fetch_fanout_renqueue, rko);
-        else
+                rd_kafka_share_fetch_fanout_with_backoff_retry(rk, abs_timeout,
+                                                               backoff_ms);
+        else {
+                rd_kafka_op_t *rko =
+                    rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT,
+                                       rd_kafka_share_fetch_fanout_op);
+                rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
+                rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
                 rd_kafka_q_enq(rk->rk_ops, rko);
+        }
 }
 
 /**
@@ -4692,6 +4713,11 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
                 break;
 
+        case RD_KAFKA_OP_SHARE_FETCH_FANOUT_RETRY | RD_KAFKA_OP_REPLY:
+                rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
+                res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
+                break;
+
         default:
                 /* If op has a callback set (e.g., OAUTHBEARER_REFRESH),
                  * call it. */
@@ -5863,44 +5889,45 @@ char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid) {
 }
 
 const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
-    if (*uuid->base64str)
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        // Standard Base64 encode
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        // Convert to URL-safe Base64
+        for (char *p = out_base64_str; *p; p++) {
+                if (*p == '+')
+                        *p = '-';
+                else if (*p == '/')
+                        *p = '_';
+        }
+
+        // Strip '=' padding (Kafka’s Base64 UUIDs are 22 chars)
+        size_t len = strlen(out_base64_str);
+        while (len > 0 && out_base64_str[len - 1] == '=') {
+                out_base64_str[--len] = '\0';
+        }
+
+        rd_strlcpy((char *)uuid->base64str, out_base64_str,
+                   sizeof(uuid->base64str));
+        rd_free(out_base64_str);
+
         return uuid->base64str;
-
-    rd_chariov_t in_base64;
-    char *out_base64_str;
-    char *uuid_bytes;
-    uint64_t input_uuid[2];
-
-    input_uuid[0] = htobe64(uuid->most_significant_bits);
-    input_uuid[1] = htobe64(uuid->least_significant_bits);
-    uuid_bytes = (char *)input_uuid;
-    in_base64.ptr = uuid_bytes;
-    in_base64.size = sizeof(uuid->most_significant_bits) +
-                     sizeof(uuid->least_significant_bits);
-
-    // Standard Base64 encode
-    out_base64_str = rd_base64_encode_str(&in_base64);
-    if (!out_base64_str)
-        return NULL;
-
-    // Convert to URL-safe Base64
-    for (char *p = out_base64_str; *p; p++) {
-        if (*p == '+')
-            *p = '-';
-        else if (*p == '/')
-            *p = '_';
-    }
-
-    // Strip '=' padding (Kafka’s Base64 UUIDs are 22 chars)
-    size_t len = strlen(out_base64_str);
-    while (len > 0 && out_base64_str[len - 1] == '=') {
-        out_base64_str[--len] = '\0';
-    }
-
-    rd_strlcpy((char *)uuid->base64str, out_base64_str, sizeof(uuid->base64str));
-    rd_free(out_base64_str);
-
-    return uuid->base64str;
 }
 
 unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid) {

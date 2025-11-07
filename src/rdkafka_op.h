@@ -192,6 +192,8 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
                                     applicable. */
         RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
+        RD_KAFKA_OP_SHARE_FETCH_FANOUT_RETRY, /**< fanout share fetch retry
+                                                *  operation */
 
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;

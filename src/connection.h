@@ -88,6 +88,7 @@ class Connection : public Nan::ObjectWrap {
 
   Baton setupSaslOAuthBearerConfig();
   Baton setupSaslOAuthBearerBackgroundQueue();
+  Baton SetPollInBackground(bool set);
 
   bool m_is_closing;
 
@@ -97,6 +98,7 @@ class Connection : public Nan::ObjectWrap {
 
   uv_rwlock_t m_connection_lock;
   bool m_has_underlying = false;
+  bool m_is_background_polling;
 
   RdKafka::Handle* m_client;
 

@@ -42,7 +42,8 @@ namespace NodeKafka {
 Connection::Connection(Conf* gconfig, Conf* tconfig):
   m_event_cb(),
   m_gconfig(gconfig),
-  m_tconfig(tconfig) {
+  m_tconfig(tconfig),
+  m_is_background_polling(false) {
     std::string errstr;
 
     m_client = NULL;
@@ -129,6 +130,30 @@ Baton Connection::setupSaslOAuthBearerBackgroundQueue() {
 
   RdKafka::Error* error = m_client->sasl_background_callbacks_enable();
   return rdkafkaErrorToBaton(error);
+}
+
+Baton Connection::SetPollInBackground(bool set) {
+  scoped_shared_read_lock lock(m_connection_lock);
+  rd_kafka_t* rk = this->m_client->c_ptr();
+  if (!IsConnected()) {
+    return Baton(RdKafka::ERR__STATE, "Client is disconnected");
+  }
+
+  if (set && !m_is_background_polling) {
+    m_is_background_polling = true;
+    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
+    rd_kafka_queue_t* background_q = rd_kafka_queue_get_background(rk);
+    rd_kafka_queue_forward(main_q, background_q);
+    rd_kafka_queue_destroy(main_q);
+    rd_kafka_queue_destroy(background_q);
+  } else if (!set && m_is_background_polling) {
+    m_is_background_polling = false;
+    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
+    rd_kafka_queue_forward(main_q, NULL);
+    rd_kafka_queue_destroy(main_q);
+  }
+
+  return Baton(RdKafka::ERR_NO_ERROR);
 }
 
 RdKafka::TopicPartition* Connection::GetPartition(std::string &topic) {

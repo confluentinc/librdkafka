@@ -7,7 +7,9 @@ v1.7.0 is a feature release. It is supported for all usage.
 1. Configurable batch size through the `js.consumer.max.batch.size` property 
    and cache size through the `js.consumer.max.cache.size.per.worker.ms` 
    property (#393).
-2. Fix for at-least-once guarantee not ensured in case a seek happens on one
+2. Statistics callback now available when using the promisified API with all
+   client types (#399).
+3. Fix for at-least-once guarantee not ensured in case a seek happens on one
 partition and there are messages being fetched about other partitions (#393).
 
 

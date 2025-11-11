@@ -75,6 +75,12 @@ Baton AdminClient::Connect() {
     DeactivateDispatchers();
   }
 
+  std::string stats_interval_ms;
+  if (this->m_gconfig->get("statistics.interval.ms", stats_interval_ms) ==
+      RdKafka::Conf::CONF_OK) {
+    Connection::SetPollInBackground(true);
+  }
+
   return baton;
 }
 

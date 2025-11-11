@@ -33,8 +33,7 @@ namespace NodeKafka {
 Producer::Producer(Conf* gconfig, Conf* tconfig):
   Connection(gconfig, tconfig),
   m_dr_cb(),
-  m_partitioner_cb(),
-  m_is_background_polling(false) {
+  m_partitioner_cb() {
     std::string errstr;
 
     if (m_tconfig)
@@ -343,30 +342,6 @@ void Producer::Poll() {
     return;
   }
   m_client->poll(0);
-}
-
-Baton Producer::SetPollInBackground(bool set) {
-  scoped_shared_read_lock lock(m_connection_lock);
-  rd_kafka_t* rk = this->m_client->c_ptr();
-  if (!IsConnected()) {
-    return Baton(RdKafka::ERR__STATE, "Producer is disconnected");
-  }
-
-  if (set && !m_is_background_polling) {
-    m_is_background_polling = true;
-    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
-    rd_kafka_queue_t* background_q = rd_kafka_queue_get_background(rk);
-    rd_kafka_queue_forward(main_q, background_q);
-    rd_kafka_queue_destroy(main_q);
-    rd_kafka_queue_destroy(background_q);
-  } else if (!set && m_is_background_polling) {
-    m_is_background_polling = false;
-    rd_kafka_queue_t* main_q = rd_kafka_queue_get_main(rk);
-    rd_kafka_queue_forward(main_q, NULL);
-    rd_kafka_queue_destroy(main_q);
-  }
-
-  return Baton(RdKafka::ERR_NO_ERROR);
 }
 
 void Producer::ConfigureCallback(const std::string& string_key,

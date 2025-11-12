@@ -58,7 +58,7 @@ int main_0129_fetch_aborted_msgs(int argc, char **argv) {
 
         test_admin_create_topic(rk, topic, 1, -1,
                                 (const char *[]) {"max.message.bytes", "10000",
-                                                  "segment.bytes", "1048576",
+                                                  "segment.bytes", "52428800",
                                                   NULL});
         test_wait_topic_exists(rk, topic, 5000);
 

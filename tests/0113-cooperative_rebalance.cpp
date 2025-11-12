@@ -2501,6 +2501,8 @@ static void t_max_poll_interval_exceeded(int variation) {
     }
     expected_cb1_revoke_call_cnt++; /* C1 exceeds
                                        max.poll.interval.ms again */
+    expected_cb1_lost_call_cnt++; /* C1 loses partitions when exceeding
+                                     max.poll.interval.ms again */
     expected_cb2_assign_call_cnt++; /* C2 gets reassigned when C1
                                        leaves again */
     expected_cb2_revoke_call_cnt++; /* C2 gets revoked when C1

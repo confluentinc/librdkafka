@@ -4892,6 +4892,10 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_assert(TAILQ_EMPTY(&rkb->rkb_waitresps.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_toppars));
+        rd_assert(TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_in_session));
+        rd_assert(TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_to_forget));
+        rd_assert(!rkb->rkb_share_fetch_session.adding_toppars);
+        rd_assert(!rkb->rkb_share_fetch_session.forgetting_toppars);
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
             (rkb->rkb_rk->rk_conf.security_protocol ==
@@ -5024,6 +5028,10 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);
         rkb->rkb_logname = rd_strdup(rkb->rkb_name);
         TAILQ_INIT(&rkb->rkb_toppars);
+        TAILQ_INIT(&rkb->rkb_share_fetch_session.toppars_in_session);
+        TAILQ_INIT(&rkb->rkb_share_fetch_session.toppars_to_forget);
+        rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
+        rkb->rkb_share_fetch_session.adding_toppars = NULL;
         CIRCLEQ_INIT(&rkb->rkb_active_toppars);
         TAILQ_INIT(&rkb->rkb_monitors);
         rd_kafka_bufq_init(&rkb->rkb_outbufs);

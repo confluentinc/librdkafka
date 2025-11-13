@@ -108,20 +108,24 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 
         struct {
-                // TAILQ_HEAD(, rd_kafka_toppar_s) toppars; /* List of toppars
-                //                                             in the current
-                //                                             fetch session. 
-                //                                             Any new added toppar in rkb_toppars will be added here after successful share fetch request.
-                //                                             Any removed toppar from rkb_toppars will be removed here after successful share fetch request.
-                //                                             rkb_fetch_session.forgotten_toppars is calculated by rkb_fetch_session.toppars - rkb_toppars */
+                TAILQ_HEAD(, rd_kafka_toppar_s) toppars_in_session; /* List of toppars
+                                                            in the current
+                                                            fetch session. 
+                                                            Any new added toppar in rkb_toppars will be added here after successful share fetch request.
+                                                            Any removed toppar from rkb_toppars will be removed from here after successful share fetch request.
+                                                            rkb_share_fetch_session.forgotten_toppars is calculated by rkb_share_fetch_session.toppars - rkb_toppars */
+                rd_list_t *adding_toppars;         /* List of toppars
+                                                   * that are added to rkb_toppars but not yet added to fetch session.
+                                                   * Will be sent in next fetch request.
+                                                   * Cleared when fetch session is reset or when fetch request is successful. */
 
-                // TAILQ_HEAD(, rd_kafka_toppar_s) next_forgotten_toppars; /* List of toppars
-                //                                                          * that are removed from rkb_toppars but not yet removed from fetch session.
-                //                                                          * Will be sent in next fetch request.
-                //                                                          * Cleared when fetch session is reset or when fetch request is successful. */
-                // TAILQ_HEAD(, rd_kafka_toppar_s) forgetting_toppars;     /* List of toppars
-                //                                                          * that are removed from rkb_toppars and sent in fetch request but not yet removed from fetch session.
-                //                                                          * Cleared when fetch session is reset or when fetch request is successful. */
+                TAILQ_HEAD(, rd_kafka_toppar_s) toppars_to_forget; /* List of toppars
+                                                                         * that are removed from rkb_toppars but not yet removed from fetch session.
+                                                                         * Will be sent in next fetch request.
+                                                                         * Cleared when fetch session is reset or when fetch request is successful. */
+                rd_list_t *forgetting_toppars;     /* List of toppars
+                                                   * that are removed from rkb_toppars and sent in fetch request but not yet removed from fetch session.
+                                                   * Cleared when fetch session is reset or when fetch request is successful. */
                 int32_t epoch; /* Current fetch session
                                 * epoch, or -1 if no session */
         } rkb_share_fetch_session;

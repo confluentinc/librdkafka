@@ -610,7 +610,8 @@ static void do_test_consume_batch_control_msgs(void) {
 
 /**
  * @brief Test that rd_kafka_consume_batch_queue correctly updates consumer
- *        position when EOF messages are received with enable.partition.eof=true.
+ *        position when EOF messages are received with
+ * enable.partition.eof=true.
  *
  * This is a regression test for the bug where EOF messages incorrectly
  * advanced the consumer position by 2 instead of 1 (last_offset + 2 instead
@@ -622,13 +623,13 @@ static void do_test_consume_batch_eof_position(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_queue_t *rkq;
         uint64_t testid;
-        const int partition_cnt            = 1;
-        const int partition                = 0;
-        const int produce_msg_cnt          = 5;
-        const int consume_msg_cnt          = 10;
-        const int timeout_ms               = 5000;
-        const int session_timeout_s        = 60;
-        const int replication_factor       = -1;
+        const int partition_cnt             = 1;
+        const int partition                 = 0;
+        const int produce_msg_cnt           = 5;
+        const int consume_msg_cnt           = 10;
+        const int timeout_ms                = 5000;
+        const int session_timeout_s         = 60;
+        const int replication_factor        = -1;
         const int topic_creation_timeout_ms = 5000;
         rd_kafka_message_t **rkmessages;
         int msg_cnt, i;
@@ -709,23 +710,26 @@ static void do_test_consume_batch_eof_position(void) {
         rd_kafka_topic_partition_list_add(positions, topic, partition);
 
         err = rd_kafka_position(consumer, positions);
-        TEST_ASSERT(!err, "rd_kafka_position failed: %s", rd_kafka_err2str(err));
+        TEST_ASSERT(!err, "rd_kafka_position failed: %s",
+                    rd_kafka_err2str(err));
 
         /* Extract the position value from the partition list */
         position_after_eof = positions->elems[0].offset;
 
-        TEST_SAY(
-            "Last real message offset: %" PRId64 "\n"
-            "EOF offset: %" PRId64 "\n"
-            "Position after EOF: %" PRId64 "\n",
-            last_real_offset, eof_offset, position_after_eof);
+        TEST_SAY("Last real message offset: %" PRId64
+                 "\n"
+                 "EOF offset: %" PRId64
+                 "\n"
+                 "Position after EOF: %" PRId64 "\n",
+                 last_real_offset, eof_offset, position_after_eof);
 
-        TEST_ASSERT(
-            position_after_eof == last_real_offset + 1,
-            "Position after EOF should be %" PRId64 " (last_offset + 1), "
-            "but got %" PRId64 ". This indicates the EOF offset bug where "
-            "position incorrectly advances by +2 instead of +1",
-            last_real_offset + 1, position_after_eof);
+        TEST_ASSERT(position_after_eof == last_real_offset + 1,
+                    "Position after EOF should be %" PRId64
+                    " (last_offset + 1), "
+                    "but got %" PRId64
+                    ". This indicates the EOF offset bug where "
+                    "position incorrectly advances by +2 instead of +1",
+                    last_real_offset + 1, position_after_eof);
 
         rd_kafka_topic_partition_list_destroy(positions);
         rd_kafka_queue_destroy(rkq);

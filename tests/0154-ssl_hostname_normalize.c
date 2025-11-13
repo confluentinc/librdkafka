@@ -45,8 +45,8 @@
 
 /* Function under test (exposed via ENABLE_DEVEL) */
 extern const char *rd_kafka_ssl_normalize_hostname(const char *hostname,
-                                                    char *normalized,
-                                                    size_t size);
+                                                   char *normalized,
+                                                   size_t size);
 
 
 /**
@@ -96,7 +96,7 @@ static void test_hostname_normalize(void) {
 
                 /* Call the actual function under test */
                 result = rd_kafka_ssl_normalize_hostname(input, normalized,
-                                                          sizeof(normalized));
+                                                         sizeof(normalized));
 
                 TEST_SAYL(3, "Test case %d: %s\n", i + 1, desc);
                 TEST_SAYL(3, "  Input:    \"%s\"\n", input);

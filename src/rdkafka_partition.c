@@ -2597,6 +2597,46 @@ void rd_kafka_toppar_leader_unavailable(rd_kafka_toppar_t *rktp,
                                          rd_false /* don't force */);
 }
 
+/**
+ * @locality any
+ */
+rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp, rd_bool_t do_lock) {
+        rd_bool_t on_cgrp;
+        if (do_lock) {
+                rd_kafka_toppar_lock(rktp);
+        }
+        on_cgrp = (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP) ? rd_true
+                                                                 : rd_false;
+
+        if (do_lock) {
+                rd_kafka_toppar_unlock(rktp);
+        }
+
+        return on_cgrp;
+}
+
+/**
+ * @locality broker thread
+ */
+static rd_bool_t rd_kafka_toppar_share_are_acknowledgements_present(rd_kafka_toppar_t *rktp) {
+        return rktp->rktp_share_acknowledge.first_offset > -1 ? rd_true : rd_false;
+}
+
+rd_bool_t rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp) {
+        if (rd_kafka_toppar_share_are_acknowledgements_present(rktp)) {
+                return rd_true;
+        }
+        return rd_kafka_toppar_is_on_cgrp(rktp, rd_true /*do_lock*/);
+}
+
+
+/**
+ * @brief Toppar copier for rd_list_copy()
+ */
+void *rd_kafka_toppar_list_copy(const void *elem, void *opaque) {
+        return rd_kafka_toppar_keep((rd_kafka_toppar_t *)elem);
+}
+
 
 const char *
 rd_kafka_topic_partition_topic(const rd_kafka_topic_partition_t *rktpar) {

@@ -829,7 +829,10 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                 rko = (rd_kafka_op_t *)rkmessages[i]->_private;
                 rd_kafka_toppar_t *rktp = rko->rko_rktp;
                 int64_t offset          = rkmessages[i]->offset + 1;
-                if (unlikely(rktp && (rktp->rktp_app_pos.offset < offset)))
+                /* Only update position for messages that are not EOF */
+                if (unlikely(rktp && (rktp->rktp_app_pos.offset < offset) &&
+                             (rkmessages[i]->err !=
+                              RD_KAFKA_RESP_ERR__PARTITION_EOF)))
                         rd_kafka_update_app_pos(
                             rk, rktp,
                             RD_KAFKA_FETCH_POS(

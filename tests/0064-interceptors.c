@@ -502,8 +502,8 @@ static void do_test_conf_destroy_interceptor_with_failed_new(void) {
 
         /* This should fail due to invalid SSL config */
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(!rk,
-                    "rd_kafka_new() should have failed with invalid SSL config");
+        TEST_ASSERT(
+            !rk, "rd_kafka_new() should have failed with invalid SSL config");
 
         rd_kafka_conf_destroy(conf);
 

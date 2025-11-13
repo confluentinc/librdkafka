@@ -124,23 +124,28 @@ endif()
 if(WIN32)
   set(with_sasl_default ON)
 else()
-  if(PkgConfig_FOUND)
-    pkg_check_modules(SASL libsasl2)
-    if(SASL_FOUND)
-      set(with_sasl_default ON)
-    else()
-      try_compile(
-          WITH_SASL_CYRUS_BOOL
-          "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
-          "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
-          LINK_LIBRARIES "-lsasl2"
-      )
-      if(WITH_SASL_CYRUS_BOOL)
+  find_package(SASL2 QUIET)
+  if (SASL2_FOUND)
+    set(with_sasl_default ON)
+  else
+    if(PkgConfig_FOUND)
+        pkg_check_modules(SASL libsasl2)
+        if(SASL_FOUND)
         set(with_sasl_default ON)
-        set(SASL_LIBRARIES "-lsasl2")
-      else()
-        set(with_sasl_default OFF)
-      endif()
+        else()
+            try_compile(
+                WITH_SASL_CYRUS_BOOL
+                "${CMAKE_CURRENT_BINARY_DIR}/try_compile"
+                "${TRYCOMPILE_SRC_DIR}/libsasl2_test.c"
+                LINK_LIBRARIES "-lsasl2"
+            )
+            if(WITH_SASL_CYRUS_BOOL)
+                set(with_sasl_default ON)
+                set(SASL_LIBRARIES "-lsasl2")
+            else()
+                set(with_sasl_default OFF)
+            endif()
+        endif()
     endif()
   endif()
 endif()

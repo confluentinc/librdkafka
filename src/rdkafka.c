@@ -2832,8 +2832,7 @@ fail:
         if (app_conf) {
                 rd_kafka_assignors_term(rk);
                 /* Do NOT destroy interceptors here - they belong to app_conf
-                 * and will be freed when app_conf is destroyed by the user.
-                 * rd_kafka_interceptors_destroy(&rk->rk_conf); */
+                 * and will be freed when app_conf is destroyed by the user. */
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
         }
 

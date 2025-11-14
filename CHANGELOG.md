@@ -4,12 +4,13 @@ v1.7.0 is a feature release. It is supported for all usage.
 
 ### Enhancements
 
-1. Configurable batch size through the `js.consumer.max.batch.size` property 
+1. References librdkafka v2.12.1. Refer to the [librdkafka v2.12.1 release notes](https://github.com/confluentinc/librdkafka/releases/tag/v2.12.1) for more information.
+2. Configurable batch size through the `js.consumer.max.batch.size` property 
    and cache size through the `js.consumer.max.cache.size.per.worker.ms` 
    property (#393).
-2. Statistics callback now available when using the promisified API with all
+3. Statistics callback now available when using the promisified API with all
    client types (#399).
-3. Fix for at-least-once guarantee not ensured in case a seek happens on one
+4. Fix for at-least-once guarantee not ensured in case a seek happens on one
 partition and there are messages being fetched about other partitions (#393).
 
 

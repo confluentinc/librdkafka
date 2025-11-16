@@ -506,11 +506,10 @@ after_pipeline:
       - name: SonarQube
         commands:
           - checkout
-          - sem-version java 17
           - artifact pull workflow mocha-coverage.json
           - artifact pull workflow jest-classic-coverage.json
           - artifact pull workflow jest-consumer-coverage.json
           - artifact pull workflow jest-sr-coverage.json
           - npx --yes istanbul-merge --out merged-output/merged-coverage.json *-coverage.json
           - npx nyc report -t merged-output --report-dir coverage --reporter=text --reporter=lcov
-          - emit-sonarqube-data --enable_sonarqube_enterprise --run_only_sonar_scan
+          - emit-sonarqube-data --run_only_sonar_scan

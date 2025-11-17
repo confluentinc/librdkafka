@@ -3209,7 +3209,13 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                           "Consumer group not initialized");
 
         /* If we have any pending items on the consumer queue, don't issue new
-         * requests, rather, deal with them first. */
+         * requests, rather, deal with them first. 
+         * 
+         * TODO KIP-932:
+         * Above statement might be incorrect as we have to send all the pending
+         * acknowledgements irrespective of whether there are messages to be
+         * consumed or not.
+         */
         if (likely(rd_kafka_q_len(rkcg->rkcg_q) == 0)) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
                              "Issuing share fetch fanout to main thread with "

@@ -192,7 +192,10 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
                                     applicable. */
         RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
-
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD, /**< share session:
+                                           * add partition */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
+                                           * remove partition */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

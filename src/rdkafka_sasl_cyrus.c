@@ -286,7 +286,7 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
 #else
         rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
                      "Kerberos ticket refresh failed: "
-                     "system() is not available",
+                     "system() is not available");
         return -1;
 #endif
 }

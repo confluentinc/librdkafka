@@ -44,20 +44,17 @@ int main_0017_compression(int argc, char **argv) {
         int msg_base      = 0;
         uint64_t testid;
 #define CODEC_CNT 5
-        const char *codecs[CODEC_CNT + 1] = {
-                "none",
+        const char *codecs[CODEC_CNT + 1] = {"none",
 #if WITH_ZLIB
-                "gzip",
+                                             "gzip",
 #endif
 #if WITH_SNAPPY
-                "snappy",
+                                             "snappy",
 #endif
 #if WITH_ZSTD
-                "zstd",
+                                             "zstd",
 #endif
-                "lz4",
-                NULL
-        };
+                                             "lz4",    NULL};
         char *topics[CODEC_CNT];
         const int32_t partition = 0;
         int i;
@@ -77,6 +74,7 @@ int main_0017_compression(int argc, char **argv) {
                     msg_cnt, codecs[i], topics[i]);
                 rkt_p = test_create_producer_topic(
                     rk_p, topics[i], "compression.codec", codecs[i], NULL);
+                test_wait_topic_exists(rk_p, topics[i], 5000);
 
                 /* Produce small message that will not decrease with
                  * compression (issue #781) */

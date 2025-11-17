@@ -35,6 +35,11 @@
 #include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
+
+#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
+#include <openssl/rand.h>
+#endif
+
 #if WITH_SSL
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
@@ -108,6 +113,19 @@ struct rd_kafka_AdminOptions_s {
                                           *   to query for.
                                           *   Valid for: ListConsumerGroups.
                                           */
+
+        rd_kafka_confval_t
+            match_consumer_group_types; /**< PTR: list of consumer group types
+                                         *   to query for.
+                                         *   Valid for: ListConsumerGroups.
+                                         */
+
+        rd_kafka_confval_t
+            isolation_level; /**< INT:Isolation Level needed for list Offset
+                              *   to query for.
+                              *   Default Set to
+                              * RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED
+                              */
 
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */
@@ -265,6 +283,38 @@ struct rd_kafka_ConfigResource_result_s {
                               *   but with response error values. */
 };
 
+/**
+ * @brief Resource type specific to config apis.
+ */
+typedef enum rd_kafka_ConfigResourceType_t {
+        RD_KAFKA_CONFIG_RESOURCE_UNKNOWN = 0,
+        RD_KAFKA_CONFIG_RESOURCE_TOPIC   = 2,
+        RD_KAFKA_CONFIG_RESOURCE_BROKER  = 4,
+        RD_KAFKA_CONFIG_RESOURCE_GROUP   = 32,
+} rd_kafka_ConfigResourceType_t;
+
+/**
+ * @brief Maps `rd_kafka_ResourceType_t` to `rd_kafka_ConfigResourceType_t`
+ *        for Config Apis. We are incorrectly using `rd_kafka_ResourceType_t` in
+ *        both Config Apis and ACL Apis. So, we need this function to map the
+ *        resource type internally to `rd_kafka_ConfigResourceType_t`. Like the
+ *        enum value for `GROUP` is 32 in Config Apis, but it is 3 for ACL Apis.
+ */
+rd_kafka_ConfigResourceType_t
+rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype);
+
+/**
+ * @brief Maps `rd_kafka_ConfigResourceType_t` to `rd_kafka_ResourceType_t`
+ *        for Config Apis. We are incorrectly using `rd_kafka_ResourceType_t` in
+ *        both Config Apis and ACL Apis. So, we need this function to map the
+ *        `rd_kafka_ConfigResourceType_t` internally to
+ *        `rd_kafka_ResourceType_t`. Like the enum value for `GROUP` is 32 in
+ *        Config Apis, but it is 3 for ACL Apis.
+ */
+rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
+    rd_kafka_ConfigResourceType_t config_resource_type);
+
+
 /**@}*/
 
 
@@ -307,6 +357,47 @@ struct rd_kafka_DeleteRecords_s {
 
 /**@}*/
 
+/**
+ * @name ListConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief ListConsumerGroupOffsets result
+ */
+struct rd_kafka_ListConsumerGroupOffsets_result_s {
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_ListConsumerGroupOffsets_s {
+        char *group_id; /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
+};
+
+/**@}*/
+
+/**
+ * @name AlterConsumerGroupOffsets
+ * @{
+ */
+
+/**
+ * @brief AlterConsumerGroupOffsets result
+ */
+struct rd_kafka_AlterConsumerGroupOffsets_result_s {
+        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
+};
+
+struct rd_kafka_AlterConsumerGroupOffsets_s {
+        char *group_id; /**< Points to data */
+        rd_kafka_topic_partition_list_t *partitions;
+        char data[1]; /**< The group id is allocated along with
+                       *   the struct here. */
+};
+
+/**@}*/
 
 /**
  * @name DeleteConsumerGroupOffsets
@@ -327,6 +418,24 @@ struct rd_kafka_DeleteConsumerGroupOffsets_s {
                        *   the struct here. */
 };
 
+/**@}*/
+
+/**
+ * @name ListOffsets
+ * @{
+ */
+
+/**
+ * @struct ListOffsets result about a single partition
+ */
+struct rd_kafka_ListOffsetsResultInfo_s {
+        rd_kafka_topic_partition_t *topic_partition;
+        int64_t timestamp;
+};
+
+rd_kafka_ListOffsetsResultInfo_t *
+rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
+                                   rd_ts_t timestamp);
 /**@}*/
 
 /**
@@ -366,50 +475,6 @@ struct rd_kafka_DeleteAcls_result_response_s {
 
 /**@}*/
 
-
-/**
- * @name AlterConsumerGroupOffsets
- * @{
- */
-
-/**
- * @brief AlterConsumerGroupOffsets result
- */
-struct rd_kafka_AlterConsumerGroupOffsets_result_s {
-        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
-};
-
-struct rd_kafka_AlterConsumerGroupOffsets_s {
-        char *group_id; /**< Points to data */
-        rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group id is allocated along with
-                       *   the struct here. */
-};
-
-/**@}*/
-
-
-/**
- * @name ListConsumerGroupOffsets
- * @{
- */
-
-/**
- * @brief ListConsumerGroupOffsets result
- */
-struct rd_kafka_ListConsumerGroupOffsets_result_s {
-        rd_list_t groups; /**< Type (rd_kafka_group_result_t *) */
-};
-
-struct rd_kafka_ListConsumerGroupOffsets_s {
-        char *group_id; /**< Points to data */
-        rd_kafka_topic_partition_list_t *partitions;
-        char data[1]; /**< The group id is allocated along with
-                       *   the struct here. */
-};
-
-/**@}*/
-
 /**
  * @name ListConsumerGroups
  * @{
@@ -423,6 +488,7 @@ struct rd_kafka_ConsumerGroupListing_s {
         /** Is it a simple consumer group? That means empty protocol_type. */
         rd_bool_t is_simple_consumer_group;
         rd_kafka_consumer_group_state_t state; /**< Consumer group state. */
+        rd_kafka_consumer_group_type_t type;   /**< Consumer group type. */
 };
 
 
@@ -461,6 +527,9 @@ struct rd_kafka_MemberDescription_s {
         char *group_instance_id;                /**< Group instance id */
         char *host;                             /**< Group member host */
         rd_kafka_MemberAssignment_t assignment; /**< Member assignment */
+        rd_kafka_MemberAssignment_t
+            *target_assignment; /**< Target assignment. `NULL` for `classic`
+                                   protocol */
 };
 
 /**
@@ -480,6 +549,8 @@ struct rd_kafka_ConsumerGroupDescription_s {
         char *partition_assignor;
         /** Consumer group state. */
         rd_kafka_consumer_group_state_t state;
+        /** Consumer group type. */
+        rd_kafka_consumer_group_type_t type;
         /** Consumer group coordinator. */
         rd_kafka_Node_t *coordinator;
         /** Count of operations allowed for topic. -1 indicates operations not
@@ -525,9 +596,10 @@ struct rd_kafka_TopicPartitionInfo_s {
  * @struct DescribeTopics result
  */
 struct rd_kafka_TopicDescription_s {
-        char *topic;           /**< Topic name */
-        int partition_cnt;     /**< Number of partitions in \p partitions*/
-        rd_bool_t is_internal; /**< Is the topic is internal to Kafka? */
+        char *topic;              /**< Topic name */
+        rd_kafka_Uuid_t topic_id; /**< Topic Id */
+        int partition_cnt;        /**< Number of partitions in \p partitions*/
+        rd_bool_t is_internal;    /**< Is the topic is internal to Kafka? */
         rd_kafka_TopicPartitionInfo_t **partitions; /**< Partitions */
         rd_kafka_error_t *error;       /**< Topic error reported by broker */
         int authorized_operations_cnt; /**< Count of operations allowed for
@@ -560,6 +632,29 @@ typedef struct rd_kafka_ClusterDescription_s {
                                      * NULL if operations were not requested */
 
 } rd_kafka_ClusterDescription_t;
+
+/**@}*/
+
+/**
+ * @name ElectLeaders
+ * @{
+ */
+
+/**
+ * @struct ElectLeaders request object
+ */
+struct rd_kafka_ElectLeaders_s {
+        rd_kafka_ElectionType_t election_type; /*Election Type*/
+        rd_kafka_topic_partition_list_t
+            *partitions; /*TopicPartitions for election*/
+};
+
+/**
+ * @struct ElectLeaders result object
+ */
+typedef struct rd_kafka_ElectLeadersResult_s {
+        rd_list_t partitions; /**< Type (rd_kafka_topic_partition_result_t *) */
+} rd_kafka_ElectLeadersResult_t;
 
 /**@}*/
 

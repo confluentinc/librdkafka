@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -63,14 +64,16 @@ static void rebalance_cb(rd_kafka_t *rk,
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 assign_cnt++;
-                rd_kafka_assign(rk, partitions);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           partitions);
                 break;
 
         case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
                 if (assign_cnt == 0)
                         TEST_FAIL("asymetric rebalance_cb\n");
                 assign_cnt--;
-                rd_kafka_assign(rk, NULL);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             partitions);
                 break;
 
         default:
@@ -195,6 +198,7 @@ static void do_test(rd_bool_t with_queue) {
         /* Produce messages */
         rk_p  = test_create_producer();
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
+        test_wait_topic_exists(rk_p, topic, 5000);
 
         for (partition = 0; partition < partition_cnt; partition++) {
                 test_produce_msgs(rk_p, rkt_p, testid, partition,
@@ -260,7 +264,9 @@ static void do_test(rd_bool_t with_queue) {
         /* Let remaining consumers run for a while to take over the now
          * lost partitions. */
 
-        if (assign_cnt != _CONS_CNT - 1)
+        /* Callback count can vary in KIP-848 */
+        if (test_consumer_group_protocol_classic() &&
+            assign_cnt != _CONS_CNT - 1)
                 TEST_FAIL("assign_cnt %d, should be %d\n", assign_cnt,
                           _CONS_CNT - 1);
 

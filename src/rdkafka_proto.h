@@ -156,21 +156,26 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
                 "DescribeUserScramCredentialsRequest",
             [RD_KAFKAP_AlterUserScramCredentials] =
                 "AlterUserScramCredentialsRequest",
-            [RD_KAFKAP_Vote]                 = "VoteRequest",
-            [RD_KAFKAP_BeginQuorumEpoch]     = "BeginQuorumEpochRequest",
-            [RD_KAFKAP_EndQuorumEpoch]       = "EndQuorumEpochRequest",
-            [RD_KAFKAP_DescribeQuorum]       = "DescribeQuorumRequest",
-            [RD_KAFKAP_AlterIsr]             = "AlterIsrRequest",
-            [RD_KAFKAP_UpdateFeatures]       = "UpdateFeaturesRequest",
-            [RD_KAFKAP_Envelope]             = "EnvelopeRequest",
-            [RD_KAFKAP_FetchSnapshot]        = "FetchSnapshot",
-            [RD_KAFKAP_DescribeCluster]      = "DescribeCluster",
-            [RD_KAFKAP_DescribeProducers]    = "DescribeProducers",
-            [RD_KAFKAP_BrokerHeartbeat]      = "BrokerHeartbeat",
-            [RD_KAFKAP_UnregisterBroker]     = "UnregisterBroker",
-            [RD_KAFKAP_DescribeTransactions] = "DescribeTransactions",
-            [RD_KAFKAP_ListTransactions]     = "ListTransactions",
-            [RD_KAFKAP_AllocateProducerIds]  = "AllocateProducerIds",
+            [RD_KAFKAP_Vote]                      = "VoteRequest",
+            [RD_KAFKAP_BeginQuorumEpoch]          = "BeginQuorumEpochRequest",
+            [RD_KAFKAP_EndQuorumEpoch]            = "EndQuorumEpochRequest",
+            [RD_KAFKAP_DescribeQuorum]            = "DescribeQuorumRequest",
+            [RD_KAFKAP_AlterIsr]                  = "AlterIsrRequest",
+            [RD_KAFKAP_UpdateFeatures]            = "UpdateFeaturesRequest",
+            [RD_KAFKAP_Envelope]                  = "EnvelopeRequest",
+            [RD_KAFKAP_FetchSnapshot]             = "FetchSnapshot",
+            [RD_KAFKAP_DescribeCluster]           = "DescribeCluster",
+            [RD_KAFKAP_DescribeProducers]         = "DescribeProducers",
+            [RD_KAFKAP_BrokerHeartbeat]           = "BrokerHeartbeat",
+            [RD_KAFKAP_UnregisterBroker]          = "UnregisterBroker",
+            [RD_KAFKAP_DescribeTransactions]      = "DescribeTransactions",
+            [RD_KAFKAP_ListTransactions]          = "ListTransactions",
+            [RD_KAFKAP_AllocateProducerIds]       = "AllocateProducerIds",
+            [RD_KAFKAP_ConsumerGroupHeartbeat]    = "ConsumerGroupHeartbeat",
+            [RD_KAFKAP_ConsumerGroupDescribe]     = "ConsumerGroupDescribe",
+            [RD_KAFKAP_GetTelemetrySubscriptions] = "GetTelemetrySubscriptions",
+            [RD_KAFKAP_PushTelemetry]             = "PushTelemetry",
+
         };
         static RD_TLS char ret[64];
 
@@ -279,6 +284,8 @@ typedef struct rd_kafkap_str_s {
 #define RD_KAFKAP_STR_INITIALIZER                                              \
         { .len = RD_KAFKAP_STR_LEN_NULL, .str = NULL }
 
+#define RD_KAFKAP_STR_INITIALIZER_EMPTY                                        \
+        { .len = 0, .str = "" }
 /**
  * Frees a Kafka string previously allocated with `rd_kafkap_str_new()`
  */
@@ -572,79 +579,71 @@ typedef struct rd_kafka_buf_s rd_kafka_buf_t;
 /**
  * @struct Struct representing UUID protocol primitive type.
  */
-typedef struct rd_kafka_uuid_s {
+typedef struct rd_kafka_Uuid_s {
         int64_t
             most_significant_bits; /**< Most significant 64 bits for the UUID */
         int64_t least_significant_bits; /**< Least significant 64 bits for the
                                            UUID */
         char base64str[23]; /**< base64 encoding for the uuid. By default, it is
                                lazy loaded. Use function
-                               `rd_kafka_uuid_base64str()` as a getter for this
+                               `rd_kafka_Uuid_base64str()` as a getter for this
                                field. */
-} rd_kafka_uuid_t;
+} rd_kafka_Uuid_t;
 
 #define RD_KAFKA_UUID_ZERO                                                     \
-        { 0, 0, "" }
+        (rd_kafka_Uuid_t) {                                                    \
+                0, 0, ""                                                       \
+        }
+
+#define RD_KAFKA_UUID_IS_ZERO(uuid)                                            \
+        (!rd_kafka_Uuid_cmp(uuid, RD_KAFKA_UUID_ZERO))
 
 #define RD_KAFKA_UUID_METADATA_TOPIC_ID                                        \
-        { 0, 1, "" }
+        (rd_kafka_Uuid_t) {                                                    \
+                0, 1, ""                                                       \
+        }
 
-
-/**
- * Creates a new UUID.
- *
- * @return A newly allocated UUID.
- */
-static RD_INLINE RD_UNUSED rd_kafka_uuid_t *rd_kafka_uuid_new() {
-        rd_kafka_uuid_t *uuid = rd_calloc(1, sizeof(rd_kafka_uuid_t *));
-        return uuid;
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
+                                                 rd_kafka_Uuid_t b) {
+        if (a.most_significant_bits < b.most_significant_bits)
+                return -1;
+        if (a.most_significant_bits > b.most_significant_bits)
+                return 1;
+        if (a.least_significant_bits < b.least_significant_bits)
+                return -1;
+        if (a.least_significant_bits > b.least_significant_bits)
+                return 1;
+        return 0;
 }
 
-/**
- * Initialize given UUID to zero UUID.
- *
- * @param uuid UUID to initialize.
- */
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_init(rd_kafka_uuid_t *uuid) {
-        memset(uuid, 0, sizeof(*uuid));
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
+        rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
+        return rd_kafka_Uuid_cmp(*a_uuid, *b_uuid);
 }
 
+rd_kafka_Uuid_t rd_kafka_Uuid_random();
+
+char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid);
+
+unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid);
+
+unsigned int rd_kafka_Uuid_map_hash(const void *key);
+
 /**
- * @brief Computes base64 encoding for the given uuid string.
- * @param uuid UUID for which base64 encoding is required.
- *
- * @return base64 encoded string for the given UUID or NULL in case of some
- *         issue with the conversion or the conversion is not supported.
+ * @brief UUID copier for rd_list_copy()
  */
-static RD_INLINE RD_UNUSED char *
-rd_kafka_uuid_base64str(rd_kafka_uuid_t *uuid) {
-        if (*uuid->base64str)
-                return uuid->base64str;
-
-        rd_chariov_t in_base64;
-        char *out_base64_str;
-        char *uuid_bytes;
-        uint64_t input_uuid[2];
-
-        input_uuid[0]  = htobe64(uuid->most_significant_bits);
-        input_uuid[1]  = htobe64(uuid->least_significant_bits);
-        uuid_bytes     = (char *)input_uuid;
-        in_base64.ptr  = uuid_bytes;
-        in_base64.size = sizeof(uuid->most_significant_bits) +
-                         sizeof(uuid->least_significant_bits);
-
-        out_base64_str = rd_base64_encode_str(&in_base64);
-        if (!out_base64_str)
-                return NULL;
-
-        rd_strlcpy(uuid->base64str, out_base64_str,
-                   23 /* Removing extra ('=') padding */);
-        rd_free(out_base64_str);
-        return uuid->base64str;
+static RD_UNUSED void *rd_list_Uuid_copy(const void *elem, void *opaque) {
+        return (void *)rd_kafka_Uuid_copy((rd_kafka_Uuid_t *)elem);
 }
 
-static RD_INLINE RD_UNUSED void rd_kafka_uuid_destroy(rd_kafka_uuid_t *uuid) {
-        rd_free(uuid);
+static RD_INLINE RD_UNUSED void rd_list_Uuid_destroy(void *uuid) {
+        rd_kafka_Uuid_destroy((rd_kafka_Uuid_t *)uuid);
+}
+
+static RD_INLINE RD_UNUSED int rd_list_Uuid_cmp(const void *uuid1,
+                                                const void *uuid2) {
+        return rd_kafka_Uuid_cmp(*((rd_kafka_Uuid_t *)uuid1),
+                                 *((rd_kafka_Uuid_t *)uuid2));
 }
 
 

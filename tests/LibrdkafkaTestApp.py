@@ -12,6 +12,7 @@ from trivup.apps.KafkaBrokerApp import KafkaBrokerApp
 from trivup.apps.KerberosKdcApp import KerberosKdcApp
 from trivup.apps.OauthbearerOIDCApp import OauthbearerOIDCApp
 
+import os
 import json
 
 
@@ -47,10 +48,6 @@ class LibrdkafkaTestApp(App):
         if version.startswith('0.9') or version.startswith('0.8'):
             conf_blob.append('api.version.request=false')
             conf_blob.append('broker.version.fallback=%s' % version)
-        else:
-            # any broker version with ApiVersion support
-            conf_blob.append('broker.version.fallback=0.10.0.0')
-            conf_blob.append('api.version.fallback.ms=0')
 
         # SASL (only one mechanism supported at a time)
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]
@@ -91,12 +88,28 @@ class LibrdkafkaTestApp(App):
                     self.env_add(
                         'EXPIRED_TOKEN_OIDC_URL',
                         oidc.conf.get('expired_url'))
+                    self.env_add(
+                        'EXPIRED_TOKEN_OIDC_URL',
+                        oidc.conf.get('expired_url'))
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY'] = \
+                        oidc.conf['sasl_oauthbearer_client_private_key_path']
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY_ENCRYPTED'] = \
+                        oidc.conf[
+                            'sasl_oauthbearer_client_private_key_encrypted_path']  # noqa: E501
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY_PASSWORD'] = \
+                        oidc.conf[
+                            'sasl_oauthbearer_client_private_key_password']
                 else:
                     conf_blob.append(
                         'enable.sasl.oauthbearer.unsecure.jwt=true\n')
-                    conf_blob.append(
-                        'sasl.oauthbearer.config=%s\n' %
-                        self.conf.get('sasl_oauthbearer_config'))
+                    if not self.conf.get('sasl_oauthbearer_config'):
+                        conf_blob.append(
+                            'sasl.oauthbearer.config=scope=requiredScope'
+                            ' principal=admin\n')
+                    else:
+                        conf_blob.append(
+                            'sasl.oauthbearer.config=%s\n' %
+                            self.conf.get('sasl_oauthbearer_config'))
 
             elif mech == 'GSSAPI':
                 self.security_protocol = 'SASL_PLAINTEXT'
@@ -128,8 +141,11 @@ class LibrdkafkaTestApp(App):
         # SSL config
         if getattr(cluster, 'ssl', None) is not None:
             ssl = cluster.ssl
+            ssl_intermediate_ca = cluster.conf.get(
+                'ssl_intermediate_ca', False)
 
-            key = ssl.create_cert('librdkafka%s' % self.appid)
+            key = ssl.create_cert('librdkafka%s' % self.appid,
+                                  through_intermediate=ssl_intermediate_ca)
 
             conf_blob.append('ssl.ca.location=%s' % ssl.ca['pem'])
             conf_blob.append('ssl.certificate.location=%s' % key['pub']['pem'])
@@ -140,6 +156,13 @@ class LibrdkafkaTestApp(App):
             # set up the env vars accordingly.
             for k, v in ssl.ca.items():
                 self.env_add('SSL_ca_{}'.format(k), v)
+
+            for k, v in ssl.unused_ca.items():
+                self.env['SSL_unused_ca_{}'.format(k)] = v
+
+            self.env['SSL_all_cas_pem'] = ssl.all_cas['pem']
+            self.env['SSL_client_auth'] = cluster.conf.get(
+                'ssl_client_auth', 'required')
 
             # Set envs for all generated keys so tests can find them.
             for k, v in key.items():
@@ -181,7 +204,9 @@ class LibrdkafkaTestApp(App):
 
         self.env_add('TEST_SCENARIO', scenario)
         self.env_add('RDKAFKA_TEST_CONF', self.test_conf_file)
-        self.env_add('TEST_KAFKA_VERSION', version)
+        test_kafka_version = version
+        if 'TEST_KAFKA_VERSION' not in os.environ:
+            self.env_add('TEST_KAFKA_VERSION', test_kafka_version, False)
         self.env_add('TRIVUP_ROOT', cluster.instance_path())
 
         if self.test_mode != 'bash':
@@ -191,7 +216,7 @@ class LibrdkafkaTestApp(App):
             if tests is not None:
                 self.env_add('TESTS', ','.join(tests))
 
-    def start_cmd(self):
+    def finalize_env(self):
         self.env_add(
             'KAFKA_PATH',
             self.cluster.get_all(
@@ -199,19 +224,23 @@ class LibrdkafkaTestApp(App):
                 '',
                 KafkaBrokerApp)[0],
             False)
-        self.env_add(
-            'ZK_ADDRESS',
-            self.cluster.get_all(
-                'address',
-                '',
-                ZookeeperApp)[0],
-            False)
+
+        zookeeper = self.cluster.get_all(
+            'address',
+            '',
+            ZookeeperApp)
+        if len(zookeeper):
+            self.env_add(
+                'ZK_ADDRESS',
+                zookeeper[0],
+                False)
         self.env_add('BROKERS', self.cluster.bootstrap_servers(), False)
 
         # Provide a HTTPS REST endpoint for the HTTP client tests.
         self.env_add(
             'RD_UT_HTTP_URL',
-            'https://jsonplaceholder.typicode.com/users')
+            'https://jsonplaceholder.typicode.com/users',
+            False)
 
         # Per broker env vars
         for b in [x for x in self.cluster.apps if isinstance(
@@ -219,14 +248,20 @@ class LibrdkafkaTestApp(App):
             self.env_add('BROKER_ADDRESS_%d' % b.appid,
                          ','.join([x for x in
                                    b.conf['listeners'].split(',')
-                                   if x.startswith(self.security_protocol)]))
+                                   if x.startswith(self.security_protocol)]),
+                         False)
             # Add each broker pid as an env so they can be killed
             # indivdidually.
-            self.env_add('BROKER_PID_%d' % b.appid, str(b.proc.pid))
+            self.env_add('BROKER_PID_%d' % b.appid, str(b.proc.pid), False)
             # JMX port, if available
             jmx_port = b.conf.get('jmx_port', None)
             if jmx_port is not None:
-                self.env_add('BROKER_JMX_PORT_%d' % b.appid, str(jmx_port))
+                self.env_add(
+                    'BROKER_JMX_PORT_%d' %
+                    b.appid, str(jmx_port), False)
+
+    def start_cmd(self):
+        self.finalize_env()
 
         extra_args = list()
         if not self.local_tests:

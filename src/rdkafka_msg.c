@@ -58,6 +58,15 @@ const char *rd_kafka_message_errstr(const rd_kafka_message_t *rkmessage) {
         return rd_kafka_err2str(rkmessage->err);
 }
 
+const char *
+rd_kafka_message_produce_errstr(const rd_kafka_message_t *rkmessage) {
+        if (!rkmessage->err)
+                return NULL;
+        rd_kafka_msg_t *rkm = (rd_kafka_msg_t *)rkmessage;
+        return rkm->rkm_u.producer.errstr;
+}
+
+
 
 /**
  * @brief Check if producing is allowed.
@@ -374,6 +383,7 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
         rd_kafka_error_t *error      = NULL;
         rd_kafka_headers_t *hdrs     = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+        int existing                 = 0;
         size_t i;
 
         if (unlikely(rd_kafka_check_produce(rk, &error)))
@@ -383,8 +393,11 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
                 const rd_kafka_vu_t *vu = &vus[i];
                 switch (vu->vtype) {
                 case RD_KAFKA_VTYPE_TOPIC:
-                        rkt =
-                            rd_kafka_topic_new0(rk, vu->u.cstr, NULL, NULL, 1);
+                        rkt = rd_kafka_topic_new0(rk, vu->u.cstr, NULL,
+                                                  &existing, 1);
+                        if (!existing)
+                                rd_kafka_topic_fast_leader_query(
+                                    rk, rd_true /* force */);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
@@ -478,6 +491,8 @@ rd_kafka_produceva(rd_kafka_t *rk, const rd_kafka_vu_t *vus, size_t cnt) {
                                            rd_kafka_err2str(err));
                 goto err;
         }
+        /* 'hdrs' is now owned by 'rkm' */
+        hdrs = NULL;
 
         /* Partition the message */
         err = rd_kafka_msg_partitioner(rkt, rkm, 1);
@@ -540,6 +555,7 @@ rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...) {
         rd_kafka_resp_err_t err;
         rd_kafka_headers_t *hdrs     = NULL;
         rd_kafka_headers_t *app_hdrs = NULL; /* App-provided headers list */
+        int existing                 = 0;
 
         if (unlikely((err = rd_kafka_check_produce(rk, NULL))))
                 return err;
@@ -550,7 +566,10 @@ rd_kafka_resp_err_t rd_kafka_producev(rd_kafka_t *rk, ...) {
                 switch (vtype) {
                 case RD_KAFKA_VTYPE_TOPIC:
                         rkt = rd_kafka_topic_new0(rk, va_arg(ap, const char *),
-                                                  NULL, NULL, 1);
+                                                  NULL, &existing, 1);
+                        if (!existing)
+                                rd_kafka_topic_fast_leader_query(
+                                    rk, rd_true /* force */);
                         break;
 
                 case RD_KAFKA_VTYPE_RKT:
@@ -1903,7 +1922,45 @@ void rd_kafka_msgq_verify_order0(const char *function,
         rd_assert(!errcnt);
 }
 
+rd_kafka_Produce_result_t *rd_kafka_Produce_result_new(int64_t offset,
+                                                       int64_t timestamp) {
+        rd_kafka_Produce_result_t *ret = rd_calloc(1, sizeof(*ret));
+        ret->offset                    = offset;
+        ret->timestamp                 = timestamp;
+        return ret;
+}
 
+void rd_kafka_Produce_result_destroy(rd_kafka_Produce_result_t *result) {
+        if (result->record_errors) {
+                int32_t i;
+                for (i = 0; i < result->record_errors_cnt; i++) {
+                        RD_IF_FREE(result->record_errors[i].errstr, rd_free);
+                }
+                rd_free(result->record_errors);
+        }
+        RD_IF_FREE(result->errstr, rd_free);
+        rd_free(result);
+}
+
+rd_kafka_Produce_result_t *
+rd_kafka_Produce_result_copy(const rd_kafka_Produce_result_t *result) {
+        rd_kafka_Produce_result_t *ret = rd_calloc(1, sizeof(*ret));
+        *ret                           = *result;
+        if (result->errstr)
+                ret->errstr = rd_strdup(result->errstr);
+        if (result->record_errors) {
+                ret->record_errors = rd_calloc(result->record_errors_cnt,
+                                               sizeof(*result->record_errors));
+                int32_t i;
+                for (i = 0; i < result->record_errors_cnt; i++) {
+                        ret->record_errors[i] = result->record_errors[i];
+                        if (result->record_errors[i].errstr)
+                                ret->record_errors[i].errstr =
+                                    rd_strdup(result->record_errors[i].errstr);
+                }
+        }
+        return ret;
+}
 
 /**
  * @name Unit tests
@@ -2481,22 +2538,28 @@ int unittest_msg(void) {
                                            {10, 10},
                                            {33692865, 33692865},
                                            {0, 0}});
-        fails += unittest_msgq_insert_sort(
-            "many messages", insert_baseline, NULL,
-            (const struct ut_msg_range[]) {{100000, 200000},
-                                           {400000, 450000},
-                                           {900000, 920000},
-                                           {33692864, 33751992},
-                                           {33906868, 33993690},
-                                           {40000000, 44000000},
-                                           {0, 0}},
-            (const struct ut_msg_range[]) {{1, 199},
-                                           {350000, 360000},
-                                           {500000, 500010},
-                                           {1000000, 1000200},
-                                           {33751993, 33906867},
-                                           {50000001, 50000001},
-                                           {0, 0}});
+        if (rd_unittest_with_valgrind) {
+                RD_UT_WARN(
+                    "Skipping large message range test "
+                    "when using Valgrind");
+        } else {
+                fails += unittest_msgq_insert_sort(
+                    "many messages", insert_baseline, NULL,
+                    (const struct ut_msg_range[]) {{100000, 200000},
+                                                   {400000, 450000},
+                                                   {900000, 920000},
+                                                   {33692864, 33751992},
+                                                   {33906868, 33993690},
+                                                   {40000000, 44000000},
+                                                   {0, 0}},
+                    (const struct ut_msg_range[]) {{1, 199},
+                                                   {350000, 360000},
+                                                   {500000, 500010},
+                                                   {1000000, 1000200},
+                                                   {33751993, 33906867},
+                                                   {50000001, 50000001},
+                                                   {0, 0}});
+        }
         fails += unittest_msgq_insert_sort(
             "issue #2508", insert_baseline, NULL,
             (const struct ut_msg_range[]) {

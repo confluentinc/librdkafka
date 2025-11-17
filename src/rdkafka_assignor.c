@@ -159,7 +159,8 @@ rd_kafkap_bytes_t *rd_kafka_consumer_protocol_member_metadata_new(
                 rd_kafka_buf_write_topic_partitions(
                     rkbuf, owned_partitions,
                     rd_false /*don't skip invalid offsets*/,
-                    rd_false /*any offset*/, fields);
+                    rd_false /*any offset*/, rd_false /*don't use topic id*/,
+                    rd_true /*use topic name*/, fields);
         }
 
         /* Following data is ignored by consumer version < 2 */
@@ -1278,7 +1279,7 @@ int verifyValidityAndBalance0(const char *func,
                                  * it means the assignment strategy failed to
                                  * properly balance the partitions. */
                                 if (!balanced &&
-                                    rd_kafka_topic_partition_list_find_topic(
+                                    rd_kafka_topic_partition_list_find_topic_by_name(
                                         otherPartitions, partition->topic)) {
                                         RD_UT_WARN(
                                             "Some %s partition(s) can be "

@@ -61,7 +61,7 @@ static void do_test(void) {
 
         testid = test_id_generate();
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -212,7 +212,7 @@ static void do_test_with_log_queue(void) {
 
         testid = test_id_generate();
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_produce_msgs_easy(topic, testid, -1, msgcnt);
 
@@ -380,7 +380,7 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
             "%d",
             forward_to_another_q, forward_to_consumer_q);
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
 
         test_str_id_generate(groupid, sizeof(groupid));
         test_conf_init(&conf, NULL, 60);
@@ -413,7 +413,9 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                     "Group join should assign partitions");
-        rd_kafka_assign(rk, rd_kafka_event_topic_partition_list(event));
+        test_consumer_assign_by_rebalance_protocol(
+            "initial group join", rk,
+            rd_kafka_event_topic_partition_list(event));
         rd_kafka_event_destroy(event);
 
         rd_sleep(10 + 1); /* Exceed max.poll.interval.ms. */
@@ -426,7 +428,8 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                     "Group leave should revoke partitions");
-        rd_kafka_assign(rk, NULL);
+        test_consumer_unassign_by_rebalance_protocol(
+            "group leave", rk, rd_kafka_event_topic_partition_list(event));
         rd_kafka_event_destroy(event);
 
         event = test_wait_event(polling_queue, RD_KAFKA_EVENT_REBALANCE,
@@ -435,7 +438,9 @@ do_test_rejoin_after_interval_expire(rd_bool_t forward_to_another_q,
         TEST_ASSERT(rd_kafka_event_error(event) ==
                         RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                     "Group rejoin should assign partitions");
-        rd_kafka_assign(rk, rd_kafka_event_topic_partition_list(event));
+
+        test_consumer_assign_by_rebalance_protocol(
+            "group rejoin", rk, rd_kafka_event_topic_partition_list(event));
         rd_kafka_event_destroy(event);
 
         if (forward_to_another_q)
@@ -466,7 +471,7 @@ static void do_test_max_poll_reset_with_consumer_cb(void) {
 
         SUB_TEST();
 
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
         uint64_t testid = test_id_generate();
 
         test_produce_msgs_easy(topic, testid, -1, 100);

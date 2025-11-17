@@ -127,12 +127,12 @@ typedef struct rd_kafka_fetch_pos_s {
 /**
  * Protocol level sanity
  */
-#define RD_KAFKAP_BROKERS_MAX    10000
-#define RD_KAFKAP_TOPICS_MAX     1000000
-#define RD_KAFKAP_PARTITIONS_MAX 100000
-#define RD_KAFKAP_GROUPS_MAX     100000
-#define RD_KAFKAP_CONFIGS_MAX    10000
-
+#define RD_KAFKAP_BROKERS_MAX              10000
+#define RD_KAFKAP_TOPICS_MAX               1000000
+#define RD_KAFKAP_PARTITIONS_MAX           100000
+#define RD_KAFKAP_GROUPS_MAX               100000
+#define RD_KAFKAP_CONFIGS_MAX              10000
+#define RD_KAFKAP_ABORTED_TRANSACTIONS_MAX 1000000
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
@@ -234,7 +234,50 @@ rd_kafka_txn_state2str(rd_kafka_txn_state_t state) {
         return names[state];
 }
 
+/**
+ * @enum Telemetry States
+ */
+typedef enum {
+        /** Initial state, awaiting telemetry broker to be assigned */
+        RD_KAFKA_TELEMETRY_AWAIT_BROKER,
+        /** Telemetry broker assigned and GetSubscriptions scheduled */
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SCHEDULED,
+        /** GetSubscriptions request sent to the assigned broker */
+        RD_KAFKA_TELEMETRY_GET_SUBSCRIPTIONS_SENT,
+        /** PushTelemetry scheduled to send */
+        RD_KAFKA_TELEMETRY_PUSH_SCHEDULED,
+        /** PushTelemetry sent to the assigned broker */
+        RD_KAFKA_TELEMETRY_PUSH_SENT,
+        /** Client is being terminated and last PushTelemetry is scheduled to
+         *  send */
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SCHEDULED,
+        /** Client is being terminated and last PushTelemetry is sent */
+        RD_KAFKA_TELEMETRY_TERMINATING_PUSH_SENT,
+        /** Telemetry is terminated */
+        RD_KAFKA_TELEMETRY_TERMINATED,
+} rd_kafka_telemetry_state_t;
 
+
+static RD_UNUSED const char *
+rd_kafka_telemetry_state2str(rd_kafka_telemetry_state_t state) {
+        static const char *names[] = {"AwaitBroker",
+                                      "GetSubscriptionsScheduled",
+                                      "GetSubscriptionsSent",
+                                      "PushScheduled",
+                                      "PushSent",
+                                      "TerminatingPushScheduled",
+                                      "TerminatingPushSent",
+                                      "Terminated"};
+        return names[state];
+}
+
+static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
+        static const char *types[] = {
+            [RD_KAFKA_PRODUCER] = "producer",
+            [RD_KAFKA_CONSUMER] = "consumer",
+        };
+        return types[type];
+}
 
 /**
  * Kafka handle, internal representation of the application's rd_kafka_t.
@@ -247,17 +290,29 @@ struct rd_kafka_s {
         TAILQ_HEAD(, rd_kafka_broker_s) rk_brokers;
         rd_list_t rk_broker_by_id; /* Fast id lookups. */
         rd_atomic32_t rk_broker_cnt;
-        /**< Number of brokers in state >= UP */
-        rd_atomic32_t rk_broker_up_cnt;
-        /**< Number of logical brokers in state >= UP, this is a sub-set
-         *   of rk_broker_up_cnt. */
-        rd_atomic32_t rk_logical_broker_up_cnt;
-        /**< Number of brokers that are down, only includes brokers
-         *   that have had at least one connection attempt. */
-        rd_atomic32_t rk_broker_down_cnt;
-        /**< Logical brokers currently without an address.
+        /**  Logical brokers count.
          *   Used for calculating ERR__ALL_BROKERS_DOWN. */
-        rd_atomic32_t rk_broker_addrless_cnt;
+        rd_atomic32_t rk_logical_broker_cnt;
+        /**  Number of configured or learned brokers in state >= UP */
+        rd_atomic32_t rk_broker_up_cnt;
+        /**  Number of brokers that are down, only includes brokers
+         *   that have had at least one connection attempt
+         *   and are configured or learned. */
+        rd_atomic32_t rk_broker_down_cnt;
+        /**  Set to 1 when there's a re-bootstrap in progress.
+         *   Set to 0 when the re-bootstrap is done.
+         *   Accessed from the main thread and the broker threads. */
+        rd_atomic32_t rk_rebootstrap_in_progress;
+
+        /**< Additional bootstrap servers list.
+         *   contains all brokers added through rd_kafka_brokers_add().
+         *   Doesn't contain the initially configured bootstrap brokers. */
+        rd_list_t additional_brokerlists;
+
+        /** Decommissioned threads to await */
+        rd_list_t wait_decommissioned_thrds;
+        /** Decommissioned brokers to await */
+        rd_list_t wait_decommissioned_brokers;
 
         mtx_t rk_internal_rkb_lock;
         rd_kafka_broker_t *rk_internal_rkb;
@@ -337,7 +392,11 @@ struct rd_kafka_s {
                                         *   (or equivalent).
                                         *   Used to enforce
                                         *   max.poll.interval.ms.
-                                        *   Only relevant for consumer. */
+                                        *   Set to INT64_MAX while polling
+                                        *   to avoid reaching
+                                        * max.poll.interval.ms. during that time
+                                        * frame. Only relevant for consumer. */
+
         /* First fatal error. */
         struct {
                 rd_atomic32_t err; /**< rd_kafka_resp_err_t */
@@ -353,18 +412,20 @@ struct rd_kafka_s {
         rd_ts_t rk_ts_metadata; /* Timestamp of most recent
                                  * metadata. */
 
-        rd_kafka_metadata_internal_t
-            *rk_full_metadata;       /* Last full metadata. */
-        rd_ts_t rk_ts_full_metadata; /* Timestamp of .. */
+        rd_ts_t rk_ts_full_metadata;                      /* Timestamp of most
+                                                           * recent full
+                                                           * metadata */
         struct rd_kafka_metadata_cache rk_metadata_cache; /* Metadata cache */
 
         char *rk_clusterid;      /* ClusterId from metadata */
         int32_t rk_controllerid; /* ControllerId from metadata */
 
         /**< Producer: Delivery report mode */
-        enum { RD_KAFKA_DR_MODE_NONE,  /**< No delivery reports */
-               RD_KAFKA_DR_MODE_CB,    /**< Delivery reports through callback */
-               RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event API*/
+        enum {
+                RD_KAFKA_DR_MODE_NONE, /**< No delivery reports */
+                RD_KAFKA_DR_MODE_CB,   /**< Delivery reports through callback */
+                RD_KAFKA_DR_MODE_EVENT, /**< Delivery reports through event
+                                           API*/
         } rk_drmode;
 
         /* Simple consumer count:
@@ -552,6 +613,16 @@ struct rd_kafka_s {
         } rk_curr_msgs;
 
         rd_kafka_timers_t rk_timers;
+
+        /** Metadata refresh timer */
+        rd_kafka_timer_t metadata_refresh_tmr;
+        /** 1s interval timer */
+        rd_kafka_timer_t one_s_tmr;
+        /** Rebootstrap timer.
+         *  Will add bootstrap brokers again
+         *  when it's fired. */
+        rd_kafka_timer_t rebootstrap_tmr;
+
         thrd_t rk_thread;
 
         int rk_initialized; /**< Will be > 0 when the rd_kafka_t
@@ -596,6 +667,12 @@ struct rd_kafka_s {
                  *   Use 10 < reconnect.backoff.jitter.ms / 2 < 1000.
                  */
                 rd_interval_t sparse_connect_random;
+
+                /**  Sparse connection timer: fires after remaining time of
+                 *   `sparse_connect_random` interval + 1ms.
+                 */
+                rd_kafka_timer_t sparse_connect_random_tmr;
+
                 /**< Lock for sparse_connect_random */
                 mtx_t sparse_connect_lock;
 
@@ -618,6 +695,64 @@ struct rd_kafka_s {
                                *   Typically assigned in provider's .init() */
                 rd_kafka_q_t *callback_q; /**< SASL callback queue, if any. */
         } rk_sasl;
+
+        struct {
+                /* Fields for the control flow - unless guarded by lock, only
+                 * accessed from main thread. */
+                /**< Current state of the telemetry state machine. */
+                rd_kafka_telemetry_state_t state;
+                /**< Preferred broker for sending telemetry (Lock protected). */
+                rd_kafka_broker_t *preferred_broker;
+                /**< Timer for all the requests we schedule. */
+                rd_kafka_timer_t request_timer;
+                /**< Lock for preferred telemetry broker and state. */
+                mtx_t lock;
+                /**< Used to wait for termination (Lock protected). */
+                cnd_t termination_cnd;
+
+                /* Fields obtained from broker as a result of GetSubscriptions -
+                 * only accessed from main thread.
+                 */
+                rd_kafka_Uuid_t client_instance_id;
+                int32_t subscription_id;
+                rd_kafka_compression_t *accepted_compression_types;
+                size_t accepted_compression_types_cnt;
+                int32_t push_interval_ms;
+                int32_t telemetry_max_bytes;
+                rd_bool_t delta_temporality;
+                char **requested_metrics;
+                size_t requested_metrics_cnt;
+                /* TODO: Use rd_list_t to store the metrics */
+                int *matched_metrics;
+                size_t matched_metrics_cnt;
+
+                struct {
+                        rd_ts_t ts_last;  /**< Timestamp of last push */
+                        rd_ts_t ts_start; /**< Timestamp from when collection
+                                           *   started */
+                        /** Total rebalance latency (ms) up to previous push */
+                        uint64_t rebalance_latency_total;
+                } rk_historic_c;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Current commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Current rebalance
+                                                       *   latency avg */
+                } rd_avg_current;
+
+                struct {
+                        rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Rolled over commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Rolled over rebalance
+                                                       *   latency avg */
+                } rd_avg_rollover;
+
+        } rk_telemetry;
 
         /* Test mocks */
         struct {
@@ -763,15 +898,13 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
                              int timeout_ms,
                              unsigned int *curr_msgsp) {
         unsigned int cnt;
-        struct timespec tspec;
-
-        rd_timeout_init_timespec(&tspec, timeout_ms);
+        rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         mtx_lock(&rk->rk_curr_msgs.lock);
         while ((cnt = rk->rk_curr_msgs.cnt) > 0) {
                 if (cnd_timedwait_abs(&rk->rk_curr_msgs.cnd,
                                       &rk->rk_curr_msgs.lock,
-                                      &tspec) == thrd_timedout)
+                                      abs_timeout) == thrd_timedout)
                         break;
         }
         mtx_unlock(&rk->rk_curr_msgs.lock);
@@ -779,6 +912,9 @@ rd_kafka_curr_msgs_wait_zero(rd_kafka_t *rk,
         *curr_msgsp = cnt;
         return cnt == 0;
 }
+
+void rd_kafka_decommissioned_broker_thread_join(rd_kafka_t *rk,
+                                                void *rkb_decommissioned);
 
 void rd_kafka_destroy_final(rd_kafka_t *rk);
 
@@ -860,6 +996,7 @@ const char *rd_kafka_purge_flags2str(int flags);
 #define RD_KAFKA_DBG_MOCK        0x10000
 #define RD_KAFKA_DBG_ASSIGNOR    0x20000
 #define RD_KAFKA_DBG_CONF        0x40000
+#define RD_KAFKA_DBG_TELEMETRY   0x80000
 #define RD_KAFKA_DBG_ALL         0xfffff
 #define RD_KAFKA_DBG_NONE        0x0
 
@@ -879,9 +1016,14 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
         rd_kafka_log0(&rk->rk_conf, rk, NULL, level, RD_KAFKA_DBG_NONE, fac,   \
                       __VA_ARGS__)
 
+#define rd_kafka_conf_is_dbg(conf, ctx)                                        \
+        unlikely((conf).debug &(RD_KAFKA_DBG_##ctx))
+
+#define rd_kafka_is_dbg(rk, ctx) (rd_kafka_conf_is_dbg(rk->rk_conf, ctx))
+
 #define rd_kafka_dbg(rk, ctx, fac, ...)                                        \
         do {                                                                   \
-                if (unlikely((rk)->rk_conf.debug & (RD_KAFKA_DBG_##ctx)))      \
+                if (rd_kafka_is_dbg(rk, ctx))                                  \
                         rd_kafka_log0(&rk->rk_conf, rk, NULL, LOG_DEBUG,       \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -889,7 +1031,7 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 /* dbg() not requiring an rk, just the conf object, for early logging */
 #define rd_kafka_dbg0(conf, ctx, fac, ...)                                     \
         do {                                                                   \
-                if (unlikely((conf)->debug & (RD_KAFKA_DBG_##ctx)))            \
+                if (rd_kafka_conf_is_dbg(*conf, ctx))                          \
                         rd_kafka_log0(conf, NULL, NULL, LOG_DEBUG,             \
                                       (RD_KAFKA_DBG_##ctx), fac, __VA_ARGS__); \
         } while (0)
@@ -909,10 +1051,11 @@ void rd_kafka_log0(const rd_kafka_conf_t *conf,
 #define rd_rkb_log(rkb, level, fac, ...)                                       \
         rd_rkb_log0(rkb, level, RD_KAFKA_DBG_NONE, fac, __VA_ARGS__)
 
+#define rd_rkb_is_dbg(rkb, ctx) rd_kafka_is_dbg((rkb)->rkb_rk, ctx)
+
 #define rd_rkb_dbg(rkb, ctx, fac, ...)                                         \
         do {                                                                   \
-                if (unlikely((rkb)->rkb_rk->rk_conf.debug &                    \
-                             (RD_KAFKA_DBG_##ctx))) {                          \
+                if (rd_rkb_is_dbg(rkb, ctx)) {                                 \
                         rd_rkb_log0(rkb, LOG_DEBUG, (RD_KAFKA_DBG_##ctx), fac, \
                                     __VA_ARGS__);                              \
                 }                                                              \
@@ -949,14 +1092,25 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
 
 rd_kafka_error_t *rd_kafka_get_fatal_error(rd_kafka_t *rk);
 
+#define rd_kafka_producer_can_have_fatal_errors(rk)                            \
+        (rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence)
+
+#define rd_kafka_consumer_can_have_fatal_errors(rk)                            \
+        (rk->rk_type == RD_KAFKA_CONSUMER &&                                   \
+         (rk->rk_conf.group_instance_id ||                                     \
+          rk->rk_conf.group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER))
+
 static RD_INLINE RD_UNUSED rd_kafka_resp_err_t
 rd_kafka_fatal_error_code(rd_kafka_t *rk) {
         /* This is an optimization to avoid an atomic read which are costly
          * on some platforms:
-         * Fatal errors are currently only raised by the idempotent producer
-         * and static consumers (group.instance.id). */
-        if ((rk->rk_type == RD_KAFKA_PRODUCER && rk->rk_conf.eos.idempotence) ||
-            (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_conf.group_instance_id))
+         * Fatal errors are currently raised by:
+         * 1) the idempotent producer
+         * 2) static consumers (group.instance.id)
+         * 3) Group using consumer protocol (Introduced in KIP-848). See exact
+         *    errors in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat() */
+        if (rd_kafka_producer_can_have_fatal_errors(rk) ||
+            rd_kafka_consumer_can_have_fatal_errors(rk))
                 return rd_atomic32_get(&rk->rk_fatal.err);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -1000,7 +1154,7 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
         last_poll = rd_atomic64_get(&rk->rk_ts_last_poll);
 
         /* Application is blocked in librdkafka function, see
-         * rd_kafka_app_poll_blocking(). */
+         * rd_kafka_app_poll_start(). */
         if (last_poll == INT64_MAX)
                 return 0;
 
@@ -1026,9 +1180,32 @@ static RD_INLINE RD_UNUSED int rd_kafka_max_poll_exceeded(rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
+static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
+                                                        rd_kafka_q_t *rkq,
+                                                        rd_ts_t now,
+                                                        rd_bool_t is_blocking) {
+        if (rk->rk_type != RD_KAFKA_CONSUMER)
+                return;
+
+        if (!now)
+                now = rd_clock();
+        if (is_blocking)
                 rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+        if (rkq->rkq_ts_last_poll_end) {
+                int64_t poll_idle_ratio = 0;
+                rd_ts_t poll_interval   = now - rkq->rkq_ts_last_poll_start;
+                if (poll_interval) {
+                        rd_ts_t idle_interval = rkq->rkq_ts_last_poll_end -
+                                                rkq->rkq_ts_last_poll_start;
+                        poll_idle_ratio =
+                            idle_interval * 1000000 / poll_interval;
+                }
+                rd_avg_add(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
+                    poll_idle_ratio);
+                rkq->rkq_ts_last_poll_start = now;
+                rkq->rkq_ts_last_poll_end   = 0;
+        }
 }
 
 /**
@@ -1039,9 +1216,25 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_blocking(rd_kafka_t *rk) {
  * @locality any
  * @locks none
  */
-static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER)
-                rd_atomic64_set(&rk->rk_ts_last_poll, rd_clock());
+static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
+                                                    rd_kafka_q_t *rkq) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                rd_ts_t now = rd_clock();
+                rd_atomic64_set(&rk->rk_ts_last_poll, now);
+                if (unlikely(rk->rk_cgrp &&
+                             rk->rk_cgrp->rkcg_group_protocol ==
+                                 RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
+                             rk->rk_cgrp->rkcg_flags &
+                                 RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)) {
+                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                            rk->rk_cgrp,
+                            "app polled after poll interval exceeded");
+                }
+                if (!rkq->rkq_ts_last_poll_end)
+                        rkq->rkq_ts_last_poll_end = now;
+                rd_dassert(rkq->rkq_ts_last_poll_end >=
+                           rkq->rkq_ts_last_poll_start);
+        }
 }
 
 
@@ -1056,5 +1249,12 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
 
+void rd_kafka_rebootstrap(rd_kafka_t *rk);
+
+void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk);
+
+int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk);
+
+void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
 
 #endif /* _RDKAFKA_INT_H_ */

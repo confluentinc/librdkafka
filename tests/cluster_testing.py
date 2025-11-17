@@ -37,7 +37,7 @@ def read_scenario_conf(scenario):
 
 class LibrdkafkaTestCluster(Cluster):
     def __init__(self, version, conf={}, num_brokers=3, debug=False,
-                 scenario="default"):
+                 scenario="default", kraft=False):
         """
         @brief Create, deploy and start a Kafka cluster using Kafka \\p version
 
@@ -61,8 +61,9 @@ class LibrdkafkaTestCluster(Cluster):
 
         self.brokers = list()
 
-        # One ZK (from Kafka repo)
-        ZookeeperApp(self)
+        if not kraft:
+            # One ZK (from Kafka repo)
+            ZookeeperApp(self)
 
         # Start Kerberos KDC if GSSAPI (Kerberos) is configured
         if 'GSSAPI' in defconf.get('sasl_mechanisms', []):
@@ -84,15 +85,22 @@ class LibrdkafkaTestCluster(Cluster):
         self.conf = defconf
 
         for n in range(0, num_brokers):
+            defconf_curr = dict(defconf)
+            if 'conf' in defconf_curr:
+                defconf_curr['conf'] = list(defconf_curr['conf'])
             # Configure rack & replica selector if broker supports
             # fetch-from-follower
             if version_as_list(version) >= [2, 4, 0]:
-                defconf.update(
+                curr_conf = defconf_curr.get('conf', list())
+                defconf_curr.update(
                     {
                         'conf': [
                             'broker.rack=RACK${appid}',
-                            'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector']})  # noqa: E501
-            self.brokers.append(KafkaBrokerApp(self, defconf))
+                            'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector'  # noqa: E501
+                        ] + curr_conf
+                    })  # noqa: E501
+            print('conf broker', str(n), ': ', defconf_curr)
+            self.brokers.append(KafkaBrokerApp(self, defconf_curr))
 
     def bootstrap_servers(self):
         """ @return Kafka bootstrap servers based on security.protocol """

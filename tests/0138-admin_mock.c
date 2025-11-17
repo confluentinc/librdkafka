@@ -175,15 +175,107 @@ static void do_test_AlterConsumerGroupOffsets_errors(int req_timeout_ms) {
 #undef TEST_ERR_SIZE
 }
 
+/**
+ * @brief A leader change should remove metadata cache for a topic
+ *        queried in ListOffsets.
+ */
+static void do_test_ListOffsets_leader_change(void) {
+        size_t cnt;
+        rd_kafka_conf_t *conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        const char *topic = "test";
+        rd_kafka_t *rk;
+        rd_kafka_queue_t *q;
+        rd_kafka_topic_partition_list_t *to_list;
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_ListOffsets_result_t *result;
+        const rd_kafka_ListOffsetsResultInfo_t **result_infos;
+
+        test_conf_init(&conf, NULL, 60);
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+        q = rd_kafka_queue_get_main(rk);
+
+        to_list = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(to_list, topic, 0)->offset = -1;
+
+        TEST_SAY("First ListOffsets call to leader broker 1\n");
+        rd_kafka_ListOffsets(rk, to_list, NULL, q);
+
+        rkev = rd_kafka_queue_poll(q, -1);
+
+        TEST_ASSERT(rd_kafka_event_type(rkev) ==
+                        RD_KAFKA_EVENT_LISTOFFSETS_RESULT,
+                    "Expected LISTOFFSETS_RESULT event type, got %d",
+                    rd_kafka_event_type(rkev));
+
+        TEST_CALL_ERR__(rd_kafka_event_error(rkev));
+
+        rd_kafka_event_destroy(rkev);
+
+
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        TEST_SAY(
+            "Second ListOffsets call to leader broker 1, returns "
+            "NOT_LEADER_OR_FOLLOWER"
+            " and invalidates cache\n");
+        rd_kafka_ListOffsets(rk, to_list, NULL, q);
+
+        rkev         = rd_kafka_queue_poll(q, -1);
+        result       = rd_kafka_event_ListOffsets_result(rkev);
+        result_infos = rd_kafka_ListOffsets_result_infos(result, &cnt);
+
+        TEST_ASSERT(cnt == 1, "Result topic cnt should be 1, got %" PRIusz,
+                    cnt);
+        err = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[0])
+                  ->err;
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER,
+                    "Expected event error NOT_LEADER_OR_FOLLOWER, got %s",
+                    rd_kafka_err2name(err));
+
+        rd_kafka_event_destroy(rkev);
+
+        TEST_SAY(
+            "Third ListOffsets call to leader broker 2, returns NO_ERROR\n");
+        rd_kafka_ListOffsets(rk, to_list, NULL, q);
+
+        rkev         = rd_kafka_queue_poll(q, -1);
+        result       = rd_kafka_event_ListOffsets_result(rkev);
+        result_infos = rd_kafka_ListOffsets_result_infos(result, &cnt);
+
+        TEST_ASSERT(cnt == 1, "Result topic cnt should be 1, got %" PRIusz,
+                    cnt);
+        err = rd_kafka_ListOffsetsResultInfo_topic_partition(result_infos[0])
+                  ->err;
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected event error NO_ERROR, got %s",
+                    rd_kafka_err2name(err));
+
+        rd_kafka_event_destroy(rkev);
+
+        rd_kafka_topic_partition_list_destroy(to_list);
+        rd_kafka_queue_destroy(q);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+}
+
 int main_0138_admin_mock(int argc, char **argv) {
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        TEST_SKIP_MOCK_CLUSTER(0);
 
         do_test_AlterConsumerGroupOffsets_errors(-1);
         do_test_AlterConsumerGroupOffsets_errors(1000);
+
+        do_test_ListOffsets_leader_change();
 
         return 0;
 }

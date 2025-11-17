@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2023, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,10 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-extern "C" {
-#include "../src/rdkafka_protocol.h"
-#include "test.h"
-}
 #include <iostream>
 #include <map>
 #include <set>
@@ -39,6 +36,10 @@ extern "C" {
 #include <assert.h>
 #include "testcpp.h"
 #include <fstream>
+extern "C" {
+#include "../src/rdkafka_protocol.h"
+#include "test.h"
+}
 
 using namespace std;
 
@@ -58,9 +59,11 @@ class Toppar {
   }
 
   friend bool operator<(const Toppar &a, const Toppar &b) {
-    if (a.partition < b.partition)
+    if (a.topic < b.topic)
       return true;
-    return a.topic < b.topic;
+    if (a.topic > b.topic)
+      return false;
+    return a.partition < b.partition;
   }
 
   string str() const {
@@ -150,6 +153,11 @@ static RdKafka::KafkaConsumer *make_consumer(
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   Test::conf_set(conf, "enable.auto.commit", "false");
   Test::conf_set(conf, "partition.assignment.strategy", assignment_strategy);
+
+  if (test_consumer_group_protocol()) {
+    Test::conf_set(conf, "group.protocol", test_consumer_group_protocol());
+  }
+
   if (additional_conf != NULL) {
     for (itr = (*additional_conf).begin(); itr != (*additional_conf).end();
          itr++)
@@ -284,9 +292,12 @@ class DefaultRebalanceCb : public RdKafka::RebalanceCb {
 
     std::string protocol = consumer->rebalance_protocol();
 
-    TEST_ASSERT(protocol == "COOPERATIVE",
-                "%s: Expected rebalance_protocol \"COOPERATIVE\", not %s",
-                consumer->name().c_str(), protocol.c_str());
+    if (protocol != "") {
+      /* Consumer hasn't been closed */
+      TEST_ASSERT(protocol == "COOPERATIVE",
+                  "%s: Expected rebalance_protocol \"COOPERATIVE\", not %s",
+                  consumer->name().c_str(), protocol.c_str());
+    }
 
     const char *lost_str = consumer->assignment_lost() ? " (LOST)" : "";
     Test::Say(tostr() << _C_YEL "RebalanceCb " << protocol << ": "
@@ -649,6 +660,9 @@ static void a_assign_tests() {
   std::string topic2_str = Test::mk_topic_name("0113-a2", 1);
   test_create_topic(NULL, topic2_str.c_str(), 1, 1);
 
+  test_wait_topic_exists(NULL, topic1_str.c_str(), 10 * 1000);
+  test_wait_topic_exists(NULL, topic2_str.c_str(), 10 * 1000);
+
   test_produce_msgs_easy_size(topic1_str.c_str(), 0, 0, msgcnt, msgsize1);
   test_produce_msgs_easy_size(topic2_str.c_str(), 0, 0, msgcnt, msgsize2);
 
@@ -728,6 +742,9 @@ static void a_assign_rapid() {
   Test::conf_set(conf, "group.id", group_id);
   Test::conf_set(conf, "auto.offset.reset", "earliest");
   Test::conf_set(conf, "enable.auto.commit", "false");
+  if (test_consumer_group_protocol()) {
+    Test::conf_set(conf, "group.protocol", test_consumer_group_protocol());
+  }
 
   RdKafka::KafkaConsumer *consumer;
   consumer = RdKafka::KafkaConsumer::create(conf, errstr);
@@ -883,7 +900,9 @@ static void a_assign_rapid() {
  */
 
 static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
-  SUB_TEST();
+  SUB_TEST("%s", close_consumer ? "close consumer" : "don't close consumer");
+  int expected_cb1_assign_call_cnt = 3;
+  int expected_cb2_assign_call_cnt = 2;
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
@@ -906,14 +925,19 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
     Test::poll_once(c2, 500);
 
     /* Start c2 after c1 has received initial assignment */
-    if (!c2_subscribed && rebalance_cb1.assign_call_cnt > 0) {
+    if (!c2_subscribed && rebalance_cb1.nonempty_assign_call_cnt > 0) {
       Test::subscribe(c2, topic_name);
       c2_subscribed = true;
     }
 
     /* Failure case: test will time out. */
-    if (rebalance_cb1.assign_call_cnt == 3 &&
-        rebalance_cb2.assign_call_cnt == 2) {
+    if (Test::assignment_partition_count(c1, NULL) == 1 &&
+        Test::assignment_partition_count(c2, NULL) == 1) {
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic() &&
+          !(rebalance_cb1.assign_call_cnt == expected_cb1_assign_call_cnt &&
+            rebalance_cb2.assign_call_cnt == expected_cb2_assign_call_cnt))
+        continue;
       break;
     }
   }
@@ -921,36 +945,42 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   /* Sequence of events:
    *
    * 1. c1 joins group.
-   * 2. c1 gets assigned 2 partitions.
+   * 2. c1 gets assigned 2 partitions (+1 assign call).
    *     - there isn't a follow-on rebalance because there aren't any revoked
    * partitions.
    * 3. c2 joins group.
-   * 4. This results in a rebalance with one partition being revoked from c1,
-   * and no partitions assigned to either c1 or c2 (however the rebalance
-   * callback will be called in each case with an empty set).
+   * 4. This results in a rebalance with one partition being revoked from c1 (+1
+   * revoke call), and no partitions assigned to either c1 (+1 assign call) or
+   * c2 (+1 assign call) (however the rebalance callback will be called in each
+   * case with an empty set).
    * 5. c1 then re-joins the group since it had a partition revoked.
-   * 6. c2 is now assigned a single partition, and c1's incremental assignment
-   * is empty.
+   * 6. c2 is now assigned a single partition (+1 assign call), and c1's
+   * incremental assignment is empty (+1 assign call).
    * 7. Since there were no revoked partitions, no further rebalance is
    * triggered.
    */
 
-  /* The rebalance cb is always called on assign, even if empty. */
-  if (rebalance_cb1.assign_call_cnt != 3)
-    Test::Fail(tostr() << "Expecting 3 assign calls on consumer 1, not "
-                       << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting 2 assign calls on consumer 2, not: "
-                       << rebalance_cb2.assign_call_cnt);
+  /* Callback count can vary in KIP-848 */
+  if (test_consumer_group_protocol_classic()) {
+    /* The rebalance cb is always called on assign, even if empty. */
+    if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
+      Test::Fail(tostr() << "Expecting " << expected_cb1_assign_call_cnt
+                         << " assign calls on consumer 1, not "
+                         << rebalance_cb1.assign_call_cnt);
+    if (rebalance_cb2.assign_call_cnt != expected_cb2_assign_call_cnt)
+      Test::Fail(tostr() << "Expecting " << expected_cb2_assign_call_cnt
+                         << " assign calls on consumer 2, not: "
+                         << rebalance_cb2.assign_call_cnt);
 
-  /* The rebalance cb is not called on and empty revoke (unless partitions lost,
-   * which is not the case here) */
-  if (rebalance_cb1.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting 1 revoke call on consumer 1, not: "
-                       << rebalance_cb1.revoke_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 0)
-    Test::Fail(tostr() << "Expecting 0 revoke calls on consumer 2, not: "
-                       << rebalance_cb2.revoke_call_cnt);
+    /* The rebalance cb is not called on and empty revoke (unless partitions
+     * lost, which is not the case here) */
+    if (rebalance_cb1.revoke_call_cnt != 1)
+      Test::Fail(tostr() << "Expecting 1 revoke call on consumer 1, not: "
+                         << rebalance_cb1.revoke_call_cnt);
+    if (rebalance_cb2.revoke_call_cnt != 0)
+      Test::Fail(tostr() << "Expecting 0 revoke calls on consumer 2, not: "
+                         << rebalance_cb2.revoke_call_cnt);
+  }
 
   /* Final state */
 
@@ -1004,13 +1034,16 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
   c1->close();
   c2->close();
 
-  /* Closing the consumer should trigger rebalance_cb (revoke): */
-  if (rebalance_cb1.revoke_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting 2 revoke calls on consumer 1, not: "
-                       << rebalance_cb1.revoke_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting 1 revoke call on consumer 2, not: "
-                       << rebalance_cb2.revoke_call_cnt);
+  /* Callback count can vary in KIP-848 */
+  if (test_consumer_group_protocol_classic()) {
+    /* Closing the consumer should trigger rebalance_cb (revoke): */
+    if (rebalance_cb1.revoke_call_cnt != 2)
+      Test::Fail(tostr() << "Expecting 2 revoke calls on consumer 1, not: "
+                         << rebalance_cb1.revoke_call_cnt);
+    if (rebalance_cb2.revoke_call_cnt != 1)
+      Test::Fail(tostr() << "Expecting 1 revoke call on consumer 2, not: "
+                         << rebalance_cb2.revoke_call_cnt);
+  }
 
   /* ..and net assigned partitions should drop to 0 in both cases: */
   if (rebalance_cb1.partitions_assigned_net != 0)
@@ -1050,7 +1083,7 @@ static void b_subscribe_with_cb_test(rd_bool_t close_consumer) {
  */
 
 static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
-  SUB_TEST();
+  SUB_TEST("%s", close_consumer ? "close consumer" : "don't close consumer");
 
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   std::string group_name =
@@ -1107,7 +1140,7 @@ static void c_subscribe_no_cb_test(rd_bool_t close_consumer) {
  */
 
 static void d_change_subscription_add_topic(rd_bool_t close_consumer) {
-  SUB_TEST();
+  SUB_TEST("%s", close_consumer ? "close consumer" : "don't close consumer");
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
@@ -1163,7 +1196,7 @@ static void d_change_subscription_add_topic(rd_bool_t close_consumer) {
  */
 
 static void e_change_subscription_remove_topic(rd_bool_t close_consumer) {
-  SUB_TEST();
+  SUB_TEST("%s", close_consumer ? "close consumer" : "don't close consumer");
 
   std::string topic_name_1 =
       Test::mk_topic_name("0113-cooperative_rebalance", 1);
@@ -1378,6 +1411,13 @@ class GTestRebalanceCb : public RdKafka::RebalanceCb {
 static void g_incremental_assign_call_eager() {
   SUB_TEST();
 
+  /* Only classic consumer group protocol supports EAGER protocol*/
+  if (!test_consumer_group_protocol_classic()) {
+    SUB_TEST_SKIP(
+        "Skipping incremental assign call eager test as EAGER protocol is only "
+        "supported in `classic` consumer group protocol");
+  }
+
   std::string topic_name = Test::mk_topic_name("0113-cooperative_rebalance", 1);
   test_create_topic(NULL, topic_name.c_str(), 1, 1);
 
@@ -1446,9 +1486,12 @@ static void h_delete_topic() {
     c->assignment(partitions);
 
     if (partitions.size() == 2 && !deleted) {
-      if (rebalance_cb.assign_call_cnt != 1)
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic() &&
+          rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected 1 assign call, saw "
                            << rebalance_cb.assign_call_cnt << "\n");
+
       Test::delete_topic(c, topic_name_2.c_str());
       deleted = true;
     }
@@ -1508,7 +1551,9 @@ static void i_delete_topic_2() {
     Test::poll_once(c, 500);
 
     if (Test::assignment_partition_count(c, NULL) == 1 && !deleted) {
-      if (rebalance_cb.assign_call_cnt != 1)
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic() &&
+          rebalance_cb.assign_call_cnt != 1)
         Test::Fail(tostr() << "Expected one assign call, saw "
                            << rebalance_cb.assign_call_cnt << "\n");
       Test::delete_topic(c, topic_name_1.c_str());
@@ -1614,23 +1659,29 @@ static void k_add_partition() {
     Test::poll_once(c, 500);
 
     if (Test::assignment_partition_count(c, NULL) == 1 && !subscribed) {
-      if (rebalance_cb.assign_call_cnt != 1)
-        Test::Fail(tostr() << "Expected 1 assign call, saw "
-                           << rebalance_cb.assign_call_cnt);
-      if (rebalance_cb.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expected 0 revoke calls, saw "
-                           << rebalance_cb.revoke_call_cnt);
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic()) {
+        if (rebalance_cb.assign_call_cnt != 1)
+          Test::Fail(tostr() << "Expected 1 assign call, saw "
+                             << rebalance_cb.assign_call_cnt);
+        if (rebalance_cb.revoke_call_cnt != 0)
+          Test::Fail(tostr() << "Expected 0 revoke calls, saw "
+                             << rebalance_cb.revoke_call_cnt);
+      }
       Test::create_partitions(c, topic_name.c_str(), 2);
       subscribed = true;
     }
 
     if (Test::assignment_partition_count(c, NULL) == 2 && subscribed) {
-      if (rebalance_cb.assign_call_cnt != 2)
-        Test::Fail(tostr() << "Expected 2 assign calls, saw "
-                           << rebalance_cb.assign_call_cnt);
-      if (rebalance_cb.revoke_call_cnt != 0)
-        Test::Fail(tostr() << "Expected 0 revoke calls, saw "
-                           << rebalance_cb.revoke_call_cnt);
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic()) {
+        if (rebalance_cb.assign_call_cnt != 2)
+          Test::Fail(tostr() << "Expected 2 assign calls, saw "
+                             << rebalance_cb.assign_call_cnt);
+        if (rebalance_cb.revoke_call_cnt != 0)
+          Test::Fail(tostr() << "Expected 0 revoke calls, saw "
+                             << rebalance_cb.revoke_call_cnt);
+      }
       done = true;
     }
   }
@@ -1639,12 +1690,15 @@ static void k_add_partition() {
   c->close();
   delete c;
 
-  if (rebalance_cb.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expected 2 assign calls, saw "
-                       << rebalance_cb.assign_call_cnt);
-  if (rebalance_cb.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected 1 revoke call, saw "
-                       << rebalance_cb.revoke_call_cnt);
+  /* Callback count can vary in KIP-848 */
+  if (test_consumer_group_protocol_classic()) {
+    if (rebalance_cb.assign_call_cnt != 2)
+      Test::Fail(tostr() << "Expected 2 assign calls, saw "
+                         << rebalance_cb.assign_call_cnt);
+    if (rebalance_cb.revoke_call_cnt != 1)
+      Test::Fail(tostr() << "Expected 1 revoke call, saw "
+                         << rebalance_cb.revoke_call_cnt);
+  }
 
   SUB_TEST_PASS();
 }
@@ -1682,49 +1736,59 @@ static void l_unsubscribe() {
       "C_2", group_name, "cooperative-sticky", NULL, &rebalance_cb2, 30);
   Test::subscribe(c2, topic_name_1, topic_name_2);
 
-  bool done         = false;
-  bool unsubscribed = false;
+  bool done                        = false;
+  bool unsubscribed                = false;
+  int expected_cb1_assign_call_cnt = 1;
+  int expected_cb1_revoke_call_cnt = 1;
+  int expected_cb2_assign_call_cnt = 1;
+
   while (!done) {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
 
     if (Test::assignment_partition_count(c1, NULL) == 2 &&
         Test::assignment_partition_count(c2, NULL) == 2) {
-      if (rebalance_cb1.assign_call_cnt != 1)
-        Test::Fail(
-            tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: "
-                    << rebalance_cb1.assign_call_cnt);
-      if (rebalance_cb2.assign_call_cnt != 1)
-        Test::Fail(
-            tostr() << "Expecting consumer 2's assign_call_cnt to be 1 not: "
-                    << rebalance_cb2.assign_call_cnt);
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic()) {
+        if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
+          Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be "
+                             << expected_cb1_assign_call_cnt
+                             << " not: " << rebalance_cb1.assign_call_cnt);
+        if (rebalance_cb2.assign_call_cnt != expected_cb2_assign_call_cnt)
+          Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be "
+                             << expected_cb2_assign_call_cnt
+                             << " not: " << rebalance_cb2.assign_call_cnt);
+      }
       Test::Say("Unsubscribing consumer 1 from both topics\n");
       c1->unsubscribe();
       unsubscribed = true;
+      expected_cb2_assign_call_cnt++;
     }
 
     if (unsubscribed && Test::assignment_partition_count(c1, NULL) == 0 &&
         Test::assignment_partition_count(c2, NULL) == 4) {
-      if (rebalance_cb1.assign_call_cnt !=
-          1) /* is now unsubscribed, so rebalance_cb will no longer be called.
-              */
-        Test::Fail(
-            tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: "
-                    << rebalance_cb1.assign_call_cnt);
-      if (rebalance_cb2.assign_call_cnt != 2)
-        Test::Fail(
-            tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: "
-                    << rebalance_cb2.assign_call_cnt);
-      if (rebalance_cb1.revoke_call_cnt != 1)
-        Test::Fail(
-            tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: "
-                    << rebalance_cb1.revoke_call_cnt);
-      if (rebalance_cb2.revoke_call_cnt !=
-          0) /* the rebalance_cb should not be called if the revoked partition
-                list is empty */
-        Test::Fail(
-            tostr() << "Expecting consumer 2's revoke_call_cnt to be 0 not: "
-                    << rebalance_cb2.revoke_call_cnt);
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic()) {
+        if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
+          /* is now unsubscribed, so rebalance_cb will no longer be called. */
+          Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be "
+                             << expected_cb1_assign_call_cnt
+                             << " not: " << rebalance_cb1.assign_call_cnt);
+        if (rebalance_cb2.assign_call_cnt != expected_cb2_assign_call_cnt)
+          Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be "
+                             << expected_cb2_assign_call_cnt
+                             << " not: " << rebalance_cb2.assign_call_cnt);
+        if (rebalance_cb1.revoke_call_cnt != expected_cb1_revoke_call_cnt)
+          Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be "
+                             << expected_cb1_revoke_call_cnt
+                             << " not: " << rebalance_cb1.revoke_call_cnt);
+        if (rebalance_cb2.revoke_call_cnt !=
+            0) /* the rebalance_cb should not be called if the revoked partition
+                  list is empty */
+          Test::Fail(tostr()
+                     << "Expecting consumer 2's revoke_call_cnt to be 0 not: "
+                     << rebalance_cb2.revoke_call_cnt);
+      }
       Test::Say("Unsubscribe completed");
       done = true;
     }
@@ -1735,21 +1799,27 @@ static void l_unsubscribe() {
   Test::Say("Closing consumer 2\n");
   c2->close();
 
-  /* there should be no assign rebalance_cb calls on close */
-  if (rebalance_cb1.assign_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be 1 not: "
-                       << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be 2 not: "
-                       << rebalance_cb2.assign_call_cnt);
+  /* Callback count can vary in KIP-848 */
+  if (test_consumer_group_protocol_classic()) {
+    /* there should be no assign rebalance_cb calls on close */
+    if (rebalance_cb1.assign_call_cnt != expected_cb1_assign_call_cnt)
+      Test::Fail(tostr() << "Expecting consumer 1's assign_call_cnt to be "
+                         << expected_cb1_assign_call_cnt
+                         << " not: " << rebalance_cb1.assign_call_cnt);
+    if (rebalance_cb2.assign_call_cnt != expected_cb2_assign_call_cnt)
+      Test::Fail(tostr() << "Expecting consumer 2's assign_call_cnt to be "
+                         << expected_cb2_assign_call_cnt
+                         << " not: " << rebalance_cb2.assign_call_cnt);
 
-  if (rebalance_cb1.revoke_call_cnt !=
-      1) /* should not be called a second revoke rebalance_cb */
-    Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be 1 not: "
-                       << rebalance_cb1.revoke_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: "
-                       << rebalance_cb2.revoke_call_cnt);
+    if (rebalance_cb1.revoke_call_cnt != expected_cb1_revoke_call_cnt)
+      Test::Fail(tostr() << "Expecting consumer 1's revoke_call_cnt to be "
+                         << expected_cb1_revoke_call_cnt
+                         << " not: " << rebalance_cb1.revoke_call_cnt);
+    if (rebalance_cb2.revoke_call_cnt != 1)
+      Test::Fail(
+          tostr() << "Expecting consumer 2's revoke_call_cnt to be 1 not: "
+                  << rebalance_cb2.revoke_call_cnt);
+  }
 
   if (rebalance_cb1.lost_call_cnt != 0)
     Test::Fail(tostr() << "Expecting consumer 1's lost_call_cnt to be 0, not: "
@@ -1862,6 +1932,7 @@ static void n_wildcard() {
   bool deleted_topic           = false;
   int last_cb1_assign_call_cnt = 0;
   int last_cb2_assign_call_cnt = 0;
+  int expected_lost_cnt        = 0;
   while (!done) {
     Test::poll_once(c1, 500);
     Test::poll_once(c2, 500);
@@ -1872,6 +1943,8 @@ static void n_wildcard() {
           "Creating two topics with 2 partitions each that match regex\n");
       test_create_topic(NULL, topic_name_1.c_str(), 2, 1);
       test_create_topic(NULL, topic_name_2.c_str(), 2, 1);
+      test_wait_topic_exists(NULL, topic_name_1.c_str(), 5000);
+      test_wait_topic_exists(NULL, topic_name_2.c_str(), 5000);
       /* The consumers should autonomously discover these topics and start
        * consuming from them. This happens in the background - is not
        * influenced by whether we wait for the topics to be created before
@@ -1921,19 +1994,26 @@ static void n_wildcard() {
 
     if (Test::assignment_partition_count(c1, NULL) == 1 &&
         Test::assignment_partition_count(c2, NULL) == 1 && deleted_topic) {
-      /* accumulated in lost case as well */
+      /* accumulated in lost case as well for the classic protocol*/
       TEST_ASSERT(rebalance_cb1.revoke_call_cnt == 1,
                   "Expecting C_1's revoke_call_cnt to be 1 not %d",
                   rebalance_cb1.revoke_call_cnt);
       TEST_ASSERT(rebalance_cb2.revoke_call_cnt == 1,
                   "Expecting C_2's revoke_call_cnt to be 1 not %d",
                   rebalance_cb2.revoke_call_cnt);
-      TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
-                  "Expecting C_1's lost_call_cnt to be 1 not %d",
-                  rebalance_cb1.lost_call_cnt);
-      TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
-                  "Expecting C_2's lost_call_cnt to be 1 not %d",
-                  rebalance_cb2.lost_call_cnt);
+
+      /* Deleted topics are not counted as lost in KIP-848.
+       * Assignment changes are propogated through ConsumerGroupHeartbeat. */
+      if (test_consumer_group_protocol_classic()) {
+        expected_lost_cnt++;
+      }
+
+      TEST_ASSERT(rebalance_cb1.lost_call_cnt == expected_lost_cnt,
+                  "Expecting C_1's lost_call_cnt to be %d not %d",
+                  expected_lost_cnt, rebalance_cb1.lost_call_cnt);
+      TEST_ASSERT(rebalance_cb2.lost_call_cnt == expected_lost_cnt,
+                  "Expecting C_2's lost_call_cnt to be %d not %d",
+                  expected_lost_cnt, rebalance_cb2.lost_call_cnt);
 
       /* Consumers will rejoin group after revoking the lost partitions.
        * this will result in an rebalance_cb assign (empty partitions).
@@ -1981,12 +2061,12 @@ static void n_wildcard() {
               "Expecting C_2's revoke_call_cnt to be 2 not %d",
               rebalance_cb2.revoke_call_cnt);
 
-  TEST_ASSERT(rebalance_cb1.lost_call_cnt == 1,
-              "Expecting C_1's lost_call_cnt to be 1, not %d",
-              rebalance_cb1.lost_call_cnt);
-  TEST_ASSERT(rebalance_cb2.lost_call_cnt == 1,
-              "Expecting C_2's lost_call_cnt to be 1, not %d",
-              rebalance_cb2.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb1.lost_call_cnt == expected_lost_cnt,
+              "Expecting C_1's lost_call_cnt to be %d, not %d",
+              expected_lost_cnt, rebalance_cb1.lost_call_cnt);
+  TEST_ASSERT(rebalance_cb2.lost_call_cnt == expected_lost_cnt,
+              "Expecting C_2's lost_call_cnt to be %d, not %d",
+              expected_lost_cnt, rebalance_cb2.lost_call_cnt);
 
   delete c1;
   delete c2;
@@ -2059,7 +2139,9 @@ static void o_java_interop() {
 
     if (Test::assignment_partition_count(c, NULL) == 4 && java_pid != 0 &&
         !changed_subscription) {
-      if (rebalance_cb.assign_call_cnt != 2)
+      /* Callback count can vary in KIP-848 */
+      if (test_consumer_group_protocol_classic() &&
+          rebalance_cb.assign_call_cnt != 2)
         Test::Fail(tostr() << "Expecting consumer's assign_call_cnt to be 2, "
                               "not "
                            << rebalance_cb.assign_call_cnt);
@@ -2200,8 +2282,14 @@ static void t_max_poll_interval_exceeded(int variation) {
   Test::subscribe(c1, topic_name_1);
   Test::subscribe(c2, topic_name_1);
 
-  bool done                    = false;
-  bool both_have_been_assigned = false;
+  bool done                        = false;
+  bool both_have_been_assigned     = false;
+  int expected_cb1_assign_call_cnt = 1;
+  int expected_cb2_assign_call_cnt = 2;
+  int expected_cb1_revoke_call_cnt = 1;
+  int expected_cb2_revoke_call_cnt = 1;
+  int expected_cb1_lost_call_cnt   = 1;
+
   while (!done) {
     if (!both_have_been_assigned)
       Test::poll_once(c1, 500);
@@ -2224,7 +2312,7 @@ static void t_max_poll_interval_exceeded(int variation) {
     }
   }
 
-  if (variation == 1) {
+  if (variation == 1 || variation == 3) {
     if (rebalance_cb1.lost_call_cnt != 0)
       Test::Fail(
           tostr() << "Expected consumer 1 lost revoke count to be 0, not: "
@@ -2233,32 +2321,46 @@ static void t_max_poll_interval_exceeded(int variation) {
                     500); /* Eat the max poll interval exceeded error message */
     Test::poll_once(c1,
                     500); /* Trigger the rebalance_cb with lost partitions */
-    if (rebalance_cb1.lost_call_cnt != 1)
-      Test::Fail(
-          tostr() << "Expected consumer 1 lost revoke count to be 1, not: "
-                  << rebalance_cb1.lost_call_cnt);
+    if (rebalance_cb1.lost_call_cnt != expected_cb1_lost_call_cnt)
+      Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
+                         << expected_cb1_lost_call_cnt
+                         << ", not: " << rebalance_cb1.lost_call_cnt);
+  }
+
+  if (variation == 3) {
+    /* Last poll will cause a rejoin, wait that the rejoin happens. */
+    rd_sleep(5);
+    expected_cb2_revoke_call_cnt++;
   }
 
   c1->close();
   c2->close();
 
-  if (rebalance_cb1.lost_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be 1, not: "
-                       << rebalance_cb1.lost_call_cnt);
+  if (rebalance_cb1.lost_call_cnt != expected_cb1_lost_call_cnt)
+    Test::Fail(tostr() << "Expected consumer 1 lost revoke count to be "
+                       << expected_cb1_lost_call_cnt
+                       << ", not: " << rebalance_cb1.lost_call_cnt);
 
-  if (rebalance_cb1.assign_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 assign count to be 1, not: "
-                       << rebalance_cb1.assign_call_cnt);
-  if (rebalance_cb2.assign_call_cnt != 2)
-    Test::Fail(tostr() << "Expected consumer 1 assign count to be 2, not: "
-                       << rebalance_cb1.assign_call_cnt);
+  /* Callback count can vary in KIP-848 */
+  if (test_consumer_group_protocol_classic()) {
+    if (rebalance_cb1.nonempty_assign_call_cnt != expected_cb1_assign_call_cnt)
+      Test::Fail(tostr() << "Expected consumer 1 non-empty assign count to be "
+                         << expected_cb1_assign_call_cnt << ", not: "
+                         << rebalance_cb1.nonempty_assign_call_cnt);
+    if (rebalance_cb2.nonempty_assign_call_cnt != expected_cb2_assign_call_cnt)
+      Test::Fail(tostr() << "Expected consumer 2 non-empty assign count to be "
+                         << expected_cb2_assign_call_cnt << ", not: "
+                         << rebalance_cb2.nonempty_assign_call_cnt);
 
-  if (rebalance_cb1.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 1 revoke count to be 1, not: "
-                       << rebalance_cb1.revoke_call_cnt);
-  if (rebalance_cb2.revoke_call_cnt != 1)
-    Test::Fail(tostr() << "Expected consumer 2 revoke count to be 1, not: "
-                       << rebalance_cb1.revoke_call_cnt);
+    if (rebalance_cb1.revoke_call_cnt != expected_cb1_revoke_call_cnt)
+      Test::Fail(tostr() << "Expected consumer 1 revoke count to be "
+                         << expected_cb1_revoke_call_cnt
+                         << ", not: " << rebalance_cb1.revoke_call_cnt);
+    if (rebalance_cb2.revoke_call_cnt != expected_cb2_revoke_call_cnt)
+      Test::Fail(tostr() << "Expected consumer 2 revoke count to be "
+                         << expected_cb2_revoke_call_cnt
+                         << ", not: " << rebalance_cb2.revoke_call_cnt);
+  }
 
   delete c1;
   delete c2;
@@ -2528,9 +2630,9 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
     /* Verify consumer assignments */
     int counts[N_CONSUMERS];
     map<Toppar, RdKafka::KafkaConsumer *> all_assignments;
-    Test::Say(tostr() << "Consumer assignments "
-                      << "(subscription_variation " << subscription_variation
-                      << ")" << (stabilized ? " (stabilized)" : "")
+    Test::Say(tostr() << "Consumer assignments " << "(subscription_variation "
+                      << subscription_variation << ")"
+                      << (stabilized ? " (stabilized)" : "")
                       << (use_rebalance_cb ? " (use_rebalance_cb)"
                                            : " (no rebalance cb)")
                       << ":\n");
@@ -2577,9 +2679,8 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
       Test::Say(tostr() << (counts[i] == exp_parts ? "" : _C_YEL) << "Consumer "
                         << consumers[i]->name() << " has " << counts[i]
                         << " assigned partitions (" << consumer_topics[i].size()
-                        << " subscribed topic(s))"
-                        << ", expecting " << exp_parts
-                        << " assigned partitions\n");
+                        << " subscribed topic(s))" << ", expecting "
+                        << exp_parts << " assigned partitions\n");
 
       if (counts[i] != exp_parts)
         done = false;
@@ -2594,8 +2695,13 @@ static void u_multiple_subscription_changes(bool use_rebalance_cb,
 
   Test::Say("Disposing consumers\n");
   for (int i = 0; i < N_CONSUMERS; i++) {
-    TEST_ASSERT(!use_rebalance_cb || !rebalance_cbs[i].wait_rebalance,
-                "Consumer %d still waiting for rebalance", i);
+    /* A consumer will not necessarily get a rebalance after a
+     * subscription change with the consumer protocol */
+    if (test_consumer_group_protocol_classic()) {
+      TEST_ASSERT(!use_rebalance_cb || !rebalance_cbs[i].wait_rebalance,
+                  "Consumer %d still waiting for rebalance", i);
+    }
+
     if (i & 1)
       consumers[i]->close();
     delete consumers[i];
@@ -2721,18 +2827,28 @@ static void p_lost_partitions_heartbeat_illegal_generation_test() {
                    RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                    rd_false /*don't expect lost*/, 5 + 2);
 
-  /* Fail heartbeats */
-  rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_Heartbeat, 5,
-                                    RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-                                    RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-                                    RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-                                    RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
-                                    RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION);
+  if (test_consumer_group_protocol_classic()) {
+    /* Fail heartbeats */
+    rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_Heartbeat, 5,
+                                      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                                      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                                      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                                      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                                      RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION);
+  } else {
+    /* Fail heartbeats */
+    rd_kafka_mock_broker_push_request_error_rtts(
+        mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 2,
+        RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH, 0, RD_KAFKA_RESP_ERR_NO_ERROR,
+        1000);
+  }
 
   expect_rebalance("lost partitions", c, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                    rd_true /*expect lost*/, 10 + 2);
 
   rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_Heartbeat);
+  rd_kafka_mock_clear_request_errors(mcluster,
+                                     RD_KAFKAP_ConsumerGroupHeartbeat);
 
   expect_rebalance("rejoin after lost", c, RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
                    rd_false /*don't expect lost*/, 10 + 2);
@@ -2914,6 +3030,78 @@ static void r_lost_partitions_commit_illegal_generation_test_local() {
   test_mock_cluster_destroy(mcluster);
 }
 
+/* Check commit is retried on FENCED_MEMBER_EPOCH, using new epoch taken
+ * from HB. */
+static void t_consumer_group_consumer_retry_commit_on_fenced_member_epoch() {
+  const char *bootstraps;
+  rd_kafka_mock_cluster_t *mcluster;
+  const char *groupid = "mygroup";
+  const char *topic   = "test";
+  const int msgcnt    = 100;
+  rd_kafka_t *c;
+  rd_kafka_conf_t *conf;
+  rd_kafka_topic_partition_list_t *rktpars =
+      rd_kafka_topic_partition_list_new(1);
+
+  SUB_TEST();
+
+  mcluster = test_mock_cluster_new(3, &bootstraps);
+
+  rd_kafka_mock_coordinator_set(mcluster, "group", groupid, 1);
+
+  /* Seed the topic with messages */
+  test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 10, "bootstrap.servers",
+                           bootstraps, "batch.num.messages", "10",
+                           "security.protocol", "plaintext", NULL);
+
+  test_conf_init(&conf, NULL, 30);
+  test_conf_set(conf, "bootstrap.servers", bootstraps);
+  test_conf_set(conf, "security.protocol", "PLAINTEXT");
+  test_conf_set(conf, "group.id", groupid);
+  test_conf_set(conf, "auto.offset.reset", "earliest");
+  test_conf_set(conf, "enable.auto.commit", "false");
+  test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+
+  c = test_create_consumer(groupid, rebalance_cb, conf, NULL);
+
+  test_consumer_subscribe(c, topic);
+
+  expect_rebalance("initial assignment", c,
+                   RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS,
+                   rd_false /*don't expect lost*/, 5 + 2);
+
+
+  /* Consume some messages so that the commit has something to commit. */
+  test_consumer_poll("consume", c, -1, -1, -1, msgcnt / 2, NULL);
+
+  /* Fail Commit */
+  rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_OffsetCommit, 5,
+                                    RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
+                                    RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
+                                    RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
+                                    RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
+                                    RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH);
+
+  rd_kafka_commit(c, NULL, rd_false);
+
+  TEST_CALL_ERR__(rd_kafka_committed(c, rktpars, 2000));
+
+  /* Offsets should be committed with retries */
+  TEST_ASSERT(rktpars->cnt == 1);
+  TEST_ASSERT(rktpars->elems[0].offset == msgcnt / 2);
+
+  rd_kafka_topic_partition_list_destroy(rktpars);
+
+  TEST_SAY("Closing consumer\n");
+  test_consumer_close(c);
+
+  TEST_SAY("Destroying consumer\n");
+  rd_kafka_destroy(c);
+
+  TEST_SAY("Destroying mock cluster\n");
+  test_mock_cluster_destroy(mcluster);
+}
+
 /**
  * @brief Test that the consumer is destroyed without segfault if
  *        it happens before first rebalance and there is no assignor
@@ -2984,8 +3172,11 @@ static void v_rebalance_cb(rd_kafka_t *rk,
   if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
     test_consumer_incremental_assign("assign", rk, parts);
   } else {
-    test_consumer_incremental_unassign("unassign", rk, parts);
-
+    TEST_ASSERT(!rd_kafka_assignment_lost(rk),
+                "Assignment must not be lost, "
+                " that is a sign that an ILLEGAL_GENERATION error, "
+                " during a commit happening during a rebalance is "
+                "causing the assignment to be lost.");
     if (!*auto_commitp) {
       rd_kafka_resp_err_t commit_err;
 
@@ -2994,10 +3185,14 @@ static void v_rebalance_cb(rd_kafka_t *rk,
       rd_sleep(2);
       commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
       TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
-                      commit_err == RD_KAFKA_RESP_ERR__DESTROY,
+                      commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
+                      commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
                   "%s: manual commit failed: %s", rd_kafka_name(rk),
                   rd_kafka_err2str(commit_err));
     }
+
+    /* Unassign must be done after manual commit. */
+    test_consumer_incremental_unassign("unassign", rk, parts);
   }
 }
 
@@ -3011,11 +3206,23 @@ static void v_commit_cb(rd_kafka_t *rk,
   TEST_SAY("%s offset commit for %d offsets: %s\n", rd_kafka_name(rk),
            offsets ? offsets->cnt : -1, rd_kafka_err2name(err));
   TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
+                  err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION ||
                   err == RD_KAFKA_RESP_ERR__DESTROY /* consumer was closed */,
               "%s offset commit failed: %s", rd_kafka_name(rk),
               rd_kafka_err2str(err));
 }
 
+/**
+ * @brief Log callback for the v_.. test.
+ */
+static void v_log_cb(const rd_kafka_t *rk,
+                     int level,
+                     const char *fac,
+                     const char *buf) {
+  /* Slow down logging to make ILLEGAL_GENERATION errors caused by
+   * manual commit more likely. */
+  rd_usleep(1000, 0);
+}
 
 static void v_commit_during_rebalance(bool with_rebalance_cb,
                                       bool auto_commit) {
@@ -3040,7 +3247,7 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
    */
   p = test_create_producer();
 
-  test_create_topic(p, topic, partition_cnt, 1);
+  test_create_topic_wait_exists(p, topic, partition_cnt, 1, 5000);
 
   for (i = 0; i < partition_cnt; i++) {
     test_produce_msgs2(p, topic, testid, i, i * msgcnt_per_partition,
@@ -3053,8 +3260,13 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
 
 
   test_conf_set(conf, "auto.offset.reset", "earliest");
+  test_conf_set(conf, "debug", "consumer,cgrp,topic,fetch");
   test_conf_set(conf, "enable.auto.commit", auto_commit ? "true" : "false");
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
+  if (!auto_commit)
+    /* Slowing down logging is necessary only to make assignment lost
+     * errors more evident. */
+    rd_kafka_conf_set_log_cb(conf, v_log_cb);
   rd_kafka_conf_set_offset_commit_cb(conf, v_commit_cb);
   rd_kafka_conf_set_opaque(conf, (void *)&auto_commit);
 
@@ -3079,8 +3291,20 @@ static void v_commit_during_rebalance(bool with_rebalance_cb,
 
   /* Poll both consumers */
   for (i = 0; i < 10; i++) {
-    test_consumer_poll_once(c1, NULL, 1000);
-    test_consumer_poll_once(c2, NULL, 1000);
+    int poll_result1, poll_result2;
+    do {
+      poll_result1 = test_consumer_poll_once(c1, NULL, 1000);
+      poll_result2 = test_consumer_poll_once(c2, NULL, 1000);
+
+      if (poll_result1 == 1 && !auto_commit) {
+        rd_kafka_resp_err_t err;
+        TEST_SAY("Attempting manual commit after poll\n");
+        err = rd_kafka_commit(c1, NULL, 0);
+        TEST_ASSERT(!err || err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
+                    "Expected not error or ILLEGAL_GENERATION, got: %s",
+                    rd_kafka_err2str(err));
+      }
+    } while (poll_result1 == 0 || poll_result2 == 0);
   }
 
   TEST_SAY("Closing consumers\n");
@@ -3107,7 +3331,7 @@ static void x_incremental_rebalances(void) {
   SUB_TEST();
   test_conf_init(&conf, NULL, 60);
 
-  test_create_topic(NULL, topic, 6, 1);
+  test_create_topic_wait_exists(NULL, topic, 6, 1, 5000);
 
   test_conf_set(conf, "partition.assignment.strategy", "cooperative-sticky");
   for (i = 0; i < _NUM_CONS; i++) {
@@ -3133,22 +3357,38 @@ static void x_incremental_rebalances(void) {
   test_consumer_subscribe(c[1], topic);
   test_consumer_wait_assignment(c[1], rd_true /*poll*/);
   rd_sleep(3);
-  test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
-                                  topic, 4, topic, 5, NULL);
-  test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 0,
-                                  topic, 1, topic, 2, NULL);
+  if (test_consumer_group_protocol_classic()) {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
+                                    topic, 4, topic, 5, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 0,
+                                    topic, 1, topic, 2, NULL);
+  } else {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 0,
+                                    topic, 1, topic, 2, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 3,
+                                    topic, 4, topic, 5, NULL);
+  }
 
   /* Third consumer joins group */
   TEST_SAY("%s: joining\n", rd_kafka_name(c[2]));
   test_consumer_subscribe(c[2], topic);
   test_consumer_wait_assignment(c[2], rd_true /*poll*/);
   rd_sleep(3);
-  test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,
-                                  topic, 5, NULL);
-  test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 1,
-                                  topic, 2, NULL);
-  test_consumer_verify_assignment(c[2], rd_false /*fail later*/, topic, 3,
-                                  topic, 0, NULL);
+  if (test_consumer_group_protocol_classic()) {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,
+                                    topic, 5, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 1,
+                                    topic, 2, NULL);
+    test_consumer_verify_assignment(c[2], rd_false /*fail later*/, topic, 3,
+                                    topic, 0, NULL);
+  } else {
+    test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 0,
+                                    topic, 1, NULL);
+    test_consumer_verify_assignment(c[1], rd_false /*fail later*/, topic, 3,
+                                    topic, 4, NULL);
+    test_consumer_verify_assignment(c[2], rd_false /*fail later*/, topic, 2,
+                                    topic, 5, NULL);
+  }
 
   /* Raise any previously failed verify_assignment calls and fail the test */
   TEST_LATER_CHECK();
@@ -3163,11 +3403,22 @@ static void x_incremental_rebalances(void) {
 
 /* Local tests not needing a cluster */
 int main_0113_cooperative_rebalance_local(int argc, char **argv) {
+  TEST_SKIP_MOCK_CLUSTER(0);
+
   a_assign_rapid();
   p_lost_partitions_heartbeat_illegal_generation_test();
-  q_lost_partitions_illegal_generation_test(rd_false /*joingroup*/);
-  q_lost_partitions_illegal_generation_test(rd_true /*syncgroup*/);
-  r_lost_partitions_commit_illegal_generation_test_local();
+  if (test_consumer_group_protocol_classic()) {
+    /* These tests have no correspondence with
+     * the consumer group protocol "consumer" */
+    q_lost_partitions_illegal_generation_test(rd_false /*joingroup*/);
+    q_lost_partitions_illegal_generation_test(rd_true /*syncgroup*/);
+  }
+  if (test_consumer_group_protocol_classic()) {
+    r_lost_partitions_commit_illegal_generation_test_local();
+  } else if (0) {
+    /* FIXME: enable this once new errors are handled in OffsetCommit. */
+    t_consumer_group_consumer_retry_commit_on_fenced_member_epoch();
+  }
   s_no_segfault_before_first_rebalance();
   return 0;
 }
@@ -3202,7 +3453,7 @@ int main_0113_cooperative_rebalance(int argc, char **argv) {
   o_java_interop();
   for (i = 1; i <= 6; i++) /* iterate over 6 different test variations */
     s_subscribe_when_rebalancing(i);
-  for (i = 1; i <= 2; i++)
+  for (i = 1; i <= 3; i++)
     t_max_poll_interval_exceeded(i);
   /* Run all 2*3 variations of the u_.. test */
   for (i = 0; i < 3; i++) {

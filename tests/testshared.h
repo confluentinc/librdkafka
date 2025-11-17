@@ -62,7 +62,7 @@ extern int test_quick;
 /** @brief Broker version to int */
 #define TEST_BRKVER(A, B, C, D) (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
 /** @brief return single version component from int */
-#define TEST_BRKVER_X(V, I) (((V) >> (24 - ((I)*8))) & 0xff)
+#define TEST_BRKVER_X(V, I) (((V) >> (24 - ((I) * 8))) & 0xff)
 
 /** @brief Topic Admin API supported by this broker version and later */
 #define TEST_BRKVER_TOPIC_ADMINAPI TEST_BRKVER(0, 10, 2, 0)
@@ -78,6 +78,12 @@ void test_create_topic(rd_kafka_t *use_rk,
                        const char *topicname,
                        int partition_cnt,
                        int replication_factor);
+
+void test_create_topic_wait_exists(rd_kafka_t *use_rk,
+                                   const char *topicname,
+                                   int partition_cnt,
+                                   int replication_factor,
+                                   int timeout);
 
 void test_create_partitions(rd_kafka_t *use_rk,
                             const char *topicname,
@@ -179,10 +185,12 @@ void test_SAY(const char *file, int line, int level, const char *str);
 void test_SKIP(const char *file, int line, const char *str);
 
 void test_timeout_set(int timeout);
+int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 int test_set_special_conf(const char *name, const char *val, int *timeoutp);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
 const char *test_getenv(const char *env, const char *def);
+size_t test_read_file(const char *path, char *dst, size_t dst_size);
 
 int test_needs_auth(void);
 
@@ -386,7 +394,7 @@ void test_sub_skip(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 #ifndef _WIN32
 #define rd_sleep(S) sleep(S)
 #else
-#define rd_sleep(S) Sleep((S)*1000)
+#define rd_sleep(S) Sleep((S) * 1000)
 #endif
 
 /* Make sure __SANITIZE_ADDRESS__ (gcc) is defined if compiled with asan */
@@ -399,4 +407,10 @@ void test_sub_skip(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 
 int test_run_java(const char *cls, const char **argv);
 int test_waitpid(int pid);
+
+const char *test_consumer_group_protocol();
+
+int test_consumer_group_protocol_classic();
+
+
 #endif /* _TESTSHARED_H_ */

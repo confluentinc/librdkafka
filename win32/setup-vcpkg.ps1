@@ -1,13 +1,34 @@
 # Set up vcpkg and install required packages.
+$version = "2025.07.25"
+$vpkgHash=(Get-FileHash ".\librdkafka\vcpkg.json").Hash
+$cacheKey = "vcpkg-$version-$Env:triplet-$vpkgHash-$Env:CACHE_TAG"
+$librdkafkaPath = ".\librdkafka";
 
+try {
+    cache restore $cacheKey
+} catch {
+    echo "cache command not found"
+}
 if (!(Test-Path -Path vcpkg/.git)) {
     git clone https://github.com/Microsoft/vcpkg.git
+    cd vcpkg
+    git checkout $version
+    .\bootstrap-vcpkg.bat
+    cd ..
+    cd librdkafka
+    ..\vcpkg\vcpkg integrate install
+    # Install required packages.
+    ..\vcpkg\vcpkg --feature-flags=versions install --triplet $Env:triplet
+    cd ..
+    try {
+        cache store $cacheKey .\vcpkg
+    } catch {
+        echo "cache command not found"
+    }
+} else {
+    cd librdkafka
+    ..\vcpkg\vcpkg integrate install
+    cd ..
+    echo "Using previously installed vcpkg"
 }
-
-cd vcpkg
-# latest version is having an issue while doing vcpkg integrate install
-git checkout 328bd79eb8340b8958f567aaf5f8ffb81056cd36
-cd ..
-
-.\vcpkg\bootstrap-vcpkg.bat
 

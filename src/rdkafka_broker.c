@@ -3175,6 +3175,86 @@ static rd_kafka_resp_err_t rd_kafka_broker_destroy_error(rd_kafka_t *rk) {
                                         : RD_KAFKA_RESP_ERR__DESTROY_BROKER;
 }
 
+
+/**
+ * @brief Add description.
+ *
+ * @locality broker thread
+ * @locks toppar lock
+ * @locks broker lock
+ */
+static void rd_kafka_broker_share_session_add_remove_toppar(rd_list_t **toppars_add_list,
+                                                     rd_list_t **toppars_remove_list,
+                                                     rd_kafka_toppar_t *rktp) {
+        if (!*toppars_add_list) {
+                /**
+                 * TODO KIP-932: Use a better destroy method. Right now
+                 * manually destroying.
+                 */
+                *toppars_add_list = rd_list_new(1, rd_kafka_toppar_destroy_free);
+        }
+        
+        rd_list_add(*toppars_add_list, rd_kafka_toppar_keep(rktp));
+
+        /* Remove from removing toppars if present there. */
+        if (*toppars_remove_list) {
+                rd_list_remove(*toppars_remove_list, rktp);
+                rd_kafka_toppar_destroy(rktp);
+                if(rd_list_empty(*toppars_remove_list)) {
+                        rd_list_destroy(*toppars_remove_list);
+                        *toppars_remove_list = NULL;
+                }
+        }
+}
+
+/**
+ * @brief Add description. 
+ * 
+ * In some scenarios, we don't have leader information present while assignment is done. In which case,
+ * when the leader is known later, we need to add the toppar to the broker's share fetch session. Being called from two places:
+ * 1) when a toppar is being added to the assignment in cgrp.
+ * 2) when a toppar is being added to the leader
+ *
+ * @locality broker thread
+ * @locks toppar lock
+ * @locks broker lock
+ */
+static void rd_kafka_broker_share_session_toppar_add(rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
+        /**
+         * TODO KIP-932:
+         *  * Check if rktp is present in current session already or not?
+         *  * Check if rktp is already present in toppars_to_add?
+         */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_broker_share_session_add_remove_toppar(
+                    &rkb->rkb_share_fetch_session.toppars_to_add, &rkb->rkb_share_fetch_session.toppars_to_forget, rktp);
+        }
+}
+
+/**
+ * @brief Add description.
+ * 
+ * In some scenarios, we have to move the toppar out of the broker's share fetch session like leader migration to another broker.
+ * Being called from two places:
+ * 1) when a toppar is being removed from the assignment in cgrp.
+ * 2) when a toppar is being removed from the leader.
+ *
+ * @locality broker thread
+ * @locks toppar lock
+ * @locks broker lock
+ */
+static void rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
+        /**
+         * TODO KIP-932:
+         *  * Check if rktp is present in current session already or not? No need to add if it is not present?
+         *  * Check if rktp is already present in toppars_to_forget?
+         */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_broker_share_session_add_remove_toppar(
+                    &rkb->rkb_share_fetch_session.toppars_to_forget, &rkb->rkb_share_fetch_session.toppars_to_add, rktp);
+        }
+}
+
 /**
  * @brief Serve a broker op (an op posted by another thread to be handled by
  *        this broker's thread).
@@ -3320,6 +3400,9 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_lock(rkb);
                 TAILQ_INSERT_TAIL(&rkb->rkb_toppars, rktp, rktp_rkblink);
                 rkb->rkb_toppar_cnt++;
+                if(rd_kafka_toppar_is_on_cgrp(rktp, rd_false)) {
+                        rd_kafka_broker_share_session_toppar_add(rkb, rktp);
+                }
                 rd_kafka_broker_unlock(rkb);
                 rktp->rktp_broker = rkb;
                 rd_assert(!rktp->rktp_msgq_wakeup_q);
@@ -3418,6 +3501,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_lock(rkb);
                 TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
                 rkb->rkb_toppar_cnt--;
+                rd_kafka_broker_share_session_toppar_remove(rkb, rktp);
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_broker_destroy(rktp->rktp_broker);
                 if (rktp->rktp_msgq_wakeup_q) {
@@ -3602,6 +3686,28 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_unlock(rkb);
 
                 wakeup = rd_true;
+                break;
+        
+        case RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD:
+                rd_rkb_dbg(rkb, CGRP, "SHARESESSION",
+                           "Received SHARE_SESSION_PARTITION_ADD op for "
+                           "topic %s [%" PRId32 "]",
+                           rko->rko_rktp->rktp_rkt->rkt_topic->str,
+                           rko->rko_rktp->rktp_partition);
+
+                rd_kafka_broker_share_session_toppar_add(
+                    rkb, rko->rko_rktp);
+                break;
+
+        case RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE:
+                rd_rkb_dbg(rkb, CGRP, "SHARESESSION",
+                           "Received SHARE_SESSION_PARTITION_REMOVE op for "
+                           "topic %s [%" PRId32 "]",
+                           rko->rko_rktp->rktp_rkt->rkt_topic->str,
+                           rko->rko_rktp->rktp_partition);
+
+                rd_kafka_broker_share_session_toppar_remove(
+                    rkb, rko->rko_rktp);
                 break;
 
         default:
@@ -4323,8 +4429,23 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
 }
 
 
+// void rd_kafka_broker_update_share_fetch_session(rd_kafka_broker_t *rkb) {
+//         rd_kafka_toppar_t *rktp, *rktp_tmp;
+//         rd_bool_t needs_update = rd_false;
+
+//         TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkb_session_link) {
+//                 rd_kafka_toppar_is_valid_to_send_for_share_fetch(rktp);
+//         }
+
+//         if (needs_update)
+//                 rd_kafka_toppar_share_fetch_session_update(rkb);
+// }
+
+
 /**
  * Consumer serving
+ * 
+ * TODO KIP-932: Fix timeouts.
  */
 static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                                                  rd_ts_t abs_timeout) {
@@ -4356,6 +4477,8 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
 
                 if (min_backoff > abs_timeout)
                         min_backoff = abs_timeout;
+
+                // rd_kafka_broker_update_share_fetch_session(rkb);
 
                 if (rd_kafka_broker_ops_io_serve(rkb, min_backoff))
                         return; /* Wakeup */
@@ -4891,9 +5014,8 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_assert(TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_toppars));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_in_session));
-        rd_assert(TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_to_forget));
-        rd_assert(!rkb->rkb_share_fetch_session.adding_toppars);
-        rd_assert(!rkb->rkb_share_fetch_session.forgetting_toppars);
+        rd_assert(!rkb->rkb_share_fetch_session.toppars_to_add);
+        rd_assert(!rkb->rkb_share_fetch_session.toppars_to_forget);
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
             (rkb->rkb_rk->rk_conf.security_protocol ==
@@ -5027,9 +5149,9 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_logname = rd_strdup(rkb->rkb_name);
         TAILQ_INIT(&rkb->rkb_toppars);
         TAILQ_INIT(&rkb->rkb_share_fetch_session.toppars_in_session);
-        TAILQ_INIT(&rkb->rkb_share_fetch_session.toppars_to_forget);
-        rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
-        rkb->rkb_share_fetch_session.adding_toppars = NULL;
+        rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
+        rkb->rkb_share_fetch_session.toppars_to_forget = NULL;
+        rkb->rkb_share_fetch_session.toppars_to_add = NULL;
         CIRCLEQ_INIT(&rkb->rkb_active_toppars);
         TAILQ_INIT(&rkb->rkb_monitors);
         rd_kafka_bufq_init(&rkb->rkb_outbufs);

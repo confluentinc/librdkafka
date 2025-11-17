@@ -114,20 +114,24 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                             Any new added toppar in rkb_toppars will be added here after successful share fetch request.
                                                             Any removed toppar from rkb_toppars will be removed from here after successful share fetch request.
                                                             rkb_share_fetch_session.forgotten_toppars is calculated by rkb_share_fetch_session.toppars - rkb_toppars */
-                rd_list_t *adding_toppars;         /* List of toppars
-                                                   * that are added to rkb_toppars but not yet added to fetch session.
+                int toppars_in_session_cnt;
+                rd_list_t *toppars_to_add;        /* TODO KIP-932: Move this from `rd_list_t` to `TAILQ_HEAD(, rd_kafka_toppar_s)` for performance improvements.
+                                                   * List of toppars that are added to rkb_toppars but not yet added to fetch session.
                                                    * Will be sent in next fetch request.
                                                    * Cleared when fetch session is reset or when fetch request is successful. */
-
-                TAILQ_HEAD(, rd_kafka_toppar_s) toppars_to_forget; /* List of toppars
-                                                                         * that are removed from rkb_toppars but not yet removed from fetch session.
-                                                                         * Will be sent in next fetch request.
-                                                                         * Cleared when fetch session is reset or when fetch request is successful. */
-                rd_list_t *forgetting_toppars;     /* List of toppars
+                rd_list_t *adding_toppars;
+                rd_list_t *toppars_to_forget;     /* TODO KIP-932: Move this from `rd_list_t` to `TAILQ_HEAD(, rd_kafka_toppar_s)` for performance improvements.
+                                                   * List of toppars
                                                    * that are removed from rkb_toppars and sent in fetch request but not yet removed from fetch session.
                                                    * Cleared when fetch session is reset or when fetch request is successful. */
+                rd_list_t *forgetting_toppars;
                 int32_t epoch; /* Current fetch session
-                                * epoch, or -1 if no session */
+                                * epoch, or -1 if leaving the session 
+                                * TODO KIP-932: Handle 0 and -1 properly. 
+                                *               * Can we move from -1 to 0? 
+                                *               * Maybe in some error case?
+                                *               * Is there a way in which we close a previous session and start a new one?
+                                */
         } rkb_share_fetch_session;
 
         int rkb_toppar_cnt;

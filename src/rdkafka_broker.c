@@ -3187,23 +3187,23 @@ static void rd_kafka_broker_share_session_add_remove_toppar(rd_list_t **toppars_
                                                      rd_list_t **toppars_remove_list,
                                                      rd_kafka_toppar_t *rktp) {
         if (!*toppars_add_list) {
-                /**
-                 * TODO KIP-932: Use a better destroy method. Right now
-                 * manually destroying.
-                 */
                 *toppars_add_list = rd_list_new(1, rd_kafka_toppar_destroy_free);
         }
         
-        rd_list_add(*toppars_add_list, rd_kafka_toppar_keep(rktp));
+        if(!rd_list_find(*toppars_add_list, rktp, rd_list_cmp_ptr))
+                rd_list_add(*toppars_add_list, rd_kafka_toppar_keep(rktp));
 
         /* Remove from removing toppars if present there. */
         if (*toppars_remove_list) {
-                rd_list_remove(*toppars_remove_list, rktp);
-                rd_kafka_toppar_destroy(rktp);
-                if(rd_list_empty(*toppars_remove_list)) {
-                        rd_list_destroy(*toppars_remove_list);
-                        *toppars_remove_list = NULL;
+                rd_kafka_toppar_t *removed_rktp = rd_list_remove(*toppars_remove_list, rktp);
+                if(removed_rktp) {
+                        rd_kafka_toppar_destroy(removed_rktp);
+                        if(rd_list_empty(*toppars_remove_list)) {
+                                rd_list_destroy(*toppars_remove_list);
+                                *toppars_remove_list = NULL;
+                        }
                 }
+                        
         }
 }
 
@@ -4931,6 +4931,40 @@ static int rd_kafka_broker_thread_main(void *arg) {
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs), r);
+                        
+                        rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                   "Partitions in fetch session: %d",
+                                   rkb->rkb_share_fetch_session.toppars_in_session_cnt);
+                        if(rkb->rkb_share_fetch_session.toppars_to_add)
+                            rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                       "Partitions to add to fetch session: %d",
+                                       rd_list_cnt(
+                                           rkb->rkb_share_fetch_session.toppars_to_add));
+                        if(rkb->rkb_share_fetch_session.toppars_to_forget) {
+                            rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                       "Partitions to forget from fetch session: %d",
+                                       rd_list_cnt(
+                                           rkb->rkb_share_fetch_session.toppars_to_forget));
+                                rd_kafka_toppar_t *rktp;
+                                int i;
+                            RD_LIST_FOREACH(rktp, rkb->rkb_share_fetch_session.toppars_to_forget, i) {
+                                rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                           "  - %.*s [%" PRId32 "]",
+                                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                           rktp->rktp_partition);
+                            }
+
+                        }
+                        if(rkb->rkb_share_fetch_session.adding_toppars)
+                            rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                       "Partitions being added to fetch session: %d",
+                                       rd_list_cnt(
+                                           rkb->rkb_share_fetch_session.adding_toppars));
+                        if(rkb->rkb_share_fetch_session.forgetting_toppars)
+                            rd_rkb_dbg(rkb, BROKER, "TERMINATE",
+                                       "Partitions being forgotten from fetch session: %d",
+                                       rd_list_cnt(
+                                           rkb->rkb_share_fetch_session.forgetting_toppars));
                 }
         }
 

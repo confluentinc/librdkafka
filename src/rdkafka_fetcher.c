@@ -1232,11 +1232,12 @@ static void rd_kafka_broker_session_update_toppars_in_session(rd_kafka_broker_t 
 static void rd_kafka_broker_session_update_toppars_list(
     rd_kafka_broker_t *rkb,
     rd_list_t **request_toppars_ptr,
-    rd_list_t *toppars_to_remove,
+    rd_list_t **toppars_to_remove_ptr,
     rd_bool_t add) {
         size_t i;
         rd_kafka_toppar_t *rktp, *removed_rktp;
         rd_list_t *request_toppars = *request_toppars_ptr;
+        rd_list_t *toppars_to_remove = *toppars_to_remove_ptr;
 
         if (request_toppars == NULL || rd_list_cnt(request_toppars) == 0)
                 return;
@@ -1245,8 +1246,13 @@ static void rd_kafka_broker_session_update_toppars_list(
                 rd_kafka_broker_session_update_toppars_in_session(rkb, rktp, add);
                 if (toppars_to_remove) {
                         removed_rktp = rd_list_remove(toppars_to_remove, rktp);
-                        if (removed_rktp)
+                        if (removed_rktp) {
                                 rd_kafka_toppar_destroy(removed_rktp); /* from partitions list */
+                                if(rd_list_empty(toppars_to_remove)) {
+                                        rd_list_destroy(toppars_to_remove);
+                                        *toppars_to_remove_ptr = NULL;
+                                }
+                        }
                 }
         }
         rd_list_destroy(request_toppars);
@@ -1257,14 +1263,14 @@ static void rd_kafka_broker_session_update_added_partitions(
     rd_kafka_broker_t *rkb) {
         rd_kafka_broker_session_update_toppars_list(
             rkb, &rkb->rkb_share_fetch_session.adding_toppars,
-            rkb->rkb_share_fetch_session.toppars_to_add, rd_true);
+            &rkb->rkb_share_fetch_session.toppars_to_add, rd_true);
 }
 
 static void rd_kafka_broker_session_update_removed_partitions(
     rd_kafka_broker_t *rkb) {
         rd_kafka_broker_session_update_toppars_list(
             rkb, &rkb->rkb_share_fetch_session.forgetting_toppars,
-            rkb->rkb_share_fetch_session.toppars_to_forget, rd_false);
+            &rkb->rkb_share_fetch_session.toppars_to_forget, rd_false);
 }
 
 static void rd_kafka_broker_session_update_partitions(rd_kafka_broker_t *rkb) {

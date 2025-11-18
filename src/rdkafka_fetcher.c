@@ -1040,12 +1040,11 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_str(rkbuf, &ErrorStr);
 
-        if(ErrorCode) {
+        if (ErrorCode) {
                 rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
                            "ShareFetch response error %d: '%.*s'",
                            ErrorCode,
                            RD_KAFKAP_STR_PR(&ErrorStr));
-                rd_kafkap_str_destroy(&ErrorStr);
                 return ErrorCode;
         }
 
@@ -1722,7 +1721,7 @@ static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send(rd_kafka_broke
         rd_kafka_toppar_t *rktp;
         int i;
 
-        TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
+        TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkblink) {
                 if (rktp->rktp_share_acknowledge.first_offset >= 0) {
                         rd_list_add(toppars_to_send, rktp);
                 }

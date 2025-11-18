@@ -279,7 +279,7 @@ int main(int argc, char **argv) {
                                 continue;
                         }
 
-                        if((int)rcvd_msgs < 100) {
+                        if((int)rcvd_msgs < -1) {
                                 /* Proper message. */
                                 printf("Message on %s [%" PRId32 "] at offset %" PRId64
                                 " (leader epoch %" PRId32 "):\n",

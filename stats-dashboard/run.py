@@ -2,8 +2,9 @@
 """
 librdkafka Stats Dashboard runner
 
-This script starts the Grafana dashboard with VictoriaMetrics for librdkafka statistics,
-handles first-time setup, and imports data from logs files and dashboards.
+This script starts the Grafana dashboard with VictoriaMetrics for librdkafka
+statistics, handles first-time setup, and imports data from logs files and
+dashboards.
 """
 
 import os
@@ -24,6 +25,7 @@ max_cols = 6
 params = (',?' * 8)[1:]
 sep = '####'
 
+
 class Grafana:
     def __init__(self):
         self.grafana_url = "http://localhost:3000"
@@ -33,31 +35,34 @@ class Grafana:
         credentials = f"{self.username}:{self.password}"
         self.auth_header = base64.b64encode(credentials.encode()).decode()
         self.librdkafka_dashboard_url = None
-    
-    def make_request(self, url: str, method: str = "GET", data: Optional[dict] = None, headers: Optional[dict] = None) -> tuple:
+
+    def make_request(self, url: str, method: str = "GET",
+                     data: Optional[dict] = None,
+                     headers: Optional[dict] = None) -> tuple:
         """Make HTTP request using urllib."""
         try:
             req_headers = {"Authorization": f"Basic {self.auth_header}"}
             if headers:
                 req_headers.update(headers)
-            
+
             if data:
                 json_data = json.dumps(data).encode('utf-8')
                 req_headers["Content-Type"] = "application/json"
             else:
                 json_data = None
-            
-            request = urllib.request.Request(url, data=json_data, headers=req_headers, method=method)
-            
+
+            request = urllib.request.Request(
+                url, data=json_data, headers=req_headers, method=method)
+
             with urllib.request.urlopen(request, timeout=10) as response:
                 response_data = response.read().decode('utf-8')
                 return response.status, response_data
-                
+
         except urllib.error.HTTPError as e:
             return e.code, e.read().decode('utf-8')
         except Exception as e:
             return 0, str(e)
-        
+
     def check_port_open(self, host: str, port: int) -> bool:
         """Check if a port is open on the given host."""
         try:
@@ -67,30 +72,31 @@ class Grafana:
                 return result == 0
         except Exception:
             return False
-    
+
     def wait_for_grafana(self, max_wait: int = 60) -> bool:
         """Wait for Grafana to start up."""
         print("Waiting for Grafana to start...")
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             if self.check_port_open("localhost", 3000):
                 print("Grafana started")
                 return True
             print("Waiting for Grafana to start")
             time.sleep(1)
-        
+
         print(f"Grafana failed to start within {max_wait} seconds")
         return False
-    
+
     def wait_for_grafana_api(self, max_wait: int = 60) -> Optional[int]:
         """Wait for Grafana API to be ready and return datasource count."""
         print("Waiting for Grafana API to be ready...")
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             try:
-                status, response_data = self.make_request(f"{self.grafana_url}/api/datasources")
+                status, response_data = self.make_request(
+                    f"{self.grafana_url}/api/datasources")
                 if status == 200:
                     datasources = json.loads(response_data)
                     count = len(datasources)
@@ -98,9 +104,9 @@ class Grafana:
                     return count
             except Exception as e:
                 print(f"Waiting for Grafana API to be ready... ({e})")
-            
+
             time.sleep(2)
-        
+
         print(f"Grafana API failed to be ready within {max_wait} seconds")
         return None
 
@@ -108,32 +114,33 @@ class Grafana:
 class VictoriaMetrics:
     def __init__(self, victoriametrics_url: str = "http://localhost:8428"):
         self.victoriametrics_url = victoriametrics_url
-        self.remote_writer = RemoteWriter(f"{victoriametrics_url}/api/v1/write")
-    
+        self.remote_writer = RemoteWriter(
+            f"{victoriametrics_url}/api/v1/write")
+
     def wait_for_victoriametrics(self, max_wait: int = 60) -> bool:
         """Wait for VictoriaMetrics to start up and be healthy."""
         print("Waiting for VictoriaMetrics to be ready...")
         start_time = time.time()
-        
+
         while time.time() - start_time < max_wait:
             if self.check_victoriametrics_health():
                 print("VictoriaMetrics is ready")
                 return True
             print("Waiting for VictoriaMetrics to start")
             time.sleep(2)
-        
+
         print(f"VictoriaMetrics failed to start within {max_wait} seconds")
         return False
-    
+
     def check_victoriametrics_health(self) -> bool:
         """Check if VictoriaMetrics is running and healthy."""
         try:
             health_url = f"{self.victoriametrics_url}/health"
             request = urllib.request.Request(health_url, method='GET')
-            
+
             with urllib.request.urlopen(request, timeout=10) as response:
                 return response.status == 200
-                    
+
         except (urllib.error.URLError, Exception):
             return False
 
@@ -143,17 +150,18 @@ class VictoriaMetrics:
             if not os.path.exists(db_path):
                 print(f"Database {db_path} not found")
                 return False
-            
+
             # Connect to SQLite database
             with sqlite3.connect(db_path) as conn:
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT f1, f2, f3, f4, f5, f6, name, value, timestamp 
-                    FROM stats 
+                    SELECT f1, f2, f3, f4, f5, f6,
+                        node, instance, value, timestamp
+                    FROM stats
                     ORDER BY timestamp ASC
                 """)
-                
+
                 rows_batch_size = 10000
                 rows = cursor.fetchmany(rows_batch_size)
                 while len(rows) > 0:
@@ -161,18 +169,20 @@ class VictoriaMetrics:
                     data = []
                     batched_metrics = {}
                     for row in rows:
-                        f1, f2, f3, f4, f5, f6, instance, value, timestamp_us = row
+                        f1, f2, f3, f4, f5, f6, \
+                            node, instance, value, timestamp_us = row
                         # Convert microsecond timestamp to milliseconds
                         timestamp_ms = timestamp_us // 1000
                         tags = {
-                            'instance': instance
+                            'instance': instance,
+                            'kubernetes_pod_name': node
                         }
 
                         if f1 == 'brokers':
                             tags['broker'] = f2
                             f2, f3, f4, f5, f6 = f3, f4, f5, f6, None
                             if f2 == "toppars":
-                                topic, partition = f3.rsplit('-',1)
+                                topic, partition = f3.rsplit('-', 1)
                                 tags['topic'] = topic
                                 tags['partition'] = partition
                                 f3, f4, f5, f6 = f4, f5, f6, None
@@ -188,10 +198,15 @@ class VictoriaMetrics:
                             metric_value = 1
                             tags['value'] = value
 
-                        metric_parts = [part for part in [f1, f2, f3, f4, f5, f6] if part is not None]
+                        metric_parts = [part for part in [
+                            f1, f2, f3, f4, f5, f6] if part is not None]
                         metric_name = "_".join(metric_parts)
                         # Create metric name (sanitized for VictoriaMetrics)
-                        metric_name = f"librdkafka_{metric_name}".replace("-", "_").replace(".", "_").replace("?", "").lower()
+                        metric_name = f"librdkafka_{metric_name}".replace(
+                            "-", "_")\
+                            .replace(".", "_")\
+                            .replace("?", "")\
+                            .lower()
 
                         tags_key = f"{tags['instance']}"
                         if 'broker' in tags:
@@ -203,20 +218,23 @@ class VictoriaMetrics:
                         if 'value' in tags:
                             tags_key += f"_{tags['value']}"
 
-                        if not metric_name in batched_metrics:
+                        if metric_name not in batched_metrics:
                             batched_metrics[metric_name] = {}
-                        if not tags_key in batched_metrics[metric_name]:
+                        if tags_key not in batched_metrics[metric_name]:
                             batched_metrics[metric_name][tags_key] = {
                                 'tags': tags,
                                 'values': [],
                                 'timestamps': []
                             }
-                        batched_metrics[metric_name][tags_key]['values'].append(metric_value)
-                        batched_metrics[metric_name][tags_key]['timestamps'].append(timestamp_ms)
+                        batched_metrics[metric_name][tags_key]['values']\
+                            .append(metric_value)
+                        batched_metrics[metric_name][tags_key]['timestamps']\
+                            .append(timestamp_ms)
 
                     for metric_name, tags in batched_metrics.items():
                         for tags_key, metric_data in tags.items():
-                            # Prepare data in the format expected by RemoteWriter
+                            # Prepare data in the format expected
+                            # by RemoteWriter
                             data.append({
                                 'metric': {
                                     '__name__': metric_name,
@@ -230,16 +248,18 @@ class VictoriaMetrics:
                     print(f"Pushed {len(rows)} metrics")
                     rows = cursor.fetchmany(rows_batch_size)
                 return True
-                
+
         except Exception as e:
             print(f"Error backfilling metrics: {repr(e)}")
             return False
 
 
-def run_command(cmd: List[str], check: bool = True) -> subprocess.CompletedProcess:
+def run_command(cmd: List[str], check: bool = True)\
+        -> subprocess.CompletedProcess:
     """Run a shell command."""
     try:
-        result = subprocess.run(cmd, check=check, capture_output=True, text=True)
+        result = subprocess.run(
+            cmd, check=check, capture_output=True, text=True)
         return result
     except subprocess.CalledProcessError as e:
         print(f"Command failed: {' '.join(cmd)}")
@@ -248,15 +268,17 @@ def run_command(cmd: List[str], check: bool = True) -> subprocess.CompletedProce
             raise
         return e
 
-def extract_tuples(json_dict, name, time):
+
+def extract_tuples(json_dict, instance, time):
     ret = []
     for k, v in json_dict.items():
         if isinstance(v, dict):
-            for p in extract_tuples(v, name, time):
+            for p in extract_tuples(v, instance, time):
                 ret.append((k,) + p)
         else:
-            ret.append((str(k), str(v), name, time))
+            ret.append((str(k), str(v), instance, time))
     return ret
+
 
 def extract_logs(f, db):
     if os.path.isfile(db):
@@ -265,7 +287,8 @@ def extract_logs(f, db):
         cur = con.cursor()
         cur.execute('''CREATE TABLE stats
                     (f1 text, f2 text, f3 text, f4 text, f5 text, f6 text,
-                    value text, name text, timestamp INTEGER)''')
+                    value text, node text, instance text,
+                    timestamp INTEGER)''')
 
         with open(f) as f:
             stats = 0
@@ -285,21 +308,25 @@ def extract_logs(f, db):
                     time = json_dict['time']
                     ts = json_dict['ts'] % 1000000
                     time = time * 1000000 + ts
-                    name = json_dict['name']
+                    instance = json_dict['name']
+                    node = 'librdkafka-pod'
                     if start_process_id >= 0 and \
                        end_process_id >= 0:
-                        name = f'{line[start_process_id+len(sep):end_process_id]},{name}'  # noqa: E501
+                        node = line[start_process_id+len(sep):end_process_id]
 
-                    tuples = extract_tuples(json_dict, name, time)
+                    tuples = extract_tuples(json_dict, instance, time)
                     rows = []
                     for tuple1 in tuples:
                         empty_cols = (None,) * (max_cols - len(tuple1) + 3)
-                        row = tuple(tuple1[0:-3]) + empty_cols + tuple1[-3:]
+                        row = tuple(tuple1[0:-3]) + \
+                            empty_cols + tuple1[-3:] + (node,)
                         rows.append(row)
                     cur.executemany(
-                        'INSERT INTO stats VALUES (?,?,?,?,?,?,?,?,?)', rows)
+                        '''INSERT INTO stats(f1,f2,f3,f4,f5,f6,
+                            value,instance,timestamp,node)
+                             VALUES (?,?,?,?,?,?,?,?,?,?)''', rows)
                     con.commit()
-                    stats+=1
+                    stats += 1
                 except json.decoder.JSONDecodeError:
                     # There will always be extraneous log lines
                     pass
@@ -313,16 +340,18 @@ def extract_logs(f, db):
                         file=sys.stderr)
             print(f'{stats} stats written')
         cur.execute('''CREATE INDEX idx_stats ON stats(
-            name,f1,f2,f3,f4,f5,timestamp)''')
+            node,instance,f1,f2,f3,f4,f5,timestamp)''')
+
 
 def read_min_interval(db):
     with sqlite3.connect(db) as con:
         cur = con.cursor()
-        cur.execute("SELECT interval_ms FROM (SELECT name, ((max(timestamp) - min(timestamp)) / (count(*) - 1) / 1000) as interval_ms FROM stats WHERE f1 = 'name' GROUP BY name ORDER BY interval_ms ASC) LIMIT 1")  # noqa: E501
+        cur.execute("SELECT interval_ms FROM (SELECT node, instance, ((max(timestamp) - min(timestamp)) / (count(*) - 1) / 1000) as interval_ms FROM stats WHERE f1 = 'name' GROUP BY node, instance ORDER BY interval_ms ASC) LIMIT 1")  # noqa: E501
         data = cur.fetchall()
         if data and len(data) > 0:
             return data[0][0]
     return None
+
 
 def update_victoriametrics_interval(min_interval):
     prometheus_config_path = os.path.join(
@@ -332,7 +361,7 @@ def update_victoriametrics_interval(min_interval):
 
     with open(prometheus_config_path, 'r') as f:
         config = f.read()
-    
+
     # Update scrape_interval
     new_config = ""
     for line in config.splitlines():
@@ -342,7 +371,7 @@ def update_victoriametrics_interval(min_interval):
             new_config += f"{spacing}scrape_interval: {min_interval}ms\n"
         else:
             new_config += line + "\n"
-    
+
     with open(prometheus_config_path, 'w') as f:
         f.write(new_config)
 
@@ -367,6 +396,7 @@ def open_dashboard(db, min_interval_ms):
         print(f'Opening {url}')
         webbrowser.open(url)
 
+
 def main():
     # Parse command line arguments
     log_file = sys.argv[1] if len(sys.argv) > 1 else None
@@ -377,7 +407,7 @@ def main():
         # Remove existing database
         if os.path.exists("./out.db"):
             os.remove("./out.db")
-        
+
         # Convert logs to SQLite
         extract_logs(log_file, "./out.db")
 
@@ -394,14 +424,14 @@ def main():
     except subprocess.CalledProcessError:
         print("Failed to start docker compose")
         sys.exit(1)
-    
+
     # Initialize Grafana
     grafana = Grafana()
-    
+
     # Wait for Grafana to start
     if not grafana.wait_for_grafana():
         sys.exit(1)
-    
+
     # Wait for Grafana API and get datasource count
     datasource_count = grafana.wait_for_grafana_api()
     if datasource_count is None:
@@ -410,11 +440,10 @@ def main():
     # Initialize VictoriaMetrics and backfill data
     print("\nInitializing VictoriaMetrics...")
     victoriametrics = VictoriaMetrics()
-    
+
     # Wait for VictoriaMetrics to be ready
     if not victoriametrics.wait_for_victoriametrics():
         sys.exit(1)
-    
 
     if log_file:
         # Backfill metrics from database

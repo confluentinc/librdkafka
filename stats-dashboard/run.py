@@ -149,7 +149,7 @@ class VictoriaMetrics:
                 cursor = conn.cursor()
 
                 cursor.execute("""
-                    SELECT f1, f2, f3, f4, f5, f6, name, value, timestamp 
+                    SELECT f1, f2, f3, f4, f5, f6, node, instance, value, timestamp 
                     FROM stats 
                     ORDER BY timestamp ASC
                 """)
@@ -161,11 +161,12 @@ class VictoriaMetrics:
                     data = []
                     batched_metrics = {}
                     for row in rows:
-                        f1, f2, f3, f4, f5, f6, instance, value, timestamp_us = row
+                        f1, f2, f3, f4, f5, f6, node, instance, value, timestamp_us = row
                         # Convert microsecond timestamp to milliseconds
                         timestamp_ms = timestamp_us // 1000
                         tags = {
-                            'instance': instance
+                            'instance': instance,
+                            'kubernetes_pod_name': node
                         }
 
                         if f1 == 'brokers':
@@ -248,14 +249,14 @@ def run_command(cmd: List[str], check: bool = True) -> subprocess.CompletedProce
             raise
         return e
 
-def extract_tuples(json_dict, name, time):
+def extract_tuples(json_dict, instance, time):
     ret = []
     for k, v in json_dict.items():
         if isinstance(v, dict):
-            for p in extract_tuples(v, name, time):
+            for p in extract_tuples(v, instance, time):
                 ret.append((k,) + p)
         else:
-            ret.append((str(k), str(v), name, time))
+            ret.append((str(k), str(v), instance, time))
     return ret
 
 def extract_logs(f, db):
@@ -265,7 +266,7 @@ def extract_logs(f, db):
         cur = con.cursor()
         cur.execute('''CREATE TABLE stats
                     (f1 text, f2 text, f3 text, f4 text, f5 text, f6 text,
-                    value text, name text, timestamp INTEGER)''')
+                    value text, node text, instance text, timestamp INTEGER)''')
 
         with open(f) as f:
             stats = 0
@@ -285,19 +286,20 @@ def extract_logs(f, db):
                     time = json_dict['time']
                     ts = json_dict['ts'] % 1000000
                     time = time * 1000000 + ts
-                    name = json_dict['name']
+                    instance = json_dict['name']
+                    node = 'librdkafka-pod'
                     if start_process_id >= 0 and \
                        end_process_id >= 0:
-                        name = f'{line[start_process_id+len(sep):end_process_id]},{name}'  # noqa: E501
+                        node = line[start_process_id+len(sep):end_process_id]
 
-                    tuples = extract_tuples(json_dict, name, time)
+                    tuples = extract_tuples(json_dict, instance, time)
                     rows = []
                     for tuple1 in tuples:
                         empty_cols = (None,) * (max_cols - len(tuple1) + 3)
-                        row = tuple(tuple1[0:-3]) + empty_cols + tuple1[-3:]
+                        row = tuple(tuple1[0:-3]) + empty_cols + tuple1[-3:] + (node,)
                         rows.append(row)
                     cur.executemany(
-                        'INSERT INTO stats VALUES (?,?,?,?,?,?,?,?,?)', rows)
+                        'INSERT INTO stats(f1,f2,f3,f4,f5,f6,value,instance,timestamp,node) VALUES (?,?,?,?,?,?,?,?,?,?)', rows)
                     con.commit()
                     stats+=1
                 except json.decoder.JSONDecodeError:
@@ -313,12 +315,12 @@ def extract_logs(f, db):
                         file=sys.stderr)
             print(f'{stats} stats written')
         cur.execute('''CREATE INDEX idx_stats ON stats(
-            name,f1,f2,f3,f4,f5,timestamp)''')
+            node,instance,f1,f2,f3,f4,f5,timestamp)''')
 
 def read_min_interval(db):
     with sqlite3.connect(db) as con:
         cur = con.cursor()
-        cur.execute("SELECT interval_ms FROM (SELECT name, ((max(timestamp) - min(timestamp)) / (count(*) - 1) / 1000) as interval_ms FROM stats WHERE f1 = 'name' GROUP BY name ORDER BY interval_ms ASC) LIMIT 1")  # noqa: E501
+        cur.execute("SELECT interval_ms FROM (SELECT node, instance, ((max(timestamp) - min(timestamp)) / (count(*) - 1) / 1000) as interval_ms FROM stats WHERE f1 = 'name' GROUP BY node, instance ORDER BY interval_ms ASC) LIMIT 1")  # noqa: E501
         data = cur.fetchall()
         if data and len(data) > 0:
             return data[0][0]

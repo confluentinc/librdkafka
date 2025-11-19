@@ -1,5 +1,5 @@
 version: v1.0
-name: 'librdkafka integration and all architectures tests pipeline'
+name: librdkafka-integration-tests
 agent:
   machine:
     type: s1-prod-ubuntu24-04-arm64-00

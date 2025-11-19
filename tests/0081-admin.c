@@ -961,32 +961,44 @@ static void do_test_AlterConfigs(rd_kafka_t *rk, rd_kafka_queue_t *rkqu) {
 
                 /* For broker configs, accept either NO_ERROR or
                  * POLICY_VIOLATION since cloud environments may or may not
-                 * allow broker config alterations */
+                 * allow broker config alterations, or INVALID_REQUEST when
+                 * mixing topic and broker configs in the same request */
                 if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
                     RD_KAFKA_RESOURCE_BROKER) {
                         if (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
-                            err != RD_KAFKA_RESP_ERR_POLICY_VIOLATION) {
+                            err != RD_KAFKA_RESP_ERR_POLICY_VIOLATION &&
+                            err != RD_KAFKA_RESP_ERR_INVALID_REQUEST) {
                                 TEST_FAIL_LATER(
                                     "ConfigResource #%d (BROKER): "
-                                    "expected NO_ERROR or POLICY_VIOLATION, "
-                                    "got %s (%s)",
+                                    "expected NO_ERROR, POLICY_VIOLATION, "
+                                    "or INVALID_REQUEST, got %s (%s)",
                                     i, rd_kafka_err2name(err),
                                     errstr2 ? errstr2 : "");
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* Accept UNKNOWN_TOPIC_OR_PART for topic configs as
-                         * some environments may restrict topic config
-                         * alterations */
+                        /* Accept UNKNOWN_TOPIC_OR_PART or INVALID_REQUEST for
+                         * topic configs as some environments may restrict topic
+                         * config alterations or reject mixed resource types */
                         if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
                                 RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
-                            err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+                            (err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
+                             err == RD_KAFKA_RESP_ERR_INVALID_REQUEST)) {
                                 TEST_SAY(
-                                    "accepting UNKNOWN_TOPIC_OR_PART for topic "
-                                    "config "
+                                    "accepting %s for topic config "
                                     "(topic config alterations may be "
-                                    "restricted)\n");
+                                    "restricted or mixed resource types not "
+                                    "supported)\n",
+                                    rd_kafka_err2name(err));
+                        } else if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
+                                       RD_KAFKA_RESOURCE_TOPIC &&
+                                   exp_err[i] ==
+                                       RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART &&
+                                   err == RD_KAFKA_RESP_ERR_INVALID_REQUEST) {
+                                TEST_SAY(
+                                    "accepting INVALID_REQUEST for topic config "
+                                    "(mixed resource types not supported)\n");
                         } else if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
                                        RD_KAFKA_RESOURCE_GROUP &&
                                    (err == RD_KAFKA_RESP_ERR_NO_ERROR ||
@@ -1288,32 +1300,44 @@ static void do_test_IncrementalAlterConfigs(rd_kafka_t *rk,
 
                 /* For broker configs, accept either NO_ERROR or
                  * POLICY_VIOLATION since cloud environments may or may not
-                 * allow broker config alterations */
+                 * allow broker config alterations, or INVALID_REQUEST when
+                 * mixing topic and broker configs in the same request */
                 if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
                     RD_KAFKA_RESOURCE_BROKER) {
                         if (err != RD_KAFKA_RESP_ERR_NO_ERROR &&
-                            err != RD_KAFKA_RESP_ERR_POLICY_VIOLATION) {
+                            err != RD_KAFKA_RESP_ERR_POLICY_VIOLATION &&
+                            err != RD_KAFKA_RESP_ERR_INVALID_REQUEST) {
                                 TEST_FAIL_LATER(
                                     "ConfigResource #%d (BROKER): "
-                                    "expected NO_ERROR or POLICY_VIOLATION, "
-                                    "got %s (%s)",
+                                    "expected NO_ERROR, POLICY_VIOLATION, "
+                                    "or INVALID_REQUEST, got %s (%s)",
                                     i, rd_kafka_err2name(err),
                                     errstr2 ? errstr2 : "");
                                 fails++;
                         }
                 } else if (err != exp_err[i]) {
-                        /* Accept UNKNOWN_TOPIC_OR_PART for topic configs as
-                         * some environments may restrict topic config
-                         * alterations */
+                        /* Accept UNKNOWN_TOPIC_OR_PART or INVALID_REQUEST for
+                         * topic configs as some environments may restrict topic
+                         * config alterations or reject mixed resource types */
                         if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
                                 RD_KAFKA_RESOURCE_TOPIC &&
                             exp_err[i] == RD_KAFKA_RESP_ERR_NO_ERROR &&
-                            err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
+                            (err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
+                             err == RD_KAFKA_RESP_ERR_INVALID_REQUEST)) {
                                 TEST_SAY(
-                                    "accepting UNKNOWN_TOPIC_OR_PART for topic "
-                                    "config "
+                                    "accepting %s for topic config "
                                     "(topic config alterations may be "
-                                    "restricted)\n");
+                                    "restricted or mixed resource types not "
+                                    "supported)\n",
+                                    rd_kafka_err2name(err));
+                        } else if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
+                                       RD_KAFKA_RESOURCE_TOPIC &&
+                                   exp_err[i] ==
+                                       RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART &&
+                                   err == RD_KAFKA_RESP_ERR_INVALID_REQUEST) {
+                                TEST_SAY(
+                                    "accepting INVALID_REQUEST for topic config "
+                                    "(mixed resource types not supported)\n");
                         } else if (rd_kafka_ConfigResource_type(rconfigs[i]) ==
                                        RD_KAFKA_RESOURCE_GROUP &&
                                    (err == RD_KAFKA_RESP_ERR_NO_ERROR ||

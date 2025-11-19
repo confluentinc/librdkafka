@@ -1,0 +1,44 @@
+services:
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: librdkafka_stats_dashboard
+    ports:
+      - "3000:3000"
+    volumes:
+      #- ./data/grafana.db:/var/lib/grafana/grafana.db
+      - ./conf/grafana.ini:/etc/grafana/grafana.ini
+      - ./provisioning/datasources/victoriametrics.yaml:/etc/grafana/provisioning/datasources/victoriametrics.yaml
+      - ./provisioning/dashboards/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - .:/mnt
+    environment:
+      - GF_SECURITY_ADMIN_USER=librdkafka
+      - GF_SECURITY_ADMIN_PASSWORD=librdkafka
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - victoriametrics
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: librdkafka_victoriametrics
+    ports:
+      - "8428:8428"
+    volumes:
+      - ./victoriametrics/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--promscrape.config=/etc/prometheus/prometheus.yml'
+      - '--storageDataPath=/victoria-metrics-data'
+      - '--httpListenAddr=:8428'
+      - '--retentionPeriod=10y'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8428/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

@@ -486,11 +486,13 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
          * Sends ACCEPT blindly with implicit acknowledgement.
          */
 
-        struct {
+        /* Dynamic array of acknowledge entries: NULL until allocated. */
+        struct rd_kafka_toppar_share_ack_entry {
                 int64_t first_offset;
                 int64_t last_offset;
                 int16_t delivery_count;
-        } rktp_share_acknowledge;
+        } *rktp_share_acknowledge; /* NULL = not initialized */
+        size_t rktp_share_acknowledge_count; /* number of entries in rktp_share_acknowledge (0 when NULL) */
 };
 
 /**

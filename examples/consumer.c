@@ -281,10 +281,9 @@ int main(int argc, char **argv) {
 
                         // if((int)rcvd_msgs < -1) {
                                 /* Proper message. */
-                                printf("Message on %s [%" PRId32 "] at offset %" PRId64
-                                " (leader epoch %" PRId32 "):\n",
+                                printf("Message received on %s [%" PRId32 "] at offset %" PRId64,
                                 rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                                rkm->offset, rd_kafka_message_leader_epoch(rkm));
+                                rkm->offset);
 
                                 /* Print the message key. */
                                 if (rkm->key && is_printable(rkm->key, rkm->key_len))
@@ -296,10 +295,10 @@ int main(int argc, char **argv) {
                                 /* Print the message value/payload. */
                                 if (rkm->payload &&
                                 is_printable(rkm->payload, rkm->len))
-                                        printf(" Value: %.*s\n", (int)rkm->len,
+                                        printf(" - Value: %.*s\n", (int)rkm->len,
                                         (const char *)rkm->payload);
                                 else if (rkm->payload)
-                                        printf(" Value: (%d bytes)\n", (int)rkm->len);
+                                        printf(" - Value: (%d bytes)\n", (int)rkm->len);
                         // }
 
                         rd_kafka_message_destroy(rkm);

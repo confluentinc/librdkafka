@@ -732,11 +732,17 @@ struct rd_kafka_op_s {
                 } terminated;
 
                 struct {
+
+                        rd_bool_t should_leave; /**< Whether this broker should
+                                                 * leave the share-fetch
+                                                 * session. */
+
                         /** Whether this broker should share-fetch nonzero
                          * messages. */
                         rd_bool_t should_fetch;
 
                         /** Absolute timeout left to complete this share-fetch.
+                         * TODO KIP-932: Use timeout properly.
                          */
                         rd_ts_t abs_timeout;
 

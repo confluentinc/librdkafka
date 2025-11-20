@@ -2991,7 +2991,7 @@ static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
  */
 rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                                                 rd_kafka_op_t *rko_orig) {
-        rd_kafka_resp_err_t err;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
@@ -3030,6 +3030,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         case RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS: /* This should not happen. */
         case RD_KAFKA_RESP_ERR__STATE:
         case RD_KAFKA_RESP_ERR__AUTHENTICATION:
+        case RD_KAFKA_RESP_ERR_NO_ERROR:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED: /* Do we need more
                                                               handling for fatal
                                                               errors? */
@@ -3163,6 +3164,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 rkb->rkb_share_fetch_enqueued = rd_true;
 
                 rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+                rko_sf->rko_u.share_fetch.should_leave = rd_false;
                 rko_sf->rko_u.share_fetch.abs_timeout  = abs_timeout;
                 rko_sf->rko_u.share_fetch.should_fetch = (rkb == selected_rkb);
                 rd_kafka_broker_keep(rkb);
@@ -3171,8 +3173,11 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 
                 rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                              "Enqueuing share fetch op on broker %s "
-                             "(%s fetch)",
+                             "(%s leave), (%s fetch)",
                              rd_kafka_broker_name(rkb),
+                             rko_sf->rko_u.share_fetch.should_leave
+                                 ? "should"
+                                 : "should not",
                              rko_sf->rko_u.share_fetch.should_fetch
                                  ? "should"
                                  : "should not");

@@ -2147,21 +2147,34 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
  */
 void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
                                 const char *group_id,
-                                const char *member_id,
+                                const rd_kafka_leave_member_t *members,
+                                int member_cnt,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion = 0;
         int features;
-
+        int i;
+        
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_LeaveGroup, 0, 1, &features);
+            rkb, RD_KAFKAP_LeaveGroup, 0, 3, &features);
 
         rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup, 1, 300);
 
         rd_kafka_buf_write_str(rkbuf, group_id, -1);
-        rd_kafka_buf_write_str(rkbuf, member_id, -1);
+
+        if (ApiVersion >= 3) {
+                rd_kafka_buf_write_arraycnt(rkbuf, member_cnt);
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafka_buf_write_kstr(rkbuf, members[i].member_id->str);
+                        rd_kafka_buf_write_kstr(rkbuf, members[i].group_instance_id);
+                }
+        } else {
+                /* v0-2: Only supports single member */
+                rd_assert(member_cnt == 1);
+                rd_kafka_buf_write_kstr(rkbuf, members[0].member_id);
+        }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

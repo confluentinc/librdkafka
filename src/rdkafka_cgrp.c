@@ -985,18 +985,18 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 3) {
-              rd_kafka_buf_read_i32(rkbuf, &member_cnt);
-              for (i = 0; i < member_cnt; i++) {
-                rd_kafka_buf_read_str(rkbuf, &MemberId);
-                rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-                rd_kafka_buf_read_i16(rkbuf, &MemberErrorCode);
+                rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
+                        rd_kafka_buf_read_i16(rkbuf, &MemberErrorCode);
 
-                if (ErrorCode == 0 && MemberErrorCode != 0) {
-                    ErrorCode = MemberErrorCode;
+                        if (ErrorCode == 0 && MemberErrorCode != 0) {
+                                ErrorCode = MemberErrorCode;
+                        }
                 }
-              }
         }
-        
+
 err:
         if (ErrorCode)
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
@@ -1168,14 +1168,13 @@ static void rd_kafka_cgrp_leave(rd_kafka_cgrp_t *rkcg) {
 
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
                 rd_kafka_leave_member_t member = {
-                        .member_id = rkcg->rkcg_member_id,
-                        .group_instance_id = rkcg->rkcg_group_instance_id
-                };
+                    .member_id         = rkcg->rkcg_member_id,
+                    .group_instance_id = rkcg->rkcg_group_instance_id};
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(
-                    rkcg->rkcg_coord, rkcg->rkcg_group_id->str, &member, member_cnt,
-                    RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+                    rkcg->rkcg_coord, rkcg->rkcg_group_id->str, &member,
+                    member_cnt, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_cgrp_handle_LeaveGroup, rkcg);
         } else
                 rd_kafka_cgrp_handle_LeaveGroup(rkcg->rkcg_rk, rkcg->rkcg_coord,

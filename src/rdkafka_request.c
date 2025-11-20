@@ -2156,7 +2156,7 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
         int features;
         int i;
-        
+
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
             rkb, RD_KAFKAP_LeaveGroup, 0, 3, &features);
 
@@ -2167,8 +2167,9 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 3) {
                 rd_kafka_buf_write_arraycnt(rkbuf, member_cnt);
                 for (i = 0; i < member_cnt; i++) {
-                        rd_kafka_buf_write_kstr(rkbuf, members[i].member_id->str);
-                        rd_kafka_buf_write_kstr(rkbuf, members[i].group_instance_id);
+                        rd_kafka_buf_write_kstr(rkbuf, members[i].member_id);
+                        rd_kafka_buf_write_kstr(rkbuf,
+                                                members[i].group_instance_id);
                 }
         } else {
                 /* v0-2: Only supports single member */

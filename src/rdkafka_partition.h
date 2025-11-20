@@ -546,19 +546,19 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp);
 #define rd_kafka_toppar_destroy(RKTP)                                          \
         do {                                                                   \
                 rd_kafka_toppar_t *_RKTP = (RKTP);                             \
-                rd_kafka_toppar_destroy0(_RKTP);                               \
+                rd_kafka_toppar_destroy0(__FUNCTION__, __LINE__, _RKTP);       \
         } while (0)
 
 /* Common destroy helper used by both the macro and the free-wrapper. */
-static RD_UNUSED RD_INLINE void rd_kafka_toppar_destroy0(rd_kafka_toppar_t *rktp) {
-        if (unlikely(rd_refcnt_sub(&rktp->rktp_refcnt) == 0))
+static RD_UNUSED RD_INLINE void rd_kafka_toppar_destroy0(const char *func, int line, rd_kafka_toppar_t *rktp) {
+        if (unlikely(rd_refcnt_sub_fl(func, line, &rktp->rktp_refcnt) == 0))
                 rd_kafka_toppar_destroy_final(rktp);
 }
 
 /* Free-function compatible wrapper for rd_list_new and similar APIs
         * (signature: void (*)(void *)). */
 static RD_UNUSED RD_INLINE void rd_kafka_toppar_destroy_free(void *ptr) {
-        rd_kafka_toppar_destroy0((rd_kafka_toppar_t *)ptr);
+        rd_kafka_toppar_destroy0(__FUNCTION__, __LINE__, (rd_kafka_toppar_t *)ptr);
 }
 
 

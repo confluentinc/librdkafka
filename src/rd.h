@@ -406,14 +406,17 @@ static RD_INLINE RD_UNUSED int rd_refcnt_get(rd_refcnt_t *R) {
                  rd_refcnt_get(R), (R), WHAT, __FUNCTION__, __LINE__),         \
          rd_refcnt_sub0(R))
 
-#define rd_refcnt_sub(R)                                                       \
+#define rd_refcnt_sub_fl(FUNC, LINE, R)                                        \
         (fprintf(stderr, "REFCNT DEBUG: %-35s %d -1: %16p: %s:%d\n", #R,       \
-                 rd_refcnt_get(R), (R), __FUNCTION__, __LINE__),               \
+                 rd_refcnt_get(R), (R), (FUNC), (LINE)),                       \
          rd_refcnt_sub0(R))
+
+#define rd_refcnt_sub(R) rd_refcnt_sub_fl(__FUNCTION__, __LINE__, R)
 
 #else
 #define rd_refcnt_add_fl(FUNC, LINE, R) rd_refcnt_add0(R)
 #define rd_refcnt_add(R)                rd_refcnt_add0(R)
+#define rd_refcnt_sub_fl(FUNC, LINE, R) rd_refcnt_sub0(R)
 #define rd_refcnt_sub(R)                rd_refcnt_sub0(R)
 #endif
 

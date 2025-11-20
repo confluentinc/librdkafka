@@ -296,11 +296,15 @@ async function transform(ctx: RuleContext, schema: Type, msg: any, fieldTransfor
   switch (schema.typeName) {
     case 'union:unwrapped':
     case 'union:wrapped':
-      const subschema = resolveUnion(schema, msg)
+      let [subschema, submsg] = resolveUnion(schema, msg)
       if (subschema == null) {
-        return null
+        return msg
       }
-      return await transform(ctx, subschema, msg, fieldTransform)
+      submsg = await transform(ctx, subschema, submsg, fieldTransform)
+      if (schema.typeName === 'union:wrapped') {
+        return {[subschema.branchName!]: submsg}
+      }
+      return submsg
     case 'array':
       const arraySchema = schema as ArrayType
       const array = msg as any[]
@@ -408,7 +412,7 @@ function disjoint(slice1: Set<string>, map1: Set<string>): boolean {
   return true
 }
 
-function resolveUnion(schema: Type, msg: any): Type | null {
+function resolveUnion(schema: Type, msg: any): [Type | null, any] {
   let unionTypes = null
   if (schema.typeName === 'union:unwrapped') {
     const union = schema as UnwrappedUnionType
@@ -416,7 +420,7 @@ function resolveUnion(schema: Type, msg: any): Type | null {
     if (unionTypes != null) {
       for (let i = 0; i < unionTypes.length; i++) {
         if (unionTypes[i].isValid(msg)) {
-          return unionTypes[i]
+          return [unionTypes[i], msg]
         }
       }
     }
@@ -429,13 +433,15 @@ function resolveUnion(schema: Type, msg: any): Type | null {
         let name = keys[0]
         for (let i = 0; i < unionTypes.length; i++) {
           if (unionTypes[i].branchName === name) {
-            return unionTypes[i]
+            return [unionTypes[i], msg[name]]
           }
         }
+      } else {
+        throw new Error('wrapped unions require a name/value pair with the name as the type name')
       }
     }
   }
-  return null
+  return [null, msg]
 }
 
 function getInlineTags(info: SchemaInfo, deps: Map<string, string>): Map<string, Set<string>> {

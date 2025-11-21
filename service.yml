@@ -11,11 +11,17 @@ semaphore:
   triggers:
   - tags
   - branches
+  - pull_requests
   branches:
   - master
+  # Semaphore pipeline changes go here
   - /semaphore.*/
+  # Prefix branches this way to run the CI before opening a PR
   - /dev_.*/
+  # Feature branches for new features still in development
   - /feature\/.*/
+  # Release branches for backporting fixes
+  - /release\/v\d+\.\d+\.x$/
   tasks:
   - name: verify-linux-packages
     branch: master

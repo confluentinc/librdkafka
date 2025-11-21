@@ -981,7 +981,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         * parse errors (which are partition-specific) */
 
         rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt, -1); // AcquiredRecordsArrayCnt
-        rd_dassert(rktp->rktp_share_acknowledge_count >= 0);
+        rd_dassert(rktp->rktp_share_acknowledge_count == 0);
         rd_dassert(rktp->rktp_share_acknowledge == NULL);
         rktp->rktp_share_acknowledge_count = AcquiredRecordsArrayCnt;
         rktp->rktp_share_acknowledge = rd_calloc(AcquiredRecordsArrayCnt,
@@ -1751,7 +1751,7 @@ static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send(rd_kafka_broke
         rd_kafka_toppar_t *rktp;
         int i;
 
-        TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkblink) {
+        TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkb_session_link) {
                 if (rktp->rktp_share_acknowledge_count >= 0) {
                         rd_list_add(toppars_to_send, rktp);
                 }

@@ -968,6 +968,11 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg       = opaque;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode           = 0;
+        int32_t member_cnt;
+        int i;
+        rd_kafkap_str_t MemberId;
+        rd_kafkap_str_t GroupInstanceId;
+        int16_t MemberErrorCode;
 
         if (err) {
                 ErrorCode = err;
@@ -978,6 +983,27 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 3) {
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, RD_KAFKAP_TOPICS_MAX);
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
+                        rd_kafka_buf_read_i16(rkbuf, &MemberErrorCode);
+
+                        if (request->rkbuf_reqhdr.ApiVersion >= 4) {
+                                rd_kafka_buf_skip_tags(rkbuf);
+                        }
+
+                        if (ErrorCode == 0 && MemberErrorCode != 0) {
+                                ErrorCode = MemberErrorCode;
+                        }
+                }
+        }
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 4) {
+                rd_kafka_buf_skip_tags(rkbuf);
+        }
 
 err:
         if (ErrorCode)
@@ -1124,6 +1150,7 @@ static void rd_kafka_cgrp_consumer_leave(rd_kafka_cgrp_t *rkcg) {
 
 static void rd_kafka_cgrp_leave(rd_kafka_cgrp_t *rkcg) {
         char *member_id;
+        int member_cnt = 1;
 
         RD_KAFKAP_STR_DUPA(&member_id, rkcg->rkcg_member_id);
 
@@ -1148,12 +1175,19 @@ static void rd_kafka_cgrp_leave(rd_kafka_cgrp_t *rkcg) {
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_WAIT_LEAVE;
 
         if (rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_UP) {
+                rd_kafkap_str_t *member_id_new;
+                member_id_new = rd_kafkap_str_new(member_id, -1);
+
+                rd_kafka_leave_member_t member = {
+                    .member_id         = member_id_new,
+                    .group_instance_id = rkcg->rkcg_group_instance_id};
                 rd_rkb_dbg(rkcg->rkcg_curr_coord, CONSUMER, "LEAVE",
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(
-                    rkcg->rkcg_coord, rkcg->rkcg_group_id->str, member_id,
-                    RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+                    rkcg->rkcg_coord, rkcg->rkcg_group_id->str, &member,
+                    member_cnt, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_cgrp_handle_LeaveGroup, rkcg);
+                rd_kafkap_str_destroy(member_id_new);
         } else
                 rd_kafka_cgrp_handle_LeaveGroup(rkcg->rkcg_rk, rkcg->rkcg_coord,
                                                 RD_KAFKA_RESP_ERR__WAIT_COORD,

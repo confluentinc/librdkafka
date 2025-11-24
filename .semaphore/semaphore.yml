@@ -1,5 +1,5 @@
 version: v1.0
-name: 'librdkafka build and release artifact pipeline'
+name: build-test-release
 agent:
   machine:
     type: s1-prod-ubuntu24-04-arm64-00

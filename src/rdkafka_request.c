@@ -2158,9 +2158,10 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
         int i;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_LeaveGroup, 0, 3, &features);
+            rkb, RD_KAFKAP_LeaveGroup, 0, 4, &features);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup, 1, 300);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_LeaveGroup, 1,
+                                                 300, ApiVersion >= 4);
 
         rd_kafka_buf_write_str(rkbuf, group_id, -1);
 
@@ -2170,6 +2171,9 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_kstr(rkbuf, members[i].member_id);
                         rd_kafka_buf_write_kstr(rkbuf,
                                                 members[i].group_instance_id);
+                        if (ApiVersion >= 4) {
+                                rd_kafka_buf_write_tags_empty(rkbuf);
+                        }
                 }
         } else {
                 /* v0-2: Only supports single member */
@@ -2188,58 +2192,6 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
 }
-
-
-/**
- * Handler for LeaveGroup responses
- * opaque must be the cgrp handle.
- */
-void rd_kafka_handle_LeaveGroup(rd_kafka_t *rk,
-                                rd_kafka_broker_t *rkb,
-                                rd_kafka_resp_err_t err,
-                                rd_kafka_buf_t *rkbuf,
-                                rd_kafka_buf_t *request,
-                                void *opaque) {
-        rd_kafka_cgrp_t *rkcg       = opaque;
-        const int log_decode_errors = LOG_ERR;
-        int16_t ErrorCode           = 0;
-        int actions;
-
-        if (err) {
-                ErrorCode = err;
-                goto err;
-        }
-
-        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
-
-err:
-        actions = rd_kafka_err_action(rkb, ErrorCode, request,
-                                      RD_KAFKA_ERR_ACTION_END);
-
-        if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
-                /* Re-query for coordinator */
-                rd_kafka_cgrp_op(rkcg, NULL, RD_KAFKA_NO_REPLYQ,
-                                 RD_KAFKA_OP_COORD_QUERY, ErrorCode);
-        }
-
-        if (actions & RD_KAFKA_ERR_ACTION_RETRY) {
-                if (rd_kafka_buf_retry(rkb, request))
-                        return;
-                /* FALLTHRU */
-        }
-
-        if (ErrorCode)
-                rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
-                             "LeaveGroup response: %s",
-                             rd_kafka_err2str(ErrorCode));
-
-        return;
-
-err_parse:
-        ErrorCode = rkbuf->rkbuf_err;
-        goto err;
-}
-
 
 
 /**

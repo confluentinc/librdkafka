@@ -1759,7 +1759,7 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &GroupId);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
-                rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, RD_KAFKAP_TOPICS_MAX);
 
                 members_id = rd_alloca(member_cnt * sizeof(*members_id));
                 members_instance_id =
@@ -1768,10 +1768,13 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
                 for (i = 0; i < member_cnt; i++) {
                         rd_kafka_buf_read_str(rkbuf, &members_id[i]);
                         rd_kafka_buf_read_str(rkbuf, &members_instance_id[i]);
+
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4)
+                                rd_kafka_buf_skip_tags(rkbuf);
                 }
         } else {
                 members_id          = rd_alloca(sizeof(*members_id));
-                members_instance_id = NULL; /* Not used for v0-2 */
+                members_instance_id = NULL;
                 rd_kafka_buf_read_str(rkbuf, &members_id[0]);
         }
 
@@ -1835,11 +1838,14 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_i16(resp, err);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
-                rd_kafka_buf_write_i32(resp, member_cnt);
+                rd_kafka_buf_write_arraycnt(resp, member_cnt);
                 for (i = 0; i < member_cnt; i++) {
                         rd_kafka_buf_write_kstr(resp, &members_id[i]);
                         rd_kafka_buf_write_kstr(resp, &members_instance_id[i]);
                         rd_kafka_buf_write_i16(resp, member_errors[i]);
+
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4)
+                                rd_kafka_buf_write_tags_empty(resp);
                 }
         }
 

@@ -985,16 +985,24 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
         if (request->rkbuf_reqhdr.ApiVersion >= 3) {
-                rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, RD_KAFKAP_TOPICS_MAX);
                 for (i = 0; i < member_cnt; i++) {
                         rd_kafka_buf_read_str(rkbuf, &MemberId);
                         rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
                         rd_kafka_buf_read_i16(rkbuf, &MemberErrorCode);
 
+                        if (request->rkbuf_reqhdr.ApiVersion >= 4) {
+                                rd_kafka_buf_skip_tags(rkbuf);
+                        }
+
                         if (ErrorCode == 0 && MemberErrorCode != 0) {
                                 ErrorCode = MemberErrorCode;
                         }
                 }
+        }
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 4) {
+                rd_kafka_buf_skip_tags(rkbuf);
         }
 
 err:

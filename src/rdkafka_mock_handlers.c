@@ -1759,7 +1759,8 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &GroupId);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
-                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, RD_KAFKAP_TOPICS_MAX);
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt,
+                                           RD_KAFKAP_TOPICS_MAX);
 
                 members_id = rd_alloca(member_cnt * sizeof(*members_id));
                 members_instance_id =

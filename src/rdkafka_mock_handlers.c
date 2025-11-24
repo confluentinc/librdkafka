@@ -1746,13 +1746,34 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_broker_t *mrkb;
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
-        rd_kafkap_str_t GroupId, MemberId;
+        rd_kafkap_str_t GroupId;
+        int32_t member_cnt = 1;
+        rd_kafkap_str_t *members_id;
+        rd_kafkap_str_t *members_instance_id;
+        rd_kafka_resp_err_t *member_errors;
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cgrp_classic_t *mcgrp;
         rd_kafka_mock_cgrp_classic_member_t *member = NULL;
+        int i;
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
-        rd_kafka_buf_read_str(rkbuf, &MemberId);
+
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
+                rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+
+                members_id = rd_alloca(member_cnt * sizeof(*members_id));
+                members_instance_id =
+                    rd_alloca(member_cnt * sizeof(*members_instance_id));
+
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafka_buf_read_str(rkbuf, &members_id[i]);
+                        rd_kafka_buf_read_str(rkbuf, &members_instance_id[i]);
+                }
+        } else {
+                members_id          = rd_alloca(sizeof(*members_id));
+                members_instance_id = NULL; /* Not used for v0-2 */
+                rd_kafka_buf_read_str(rkbuf, &members_id[0]);
+        }
 
         /*
          * Construct response
@@ -1781,21 +1802,46 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
                         err = RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND;
         }
 
+        member_errors = rd_alloca(member_cnt * sizeof(*member_errors));
+
         if (!err) {
-                member =
-                    rd_kafka_mock_cgrp_classic_member_find(mcgrp, &MemberId);
-                if (!member)
-                        err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                for (i = 0; i < member_cnt; i++) {
+                        member = rd_kafka_mock_cgrp_classic_member_find(
+                            mcgrp, &members_id[i]);
+                        if (!member) {
+                                member_errors[i] =
+                                    RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                        } else {
+                                member_errors[i] =
+                                    rd_kafka_mock_cgrp_classic_check_state(
+                                        mcgrp, member, rkbuf, -1);
+                                if (!member_errors[i])
+                                        rd_kafka_mock_cgrp_classic_member_leave(
+                                            mcgrp, member);
+                        }
+
+                        /* For v0-2, promote first member error to top-level */
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion < 3 &&
+                            member_errors[i] && !err)
+                                err = member_errors[i];
+                }
+        } else {
+                for (i = 0; i < member_cnt; i++) {
+                        member_errors[i] = err;
+                }
         }
 
-        if (!err)
-                err = rd_kafka_mock_cgrp_classic_check_state(mcgrp, member,
-                                                             rkbuf, -1);
+        /* Write top-level error code */
+        rd_kafka_buf_write_i16(resp, err);
 
-        if (!err)
-                rd_kafka_mock_cgrp_classic_member_leave(mcgrp, member);
-
-        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
+                rd_kafka_buf_write_i32(resp, member_cnt);
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafka_buf_write_kstr(resp, &members_id[i]);
+                        rd_kafka_buf_write_kstr(resp, &members_instance_id[i]);
+                        rd_kafka_buf_write_i16(resp, member_errors[i]);
+                }
+        }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 

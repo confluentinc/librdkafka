@@ -265,6 +265,7 @@ typedef struct rd_kafka_acl_result_s rd_kafka_acl_result_t;
 typedef struct rd_kafka_Uuid_s rd_kafka_Uuid_t;
 typedef struct rd_kafka_topic_partition_result_s
     rd_kafka_topic_partition_result_t;
+typedef struct rd_kafka_share_s rd_kafka_share_t;
 /* @endcond */
 
 
@@ -3058,7 +3059,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
 
 RD_EXPORT
-rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
+rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                                         char *errstr,
                                         size_t errstr_size);
 
@@ -3073,7 +3074,7 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
  */
 RD_EXPORT
 rd_kafka_error_t *
-rd_kafka_share_consume_batch(rd_kafka_t *rk,
+rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
                              int timeout_ms,
                              rd_kafka_message_t **rkmessages /* out */,
                              size_t *rkmessages_size /* out */);
@@ -3102,6 +3103,13 @@ void rd_kafka_destroy(rd_kafka_t *rk);
  */
 RD_EXPORT
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags);
+
+
+/**
+ * TODO KIP-932: Add proper documentation.
+ */
+RD_EXPORT
+void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Flags for rd_kafka_destroy_flags()
@@ -4734,6 +4742,99 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
 
 
 /**
+ * @name ShareConsumer (C)
+ * @brief Share consumer specific APIs
+ * @{
+ *
+ *
+ *
+ */
+/**
+ * TODO KIP-932:
+ * 1) Update descriptions of all the below APIs.
+ * 2) Shall we guard these APIs with asserts for rkshare type and
+ *    internal rkshare_rk to be present.
+ */
+/**
+ * @brief Subscribe to topic set using balanced consumer groups.
+ *
+ * Wildcard (regex) topics are not supported.
+ *
+ * @remark Only the \c .topic field is used in the supplied \p topics list,
+ *         all other fields are ignored.
+ *
+ * @remark subscribe() is an asynchronous method which returns immediately:
+ *         background threads will (re)join the group, wait for group rebalance,
+ *         issue any registered rebalance_cb, assign() the assigned partitions,
+ *         and then start fetching messages.
+ *
+ * @remark After this call returns a consumer error will be returned by
+ *         rd_kafka_consumer_poll (et.al) for each unavailable topic in the
+ *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
+ *         for non-existent topics, and
+ *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
+ *         The consumer error will be raised through rd_kafka_consumer_poll()
+ *         (et.al.) with the \c rd_kafka_message_t.err field set to one of the
+ *         error codes mentioned above.
+ *         The subscribe function itself is asynchronous and will not return
+ *         an error on unavailable topics.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
+ *          topics or regexes or duplicate entries,
+ *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
+                   const rd_kafka_topic_partition_list_t *topics);
+
+
+/**
+ * @brief Unsubscribe from the current subscription set.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare);
+
+
+/**
+ * @brief Returns the current topic subscription
+ *
+ * @returns An error code on failure, otherwise \p topic is updated
+ *          to point to a newly allocated topic list (possibly empty).
+ *
+ * @remark The application is responsible for calling
+ *         rd_kafka_topic_partition_list_destroy on the returned list.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_share_subscription(rd_kafka_share_t *rkshare, rd_kafka_topic_partition_list_t **topics);
+
+
+
+/**
+ * @brief Close the consumer.
+ *
+ * This call will block until the consumer has revoked its assignment,
+ * calling the \c rebalance_cb if it is configured, committed offsets
+ * to broker, and left the consumer group (if applicable).
+ * The maximum blocking time is roughly limited to session.timeout.ms.
+ *
+ * @returns An error code indicating if the consumer close was succesful
+ *          or not.
+ *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
+ *          a fatal error.
+ *
+ * @remark The application still needs to call rd_kafka_destroy() after
+ *         this call finishes to clean up the underlying handle resources.
+ *
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
+
+/**@}*/
+
+
+
+/**
  * @name Producer API
  * @{
  *
@@ -5567,6 +5668,16 @@ int rd_kafka_unittest(void);
 RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk);
 
+
+/**
+ * @brief Redirect the main (rd_kafka_poll()) queue to the KafkaConsumer's
+ *        queue (rd_kafka_consumer_poll()).
+ *
+ * @warning It is not permitted to call rd_kafka_poll() after directing the
+ *          main queue with rd_kafka_share_poll_set_consumer().
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare);
 
 /**@}*/
 

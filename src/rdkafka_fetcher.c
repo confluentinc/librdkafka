@@ -956,29 +956,28 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        if (unlikely(MessageSetSize <= 0))
-                goto done;
+        if(MessageSetSize > 0) {
+                /**
+                 * Parse MessageSet
+                 */
+                if (!rd_slice_narrow_relative(&rkbuf->rkbuf_reader, &save_slice,
+                                        (size_t) MessageSetSize))
+                        rd_kafka_buf_check_len(rkbuf, MessageSetSize);
 
-        /**
-         * Parse MessageSet
-         */
-        if (!rd_slice_narrow_relative(&rkbuf->rkbuf_reader, &save_slice,
-                                (size_t) MessageSetSize))
-                rd_kafka_buf_check_len(rkbuf, MessageSetSize);
+                /* Parse messages 
+                TODO KIP-932: This part might raise issue as We are adding messages
+                                to the consumer queue in partition by partition manner.
+                                The poll returns messages as soon as they are available in the queue,
+                                so messages for different partitions in the same fetch request might
+                                not be sent at once to the user.
+                */
+                err = rd_kafka_msgset_parse(rkbuf, request, rktp, NULL, &tver);
 
-        /* Parse messages 
-           TODO KIP-932: This part might raise issue as We are adding messages
-                         to the consumer queue in partition by partition manner.
-                         The poll returns messages as soon as they are available in the queue,
-                         so messages for different partitions in the same fetch request might
-                         not be sent at once to the user.
-        */
-        err = rd_kafka_msgset_parse(rkbuf, request, rktp, NULL, &tver);
+                rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
+                /* Continue with next partition regardless of
+                * parse errors (which are partition-specific) */
 
-
-        rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
-        /* Continue with next partition regardless of
-        * parse errors (which are partition-specific) */
+        }
 
         rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt, -1); // AcquiredRecordsArrayCnt
         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "%.*s [%" PRId32 "] : Share Acknowledgement Count: %ld, AcquiredRecordsArrayCnt: %d\n",

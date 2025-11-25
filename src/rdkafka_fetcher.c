@@ -1474,12 +1474,12 @@ void rd_kafka_ShareFetchRequest(
         int toppars_to_send_cnt    = toppars_to_send ? rd_list_cnt(toppars_to_send) : 0;
         int i;
         size_t j;
-        rd_bool_t has_acknowledgements = toppars_to_send && rd_list_cnt(toppars_to_send) > 0 ? rd_true : rd_false;
+        rd_bool_t has_acknowledgements_or_topics_to_add = toppars_to_send && rd_list_cnt(toppars_to_send) > 0 ? rd_true : rd_false;
         rd_bool_t has_toppars_to_forget = toppars_to_forget && rd_list_cnt(toppars_to_forget) > 0 ? rd_true : rd_false;
         rd_bool_t is_fetching_messages = max_records > 0 ? rd_true : rd_false;
 
-        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH", "toppars_to_send_cnt=%d, has_acknowledgements=%d, has_toppars_to_forget=%d, is_fetching_messages=%d",
-               toppars_to_send_cnt, has_acknowledgements, has_toppars_to_forget, is_fetching_messages);
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH", "toppars_to_send_cnt=%d, has_acknowledgements_or_topics_to_add=%d, has_toppars_to_forget=%d, is_fetching_messages=%d",
+               toppars_to_send_cnt, has_acknowledgements_or_topics_to_add, has_toppars_to_forget, is_fetching_messages);
         /*
          * Only sending 1 aknowledgement for each partition. StartOffset + LastOffset + AcknowledgementType (ACCEPT for now).
          * TODO KIP-932: Change this to accommodate explicit acknowledgements.
@@ -1648,10 +1648,10 @@ void rd_kafka_ShareFetchRequest(
                 rd_list_destroy(toppars_to_send);
         }
 
-        if(is_leave_request || has_acknowledgements || has_toppars_to_forget || is_fetching_messages) {
+        if(is_leave_request || has_acknowledgements_or_topics_to_add || has_toppars_to_forget || is_fetching_messages) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                            "Share Fetch Request sent with%s%s%s",
-                           has_acknowledgements ? " acknowledgements," : "",
+                           has_acknowledgements_or_topics_to_add ? " acknowledgements," : "",
                            has_toppars_to_forget ? " forgotten toppars," : "",
                            is_fetching_messages ? " fetching messages" : "");
         } else {

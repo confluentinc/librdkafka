@@ -1772,7 +1772,7 @@ static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send(rd_kafka_broke
                        RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                        rktp->rktp_partition,
                        rktp->rktp_share_acknowledge_count);
-                if (rktp->rktp_share_acknowledge_count >= 0) {
+                if (rktp->rktp_share_acknowledge_count > 0) {
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_broker_share_fetch_get_toppars_to_send: adding to toppars_to_send topic %.*s [%" PRId32 "] with %ld acknowledgements",
                                RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                                rktp->rktp_partition,

@@ -1210,6 +1210,15 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
         rd_kafka_destroy_app(rk, 0);
 }
 
+void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
+        /**
+         * TODO KIP-932: Guard this with checks for rkshare and
+         *               rkshare->rkshare_rk?
+         */
+        rd_kafka_destroy(rkshare->rkshare_rk);
+        rd_free(rkshare);
+}
+
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
 }
@@ -2868,9 +2877,10 @@ fail:
         return NULL;
 }
 
-rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
-                                        char *errstr,
-                                        size_t errstr_size) {
+rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
+                                              char *errstr,
+                                              size_t errstr_size) {
+        rd_kafka_share_t *rkshare;
         rd_kafka_t *rk;
         char errstr_internal[512];
         rd_kafka_conf_res_t res;
@@ -2882,6 +2892,9 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        /**
+         * TODO KIP-932: Check if this way of defining share consumer needs to be changed.
+         */
         res = rd_kafka_conf_set(conf, "share.consumer", "true", errstr_internal,
                                 sizeof(errstr_internal));
         if (res != RD_KAFKA_CONF_OK) {
@@ -2892,7 +2905,30 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        /**
+         * TODO KIP-932: Remove this property once we have removed offset management.
+         */
+        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
 
+        /**
+         * TODO KIP-932: Remove this property once we have removed offset management.
+         */
+        if (rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
+
+        /**
+         * TODO KIP-932: Try removing use of this property when improving share consumer
+         *               rebalancing logic in group management ticket.
+         */
         res = rd_kafka_conf_set(conf, "group.protocol", "consumer",
                                 errstr_internal, sizeof(errstr_internal));
         if (res != RD_KAFKA_CONF_OK) {
@@ -2909,7 +2945,10 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                  * and filled out errstr, so we don't need to do that here. */
                 return NULL;
         }
-        return rk;
+
+        rkshare = rd_calloc(1, sizeof(*rkshare));
+        rkshare->rkshare_rk = rk;
+        return rkshare;
 }
 
 
@@ -3183,7 +3222,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 }
 
                 if (rkb->rkb_share_fetch_enqueued) {
-                        rd_kafka_broker_unlock(rkb);
                         rd_kafka_dbg(rk, CGRP, "SHARE",
                                      "Unable to enqueue op on broker %s "
                                      "because another op is already pending.",
@@ -3220,13 +3258,14 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 }
 
 rd_kafka_error_t *rd_kafka_share_consume_batch(
-    rd_kafka_t *rk,
+    rd_kafka_share_t *rkshare,
     int timeout_ms,
     /* There is some benefit to making this ***rkmessages and allocating it
        within this function, but on the flipside this means that it will always
        be allocated on the heap. */
     rd_kafka_message_t **rkmessages /* out */,
     size_t *rkmessages_size /* out */) {
+        rd_kafka_t *rk          = rkshare->rkshare_rk;
         rd_kafka_cgrp_t *rkcg;
         rd_ts_t now             = rd_clock();
         rd_ts_t abs_timeout     = rd_timeout_init0(now, timeout_ms);
@@ -3259,6 +3298,12 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                                          0 /* no backoff */);
         }
 
+        /*
+         * TODO KIP-932: Change this to send all the messages present in the
+         *               queue at once instead of sending only
+         *               max_poll_records. How many messages to be sent to the
+         *               user is driven by broker with AcquiredRecords field.
+         */
         /* At this point, there's no reason to deviate from what we already do
          * for returning multiple messages to the user, as the orchestration
          * is handled by the main thread. Later on, we needed, we might need
@@ -3909,6 +3954,10 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk) {
 }
 
 
+rd_kafka_resp_err_t rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare) {
+        return rd_kafka_poll_set_consumer(rkshare->rkshare_rk);
+}
+
 
 rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms) {
         rd_kafka_cgrp_t *rkcg;
@@ -4040,6 +4089,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                              "Consumer closed");
 
         return err;
+}
+
+rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
+        return rd_kafka_consumer_close(rkshare->rkshare_rk);
 }
 
 

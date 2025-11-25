@@ -925,6 +925,11 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
 
                 mtx_unlock(&rkq->rkq_lock);
 
+                /* TODO KIP-932: We should never have outdated rko as we are
+                 *               not using version barriers for share
+                 *               consumers.
+                 *               Check from where are we getting outdated msgs.
+                 *               Fix those and then remove this condition. */
                 if (rd_kafka_op_version_outdated(rko, 0)) {
                         /* Outdated op, put on discard queue */
                         TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
@@ -948,6 +953,10 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 /* If this is a control messages, don't return message to
                  * application. Add it to a tmp queue from where we can store
                  * the offset and destroy the op */
+                /* TODO KIP-932: Is this the right place to check ctrl msgs or
+                 * should it be done earlier in broker thread while receiving
+                 * the response. Should be decided once explicit acknowledgement
+                 * design is complete */
                 if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
                         TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
                         continue;

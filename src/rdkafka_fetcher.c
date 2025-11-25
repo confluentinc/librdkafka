@@ -985,22 +985,24 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                rktp->rktp_share_acknowledge_count, AcquiredRecordsArrayCnt);
         rd_dassert(rktp->rktp_share_acknowledge_count == 0);
         rd_dassert(rktp->rktp_share_acknowledge == NULL);
-        rktp->rktp_share_acknowledge_count = AcquiredRecordsArrayCnt;
-        rktp->rktp_share_acknowledge = rd_calloc(AcquiredRecordsArrayCnt,
-                                                sizeof(*rktp->rktp_share_acknowledge));
-        for (i = 0; i < AcquiredRecordsArrayCnt; i++) {
-                rd_kafka_buf_read_i64(rkbuf, &FirstOffset); // FirstOffset
-                rd_kafka_buf_read_i64(rkbuf, &LastOffset); // LastOffset
-                rd_kafka_buf_read_i16(rkbuf, &DeliveryCount); // DeliveryCount
-                rd_kafka_buf_skip_tags(rkbuf); // AcquiredRecords tags
-                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
-                        "%.*s [%" PRId32 "]: Acquired Records from offset %" PRId64
-                        " to %" PRId64 ", DeliveryCount %" PRId16,
-                        RD_KAFKAP_STR_PR(topic), PartitionId,
-                        FirstOffset, LastOffset, DeliveryCount);
-                rktp->rktp_share_acknowledge[i].first_offset = FirstOffset;
-                rktp->rktp_share_acknowledge[i].last_offset = LastOffset;
-                rktp->rktp_share_acknowledge[i].delivery_count = DeliveryCount;
+        if(AcquiredRecordsArrayCnt > 0) {
+                rktp->rktp_share_acknowledge_count = AcquiredRecordsArrayCnt;
+                rktp->rktp_share_acknowledge = rd_calloc(AcquiredRecordsArrayCnt,
+                                                        sizeof(*rktp->rktp_share_acknowledge));
+                for (i = 0; i < AcquiredRecordsArrayCnt; i++) {
+                        rd_kafka_buf_read_i64(rkbuf, &FirstOffset); // FirstOffset
+                        rd_kafka_buf_read_i64(rkbuf, &LastOffset); // LastOffset
+                        rd_kafka_buf_read_i16(rkbuf, &DeliveryCount); // DeliveryCount
+                        rd_kafka_buf_skip_tags(rkbuf); // AcquiredRecords tags
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                "%.*s [%" PRId32 "]: Acquired Records from offset %" PRId64
+                                " to %" PRId64 ", DeliveryCount %" PRId16,
+                                RD_KAFKAP_STR_PR(topic), PartitionId,
+                                FirstOffset, LastOffset, DeliveryCount);
+                        rktp->rktp_share_acknowledge[i].first_offset = FirstOffset;
+                        rktp->rktp_share_acknowledge[i].last_offset = LastOffset;
+                        rktp->rktp_share_acknowledge[i].delivery_count = DeliveryCount;
+                }
         }
 
         rd_kafka_buf_skip_tags(rkbuf); // Partition tags

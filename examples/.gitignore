@@ -23,3 +23,4 @@ incremental_alter_configs
 user_scram
 list_offsets
 elect_leaders
+share_consumer

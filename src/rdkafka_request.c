@@ -601,13 +601,14 @@ rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_FindCoordinator, 0, 2, NULL);
+            rkb, RD_KAFKAP_FindCoordinator, 0, 3, NULL);
 
         if (coordtype != RD_KAFKA_COORD_GROUP && ApiVersion < 1)
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_FindCoordinator, 1,
-                                         1 + 2 + strlen(coordkey));
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_FindCoordinator,
+                                                 1, 1 + 2 + strlen(coordkey),
+                                                 ApiVersion >= 3);
 
         rd_kafka_buf_write_str(rkbuf, coordkey, -1);
 
@@ -1163,6 +1164,11 @@ void rd_kafka_OffsetForLeaderEpochRequest(
 }
 
 
+int rd_kafka_handle_OffsetFetch_err_action(rd_kafka_broker_t *rkb,
+                                           rd_kafka_resp_err_t err,
+                                           rd_kafka_buf_t *request) {
+        return rd_kafka_err_action(rkb, err, request, RD_KAFKA_ERR_ACTION_END);
+}
 
 /**
  * Generic handler for OffsetFetch responses.
@@ -1362,8 +1368,7 @@ err:
                            seen_cnt, (*offsets)->cnt, retry_unstable,
                            rd_kafka_err2str(err));
 
-        actions =
-            rd_kafka_err_action(rkb, err, request, RD_KAFKA_ERR_ACTION_END);
+        actions = rd_kafka_handle_OffsetFetch_err_action(rkb, err, request);
 
         if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
                 /* Re-query for coordinator */
@@ -1726,9 +1731,9 @@ rd_kafka_handle_OffsetCommit(rd_kafka_t *rk,
                         continue;
                 }
 
+                rktpar->err = partition->err;
                 if (partition->err) {
-                        rktpar->err = partition->err;
-                        err         = partition->err;
+                        err = partition->err;
                         errcnt++;
                         /* Accumulate actions for per-partition
                          * errors. */
@@ -1995,27 +2000,29 @@ void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_SyncGroup, 0, 3, &features);
+            rkb, RD_KAFKAP_SyncGroup, 0, 4, &features);
 
-        rkbuf = rd_kafka_buf_new_request(
+        rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_SyncGroup, 1,
             RD_KAFKAP_STR_SIZE(group_id) + 4 /* GenerationId */ +
                 RD_KAFKAP_STR_SIZE(member_id) +
                 RD_KAFKAP_STR_SIZE(group_instance_id) +
                 4 /* array size group_assignment */ +
-                (assignment_cnt * 100 /*guess*/));
+                (assignment_cnt * 100 /*guess*/),
+            ApiVersion >= 4);
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
         if (ApiVersion >= 3)
                 rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
-        rd_kafka_buf_write_i32(rkbuf, assignment_cnt);
+        rd_kafka_buf_write_arraycnt(rkbuf, assignment_cnt);
 
         for (i = 0; i < assignment_cnt; i++) {
                 const rd_kafka_group_member_t *rkgm = &assignments[i];
 
                 rd_kafka_buf_write_kstr(rkbuf, rkgm->rkgm_member_id);
                 rd_kafka_group_MemberState_consumer_write(rkbuf, rkgm);
+                rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
         /* This is a blocking request */
@@ -2053,17 +2060,18 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_JoinGroup, 0, 5, &features);
+            rkb, RD_KAFKAP_JoinGroup, 0, 6, &features);
 
 
-        rkbuf = rd_kafka_buf_new_request(
+        rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_JoinGroup, 1,
             RD_KAFKAP_STR_SIZE(group_id) + 4 /* sessionTimeoutMs */ +
                 4 /* rebalanceTimeoutMs */ + RD_KAFKAP_STR_SIZE(member_id) +
                 RD_KAFKAP_STR_SIZE(group_instance_id) +
                 RD_KAFKAP_STR_SIZE(protocol_type) +
                 4 /* array count GroupProtocols */ +
-                (rd_list_cnt(topics) * 100));
+                (rd_list_cnt(topics) * 100),
+            ApiVersion >= 6 /*flexver*/);
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
         if (ApiVersion >= 1)
@@ -2072,7 +2080,7 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 5)
                 rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
-        rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
+        rd_kafka_buf_write_arraycnt(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
         RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
                 rd_kafkap_bytes_t *member_metadata;
@@ -2084,6 +2092,7 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                     rk->rk_cgrp->rkcg_group_assignment,
                     rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
+                rd_kafka_buf_write_tags_empty(rkbuf);
                 rd_kafkap_bytes_destroy(member_metadata);
         }
 
@@ -2240,16 +2249,17 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Heartbeat, 0, 3, &features);
+            rkb, RD_KAFKAP_Heartbeat, 0, 4, &features);
 
         rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
                    "Heartbeat for group \"%s\" generation id %" PRId32,
                    group_id->str, generation_id);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Heartbeat, 1,
-                                         RD_KAFKAP_STR_SIZE(group_id) +
-                                             4 /* GenerationId */ +
-                                             RD_KAFKAP_STR_SIZE(member_id));
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_Heartbeat, 1,
+            RD_KAFKAP_STR_SIZE(group_id) + 4 /* GenerationId */ +
+                RD_KAFKAP_STR_SIZE(member_id),
+            ApiVersion >= 4);
 
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
@@ -2620,6 +2630,7 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
         if (err)
                 goto err;
 
+        rd_kafka_rebootstrap_tmr_stop(rk);
         if (rko && rko->rko_replyq.q) {
                 /* Reply to metadata requester, passing on the metadata.
                  * Reuse requesting rko for the reply. */
@@ -2744,6 +2755,18 @@ done:
  *
  * @sa rd_kafka_MetadataRequest().
  * @sa rd_kafka_MetadataRequest_resp_cb().
+ *
+ * @locality any
+ * @locks none
+ * @locks_acquired
+ *  - mtx_lock(&rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock) in
+ *    this function
+ *  - rd_kafka_broker_lock() in
+ *    rd_kafka_broker_ApiVersion_supported()
+ *  - rd_kafka_timers_lock() in
+ *    rd_kafka_rebootstrap_tmr_start_maybe()
+ *  - mtx_lock(&rkq->rkq_lock) in
+ *    rd_kafka_broker_buf_enq_replyq()
  */
 static rd_kafka_resp_err_t
 rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
@@ -2877,8 +2900,27 @@ rd_kafka_MetadataRequest0(rd_kafka_broker_t *rkb,
                 rkbuf->rkbuf_u.Metadata.decr = full_incr;
                 rkbuf->rkbuf_u.Metadata.decr_lock =
                     &rkb->rkb_rk->rk_metadata_cache.rkmc_full_lock;
+        } else if (!resp_cb) {
+                /*
+                 * Conditions for starting the rebootstrap timer:
+                 *
+                 * !full_incr:
+                 * In case it's a full request, forced or not, it won't be
+                 * retried on the same broker to avoid blocking metadata
+                 * requests, because of the lock, when that broker isn't
+                 * available. We don't start the timer as we cannot ensure the
+                 * request is retried for the duration of
+                 * `metadata.recovery.rebootstrap.trigger.ms`.
+                 *
+                 * !resp_cb:
+                 * Same reasoning applies when we use a custom callback, for the
+                 * AdminClient requests for example.
+                 *
+                 * Start the rebootstrap timer only if it's the first
+                 * metadata refresh request after last successful response,
+                 * so the timer is not reset if already scheduled. */
+                rd_kafka_rebootstrap_tmr_start_maybe(rkb->rkb_rk);
         }
-
 
         if (topic_cnt > 0) {
                 char *topic;
@@ -3411,7 +3453,11 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion;
         int features;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0);
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 2, &features);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 0, ApiVersion >= 2);
 
         /* Should be sent before any other requests since it is part of
          * the initial connection handshake. */
@@ -3424,8 +3470,6 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
          * close down the connection and reconnect on failure. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
 
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_SaslAuthenticate, 0, 1, &features);
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (replyq.q)
@@ -6522,15 +6566,14 @@ rd_kafka_PushTelemetryRequest(rd_kafka_broker_t *rkb,
         }
 
         size_t len = sizeof(rd_kafka_Uuid_t) + sizeof(int32_t) +
-                     sizeof(rd_bool_t) + sizeof(compression_type) +
-                     metrics_size;
+                     sizeof(rd_bool_t) + sizeof(int8_t) + metrics_size;
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_PushTelemetry,
                                                  1, len, rd_true);
 
         rd_kafka_buf_write_uuid(rkbuf, client_instance_id);
         rd_kafka_buf_write_i32(rkbuf, subscription_id);
         rd_kafka_buf_write_bool(rkbuf, terminating);
-        rd_kafka_buf_write_i8(rkbuf, compression_type);
+        rd_kafka_buf_write_i8(rkbuf, (int8_t)compression_type);
 
         rd_dassert(metrics != NULL);
         rd_dassert(metrics_size >= 0);
@@ -6595,10 +6638,12 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                 rk->rk_telemetry.accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
 
-                for (i = 0; i < (size_t)arraycnt; i++)
-                        rd_kafka_buf_read_i8(
-                            rkbuf,
-                            &rk->rk_telemetry.accepted_compression_types[i]);
+                for (i = 0; i < (size_t)arraycnt; i++) {
+                        int8_t AcceptedCompressionType;
+                        rd_kafka_buf_read_i8(rkbuf, &AcceptedCompressionType);
+                        rk->rk_telemetry.accepted_compression_types[i] =
+                            AcceptedCompressionType;
+                }
         } else {
                 rk->rk_telemetry.accepted_compression_types_cnt = 1;
                 rk->rk_telemetry.accepted_compression_types =

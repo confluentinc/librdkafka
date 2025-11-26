@@ -33,7 +33,6 @@
 #define CJSON_HIDE_SYMBOLS
 #include "cJSON.h"
 
-
 typedef struct rd_http_error_s {
         int code;
         char *errstr;
@@ -42,9 +41,26 @@ typedef struct rd_http_error_s {
 
 void rd_http_error_destroy(rd_http_error_t *herr);
 
-rd_http_error_t *rd_http_get(rd_kafka_t *rk, const char *url, rd_buf_t **rbufp);
-rd_http_error_t *
-rd_http_get_json(rd_kafka_t *rk, const char *url, cJSON **jsonp);
+char *rd_http_get_params_append(const char *url, const char *params);
+
+rd_http_error_t *rd_http_get(rd_kafka_t *rk,
+                             const char *url,
+                             char **headers_array,
+                             size_t headers_array_cnt,
+                             int timeout_s,
+                             int retries,
+                             int retry_ms,
+                             rd_buf_t **rbufp,
+                             char **content_type,
+                             int *response_code);
+rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
+                                  const char *url,
+                                  char **headers_array,
+                                  size_t headers_array_cnt,
+                                  int timeout_s,
+                                  int retries,
+                                  int retry_ms,
+                                  cJSON **jsonp);
 
 void rd_http_global_init(void);
 
@@ -73,7 +89,7 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                                           const char *data_to_token,
                                           size_t data_to_token_size,
                                           int timeout_s,
-                                          int retry,
+                                          int retries,
                                           int retry_ms,
                                           cJSON **jsonp);
 void rd_http_req_destroy(rd_http_req_t *hreq);

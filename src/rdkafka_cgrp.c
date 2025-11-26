@@ -555,12 +555,6 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
                     rk->rk_conf.auto_commit_interval_ms * 1000ll,
                     rd_kafka_cgrp_offset_commit_tmr_cb, rkcg);
 
-        if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                rd_kafka_log(rk, LOG_WARNING, "CGRP",
-                             "KIP-848 Consumer Group Protocol is in 'Preview' "
-                             "and MUST NOT be used in production");
-        }
-
         return rkcg;
 }
 
@@ -2228,7 +2222,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
         rd_kafka_buf_read_str(rkbuf, &Protocol);
         rd_kafka_buf_read_str(rkbuf, &LeaderId);
         rd_kafka_buf_read_str(rkbuf, &MyMemberId);
-        rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, 100000);
 
         if (!ErrorCode && RD_KAFKAP_STR_IS_NULL(&Protocol)) {
                 /* Protocol not set, we will not be able to find
@@ -2324,6 +2318,9 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                         if (request->rkbuf_reqhdr.ApiVersion >= 5)
                                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
                         rd_kafka_buf_read_kbytes(rkbuf, &MemberMetadata);
+                        if (request->rkbuf_reqhdr.ApiVersion >= 6) {
+                                rd_kafka_buf_skip_tags(rkbuf);
+                        }
 
                         rkgm                 = &members[sub_cnt];
                         rkgm->rkgm_member_id = rd_kafkap_str_copy(&MemberId);
@@ -3085,8 +3082,6 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
 
-        if (rd_kafka_cgrp_will_leave(rkcg))
-                err = RD_KAFKA_RESP_ERR__OUTDATED;
         if (err)
                 goto err;
 
@@ -3106,15 +3101,25 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
         }
 
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
-        rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
-
-        int8_t are_assignments_present;
-        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
         rkcg->rkcg_generation_id = member_epoch;
+
+        rd_kafka_dbg(rk, CGRP, "HEARTBEAT",
+                     "ConsumerGroupHeartbeat response received for "
+                     "member id \"%.*s\" with epoch %d",
+                     RD_KAFKAP_STR_PR(&member_id), member_epoch);
+
+        if (rd_kafka_cgrp_will_leave(rkcg)) {
+                err = RD_KAFKA_RESP_ERR__OUTDATED;
+                goto err;
+        }
+
+        rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
         if (heartbeat_interval_ms > 0) {
                 rkcg->rkcg_heartbeat_intvl_ms = heartbeat_interval_ms;
         }
 
+        int8_t are_assignments_present;
+        rd_kafka_buf_read_i8(rkbuf, &are_assignments_present);
         if (are_assignments_present == 1) {
                 rd_kafka_topic_partition_list_t *assigned_topic_partitions;
                 const rd_kafka_topic_partition_field_t assignments_fields[] = {
@@ -3134,11 +3139,10 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
                                     sizeof(assigned_topic_partitions_str), 0);
                         }
 
-                        rd_kafka_dbg(
-                            rk, CGRP, "HEARTBEAT",
-                            "ConsumerGroupHeartbeat response received target "
-                            "assignment \"%s\"",
-                            assigned_topic_partitions_str);
+                        rd_kafka_dbg(rk, CGRP, "HEARTBEAT",
+                                     "ConsumerGroupHeartbeat received target "
+                                     "assignment \"%s\"",
+                                     assigned_topic_partitions_str);
                 }
 
                 if (assigned_topic_partitions) {

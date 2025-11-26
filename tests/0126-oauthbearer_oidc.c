@@ -170,8 +170,6 @@ static void do_test_produce_consumer_with_OIDC_should_fail(
                 return;
         }
 
-        conf = rd_kafka_conf_dup(base_conf);
-
         error_seen = rd_false;
 
         conf = rd_kafka_conf_dup(base_conf);
@@ -388,6 +386,114 @@ void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
         }
 }
 
+
+typedef enum oidc_configuration_metadata_authentication_variation_t {
+        /** Azure IMDS. Successful case. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS,
+        /** Azure IMDS. Missing client ID. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID,
+        /** Azure IMDS. Missing resource parameter. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_RESOURCE,
+        /** Azure IMDS. Missing API version. */
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_API_VERSION,
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT
+} oidc_configuration_metadata_authentication_variation_t;
+
+#define OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__FIRST_FAILING    \
+        OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID
+
+static const char *oidc_configuration_metadata_authentication_variation_name(
+    oidc_configuration_metadata_authentication_variation_t variation) {
+        rd_assert(
+            variation >=
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS &&
+            variation <
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT);
+        static const char *names[] = {
+            "Azure IMDS: success", "Azure IMDS: missing client ID",
+            "Azure IMDS: missing resource", "Azure IMDS: missing API version"};
+        return names[variation];
+}
+
+static rd_kafka_conf_t *oidc_configuration_metadata_authentication(
+    rd_kafka_conf_t *conf,
+    oidc_configuration_metadata_authentication_variation_t variation) {
+        conf = rd_kafka_conf_dup(conf);
+        switch (variation) {
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS:
+                test_conf_set(conf,
+                              "sasl.oauthbearer.metadata.authentication.type",
+                              "azure_imds");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "api-version=2025-04-07&resource="
+                              "api://external_resource_id&client_id=client_id");
+                break;
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_CLIENT_ID:
+                test_conf_set(conf,
+                              "sasl.oauthbearer.metadata.authentication.type",
+                              "azure_imds");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "api-version=2025-04-07&resource="
+                              "api://external_resource_id");
+                break;
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_RESOURCE:
+                test_conf_set(conf,
+                              "sasl.oauthbearer.metadata.authentication.type",
+                              "azure_imds");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "api-version=2025-04-07&"
+                              "client_id=client_id");
+                break;
+        case OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_MISSING_API_VERSION:
+                test_conf_set(conf,
+                              "sasl.oauthbearer.metadata.authentication.type",
+                              "azure_imds");
+                test_conf_set(conf, "sasl.oauthbearer.config",
+                              "query=__metadata_authentication_type=azure_imds&"
+                              "resource="
+                              "api://external_resource_id&client_id=client_id");
+                break;
+        default:
+                TEST_ASSERT(rd_false,
+                            "Unknown OIDC metadata authentication type");
+        }
+        return conf;
+}
+
+/* Test metadata-based authentication cases against Trivup. */
+void do_test_produce_consumer_with_OIDC_metadata_authentication(
+    rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *metadata_authentication_conf;
+        oidc_configuration_metadata_authentication_variation_t variation;
+        for (
+            variation =
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS;
+            variation <
+            OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT;
+            variation++) {
+                const char *test_name;
+                metadata_authentication_conf =
+                    oidc_configuration_metadata_authentication(conf, variation);
+
+                test_name = tsprintf(
+                    "Metadata authentication variation: %s\n",
+                    oidc_configuration_metadata_authentication_variation_name(
+                        variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__FIRST_FAILING)
+                        do_test_produce_consumer_with_OIDC(
+                            test_name, metadata_authentication_conf);
+                else
+                        do_test_produce_consumer_with_OIDC_should_fail(
+                            test_name, metadata_authentication_conf);
+                rd_kafka_conf_destroy(metadata_authentication_conf);
+        }
+}
+
 int main_0126_oauthbearer_oidc(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         const char *sec;
@@ -414,6 +520,7 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
             conf);
         do_test_produce_consumer_with_OIDC_expired_token_should_fail(conf);
         do_test_produce_consumer_with_OIDC_jwt_bearer(conf);
+        do_test_produce_consumer_with_OIDC_metadata_authentication(conf);
 
         rd_kafka_conf_destroy(conf);
 

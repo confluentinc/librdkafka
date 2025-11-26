@@ -1,3 +1,67 @@
+# librdkafka v2.12.0
+
+librdkafka v2.12.0 is a feature release:
+
+## [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) – General Availability
+
+Starting with **librdkafka 2.12.0**, the next generation consumer group rebalance protocol defined in **[KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol)** is **production-ready**. Please refer the following [migration guide](INTRODUCTION.md#next-generation-consumer-group-protocol-kip-848) for moving from `classic` to `consumer` protocol.
+
+**Note:** The new consumer group protocol defined in [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+Next+Generation+of+the+Consumer+Rebalance+Protocol) is not enabled by default. There are few contract change associated with the new protocol and might cause breaking changes. `group.protocol` configuration property dictates whether to use the new `consumer` protocol or older `classic` protocol. It defaults to `classic` if not provided.
+
+## Enhancements and Fixes
+* Support for OAUTHBEARER metadata based authentication types,
+  starting with Azure IMDS. [Introduction available](INTRODUCTION.md#oauthbearer-oidc-metadata-authentication) (#5155).
+* Fix compression types read issue in GetTelemetrySubscriptions response
+  for big-endian architectures (#5183, @paravoid).
+* Fix for KIP-1102 time based re-bootstrap condition (#5177).
+* Fix for discarding the member epoch in a consumer group heartbeat response when leaving with an inflight HB (#4672).
+* Fix for an error being raised after a commit due to an existing error in the topic partition (#4672).
+* Fix double free of headers in `rd_kafka_produceva` method (@blindspotbounty, #4628).
+* Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry (#5201).
+* New [walkthrough](https://github.com/confluentinc/librdkafka/wiki/Using-SASL-GSSAPI-with-librdkafka-in-a-cross%E2%80%90realm-scenario-with-Windows-SSPI-and-MIT-Kerberos) in the Wiki about configuring Kafka cross-realm authentication between Windows SSPI and MIT Kerberos.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5178.
+  Fix for KIP-1102 time based re-bootstrap condition.
+  Re-bootstrap is now triggered only after `metadata.recovery.rebootstrap.trigger.ms`
+  have passed since first metadata refresh request after last successful
+  metadata response. The calculation was since last successful metadata response
+  so it's possible it did overlap with the periodic `topic.metadata.refresh.interval.ms`
+  and cause a re-bootstrap even if not needed.
+  Happening since 2.11.0 (#5177).
+* Issues: #4878.
+  Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry.
+  Happening since 2.3.0 (#5201).
+
+### Telemetry fixes
+
+* Issues: #5179 .
+  Fix issue in GetTelemetrySubscriptions with big-endian
+  architectures where wrong values are read as
+  accepted compression types causing the metrics to be sent uncompressed.
+  Happening since 2.5.0. Since 2.10.1 unit tests are failing when run on
+  big-endian architectures (#5183, @paravoid).
+
+### Consumer fixes
+  
+  * Issues: #5199
+  Fixed an issue where topic partition errors were not cleared after a successful
+  commit. Previously, a partition could retain a stale error state even though the
+  most recent commit succeeded, causing misleading error reporting. Now, successful
+  commits correctly clear the error state for the affected partitions
+  Happening since 2.4.0 (#4672).
+
+### Producer fixes
+
+* Issues: #4627.
+  Fix double free of headers in `rd_kafka_produceva` method in cases where the partition doesn't exist.
+  Happening since 1.x (@blindspotbounty, #4628).
+
+
 # librdkafka v2.11.1
 
 librdkafka v2.11.1 is a maintenance release:

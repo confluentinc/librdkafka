@@ -488,7 +488,6 @@ static void test_share_consumer_multiple_topics(void) {
         rd_kafka_conf_set(cons_conf, "group.protocol", "consumer", errstr, sizeof(errstr));
         rd_kafka_conf_set(cons_conf, "group.id", group, errstr, sizeof(errstr));
         rd_kafka_conf_set(cons_conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-        //rd_kafka_conf_set(cons_conf, "debug", "all", errstr, sizeof(errstr));
 
         consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cons_conf, errstr, sizeof(errstr));
         TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
@@ -505,7 +504,7 @@ static void test_share_consumer_multiple_topics(void) {
         rd_kafka_topic_partition_list_destroy(topics);
 
         /* Consume messages from both topics */
-        rd_kafka_message_t **rkmessages = malloc(sizeof(rd_kafka_message_t *) * 20);
+        rd_kafka_message_t **rkmessages = malloc(sizeof(rd_kafka_message_t *) * 500);
         int attempts = 10; // Number of attempts to poll so the test doesn't run indefinitely
 
         while (consumed_count < (msgs_per_topic * 2) && attempts > 0) {
@@ -513,7 +512,6 @@ static void test_share_consumer_multiple_topics(void) {
                 rd_kafka_error_t *error;
                 int i;
 
-                printf("Polling for messages, consumed so far: %d/%d\n", consumed_count, msgs_per_topic * 2);
                 error = rd_kafka_share_consume_batch(consumer, 3000, rkmessages, &rcvd_msgs);
 
                 if (error) {
@@ -559,7 +557,7 @@ static void test_share_consumer_multi_members_same_topic(void) {
         char errstr[512];
         const char *group = "share-group-multi-member";
         char *topic = "0154-share-multi-member";
-        const int total_msgs = 20;
+        const int total_msgs = 1000;
         int consumed_total = 0;
         int c1_count = 0;
         int c2_count = 0;
@@ -608,7 +606,7 @@ static void test_share_consumer_multi_members_same_topic(void) {
         rd_kafka_topic_partition_list_destroy(subs);
 
         /* Poll loop: alternate polling both consumers */
-        rd_kafka_message_t *batch[32];
+        rd_kafka_message_t *batch[500];
 
         while (consumed_total < total_msgs && attempts-- > 0) {
                 size_t rcvd1 = 0, rcvd2 = 0;
@@ -671,7 +669,7 @@ static void test_share_single_consumer_multi_partitions_one_topic(void) {
         const char *group = "share-group-single-one-topic-mparts";
         const char *topic = "0154-share-one-topic-mparts";
         const int partition_cnt = 3;
-        const int msgs_per_partition = 7;
+        const int msgs_per_partition = 500;
         const int total_msgs = partition_cnt * msgs_per_partition;
         int consumed = 0;
         int attempts = 30;
@@ -693,6 +691,7 @@ static void test_share_single_consumer_multi_partitions_one_topic(void) {
         rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
+
         rd_kafka_t *consumer =
             rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(consumer, "create failed: %s", errstr);
@@ -706,7 +705,7 @@ static void test_share_single_consumer_multi_partitions_one_topic(void) {
         rd_kafka_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rd_kafka_message_t *batch[64];
+        rd_kafka_message_t *batch[500];
 
         while (consumed < total_msgs && attempts-- > 0) {
                 size_t rcvd = 0;
@@ -743,7 +742,7 @@ static void test_share_single_consumer_multi_partitions_multi_topics(void) {
         const char *group = "share-group-single-multi-topic-mparts";
         const int topic_cnt = 3;
         const int partition_cnt = 2;
-        const int msgs_per_partition = 5;
+        const int msgs_per_partition = 500;
         char *topics[topic_cnt];
         int total_msgs = topic_cnt * partition_cnt * msgs_per_partition;
         int consumed = 0;
@@ -754,7 +753,7 @@ static void test_share_single_consumer_multi_partitions_multi_topics(void) {
                  topic_cnt, partition_cnt);
 
         for (int t = 0; t < topic_cnt; t++) {
-                topics[t] = test_mk_topic_name("0154-share-multiT-mparts", t);
+                topics[t] = rd_strdup(test_mk_topic_name("0154-share-multiT-mparts", 1));
                 test_create_topic_wait_exists(NULL, topics[t], partition_cnt,
                                               -1, 60 * 1000);
                 for (int p = 0; p < partition_cnt; p++)
@@ -769,6 +768,7 @@ static void test_share_single_consumer_multi_partitions_multi_topics(void) {
         rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
+
         rd_kafka_t *consumer =
             rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(consumer, "create failed: %s", errstr);
@@ -784,7 +784,7 @@ static void test_share_single_consumer_multi_partitions_multi_topics(void) {
         rd_kafka_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rd_kafka_message_t *batch[128];
+        rd_kafka_message_t *batch[500];
 
         while (consumed < total_msgs && attempts-- > 0) {
                 size_t rcvd = 0;
@@ -822,7 +822,7 @@ static void test_share_multi_consumers_multi_partitions_one_topic(void) {
         const char *group = "share-group-multi-cons-one-topic-mparts";
         const char *topic = "0154-share-cons-oneT-mparts";
         const int partition_cnt = 4;
-        const int msgs_per_partition = 6;
+        const int msgs_per_partition = 500;
         const int total_msgs = partition_cnt * msgs_per_partition;
         int consumed_total = 0;
         int c_counts[4] = {0};
@@ -862,7 +862,7 @@ static void test_share_multi_consumers_multi_partitions_one_topic(void) {
                 rd_kafka_subscribe(consumers[i], subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rd_kafka_message_t *batch[64];
+        rd_kafka_message_t *batch[500];
 
         while (consumed_total < total_msgs && attempts-- > 0) {
                 for (int i = 0; i < consumer_cnt; i++) {
@@ -909,7 +909,7 @@ static void test_share_multi_consumers_multi_partitions_multi_topics(void) {
         const char *group = "share-group-multi-cons-multiT-mparts";
         const int topic_cnt = 2;
         const int partition_cnt = 3;
-        const int msgs_per_partition = 5;
+        const int msgs_per_partition = 500;
         const int consumer_cnt = 3;
         char *topics[topic_cnt];
         int total_msgs = topic_cnt * partition_cnt * msgs_per_partition;
@@ -924,7 +924,7 @@ static void test_share_multi_consumers_multi_partitions_multi_topics(void) {
                  consumer_cnt, topic_cnt, partition_cnt);
 
         for (int t = 0; t < topic_cnt; t++) {
-                topics[t] = test_mk_topic_name("0154-share-multiT", t);
+                topics[t] = rd_strdup(test_mk_topic_name("0154-share-multiT", 1));
                 test_create_topic_wait_exists(NULL, topics[t], partition_cnt,
                                               -1, 60 * 1000);
                 for (int p = 0; p < partition_cnt; p++)
@@ -957,7 +957,7 @@ static void test_share_multi_consumers_multi_partitions_multi_topics(void) {
                 rd_kafka_subscribe(consumers[i], subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rd_kafka_message_t *batch[128];
+        rd_kafka_message_t *batch[500];
 
         while (consumed_total < total_msgs && attempts-- > 0) {
                 for (int i = 0; i < consumer_cnt; i++) {

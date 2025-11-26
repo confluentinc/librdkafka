@@ -45,7 +45,7 @@ class LibrdkafkaTestApp(App):
             f.write('enable.sparse.connections={}\n'.format(
                 sparse).encode('ascii'))
 
-        if version.startswith('0.9') or version.startswith('0.8'):
+        if version.startswith('0.9') or version.startswith('0.8') or version.startswith('0.10.0'):
             conf_blob.append('api.version.request=false')
             conf_blob.append('broker.version.fallback=%s' % version)
 

@@ -2460,6 +2460,14 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafka_resp_err_t err;
         int32_t TopicsCnt, i;
+        int32_t ReplicaId = -1;
+        int32_t ApiVersion;
+
+        ApiVersion = rkbuf->rkbuf_reqhdr.ApiVersion;
+
+        if (ApiVersion >= 3) {
+                rd_kafka_buf_read_i32(rkbuf, &ReplicaId);
+        }
 
         /* Response: ThrottleTimeMs */
         rd_kafka_buf_write_i32(resp, 0);
@@ -2505,6 +2513,10 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
                         /* LeaderEpoch */
                         rd_kafka_buf_read_i32(rkbuf, &LeaderEpoch);
 
+                        /* Skip partition tags for v4+ */
+                        if (ApiVersion >= 4)
+                                rd_kafka_buf_skip_tags(rkbuf);
+
                         mpart = rd_kafka_mock_partition_find(mtopic, Partition);
                         if (!err && !mpart)
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
@@ -2528,8 +2540,28 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_i32(resp, LeaderEpoch);
                         /* Response: Partition */
                         rd_kafka_buf_write_i64(resp, EndOffset);
+
+                        /* Response: Partition tags for v4+ */
+                        if (ApiVersion >= 4)
+                                rd_kafka_buf_write_tags_empty(resp);
                 }
+
+                /* Skip topic tags for v4+ */
+                if (ApiVersion >= 4)
+                        rd_kafka_buf_skip_tags(rkbuf);
+
+                /* Response: Topic tags for v4+ */
+                if (ApiVersion >= 4)
+                        rd_kafka_buf_write_tags_empty(resp);
         }
+
+        /* Skip top-level tags for v4+ */
+        if (ApiVersion >= 4)
+                rd_kafka_buf_skip_tags(rkbuf);
+
+        /* Response: Top-level tags for v4+ */
+        if (ApiVersion >= 4)
+                rd_kafka_buf_write_tags_empty(resp);
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 
@@ -3022,7 +3054,7 @@ const struct rd_kafka_mock_api_handler
                                        rd_kafka_mock_handle_TxnOffsetCommit},
         [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
-            {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+            {2, 4, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
             {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =

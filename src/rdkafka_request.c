@@ -1101,6 +1101,10 @@ rd_kafka_resp_err_t rd_kafka_handle_OffsetForLeaderEpoch(
         if (!*offsets)
                 goto err_parse;
 
+        if (ApiVersion >= 4) {
+                rd_kafka_buf_skip_tags(rkbuf);
+        }
+
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err:
@@ -1127,7 +1131,7 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         int16_t ApiVersion;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 3, NULL);
+            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 4, NULL);
         /* If the supported ApiVersions are not yet known,
          * or this broker doesn't support it, we let this request
          * succeed or fail later from the broker thread where the
@@ -1158,6 +1162,10 @@ void rd_kafka_OffsetForLeaderEpochRequest(
             rkbuf, parts, rd_false /*include invalid offsets*/,
             rd_false /*skip valid offsets*/, rd_false /*don't use topic id*/,
             rd_true /*use topic name*/, fields);
+
+        if (ApiVersion >= 4) {
+                rd_kafka_buf_write_tags_empty(rkbuf);
+        }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

@@ -1926,9 +1926,11 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Error case */
-        rd_kafka_buf_write_i16(resp, err);        /* ErrorCode */
-        rd_kafka_buf_write_kbytes(resp, &(rd_kafkap_bytes_t){ .data = "", .len = 0 }); /* MemberState */
-        rd_kafka_buf_write_tags_empty(resp);      /* Response: Struct tags */
+        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        rd_kafka_buf_write_kbytes(
+            resp,
+            &(rd_kafkap_bytes_t) {.data = "", .len = 0}); /* MemberState */
+        rd_kafka_buf_write_tags_empty(resp); /* Response: Struct tags */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 

@@ -1979,8 +1979,9 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         void *tmp  = rd_malloc(len);
         rd_slice_peek(&slice, 0, tmp, len);
 
-        rd_kafkap_bytes_t member_state = { .data = tmp, .len = (int32_t)len };
-        /* Writes CompactBytes if env_rkbuf is flexver (SyncGroup v4), else classic Bytes */
+        rd_kafkap_bytes_t member_state = {.data = tmp, .len = (int32_t)len};
+        /* Writes CompactBytes if env_rkbuf is flexver (SyncGroup v4), else
+         * classic Bytes */
         rd_kafka_buf_write_kbytes(env_rkbuf, &member_state);
 
         rd_free(tmp);

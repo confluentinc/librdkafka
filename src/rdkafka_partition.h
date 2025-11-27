@@ -184,6 +184,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rd_kafka_q_t *rktp_fetchq; /* Queue of fetched messages
                                     * from broker.
                                     * Broker thread -> App */
+        rd_kafka_q_t *rktp_temp_fetchq; /* Temporary fetch queue
+                                        * used to filter acquired records */
         rd_kafka_q_t *rktp_ops;    /* * -> Main thread */
 
         rd_atomic32_t rktp_msgs_inflight; /**< Current number of

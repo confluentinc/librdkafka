@@ -884,6 +884,56 @@ err_parse:
         return rkbuf->rkbuf_err;
 }
 
+/* Returns rd_true if off is within any acquired range on rktp */
+static rd_bool_t
+rd_kafka_share_ack_ranges_contains(const rd_kafka_toppar_t *rktp, int64_t off) {
+    size_t i;
+    if (!rktp->rktp_share_acknowledge ||
+        rktp->rktp_share_acknowledge_count <= 0)
+        return rd_false;
+
+    for (i = 0; i < (size_t)rktp->rktp_share_acknowledge_count; i++) {
+        const int64_t first = rktp->rktp_share_acknowledge[i].first_offset;
+        const int64_t last  = rktp->rktp_share_acknowledge[i].last_offset;
+        if (off >= first && off <= last)
+            return rd_true;
+    }
+    return rd_false;
+}
+
+/* Filter rktp->temp_fetch_queue into rktp->rktp_fetchq based on acquired ranges. */
+static void
+rd_kafka_share_filter_temp_fetchq(rd_kafka_toppar_t *rktp) {
+    rd_kafka_op_t *rko;
+    rd_kafka_q_t filtered_q;
+
+    if (!rktp)
+        return;
+
+    rd_kafka_q_init(&filtered_q, rktp->rktp_rkt->rkt_rk);
+
+    while ((rko = rd_kafka_q_pop(&rktp->rktp_temp_fetchq, 0, 0))) {
+        rd_bool_t keep = rd_true;
+
+        printf("Filtering op type %d\n", rko->rko_type);
+
+        if (rko->rko_type == RD_KAFKA_OP_FETCH) {
+            const int64_t off = rko->rko_u.fetch.rkm.rkm_offset;
+            if (!rd_kafka_share_ack_ranges_contains(rktp, off))
+                keep = rd_false;
+        }
+
+        if (keep)
+            rd_kafka_q_enq(&filtered_q, rko);
+        else
+            rd_kafka_op_destroy(rko);
+    }
+
+    (void)rd_kafka_q_concat(rktp->rktp_fetchq, &filtered_q);
+    rd_kafka_q_destroy_owner(&filtered_q);
+
+}
+
 
 static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
     rd_kafka_broker_t *rkb,
@@ -971,7 +1021,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                                 so messages for different partitions in the same fetch request might
                                 not be sent at once to the user.
                 */
-                err = rd_kafka_msgset_parse(rkbuf, request, rktp, NULL, &tver);
+                err = rd_kafka_share_msgset_parse(rkbuf, request, rktp, NULL, &tver);
 
                 rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
                 /* Continue with next partition regardless of
@@ -1006,6 +1056,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         }
 
         rd_kafka_buf_skip_tags(rkbuf); // Partition tags
+
+        rd_kafka_share_filter_temp_fetchq(rktp);
 
         goto done;
 

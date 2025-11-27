@@ -1975,9 +1975,15 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         rd_slice_init_full(&slice, &rkbuf->rkbuf_buf);
 
         /* Write binary buffer as Kafka Bytes to enveloping buffer. */
-        rd_kafka_buf_write_arraycnt(env_rkbuf, (size_t)rd_slice_remains(&slice));
-        rd_buf_write_slice(&env_rkbuf->rkbuf_buf, &slice);
+        size_t len = rd_slice_remains(&slice);
+        void *tmp  = rd_malloc(len);
+        rd_slice_peek(&slice, 0, tmp, len);
 
+        rd_kafkap_bytes_t member_state = { .data = tmp, .len = (int32_t)len };
+        /* Writes CompactBytes if env_rkbuf is flexver (SyncGroup v4), else classic Bytes */
+        rd_kafka_buf_write_kbytes(env_rkbuf, &member_state);
+
+        rd_free(tmp);
         rd_kafka_buf_destroy(rkbuf);
 }
 

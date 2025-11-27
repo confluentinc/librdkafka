@@ -1975,7 +1975,7 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
         rd_slice_init_full(&slice, &rkbuf->rkbuf_buf);
 
         /* Write binary buffer as Kafka Bytes to enveloping buffer. */
-        rd_kafka_buf_write_i32(env_rkbuf, (int32_t)rd_slice_remains(&slice));
+        rd_kafka_buf_write_arraycnt(env_rkbuf, (size_t)rd_slice_remains(&slice));
         rd_buf_write_slice(&env_rkbuf->rkbuf_buf, &slice);
 
         rd_kafka_buf_destroy(rkbuf);

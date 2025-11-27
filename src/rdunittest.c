@@ -433,6 +433,9 @@ extern int unittest_sasl_oauthbearer_oidc_assertion(void);
 #endif
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
+#if WITH_SSL
+extern int unittest_ssl(void);
+#endif
 
 int rd_unittest(void) {
         int fails = 0;
@@ -481,6 +484,9 @@ int rd_unittest(void) {
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
             {"feature", unittest_feature},
+#if WITH_SSL
+            {"ssl", unittest_ssl},
+#endif
             {NULL}};
         int i;
         const char *match = rd_getenv("RD_UT_TEST", NULL);

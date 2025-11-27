@@ -3054,7 +3054,7 @@ const struct rd_kafka_mock_api_handler
                                        rd_kafka_mock_handle_TxnOffsetCommit},
         [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
-            {2, 4, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+            {2, 4, 4, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
             {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =

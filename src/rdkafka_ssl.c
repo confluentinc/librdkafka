@@ -36,6 +36,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_cert.h"
+#include "rdunittest.h"
 
 #ifdef _WIN32
 #include <wincrypt.h>

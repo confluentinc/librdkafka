@@ -34,15 +34,15 @@ global_job_config:
           echo "Error: KAFKA_SASL_PASSWORD is required"
           exit 1
         fi
-      # Setup kubeconfig
+      # Setup kubeconfig (base64 encoded to avoid YAML issues)
       - |
-        if [[ -z "$KUBECONFIG_CONTENT" ]]; then
-          echo "Error: KUBECONFIG_CONTENT is required"
-          echo "Get it by running: cat ~/.kube/ccloud-config/devel/kubeconfig"
+        if [[ -z "$KUBECONFIG_BASE64" ]]; then
+          echo "Error: KUBECONFIG_BASE64 is required"
+          echo "Get it by running: base64 < /tmp/k8s-devcnn3k3-only.yaml | tr -d '\n'"
           exit 1
         fi
       - mkdir -p $HOME/.kube
-      - echo "$KUBECONFIG_CONTENT" > $HOME/.kube/config
+      - echo "$KUBECONFIG_BASE64" | base64 -d > $HOME/.kube/config
       - export KUBECONFIG=$HOME/.kube/config
       - echo "✓ Kubeconfig loaded"
       # Verify toolbox connectivity

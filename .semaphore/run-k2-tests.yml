@@ -35,8 +35,10 @@ global_job_config:
           exit 1
         fi
       # Get fresh kubeconfig using Confluent's internal tools
-      - echo "Getting kubeconfig via devel && kubeconfig-sync..."
-      - eval "$(devel)" && kubeconfig-sync
+      - echo "Getting kubeconfig..."
+      - . assume-iam-role arn:aws:iam::037803949979:role/nonprod-administrator
+      - mkdir -p $HOME/.kube/ccloud-config/devel
+      - kubectl-ccloud-config get devel
       - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
       - echo "✓ Kubeconfig obtained"
       # Verify toolbox connectivity

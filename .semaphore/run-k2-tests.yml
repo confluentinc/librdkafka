@@ -34,17 +34,12 @@ global_job_config:
           echo "Error: KAFKA_SASL_PASSWORD is required"
           exit 1
         fi
-      # Setup kubeconfig (base64 encoded to avoid YAML issues)
-      - |
-        if [[ -z "$KUBECONFIG_BASE64" ]]; then
-          echo "Error: KUBECONFIG_BASE64 is required"
-          echo "Get it by running: base64 < /tmp/k8s-devcnn3k3-only.yaml | tr -d '\n'"
-          exit 1
-        fi
-      - mkdir -p $HOME/.kube
-      - echo "$KUBECONFIG_BASE64" | base64 -d > $HOME/.kube/config
-      - export KUBECONFIG=$HOME/.kube/config
-      - echo "✓ Kubeconfig loaded"
+      # Assume IAM role for EKS access
+      - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
+      - echo "✓ IAM role assumed"
+      # Setup kubeconfig for EKS cluster (with alias to match K8S_CONTEXT)
+      - aws eks update-kubeconfig --region ${AWS_REGION:-us-west-2} --name ${EKS_CLUSTER_NAME} --alias ${K8S_CONTEXT}
+      - echo "✓ Kubeconfig ready for context: ${K8S_CONTEXT}"
       # Verify toolbox connectivity
       - |
         echo "Connecting to toolbox: $TOOLBOX_ID in context: $K8S_CONTEXT"

@@ -471,10 +471,9 @@ RD_EXPORT
 #else
 static
 #endif
-const char *
-rd_kafka_ssl_normalize_hostname(const char *hostname,
-                                 char *normalized,
-                                 size_t size) {
+const char *rd_kafka_ssl_normalize_hostname(const char *hostname,
+                                            char *normalized,
+                                            size_t size) {
         size_t len;
 
         rd_snprintf(normalized, size, "%s", hostname);
@@ -512,18 +511,18 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 
         /* Normalize hostname (remove trailing dot) for both SNI and certificate
          * verification */
-        rd_kafka_ssl_normalize_hostname(name,
-                                         name_for_verify,
-                                         sizeof(name_for_verify));
+        rd_kafka_ssl_normalize_hostname(name, name_for_verify,
+                                        sizeof(name_for_verify));
 
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (strchr(name_for_verify, ':') &&
-                        strspn(name_for_verify,
-                               "0123456789abcdefABCDEF:.[]%") ==
-                            strlen(name_for_verify)) ||
+        if (!(/*ipv6*/ (
+                  strchr(name_for_verify, ':') &&
+                  strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
+                      strlen(name_for_verify)) ||
               /*ipv4*/
-              strspn(name_for_verify, "0123456789.") == strlen(name_for_verify)) &&
+              strspn(name_for_verify, "0123456789.") ==
+                  strlen(name_for_verify)) &&
             !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #endif

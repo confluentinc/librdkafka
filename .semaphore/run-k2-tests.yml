@@ -35,8 +35,8 @@ global_job_config:
         fi
         echo "All required parameters set"
       - . vault-setup
-      - git clone git@github.com:confluentinc/ce-kafka.git /tmp/ce-kafka
-      - cd /tmp/ce-kafka/mk-include/bin/cc-system-tests && . setup_kubeconfig.sh "devel"
+      - git clone git@github.com:confluentinc/cc-mk-include.git /tmp/cc-mk-include
+      - cd /tmp/cc-mk-include/bin/cc-system-tests && . setup_kubeconfig.sh "devel"
       - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
       - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID}
 

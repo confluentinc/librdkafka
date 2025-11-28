@@ -2,7 +2,7 @@ version: v1.0
 name: run-k2-tests
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-1
+    type: s1-prod-ubuntu24-04-amd64-00
 
 execution_time_limit:
   hours: 3
@@ -39,6 +39,7 @@ global_job_config:
       - git clone git@github.com:confluentinc/cc-mk-include.git /tmp/cc-mk-include
       - cd /tmp/cc-mk-include/bin/cc-system-tests && . setup_kubeconfig.sh "devel"
       - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+      - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin
       - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID}
 
 blocks:

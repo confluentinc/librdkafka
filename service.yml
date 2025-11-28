@@ -8,6 +8,10 @@ github:
 semaphore:
   enable: true
   pipeline_enable: false
+  pipeline_files:
+  # Additional pipeline files run to consider for status checks
+  - path: .semaphore/semaphore-integration.yml
+    level: pipeline
   triggers:
   - tags
   - branches

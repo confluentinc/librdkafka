@@ -34,6 +34,11 @@ global_job_config:
           echo "Error: KAFKA_SASL_PASSWORD is required"
           exit 1
         fi
+      # Get fresh kubeconfig using Confluent's internal tools
+      - echo "Getting kubeconfig via devel && kubeconfig-sync..."
+      - eval "$(devel)" && kubeconfig-sync
+      - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+      - echo "✓ Kubeconfig obtained"
       # Verify toolbox connectivity
       - |
         echo "Connecting to toolbox: $TOOLBOX_ID in context: $K8S_CONTEXT"

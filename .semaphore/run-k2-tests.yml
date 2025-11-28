@@ -34,11 +34,17 @@ global_job_config:
           echo "Error: KAFKA_SASL_PASSWORD is required"
           exit 1
         fi
-      # Get kubeconfig
-      - mkdir -p $HOME/.kube/ccloud-config/devel
-      - kubectl-ccloud-config get devel
-      - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-      - echo "✓ Kubeconfig ready"
+      # Setup kubeconfig
+      - |
+        if [[ -z "$KUBECONFIG_CONTENT" ]]; then
+          echo "Error: KUBECONFIG_CONTENT is required"
+          echo "Get it by running: cat ~/.kube/ccloud-config/devel/kubeconfig"
+          exit 1
+        fi
+      - mkdir -p $HOME/.kube
+      - echo "$KUBECONFIG_CONTENT" > $HOME/.kube/config
+      - export KUBECONFIG=$HOME/.kube/config
+      - echo "✓ Kubeconfig loaded"
       # Verify toolbox connectivity
       - |
         echo "Connecting to toolbox: $TOOLBOX_ID in context: $K8S_CONTEXT"

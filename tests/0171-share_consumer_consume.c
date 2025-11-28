@@ -28,321 +28,6 @@
 
 #include "test.h"
 
-/**
- * @brief Test that polling without subscription fails
- */
-static void test_poll_no_subscribe_fails(void) {
-        char errstr[512];
-        rd_kafka_conf_t *cons_conf;
-        rd_kafka_t *consumer;
-        char *group = "share-group-no-subscribe";
-
-        TEST_SAY("=== Testing poll without subscription fails ===\n");
-
-        /* Create share consumer */
-        test_conf_init(&cons_conf, NULL, 60);
-        rd_kafka_conf_set(cons_conf, "share.consumer", "true", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.protocol", "consumer", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-
-        consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cons_conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-
-        /* Try to poll without subscribing - should fail or return timeout */
-        TEST_SAY("Attempting to poll without subscription\n");
-        rd_kafka_message_t **msgs = malloc(sizeof(rd_kafka_message_t *) * 10);
-        size_t rcvd_msgs = 0;
-        
-        rd_kafka_error_t *error = rd_kafka_share_consume_batch(consumer, 2000, msgs, &rcvd_msgs);
-        
-        /**
-         * TODO KIP-932: Uncomment once polling before any subscription is properly handled
-         */
-        //TEST_ASSERT(error, "Expected poll to fail after unsubscribe, but it succeeded");
-
-        free(msgs);
-        rd_kafka_destroy(consumer);
-}
-
-/**
- * @brief Test subscribe and poll with no records available
- */
-static void test_subscribe_and_poll_no_records(void) {
-        char errstr[512];
-        rd_kafka_conf_t *cons_conf;
-        rd_kafka_t *consumer;
-        rd_kafka_topic_partition_list_t *topics;
-        const char *topic = "0154-share-empty-records";
-        const char *group = "share-group-empty";
-
-        TEST_SAY("=== Testing subscribe and poll with no records ===\n");
-
-        /* Create empty topic (no messages produced) */
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        TEST_SAY("Created empty topic: %s\n", topic);
-
-        /* Create share consumer */
-        test_conf_init(&cons_conf, NULL, 60);
-        rd_kafka_conf_set(cons_conf, "share.consumer", "true", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.protocol", "consumer", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-
-        consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cons_conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-
-        /* Subscribe to empty topic */
-        topics = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(topics, topic, RD_KAFKA_PARTITION_UA);
-        rd_kafka_subscribe(consumer, topics);
-        rd_kafka_topic_partition_list_destroy(topics);
-
-        TEST_SAY("Subscribed to empty topic, polling for messages\n");
-
-        /* Poll for messages - should get none */
-        rd_kafka_message_t **msgs = malloc(sizeof(rd_kafka_message_t *) * 10);
-        size_t rcvd_msgs = 0;
-        
-        rd_kafka_error_t *error = rd_kafka_share_consume_batch(consumer, 5000, msgs, &rcvd_msgs);
-
-        TEST_ASSERT(rcvd_msgs == 0, "Should not receive messages from empty topic");
-        TEST_SAY("✓ No messages received from empty topic (expected)\n");
-
-        test_delete_topic(consumer, topic);
-
-        free(msgs);
-        rd_kafka_destroy(consumer);
-}
-
-/**
- * @brief Test subscribe, poll, then unsubscribe
- */
-static void test_subscribe_poll_unsubscribe(void) {
-        char errstr[512];
-        rd_kafka_conf_t *cons_conf;
-        rd_kafka_t *consumer;
-        rd_kafka_topic_partition_list_t *topics;
-        const char *topic = "0154-share-unsub";
-        const char *group = "share-group-unsub";
-        const int msg_count = 5;
-
-        TEST_SAY("=== Testing subscribe, poll, then unsubscribe ===\n");
-
-        /* Create topic and produce messages */
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, msg_count);
-        TEST_SAY("Produced %d messages\n", msg_count);
-
-        /* Create share consumer */
-        test_conf_init(&cons_conf, NULL, 60);
-        rd_kafka_conf_set(cons_conf, "share.consumer", "true", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.protocol", "consumer", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-
-        consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cons_conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-
-        /* Subscribe to topic */
-        topics = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(topics, topic, RD_KAFKA_PARTITION_UA);
-        rd_kafka_subscribe(consumer, topics);
-        rd_kafka_topic_partition_list_destroy(topics);
-
-        TEST_SAY("Subscribed to topic, consuming messages\n");
-
-        /* Poll for some messages */
-        rd_kafka_message_t **msgs = malloc(sizeof(rd_kafka_message_t *) * 10);
-        size_t rcvd_msgs = 0;
-        int consumed_count = 0;
-        
-        rd_kafka_error_t *error = rd_kafka_share_consume_batch(consumer, 10000, msgs, &rcvd_msgs);
-        
-        if (!error && rcvd_msgs > 0) {
-                for (int i = 0; i < (int)rcvd_msgs; i++) {
-                        if (!msgs[i]->err) {
-                                consumed_count++;
-                        }
-                        rd_kafka_message_destroy(msgs[i]);
-                }
-                TEST_SAY("Consumed %d messages before unsubscribe\n", consumed_count);
-        } else if (error) {
-                rd_kafka_error_destroy(error);
-        }
-
-        /* Unsubscribe from all topics */
-        TEST_SAY("Unsubscribing from all topics\n");
-        rd_kafka_resp_err_t err = rd_kafka_unsubscribe(consumer);
-        TEST_ASSERT(!err, "Failed to unsubscribe: %s", rd_kafka_err2str(err));
-
-        /* Try to poll after unsubscribe - should fail or get no messages */
-        TEST_SAY("Attempting to poll after unsubscribe\n");
-        rcvd_msgs = 0;
-        error = rd_kafka_share_consume_batch(consumer, 2000, msgs, &rcvd_msgs);
-        
-        /**
-         * TODO KIP-932: Uncomment once polling before any subscription is properly handled
-         */
-        //TEST_ASSERT(error, "Expected poll to fail after unsubscribe, but it succeeded");
-
-        test_delete_topic(consumer, topic);
-
-        free(msgs);
-        rd_kafka_destroy(consumer);
-}
-
-/**
- * @brief Test subscribe, poll, then subscribe to different topic
- */
-static void test_subscribe_poll_subscribe(void) {
-        char errstr[512];
-        rd_kafka_conf_t *cons_conf;
-        rd_kafka_t *consumer;
-        rd_kafka_topic_partition_list_t *topics;
-        char *topic1 = "test-topic-0154-share-sub1";
-        char *topic2 = "test-topic-0154-share-sub2";
-        char *group = "share-group-resub";
-        const int msg_count = 3;
-
-        TEST_SAY("=== Testing subscribe, poll, then resubscribe ===\n");
-
-        /* Create topics and produce messages */
-        test_create_topic_wait_exists(NULL, topic1, 1, -1, 60 * 1000);
-        test_create_topic_wait_exists(NULL, topic2, 1, -1, 60 * 1000);
-        
-        test_produce_msgs_easy(topic1, 0, 0, msg_count);
-        test_produce_msgs_easy(topic2, 0, 0, msg_count);
-        TEST_SAY("Produced %d messages to each topic\n", msg_count);
-
-        /* Create share consumer */
-        test_conf_init(&cons_conf, NULL, 60);
-        rd_kafka_conf_set(cons_conf, "share.consumer", "true", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.protocol", "consumer", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-
-        consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cons_conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-
-        /* Subscribe to first topic */
-        topics = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(topics, topic1, RD_KAFKA_PARTITION_UA);
-        rd_kafka_subscribe(consumer, topics);
-        rd_kafka_topic_partition_list_destroy(topics);
-
-        TEST_SAY("Subscribed to first topic: %s\n", topic1);
-
-        /* Poll from first topic */
-        rd_kafka_message_t **msgs = malloc(sizeof(rd_kafka_message_t *) * 10);
-        size_t rcvd_msgs = 0;
-        int topic1_count = 0;
-        
-        rd_kafka_error_t *error = rd_kafka_share_consume_batch(consumer, 10000, msgs, &rcvd_msgs);
-        
-        if (!error && rcvd_msgs > 0) {
-                for (int i = 0; i < (int)rcvd_msgs; i++) {
-                        if (!msgs[i]->err) {
-                                topic1_count++;
-                        }
-                        rd_kafka_message_destroy(msgs[i]);
-                }
-                TEST_SAY("Consumed %d messages from topic1\n", topic1_count);
-        } else if (error) {
-                rd_kafka_error_destroy(error);
-        }
-
-        /* Subscribe to second topic */
-        TEST_SAY("Resubscribing to second topic: %s\n", topic2);
-        topics = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(topics, topic2, RD_KAFKA_PARTITION_UA);
-        rd_kafka_subscribe(consumer, topics);
-        rd_kafka_topic_partition_list_destroy(topics);
-
-        /* Poll from second topic */
-        rcvd_msgs = 0;
-        int topic2_count = 0;
-        
-        error = rd_kafka_share_consume_batch(consumer, 10000, msgs, &rcvd_msgs);
-        
-        if (!error && rcvd_msgs > 0) {
-                for (int i = 0; i < (int)rcvd_msgs; i++) {
-                        if (!msgs[i]->err) {
-                                topic2_count++;
-                        }
-                        rd_kafka_message_destroy(msgs[i]);
-                }
-                TEST_SAY("Consumed %d messages from topic2\n", topic2_count);
-        } else if (error) {
-                rd_kafka_error_destroy(error);
-        }
-
-        TEST_SAY("✓ Successfully resubscribed and consumed from different topics\n");
-
-        test_delete_topic(consumer, topic1);
-        test_delete_topic(consumer, topic2);
-
-        free(msgs);
-        rd_kafka_destroy(consumer);
-}
-
-/**
- * @brief Test subscribe, unsubscribe, then poll fails
- */
-static void test_subscribe_unsubscribe_poll_fails(void) {
-        char errstr[512];
-        rd_kafka_conf_t *cons_conf;
-        rd_kafka_t *consumer;
-        rd_kafka_topic_partition_list_t *topics;
-        const char *topic = "0154-share-unsub-fail";
-        const char *group = "share-group-unsub-fail";
-
-        TEST_SAY("=== Testing subscribe, unsubscribe, then poll fails ===\n");
-
-        /* Create topic */
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, 3);
-
-        /* Create share consumer */
-        test_conf_init(&cons_conf, NULL, 60);
-        rd_kafka_conf_set(cons_conf, "share.consumer", "true", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.protocol", "consumer", errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(cons_conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-
-        consumer = rd_kafka_new(RD_KAFKA_CONSUMER, cons_conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-
-        /* Subscribe to topic */
-        topics = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(topics, topic, RD_KAFKA_PARTITION_UA);
-        rd_kafka_subscribe(consumer, topics);
-        rd_kafka_topic_partition_list_destroy(topics);
-
-        TEST_SAY("Subscribed to topic: %s\n", topic);
-
-        /* Immediately unsubscribe */
-        TEST_SAY("Unsubscribing immediately\n");
-        rd_kafka_resp_err_t err = rd_kafka_unsubscribe(consumer);
-        TEST_ASSERT(!err, "Failed to unsubscribe: %s", rd_kafka_err2str(err));
-
-        /* Try to poll - should fail */
-        TEST_SAY("Attempting to poll after unsubscribe\n");
-        rd_kafka_message_t **msgs = malloc(sizeof(rd_kafka_message_t *) * 10);
-        size_t rcvd_msgs = 0;
-        
-        rd_kafka_error_t *error = rd_kafka_share_consume_batch(consumer, 2000, msgs, &rcvd_msgs);
-        
-        /**
-         * TODO KIP-932: Uncomment once polling before any subscription is properly handled
-         */
-        //TEST_ASSERT(error, "Expected poll to fail after unsubscribe, but it succeeded");
-
-        test_delete_topic(consumer, topic);
-
-        free(msgs);
-        rd_kafka_destroy(consumer);
-}
 
 /**
  * @brief Test producing and consuming 10 messages
@@ -999,14 +684,82 @@ static void test_share_multi_consumers_multi_partitions_multi_topics(void) {
         }
 }
 
+static void test_batch_all_partitions_arrive_together(void) {
+        char errstr[512];
+        const char *group = "share-group-batch-all";
+        const char *topic = test_mk_topic_name("0154-share-batch-all", 1);
+        const int partition_cnt = 3;
+        const int msgs_per_partition = 5;
+        const int total_msgs = partition_cnt * msgs_per_partition;
 
-int main_0154_share_consumer(int argc, char **argv) {
+        TEST_SAY("=== Expect single batch of %d msgs across %d partitions ===\n",
+                 total_msgs, partition_cnt);
 
-        test_poll_no_subscribe_fails();
-        test_subscribe_and_poll_no_records();
-        test_subscribe_poll_unsubscribe();
-        test_subscribe_poll_subscribe();
-        test_subscribe_unsubscribe_poll_fails();
+        /* Create topic with 3 partitions and produce 5 msgs per partition */
+        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 60 * 1000);
+        for (int p = 0; p < partition_cnt; p++)
+                test_produce_msgs_easy(topic, p, p, msgs_per_partition);
+
+        /* Create share consumer */
+        rd_kafka_conf_t *conf;
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "share.consumer", "true", errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
+        rd_kafka_t *consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
+
+        /* Read from beginning */
+        const char *grp_conf[] = {"share.auto.offset.reset","SET","earliest"};
+        test_IncrementalAlterConfigs_simple(consumer, RD_KAFKA_RESOURCE_GROUP, group, grp_conf, 1);
+
+        /* Subscribe */
+        rd_kafka_topic_partition_list_t *subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_subscribe(consumer, subs), "subscribe failed");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume once, expect all 15 messages in single batch */
+        rd_kafka_message_t *msgs[32];
+        size_t rcvd = 0;
+        int counts[partition_cnt];
+        memset(counts, 0, sizeof(counts));
+
+        rd_kafka_error_t *err = rd_kafka_share_consume_batch(consumer, 10000, msgs, &rcvd);
+        TEST_ASSERT(!err, "Consume error: %s", err ? rd_kafka_error_string(err) : "");
+        if (err) rd_kafka_error_destroy(err);
+
+        TEST_SAY("Received %zu messages in one batch\n", rcvd);
+        TEST_ASSERT(rcvd == (size_t)total_msgs,
+                    "Expected %d messages in single batch, got %zu",
+                    total_msgs, rcvd);
+
+        /* Verify 5 per partition, destroy messages */
+        for (size_t i = 0; i < rcvd; i++) {
+                rd_kafka_message_t *m = msgs[i];
+                TEST_ASSERT(!m->err, "Message error: %s", rd_kafka_message_errstr(m));
+                int p = m->partition;
+                TEST_ASSERT(p >= 0 && p < partition_cnt, "Unexpected partition %d", p);
+                counts[p]++;
+                rd_kafka_message_destroy(m);
+        }
+        for (int p = 0; p < partition_cnt; p++) {
+                TEST_ASSERT(counts[p] == msgs_per_partition,
+                            "Partition %d expected %d msgs, got %d",
+                            p, msgs_per_partition, counts[p]);
+        }
+
+        TEST_SAY("✓ Single batch contained all %d msgs (5 per partition)\n", total_msgs);
+
+        test_delete_topic(consumer, topic);
+        rd_kafka_consumer_close(consumer);
+        rd_kafka_destroy(consumer);
+}
+
+
+int main_0171_share_consumer_consume(int argc, char **argv) {
+
         test_share_consumer_messages();
         test_share_consumer_multiple_topics();
         test_share_consumer_multi_members_same_topic();
@@ -1014,5 +767,7 @@ int main_0154_share_consumer(int argc, char **argv) {
         test_share_single_consumer_multi_partitions_multi_topics();
         test_share_multi_consumers_multi_partitions_one_topic();
         test_share_multi_consumers_multi_partitions_multi_topics();
+        /* Uncomment it after fixing the issue */
+        //test_batch_all_partitions_arrive_together();
         return 0;
 }

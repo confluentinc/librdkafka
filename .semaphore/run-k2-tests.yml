@@ -12,7 +12,6 @@ global_job_config:
     commands:
       - checkout
       - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
-      # Verify required parameters
       - |
         if [[ -z "$TOOLBOX_ID" ]]; then
           echo "Error: TOOLBOX_ID is required (e.g., anl-le-new-1)"
@@ -34,13 +33,16 @@ global_job_config:
           echo "Error: KAFKA_SASL_PASSWORD is required"
           exit 1
         fi
-      # Assume IAM role for EKS access
+        if [[ -z "$EKS_CLUSTER_NAME" ]]; then
+          echo "Error: EKS_CLUSTER_NAME is required (e.g., k8saas-k8s-devcnn3k3)"
+          exit 1
+        fi
+      - echo "Assuming IAM role for EKS access..."
       - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
       - echo "✓ IAM role assumed"
-      # Setup kubeconfig for EKS cluster (with alias to match K8S_CONTEXT)
+      - echo "Setting up kubeconfig for EKS cluster..."
       - aws eks update-kubeconfig --region ${AWS_REGION:-us-west-2} --name ${EKS_CLUSTER_NAME} --alias ${K8S_CONTEXT}
       - echo "✓ Kubeconfig ready for context: ${K8S_CONTEXT}"
-      # Verify toolbox connectivity
       - |
         echo "Connecting to toolbox: $TOOLBOX_ID in context: $K8S_CONTEXT"
         kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID} || {

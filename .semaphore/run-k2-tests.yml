@@ -1,0 +1,129 @@
+version: v1.0
+name: run-k2-tests
+agent:
+  machine:
+    type: s1-prod-ubuntu24-04-amd64-1
+
+execution_time_limit:
+  hours: 3
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+      - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
+      # Verify required parameters
+      - |
+        if [[ -z "$TOOLBOX_ID" ]]; then
+          echo "Error: TOOLBOX_ID is required (e.g., anl-le-new-1)"
+          exit 1
+        fi
+        if [[ -z "$K8S_CONTEXT" ]]; then
+          echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
+          exit 1
+        fi
+        if [[ -z "$KAFKA_BOOTSTRAP_SERVER" ]]; then
+          echo "Error: KAFKA_BOOTSTRAP_SERVER is required"
+          exit 1
+        fi
+        if [[ -z "$KAFKA_SASL_USERNAME" ]]; then
+          echo "Error: KAFKA_SASL_USERNAME is required"
+          exit 1
+        fi
+        if [[ -z "$KAFKA_SASL_PASSWORD" ]]; then
+          echo "Error: KAFKA_SASL_PASSWORD is required"
+          exit 1
+        fi
+      # Verify toolbox connectivity
+      - |
+        echo "Connecting to toolbox: $TOOLBOX_ID in context: $K8S_CONTEXT"
+        kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID} || {
+          echo "Error: Cannot access pod $TOOLBOX_ID"
+          exit 1
+        }
+        echo "✓ Toolbox accessible"
+
+blocks:
+  - name: "Setup and Run Tests"
+    dependencies: []
+    task:
+      jobs:
+        - name: "Run K2 Tests"
+          commands:
+            # Setup librdkafka and run tests in the toolbox
+            - |
+              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_ID} -- bash -c "
+                set -e
+                cd /tmp
+                
+                # Setup librdkafka if not already done
+                if [ ! -d 'librdkafka' ]; then
+                  echo '==> Installing dependencies...'
+                  apt-get update -qq && apt-get install -y build-essential git libssl-dev wget python3 python3-pip openjdk-21-jdk llvm clang
+                  echo '==> Cloning librdkafka...'
+                  git clone https://github.com/confluentinc/librdkafka.git
+                  cd librdkafka
+                  git checkout ${GIT_REF:-k2_testing_final}
+                  echo '==> Configuring...'
+                  ./dev-conf.sh
+                  echo '==> Building tests...'
+                  cd tests
+                  pip3 install -r requirements.txt || true
+                  make
+                else
+                  echo '==> librdkafka already set up, updating...'
+                  cd librdkafka
+                  git fetch origin
+                  git checkout ${GIT_REF:-k2_testing_final}
+                  git pull origin ${GIT_REF:-k2_testing_final} || true
+                fi
+                
+                # Create test.conf with K2 settings
+                cd /tmp/librdkafka/tests
+                echo '==> Creating test.conf...'
+                cat > test.conf << 'EOF'
+              security.protocol=SASL_SSL
+              sasl.mechanism=PLAIN
+              sasl.username=${KAFKA_SASL_USERNAME}
+              sasl.password=${KAFKA_SASL_PASSWORD}
+              ssl.endpoint.identification.algorithm=none
+              test.timeout.multiplier=${TEST_TIMEOUT_MULTIPLIER:-2}
+              test.topic.prefix=${TEST_TOPIC_PREFIX:-semaphore-}
+              test.topic.random=true
+              metadata.broker.list=${KAFKA_BOOTSTRAP_SERVER}
+              test.skip.idempotent=true
+              test.supported.acks=-1
+              test.sleep.multiplier=${TEST_SLEEP_MULTIPLIER:-2.0}
+              test.skip.numbers=${TEST_SKIP_NUMBERS:-0011,0059}
+              EOF
+                
+                # Substitute variables
+                sed -i \"s|\\\${KAFKA_SASL_USERNAME}|${KAFKA_SASL_USERNAME}|g\" test.conf
+                sed -i \"s|\\\${KAFKA_SASL_PASSWORD}|${KAFKA_SASL_PASSWORD}|g\" test.conf
+                sed -i \"s|\\\${KAFKA_BOOTSTRAP_SERVER}|${KAFKA_BOOTSTRAP_SERVER}|g\" test.conf
+                sed -i \"s|\\\${TEST_TIMEOUT_MULTIPLIER:-2}|${TEST_TIMEOUT_MULTIPLIER:-2}|g\" test.conf
+                sed -i \"s|\\\${TEST_TOPIC_PREFIX:-semaphore-}|${TEST_TOPIC_PREFIX:-semaphore-}|g\" test.conf
+                sed -i \"s|\\\${TEST_SLEEP_MULTIPLIER:-2.0}|${TEST_SLEEP_MULTIPLIER:-2.0}|g\" test.conf
+                sed -i \"s|\\\${TEST_SKIP_NUMBERS:-0011,0059}|${TEST_SKIP_NUMBERS:-0011,0059}|g\" test.conf
+                
+                echo '==> test.conf created'
+                
+                # Run tests
+                echo '==> Running tests: ${TESTS:-all}...'
+                if [ '${TESTS:-all}' = 'all' ]; then
+                  ./run-tests.sh
+                else
+                  TESTS='${TESTS}' ./run-tests.sh
+                fi
+                
+                echo '==> Tests completed!'
+              " | tee test-output.log
+            # Check results
+            - |
+              if grep -q "FAIL" test-output.log; then
+                echo "❌ Some tests failed"
+                exit 1
+              else
+                echo "✅ All tests passed!"
+              fi
+

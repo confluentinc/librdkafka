@@ -12,7 +12,8 @@ v1.7.0 is a feature release. It is supported for all usage.
    client types (#399).
 4. Fix for at-least-once guarantee not ensured in case a seek happens on one
 partition and there are messages being fetched about other partitions (#393).
-
+5. Avoid returning a negative lag in case there is no cached offset for 
+   the HWM (#406).
 
 # confluent-kafka-javascript 1.6.0
 

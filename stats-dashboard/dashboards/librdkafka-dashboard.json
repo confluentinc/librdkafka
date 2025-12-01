@@ -697,8 +697,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -795,8 +794,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -896,8 +894,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -2760,7 +2757,7 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "",
+  "refresh": false,
   "schemaVersion": 38,
   "tags": [],
   "templating": {
@@ -2812,17 +2809,17 @@
         "current": {
           "selected": true,
           "text": [
-            "librdkafka-pod"
+            "All"
           ],
           "value": [
-            "librdkafka-pod"
+            "$__all"
           ]
         },
         "datasource": {
           "type": "prometheus",
           "uid": "victoriametrics-datasource-uid"
         },
-        "definition": "label_values(librdkafka_name,$node_variable_name)",
+        "definition": "query_result(last_over_time(librdkafka_name[$__range]))",
         "hide": 0,
         "includeAll": true,
         "label": "Node",
@@ -2830,14 +2827,14 @@
         "name": "node_name",
         "options": [],
         "query": {
-          "qryType": 1,
-          "query": "label_values(librdkafka_name,$node_variable_name)",
+          "qryType": 3,
+          "query": "query_result(last_over_time(librdkafka_name[$__range]))",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
-        "regex": "",
+        "refresh": 2,
+        "regex": "/$node_variable_name=\\\"([^,]+)\\\"/g",
         "skipUrlSync": false,
-        "sort": 0,
+        "sort": 5,
         "type": "query"
       },
       {
@@ -2855,7 +2852,7 @@
           "type": "prometheus",
           "uid": "victoriametrics-datasource-uid"
         },
-        "definition": "label_values(librdkafka_name,$value_variable_name)",
+        "definition": "query_result(last_over_time(librdkafka_name{$node_variable_name=~\"$node_name\"}[$__range]))",
         "description": "Client instance name",
         "hide": 0,
         "includeAll": true,
@@ -2864,12 +2861,12 @@
         "name": "instance",
         "options": [],
         "query": {
-          "qryType": 1,
-          "query": "label_values(librdkafka_name,$value_variable_name)",
+          "qryType": 3,
+          "query": "query_result(last_over_time(librdkafka_name{$node_variable_name=~\"$node_name\"}[$__range]))",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
-        "regex": "",
+        "refresh": 2,
+        "regex": "/$value_variable_name=\\\"([^,]+)\\\"/g",
         "skipUrlSync": false,
         "sort": 5,
         "type": "query"
@@ -2889,7 +2886,7 @@
           "type": "prometheus",
           "uid": "victoriametrics-datasource-uid"
         },
-        "definition": "label_values(librdkafka_brokers_name,$value_variable_name)",
+        "definition": "query_result(last_over_time(librdkafka_brokers_name{$node_variable_name=~\"$node_name\", $instance_variable_name=~\"$instance\"}[$__range]))",
         "hide": 0,
         "includeAll": true,
         "label": "Brokers",
@@ -2897,12 +2894,12 @@
         "name": "brokers",
         "options": [],
         "query": {
-          "qryType": 1,
-          "query": "label_values(librdkafka_brokers_name,$value_variable_name)",
+          "qryType": 3,
+          "query": "query_result(last_over_time(librdkafka_brokers_name{$node_variable_name=~\"$node_name\", $instance_variable_name=~\"$instance\"}[$__range]))",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
-        "regex": "",
+        "refresh": 2,
+        "regex": "/$value_variable_name=\\\"([^,]+)\\\"/g",
         "skipUrlSync": false,
         "sort": 5,
         "type": "query"
@@ -2922,7 +2919,7 @@
           "type": "prometheus",
           "uid": "victoriametrics-datasource-uid"
         },
-        "definition": "label_values(librdkafka_topics_topic,$value_variable_name)",
+        "definition": "query_result(last_over_time(librdkafka_topics_topic{$node_variable_name=~\"$node_name\", $instance_variable_name=~\"$instance\"}[$__range]))",
         "hide": 0,
         "includeAll": true,
         "label": "Topics",
@@ -2930,12 +2927,12 @@
         "name": "topics",
         "options": [],
         "query": {
-          "qryType": 1,
-          "query": "label_values(librdkafka_topics_topic,$value_variable_name)",
+          "qryType": 3,
+          "query": "query_result(last_over_time(librdkafka_topics_topic{$node_variable_name=~\"$node_name\", $instance_variable_name=~\"$instance\"}[$__range]))",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
-        "regex": "",
+        "refresh": 2,
+        "regex": "/$value_variable_name=\\\"([^,]+)\\\"/g",
         "skipUrlSync": false,
         "sort": 5,
         "type": "query"
@@ -2955,7 +2952,7 @@
           "type": "prometheus",
           "uid": "victoriametrics-datasource-uid"
         },
-        "definition": "query_result(librdkafka_topics_partitions_partition{$topics_variable_name=~\"$topics\"})",
+        "definition": "query_result(last_over_time(librdkafka_topics_partitions_partition{$node_variable_name=~\"$node_name\", $instance_variable_name=~\"$instance\", $topics_variable_name=~\"$topics\"}[$__range]))",
         "hide": 0,
         "includeAll": true,
         "label": "Partitions",
@@ -2964,10 +2961,10 @@
         "options": [],
         "query": {
           "qryType": 3,
-          "query": "query_result(librdkafka_topics_partitions_partition{$topics_variable_name=~\"$topics\"})",
+          "query": "query_result(last_over_time(librdkafka_topics_partitions_partition{$node_variable_name=~\"$node_name\", $instance_variable_name=~\"$instance\", $topics_variable_name=~\"$topics\"}[$__range]))",
           "refId": "PrometheusVariableQueryEditor-VariableQuery"
         },
-        "refresh": 1,
+        "refresh": 2,
         "regex": "/partition=\\\"([0-9]+)\\\"/g",
         "skipUrlSync": false,
         "sort": 3,
@@ -2976,8 +2973,8 @@
     ]
   },
   "time": {
-    "from": "2025-11-05T11:43:05.600Z",
-    "to": "2025-11-05T11:43:26.614Z"
+    "from": "2025-11-05T11:43:05.000Z",
+    "to": "2025-11-05T11:43:26.000Z"
   },
   "timepicker": {},
   "timezone": "utc",

@@ -42,9 +42,10 @@
 
 
 int main_0038_performance(int argc, char **argv) {
-        const char *topic   = test_mk_topic_name(__FUNCTION__, 1);
-        const int partition = 0;
-        const int msgsize   = 100;
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const int partition    = 0;
+        const int msgsize      = 100;
+        const char *acks_value = "1";
         uint64_t testid;
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
@@ -59,15 +60,22 @@ int main_0038_performance(int argc, char **argv) {
 
         msgcnt = totsize / msgsize;
 
-        TEST_SAY("Producing %d messages of size %d to %s [%d]\n", msgcnt,
-                 (int)msgsize, topic, partition);
+        /* Use acks=1 for performance test */
+        if (!test_is_acks_supported("1")) {
+                TEST_SKIP("acks=1 not supported by this cluster\n");
+                return 0;
+        }
+
+        TEST_SAY("Producing %d messages of size %d to %s [%d] with acks=%s\n",
+                 msgcnt, (int)msgsize, topic, partition, acks_value);
         testid = test_id_generate();
         test_conf_init(&conf, NULL, 120);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         test_conf_set(conf, "queue.buffering.max.messages", "10000000");
         test_conf_set(conf, "linger.ms", "100");
-        rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        rkt = test_create_producer_topic(rk, topic, "acks", "1", NULL);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
+        rkt = test_create_producer_topic(rk, topic, "acks", acks_value, NULL);
         test_wait_topic_exists(rk, topic, 5000);
 
         /* First produce one message to create the topic, etc, this might take

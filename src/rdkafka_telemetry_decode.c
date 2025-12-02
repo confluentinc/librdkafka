@@ -522,17 +522,17 @@ unit_test_telemetry_decode_error(void *opaque, const char *error, ...) {
         rd_assert(!*"Failure while decoding telemetry data");
 }
 
-int unit_test_telemetry(rd_kafka_type_t rk_type,
-                        rd_kafka_telemetry_producer_metric_name_t metric_name,
-                        const char *expected_name,
-                        const char *expected_description,
-                        rd_kafka_telemetry_metric_type_t expected_type,
-                        rd_bool_t is_double,
-                        rd_bool_t is_per_broker,
-                        void (*set_metric_value)(rd_kafka_t *,
-                                                 rd_kafka_broker_t *),
-                        int64_t expected_value_int,
-                        double expected_value_double) {
+int unit_test_telemetry(
+    rd_kafka_type_t rk_type,
+    int metric_name, /* Accepts both producer and consumer metric enums */
+    const char *expected_name,
+    const char *expected_description,
+    rd_kafka_telemetry_metric_type_t expected_type,
+    rd_bool_t is_double,
+    rd_bool_t is_per_broker,
+    void (*set_metric_value)(rd_kafka_t *, rd_kafka_broker_t *),
+    int64_t expected_value_int,
+    double expected_value_double) {
         rd_kafka_t *rk = rd_calloc(1, sizeof(*rk));
         rwlock_init(&rk->rk_lock);
         rd_kafka_conf_t *conf = rd_kafka_conf_new();

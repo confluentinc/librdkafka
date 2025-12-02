@@ -504,5 +504,5 @@ int unittest_map(void) {
         fails += unittest_untyped_map();
         fails += unittest_typed_map();
         fails += unittest_typed_map2();
-        return 0;
+        return fails;
 }

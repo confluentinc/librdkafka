@@ -114,6 +114,7 @@ static void expect_match(struct expect *exp,
         }
 }
 
+
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
                          rd_kafka_topic_partition_list_t *parts,
@@ -124,7 +125,7 @@ static void rebalance_cb(rd_kafka_t *rk,
 
         TEST_SAY("rebalance_cb: %s with %d partition(s)\n",
                  rd_kafka_err2str(err), parts->cnt);
-        test_print_partition_list(parts);
+        test_print_partition_list_with_errors(parts);
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
@@ -179,11 +180,14 @@ static void consumer_poll_once(rd_kafka_t *rk) {
 
         } else if (rkmessage->err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
                 /* Test segfault associated with this call is solved */
-                int32_t leader_epoch = rd_kafka_message_leader_epoch(rkmessage);
-                TEST_ASSERT(leader_epoch == -1,
-                            "rd_kafka_message_leader_epoch should be -1"
-                            ", got %" PRId32,
-                            leader_epoch);
+                if (rd_kafka_version() >= 0x020100ff) {
+                        int32_t leader_epoch =
+                            rd_kafka_message_leader_epoch(rkmessage);
+                        TEST_ASSERT(leader_epoch == -1,
+                                    "rd_kafka_message_leader_epoch should be -1"
+                                    ", got %" PRId32,
+                                    leader_epoch);
+                }
 
                 if (strstr(rd_kafka_topic_name(rkmessage->rkt), "NONEXIST"))
                         TEST_SAY("%s: %s: error is expected for this topic\n",
@@ -304,33 +308,48 @@ static int do_test(const char *assignor) {
         testid = test_id_generate();
         test_str_id_generate(groupid, sizeof(groupid));
 
-        rd_snprintf(topics[0], sizeof(topics[0]), "%s_%s",
-                    test_mk_topic_name("regex_subscribe_TOPIC_0001_UNO", 0),
-                    groupid);
-        rd_snprintf(topics[1], sizeof(topics[1]), "%s_%s",
-                    test_mk_topic_name("regex_subscribe_topic_0002_dup", 0),
-                    groupid);
-        rd_snprintf(topics[2], sizeof(topics[2]), "%s_%s",
-                    test_mk_topic_name("regex_subscribe_TOOTHPIC_0003_3", 0),
-                    groupid);
+        /* Generate unique test run ID for topic isolation to prevent
+         * cross-test contamination from leftover topics */
+        char *test_run_id = rd_strdup(test_str_id_generate_tmp());
+
+        rd_snprintf(
+            topics[0], sizeof(topics[0]), "%s",
+            test_mk_topic_name(
+                tsprintf("regex_subscribe_TOPIC_0001_UNO_%s", test_run_id), 0));
+        rd_snprintf(
+            topics[1], sizeof(topics[1]), "%s",
+            test_mk_topic_name(
+                tsprintf("regex_subscribe_topic_0002_dup_%s", test_run_id), 0));
+        rd_snprintf(
+            topics[2], sizeof(topics[2]), "%s",
+            test_mk_topic_name(
+                tsprintf("regex_subscribe_TOOTHPIC_0003_3_%s", test_run_id),
+                0));
 
         /* To avoid auto topic creation to kick in we use
          * an invalid topic name. */
-        rd_snprintf(
-            nonexist_topic, sizeof(nonexist_topic), "%s_%s",
-            test_mk_topic_name("regex_subscribe_NONEXISTENT_0004_IV#!", 0),
-            groupid);
+        rd_snprintf(nonexist_topic, sizeof(nonexist_topic), "%s",
+                    test_mk_topic_name(
+                        tsprintf("regex_subscribe_NONEXISTENT_0004_IV#!_%s",
+                                 test_run_id),
+                        0));
 
-        /* Produce messages to topics to ensure creation. */
-        for (i = 0; i < topic_cnt; i++)
+        /* Create topics explicitly and produce messages. */
+        for (i = 0; i < topic_cnt; i++) {
+                test_create_topic(NULL, topics[i], 1, -1);
+                test_wait_topic_exists(NULL, topics[i], tmout_multip(10000));
+                test_wait_for_metadata_propagation(3);
                 test_produce_msgs_easy(topics[i], testid, RD_KAFKA_PARTITION_UA,
                                        msgcnt);
+        }
 
         test_conf_init(&conf, NULL, 20);
         test_conf_set(conf, "partition.assignment.strategy", assignor);
         /* Speed up propagation of new topics */
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "5000");
-        test_conf_set(conf, "allow.auto.create.topics", "true");
+
+        if (test_check_auto_create_topic())
+                test_conf_set(conf, "allow.auto.create.topics", "true");
 
         /* Create a single consumer to handle all subscriptions.
          * Has the nice side affect of testing multiple subscriptions. */
@@ -364,7 +383,7 @@ static int do_test(const char *assignor) {
         {
                 struct expect expect = {
                     .name = rd_strdup(tsprintf("%s: regex all", assignor)),
-                    .sub  = {rd_strdup(tsprintf("^.*_%s", groupid)), NULL},
+                    .sub  = {rd_strdup(tsprintf("^.*_%s", test_run_id)), NULL},
                     .exp  = {topics[0], topics[1], topics[2], NULL}};
 
                 fails += test_subscribe(rk, &expect);
@@ -375,8 +394,9 @@ static int do_test(const char *assignor) {
         {
                 struct expect expect = {
                     .name = rd_strdup(tsprintf("%s: regex 0&1", assignor)),
-                    .sub  = {rd_strdup(tsprintf(
-                                "^.*[tToOpPiIcC]_0+[12]_[^_]+_%s", groupid)),
+                    .sub  = {rd_strdup(
+                                tsprintf("^.*[tToOpPiIcC]_0+[12]_[^_]+_%s",
+                                          test_run_id)),
                              NULL},
                     .exp  = {topics[0], topics[1], NULL}};
 
@@ -389,7 +409,7 @@ static int do_test(const char *assignor) {
                 struct expect expect = {
                     .name = rd_strdup(tsprintf("%s: regex 2", assignor)),
                     .sub  = {rd_strdup(
-                                tsprintf("^.*TOOTHPIC_000._._%s", groupid)),
+                                tsprintf("^.*TOOTHPIC_000._._%s", test_run_id)),
                              NULL},
                     .exp  = {topics[2], NULL}};
 
@@ -403,7 +423,8 @@ static int do_test(const char *assignor) {
                     .name = rd_strdup(tsprintf("%s: regex 2 and "
                                                "nonexistent(not seen)",
                                                assignor)),
-                    .sub  = {rd_strdup(tsprintf("^.*_000[34]_..?_%s", groupid)),
+                    .sub  = {rd_strdup(
+                                tsprintf("^.*_000[34]_..?_%s", test_run_id)),
                              NULL},
                     .exp  = {topics[2], NULL}};
 
@@ -428,12 +449,17 @@ static int do_test(const char *assignor) {
                 struct expect expect = {
                     .name = rd_strdup(
                         tsprintf("%s: multiple regex 1&2 matches", assignor)),
-                    .sub = {"^.*regex_subscribe_to.*",
-                            "^.*regex_subscribe_TOO.*", NULL},
+                    .sub = {rd_strdup(tsprintf("^.*regex_subscribe_to.*_%s",
+                                               test_run_id)),
+                            rd_strdup(tsprintf("^.*regex_subscribe_TOO.*_%s",
+                                               test_run_id)),
+                            NULL},
                     .exp = {topics[1], topics[2], NULL}};
 
                 fails += test_subscribe(rk, &expect);
                 rd_free(expect.name);
+                rd_free((void *)expect.sub[0]);
+                rd_free((void *)expect.sub[1]);
         }
 
         test_consumer_close(rk);
@@ -442,6 +468,8 @@ static int do_test(const char *assignor) {
                 test_delete_topic(rk, topics[i]);
 
         rd_kafka_destroy(rk);
+
+        rd_free(test_run_id);
 
         if (fails)
                 TEST_FAIL("See %d previous failures", fails);

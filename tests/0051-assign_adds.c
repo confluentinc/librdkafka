@@ -31,6 +31,7 @@
 
 #include <stdarg.h>
 
+
 /**
  * Verify that quick assignment additions work.
  *  * Create topics T1,T2,T3
@@ -67,6 +68,8 @@ int main_0051_assign_adds(int argc, char **argv) {
         for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_t *rkt;
 
+                test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
+
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
                 test_wait_topic_exists(rk, topic[i], 5000);
 
@@ -87,7 +90,7 @@ int main_0051_assign_adds(int argc, char **argv) {
         for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_partition_list_add(tlist, topic[i], 0);
                 TEST_SAY("Assign %d topic(s):\n", tlist->cnt);
-                test_print_partition_list(tlist);
+                test_print_partition_list_with_errors(tlist);
 
                 err = rd_kafka_assign(rk, tlist);
                 TEST_ASSERT(!err, "assign() failed: %s", rd_kafka_err2str(err));

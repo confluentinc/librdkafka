@@ -247,6 +247,16 @@ static const struct rd_kafka_feature_map {
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_Queryable[] = {
     {RD_KAFKAP_ApiVersion, 0, 0}};
 
+/* =~ 0.10.0 - Custom backlevel version with SASL handshake but no ApiVersionRequest */
+static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_10_0[] = {
+    {RD_KAFKAP_Produce, 0, 2},         {RD_KAFKAP_Fetch, 0, 2},
+    {RD_KAFKAP_ListOffsets, 0, 1},     {RD_KAFKAP_Metadata, 0, 1},
+    {RD_KAFKAP_OffsetCommit, 0, 2},    {RD_KAFKAP_OffsetFetch, 0, 1},
+    {RD_KAFKAP_FindCoordinator, 0, 0}, {RD_KAFKAP_JoinGroup, 0, 0},
+    {RD_KAFKAP_Heartbeat, 0, 0},       {RD_KAFKAP_LeaveGroup, 0, 0},
+    {RD_KAFKAP_SyncGroup, 0, 0},       {RD_KAFKAP_DescribeGroups, 0, 0},
+    {RD_KAFKAP_ListGroups, 0, 0},      {RD_KAFKAP_SaslHandshake, 0, 1},
+    {RD_KAFKAP_SaslAuthenticate, 0, 2}};
 
 /* =~ 0.9.0 */
 static struct rd_kafka_ApiVersion rd_kafka_ApiVersion_0_9_0[] = {
@@ -303,7 +313,8 @@ int rd_kafka_get_legacy_ApiVersions(const char *broker_version,
                 const char *pfx;
                 struct rd_kafka_ApiVersion *apis;
                 size_t api_cnt;
-        } vermap[] = {_VERMAP("0.9.0", rd_kafka_ApiVersion_0_9_0),
+        } vermap[] = {_VERMAP("0.10.0", rd_kafka_ApiVersion_0_10_0),
+                      _VERMAP("0.9.0", rd_kafka_ApiVersion_0_9_0),
                       _VERMAP("0.8.2", rd_kafka_ApiVersion_0_8_2),
                       _VERMAP("0.8.1", rd_kafka_ApiVersion_0_8_1),
                       _VERMAP("0.8.0", rd_kafka_ApiVersion_0_8_0),

@@ -37,13 +37,16 @@ if 'TEST_KAFKA_VERSION' not in os.environ:
           file=sys.stderr)
     sys.exit(1)
 
-do_enable_auto_create_topics_enable = all([
+# When these are set we both enable auto.create.topics.enable and perform
+# best-effort cleanup of rdkafka test topics at the end of the run.
+_do_rest_ops = all([
     var in os.environ for var in
     ['REST_ENDPOINT', 'CLIENT_KEY', 'CLIENT_SECRET', 'CLUSTER_LKC']
 ])
-if not do_enable_auto_create_topics_enable:
-    print('WARNING: Not setting up auto.create.topics.enable for the cluster,'
-          ' missing environment variables',
+
+if not _do_rest_ops:
+    print('WARNING: Not setting up auto.create.topics.enable or REST cleanup, '
+          'missing environment variables',
           file=sys.stderr)
 
 if not os.path.exists('test.conf'):
@@ -55,21 +58,101 @@ if not os.path.exists('test.conf'):
 TESTS_SKIP = '0054,0081,0113,0122,0129'
 
 
-def enable_auto_create_topics_enable():
-    REST_ENDPOINT = os.environ['REST_ENDPOINT']
-    CLUSTER_LKC = os.environ['CLUSTER_LKC']
-    CLIENT_KEY = os.environ['CLIENT_KEY']
-    CLIENT_SECRET = os.environ['CLIENT_SECRET']
+def _rest_client():
+    """Return a cached httpx.Client configured for the Confluent REST API.
 
-    r = httpx.put(f'{REST_ENDPOINT}/kafka/v3/clusters/{CLUSTER_LKC}'
-                  '/broker-configs/auto.create.topics.enable',
-                  auth=(CLIENT_KEY, CLIENT_SECRET), json={'value': 'true'})
+    Caller must ensure _do_rest_ops is True.
+    """
+    # Simple singleton on the module.
+    global __rest_client
+    try:
+        return __rest_client
+    except NameError:
+        REST_ENDPOINT = os.environ['REST_ENDPOINT'].rstrip('/')
+        CLIENT_KEY = os.environ['CLIENT_KEY']
+        CLIENT_SECRET = os.environ['CLIENT_SECRET']
+        __rest_client = httpx.Client(
+            base_url=REST_ENDPOINT,
+            auth=(CLIENT_KEY, CLIENT_SECRET),
+            timeout=httpx.Timeout(10.0, read=30.0)
+        )
+        return __rest_client
+
+
+def enable_auto_create_topics_enable():
+    if not _do_rest_ops:
+        return
+
+    CLUSTER_LKC = os.environ['CLUSTER_LKC']
+
+    c = _rest_client()
+    r = c.put(f'/kafka/v3/clusters/{CLUSTER_LKC}'
+              '/broker-configs/auto.create.topics.enable',
+              json={'value': 'true'})
     assert r.status_code == 204, ('Failed to enable auto.create.topics.enable'
                                   f': {r.status_code} {r.text}')
 
 
+def cleanup_test_topics():
+    """Best-effort deletion of librdkafka test topics via Confluent REST.
+
+    We currently delete all topics whose name starts with the prefix used by
+    the C test helpers (see test_mk_topic_name in tests/testshared.h).
+    This is intentionally conservative and non-fatal: failures here will be
+    logged but will not fail the test run.
+    """
+    if not _do_rest_ops:
+        return
+
+    CLUSTER_LKC = os.environ['CLUSTER_LKC']
+    # Prefix used by test_mk_topic_name() in the C test suite.
+    topic_prefix = os.environ.get('TEST_TOPIC_PREFIX', 'rdkafkatest_')
+
+    c = _rest_client()
+
+    try:
+        # List topics (v3 API). We assume number of topics is manageable for a
+        # single request; pagination can be added if needed.
+        r = c.get(f'/kafka/v3/clusters/{CLUSTER_LKC}/topics')
+    except Exception as e:  # network/timeout/etc.
+        print(f'WARNING: Failed to list topics for cleanup: {e}',
+              file=sys.stderr)
+        return
+
+    if r.status_code != 200:
+        print('WARNING: Failed to list topics for cleanup: '
+              f'{r.status_code} {r.text}',
+              file=sys.stderr)
+        return
+
+    data = r.json()
+    topics = data.get('data') or []
+
+    deleted = 0
+    for t in topics:
+        name = t.get('topic_name') or t.get('name')
+        if not name or not name.startswith(topic_prefix):
+            continue
+        try:
+            dr = c.delete(
+                f'/kafka/v3/clusters/{CLUSTER_LKC}/topics/{name}')
+            if dr.status_code not in (202, 204, 404):
+                print('WARNING: Failed to delete topic '
+                      f"{name}: {dr.status_code} {dr.text}",
+                      file=sys.stderr)
+            else:
+                deleted += 1
+        except Exception as e:
+            print(f'WARNING: Exception while deleting topic {name}: {e}',
+                  file=sys.stderr)
+
+    print(f'INFO: Topic cleanup via REST deleted {deleted} topics with '
+          f'prefix {topic_prefix}',
+          file=sys.stderr)
+
+
 def run_tests():
-    if do_enable_auto_create_topics_enable:
+    if _do_rest_ops:
         enable_auto_create_topics_enable()
 
     interrupted = False
@@ -93,6 +176,9 @@ def run_tests():
             except subprocess.TimeoutExpired:
                 os.killpg(p.pid, signal.SIGKILL)
                 p.wait(10)
+
+        # Always attempt cleanup at the very end, regardless of interruption.
+        cleanup_test_topics()
 
 
 error = run_tests()

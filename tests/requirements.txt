@@ -1,3 +1,2 @@
-trivup/trivup-0.14.0.tar.gz
 jsoncomment
 httpx

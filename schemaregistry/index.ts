@@ -1,5 +1,7 @@
 export * from './confluent/types/decimal_pb'
 export * from './confluent/meta_pb'
+export * from './rules/cel/cel-executor'
+export * from './rules/cel/cel-field-executor'
 export * from './rules/encryption/awskms/aws-driver'
 export * from './rules/encryption/azurekms/azure-driver'
 export * from './rules/encryption/dekregistry/dekregistry-client'

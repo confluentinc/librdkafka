@@ -2,7 +2,7 @@ Confluent's JavaScript Client for Schema Registry<sup>TM</sup>
 =====================================================
 
 Confluent's JavaScript client for [Schema Registry](https://docs.confluent.io/cloud/current/sr/index.html) supports Avro, Protobuf and JSON Schema, and is designed to work with
-[Confluent's JavaScript Client for Apache Kafka](https://www.npmjs.com/package/@confluentinc/kafka-javascript). This is an **Early Availability** library.
+[Confluent's JavaScript Client for Apache Kafka](https://www.npmjs.com/package/@confluentinc/kafka-javascript).
 The goal is to provide a highly performant, reliable and easy to use JavaScript client in line with other Schema Registry clients
 such as our [Go](https://github.com/confluentinc/confluent-kafka-go), [.NET](https://github.com/confluentinc/confluent-kafka-dotnet),
 and [Java](https://github.com/confluentinc/schema-registry) clients.
@@ -108,11 +108,10 @@ run().catch (async e => {
 ```
 
 ## Features and Limitations
-- Full Avro and JSON Schema support
-- Protobuf support requires Schema Registry in (upcoming) release: CP 7.4.8, 7.5.7, 7.6.4, 7.7.2, 7.8.0
+- Avro, Protobuf, and JSON Schema support
 - Support for CSFLE (Client-Side Field Level Encryption)
+- Support for data quality rules
 - Support for schema migration rules for Avro and JSON Schema
-- Data quality rules are not yet supported
 - Support for OAuth
 
 ## Contributing

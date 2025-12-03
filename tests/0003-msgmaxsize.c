@@ -79,6 +79,7 @@ int main_0003_msgmaxsize(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_topic_conf_t *topic_conf;
         char errstr[512];
+        const char *topic;
 
         static const struct {
                 ssize_t keylen;
@@ -108,7 +109,10 @@ int main_0003_msgmaxsize(int argc, char **argv) {
         /* Create kafka instance */
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        rkt = rd_kafka_topic_new(rk, test_mk_topic_name("0003", 0), topic_conf);
+        topic = test_mk_topic_name("0003", 0);
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+        rkt = rd_kafka_topic_new(rk, topic, topic_conf);
+
         if (!rkt)
                 TEST_FAIL("Failed to create topic: %s\n", rd_strerror(errno));
 

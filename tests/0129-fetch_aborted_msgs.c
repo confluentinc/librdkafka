@@ -56,9 +56,9 @@ int main_0129_fetch_aborted_msgs(int argc, char **argv) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        test_admin_create_topic(rk, topic, 1, 1,
+        test_admin_create_topic(rk, topic, 1, -1,
                                 (const char *[]) {"max.message.bytes", "10000",
-                                                  "segment.bytes", "20000",
+                                                  "segment.bytes", "52428800",
                                                   NULL});
         test_wait_topic_exists(rk, topic, 5000);
 

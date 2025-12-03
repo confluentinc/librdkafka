@@ -34,15 +34,15 @@ global_job_config:
           exit 1
         fi
         echo "All required parameters set"
-      # NOTE: Kubeconfig setup not needed - kubectl access already configured on Semaphore agent
-      # - . vault-setup
-      # - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
-      # - git clone git@github.com:confluentinc/cc-mk-include.git /tmp/cc-mk-include
-      # - cd /tmp/cc-mk-include/bin/cc-system-tests && . setup_kubeconfig.sh "devel"
-      # - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-      # - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin
-      # - export KUBECTL_OIDC_LOGIN_GRANT_TYPE=device-code
-      # - export KUBECTL_OIDC_LOGIN_SKIP_OPEN_BROWSER=true
+      NOTE: Kubeconfig setup not needed - kubectl access already configured on Semaphore agent
+      - . vault-setup
+      - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
+      - git clone git@github.com:confluentinc/cc-mk-include.git /tmp/cc-mk-include
+      - cd /tmp/cc-mk-include/bin/cc-system-tests && . setup_kubeconfig.sh "devel"
+      - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+      - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin
+      - export KUBECTL_OIDC_LOGIN_GRANT_TYPE=device-code
+      - export KUBECTL_OIDC_LOGIN_SKIP_OPEN_BROWSER=true
       - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID}
 
 blocks:

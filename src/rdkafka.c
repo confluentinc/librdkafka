@@ -2822,12 +2822,17 @@ fail:
         /* If rk_conf is a struct-copy of the application configuration
          * we need to avoid rk_conf fields from being freed from
          * rd_kafka_destroy_internal() since they belong to app_conf.
-         * However, there are some internal fields, such as interceptors,
-         * that belong to rk_conf and thus needs to be cleaned up.
+         *
+         * NOTE: The interceptors in rk_conf are shallow-copied pointers to
+         * the same memory as app_conf, so they should NOT be destroyed here.
+         * They will be destroyed when the user calls rd_kafka_conf_destroy()
+         * on app_conf. Destroying them here would cause a double-free.
+         *
          * Legacy APIs, sigh.. */
         if (app_conf) {
                 rd_kafka_assignors_term(rk);
-                rd_kafka_interceptors_destroy(&rk->rk_conf);
+                /* Do NOT destroy interceptors here - they belong to app_conf
+                 * and will be freed when app_conf is destroyed by the user. */
                 memset(&rk->rk_conf, 0, sizeof(rk->rk_conf));
         }
 

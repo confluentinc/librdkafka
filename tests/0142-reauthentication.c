@@ -99,8 +99,9 @@ void do_test_producer(int64_t reauth_time, const char *topic) {
         rd_kafka_flush(rk, 10 * 1000);
 
         TEST_ASSERT(TIMING_DURATION(&t_produce) >= reauth_time * 1000,
-                    "time enough for one reauth should pass (%ld vs %ld)",
-                    TIMING_DURATION(&t_produce), reauth_time * 1000);
+                    "time enough for one reauth should pass (%" PRId64
+                    " vs %" PRId64 ")",
+                    TIMING_DURATION(&t_produce), (int64_t)(reauth_time * 1000));
         TEST_ASSERT(delivered_msg == sent_msg,
                     "did not deliver as many messages as sent (%d vs %d)",
                     delivered_msg, sent_msg);
@@ -202,8 +203,9 @@ void do_test_txn_producer(int64_t reauth_time,
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "transactional.id", topic);
-        test_conf_set(conf, "transaction.timeout.ms",
-                      tsprintf("%ld", (int64_t)(reauth_time * 1.2 + 60000)));
+        test_conf_set(
+            conf, "transaction.timeout.ms",
+            tsprintf("%" PRId64, (int64_t)(reauth_time * 1.2 + 60000)));
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -227,8 +229,9 @@ void do_test_txn_producer(int64_t reauth_time,
         rd_kafka_flush(rk, 10 * 1000);
 
         TEST_ASSERT(TIMING_DURATION(&t_produce) >= reauth_time * 1000,
-                    "time enough for one reauth should pass (%ld vs %ld)",
-                    TIMING_DURATION(&t_produce), reauth_time * 1000);
+                    "time enough for one reauth should pass (%" PRId64
+                    " vs %" PRId64 ")",
+                    TIMING_DURATION(&t_produce), (int64_t)(reauth_time * 1000));
         TEST_ASSERT(delivered_msg == sent_msg,
                     "did not deliver as many messages as sent (%d vs %d)",
                     delivered_msg, sent_msg);
@@ -276,8 +279,9 @@ void do_test_oauthbearer(int64_t reauth_time,
         int token_lifetime_s = token_lifetime_ms / 1000;
 
         SUB_TEST(
-            "test reauthentication with oauthbearer, reauth_time = %ld, "
-            "token_lifetime = %ld",
+            "test reauthentication with oauthbearer, reauth_time = %" PRId64
+            ", "
+            "token_lifetime = %" PRId64,
             reauth_time, token_lifetime_ms);
 
         test_conf_init(&conf, NULL, 30);
@@ -331,8 +335,9 @@ void do_test_oauthbearer(int64_t reauth_time,
         rd_kafka_flush(rk, 10 * 1000);
 
         TEST_ASSERT(TIMING_DURATION(&t_produce) >= reauth_time * 1000,
-                    "time enough for one reauth should pass (%ld vs %ld)",
-                    TIMING_DURATION(&t_produce), reauth_time * 1000);
+                    "time enough for one reauth should pass (%" PRId64
+                    " vs %" PRId64 ")",
+                    TIMING_DURATION(&t_produce), (int64_t)(reauth_time * 1000));
         TEST_ASSERT(delivered_msg == sent_msg,
                     "did not deliver as many messages as sent (%d vs %d)",
                     delivered_msg, sent_msg);
@@ -397,8 +402,9 @@ void do_test_reauth_failure(int64_t reauth_time, const char *topic) {
         TIMING_STOP(&t_produce);
 
         TEST_ASSERT(TIMING_DURATION(&t_produce) >= reauth_time * 1000,
-                    "time enough for one reauth should pass (%ld vs %ld)",
-                    TIMING_DURATION(&t_produce), reauth_time * 1000);
+                    "time enough for one reauth should pass (%" PRId64
+                    " vs %" PRId64 ")",
+                    TIMING_DURATION(&t_produce), (int64_t)(reauth_time * 1000));
         TEST_ASSERT(error_seen, "should have had an authentication error");
 
         rd_kafka_topic_destroy(rkt);

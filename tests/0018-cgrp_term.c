@@ -196,7 +196,8 @@ static void do_test(rd_bool_t with_queue) {
         testid = test_id_generate();
 
         /* Produce messages */
-        rk_p  = test_create_producer();
+        rk_p = test_create_producer();
+        test_create_topic_if_auto_create_disabled(rk_p, topic, partition_cnt);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
         test_wait_topic_exists(rk_p, topic, 5000);
 
@@ -331,6 +332,14 @@ static void do_test(rd_bool_t with_queue) {
 
 
 int main_0018_cgrp_term(int argc, char **argv) {
+        if (rd_kafka_version() < 0x020100ff) {
+                TEST_SKIP(
+                    "Test requires librdkafka >= 2.1.0 (leader epoch APIs), "
+                    "current version: %s\n",
+                    rd_kafka_version_str());
+                return 0;
+        }
+
         do_test(rd_false /* rd_kafka_consumer_close() */);
         do_test(rd_true /*  rd_kafka_consumer_close_queue() */);
 

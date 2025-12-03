@@ -136,5 +136,10 @@ EOF
     fi
 done
 
+# Print cleanup instructions
+echo ""
+echo "To clean up test topics, run: ./topic_cleanup"
+echo ""
+
 exit $FAILED
 

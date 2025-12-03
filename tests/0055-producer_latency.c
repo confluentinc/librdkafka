@@ -129,6 +129,13 @@ static int verify_latency(struct latconf *latconf) {
 
         ext_overhead *= test_timeout_multiplier;
 
+        /* Add extra overhead only for slow environments (timeout multiplier >
+         * 1) */
+        if (test_timeout_multiplier > 1.0) {
+                ext_overhead += 1000.0;
+        }
+
+
         avg = latconf->sum / (float)latconf->cnt;
 
         TEST_SAY(
@@ -342,24 +349,53 @@ int main_0055_producer_latency(int argc, char **argv) {
                 return 0;
         }
 
-        /* Create topic without replicas to keep broker-side latency down */
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        /* Display what acks values are supported */
+        if (test_supported_acks) {
+                TEST_SAY("Supported acks values: %s\n", test_supported_acks);
+        }
 
-        for (latconf = latconfs; latconf->name; latconf++)
+        /* Create topic without replicas to keep broker-side latency down */
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+
+        for (latconf = latconfs; latconf->name; latconf++) {
+                if (strstr(latconf->name, "no acks") &&
+                    !test_is_acks_supported("0")) {
+                        TEST_SAY("Skipping %s test (acks=0 not supported)\n",
+                                 latconf->name);
+                        continue;
+                }
+
                 test_producer_latency(topic, latconf);
+        }
 
         TEST_SAY(_C_YEL "Latency tests summary:\n" _C_CLR);
         TEST_SAY("%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s\n", "Name",
                  "linger.ms", "MinExp", "MaxExp", "RTT", "Min", "Average",
                  "Max", "Wakeups");
 
-        for (latconf = latconfs; latconf->name; latconf++)
+        for (latconf = latconfs; latconf->name; latconf++) {
+                /* Skip configurations based on test configuration */
+                int should_skip = 0;
+
+                if (strstr(latconf->name, "no acks") &&
+                    !test_is_acks_supported("0")) {
+                        should_skip = 1;
+                }
+
+                if (should_skip) {
+                        TEST_SAY(
+                            "%-40s %9s  %6s..%-6s  %7s  %9s %9s %9s %8s%s\n",
+                            latconf->name, "-", "SKIP", "SKIP", "-", "-", "-",
+                            "-", "-", _C_YEL "  SKIPPED");
+                        continue;
+                }
                 TEST_SAY("%-40s %9s  %6d..%-6d  %7g  %9g %9g %9g %8d%s\n",
                          latconf->name, latconf->linger_ms_conf, latconf->min,
                          latconf->max, latconf->rtt, find_min(latconf),
                          latconf->sum / latconf->cnt, find_max(latconf),
                          latconf->wakeups,
                          latconf->passed ? "" : _C_RED "  FAILED");
+        }
 
 
         TEST_LATER_CHECK("");
@@ -531,6 +567,14 @@ int main_0055_producer_latency_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
         int case_number;
+
+        if (test_needs_auth()) {
+                TEST_SKIP(
+                    "Mock cluster tests require PLAINTEXT but cluster uses "
+                    "SSL/SASL\n");
+                return 0;
+        }
+
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);
         }

@@ -6,16 +6,9 @@
 # For slow connections: multiply test timeouts by this much (float)
 #test.timeout.multiplier=3.5
 
-# Skip specific tests by number (comma-separated list)
-# Example: test.skip.numbers=0011,0055,0081
-#test.skip.numbers=
-
 # Test topic names are constructed by:
 #  <prefix>_<suffix>, where default topic prefix is "rdkafkatest".
 # suffix is specified by the tests.
-# NOTE: When test.topic.prefix is set, run-test.sh will automatically
-#       clean up (delete) all topics starting with this prefix after
-#       each test completes. If no prefix is set, no cleanup occurs.
 #test.topic.prefix=bib
 
 # Make topic names random:

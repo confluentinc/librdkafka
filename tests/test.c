@@ -892,11 +892,6 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
                         rd_free(test_sql_cmd);
                 test_sql_cmd = rd_strdup(val);
                 TEST_UNLOCK();
-        } else if (!strcmp(name, "test.skip.idempotent")) {
-                if (!strcmp(val, "true") || !strcmp(val, "1"))
-                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
-                else
-                        test_neg_flags &= ~TEST_F_IDEMPOTENT_PRODUCER;
         } else if (!strcmp(name, "test.supported.acks")) {
                 TEST_LOCK();
                 if (test_supported_acks)

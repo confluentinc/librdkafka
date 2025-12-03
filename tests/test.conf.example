@@ -18,9 +18,6 @@
 # Write test results to sqlite3 database
 #test.sql.command=sqlite3 rdktests
 
-# Skip tests that require idempotent producer
-#test.skip.idempotent=true
-
 # Configure which acks values are supported by the cluster
 # Tests using unsupported acks values will be skipped.
 # Examples:
@@ -30,7 +27,7 @@
 
 # Multiplies explicit test_wait_for_metadata_propagation() delays for cluster state propagation (set 0 to skip sleeps)
 # Different from test.timeout.multiplier which multiplies API operation timeouts (can't be disabled)
-#test.sleep.multiplier=2.0      (cloud)
+#test.sleep.multiplier=2.0    
 #test.sleep.multiplier=0         
 
 # Bootstrap broker(s)

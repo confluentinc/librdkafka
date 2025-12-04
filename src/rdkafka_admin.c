@@ -5467,8 +5467,6 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
                             acl_res);
         }
 
-        rd_kafka_buf_skip_tags(reply);
-
         *rko_resultp = rko_result;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;

@@ -7,124 +7,43 @@ agent:
 execution_time_limit:
   hours: 3
 
-global_job_config:
-  prologue:
-    commands:
-      # Setup (exact pattern from cc-system-tests-kafka)
-      - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
-      - mkdir -vp "${SEMAPHORE_GIT_DIR}"
-      - checkout
-      - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
-      # Clone tools (since librdkafka doesn't have them as submodules)
-      - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
-      - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
-      - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
-      # Vault secrets (same as cc-system-tests)
-      - . vault-setup
-      - . vault-sem-get-secret cc-system-tests
-      - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
-      - export AWS_AUTH_METHOD=aws-creds
-      # Install oidc-kubelogin
-      - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
-      # Setup kubeconfig
-      - . ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel || true
-      - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-      # Validate parameters
-      - |
-        if [[ -z "$TOOLBOX_ID" ]] || [[ -z "$K8S_CONTEXT" ]] || [[ -z "$KAFKA_BOOTSTRAP_SERVER" ]] || [[ -z "$KAFKA_SASL_USERNAME" ]] || [[ -z "$KAFKA_SASL_PASSWORD" ]]; then
-          echo "Error: Missing required parameters (TOOLBOX_ID, K8S_CONTEXT, KAFKA_BOOTSTRAP_SERVER, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD)"
-          exit 1
-        fi
-      # Verify kubectl
-      - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID}
-
 blocks:
-  - name: "Setup and Run Tests"
-    dependencies: []
+  - name: "K2 Testing Setup"
     task:
+      prologue:
+        commands:
+          # Setup paths (same as cc-system-tests-kafka)
+          - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
+          - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+          - mkdir -vp "${SEMAPHORE_GIT_DIR}"
+          - checkout
+          # Vault setup
+          - . vault-setup
+          - . vault-sem-get-secret cc-system-tests
+          - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
+          - export AWS_AUTH_METHOD=aws-creds
       jobs:
-        - name: "Run K2 Tests"
+        - name: "Get kubectl access and verify"
           commands:
-            # Setup librdkafka and run tests in the toolbox
-            - |
-              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_ID} -- bash -c "
-                set -e
-                cd /tmp
-                
-                # Setup librdkafka if not already done
-                if [ ! -d 'librdkafka' ]; then
-                  echo '==> Installing dependencies...'
-                  apt-get update -qq && apt-get install -y build-essential git libssl-dev wget python3 python3-pip openjdk-21-jdk llvm clang
-                  echo '==> Cloning librdkafka...'
-                  git clone https://github.com/confluentinc/librdkafka.git
-                  cd librdkafka
-                  git checkout ${GIT_REF:-k2_testing_final}
-                  echo '==> Configuring...'
-                  ./dev-conf.sh
-                  echo '==> Building tests...'
-                  cd tests
-                  pip3 install -r requirements.txt || true
-                  make
-                else
-                  echo '==> librdkafka already set up, updating...'
-                  cd librdkafka
-                  git fetch origin
-                  git checkout ${GIT_REF:-k2_testing_final}
-                  git pull origin ${GIT_REF:-k2_testing_final} || true
-                fi
-                
-                # Create test.conf with K2 settings
-                cd /tmp/librdkafka/tests
-                echo '==> Creating test.conf...'
-                cat > test.conf << 'EOF'
-              security.protocol=SASL_SSL
-              sasl.mechanism=PLAIN
-              sasl.username=${KAFKA_SASL_USERNAME}
-              sasl.password=${KAFKA_SASL_PASSWORD}
-              ssl.endpoint.identification.algorithm=none
-              test.timeout.multiplier=${TEST_TIMEOUT_MULTIPLIER:-2}
-              test.topic.prefix=${TEST_TOPIC_PREFIX:-semaphore-}
-              test.topic.random=true
-              metadata.broker.list=${KAFKA_BOOTSTRAP_SERVER}
-              test.skip.idempotent=true
-              test.supported.acks=-1
-              test.sleep.multiplier=${TEST_SLEEP_MULTIPLIER:-2.0}
-              test.skip.numbers=${TEST_SKIP_NUMBERS:-0011,0059}
-              EOF
-                
-                # Substitute variables
-                sed -i \"s|\\\${KAFKA_SASL_USERNAME}|${KAFKA_SASL_USERNAME}|g\" test.conf
-                sed -i \"s|\\\${KAFKA_SASL_PASSWORD}|${KAFKA_SASL_PASSWORD}|g\" test.conf
-                sed -i \"s|\\\${KAFKA_BOOTSTRAP_SERVER}|${KAFKA_BOOTSTRAP_SERVER}|g\" test.conf
-                sed -i \"s|\\\${TEST_TIMEOUT_MULTIPLIER:-2}|${TEST_TIMEOUT_MULTIPLIER:-2}|g\" test.conf
-                sed -i \"s|\\\${TEST_TOPIC_PREFIX:-semaphore-}|${TEST_TOPIC_PREFIX:-semaphore-}|g\" test.conf
-                sed -i \"s|\\\${TEST_SLEEP_MULTIPLIER:-2.0}|${TEST_SLEEP_MULTIPLIER:-2.0}|g\" test.conf
-                sed -i \"s|\\\${TEST_SKIP_NUMBERS:-0011,0059}|${TEST_SKIP_NUMBERS:-0011,0059}|g\" test.conf
-                
-                echo '==> test.conf created'
-                
-                # Run tests
-                echo '==> Running tests: ${TESTS:-all}...'
-                if [ '${TESTS:-all}' = 'all' ]; then
-                  ./run-tests.sh
-                else
-                  TESTS='${TESTS}' ./run-tests.sh
-                fi
-                
-                echo '==> Tests completed!'
-              " | tee test-output.log
-            # Check results
-            - |
-              if grep -q "FAIL" test-output.log; then
-                echo "❌ Some tests failed"
-              else
-                echo "✅ All tests passed!"
-              fi
-            # Keep job alive for 2 hours to allow SSH access for debugging
+            # Install oidc-kubelogin
+            - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
+            # Clone tools
+            - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
+            - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
+            - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+            # Setup kubeconfig
+            - cd ${SEMAPHORE_GIT_DIR} && . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+            # Verify kubectl access
+            - kubectl config get-contexts
+            - kubectl --context ${K8S_CONTEXT:-k8s-devcnn3k3} get namespaces
+            - kubectl --context ${K8S_CONTEXT:-k8s-devcnn3k3} get pod ${TOOLBOX_ID:-anl-le-new} || echo "Toolbox pod not found (provide TOOLBOX_ID)"
+            # Sleep for 2 hours for manual access
             - |
               echo "=============================================="
-              echo "Job will stay alive for 2 hours for SSH access"
-              echo "SSH into toolbox: kubectl --context ${K8S_CONTEXT} exec -it ${TOOLBOX_ID} -- bash"
+              echo "kubectl access is working!"
+              echo "Sleeping for 2 hours - you can SSH in now"
+              echo "To exec into toolbox:"
+              echo "  kubectl --context ${K8S_CONTEXT:-k8s-devcnn3k3} exec -it ${TOOLBOX_ID:-anl-le-new} -- bash"
               echo "=============================================="
               sleep 7200
-

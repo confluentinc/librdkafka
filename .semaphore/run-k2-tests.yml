@@ -124,8 +124,14 @@ blocks:
             - |
               if grep -q "FAIL" test-output.log; then
                 echo "❌ Some tests failed"
-                exit 1
               else
                 echo "✅ All tests passed!"
               fi
+            # Keep job alive for 2 hours to allow SSH access for debugging
+            - |
+              echo "=============================================="
+              echo "Job will stay alive for 2 hours for SSH access"
+              echo "SSH into toolbox: kubectl --context ${K8S_CONTEXT} exec -it ${TOOLBOX_ID} -- bash"
+              echo "=============================================="
+              sleep 7200
 

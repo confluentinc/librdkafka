@@ -5,7 +5,7 @@ librdkafka v2.13.0 is a feature release:
 * Fix memory management for interceptors in rd_kafka_conf to prevent
 double-free errors (#5240).
 * Fix for the pseudo-random generator seed on Windows involving as well
-  the uniqueness of the new consumer group protocol member id (#).
+  the uniqueness of the new consumer group protocol member id (#5265).
 
 
 ## Fixes
@@ -18,13 +18,13 @@ double-free errors (#5240).
   data structure, it was causing a double-free because the interceptors were
   already freed in the constructor.
   Happening since 1.x (#5240).
-* Issues: #.
+* Issues: #5263, #3929.
   Fix for the pseudo-random seed on Windows. The function `rand_r` isn't present
   on Windows and the global seed wasn't based on the current microseconds and thread
   id. Also it wasn't called on every thread as required on this platform but
   only once per process. The fix allows on this platform the uniqueness of client side 
   member id generation in next-generation consumer group protocol.
-  Happening since 1.x (#).
+  Happening since 1.x (#5265).
 
 
 

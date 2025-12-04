@@ -22,8 +22,9 @@ blocks:
             # Assume AWS role
             - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
             - aws sts get-caller-identity
-            # Download kubeconfig from GCS
-            - gcloud auth activate-service-account --key-file=devel.json
+            # Download kubeconfig from GCS (write creds to file first)
+            - echo "$GCP_CONNECT_CREDENTIALS_DEVEL_JSON" > /tmp/devel.json
+            - gcloud auth activate-service-account --key-file=/tmp/devel.json
             - mkdir -p ~/.kube/ccloud-config/devel
             - gsutil cp gs://k8saas-prod-user-kubeconfigs/k8saas-generated/devel/kubeconfig ~/.kube/ccloud-config/devel/kubeconfig
             - export KUBECONFIG=~/.kube/ccloud-config/devel/kubeconfig

@@ -38,7 +38,6 @@ global_job_config:
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
       - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
-      - checkout
       - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
       - |
         echo "=============================================="

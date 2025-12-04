@@ -4512,6 +4512,7 @@ static int rd_kafka_broker_thread_main(void *arg) {
 
         rd_kafka_set_thread_name("%s", rkb->rkb_name);
         rd_kafka_set_thread_sysname("rdk:broker%" PRId32, rkb->rkb_nodeid);
+        rd_kafka_thread_srand(rk, rd_true /* we're in an internal thread */);
 
         rd_kafka_interceptors_on_thread_start(rk, RD_KAFKA_THREAD_BROKER);
 

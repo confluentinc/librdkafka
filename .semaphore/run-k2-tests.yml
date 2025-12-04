@@ -34,7 +34,6 @@ global_job_config:
           exit 1
         fi
         echo "All required parameters set"
-      NOTE: Kubeconfig setup not needed - kubectl access already configured on Semaphore agent
       - . vault-setup
       - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
       - git clone git@github.com:confluentinc/cc-mk-include.git /tmp/cc-mk-include

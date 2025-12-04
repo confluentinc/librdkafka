@@ -42,6 +42,12 @@ global_job_config:
       - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin
       - export KUBECTL_OIDC_LOGIN_GRANT_TYPE=device-code
       - export KUBECTL_OIDC_LOGIN_SKIP_OPEN_BROWSER=true
+      - |
+        echo "=============================================="
+        echo "Sleeping for 2 hours - SSH into toolbox now!"
+        echo "kubectl --context ${K8S_CONTEXT} exec -it ${TOOLBOX_ID} -- bash"
+        echo "=============================================="
+        sleep 7200
       - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID}
 
 blocks:

@@ -458,17 +458,24 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
 static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   char *errstr,
                                                   size_t errstr_size) {
+        rd_kafka_broker_t *rkb = rktrans->rktrans_rkb;
         char name[RD_KAFKA_NODENAME_SIZE];
-        char *t;
 
-        rd_kafka_broker_lock(rktrans->rktrans_rkb);
-        rd_snprintf(name, sizeof(name), "%s",
-                    rktrans->rktrans_rkb->rkb_nodename);
-        rd_kafka_broker_unlock(rktrans->rktrans_rkb);
+        if (rkb->rkb_rk->rk_conf.ssl.endpoint_hostname) {
+                rd_strlcpy(name, rkb->rkb_rk->rk_conf.ssl.endpoint_hostname,
+                           sizeof(name));
+        } else {
+                char *t;
 
-        /* Remove ":9092" port suffix from nodename */
-        if ((t = strrchr(name, ':')))
-                *t = '\0';
+                rd_kafka_broker_lock(rkb);
+                rd_snprintf(name, sizeof(name), "%s",
+                            rkb->rkb_nodename);
+                rd_kafka_broker_unlock(rkb);
+
+                /* Remove ":9092" port suffix from nodename */
+                if ((t = strrchr(name, ':')))
+                        *t = '\0';
+        }
 
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */

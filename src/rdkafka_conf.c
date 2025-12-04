@@ -965,6 +965,13 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .s2i  = {{RD_KAFKA_SSL_ENDPOINT_ID_NONE, "none"},
               {RD_KAFKA_SSL_ENDPOINT_ID_HTTPS, "https"}},
      _UNSUPPORTED_OPENSSL_1_0_2},
+    {_RK_GLOBAL, "ssl.endpoint.hostname", _RK_C_STR, _RK(ssl.endpoint_hostname),
+     "Overrides the broker hostname that libssl will verify certificates "
+     "against when ssl.endpoint.identification.algorithm is set to https. "
+     "This is useful in cases where brokers present certificates that have "
+     "CNs/SANs that do not match the broker's hostname. The hostname provided "
+     "will be passed directly to libssl.",
+     _UNSUPPORTED_OPENSSL_1_0_2},
     {_RK_GLOBAL, "ssl.certificate.verify_cb", _RK_C_PTR,
      _RK(ssl.cert_verify_cb),
      "Callback to verify the broker certificate chain.", _UNSUPPORTED_SSL},

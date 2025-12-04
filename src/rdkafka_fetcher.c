@@ -885,9 +885,10 @@ err_parse:
 }
 
 
-static RD_INLINE int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko) {
-        if (!rko)
+int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko) {
+        if (!rko) {
                 return RD_KAFKA_OFFSET_INVALID;
+        }           
         if (rko->rko_type == RD_KAFKA_OP_FETCH)
                 return rko->rko_u.fetch.rkm.rkm_rkmessage.offset;
         if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR)
@@ -895,7 +896,7 @@ static RD_INLINE int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko) {
         return RD_KAFKA_OFFSET_INVALID;
 }
 
-static void rd_kafka_share_filter_forward(
+void rd_kafka_share_filter_forward(
     rd_kafka_broker_t *rkb,
     rd_kafka_toppar_t *rktp,
     rd_kafka_q_t *temp_fetchq,
@@ -1122,6 +1123,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
         if (rktp->rktp_share_acknowledgement_list) {
                 rktp->rktp_share_acknowledge_count = rd_list_cnt(rktp->rktp_share_acknowledgement_list);
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                   "%.*s [%" PRId32 "] : Share Acknowledgement Count: %ld\n",
+                   RD_KAFKAP_STR_PR(topic), PartitionId,
+                   rktp->rktp_share_acknowledge_count);
         }
 
         rd_kafka_buf_skip_tags(rkbuf); // Partition tags

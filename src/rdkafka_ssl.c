@@ -1993,14 +1993,7 @@ rd_kafka_transport_ssl_lock_cb(int mode, int i, const char *file, int line) {
 #endif
 
 static RD_UNUSED unsigned long rd_kafka_transport_ssl_threadid_cb(void) {
-#ifdef _WIN32
-        /* Windows makes a distinction between thread handle
-         * and thread id, which means we can't use the
-         * thrd_current() API that returns the handle. */
-        return (unsigned long)GetCurrentThreadId();
-#else
-        return (unsigned long)(intptr_t)thrd_current();
-#endif
+        return thrd_current_id();
 }
 
 #ifdef HAVE_OPENSSL_CRYPTO_THREADID_SET_CALLBACK

@@ -42,7 +42,7 @@ int rd_jitter(int low, int high) {
                 struct timeval tv;
                 rd_gettimeofday(&tv, NULL);
                 seed = (unsigned int)(tv.tv_usec);
-                seed ^= (unsigned int)(intptr_t)thrd_current();
+                seed ^= thrd_current_id();
 
                 /* When many threads are created at the same time and the
                  * thread id is different only by a few bits it's possible that

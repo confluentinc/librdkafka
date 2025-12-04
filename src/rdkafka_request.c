@@ -2558,7 +2558,7 @@ rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_DescribeGroups, 1,
             4 /* rd_kafka_buf_write_arraycnt_pos */ +
-                1 /* IncludeAuthorizedOperations */ + 1 /* tags */ +
+                1 /* IncludeAuthorizedOperations */ +
                 32 * group_cnt /* Groups */,
             ApiVersion >= 5 /* is_flexver */);
 

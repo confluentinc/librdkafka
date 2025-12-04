@@ -4069,7 +4069,6 @@ rd_kafka_DeleteRecordsResponse_parse(rd_kafka_op_t *rko_req,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         offsets = rd_kafka_buf_read_topic_partitions(
             reply, rd_false /*don't use topic_id*/, rd_true, 0, fields);
-        rd_kafka_buf_skip_tags(reply);
 
         if (!offsets)
                 rd_kafka_buf_parse_fail(reply,
@@ -4793,8 +4792,6 @@ rd_kafka_DeleteGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_list_add(&rko_result->rko_u.admin_result.results, groupres);
         }
-
-        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -8293,6 +8290,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &ClientHost);
                         rd_kafka_buf_read_kbytes(reply, &MemberMetadata);
                         rd_kafka_buf_read_kbytes(reply, &MemberAssignment);
+                        rd_kafka_buf_skip_tags(reply);
                         if (error != NULL)
                                 continue;
 
@@ -8321,8 +8319,6 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                                             reply,
                                             "Error reading topic partitions");
                         }
-
-                        rd_kafka_buf_skip_tags(reply);
 
                         member_id = RD_KAFKAP_STR_DUP(&MemberId);
                         if (!RD_KAFKAP_STR_IS_NULL(&GroupInstanceId)) {
@@ -8391,8 +8387,6 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                 proto       = NULL;
                 operations  = NULL;
         }
-
-        rd_kafka_buf_skip_tags(reply);
 
         if (host)
                 rd_free(host);

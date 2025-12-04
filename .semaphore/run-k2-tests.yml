@@ -2,7 +2,7 @@ version: v1.0
 name: run-k2-tests
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-00
+    type: s1-prod-ubuntu24-04-amd64-3
 
 execution_time_limit:
   hours: 3
@@ -10,41 +10,32 @@ execution_time_limit:
 global_job_config:
   prologue:
     commands:
+      # Setup (exact pattern from cc-system-tests-kafka)
+      - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
+      - mkdir -vp "${SEMAPHORE_GIT_DIR}"
       - checkout
       - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
-      - |
-        if [[ -z "$TOOLBOX_ID" ]]; then
-          echo "Error: TOOLBOX_ID is required (e.g., anl-le-new-1)"
-          exit 1
-        fi
-        if [[ -z "$K8S_CONTEXT" ]]; then
-          echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
-          exit 1
-        fi
-        if [[ -z "$KAFKA_BOOTSTRAP_SERVER" ]]; then
-          echo "Error: KAFKA_BOOTSTRAP_SERVER is required"
-          exit 1
-        fi
-        if [[ -z "$KAFKA_SASL_USERNAME" ]]; then
-          echo "Error: KAFKA_SASL_USERNAME is required"
-          exit 1
-        fi
-        if [[ -z "$KAFKA_SASL_PASSWORD" ]]; then
-          echo "Error: KAFKA_SASL_PASSWORD is required"
-          exit 1
-        fi
-        echo "All required parameters set"
-      # Setup Vault and get K8s credentials (same as cc-system-tests pipeline)
+      # Clone tools (since librdkafka doesn't have them as submodules)
+      - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
+      - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
+      - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+      # Vault secrets (same as cc-system-tests)
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
-      - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
-      - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+      - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
+      - export AWS_AUTH_METHOD=aws-creds
+      # Install oidc-kubelogin
+      - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
+      # Setup kubeconfig
+      - . ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel || true
+      - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+      # Validate parameters
       - |
-        echo "=============================================="
-        echo "Sleeping for 2 hours - SSH into toolbox now!"
-        echo "kubectl --context ${K8S_CONTEXT} exec -it ${TOOLBOX_ID} -- bash"
-        echo "=============================================="
-        sleep 7200
+        if [[ -z "$TOOLBOX_ID" ]] || [[ -z "$K8S_CONTEXT" ]] || [[ -z "$KAFKA_BOOTSTRAP_SERVER" ]] || [[ -z "$KAFKA_SASL_USERNAME" ]] || [[ -z "$KAFKA_SASL_PASSWORD" ]]; then
+          echo "Error: Missing required parameters (TOOLBOX_ID, K8S_CONTEXT, KAFKA_BOOTSTRAP_SERVER, KAFKA_SASL_USERNAME, KAFKA_SASL_PASSWORD)"
+          exit 1
+        fi
+      # Verify kubectl
       - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_ID}
 
 blocks:

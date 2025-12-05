@@ -80,6 +80,11 @@ blocks:
             - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
             - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
             - echo "Tests completed!"
+            # Install Confluent CLI
+            - echo "Installing Confluent CLI..."
+            - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
+            - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
+            - export "PATH=/tmp/cli/$(find /tmp/cli/dist -name 'confluent_*' | head -1):${PATH}"
             # Describe the Kafka cluster
             - echo "Describing Kafka cluster ${LKC}..."
             - confluent kafka cluster describe --environment env-devc5drgr8 ${LKC}

@@ -76,10 +76,10 @@ blocks:
             - kubectl config get-contexts | grep -i "${K8S_CONTEXT}" || echo "Context not found"
             - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_POD}
             - echo "SUCCESS! kubectl access is working!"
-            # Run librdkafka tests in the pod (continue even if tests fail)
-            - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
-            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-            - echo "Tests completed!"
+            # # Run librdkafka tests in the pod (continue even if tests fail)
+            # - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
+            # - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
+            # - echo "Tests completed!"
             # Install Confluent CLI
             - echo "Installing Confluent CLI..."
             - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli

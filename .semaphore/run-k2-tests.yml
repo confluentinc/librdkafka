@@ -45,26 +45,17 @@ blocks:
             # Clone helper repos
             - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
             - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
-            # Set up AWS OIDC token for direct AWS auth
-            - echo "$SEMAPHORE_OIDC_TOKEN" > /home/semaphore/.aws/semaphore_oidc_token
-            - export AWS_WEB_IDENTITY_TOKEN_FILE=/home/semaphore/.aws/semaphore_oidc_token
-            - export DISABLE_AWS_LOAD_CREDS=1
-            # Create AWS profile for account 581884925347 (where k8s-devcnn3k3 cluster is)
-            - |
-              cat >> ~/.aws/config << EOF
-              [profile 581884925347]
-              role_arn = arn:aws:iam::581884925347:role/semaphore-access
-              web_identity_token_file = /home/semaphore/.aws/semaphore_oidc_token
-              EOF
-            # Test AWS auth to account 581884925347
-            - echo "Testing AWS auth to account 581884925347..."
-            - aws --profile 581884925347 sts get-caller-identity
-            # Set up kubeconfig for the cluster using AWS EKS
-            - aws --profile 581884925347 eks update-kubeconfig --region us-west-2 --name k8saas-k8s-devcnn3k3 --alias k8s-devcnn3k3
-            # Test kubectl
+            # Assume AWS role for devel environment (like setup_kubeconfig.sh does)
+            - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
+            - aws sts get-caller-identity
+            # Now run setup_kubeconfig.sh which uses the assumed role
+            - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+            # Test kubectl - use the full context name from ccloud-config
             - echo "Testing kubectl access..."
-            - kubectl --context k8s-devcnn3k3 get namespaces
-            - kubectl --context k8s-devcnn3k3 get pod anl-le-new
+            - kubectl config get-contexts | grep -i devcnn3k3 || echo "Context not found"
+            - kubectl --context k8s-devcnn3k3 get namespaces || kubectl --context k8saas-k8s-devcnn3k3 get namespaces
+            - kubectl --context k8s-devcnn3k3 get pod anl-le-new || kubectl --context k8saas-k8s-devcnn3k3 get pod anl-le-new
             - echo "SUCCESS! kubectl access is working!"
             # Sleep for SSH debugging
             - echo "Sleeping for 2 hours for SSH debugging..."

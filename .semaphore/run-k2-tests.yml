@@ -35,32 +35,54 @@ global_job_config:
       - export AWS_AUTH_METHOD=aws-creds
 
 blocks:
-  - name: "K2 Testing Setup"
+  - name: "K2 Testing"
     task:
       jobs:
-        - name: "Get kubectl access"
+        - name: "Run K2 Tests"
           commands:
+            # Validate required inputs
+            - |
+              echo "=============================================="
+              echo "K2 Test Configuration:"
+              echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
+              echo "  TOOLBOX_POD: ${TOOLBOX_POD:-not set}"
+              echo "  LKC: ${LKC:-not set}"
+              echo "=============================================="
+              if [[ -z "$K8S_CONTEXT" ]]; then
+                echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
+                exit 1
+              fi
+              if [[ -z "$TOOLBOX_POD" ]]; then
+                echo "Error: TOOLBOX_POD is required (e.g., anl-le-new)"
+                exit 1
+              fi
+              if [[ -z "$LKC" ]]; then
+                echo "Error: LKC is required (e.g., lkc-abc123)"
+                exit 1
+              fi
             # Install oidc-kubelogin
             - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
             # Clone helper repos
             - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
             - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
-            # Assume AWS role for devel environment (like setup_kubeconfig.sh does)
+            # Assume AWS role for devel environment
             - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
             - aws sts get-caller-identity
-            # Now run setup_kubeconfig.sh which uses the assumed role
+            # Set up kubeconfig
             - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
             - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-            # Test kubectl - use the full context name from ccloud-config
-            - echo "Testing kubectl access..."
-            - kubectl config get-contexts | grep -i devcnn3k3 || echo "Context not found"
-            - kubectl --context k8s-devcnn3k3 get namespaces || kubectl --context k8saas-k8s-devcnn3k3 get namespaces
-            - kubectl --context k8s-devcnn3k3 get pod anl-le-new || kubectl --context k8saas-k8s-devcnn3k3 get pod anl-le-new
+            # Test kubectl access
+            - echo "Testing kubectl access to ${K8S_CONTEXT}..."
+            - kubectl config get-contexts | grep -i "${K8S_CONTEXT}" || echo "Context not found"
+            - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_POD}
             - echo "SUCCESS! kubectl access is working!"
-            # Run librdkafka tests in the pod (non-interactive)
-            - echo "Running librdkafka tests in the toolbox pod..."
-            - kubectl --context k8s-devcnn3k3 exec anl-le-new -- bash -c "cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh"
+            # Run librdkafka tests in the pod
+            - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh"
             - echo "Tests completed!"
+            # Describe the Kafka cluster
+            - echo "Describing Kafka cluster ${LKC}..."
+            - confluent kafka cluster describe --environment env-devc5drgr8 ${LKC}
             # Sleep for SSH debugging
             - echo "Sleeping for 2 hours for SSH debugging..."
             - sleep 7200

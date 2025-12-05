@@ -49,15 +49,16 @@ blocks:
             - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
             - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
             # Test kubectl access
+            - echo "=============================================="
+            - echo "Testing kubectl access..."
+            - echo "=============================================="
             - kubectl config get-contexts
-            - kubectl --context k8s-devcnn3k3 get namespaces || echo "kubectl access not working yet"
-            # Sleep for manual testing
-            - |
-              echo "=============================================="
-              echo "kubectl access configured!"
-              echo "SSH into agent and run:"
-              echo "  export KUBECONFIG=\$HOME/.kube/ccloud-config/devel/kubeconfig"
-              echo "  kubectl --context k8s-devcnn3k3 get namespaces"
-              echo "  kubectl --context k8s-devcnn3k3 get pod anl-le-new"
-              echo "=============================================="
-              sleep 7200
+            - echo "----"
+            - echo "Getting namespaces from k8s-devcnn3k3:"
+            - kubectl --context k8s-devcnn3k3 get namespaces
+            - echo "----"
+            - echo "Getting pod anl-le-new:"
+            - kubectl --context k8s-devcnn3k3 get pod anl-le-new
+            - echo "=============================================="
+            - echo "kubectl access WORKS!"
+            - echo "=============================================="

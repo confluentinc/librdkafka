@@ -19,15 +19,14 @@ blocks:
             - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
             # Install oidc-kubelogin
             - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
-            # Assume AWS role
-            - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
-            - aws sts get-caller-identity
-            # Download kubeconfig from GCS (write creds to file first)
-            - echo "$GCP_CONNECT_CREDENTIALS_DEVEL_JSON" > /tmp/devel.json
-            - gcloud auth activate-service-account --key-file=/tmp/devel.json
-            - mkdir -p ~/.kube/ccloud-config/devel
-            - gsutil cp gs://k8saas-prod-user-kubeconfigs/k8saas-generated/devel/kubeconfig ~/.kube/ccloud-config/devel/kubeconfig
-            - export KUBECONFIG=~/.kube/ccloud-config/devel/kubeconfig
+            # Clone helper repos and use their setup scripts
+            - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
+            - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
+            - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+            - |
+              cd ${SEMAPHORE_GIT_DIR}
+              . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
             # Clone cc-dotfiles for kubectl helpers
             - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ~/cc-dotfiles
             - export PATH=~/cc-dotfiles/bin/k8saas-ga:$PATH

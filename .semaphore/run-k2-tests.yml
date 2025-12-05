@@ -48,17 +48,20 @@ blocks:
             # Set up kubectl access during the job (while vault tokens are valid)
             - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
             - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-            # Test kubectl access
-            - echo "=============================================="
-            - echo "Testing kubectl access..."
-            - echo "=============================================="
-            - kubectl config get-contexts
-            - echo "----"
-            - echo "Getting namespaces from k8s-devcnn3k3:"
-            - kubectl --context k8s-devcnn3k3 get namespaces
-            - echo "----"
-            - echo "Getting pod anl-le-new:"
-            - kubectl --context k8s-devcnn3k3 get pod anl-le-new
-            - echo "=============================================="
-            - echo "kubectl access WORKS!"
-            - echo "=============================================="
+            # Print debug info and sleep for SSH
+            - |
+              echo "=============================================="
+              echo "SSH in and run these commands:"
+              echo ""
+              echo "# Try AWS EKS kubeconfig:"
+              echo "export KUBECONFIG=\$HOME/.kube/config"
+              echo "kubectl config get-contexts"
+              echo "kubectl get namespaces"
+              echo ""
+              echo "# Try OIDC kubeconfig:"  
+              echo "export KUBECONFIG=\$HOME/.kube/ccloud-config/devel/kubeconfig"
+              echo "kubectl config get-contexts | grep devcnn3k3"
+              echo "kubectl --context k8s-devcnn3k3 get namespaces"
+              echo "=============================================="
+              echo "Sleeping for 2 hours for SSH debugging..."
+              sleep 7200

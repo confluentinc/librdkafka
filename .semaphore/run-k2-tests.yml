@@ -46,8 +46,7 @@ blocks:
             - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
             - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
             # Set up kubectl access during the job (while vault tokens are valid)
-            - cd ${SEMAPHORE_GIT_DIR}
-            - . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+            - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
             - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
             # Test kubectl access
             - kubectl config get-contexts

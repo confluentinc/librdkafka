@@ -57,6 +57,10 @@ blocks:
             - kubectl --context k8s-devcnn3k3 get namespaces || kubectl --context k8saas-k8s-devcnn3k3 get namespaces
             - kubectl --context k8s-devcnn3k3 get pod anl-le-new || kubectl --context k8saas-k8s-devcnn3k3 get pod anl-le-new
             - echo "SUCCESS! kubectl access is working!"
+            # Run librdkafka tests in the pod (non-interactive)
+            - echo "Running librdkafka tests in the toolbox pod..."
+            - kubectl --context k8s-devcnn3k3 exec anl-le-new -- bash -c "cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh"
+            - echo "Tests completed!"
             # Sleep for SSH debugging
             - echo "Sleeping for 2 hours for SSH debugging..."
             - sleep 7200

@@ -45,14 +45,20 @@ blocks:
             # Clone helper repos
             - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
             - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
-            # Sleep for manual setup
+            # Set up kubectl access during the job (while vault tokens are valid)
+            - cd ${SEMAPHORE_GIT_DIR}
+            - . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+            # Test kubectl access
+            - kubectl config get-contexts
+            - kubectl --context k8s-devcnn3k3 get namespaces || echo "kubectl access not working yet"
+            # Sleep for manual testing
             - |
               echo "=============================================="
-              echo "Environment ready for manual kubectl setup"
+              echo "kubectl access configured!"
               echo "SSH into agent and run:"
-              echo "  cd ${SEMAPHORE_GIT_DIR}"
-              echo "  . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel"
               echo "  export KUBECONFIG=\$HOME/.kube/ccloud-config/devel/kubeconfig"
               echo "  kubectl --context k8s-devcnn3k3 get namespaces"
+              echo "  kubectl --context k8s-devcnn3k3 get pod anl-le-new"
               echo "=============================================="
               sleep 7200

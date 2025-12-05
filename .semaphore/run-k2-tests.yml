@@ -10,9 +10,29 @@ execution_time_limit:
 global_job_config:
   prologue:
     commands:
-      - export SEMAPHORE_GIT_DIR=/home/semaphore/${SEMAPHORE_PROJECT_NAME}
-      - mkdir -vp "${SEMAPHORE_GIT_DIR}"
+      - sem-version go 1.23.6
+      - sem-version python 3.9
+      - sem-version kubectl 1.22.6
+      - export "GOPATH=$(go env GOPATH)"
+      - export "SEMAPHORE_GIT_DIR=${GOPATH}/src/github.com/confluentinc/${SEMAPHORE_PROJECT_NAME}"
+      - export "PATH=${GOPATH}/bin:${PATH}"
+      - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+      - mkdir -vp "${SEMAPHORE_GIT_DIR}" "${GOPATH}/bin"
       - checkout
+      - . vault-setup
+      - . vault-sem-get-secret cc-system-tests
+      - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
+      - . vault-sem-get-secret data-dog-creds
+      - . vault-sem-get-secret azure_credentials
+      - . vault-sem-get-secret azure_byok_client_credentials
+      - . vault-sem-get-secret azure-traffic-pl-vm-credentials
+      - . vault-sem-get-secret connect_jdbc_credentials
+      - . vault-sem-get-secret CONNECT_MONGODB_ATLAS_PASSWORD
+      - . vault-sem-get-secret CONNECT_SNOWFLAKE_PRIVATE_KEY
+      - . vault-sem-get-secret connect_redshift_credentials
+      - . vault-sem-get-secret byok_aws_credentials
+      - . vault-sem-get-secret byok_gcp_credentials
+      - export AWS_AUTH_METHOD=aws-creds
 
 blocks:
   - name: "K2 Testing Setup"
@@ -20,30 +40,19 @@ blocks:
       jobs:
         - name: "Get kubectl access"
           commands:
-            # Setup Vault
-            - . vault-setup
-            - . vault-sem-get-secret cc-system-tests
-            - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
             # Install oidc-kubelogin
             - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
-            # Clone helper repos and use their setup scripts
+            # Clone helper repos
             - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
             - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
-            - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
-            - |
-              cd ${SEMAPHORE_GIT_DIR}
-              . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
-            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-            # Clone cc-dotfiles for kubectl helpers
-            - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ~/cc-dotfiles
-            - export PATH=~/cc-dotfiles/bin/k8saas-ga:$PATH
-            # Test kubectl
-            - kubectl config get-contexts
-            - kubectl --context ${K8S_CONTEXT:-k8s-devcnn3k3} get namespaces
-            # Sleep for debugging
+            # Sleep for manual setup
             - |
               echo "=============================================="
-              echo "kubectl access is working!"
-              echo "Sleeping for 2 hours for manual debugging"
+              echo "Environment ready for manual kubectl setup"
+              echo "SSH into agent and run:"
+              echo "  cd ${SEMAPHORE_GIT_DIR}"
+              echo "  . mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel"
+              echo "  export KUBECONFIG=\$HOME/.kube/ccloud-config/devel/kubeconfig"
+              echo "  kubectl --context k8s-devcnn3k3 get namespaces"
               echo "=============================================="
               sleep 7200

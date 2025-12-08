@@ -92,7 +92,7 @@ blocks:
             - echo "Authenticating Confluent CLI..."
             - export CONFLUENT_CLOUD_EMAIL="cli-team+system-tests@confluent.io"
             - export CONFLUENT_CLOUD_PASSWORD=$(vault kv get -field=password v1/devel/kv/cli/system-tests/test-user-password)
-            - confluent login --url https://devel.cpdev.cloud --organization-id 70543963-a695-49d1-91bb-a0698468f996
+            - confluent login --url https://devel.cpdev.cloud --organization 70543963-a695-49d1-91bb-a0698468f996
             # Describe the Kafka cluster
             - echo "Describing Kafka cluster ${LKC}..."
             - confluent kafka cluster describe --environment env-devc5drgr8 ${LKC}

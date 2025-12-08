@@ -466,12 +466,7 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
  *
  * @remark This function is exposed for testing via ENABLE_DEVEL.
  */
-#if ENABLE_DEVEL
-RD_EXPORT
-#else
-static
-#endif
-const char *rd_kafka_ssl_normalize_hostname(const char *hostname,
+static const char *rd_kafka_ssl_normalize_hostname(const char *hostname,
                                             char *normalized,
                                             size_t size) {
         size_t len;
@@ -2185,7 +2180,6 @@ int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
         return 0;
 }
 
-#if WITH_SSL
 /**
  * @brief Unit test for SSL hostname normalization.
  *

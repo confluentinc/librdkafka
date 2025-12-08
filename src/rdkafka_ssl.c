@@ -467,8 +467,8 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
  * @remark This function is exposed for testing via ENABLE_DEVEL.
  */
 static const char *rd_kafka_ssl_normalize_hostname(const char *hostname,
-                                            char *normalized,
-                                            size_t size) {
+                                                   char *normalized,
+                                                   size_t size) {
         size_t len;
 
         rd_snprintf(normalized, size, "%s", hostname);

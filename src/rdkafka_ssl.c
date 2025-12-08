@@ -36,6 +36,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_transport_int.h"
 #include "rdkafka_cert.h"
+#include "rdunittest.h"
 
 #ifdef _WIN32
 #include <wincrypt.h>
@@ -450,6 +451,38 @@ static int rd_kafka_transport_ssl_cert_verify_cb(int preverify_ok,
 }
 
 /**
+ * @brief Normalize hostname for SSL certificate verification.
+ *
+ * Strips trailing dot from hostname as X.509 certificates (per RFC 5280)
+ * don't include them in Subject Alternative Names (SANs).
+ * The trailing dot is used in DNS to indicate an absolute FQDN,
+ * but certificate SANs use a different representation without it.
+ *
+ * @param hostname Input hostname (may have trailing dot)
+ * @param normalized Output buffer for normalized hostname
+ * @param size Size of output buffer
+ *
+ * @returns The normalized hostname (same as \p normalized)
+ *
+ * @remark This function is exposed for testing via ENABLE_DEVEL.
+ */
+static const char *rd_kafka_ssl_normalize_hostname(const char *hostname,
+                                                   char *normalized,
+                                                   size_t size) {
+        size_t len;
+
+        rd_snprintf(normalized, size, "%s", hostname);
+        len = strlen(normalized);
+
+        /* Strip trailing dot (unless it's a single dot) */
+        if (len > 1 && normalized[len - 1] == '.') {
+                normalized[len - 1] = '\0';
+        }
+
+        return normalized;
+}
+
+/**
  * @brief Set TLSEXT hostname for SNI and optionally enable
  *        SSL endpoint identification verification.
  *
@@ -459,6 +492,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   char *errstr,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
+        char name_for_verify[RD_KAFKA_NODENAME_SIZE];
         char *t;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
@@ -470,13 +504,21 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         if ((t = strrchr(name, ':')))
                 *t = '\0';
 
+        /* Normalize hostname (remove trailing dot) for both SNI and certificate
+         * verification */
+        rd_kafka_ssl_normalize_hostname(name, name_for_verify,
+                                        sizeof(name_for_verify));
+
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (strchr(name, ':') &&
-                        strspn(name, "0123456789abcdefABCDEF:.[]%") ==
-                            strlen(name)) ||
-              /*ipv4*/ strspn(name, "0123456789.") == strlen(name)) &&
-            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name))
+        if (!(/*ipv6*/ (
+                  strchr(name_for_verify, ':') &&
+                  strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
+                      strlen(name_for_verify)) ||
+              /*ipv4*/
+              strspn(name_for_verify, "0123456789.") ==
+                  strlen(name_for_verify)) &&
+            !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #endif
 
@@ -484,8 +526,16 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
             RD_KAFKA_SSL_ENDPOINT_ID_NONE)
                 return 0;
 
+        /* Log if we stripped a trailing dot */
+        if (strcmp(name, name_for_verify) != 0) {
+                rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
+                           "Stripped trailing dot from hostname for "
+                           "certificate verification: %s -> %s",
+                           name, name_for_verify);
+        }
+
 #if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name))
+        if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
@@ -493,8 +543,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
-                if (!X509_VERIFY_PARAM_set1_host(param, name,
-                                                 strnlen(name, sizeof(name))))
+                if (!X509_VERIFY_PARAM_set1_host(
+                        param, name_for_verify,
+                        strnlen(name_for_verify, sizeof(name_for_verify))))
                         goto fail;
         }
 #else
@@ -506,7 +557,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s", name);
+                   "Enabled endpoint identification using hostname %s",
+                   name_for_verify);
 
         return 0;
 
@@ -2127,3 +2179,65 @@ int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
 
         return 0;
 }
+
+/**
+ * @brief Unit test for SSL hostname normalization.
+ *
+ * Tests the rd_kafka_ssl_normalize_hostname() function with various edge cases
+ * to verify that trailing dots are correctly stripped from hostnames for
+ * SSL certificate verification.
+ */
+int unittest_ssl(void) {
+        int fails = 0;
+        struct {
+                const char *input;
+                const char *expected;
+                const char *description;
+        } test_cases[] = {
+            {"broker.example.com.", "broker.example.com",
+             "FQDN with trailing dot"},
+            {"broker.example.com", "broker.example.com",
+             "FQDN without trailing dot"},
+            {"localhost.", "localhost", "localhost with trailing dot"},
+            {"localhost", "localhost", "localhost without trailing dot"},
+            {".", ".", "single dot (edge case - should remain unchanged)"},
+            {"", "", "empty string (edge case)"},
+            {"broker-1.example.com.", "broker-1.example.com",
+             "hostname with dash and trailing dot"},
+            {"192.168.1.1", "192.168.1.1", "IP address (no trailing dot)"},
+            {NULL, NULL, NULL}};
+        int i;
+
+        RD_UT_SAY("Testing hostname normalization edge cases");
+
+        for (i = 0; test_cases[i].input != NULL; i++) {
+                char normalized[256];
+                const char *input    = test_cases[i].input;
+                const char *expected = test_cases[i].expected;
+                const char *desc     = test_cases[i].description;
+                const char *result;
+
+                /* Call the function under test */
+                result = rd_kafka_ssl_normalize_hostname(input, normalized,
+                                                         sizeof(normalized));
+
+                /* Verify the function returns the normalized buffer */
+                RD_UT_ASSERT(result == normalized,
+                             "Test case %d (%s): Function should return the "
+                             "normalized buffer",
+                             i + 1, desc);
+
+                /* Verify the normalization is correct */
+                RD_UT_ASSERT(!strcmp(result, expected),
+                             "Test case %d (%s): Hostname normalization "
+                             "failed: expected \"%s\" but got \"%s\"",
+                             i + 1, desc, expected, result);
+
+                RD_UT_SAY("Test case %d passed: %s", i + 1, desc);
+        }
+
+        RD_UT_SAY("All %d hostname normalization edge cases passed", i);
+
+        return fails;
+}
+#endif /* WITH_SSL */

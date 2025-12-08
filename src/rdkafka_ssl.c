@@ -2240,4 +2240,3 @@ int unittest_ssl(void) {
 
         return fails;
 }
-#endif /* WITH_SSL */

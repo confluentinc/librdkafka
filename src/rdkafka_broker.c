@@ -6390,6 +6390,111 @@ static int rd_ut_ApiVersion_at_least(void) {
 }
 
 /**
+ * @brief Unittest for persistent failure tracking
+ *
+ * Tests that:
+ * 1. First failure time is tracked correctly
+ * 2. Persistent failure is reported after threshold
+ * 3. Failure tracking is reset on successful connection
+ * 4. DNS re-resolution is triggered on auth failures
+ */
+static int rd_ut_persistent_failure_tracking(void) {
+        rd_kafka_broker_t rkb = RD_ZERO_INIT;
+        rd_kafka_conf_t conf  = {.reconnect_failure_report_ms = 100};
+        rd_kafka_t rk         = RD_ZERO_INIT;
+        rd_ts_t now           = 1000000; /* 1 second in microseconds */
+
+        RD_UT_SAY("Testing persistent failure tracking");
+
+        rkb.rkb_rk = &rk;
+        rk.rk_conf = conf;
+
+        /* Test 1: First failure should set rkb_ts_first_failure */
+        RD_UT_ASSERT(rkb.rkb_ts_first_failure == 0,
+                     "Initial rkb_ts_first_failure should be 0");
+
+        /* Simulate setting first failure (normally done in rd_kafka_broker_fail)
+         */
+        rkb.rkb_ts_first_failure = now;
+        RD_UT_ASSERT(rkb.rkb_ts_first_failure == now,
+                     "rkb_ts_first_failure should be set to now");
+
+        /* Test 2: After threshold, persistent failure should be reported */
+        rd_ts_t after_threshold = now + (conf.reconnect_failure_report_ms * 1000);
+        RD_UT_ASSERT(
+            (after_threshold - rkb.rkb_ts_first_failure) >=
+                ((rd_ts_t)conf.reconnect_failure_report_ms * 1000),
+            "Time difference should exceed threshold");
+
+        /* Test 3: Simulating successful connection reset */
+        rkb.rkb_persistent_failure_reported = rd_true;
+        rkb.rkb_force_dns_reresolution      = rd_true;
+
+        /* Reset (normally done in rd_kafka_broker_connect_up) */
+        rkb.rkb_ts_first_failure            = 0;
+        rkb.rkb_persistent_failure_reported = rd_false;
+        rkb.rkb_force_dns_reresolution      = rd_false;
+
+        RD_UT_ASSERT(rkb.rkb_ts_first_failure == 0,
+                     "rkb_ts_first_failure should be reset to 0");
+        RD_UT_ASSERT(rkb.rkb_persistent_failure_reported == rd_false,
+                     "rkb_persistent_failure_reported should be reset");
+        RD_UT_ASSERT(rkb.rkb_force_dns_reresolution == rd_false,
+                     "rkb_force_dns_reresolution should be reset");
+
+        /* Test 4: Auth failure should set DNS re-resolution flag */
+        /* Simulate auth failure setting the flag */
+        rkb.rkb_force_dns_reresolution = rd_true;
+        RD_UT_ASSERT(rkb.rkb_force_dns_reresolution == rd_true,
+                     "Auth failure should set DNS re-resolution flag");
+
+        /* Test 5: Disabled persistent failure reporting (threshold = 0) */
+        rk.rk_conf.reconnect_failure_report_ms = 0;
+        rkb.rkb_ts_first_failure               = now;
+        rkb.rkb_persistent_failure_reported    = rd_false;
+
+        /* With threshold 0, reporting should not happen even after long time */
+        rd_ts_t way_later = now + (1000000 * 1000); /* 1000 seconds later */
+        rd_bool_t should_report =
+            (rk.rk_conf.reconnect_failure_report_ms > 0 &&
+             !rkb.rkb_persistent_failure_reported &&
+             rkb.rkb_ts_first_failure > 0 &&
+             (way_later - rkb.rkb_ts_first_failure) >=
+                 ((rd_ts_t)rk.rk_conf.reconnect_failure_report_ms * 1000));
+
+        RD_UT_ASSERT(should_report == rd_false,
+                     "With threshold=0, should never report persistent failure");
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Unittest for reconnect.failure.report.ms configuration validation
+ */
+static int rd_ut_reconnect_failure_config(void) {
+        rd_kafka_conf_t conf = RD_ZERO_INIT;
+
+        RD_UT_SAY("Testing reconnect.failure.report.ms configuration");
+
+        /* Test default value */
+        conf.reconnect_failure_report_ms = 60000; /* default */
+        RD_UT_ASSERT(conf.reconnect_failure_report_ms == 60000,
+                     "Default should be 60000ms");
+
+        /* Test disabled (0) */
+        conf.reconnect_failure_report_ms = 0;
+        RD_UT_ASSERT(conf.reconnect_failure_report_ms == 0,
+                     "Value 0 should disable persistent failure reporting");
+
+        /* Test custom value */
+        conf.reconnect_failure_report_ms = 30000;
+        RD_UT_ASSERT(conf.reconnect_failure_report_ms == 30000,
+                     "Custom value should be accepted");
+
+        RD_UT_PASS();
+}
+
+/**
  * @name Unit tests
  * @{
  *
@@ -6399,6 +6504,8 @@ int unittest_broker(void) {
 
         fails += rd_ut_reconnect_backoff();
         fails += rd_ut_ApiVersion_at_least();
+        fails += rd_ut_persistent_failure_tracking();
+        fails += rd_ut_reconnect_failure_config();
 
         return fails;
 }

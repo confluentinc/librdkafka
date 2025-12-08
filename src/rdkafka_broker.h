@@ -305,6 +305,17 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /** Absolute time of last connection attempt. */
         rd_ts_t rkb_ts_connect;
 
+        /** Absolute time when first failure in current failure streak started.
+         *  Reset to 0 when a successful connection is made. */
+        rd_ts_t rkb_ts_first_failure;
+
+        /** Whether we've already reported this persistent failure to the app. */
+        rd_bool_t rkb_persistent_failure_reported;
+
+        /** Whether DNS should be re-resolved on next connect attempt.
+         *  Set to true on authentication failures. */
+        rd_bool_t rkb_force_dns_reresolution;
+
         /** True if a reauthentication is in progress. */
         rd_bool_t rkb_reauth_in_progress;
 

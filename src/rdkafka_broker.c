@@ -652,6 +652,62 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
 
         rkb->rkb_reauth_in_progress = rd_false;
 
+        /* Track persistent connection failures and report to application
+         * if threshold is reached. This helps detect scenarios where
+         * broker reconnection is persistently failing (e.g., after broker
+         * restart with AWS MSK IAM auth). */
+        {
+                rd_ts_t now = rd_clock();
+                int reconnect_failure_report_ms =
+                    rkb->rkb_rk->rk_conf.reconnect_failure_report_ms;
+
+                /* Start tracking if this is the first failure */
+                if (rkb->rkb_ts_first_failure == 0)
+                        rkb->rkb_ts_first_failure = now;
+
+                /* On authentication failures, force DNS re-resolution on next
+                 * connection attempt. This helps with scenarios where broker
+                 * IPs change after restarts (e.g., AWS MSK with private links).
+                 */
+                if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
+                    err == RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED) {
+                        rkb->rkb_force_dns_reresolution = rd_true;
+                        rd_rkb_dbg(rkb, BROKER, "AUTHFAIL",
+                                   "Authentication failure, will force DNS "
+                                   "re-resolution on next connect attempt");
+                }
+
+                /* Report persistent failure if threshold reached and not yet
+                 * reported */
+                if (reconnect_failure_report_ms > 0 &&
+                    !rkb->rkb_persistent_failure_reported &&
+                    rkb->rkb_ts_first_failure > 0 &&
+                    (now - rkb->rkb_ts_first_failure) >=
+                        ((rd_ts_t)reconnect_failure_report_ms * 1000)) {
+                        rkb->rkb_persistent_failure_reported = rd_true;
+
+                        rd_kafka_log(rkb->rkb_rk, LOG_WARNING, "BRKFAIL",
+                                     "%s: Broker reconnection has been failing "
+                                     "persistently for %dms (threshold: %dms). "
+                                     "Last error: %s",
+                                     rkb->rkb_name,
+                                     (int)((now - rkb->rkb_ts_first_failure) /
+                                           1000),
+                                     reconnect_failure_report_ms,
+                                     rd_kafka_err2str(err));
+
+                        /* Send persistent failure error to application */
+                        rd_kafka_q_op_err(
+                            rkb->rkb_rk->rk_rep,
+                            RD_KAFKA_RESP_ERR__BROKER_PERSISTENT_FAILURE,
+                            "%s: Broker reconnection has been failing "
+                            "persistently for %dms: %s",
+                            rkb->rkb_name,
+                            (int)((now - rkb->rkb_ts_first_failure) / 1000),
+                            rd_kafka_err2str(err));
+                }
+        }
+
         va_start(ap, fmt);
         rd_kafka_broker_set_error(rkb, level, err, fmt, ap);
         va_end(ap);
@@ -2294,9 +2350,17 @@ static int rd_kafka_broker_connect(rd_kafka_broker_t *rkb) {
         rd_kafka_broker_lock(rkb);
         rd_strlcpy(nodename, rkb->rkb_nodename, sizeof(nodename));
 
-        /* If the nodename was changed since the last connect,
+        /* If the nodename was changed since the last connect, or if
+         * DNS re-resolution was forced (e.g., after auth failure),
          * reset the address cache. */
-        reset_cached_addr = (rkb->rkb_connect_epoch != rkb->rkb_nodename_epoch);
+        reset_cached_addr = (rkb->rkb_connect_epoch != rkb->rkb_nodename_epoch) ||
+                            rkb->rkb_force_dns_reresolution;
+        if (rkb->rkb_force_dns_reresolution) {
+                rd_rkb_dbg(rkb, BROKER, "CONNECT",
+                           "Forcing DNS re-resolution due to previous "
+                           "authentication or connection failure");
+                rkb->rkb_force_dns_reresolution = rd_false;
+        }
         rkb->rkb_connect_epoch = rkb->rkb_nodename_epoch;
         /* Logical brokers might not have a hostname set, in which case
          * we should not try to connect. */
@@ -2344,6 +2408,11 @@ void rd_kafka_broker_connect_up(rd_kafka_broker_t *rkb) {
 
         rkb->rkb_max_inflight       = rkb->rkb_rk->rk_conf.max_inflight;
         rkb->rkb_reauth_in_progress = rd_false;
+
+        /* Reset persistent failure tracking on successful connection */
+        rkb->rkb_ts_first_failure            = 0;
+        rkb->rkb_persistent_failure_reported = rd_false;
+        rkb->rkb_force_dns_reresolution      = rd_false;
 
         rd_kafka_broker_lock(rkb);
         rd_kafka_broker_set_state(rkb, RD_KAFKA_BROKER_STATE_UP);

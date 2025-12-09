@@ -11,7 +11,6 @@ global_job_config:
   prologue:
     commands:
       - sem-version go 1.23.6
-      - sem-version python 3.9
       - sem-version kubectl 1.22.6
       - export "GOPATH=$(go env GOPATH)"
       - export "SEMAPHORE_GIT_DIR=${GOPATH}/src/github.com/confluentinc/${SEMAPHORE_PROJECT_NAME}"
@@ -22,16 +21,6 @@ global_job_config:
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
       - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
-      - . vault-sem-get-secret data-dog-creds
-      - . vault-sem-get-secret azure_credentials
-      - . vault-sem-get-secret azure_byok_client_credentials
-      - . vault-sem-get-secret azure-traffic-pl-vm-credentials
-      - . vault-sem-get-secret connect_jdbc_credentials
-      - . vault-sem-get-secret CONNECT_MONGODB_ATLAS_PASSWORD
-      - . vault-sem-get-secret CONNECT_SNOWFLAKE_PRIVATE_KEY
-      - . vault-sem-get-secret connect_redshift_credentials
-      - . vault-sem-get-secret byok_aws_credentials
-      - . vault-sem-get-secret byok_gcp_credentials
       - export AWS_AUTH_METHOD=aws-creds
 
 blocks:
@@ -40,16 +29,13 @@ blocks:
       jobs:
         - name: "Run K2 Tests"
           commands:
-            # Validate required inputs
             - |
-              echo "=============================================="
               echo "K2 Test Configuration:"
               echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
               echo "  TOOLBOX_POD: ${TOOLBOX_POD:-not set}"
               echo "  LKC: ${LKC:-not set}"
               echo "  ENV_ID: ${ENV_ID:-not set}"
               echo "  KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
-              echo "=============================================="
               if [[ -z "$K8S_CONTEXT" ]]; then
                 echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
                 exit 1
@@ -94,23 +80,18 @@ blocks:
             # Run librdkafka tests in the pod (continue even if tests fail)
             - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
             - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-            - echo "Tests completed!"
             # Install Confluent CLI
             - echo "Installing Confluent CLI..."
             - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
             - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
             # Find and add CLI to PATH
             - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
-            - echo "Found CLI at ${CLI_DIR}"
             - export PATH="${CLI_DIR}:${PATH}"
             # Authenticate Confluent CLI
-            - echo "Authenticating Confluent CLI..."
             - export CONFLUENT_CLOUD_EMAIL="cli-team+system-tests@confluent.io"
             - export CONFLUENT_CLOUD_PASSWORD=$(vault kv get -field=password v1/devel/kv/cli/system-tests/test-user-password)
             - confluent login --url https://devel.cpdev.cloud --organization 91a07ac9-9a13-491e-a2cf-46a9a5cf339c
             # Describe the Kafka cluster
-            - echo "Describing Kafka cluster ${LKC} in environment ${ENV_ID}..."
             - confluent kafka cluster describe --environment ${ENV_ID} ${LKC}
             # Sleep for SSH debugging
-            - echo "Sleeping for 2 hours for SSH debugging..."
             - sleep 7200

@@ -55,6 +55,12 @@ int thrd_setname(const char *name);
  */
 int thrd_is_current(thrd_t thr);
 
+/**
+ * @brief Get current thread ID as an unsigned long.
+ * @return Current thread ID.
+ */
+unsigned long thrd_current_id(void);
+
 
 #ifdef _WIN32
 /**

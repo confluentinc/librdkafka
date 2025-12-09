@@ -57,6 +57,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdmurmur2.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -82,8 +83,14 @@
 #endif
 
 
-static once_flag rd_kafka_global_init_once  = ONCE_FLAG_INIT;
-static once_flag rd_kafka_global_srand_once = ONCE_FLAG_INIT;
+static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
+#ifdef _WIN32
+/* On Windows srand needs to be called on each thread. */
+static RD_TLS once_flag rd_kafka_srand_once = ONCE_FLAG_INIT;
+#else
+static once_flag rd_kafka_srand_once = ONCE_FLAG_INIT;
+#endif
+
 
 /**
  * @brief Global counter+lock for all active librdkafka instances
@@ -130,6 +137,22 @@ void rd_kafka_set_thread_name(const char *fmt, ...) {
  */
 static char RD_TLS rd_kafka_thread_sysname[16] = "app";
 
+/**
+ * @brief Seed the PRNG with current microseconds and thread ID.
+ */
+static void rd_kafka_srand(void) {
+        unsigned int seed = 0;
+        struct timeval tv;
+        rd_gettimeofday(&tv, NULL);
+        seed = (unsigned int)(tv.tv_usec);
+        seed ^= thrd_current_id();
+
+        /* Apply the murmur2 hash to distribute entropy to
+         * the whole seed. */
+        seed = (unsigned int)rd_murmur2(&seed, sizeof(seed));
+        srand(seed);
+}
+
 void rd_kafka_set_thread_sysname(const char *fmt, ...) {
         va_list ap;
 
@@ -139,6 +162,30 @@ void rd_kafka_set_thread_sysname(const char *fmt, ...) {
         va_end(ap);
 
         thrd_setname(rd_kafka_thread_sysname);
+}
+
+/**
+ * @brief Seed the PRNG for the current thread or for the whole process.
+ *        Depending on the platform implementation of srand() the seed can
+ *        be a thread local or global one. In case it's thread local we
+ *        need to call it on each thread.
+ *
+ * @param rk Client instance.
+ * @param internal_thread If true, seed the PRNG if
+ *                        it's required per-thread.
+ */
+void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread) {
+#ifdef _WIN32
+        rd_bool_t required_per_thread = rd_true;
+#else
+        rd_bool_t required_per_thread = rd_false;
+#endif
+        if ((required_per_thread &&
+             (rk->rk_conf.enable_random_seed || internal_thread)) ||
+            (!required_per_thread && rk->rk_conf.enable_random_seed &&
+             !internal_thread)) {
+                call_once(&rd_kafka_srand_once, rd_kafka_srand);
+        }
 }
 
 static void rd_kafka_global_init0(void) {
@@ -168,18 +215,6 @@ static void rd_kafka_global_init0(void) {
  */
 void rd_kafka_global_init(void) {
         call_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
-}
-
-
-/**
- * @brief Seed the PRNG with current_time.milliseconds
- */
-static void rd_kafka_global_srand(void) {
-        struct timeval tv;
-
-        rd_gettimeofday(&tv, NULL);
-
-        srand((unsigned int)(tv.tv_usec / 1000));
 }
 
 
@@ -2218,6 +2253,7 @@ static int rd_kafka_thread_main(void *arg) {
 
         rd_kafka_set_thread_name("main");
         rd_kafka_set_thread_sysname("rdk:main");
+        rd_kafka_thread_srand(rk, rd_true /* we're in an internal thread */);
 
         rd_kafka_interceptors_on_thread_start(rk, RD_KAFKA_THREAD_MAIN);
 
@@ -2367,10 +2403,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                 * freed from rd_kafka_destroy_internal()
                                 * as the rk itself is destroyed. */
 
-        /* Seed PRNG, don't bother about HAVE_RAND_R, since it is pretty cheap.
-         */
-        if (rk->rk_conf.enable_random_seed)
-                call_once(&rd_kafka_global_srand_once, rd_kafka_global_srand);
+        rd_kafka_thread_srand(rk, rd_false /* we're on an app thread */);
 
         /* Call on_new() interceptors */
         rd_kafka_interceptors_on_new(rk, &rk->rk_conf);

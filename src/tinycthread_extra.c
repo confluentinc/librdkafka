@@ -59,6 +59,17 @@ int thrd_is_current(thrd_t thr) {
 #endif
 }
 
+unsigned long thrd_current_id(void) {
+#ifdef _WIN32
+        /* Windows makes a distinction between thread handle
+         * and thread id, which means we can't use the
+         * thrd_current() API that returns the handle. */
+        return (unsigned long)GetCurrentThreadId();
+#else
+        return (unsigned long)(intptr_t)thrd_current();
+#endif
+}
+
 
 #ifdef _WIN32
 void cnd_wait_enter(cnd_t *cond) {

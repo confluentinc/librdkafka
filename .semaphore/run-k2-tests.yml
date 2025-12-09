@@ -2,7 +2,7 @@ version: v1.0
 name: run-k2-tests
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-3
+    type: s1-prod-ubuntu24-04-amd64-00
 
 execution_time_limit:
   hours: 3
@@ -47,6 +47,8 @@ blocks:
               echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
               echo "  TOOLBOX_POD: ${TOOLBOX_POD:-not set}"
               echo "  LKC: ${LKC:-not set}"
+              echo "  ENV_ID: ${ENV_ID:-not set}"
+              echo "  KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
               echo "=============================================="
               if [[ -z "$K8S_CONTEXT" ]]; then
                 echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
@@ -60,6 +62,19 @@ blocks:
                 echo "Error: LKC is required (e.g., lkc-abc123)"
                 exit 1
               fi
+              if [[ -z "$ENV_ID" ]]; then
+                echo "Error: ENV_ID is required (e.g., env-devc5drgr8)"
+                exit 1
+              fi
+              if [[ -z "$KAFKA_TYPE" ]]; then
+                echo "Error: KAFKA_TYPE is required (k1 or k2)"
+                exit 1
+              fi
+              if [[ "$KAFKA_TYPE" != "k1" && "$KAFKA_TYPE" != "k2" ]]; then
+                echo "Error: KAFKA_TYPE must be 'k1' or 'k2'"
+                exit 1
+              fi
+              echo "KAFKA_TYPE=${KAFKA_TYPE} (no action for now)"
             # Install oidc-kubelogin
             - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
             # Clone helper repos
@@ -76,10 +91,10 @@ blocks:
             - kubectl config get-contexts | grep -i "${K8S_CONTEXT}" || echo "Context not found"
             - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_POD}
             - echo "SUCCESS! kubectl access is working!"
-            # # Run librdkafka tests in the pod (continue even if tests fail)
-            # - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
-            # - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-            # - echo "Tests completed!"
+            # Run librdkafka tests in the pod (continue even if tests fail)
+            - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
+            - echo "Tests completed!"
             # Install Confluent CLI
             - echo "Installing Confluent CLI..."
             - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
@@ -92,10 +107,10 @@ blocks:
             - echo "Authenticating Confluent CLI..."
             - export CONFLUENT_CLOUD_EMAIL="cli-team+system-tests@confluent.io"
             - export CONFLUENT_CLOUD_PASSWORD=$(vault kv get -field=password v1/devel/kv/cli/system-tests/test-user-password)
-            - confluent login --url https://devel.cpdev.cloud 
+            - confluent login --url https://devel.cpdev.cloud --organization 91a07ac9-9a13-491e-a2cf-46a9a5cf339c
             # Describe the Kafka cluster
-            - echo "Describing Kafka cluster ${LKC}..."
-            - confluent kafka cluster describe --environment env-devc5drgr8 ${LKC}
+            - echo "Describing Kafka cluster ${LKC} in environment ${ENV_ID}..."
+            - confluent kafka cluster describe --environment ${ENV_ID} ${LKC}
             # Sleep for SSH debugging
             - echo "Sleeping for 2 hours for SSH debugging..."
             - sleep 7200

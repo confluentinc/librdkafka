@@ -91,7 +91,7 @@ blocks:
             # Authenticate Confluent CLI (using CCLOUD_USER_EMAIL and CCLOUD_USER_PASSWORD from Vault)
             - export CONFLUENT_CLOUD_EMAIL="${CCLOUD_USER_EMAIL}"
             - export CONFLUENT_CLOUD_PASSWORD="${CCLOUD_USER_PASSWORD}"
-            - confluent login --url https://devel.cpdev.cloud -organization 91a07ac9-9a13-491e-a2cf-46a9a5cf339c
+            - confluent login --url https://devel.cpdev.cloud --organization 91a07ac9-9a13-491e-a2cf-46a9a5cf339c
             # Describe the Kafka cluster
             - confluent kafka cluster describe --environment ${ENV_ID} ${LKC}
             # Sleep for SSH debugging

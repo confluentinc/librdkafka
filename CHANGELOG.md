@@ -1,3 +1,14 @@
+# librdkafka v2.13.0
+
+librdkafka v2.13.0 is a feature release:
+
+## Enhancements and Fixes
+* Protocol upgrades [KIP-482](https://cwiki.apache.org/confluence/display/KAFKA/KIP-482%3A+The+Kafka+Protocol+should+Support+Optional+Tagged+Fields):
+  * Upgrade CreateAcls, DescribeAcls, DeleteAcls to v2 (first flexible versions). (#5081)
+  * Upgrade DescribeGroups 4→5, DeleteTopics 1→4, DeleteRecords 1→2, CreatePartitions 0→2, DeleteGroups 1→2. (#5083)
+
+
+
 # librdkafka v2.12.1
 
 librdkafka v2.12.1 is a maintenance release:

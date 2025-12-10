@@ -21,7 +21,6 @@ global_job_config:
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
       - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
-      - . vault-sem-get-secret SYST_TESTS_KAFKA_CCLOUD_ACCOUNT_CREDS
       - export AWS_AUTH_METHOD=aws-creds
 
 blocks:
@@ -63,37 +62,36 @@ blocks:
               fi
               echo "KAFKA_TYPE=${KAFKA_TYPE} (no action for now)"
             # # Install oidc-kubelogin
+            # - echo "Installing oidc-kubelogin..."
             # - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
             # # Clone helper repos
+            # - echo "Cloning helper repos..."
             # - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
             # - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
             # # Assume AWS role for devel environment
+            # - echo "Assuming AWS role for devel environment..."
             # - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
             # - aws sts get-caller-identity
             # # Set up kubeconfig
+            # - echo "Setting up kubeconfig"
             # - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
             # - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
             # # Test kubectl access
             # - echo "Testing kubectl access to ${K8S_CONTEXT}..."
             # - kubectl config get-contexts | grep -i "${K8S_CONTEXT}" || echo "Context not found"
             # - kubectl --context ${K8S_CONTEXT} get pod ${TOOLBOX_POD}
-            # - echo "SUCCESS! kubectl access is working!"
-            # # Run librdkafka tests in the pod (continue even if tests fail)
-            # - echo "Running librdkafka tests in pod ${TOOLBOX_POD} with LKC=${LKC}..."
             # - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-            # Install Confluent CLI
-            - echo "Installing Confluent CLI..."
+            # # Install Confluent CLI
+            # - echo "Installing Confluent CLI..."
             - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
             - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
             # Find and add CLI to PATH
             - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
             - export PATH="${CLI_DIR}:${PATH}"
-            # Authenticate Confluent CLI (using credentials from Vault)
-            - export CONFLUENT_CLOUD_EMAIL=$(vault kv get -field=username v1/devel/kv/njc/semaphore/test-user-password)
-            - echo "CONFLUENT_CLOUD_EMAIL=${CONFLUENT_CLOUD_EMAIL}"
-            - export CONFLUENT_CLOUD_PASSWORD=$(vault kv get -field=password v1/devel/kv/njc/semaphore/test-user-password)
-            - confluent login --url https://devel.cpdev.cloud
+            # Authenticate Confluent CLI
+            - export CONFLUENT_CLOUD_EMAIL="cli-team+system-tests@confluent.io"
+            - export CONFLUENT_CLOUD_PASSWORD=$(vault kv get -field=password v1/devel/kv/cli/system-tests/test-user-password)
+            - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
+            - confluent login --url https://devel.cpdev.cloud --organization 91a07ac9-9a13-491e-a2cf-46a9a5cf339c
             # Describe the Kafka cluster
             - confluent kafka cluster describe --environment ${ENV_ID} ${LKC}
-            # Sleep for SSH debugging
-            - sleep 7200

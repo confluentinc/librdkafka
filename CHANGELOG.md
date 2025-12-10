@@ -1,3 +1,20 @@
+# librdkafka v2.13.0
+
+librdkafka v2.13.0 is a feature release:
+
+* Strip trailing dot of hostname to fix SSL certificate verification issue (#5253).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4348.
+  Strip trailing dot of hostname to fix SSL certificate verification issue.
+  Happening since 1.x (#5253).
+
+
+
 # librdkafka v2.12.1
 
 librdkafka v2.12.1 is a maintenance release:

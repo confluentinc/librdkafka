@@ -1,0 +1,151 @@
+version: v1.0
+name: run-tests-cloud
+agent:
+  machine:
+    type: s1-prod-ubuntu24-04-amd64-00
+
+execution_time_limit:
+  hours: 3
+
+global_job_config:
+  prologue:
+    commands:
+      - sem-version go 1.23.6
+      - sem-version kubectl 1.22.6
+      - export "GOPATH=$(go env GOPATH)"
+      - export "SEMAPHORE_GIT_DIR=${GOPATH}/src/github.com/confluentinc/${SEMAPHORE_PROJECT_NAME}"
+      - export "PATH=${GOPATH}/bin:${PATH}"
+      - export "PATH=${SEMAPHORE_GIT_DIR}/cc-dotfiles/bin/k8saas-ga:${PATH}"
+      - mkdir -vp "${SEMAPHORE_GIT_DIR}" "${GOPATH}/bin"
+      - checkout
+      - . vault-setup
+      - . vault-sem-get-secret cc-system-tests
+      - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
+      - . vault-sem-get-secret njc-test-user-password
+      - export AWS_AUTH_METHOD=aws-creds
+
+blocks:
+  - name: "Integration Testing against Cloud Environment"
+    task:
+      epilogue:
+        always:
+          commands:
+            - echo "Cleaning up pod ${TOOLBOX_POD}..."
+            - kubectl --context ${K8S_CONTEXT} delete pod ${TOOLBOX_POD} --ignore-not-found=true || echo "Failed to delete pod"
+      jobs:
+        - name: "Run Integration Tests"
+          commands:
+            - |
+              echo "Integration Test Configuration:"
+              echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
+              echo "  LKC: ${LKC:-not set}"
+              echo "  ENV_ID: ${ENV_ID:-not set}"
+              echo "  KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
+              if [[ -z "$K8S_CONTEXT" ]]; then
+                echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
+                exit 1
+              fi
+              if [[ -z "$LKC" ]]; then
+                echo "Error: LKC is required (e.g., lkc-abc123)"
+                exit 1
+              fi
+              if [[ -z "$ENV_ID" ]]; then
+                echo "Error: ENV_ID is required (e.g., env-devc5drgr8)"
+                exit 1
+              fi
+              if [[ -z "$KAFKA_TYPE" ]]; then
+                echo "Error: KAFKA_TYPE is required (k1 or k2)"
+                exit 1
+              fi
+              if [[ "$KAFKA_TYPE" != "k1" && "$KAFKA_TYPE" != "k2" ]]; then
+                echo "Error: KAFKA_TYPE must be 'k1' or 'k2'"
+                exit 1
+              fi
+              echo "KAFKA_TYPE=${KAFKA_TYPE} (no action for now)"
+            # Install oidc-kubelogin
+            - echo "Installing oidc-kubelogin..."
+            - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
+            # Clone helper repos
+            - echo "Cloning helper repos..."
+            - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
+            - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
+            # Assume AWS role for devel environment
+            - echo "Assuming AWS role for devel environment..."
+            - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
+            - aws sts get-caller-identity
+            # Set up kubeconfig
+            - echo "Setting up kubeconfig"
+            - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+            # Create unique test pod for this run
+            - export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
+            - echo "Creating pod ${TOOLBOX_POD}..."
+            - kubectl --context ${K8S_CONTEXT} run ${TOOLBOX_POD} --image=debian:latest --command -- sleep infinity
+            - echo "Waiting for pod to be ready..."
+            - kubectl --context ${K8S_CONTEXT} wait --for=condition=Ready pod/${TOOLBOX_POD} --timeout=120s
+            # Set up the pod environment
+            - echo "Installing packages in pod..."
+            - |
+              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c '
+                apt-get update -qq && apt-get install -y \
+                  apt-transport-https \
+                  ca-certificates \
+                  httping \
+                  man-db \
+                  vim \
+                  screen \
+                  curl \
+                  gnupg \
+                  atop \
+                  htop \
+                  jq \
+                  bind9-dnsutils \
+                  tcpdump \
+                  traceroute \
+                  iputils-ping \
+                  iptables \
+                  net-tools \
+                  iproute2 \
+                  strace \
+                  telnet \
+                  openssl \
+                  psmisc \
+                  mtr-tiny \
+                  conntrack \
+                  wget \
+                  build-essential \
+                  libssl-dev \
+                  git
+              '
+            - echo "Installing LLVM and Java..."
+            - |
+              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c '
+                apt-get install -y llvm-17 llvm-17-tools llvm clang
+                apt-get install -y openjdk-21-jdk default-jdk
+                apt-get install -y iotop nethogs
+              '
+            # Clone librdkafka in the pod
+            - echo "Cloning librdkafka in pod..."
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp && git clone https://github.com/confluentinc/librdkafka.git'
+            # Checkout k2_testing_final branch and configure
+            - echo "Checking out k2_testing_final branch..."
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
+            - echo "Running dev-conf.sh..."
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && ./dev-conf.sh'
+            # Run tests
+            - echo "Running librdkafka tests..."
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
+            # # Install Confluent CLI
+            # - echo "Installing Confluent CLI..."
+            # - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
+            # - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
+            # # Find and add CLI to PATH
+            # - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
+            # - export PATH="${CLI_DIR}:${PATH}"
+            # # Authenticate Confluent CLI (using credentials from vault-sem-get-secret njc-test-user-password)
+            # - export CONFLUENT_CLOUD_EMAIL="${username}"
+            # - export CONFLUENT_CLOUD_PASSWORD="${password}"
+            # - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
+            # - confluent login --url https://devel.cpdev.cloud
+            # # Describe the Kafka cluster
+            # - confluent kafka cluster describe --environment ${ENV_ID} ${LKC}

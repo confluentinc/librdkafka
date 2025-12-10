@@ -21,6 +21,7 @@ global_job_config:
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
       - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
+      - . vault-sem-get-secret SYST_TESTS_KAFKA_CCLOUD_ACCOUNT_CREDS
       - export AWS_AUTH_METHOD=aws-creds
 
 blocks:
@@ -88,9 +89,9 @@ blocks:
             # Find and add CLI to PATH
             - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
             - export PATH="${CLI_DIR}:${PATH}"
-            # Authenticate Confluent CLI
-            - export CONFLUENT_CLOUD_EMAIL="cli-team+system-tests@confluent.io"
-            - export CONFLUENT_CLOUD_PASSWORD=$(vault kv get -field=password v1/devel/kv/cli/system-tests/test-user-password)
+            # Authenticate Confluent CLI (using CCLOUD_USER_EMAIL and CCLOUD_USER_PASSWORD from SYST_TESTS_KAFKA_CCLOUD_ACCOUNT_CREDS)
+            - export CONFLUENT_CLOUD_EMAIL="${CCLOUD_USER_EMAIL}"
+            - export CONFLUENT_CLOUD_PASSWORD="${CCLOUD_USER_PASSWORD}"
             - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
             - confluent login --url https://devel.cpdev.cloud --organization 91a07ac9-9a13-491e-a2cf-46a9a5cf339c
             # Describe the Kafka cluster

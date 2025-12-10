@@ -653,6 +653,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The maximum time to wait before reconnecting to a broker "
      "after the connection has been closed.",
      0, 60 * 60 * 1000, 10 * 1000},
+    {_RK_GLOBAL | _RK_MED, "reconnect.failure.report.ms", _RK_C_INT,
+     _RK(reconnect_failure_report_ms),
+     "The time after which persistent broker reconnection failures should "
+     "be reported to the application via an error event "
+     "(RD_KAFKA_RESP_ERR__BROKER_PERSISTENT_FAILURE). "
+     "This helps detect scenarios where a broker is unreachable or "
+     "authentication is failing persistently (e.g., after broker restarts "
+     "with AWS MSK IAM auth). Set to 0 to disable. Default is 60000ms (1 min).",
+     0, 24 * 60 * 60 * 1000, 60 * 1000},
     {_RK_GLOBAL | _RK_HIGH, "statistics.interval.ms", _RK_C_INT,
      _RK(stats_interval_ms),
      "librdkafka statistics emit interval. The application also needs to "

@@ -491,6 +491,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
     _ERR_DESC(RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD,
               "Local: an invalid record in the same batch caused "
               "the failure of this message too"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__BROKER_PERSISTENT_FAILURE,
+              "Local: Broker reconnection has been failing persistently"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY_BROKER,
               "Local: Broker handle destroyed without termination"),
 

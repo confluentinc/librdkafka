@@ -252,6 +252,7 @@ struct rd_kafka_conf_s {
         int reconnect_backoff_ms;
         int reconnect_backoff_max_ms;
         int reconnect_jitter_ms;
+        int reconnect_failure_report_ms;
         int socket_connection_setup_timeout_ms;
         int connections_max_idle_ms;
         int sparse_connections;

@@ -414,6 +414,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD = -138,
         /** Broker is going away but client isn't terminating */
         RD_KAFKA_RESP_ERR__DESTROY_BROKER = -137,
+        /** Broker reconnection has been failing persistently */
+        RD_KAFKA_RESP_ERR__BROKER_PERSISTENT_FAILURE = -136,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,

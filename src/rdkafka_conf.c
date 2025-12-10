@@ -996,6 +996,12 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Kerberos principal name that Kafka runs as, "
      "not including /hostname@REALM",
      .sdef = "kafka"},
+    {_RK_GLOBAL, "sasl.kerberos.domain.name", _RK_C_STR,
+     _RK(sasl.domain_name),
+     "Override for the broker hostname portion of the service principal "
+     "(the string after \"service/\"). Set this if the Kerberos ticket "
+     "should always target a fixed FQDN regardless of the broker's "
+     "advertised hostname."},
     {_RK_GLOBAL, "sasl.kerberos.principal", _RK_C_STR, _RK(sasl.principal),
      "This client's Kerberos principal name. "
      "(Not supported on Windows, will use the logon user's principal).",

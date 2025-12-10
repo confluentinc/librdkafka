@@ -3,6 +3,7 @@ TESTSRCS_CXX= $(wildcard [08]*-*.cpp)
 OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 
 BIN	  = test-runner
+UTILS     = topic_cleanup
 LIBS	 += -lrdkafka++ -lrdkafka
 OBJS	 += test.o rusage.o testcpp.o \
 		tinycthread.o tinycthread_extra.o rdlist.o sockem.o \
@@ -28,7 +29,7 @@ SMOKE_TESTS?=0000,0001,0004,0012,0017,0022,0030,0039,0049,0087,0103
 # Use C++ compiler as linker
 CC_LD=$(CXX)
 
-all: $(BIN) run_par
+all: $(BIN) $(UTILS) topic_cleanup run_par
 
 #
 # These targets spin up a cluster and runs the test suite
@@ -97,7 +98,7 @@ delete_topics:
 
 .PHONY:
 
-build: $(BIN) interceptor_test
+build: $(BIN) interceptor_test topic_cleanup
 
 test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 
@@ -122,9 +123,12 @@ tinycthread_extra.o: ../src/tinycthread_extra.c
 rdlist.o: ../src/rdlist.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
+# Topic cleanup utility
+topic_cleanup: topic_cleanup.c ../src/librdkafka.a
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LIBS)
 
 clean:
-	rm -f *.test $(OBJS) $(BIN)
+	rm -f *.test $(OBJS) $(BIN) $(UTILS)
 	$(MAKE) -C interceptor_test clean
 
 # Remove test reports, temporary test files, crash dumps, etc.

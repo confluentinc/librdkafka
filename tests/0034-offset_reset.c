@@ -129,6 +129,8 @@ int main_0034_offset_reset(int argc, char **argv) {
         const int partition = 0;
         const int msgcnt    = test_quick ? 20 : 100;
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, -1);
+
         /* Produce messages */
         test_produce_msgs_easy(topic, 0, partition, msgcnt);
 

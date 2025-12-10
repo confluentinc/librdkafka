@@ -61,13 +61,16 @@ static int verify_offset(const RdKafka::TopicPartition *tp,
 
 static void test_offset_time(void) {
   std::vector<RdKafka::TopicPartition *> query_parts;
-  std::string topic = Test::mk_topic_name("0054-offset_time", 1);
+  struct timeval ts;
+  rd_gettimeofday(&ts, NULL);
+  int64_t current_time = (int64_t)ts.tv_sec * 1000 + ts.tv_usec / 1000;
+  std::string topic    = Test::mk_topic_name("0054-offset_time", 1);
   RdKafka::Conf *conf, *tconf;
   int64_t timestamps[] = {
       /* timestamp, expected offset */
-      1234,
+      current_time,
       0,
-      999999999999,
+      current_time + 500,
       1,
   };
   const int timestamp_cnt = 2;
@@ -103,9 +106,12 @@ static void test_offset_time(void) {
 
   if (err != RdKafka::ERR__UNKNOWN_PARTITION)
     Test::Fail(
-        "offsetsForTimes #1 should have failed with UNKNOWN_PARTITION, "
+        "offsetsForTimes #1 should have failed with "
+        "UNKNOWN_PARTITION, "
         "not " +
         RdKafka::err2str(err));
+
+  Test::create_topic(p, topic.c_str(), 4, -1);
 
   Test::Say("Producing to " + topic + "\n");
   for (int partition = 0; partition < 2; partition++) {
@@ -178,7 +184,8 @@ static void test_offset_time(void) {
     Test::print_TopicPartitions("offsetsForTimes", query_parts);
     if (err != RdKafka::ERR__TIMED_OUT)
       Test::Fail(
-          "expected offsetsForTimes(timeout=0) to fail with TIMED_OUT, not " +
+          "expected offsetsForTimes(timeout=0) to fail with "
+          "TIMED_OUT, not " +
           RdKafka::err2str(err));
   }
 
@@ -197,12 +204,16 @@ static void test_offset_time(void) {
         RdKafka::TopicPartition::create(topic, 3, timestamps[ti]));
     query_parts.push_back(
         RdKafka::TopicPartition::create(topic, 21, timestamps[ti]));
-    Test::Say("Attempting offsetsForTimes() with non-existent partitions\n");
+    Test::Say(
+        "Attempting offsetsForTimes() with non-existent "
+        "partitions\n");
     err = p->offsetsForTimes(query_parts, -1);
     Test::print_TopicPartitions("offsetsForTimes", query_parts);
     if (err != RdKafka::ERR_NO_ERROR)
-      Test::Fail("expected offsetsForTimes(timeout=0) to succeed, not " +
-                 RdKafka::err2str(err));
+      Test::Fail(
+          "expected offsetsForTimes(timeout=0) to succeed, "
+          "not " +
+          RdKafka::err2str(err));
     fails += verify_offset(query_parts[0], timestamps[ti], timestamps[ti + 1],
                            RdKafka::ERR_NO_ERROR);
     fails += verify_offset(query_parts[1], timestamps[ti], timestamps[ti + 1],

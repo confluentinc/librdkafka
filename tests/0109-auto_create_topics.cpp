@@ -59,7 +59,8 @@ static void do_test_consumer(bool allow_auto_create_topics,
                                           * security config to kafka-acls.sh */
   if (test_unauthorized_topic && !has_acl_cli) {
     Test::Say(
-        "Skipping unauthorized topic test since kafka-acls.sh is not "
+        "Skipping unauthorized topic test since kafka-acls.sh is "
+        "not "
         "available\n");
     return;
   }
@@ -83,7 +84,8 @@ static void do_test_consumer(bool allow_auto_create_topics,
   Test::conf_set(conf, "group.id", topic_exists);
   Test::conf_set(conf, "enable.partition.eof", "true");
   /* Quickly refresh metadata on topic auto-creation since the first
-   * metadata after auto-create hides the topic due to 0 partition count. */
+   * metadata after auto-create hides the topic due to 0 partition count.
+   */
   Test::conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
   if (allow_auto_create_topics)
     Test::conf_set(conf, "allow.auto.create.topics", "true");
@@ -138,9 +140,9 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
   /* `classic` protocol case: if the subscription contains at least one
    * wildcard/regex then no auto topic creation will take place (since the
-   * consumer requests all topics in metadata, and not specific ones, thus not
-   * triggering topic auto creation). We need to handle the expected error cases
-   * accordingly.
+   * consumer requests all topics in metadata, and not specific ones, thus
+   * not triggering topic auto creation). We need to handle the expected
+   * error cases accordingly.
    *
    * `consumer` protocol case: there's no automatic topic creation. */
   if (test_consumer_group_protocol_classic()) {
@@ -148,9 +150,11 @@ static void do_test_consumer(bool allow_auto_create_topics,
       exp_errors["^" + topic_notexists] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
       exp_errors[topic_notexists]       = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
       if (test_unauthorized_topic) {
-        /* Unauthorized topics are not included in list-all-topics Metadata,
-         * which we use for wildcards, so in this case the error code for
-         * unauthorixed topics show up as unknown topic. */
+        /* Unauthorized topics are not included in
+         * list-all-topics Metadata, which we use for
+         * wildcards, so in this case the error code for
+         * unauthorixed topics show up as unknown topic.
+         */
         exp_errors[topic_unauth] = RdKafka::ERR_UNKNOWN_TOPIC_OR_PART;
       }
     } else if (test_unauthorized_topic) {
@@ -158,13 +162,13 @@ static void do_test_consumer(bool allow_auto_create_topics,
     }
   } else if (test_unauthorized_topic) {
     /* Authorization errors happen if even a single topic
-     * is unauthorized and an error is returned for the whole subscription
-     * without reference to the topic. */
+     * is unauthorized and an error is returned for the whole
+     * subscription without reference to the topic. */
     exp_errors[""] = RdKafka::ERR_TOPIC_AUTHORIZATION_FAILED;
   }
 
-  /* `classic` protocol case: expect an error only if the broker supports the
-   * property and the test disallowed it.
+  /* `classic` protocol case: expect an error only if the broker supports
+   * the property and the test disallowed it.
    *
    * `consumer` protocol case: there's no automatic topic creation. */
   if (supports_allow && !allow_auto_create_topics &&
@@ -195,7 +199,8 @@ static void do_test_consumer(bool allow_auto_create_topics,
         run = true;
       } else {
         /* `consumer` rebalance protocol:
-         * wait for `unauthorized_error_cnt` consecutive errors. */
+         * wait for `unauthorized_error_cnt` consecutive
+         * errors. */
         run = (++consecutive_error_cnt) <
               cgrp_consumer_expected_consecutive_error_cnt;
       }
@@ -208,24 +213,27 @@ static void do_test_consumer(bool allow_auto_create_topics,
       std::map<std::string, RdKafka::ErrorCode>::iterator it =
           exp_errors.find(msg->topic_name());
 
-      /* Temporary unknown-topic errors are okay for auto-created topics. */
+      /* Temporary unknown-topic errors are okay for
+       * auto-created topics. */
       bool unknown_is_ok = allow_auto_create_topics && !with_wildcards &&
                            msg->err() == RdKafka::ERR_UNKNOWN_TOPIC_OR_PART &&
                            msg->topic_name() == topic_notexists;
 
       if (it == exp_errors.end()) {
         if (unknown_is_ok)
-          Test::Say("Ignoring temporary auto-create error for topic " +
-                    msg->topic_name() + ": " + RdKafka::err2str(msg->err()) +
-                    "\n");
+          Test::Say(
+              "Ignoring temporary auto-create "
+              "error for topic " +
+              msg->topic_name() + ": " + RdKafka::err2str(msg->err()) + "\n");
         else
           Test::Fail("Did not expect error for " + msg->topic_name() +
                      ": got: " + RdKafka::err2str(msg->err()));
       } else if (msg->err() != it->second) {
         if (unknown_is_ok)
-          Test::Say("Ignoring temporary auto-create error for topic " +
-                    msg->topic_name() + ": " + RdKafka::err2str(msg->err()) +
-                    "\n");
+          Test::Say(
+              "Ignoring temporary auto-create "
+              "error for topic " +
+              msg->topic_name() + ": " + RdKafka::err2str(msg->err()) + "\n");
         else
           Test::Fail("Expected '" + RdKafka::err2str(it->second) + "' for " +
                      msg->topic_name() + ", got " +
@@ -259,6 +267,12 @@ static void do_test_consumer(bool allow_auto_create_topics,
 
 extern "C" {
 int main_0109_auto_create_topics(int argc, char **argv) {
+  if (!test_check_auto_create_topic()) {
+    Test::Say(
+        "Skipping test since broker does not support "
+        "auto.create.topics.enable\n");
+    return 0;
+  }
   /* Parameters:
    *  allow auto create, with wildcards, test unauthorized topic */
   do_test_consumer(true, false, false);

@@ -58,7 +58,15 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
   Test::conf_set(conf, "auto.offset.reset", "beginning");
   Test::conf_set(conf, "queued.min.messages", "1");
   if (backoff_ms >= 0) {
-    Test::conf_set(conf, "fetch.queue.backoff.ms", tostr() << backoff_ms);
+    if (rd_kafka_version() >= 0x02020000) { /* fetch.queue.backoff.ms available
+                                               since librdkafka 2.2.0 */
+      Test::conf_set(conf, "fetch.queue.backoff.ms", tostr() << backoff_ms);
+    } else {
+      Test::Say(tostr() << "SKIPPING: fetch.queue.backoff.ms "
+                           "configuration - requires librdkafka "
+                           "version >= 2.2.0 (current: 0x"
+                        << std::hex << rd_kafka_version() << ")\n");
+    }
   }
   /* Make sure to include only one message in each fetch.
    * Message size is 10000. */
@@ -86,14 +94,15 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
 
   int received       = 0;
   int in_profile_cnt = 0;
-  int dmax           = backoff_ms + test_timeout_multiplier * 30;
+  int dmax           = backoff_ms + (int)(test_timeout_multiplier * 30);
 
   int64_t ts_consume = test_clock();
 
   while (received < 5) {
     /* Wait more than dmax to count out of profile messages.
      * Different for first message, that is skipped. */
-    int consume_timeout = received == 0 ? 1500 * test_timeout_multiplier : dmax;
+    int consume_timeout =
+        received == 0 ? (int)(1500 * test_timeout_multiplier) : dmax;
     RdKafka::Message *msg = c->consume(consume_timeout);
     if (msg->err() == RdKafka::ERR__TIMED_OUT) {
       delete msg;
@@ -101,7 +110,7 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
     }
 
     rd_ts_t now     = test_clock();
-    int latency     = (now - ts_consume) / 1000;
+    int latency     = (int)((now - ts_consume) / 1000);
     ts_consume      = now;
     bool in_profile = latency <= dmax;
 
@@ -140,26 +149,36 @@ static void do_test_queue_backoff(const std::string &topic, int backoff_ms) {
 
 extern "C" {
 int main_0127_fetch_queue_backoff(int argc, char **argv) {
-  std::string topic = Test::mk_topic_name("0127_fetch_queue_backoff", 1);
+  if (rd_kafka_version() >= 0x02020000) { /* fetch.queue.backoff.ms tests
+                                             available since librdkafka 2.2.0 */
+    std::string topic = Test::mk_topic_name("0127_fetch_queue_backoff", 1);
 
-  /* Prime the topic with messages. */
-  RdKafka::Conf *conf;
-  Test::conf_init(&conf, NULL, 10);
-  Test::conf_set(conf, "batch.num.messages", "1");
-  std::string errstr;
-  RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
-  if (!p)
-    Test::Fail(tostr() << __FUNCTION__
-                       << ": Failed to create producer: " << errstr);
-  delete conf;
+    /* Prime the topic with messages. */
+    RdKafka::Conf *conf;
+    Test::conf_init(&conf, NULL, 10);
+    Test::conf_set(conf, "batch.num.messages", "1");
+    std::string errstr;
+    RdKafka::Producer *p = RdKafka::Producer::create(conf, errstr);
+    if (!p)
+      Test::Fail(tostr() << __FUNCTION__
+                         << ": Failed to create producer: " << errstr);
+    delete conf;
 
-  Test::produce_msgs(p, topic, 0, 100, 10000, true /*flush*/);
-  delete p;
+    test_create_topic_if_auto_create_disabled(p->c_ptr(), topic.c_str(), -1);
 
-  do_test_queue_backoff(topic, -1);
-  do_test_queue_backoff(topic, 500);
-  do_test_queue_backoff(topic, 10);
-  do_test_queue_backoff(topic, 0);
+    Test::produce_msgs(p, topic, 0, 100, 10000, true /*flush*/);
+    delete p;
+
+    do_test_queue_backoff(topic, -1);
+    do_test_queue_backoff(topic, 500);
+    do_test_queue_backoff(topic, 10);
+    do_test_queue_backoff(topic, 0);
+  } else {
+    TEST_SAY(
+        "SKIPPING: fetch.queue.backoff.ms tests - requires "
+        "librdkafka version >= 2.2.0 (current: 0x%08x)\n",
+        rd_kafka_version());
+  }
   return 0;
 }
 }

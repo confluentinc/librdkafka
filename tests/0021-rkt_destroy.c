@@ -55,7 +55,10 @@ int main_0021_rkt_destroy(int argc, char **argv) {
 
         testid = test_id_generate();
         rk     = test_create_producer();
-        rkt    = test_create_producer_topic(rk, topic, NULL);
+
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
+
+        rkt = test_create_producer_topic(rk, topic, NULL);
         test_wait_topic_exists(rk, topic, 5000);
 
 

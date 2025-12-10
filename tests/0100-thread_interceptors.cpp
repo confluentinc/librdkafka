@@ -159,7 +159,8 @@ static void test_thread_cbs() {
    *  1. Extract the C conf_t object
    *  2. Set up an on_new() interceptor
    *  3. Set up an on_conf_dup() interceptor to add interceptors in the
-   *     case the config object is copied (which the C++ Conf always does).
+   *     case the config object is copied (which the C++ Conf always
+   * does).
    *  4. In the on_new() interceptor, add the thread interceptors. */
   c_conf = conf->c_ptr_global();
   rd_kafka_conf_interceptor_add_on_new(c_conf, "test:0100", on_new,
@@ -183,7 +184,9 @@ static void test_thread_cbs() {
   if (my_threads.exitCount() < 3)
     Test::Fail("Did not catch enough thread exit callback calls");
   if (my_threads.startCount() != my_threads.exitCount())
-    Test::Fail("Did not catch same number of start and exit callback calls");
+    Test::Fail(
+        "Did not catch same number of start and exit callback "
+        "calls");
 }
 
 

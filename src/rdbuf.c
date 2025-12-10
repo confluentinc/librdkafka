@@ -931,6 +931,7 @@ size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size) {
         }
 
         rd_dassert(remains == 0);
+        (void)remains; /* Only used in asserts */
 
         /* Restore original size */
         slice->end = orig_end;

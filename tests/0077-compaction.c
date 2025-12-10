@@ -194,6 +194,10 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
             "--config file.delete.delay.ms=10000 "
             "--config max.compaction.lag.ms=100",
             topic, partition + 1);
+
+        /* Wait for topic to propagate to brokers */
+        rd_sleep(3);
+
         test_wait_topic_exists(NULL, topic, 5000);
 
         test_conf_init(&conf, NULL, 120);

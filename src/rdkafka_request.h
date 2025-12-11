@@ -131,6 +131,9 @@ typedef struct rd_kafkap_Produce_reply_tags_s {
         rd_kafkap_Produce_reply_tags_Topic_t Topic;
 } rd_kafkap_Produce_reply_tags_t;
 
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafkap_Produce_reply_tags_t *) map_topic_partition_produce_reply_tags_t;
+
 /**@}*/
 
 /**
@@ -159,6 +162,7 @@ typedef struct rd_kafkap_Fetch_reply_tags_s {
 } rd_kafkap_Fetch_reply_tags_t;
 
 /**@}*/
+
 
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
@@ -463,7 +467,14 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
 int rd_kafka_ProduceRequest(rd_kafka_broker_t *rkb,
                             rd_kafka_toppar_t *rktp,
                             const rd_kafka_pid_t pid,
-                            uint64_t epoch_base_msgid);
+                            uint64_t epoch_base_msgid,
+                            rd_bool_t skip_sending,
+                            map_topic_partition_buf_t *map_topic_batch);
+
+int rd_kafka_MultiBatchProduceRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafka_pid_t pid,
+    map_topic_partition_buf_t *map_topic_batch);
 
 rd_kafka_resp_err_t
 rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,

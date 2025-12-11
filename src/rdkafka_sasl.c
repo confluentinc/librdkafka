@@ -383,7 +383,16 @@ int rd_kafka_sasl_select_provider(rd_kafka_t *rk,
 #ifdef _WIN32
                 provider = &rd_kafka_sasl_win32_provider;
 #elif WITH_SASL_CYRUS
-                provider = &rd_kafka_sasl_cyrus_provider;
+                if (rd_kafka_sasl_cyrus_is_library_loaded()) {
+                        provider = &rd_kafka_sasl_cyrus_provider;
+                } else {
+                        rd_snprintf(
+                            errstr, errstr_size,
+                            "SASL GSSAPI mechanism requires "
+                            "cyrus-sasl/libsasl2 to be installed: %s",
+                            rd_kafka_sasl_cyrus_get_library_loading_error());
+                        return -1;
+                }
 #endif
 
         } else if (!strcmp(rk->rk_conf.sasl.mechanisms, "PLAIN")) {
@@ -415,7 +424,7 @@ int rd_kafka_sasl_select_provider(rd_kafka_t *rk,
                             "No provider for SASL mechanism %s"
                             ": recompile librdkafka with "
 #ifndef _WIN32
-                            "libsasl2 or "
+                            "libdl or "
 #endif
                             "openssl support. "
                             "Current build options:"

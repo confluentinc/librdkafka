@@ -382,6 +382,11 @@ struct rd_kafka_conf_s {
                                                  const char *oauthbearer_config,
                                                  void *opaque);
                 } oauthbearer;
+                struct {
+                        char *username;
+                        char *domain;
+                        char *password;
+                } win32gssapi;
         } sasl;
 
         char *plugin_paths;

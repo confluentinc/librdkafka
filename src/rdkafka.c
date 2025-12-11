@@ -2337,6 +2337,23 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         else
                 conf = app_conf;
 
+        /* Set default FIPS and debug configuration */
+        if (rd_kafka_conf_set(conf, "ssl.providers", "fips,base", errstr,
+                              errstr_size) != RD_KAFKA_CONF_OK) {
+                if (!app_conf)
+                        rd_kafka_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return NULL;
+        }
+        if (rd_kafka_conf_set(conf, "debug", "security", errstr,
+                              errstr_size) != RD_KAFKA_CONF_OK) {
+                if (!app_conf)
+                        rd_kafka_conf_destroy(conf);
+                rd_kafka_set_last_error(RD_KAFKA_RESP_ERR__INVALID_ARG, EINVAL);
+                return NULL;
+        }
+
+
         /* Verify and finalize configuration */
         if ((conf_err = rd_kafka_conf_finalize(type, conf))) {
                 /* Incompatible configuration settings */

@@ -2395,9 +2395,9 @@ release of librdkafka.
 | 25     | AddOffsetsToTxn              | 4         | 0              |
 | 26     | EndTxn                       | 5         | 1              |
 | 28     | TxnOffsetCommit              | 5         | 3              |
-| 29     | DescribeAcls                 | 3         | 1              |
-| 30     | CreateAcls                   | 3         | 1              |
-| 31     | DeleteAcls                   | 3         | 1              |
+| 29     | DescribeAcls                 | 3         | 2              |
+| 30     | CreateAcls                   | 3         | 2              |
+| 31     | DeleteAcls                   | 3         | 2              |
 | 32     | DescribeConfigs              | 4         | 1              |
 | 33     | AlterConfigs                 | 2         | 2              |
 | 36     | SaslAuthenticate             | 2         | 1              |

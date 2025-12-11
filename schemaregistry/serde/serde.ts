@@ -1013,7 +1013,7 @@ export class ErrorAction implements RuleAction {
   }
 
   async run(ctx: RuleContext, msg: any, err: Error): Promise<void> {
-    throw new SerializationError(err.message)
+    throw new SerializationError(`rule ${ctx.rule.name} failed: ${err.message}`)
   }
 
   close(): void {

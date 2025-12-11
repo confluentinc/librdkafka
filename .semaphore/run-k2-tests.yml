@@ -21,7 +21,7 @@ global_job_config:
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
       - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
-      - . vault-get-secret --vault-role=default semaphore/njc/service-account-credentials
+      - . vault-get-secret --vault-role=default njc/service-account-credentials
       - export AWS_AUTH_METHOD=aws-creds
 
 blocks:

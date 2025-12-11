@@ -815,6 +815,12 @@ int rd_kafka_topic_partition_list_cmp(const void *_a,
                                       const void *_b,
                                       int (*cmp)(const void *, const void *));
 
+int rd_kafka_topic_partition_list_cmp_with_hash(
+    const void *_a,
+    const void *_b,
+    int (*cmp)(const void *, const void *),
+    unsigned int (*hash)(const void *));
+
 /**
  * Creates a new empty topic partition private.
  *

@@ -669,6 +669,11 @@ static int rd_kafka_transport_ssl_verify(rd_kafka_transport_t *rktrans) {
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SSLVERIFY",
                    "Broker SSL certificate verified");
+        rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SSLVERIFY",
+                   "TLS version: %s, Cipher: %s",
+                   SSL_get_version(rktrans->rktrans_ssl),
+                   SSL_get_cipher(rktrans->rktrans_ssl));
+
         return 0;
 }
 

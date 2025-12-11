@@ -234,6 +234,7 @@
     <ClCompile Include="..\..\tests\0151-purge-brokers.c" />
     <ClCompile Include="..\..\tests\0152-rebootstrap.c" />
     <ClCompile Include="..\..\tests\0153-memberid.c" />
+    <ClCompile Include="..\..\tests\0154-rd_hdr_histogram_new-fpe.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

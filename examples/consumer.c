@@ -149,6 +149,29 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        if (rd_kafka_conf_set(conf, "share.consumer", "true", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
+
+
+        if (rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
+
+
+        if (rd_kafka_conf_set(conf, "debug", "cgrp", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
+
         /*
          * Create consumer instance.
          *

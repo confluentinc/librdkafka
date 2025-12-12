@@ -206,6 +206,13 @@ blocks:
               kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf
               rm -f /tmp/test.conf
             - echo "test.conf created successfully"
+            # Display test.conf (masking sensitive values)
+            - |
+              echo "=== test.conf contents ==="
+              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- cat /tmp/librdkafka/tests/test.conf | \
+                sed 's/^\(sasl\.username=\).*/\1[REDACTED]/' | \
+                sed 's/^\(sasl\.password=\).*/\1[REDACTED]/'
+              echo "=========================="
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
             - echo "Running librdkafka tests..."
             # - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"

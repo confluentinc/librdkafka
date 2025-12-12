@@ -21,7 +21,7 @@ global_job_config:
       - . vault-setup
       - . vault-sem-get-secret cc-system-tests
       - . vault-sem-get-secret GCP_CONNECT_CREDENTIALS_DEVEL
-      - . vault-sem-get-secret njc-test-user-password
+      - . vault-get-secret --vault-role=default njc/service-account-credentials
       - export AWS_AUTH_METHOD=aws-creds
 
 blocks:
@@ -30,8 +30,21 @@ blocks:
       epilogue:
         always:
           commands:
-            - echo "Cleaning up pod ${TOOLBOX_POD}..."
-            - kubectl --context ${K8S_CONTEXT} delete pod ${TOOLBOX_POD} --ignore-not-found=true || echo "Failed to delete pod"
+            - echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
+            - kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
+            - |
+              if [[ -f /tmp/api-key-id.txt ]]; then
+                API_KEY_ID=$(cat /tmp/api-key-id.txt)
+                echo "Deleting API key ${API_KEY_ID}..."
+                # Find CLI binary path
+                CLI_BIN=$(find /tmp/cli/dist -type f -name 'confluent' -executable 2>/dev/null | head -1)
+                if [[ -n "$CLI_BIN" ]]; then
+                  $CLI_BIN api-key delete ${API_KEY_ID} --force || echo "Failed to delete API key"
+                else
+                  echo "CLI not found, skipping API key cleanup"
+                fi
+                rm -f /tmp/api-key-id.txt
+              fi
       jobs:
         - name: "Run Integration Tests"
           commands:
@@ -40,17 +53,22 @@ blocks:
               echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
               echo "  LKC: ${LKC:-not set}"
               echo "  ENV_ID: ${ENV_ID:-not set}"
+              echo "  ORG_ID: ${ORG_ID:-not set}"
               echo "  KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
               if [[ -z "$K8S_CONTEXT" ]]; then
-                echo "Error: K8S_CONTEXT is required (e.g., k8s-devcnn3k3)"
+                echo "Error: K8S_CONTEXT is required"
                 exit 1
               fi
               if [[ -z "$LKC" ]]; then
-                echo "Error: LKC is required (e.g., lkc-abc123)"
+                echo "Error: LKC is required"
                 exit 1
               fi
               if [[ -z "$ENV_ID" ]]; then
-                echo "Error: ENV_ID is required (e.g., env-devc5drgr8)"
+                echo "Error: ENV_ID is required"
+                exit 1
+              fi
+              if [[ -z "$ORG_ID" ]]; then
+                echo "Error: ORG_ID is required"
                 exit 1
               fi
               if [[ -z "$KAFKA_TYPE" ]]; then
@@ -77,6 +95,40 @@ blocks:
             - echo "Setting up kubeconfig"
             - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
             - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+            # Install Confluent CLI (needed for getting cluster info and API keys)
+            - echo "Installing Confluent CLI..."
+            - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
+            - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
+            - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
+            - export PATH="${CLI_DIR}:${PATH}"
+            # Authenticate Confluent CLI (using NJC credentials from Vault v3)
+            - export CONFLUENT_CLOUD_EMAIL="${NJC_CCLOUD_USER_EMAIL}"
+            - export CONFLUENT_CLOUD_PASSWORD="${NJC_CCLOUD_USER_PASSWORD}"
+            - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
+            - confluent login --url https://devel.cpdev.cloud --organization ${ORG_ID}
+            # Get cluster details and extract bootstrap server (save to file, not logs)
+            - echo "Getting cluster details..."
+            - confluent environment use ${ENV_ID}
+            - confluent kafka cluster describe ${LKC} --output json > /tmp/cluster-info.json
+            - |
+              BOOTSTRAP_SERVER=$(jq -r '.endpoint' /tmp/cluster-info.json | sed 's|SASL_SSL://||')
+              echo "${BOOTSTRAP_SERVER}" > /tmp/bootstrap-server.txt
+            - echo "Creating API key for cluster ${LKC}..."
+            - |
+              if ! confluent api-key create --resource ${LKC} --output json > /tmp/api-key.json 2>&1; then
+                echo "Failed to create API key"
+                cat /tmp/api-key.json
+                exit 1
+              fi
+              jq -r '.api_key // .key' /tmp/api-key.json > /tmp/api-key.txt
+              jq -r '.api_secret // .secret' /tmp/api-key.json > /tmp/api-secret.txt
+              cat /tmp/api-key.txt > /tmp/api-key-id.txt
+            # Read credentials from files
+            - export BOOTSTRAP_SERVER=$(cat /tmp/bootstrap-server.txt)
+            - export API_KEY=$(cat /tmp/api-key.txt)
+            - export API_SECRET=$(cat /tmp/api-secret.txt)
+            # Clean up sensitive files on Semaphore agent
+            - rm -f /tmp/api-key.json /tmp/cluster-info.json
             # Create unique test pod for this run
             - export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
             - echo "Creating pod ${TOOLBOX_POD}..."
@@ -132,20 +184,29 @@ blocks:
             - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
             - echo "Running dev-conf.sh..."
             - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && ./dev-conf.sh'
-            # Run tests
+            # Create test.conf with extracted credentials
+            - echo "Creating test.conf with cluster credentials..."
+            - |
+              cat > /tmp/test.conf << EOF
+              security.protocol=SASL_SSL
+              sasl.mechanism=PLAIN
+              sasl.username=${API_KEY}
+              sasl.password=${API_SECRET}
+              ssl.endpoint.identification.algorithm=none
+              test.timeout.multiplier=5
+              test.topic.prefix=njc-test-
+              test.topic.random=true
+              metadata.broker.list=${BOOTSTRAP_SERVER}
+              test.skip.idempotent=true
+              test.supported.acks=-1
+              test.sleep.multiplier=2.0
+              EOF
+              # Remove leading spaces
+              sed -i 's/^[[:space:]]*//' /tmp/test.conf
+              # Copy to pod
+              kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf
+              rm -f /tmp/test.conf
+            - echo "test.conf created successfully"
+            - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
             - echo "Running librdkafka tests..."
             - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-            # # Install Confluent CLI
-            # - echo "Installing Confluent CLI..."
-            # - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
-            # - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
-            # # Find and add CLI to PATH
-            # - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
-            # - export PATH="${CLI_DIR}:${PATH}"
-            # # Authenticate Confluent CLI (using credentials from vault-sem-get-secret njc-test-user-password)
-            # - export CONFLUENT_CLOUD_EMAIL="${username}"
-            # - export CONFLUENT_CLOUD_PASSWORD="${password}"
-            # - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
-            # - confluent login --url https://devel.cpdev.cloud
-            # # Describe the Kafka cluster
-            # - confluent kafka cluster describe --environment ${ENV_ID} ${LKC}

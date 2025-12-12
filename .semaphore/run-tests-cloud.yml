@@ -197,7 +197,6 @@ blocks:
               test.topic.prefix=njc-test-
               test.topic.random=true
               metadata.broker.list=${BOOTSTRAP_SERVER}
-              test.skip.idempotent=true
               test.supported.acks=-1
               test.sleep.multiplier=2.0
               EOF
@@ -209,4 +208,4 @@ blocks:
             - echo "test.conf created successfully"
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
             - echo "Running librdkafka tests..."
-            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001,0002,0003,0004,0005,0006 ./run-test.sh" || echo "Tests finished with failures"

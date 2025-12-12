@@ -30,21 +30,22 @@ blocks:
       epilogue:
         always:
           commands:
-            - echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
-            - kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
-            - |
-              if [[ -f /tmp/api-key-id.txt ]]; then
-                API_KEY_ID=$(cat /tmp/api-key-id.txt)
-                echo "Deleting API key ${API_KEY_ID}..."
-                # Find CLI binary path
-                CLI_BIN=$(find /tmp/cli/dist -type f -name 'confluent' -executable 2>/dev/null | head -1)
-                if [[ -n "$CLI_BIN" ]]; then
-                  $CLI_BIN api-key delete ${API_KEY_ID} --force || echo "Failed to delete API key"
-                else
-                  echo "CLI not found, skipping API key cleanup"
-                fi
-                rm -f /tmp/api-key-id.txt
-              fi
+            - echo "Skipping cleanup - pod and API key will persist"
+            # - echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
+            # - kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
+            # - |
+            #   if [[ -f /tmp/api-key-id.txt ]]; then
+            #     API_KEY_ID=$(cat /tmp/api-key-id.txt)
+            #     echo "Deleting API key ${API_KEY_ID}..."
+            #     # Find CLI binary path
+            #     CLI_BIN=$(find /tmp/cli/dist -type f -name 'confluent' -executable 2>/dev/null | head -1)
+            #     if [[ -n "$CLI_BIN" ]]; then
+            #       $CLI_BIN api-key delete ${API_KEY_ID} --force || echo "Failed to delete API key"
+            #     else
+            #       echo "CLI not found, skipping API key cleanup"
+            #     fi
+            #     rm -f /tmp/api-key-id.txt
+            #   fi
       jobs:
         - name: "Run Integration Tests"
           commands:

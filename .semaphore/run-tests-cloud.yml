@@ -215,5 +215,4 @@ blocks:
               echo "=========================="
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
             - echo "Running librdkafka tests..."
-            # - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LKC=${LKC} TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-            - sleep 7200
+            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests &&  TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"

@@ -3467,6 +3467,60 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_brokers_broadcast_state_change(rkb->rkb_rk);
                 break;
 
+        case RD_KAFKA_OP_SHARE_FETCH:
+                rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
+                           "Received SHARE_FETCH op for broker %s with "
+                           "should_fetch = %d",
+                           rd_kafka_broker_name(rkb),
+                           rko->rko_u.share_fetch.should_fetch);
+                /* This is only temporary handling for testing to avoid crashing
+                 * on assert  - the code below will automatically enqueue a
+                 * reply which is not the final behaviour. */
+                /* Insert errors randomly for testing, remove this code once
+                 * actual errors can be tested via the mock broker. */
+                // if (rd_jitter(0, 10) > 7) {
+                //         rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
+                //                    "Injecting error! %s : %d",
+                //                    rd_kafka_broker_name(rkb),
+                //                    rko->rko_u.share_fetch.should_fetch);
+
+                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
+                //         rko = NULL;
+                // }
+
+                if (rd_kafka_broker_or_instance_terminating(rkb)) {
+                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                   "Ignoring SHARE_FETCH op: "
+                                   "instance or broker is terminating");
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
+                } else if(rkb->rkb_fetching) {
+                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                   "Ignoring SHARE_FETCH op: "
+                                   "already fetching");
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
+                }
+
+                rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
+                
+                // if (!rko->rko_u.share_fetch.should_fetch) {
+                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                //                    "Ignoring SHARE_FETCH op: "
+                //                    "should_fetch is false");
+                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__NOOP);
+                //         break;
+                // }
+
+                // if(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
+                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                //                    "Connection not up: Sending connect in progress as reply");
+                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
+                //         break;
+                // }
+
+                rko = NULL; /* the rko is reused for the reply */
+
+                break;
+
         case RD_KAFKA_OP_TERMINATE:
                 /* nop: just a wake-up. */
                 rd_rkb_dbg(rkb, BROKER, "TERM",
@@ -3551,28 +3605,6 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_unlock(rkb);
 
                 wakeup = rd_true;
-                break;
-
-        case RD_KAFKA_OP_SHARE_FETCH:
-                rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
-                           "Received SHARE_FETCH op for broker %s with "
-                           "should_fetch = %d",
-                           rd_kafka_broker_name(rkb),
-                           rko->rko_u.share_fetch.should_fetch);
-                /* This is only temporary handling for testing to avoid crashing
-                 * on assert  - the code below will automatically enqueue a
-                 * reply which is not the final behaviour. */
-                /* Insert errors randomly for testing, remove this code once
-                 * actual errors can be tested via the mock broker. */
-                // if (rd_jitter(0, 10) > 7) {
-                //         rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
-                //                    "Injecting error! %s : %d",
-                //                    rd_kafka_broker_name(rkb),
-                //                    rko->rko_u.share_fetch.should_fetch);
-
-                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
-                //         rko = NULL;
-                // }
                 break;
 
         default:
@@ -4294,6 +4326,48 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
 }
 
 
+/**
+ * Consumer serving
+ */
+static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
+                                                 rd_ts_t abs_timeout) {
+        unsigned int initial_state = rkb->rkb_state;
+        rd_ts_t now;
+
+        rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
+
+        rd_kafka_broker_lock(rkb);
+
+        while (!rd_kafka_broker_terminating(rkb) &&
+               rkb->rkb_state == initial_state &&
+               abs_timeout > (now = rd_clock())) {
+                rd_ts_t min_backoff = abs_timeout;
+
+                rd_kafka_broker_unlock(rkb);
+
+                if (rkb->rkb_toppar_cnt > 0 &&
+                    rkb->rkb_share_fetch_session.epoch >= 0 &&
+                    rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
+                        /* There are partitions to fetch but the
+                         * connection is not up. */
+                        rkb->rkb_persistconn.internal++;
+                }
+
+                /* Check and move retry buffers */
+                if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
+                        rd_kafka_broker_retry_bufs_move(rkb, &min_backoff);
+
+                if (min_backoff > abs_timeout)
+                        min_backoff = abs_timeout;
+
+                if (rd_kafka_broker_ops_io_serve(rkb, min_backoff))
+                        return; /* Wakeup */
+
+                rd_kafka_broker_lock(rkb);
+        }
+
+        rd_kafka_broker_unlock(rkb);
+}
 
 /**
  * Consumer serving
@@ -4504,6 +4578,8 @@ static void rd_kafka_broker_serve(rd_kafka_broker_t *rkb, int timeout_ms) {
 
         if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER)
                 rd_kafka_broker_producer_serve(rkb, abs_timeout);
+        else if (RD_KAFKA_IS_SHARE_CONSUMER(rkb->rkb_rk))
+                rd_kafka_broker_share_consumer_serve(rkb, abs_timeout);
         else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER)
                 rd_kafka_broker_consumer_serve(rkb, abs_timeout);
 
@@ -4942,6 +5018,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_port                      = port;
         rkb->rkb_origname                  = rd_strdup(name);
         rkb->rkb_c.connections_max_idle_ms = -1;
+        rkb->rkb_share_fetch_session.epoch = 0;
 
         mtx_init(&rkb->rkb_lock, mtx_plain);
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);

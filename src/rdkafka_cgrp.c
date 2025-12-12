@@ -4061,6 +4061,19 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
         rd_kafka_toppar_lock(rktp);
         rd_assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP));
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_CGRP;
+        if(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) && rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
+                rd_kafka_op_t *rko;
+                rko      = rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD);
+                rko->rko_rktp = rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPADD",
+                             "Group \"%s\": enqueue partition add for %s [%" PRId32 "] "
+                             "on broker %s",
+                             rkcg->rkcg_group_id->str,
+                             rktp->rktp_rkt->rkt_topic->str,
+                             rktp->rktp_partition,
+                             rd_kafka_broker_name(rktp->rktp_broker));
+                rd_kafka_q_enq(rktp->rktp_broker->rkb_ops, rko);
+        }
         rd_kafka_toppar_unlock(rktp);
 
         rd_kafka_toppar_keep(rktp);
@@ -4083,6 +4096,20 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
 
+        if(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) && rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
+                rd_kafka_op_t *rko;
+                rko      = rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE);
+                rko->rko_rktp = rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
+                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPDEL",
+                             "Group \"%s\": enqueue partition remove for %s [%" PRId32 "] "
+                             "on broker %s",
+                             rkcg->rkcg_group_id->str,
+                             rktp->rktp_rkt->rkt_topic->str,
+                             rktp->rktp_partition,
+                             rd_kafka_broker_name(rktp->rktp_broker));
+                rd_kafka_q_enq(rktp->rktp_broker->rkb_ops, rko);
+        }
+        
         rd_kafka_toppar_purge_internal_fetch_queue_maybe(rktp);
 
         rd_kafka_toppar_unlock(rktp);

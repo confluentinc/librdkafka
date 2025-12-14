@@ -131,6 +131,11 @@ rd_kafka_fetch_pos_make(int64_t offset,
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
                    rd_kafka_toppar_s) rd_kafka_toppar_tqhead_t;
 
+typedef enum rd_kafka_share_acknowledgement_type {
+        RD_KAFKA_SHARE_ACK_GAP    = 0,  /* gap */
+        RD_KAFKA_SHARE_ACK_ACCEPT = 1   /* accept */
+} rd_kafka_share_acknowledgement_type;
+
 /**
  * Topic + Partition combination
  */
@@ -184,6 +189,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rd_kafka_q_t *rktp_fetchq; /* Queue of fetched messages
                                     * from broker.
                                     * Broker thread -> App */
+        rd_kafka_q_t *rktp_temp_fetchq; /* Temporary fetch queue
+                                        * used to filter acquired records */
         rd_kafka_q_t *rktp_ops;    /* * -> Main thread */
 
         rd_atomic32_t rktp_msgs_inflight; /**< Current number of
@@ -491,8 +498,10 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 int64_t first_offset;
                 int64_t last_offset;
                 int16_t delivery_count;
-        } *rktp_share_acknowledge; /* NULL = not initialized */
+                rd_kafka_share_acknowledgement_type type;
+        };
         size_t rktp_share_acknowledge_count; /* number of entries in rktp_share_acknowledge (0 when NULL) */
+        rd_list_t *rktp_share_acknowledgement_list; /*Type: rd_kafka_toppar_share_ack_entry_t */
 };
 
 /**

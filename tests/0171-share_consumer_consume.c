@@ -684,79 +684,6 @@ static void test_share_multi_consumers_multi_partitions_multi_topics(void) {
         }
 }
 
-static void test_batch_all_partitions_arrive_together(void) {
-        char errstr[512];
-        const char *group = "share-group-batch-all";
-        const char *topic = test_mk_topic_name("0154-share-batch-all", 1);
-        const int partition_cnt = 3;
-        const int msgs_per_partition = 5;
-        const int total_msgs = partition_cnt * msgs_per_partition;
-
-        TEST_SAY("=== Expect single batch of %d msgs across %d partitions ===\n",
-                 total_msgs, partition_cnt);
-
-        /* Create topic with 3 partitions and produce 5 msgs per partition */
-        test_create_topic_wait_exists(NULL, topic, partition_cnt, -1, 60 * 1000);
-        for (int p = 0; p < partition_cnt; p++)
-                test_produce_msgs_easy(topic, p, p, msgs_per_partition);
-
-        /* Create share consumer */
-        rd_kafka_conf_t *conf;
-        test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set(conf, "share.consumer", "true", errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "group.protocol", "consumer", errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr, sizeof(errstr));
-        rd_kafka_t *consumer = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-
-        /* Read from beginning */
-        const char *grp_conf[] = {"share.auto.offset.reset","SET","earliest"};
-        test_IncrementalAlterConfigs_simple(consumer, RD_KAFKA_RESOURCE_GROUP, group, grp_conf, 1);
-
-        /* Subscribe */
-        rd_kafka_topic_partition_list_t *subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        TEST_ASSERT(!rd_kafka_subscribe(consumer, subs), "subscribe failed");
-        rd_kafka_topic_partition_list_destroy(subs);
-
-        /* Consume once, expect all 15 messages in single batch */
-        rd_kafka_message_t *msgs[32];
-        size_t rcvd = 0;
-        int counts[partition_cnt];
-        memset(counts, 0, sizeof(counts));
-
-        rd_kafka_error_t *err = rd_kafka_share_consume_batch(consumer, 10000, msgs, &rcvd);
-        TEST_ASSERT(!err, "Consume error: %s", err ? rd_kafka_error_string(err) : "");
-        if (err) rd_kafka_error_destroy(err);
-
-        TEST_SAY("Received %zu messages in one batch\n", rcvd);
-        TEST_ASSERT(rcvd == (size_t)total_msgs,
-                    "Expected %d messages in single batch, got %zu",
-                    total_msgs, rcvd);
-
-        /* Verify 5 per partition, destroy messages */
-        for (size_t i = 0; i < rcvd; i++) {
-                rd_kafka_message_t *m = msgs[i];
-                TEST_ASSERT(!m->err, "Message error: %s", rd_kafka_message_errstr(m));
-                int p = m->partition;
-                TEST_ASSERT(p >= 0 && p < partition_cnt, "Unexpected partition %d", p);
-                counts[p]++;
-                rd_kafka_message_destroy(m);
-        }
-        for (int p = 0; p < partition_cnt; p++) {
-                TEST_ASSERT(counts[p] == msgs_per_partition,
-                            "Partition %d expected %d msgs, got %d",
-                            p, msgs_per_partition, counts[p]);
-        }
-
-        TEST_SAY("✓ Single batch contained all %d msgs (5 per partition)\n", total_msgs);
-
-        test_delete_topic(consumer, topic);
-        rd_kafka_consumer_close(consumer);
-        rd_kafka_destroy(consumer);
-}
-
 
 int main_0171_share_consumer_consume(int argc, char **argv) {
 
@@ -767,7 +694,5 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         test_share_single_consumer_multi_partitions_multi_topics();
         test_share_multi_consumers_multi_partitions_one_topic();
         test_share_multi_consumers_multi_partitions_multi_topics();
-        /* Uncomment it after fixing the issue */
-        //test_batch_all_partitions_arrive_together();
         return 0;
 }

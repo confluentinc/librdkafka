@@ -272,9 +272,10 @@ _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
-_TEST_DECL(0154_share_consumer);
 _TEST_DECL(0155_share_group_heartbeat_mock);
 _TEST_DECL(0156_kip932_sharefetch_mockbroker);
+_TEST_DECL(0170_share_consumer_subscription);
+_TEST_DECL(0171_share_consumer_consume);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -543,9 +544,11 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
-    _TEST(0154_share_consumer, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
     _TEST(0156_kip932_sharefetch_mockbroker, TEST_F_LOCAL),
+    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

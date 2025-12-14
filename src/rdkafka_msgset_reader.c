@@ -1499,6 +1499,33 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
         return err;
 }
 
+rd_kafka_resp_err_t
+rd_kafka_share_msgset_parse(rd_kafka_buf_t *rkbuf,
+                      rd_kafka_buf_t *request,
+                      rd_kafka_toppar_t *rktp,
+                      rd_kafka_aborted_txns_t *aborted_txns,
+                      const struct rd_kafka_toppar_ver *tver,
+                      rd_kafka_q_t *par_rkq) {
+        rd_kafka_msgset_reader_t msetr;
+        rd_kafka_resp_err_t err;
+
+        rd_kafka_msgset_reader_init(&msetr, rkbuf, rktp, tver, aborted_txns,
+                                    par_rkq);
+
+        /* Parse and handle the message set */
+        err = rd_kafka_msgset_reader_run(&msetr);
+
+        rd_atomic64_add(&rktp->rktp_c.rx_msgs, msetr.msetr_msgcnt);
+        rd_atomic64_add(&rktp->rktp_c.rx_msg_bytes, msetr.msetr_msg_bytes);
+
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchcnt,
+                   (int64_t)msetr.msetr_msgcnt);
+        rd_avg_add(&rktp->rktp_rkt->rkt_avg_batchsize,
+                   (int64_t)msetr.msetr_msg_bytes);
+
+        return err;
+}
+
 
 /**
  * @brief Offset comparator

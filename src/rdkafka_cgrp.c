@@ -549,7 +549,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_coord = rd_kafka_broker_add_logical(rk, "GroupCoordinator");
 
         if (rk->rk_conf.enable_auto_commit &&
-            rk->rk_conf.auto_commit_interval_ms > 0)
+            rk->rk_conf.auto_commit_interval_ms > 0 && !RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 rd_kafka_timer_start(
                     &rk->rk_timers, &rkcg->rkcg_offset_commit_tmr,
                     rk->rk_conf.auto_commit_interval_ms * 1000ll,
@@ -4047,6 +4047,12 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
  */
 static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
                                         rd_kafka_toppar_t *rktp) {
+                                                printf("SHARE DEBUG: cgrp_partition_add called for %s [%d]\n",
+                                                        rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+                                                 printf("SHARE DEBUG: flags ON_RKB=%d, ON_CGRP=%d, is_share=%d\n",
+                                                        !!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB),
+                                                        !!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP),
+                                                        RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk));
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTADD",
                      "Group \"%s\": add %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
@@ -4057,6 +4063,8 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_CGRP;
         if(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) && rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
                 rd_kafka_op_t *rko;
+                printf("SHARE DEBUG: INSIDE IF - sending SHARE_SESSION_PARTITION_ADD to broker %s\n",
+                       rd_kafka_broker_name(rktp->rktp_broker));
                 rko      = rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD);
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPADD",
@@ -4666,6 +4674,7 @@ void rd_kafka_cgrp_assigned_offsets_commit(
     rd_bool_t set_offsets,
     const char *reason) {
         rd_kafka_op_t *rko;
+        printf("Should not get here\n");
 
         if (rd_kafka_cgrp_assignment_is_lost(rkcg)) {
                 rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "AUTOCOMMIT",

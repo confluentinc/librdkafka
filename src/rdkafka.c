@@ -3022,11 +3022,33 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
  */
 static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
                                                  void *arg) {
-        rd_kafka_op_t *rko = arg;
-        rd_kafka_t *rk     = rkts->rkts_rk;
+        rd_kafka_op_t *rko    = arg;
+        rd_kafka_t *rk        = rkts->rkts_rk;
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
 
         rd_kafka_dbg(rk, CGRP, "SHARE", "Re-enqueing SHARE_FETCH_FANOUT");
         rd_kafka_q_enq(rk->rk_ops, rko);
+        rkcg->rkcg_share.share_fetch_fanout_retry_op = NULL;
+}
+
+/**
+ * @brief Enqueue a SHARE_FETCH_FANOUT_RETRY op on the main queue
+ * @param backoff_ms Op will be enqueued after this many milliseconds.
+ * @locality main thread
+ */
+static void rd_kafka_share_fetch_fanout_with_backoff_retry(rd_kafka_t *rk,
+                                                           rd_ts_t abs_timeout,
+                                                           int backoff_ms) {
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+        rd_kafka_op_t *rko =
+            rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT_RETRY,
+                               rd_kafka_share_fetch_fanout_op);
+        rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
+        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+        rkcg->rkcg_share.share_fetch_fanout_retry_op = rko;
+        rd_kafka_timer_start_oneshot(
+            &rk->rk_timers, &rkcg->rkcg_share.share_fetch_fanout_tmr, rd_true,
+            backoff_ms * 1000, rd_kafka_share_fetch_fanout_renqueue, rko);
 }
 
 /**
@@ -3038,19 +3060,18 @@ static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
 static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                                                      rd_ts_t abs_timeout,
                                                      int backoff_ms) {
-        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
-        rd_kafka_op_t *rko    = rd_kafka_op_new_cb(
-            rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
-        rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
-        rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
 
         if (backoff_ms > 0)
-                rd_kafka_timer_start_oneshot(
-                    &rk->rk_timers, &rkcg->rkcg_share.share_fetch_fanout_tmr,
-                    rd_true, backoff_ms * 1000,
-                    rd_kafka_share_fetch_fanout_renqueue, rko);
-        else
+                rd_kafka_share_fetch_fanout_with_backoff_retry(rk, abs_timeout,
+                                                               backoff_ms);
+        else {
+                rd_kafka_op_t *rko =
+                    rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT,
+                                       rd_kafka_share_fetch_fanout_op);
+                rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
+                rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
                 rd_kafka_q_enq(rk->rk_ops, rko);
+        }
 }
 
 /**
@@ -4779,6 +4800,11 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
+                rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
+                res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
+                break;
+
+        case RD_KAFKA_OP_SHARE_FETCH_FANOUT_RETRY | RD_KAFKA_OP_REPLY:
                 rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
                 res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
                 break;

@@ -30,17 +30,16 @@ blocks:
       epilogue:
         always:
           commands:
+          # Delete test pod
             - |
-              # Cleanup for K2 only (pod deletion)
               if [[ "$KAFKA_TYPE" == "k2" ]]; then
                 echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
                 kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
               fi
+            # Delete API key
             - |
-              # Cleanup API key (both K1 and K2)
               if [[ -f /tmp/api-key-id.txt ]]; then
                 API_KEY_ID=$(cat /tmp/api-key-id.txt)
-                echo "Deleting API key ${API_KEY_ID}..."
                 CLI_BIN=$(find /tmp/cli/dist -type f -name 'confluent' -executable 2>/dev/null | head -1)
                 if [[ -n "$CLI_BIN" ]]; then
                   $CLI_BIN api-key delete ${API_KEY_ID} --force || echo "Failed to delete API key"
@@ -53,12 +52,6 @@ blocks:
         - name: "Run Integration Tests"
           commands:
             - |
-              echo "Integration Test Configuration:"
-              echo "  LKC: ${LKC:-not set}"
-              echo "  ENV_ID: ${ENV_ID:-not set}"
-              echo "  ORG_ID: ${ORG_ID:-not set}"
-              echo "  KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
-              echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set (required for K2)}"
               if [[ -z "$LKC" ]]; then
                 echo "Error: LKC is required"
                 exit 1
@@ -145,8 +138,6 @@ blocks:
             # K1 setup
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
-                echo "=== K1 Setup ==="
-                echo "Cloning librdkafka..."
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final
                 
@@ -157,7 +148,6 @@ blocks:
                 echo "Building tests..."
                 cd tests/
                 make
-                echo "=== Build complete ==="
                 
                 echo "Creating test.conf..."
                 cat > /tmp/librdkafka/tests/test.conf << EOF
@@ -173,12 +163,6 @@ blocks:
               test.sleep.multiplier=2.0
               EOF
                 sed -i 's/^[[:space:]]*//' /tmp/librdkafka/tests/test.conf
-                
-                echo "=== test.conf contents (K1) ==="
-                cat /tmp/librdkafka/tests/test.conf | \
-                  sed 's/^\(sasl\.username=\).*/\1[REDACTED]/' | \
-                  sed 's/^\(sasl\.password=\).*/\1[REDACTED]/'
-                echo "==============================="
               fi
 
             # K2 setup
@@ -251,17 +235,14 @@ blocks:
 
             # Run tests
             - |
-              echo "=== Running librdkafka tests ==="
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 echo "Executing tests on agent..."
                 cd /tmp/librdkafka/tests
                 echo "Current directory: $(pwd)"
                 echo "test.conf exists: $(test -f test.conf && echo yes || echo no)"
-                TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
+                ./run-test.sh || echo "Tests finished with failures"
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Executing tests in pod ${TOOLBOX_POD}..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
-              fi
-              echo "=== Tests complete ==="
-                              
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && ./run-test.sh" || echo "Tests finished with failures"
+              fi                              

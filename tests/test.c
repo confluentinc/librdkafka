@@ -542,7 +542,7 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
-        _TEST(0154_ssl_keys_3des_fips, TEST_F_LOCAL),
+        _TEST(0154_ssl_keys_3des_fips, 0),
         _TEST(0155_ssl_cipher_fips, 0),
 
     /* Manual tests */

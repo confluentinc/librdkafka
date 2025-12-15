@@ -236,7 +236,6 @@ blocks:
             # Run tests
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
-                echo "Executing tests on agent..."
                 cd /tmp/librdkafka/tests
                 echo "Current directory: $(pwd)"
                 echo "test.conf exists: $(test -f test.conf && echo yes || echo no)"

@@ -30,36 +30,35 @@ blocks:
       epilogue:
         always:
           commands:
-            - echo "Skipping cleanup - pod and API key will persist"
-            # - echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
-            # - kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
-            # - |
-            #   if [[ -f /tmp/api-key-id.txt ]]; then
-            #     API_KEY_ID=$(cat /tmp/api-key-id.txt)
-            #     echo "Deleting API key ${API_KEY_ID}..."
-            #     # Find CLI binary path
-            #     CLI_BIN=$(find /tmp/cli/dist -type f -name 'confluent' -executable 2>/dev/null | head -1)
-            #     if [[ -n "$CLI_BIN" ]]; then
-            #       $CLI_BIN api-key delete ${API_KEY_ID} --force || echo "Failed to delete API key"
-            #     else
-            #       echo "CLI not found, skipping API key cleanup"
-            #     fi
-            #     rm -f /tmp/api-key-id.txt
-            #   fi
+            - |
+              # Cleanup for K2 only (pod deletion)
+              if [[ "$KAFKA_TYPE" == "k2" ]]; then
+                echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
+                kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
+              fi
+            - |
+              # Cleanup API key (both K1 and K2)
+              if [[ -f /tmp/api-key-id.txt ]]; then
+                API_KEY_ID=$(cat /tmp/api-key-id.txt)
+                echo "Deleting API key ${API_KEY_ID}..."
+                CLI_BIN=$(find /tmp/cli/dist -type f -name 'confluent' -executable 2>/dev/null | head -1)
+                if [[ -n "$CLI_BIN" ]]; then
+                  $CLI_BIN api-key delete ${API_KEY_ID} --force || echo "Failed to delete API key"
+                else
+                  echo "CLI not found, skipping API key cleanup"
+                fi
+                rm -f /tmp/api-key-id.txt
+              fi
       jobs:
         - name: "Run Integration Tests"
           commands:
             - |
               echo "Integration Test Configuration:"
-              echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
               echo "  LKC: ${LKC:-not set}"
               echo "  ENV_ID: ${ENV_ID:-not set}"
               echo "  ORG_ID: ${ORG_ID:-not set}"
               echo "  KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
-              if [[ -z "$K8S_CONTEXT" ]]; then
-                echo "Error: K8S_CONTEXT is required"
-                exit 1
-              fi
+              echo "  K8S_CONTEXT: ${K8S_CONTEXT:-not set (required for K2)}"
               if [[ -z "$LKC" ]]; then
                 echo "Error: LKC is required"
                 exit 1
@@ -80,34 +79,48 @@ blocks:
                 echo "Error: KAFKA_TYPE must be 'k1' or 'k2'"
                 exit 1
               fi
-              echo "KAFKA_TYPE=${KAFKA_TYPE} (no action for now)"
-            # Install oidc-kubelogin
-            - echo "Installing oidc-kubelogin..."
-            - curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip && unzip -o /tmp/kubelogin.zip -d /tmp && sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin && chmod +x /usr/local/bin/oidc-kubelogin
-            # Clone helper repos
-            - echo "Cloning helper repos..."
-            - git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
-            - git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
-            # Assume AWS role for devel environment
-            - echo "Assuming AWS role for devel environment..."
-            - . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
-            - aws sts get-caller-identity
-            # Set up kubeconfig
-            - echo "Setting up kubeconfig"
-            - ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
-            - export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
-            # Install Confluent CLI (needed for getting cluster info and API keys)
+              if [[ "$KAFKA_TYPE" == "k2" && -z "$K8S_CONTEXT" ]]; then
+                echo "Error: K8S_CONTEXT is required for K2 testing"
+                exit 1
+              fi
+              echo "Running ${KAFKA_TYPE^^} tests..."
+
+            # Kubectl setup
+            - |
+              if [[ "$KAFKA_TYPE" == "k2" ]]; then
+                echo "Installing oidc-kubelogin..."
+                curl -sL https://github.com/int128/kubelogin/releases/download/v1.28.0/kubelogin_linux_amd64.zip -o /tmp/kubelogin.zip
+                unzip -o /tmp/kubelogin.zip -d /tmp
+                sudo mv /tmp/kubelogin /usr/local/bin/oidc-kubelogin
+                chmod +x /usr/local/bin/oidc-kubelogin
+                
+                echo "Cloning helper repos..."
+                git clone --depth 1 git@github.com:confluentinc/cc-dotfiles.git ${SEMAPHORE_GIT_DIR}/cc-dotfiles
+                git clone --depth 1 git@github.com:confluentinc/cc-mk-include.git ${SEMAPHORE_GIT_DIR}/mk-include
+                
+                echo "Assuming AWS role for devel environment..."
+                . assume-iam-role arn:aws:iam::037803949979:role/semaphore-access
+                aws sts get-caller-identity
+                
+                echo "Setting up kubeconfig..."
+                ${SEMAPHORE_GIT_DIR}/mk-include/bin/cc-system-tests/setup_kubeconfig.sh devel
+                export KUBECONFIG=$HOME/.kube/ccloud-config/devel/kubeconfig
+              else
+                echo "K1 mode - skipping K8s setup"
+              fi
+
+            # Install Confluent CLI
             - echo "Installing Confluent CLI..."
             - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
             - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
             - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
             - export PATH="${CLI_DIR}:${PATH}"
-            # Authenticate Confluent CLI (using NJC credentials from Vault v3)
+
+            # Get cluster details
             - export CONFLUENT_CLOUD_EMAIL="${NJC_CCLOUD_USER_EMAIL}"
             - export CONFLUENT_CLOUD_PASSWORD="${NJC_CCLOUD_USER_PASSWORD}"
             - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
             - confluent login --url https://devel.cpdev.cloud --organization ${ORG_ID}
-            # Get cluster details and extract bootstrap server (save to file, not logs)
             - echo "Getting cluster details..."
             - confluent environment use ${ENV_ID}
             - confluent kafka cluster describe ${LKC} --output json > /tmp/cluster-info.json
@@ -124,23 +137,50 @@ blocks:
               jq -r '.api_key // .key' /tmp/api-key.json > /tmp/api-key.txt
               jq -r '.api_secret // .secret' /tmp/api-key.json > /tmp/api-secret.txt
               cat /tmp/api-key.txt > /tmp/api-key-id.txt
-            # Read credentials from files
             - export BOOTSTRAP_SERVER=$(cat /tmp/bootstrap-server.txt)
             - export API_KEY=$(cat /tmp/api-key.txt)
             - export API_SECRET=$(cat /tmp/api-secret.txt)
-            # Clean up sensitive files on Semaphore agent
             - rm -f /tmp/api-key.json /tmp/cluster-info.json
-            # Create unique test pod for this run
-            - export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
-            - echo "Creating pod ${TOOLBOX_POD}..."
-            - kubectl --context ${K8S_CONTEXT} run ${TOOLBOX_POD} --image=debian:latest --command -- sleep infinity
-            - echo "Waiting for pod to be ready..."
-            - kubectl --context ${K8S_CONTEXT} wait --for=condition=Ready pod/${TOOLBOX_POD} --timeout=120s
-            # Set up the pod environment
-            - echo "Installing packages in pod..."
+
+            # K1 setup
             - |
-              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c '
-                apt-get update -qq && apt-get install -y \
+              if [[ "$KAFKA_TYPE" == "k1" ]]; then
+                echo "K1 mode - skipping K8s setup"
+                sudo apt-get update -qq
+                sudo apt-get install -y build-essential libssl-dev git
+                
+                echo "Cloning librdkafka..."
+                cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
+                cd /tmp/librdkafka && git checkout k2_testing_final
+                
+                echo "Running dev-conf.sh..."
+                ./dev-conf.sh
+                
+                echo "Creating test.conf..."
+                cat > /tmp/librdkafka/tests/test.conf << EOF
+              security.protocol=SASL_SSL
+              sasl.mechanism=PLAIN
+              sasl.username=${API_KEY}
+              sasl.password=${API_SECRET}
+              ssl.endpoint.identification.algorithm=none
+              test.timeout.multiplier=5
+              test.topic.prefix=njc-test-
+              test.topic.random=true
+              metadata.broker.list=${BOOTSTRAP_SERVER}
+              test.sleep.multiplier=2.0
+              EOF
+                sed -i 's/^[[:space:]]*//' /tmp/librdkafka/tests/test.conf
+              fi
+
+            # K2 setup
+            - |
+              if [[ "$KAFKA_TYPE" == "k2" ]]; then
+                export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
+                kubectl --context ${K8S_CONTEXT} run ${TOOLBOX_POD} --image=debian:latest --command -- sleep infinity
+                
+                kubectl --context ${K8S_CONTEXT} wait --for=condition=Ready pod/${TOOLBOX_POD} --timeout=120s
+                
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'apt-get update -qq && apt-get install -y \
                   apt-transport-https \
                   ca-certificates \
                   httping \
@@ -168,27 +208,18 @@ blocks:
                   wget \
                   build-essential \
                   libssl-dev \
-                  git
-              '
-            - echo "Installing LLVM and Java..."
-            - |
-              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c '
-                apt-get install -y llvm-17 llvm-17-tools llvm clang
-                apt-get install -y openjdk-21-jdk default-jdk
-                apt-get install -y iotop nethogs
-              '
-            # Clone librdkafka in the pod
-            - echo "Cloning librdkafka in pod..."
-            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp && git clone https://github.com/confluentinc/librdkafka.git'
-            # Checkout k2_testing_final branch and configure
-            - echo "Checking out k2_testing_final branch..."
-            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
-            - echo "Running dev-conf.sh..."
-            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && ./dev-conf.sh'
-            # Create test.conf with extracted credentials
-            - echo "Creating test.conf with cluster credentials..."
-            - |
-              cat > /tmp/test.conf << EOF
+                  git'
+                
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c '
+                  apt-get install -y llvm-17 llvm-17-tools llvm clang
+                  apt-get install -y openjdk-21-jdk default-jdk
+                  apt-get install -y iotop nethogs
+                '
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp && git clone https://github.com/confluentinc/librdkafka.git'
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && ./dev-conf.sh'
+
+                cat > /tmp/test.conf << EOF
               security.protocol=SASL_SSL
               sasl.mechanism=PLAIN
               sasl.username=${API_KEY}
@@ -201,19 +232,20 @@ blocks:
               test.supported.acks=-1
               test.sleep.multiplier=2.0
               EOF
-              # Remove leading spaces
-              sed -i 's/^[[:space:]]*//' /tmp/test.conf
-              # Copy to pod
-              kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf
-              rm -f /tmp/test.conf
-            - echo "test.conf created successfully"
-            # Display test.conf (masking sensitive values)
-            - |
-              echo "=== test.conf contents ==="
-              kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- cat /tmp/librdkafka/tests/test.conf | \
-                sed 's/^\(sasl\.username=\).*/\1[REDACTED]/' | \
-                sed 's/^\(sasl\.password=\).*/\1[REDACTED]/'
-              echo "=========================="
+                sed -i 's/^[[:space:]]*//' /tmp/test.conf
+                kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf
+                rm -f /tmp/test.conf
+              fi
+
+            # Cleanup credentials
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
-            - echo "Running librdkafka tests..."
-            - kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests &&  TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
+
+            # Run tests
+            - |
+              echo "Running librdkafka tests..."
+              if [[ "$KAFKA_TYPE" == "k1" ]]; then
+                cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
+              else
+                export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
+              fi

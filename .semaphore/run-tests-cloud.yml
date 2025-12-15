@@ -145,16 +145,14 @@ blocks:
             # K1 setup
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
-                echo "K1 mode - skipping K8s setup"
-                sudo apt-get update -qq
-                sudo apt-get install -y build-essential libssl-dev git
-                
+                echo "=== K1 Setup ==="
                 echo "Cloning librdkafka..."
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final
                 
-                echo "Running dev-conf.sh..."
+                echo "Running dev-conf.sh (this will build librdkafka)..."
                 ./dev-conf.sh
+                echo "=== Build complete ==="
                 
                 echo "Creating test.conf..."
                 cat > /tmp/librdkafka/tests/test.conf << EOF
@@ -170,6 +168,12 @@ blocks:
               test.sleep.multiplier=2.0
               EOF
                 sed -i 's/^[[:space:]]*//' /tmp/librdkafka/tests/test.conf
+                
+                echo "=== test.conf contents (K1) ==="
+                cat /tmp/librdkafka/tests/test.conf | \
+                  sed 's/^\(sasl\.username=\).*/\1[REDACTED]/' | \
+                  sed 's/^\(sasl\.password=\).*/\1[REDACTED]/'
+                echo "==============================="
               fi
 
             # K2 setup
@@ -242,10 +246,17 @@ blocks:
 
             # Run tests
             - |
-              echo "Running librdkafka tests..."
+              echo "=== Running librdkafka tests ==="
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
-                cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
+                echo "Executing tests on agent..."
+                cd /tmp/librdkafka/tests
+                echo "Current directory: $(pwd)"
+                echo "test.conf exists: $(test -f test.conf && echo yes || echo no)"
+                TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
+                echo "Executing tests in pod ${TOOLBOX_POD}..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
               fi
+              echo "=== Tests complete ==="
+                              

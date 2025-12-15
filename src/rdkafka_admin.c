@@ -5661,8 +5661,6 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_skip_tags(reply);
         }
 
-        rd_kafka_buf_skip_tags(reply);
-
         *rko_resultp = rko_result;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -6733,8 +6731,6 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_list_add(&rko_result->rko_u.admin_result.results,
                             (void *)result_response);
         }
-
-        rd_kafka_buf_skip_tags(reply);
 
         *rko_resultp = rko_result;
 

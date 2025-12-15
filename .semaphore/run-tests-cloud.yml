@@ -150,8 +150,13 @@ blocks:
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final
                 
-                echo "Running dev-conf.sh (this will build librdkafka)..."
-                ./dev-conf.sh
+                echo "Configuring librdkafka..."
+                ./configure --enable-ssl
+                echo "Building librdkafka..."
+                make
+                echo "Building tests..."
+                cd tests/
+                make
                 echo "=== Build complete ==="
                 
                 echo "Creating test.conf..."

@@ -44,6 +44,7 @@ int main_0001_multiobj(int argc, char **argv) {
         int NUM_ITER      = test_quick ? 2 : 5;
         const char *topic = NULL;
 
+        TEST_SAY("librdkafka version: %s\n", rd_kafka_version_str());
         TEST_SAY("Creating and destroying %i kafka instances\n", NUM_ITER);
 
         /* Create, use and destroy NUM_ITER kafka instances. */

@@ -1,4 +1,4 @@
-// ====== Generated from librdkafka 2.12.1 file src-cpp/rdkafkacpp.h ======
+// ====== Generated from librdkafka 2.13.0-RC1 file src-cpp/rdkafkacpp.h ======
 export const CODES: { ERRORS: {
   /* Internal errors to rdkafka: */
   /** Begin internal error codes (**-200**) */

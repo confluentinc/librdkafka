@@ -120,6 +120,7 @@ For guidelines on contributing please see [CONTRIBUTING.md](CONTRIBUTING.md)
 | 1.5.0                      | 2.11.1     |
 | 1.6.0                      | 2.12.0     |
 | 1.7.0                      | 2.12.1     |
+| 1.8.0                      | 2.13.0-RC1 |
 
 This mapping is applicable if you're using a pre-built binary. Otherwise, you can check the librdkafka version with the following command:
 

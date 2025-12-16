@@ -218,12 +218,12 @@ blocks:
               sasl.username=${API_KEY}
               sasl.password=${API_SECRET}
               ssl.endpoint.identification.algorithm=none
-              test.timeout.multiplier=5
+              test.timeout.multiplier=20
               test.topic.prefix=njc-test-
               test.topic.random=true
               metadata.broker.list=${BOOTSTRAP_SERVER}
               test.supported.acks=-1
-              test.sleep.multiplier=2.0
+              test.sleep.multiplier=3.0
               test.skip.idempotent=true
               test.skip.numbers=0011,0059,0081
               EOF

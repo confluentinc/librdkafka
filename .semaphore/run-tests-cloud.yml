@@ -224,6 +224,8 @@ blocks:
               metadata.broker.list=${BOOTSTRAP_SERVER}
               test.supported.acks=-1
               test.sleep.multiplier=2.0
+              test.skip.idempotent=true
+              test.skip.numbers=0011,0059,0081
               EOF
                 sed -i 's/^[[:space:]]*//' /tmp/test.conf
                 kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf

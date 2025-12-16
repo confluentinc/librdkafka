@@ -63,7 +63,6 @@ int main_0040_io_event(int argc, char **argv) {
         int wait_multiplier = 1;
         struct pollfd pfd;
         int r;
-        rd_kafka_resp_err_t err;
         enum { _NOPE, _YEP, _REBALANCE } expecting_io = _REBALANCE;
 
 #ifdef _WIN32
@@ -73,12 +72,11 @@ int main_0040_io_event(int argc, char **argv) {
         testid = test_id_generate();
         topic  = test_mk_topic_name(__FUNCTION__, 1);
 
-        rk_p  = test_create_producer();
+        rk_p = test_create_producer();
+        test_create_topic(rk_p, topic, 3, -1);
         rkt_p = test_create_producer_topic(rk_p, topic, NULL);
-        test_wait_topic_exists(rk_p, topic, 5000);
-        err = test_auto_create_topic_rkt(rk_p, rkt_p, tmout_multip(5000));
-        TEST_ASSERT(!err, "Topic auto creation failed: %s",
-                    rd_kafka_err2str(err));
+        test_wait_topic_exists(rk_p, topic, 10000);
+        test_wait_for_metadata_propagation(3);
 
         test_conf_init(&conf, &tconf, 0);
         rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
@@ -91,8 +89,6 @@ int main_0040_io_event(int argc, char **argv) {
 
         queue = rd_kafka_queue_get_consumer(rk_c);
 
-        test_consumer_subscribe(rk_c, topic);
-
 #ifndef _WIN32
         r = pipe(fds);
 #else
@@ -102,6 +98,9 @@ int main_0040_io_event(int argc, char **argv) {
                 TEST_FAIL("pipe() failed: %s\n", strerror(errno));
 
         rd_kafka_queue_io_event_enable(queue, fds[1], "1", 1);
+
+        test_consumer_subscribe(rk_c, topic);
+        rd_sleep(1);
 
         pfd.fd      = fds[0];
         pfd.events  = POLLIN;

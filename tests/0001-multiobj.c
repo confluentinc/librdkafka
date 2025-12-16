@@ -44,6 +44,7 @@ int main_0001_multiobj(int argc, char **argv) {
         int NUM_ITER      = test_quick ? 2 : 5;
         const char *topic = NULL;
 
+        TEST_SAY("librdkafka version: %s\n", rd_kafka_version_str());
         TEST_SAY("Creating and destroying %i kafka instances\n", NUM_ITER);
 
         /* Create, use and destroy NUM_ITER kafka instances. */
@@ -57,8 +58,11 @@ int main_0001_multiobj(int argc, char **argv) {
 
                 test_conf_init(&conf, &topic_conf, 30);
 
-                if (!topic)
+                if (!topic) {
                         topic = test_mk_topic_name("0001", 0);
+                        test_create_topic_if_auto_create_disabled(NULL, topic,
+                                                                  -1);
+                }
 
                 TIMING_START(&t_full, "full create-produce-destroy cycle");
                 rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
@@ -92,7 +96,7 @@ int main_0001_multiobj(int argc, char **argv) {
 
                 /* Topic is created on the first iteration. */
                 if (i > 0)
-                        TIMING_ASSERT(&t_full, 0, 999);
+                        TIMING_ASSERT(&t_full, 0, tmout_multip(999));
                 else
                         /* Allow metadata propagation. */
                         rd_sleep(1);

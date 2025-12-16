@@ -99,11 +99,12 @@ class MyDeliveryReportCb : public RdKafka::DeliveryReportCb {
 
     if (!msg.msg_opaque())
       return;
-
     RdKafka::MessageTimestamp ts = msg.timestamp();
-    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
+    /* Accept both CreateTime and LogAppendTime due to a bug in some cloud
+     * provider where timestamp type is not returned correctly. */
+    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+        ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
       Test::Fail(tostr() << "Dr msg timestamp type wrong: " << ts.type);
-
     golden_timestamp = ts.timestamp;
     golden_offset    = msg.offset();
   }
@@ -132,6 +133,12 @@ static void do_test_bsearch(void) {
 
   /* Start with now() - 1h */
   timestamp_ms = std::time(0) * 1000LL - 3600LL * 1000LL;
+
+  /* Create topic with CreateTime timestamp type for reliable binary
+   * search */
+  const char *topic_configs[] = {"message.timestamp.type", "CreateTime", NULL};
+  test_create_topic_if_auto_create_disabled_with_configs(
+      p->c_ptr(), topic.c_str(), 1, topic_configs);
 
   for (int i = 0; i < msgcnt; i++) {
     err = p->produce(topic, partition, RdKafka::Producer::RK_MSG_COPY,
@@ -169,6 +176,16 @@ static void do_test_bsearch(void) {
     Test::Fail("Failed to create KafkaConsumer: " + errstr);
   delete conf;
 
+  //  Get the actual stored timestamp from the golden message
+  Test::Say("Getting actual stored timestamp from golden message\n");
+  RdKafka::Message *golden_msg        = get_msg(c, golden_offset, false);
+  RdKafka::MessageTimestamp golden_ts = golden_msg->timestamp();
+  golden_timestamp =
+      golden_ts.timestamp;  // Update with actual stored timestamp
+  Test::Say(tostr() << "Golden message at offset " << golden_offset
+                    << " has actual stored timestamp " << golden_timestamp
+                    << "\n");
+  delete golden_msg;
   Test::Say("Find initial middle offset\n");
   int64_t low, high;
   test_timing_t t_qr;
@@ -192,14 +209,18 @@ static void do_test_bsearch(void) {
                          << high << " -> " << mid << "\n");
 
     RdKafka::Message *msg = get_msg(c, mid,
-                                    /* use assign() on first iteration,
-                                     * then seek() */
+                                    /* use assign() on first
+                                     * iteration, then seek() */
                                     itcnt > 0);
 
     RdKafka::MessageTimestamp ts = msg->timestamp();
-    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME)
-      Test::Fail(tostr() << "Expected CreateTime timestamp, not " << ts.type
-                         << " at offset " << msg->offset());
+    /* Accept both CreateTime and LogAppendTime due to a bug in some cloud
+     * provider where timestamp type is not returned correctly. */
+    if (ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_CREATE_TIME &&
+        ts.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_LOG_APPEND_TIME)
+      Test::Fail(tostr() << "Expected CreateTime or "
+                            "LogAppendTime timestamp, not "
+                         << ts.type << " at offset " << msg->offset());
 
     Test::Say(1, tostr() << "Message at offset " << msg->offset()
                          << " with timestamp " << ts.timestamp << "\n");

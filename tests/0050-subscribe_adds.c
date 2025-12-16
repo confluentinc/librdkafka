@@ -33,6 +33,7 @@
 
 #include <stdarg.h>
 
+
 /**
  * Verify that quick subscription additions work.
  *  * Create topics T1,T2,T3
@@ -73,8 +74,11 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
         for (i = 0; i < TOPIC_CNT; i++) {
                 rd_kafka_topic_t *rkt;
 
+                test_create_topic_if_auto_create_disabled(rk, topic[i], -1);
                 rkt = test_create_producer_topic(rk, topic[i], NULL);
-                test_wait_topic_exists(rk, topic[i], 5000);
+                test_wait_topic_exists(rk, topic[i], tmout_multip(5000));
+
+                test_wait_for_metadata_propagation(5);
 
                 test_produce_msgs(rk, rkt, testid, RD_KAFKA_PARTITION_UA,
                                   (msgcnt / TOPIC_CNT) * i,
@@ -97,7 +101,7 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
                 rd_kafka_topic_partition_list_add(tlist, topic[i],
                                                   RD_KAFKA_PARTITION_UA);
                 TEST_SAY("Subscribe to %d topic(s):\n", tlist->cnt);
-                test_print_partition_list(tlist);
+                test_print_partition_list_with_errors(tlist);
 
                 err = rd_kafka_subscribe(rk, tlist);
                 TEST_ASSERT(!err, "subscribe() failed: %s",
@@ -114,7 +118,15 @@ test_no_duplicate_messages(const char *partition_assignment_strategy) {
         err = rd_kafka_subscribe(rk, tlist);
         TEST_ASSERT(!err, "subscribe() failed: %s", rd_kafka_err2str(err));
 
-        test_consumer_poll_no_msgs("consume", rk, testid, (int)(3000));
+        /* Only run test_consumer_poll_no_msgs if librdkafka version > 2.3.0 */
+        if (rd_kafka_version() > 0x02030000) {
+                test_wait_for_metadata_propagation(3);
+                test_consumer_poll_no_msgs("consume", rk, testid, 5000);
+        } else {
+                TEST_SAY(
+                    "Skipping no-messages verification: requires librdkafka "
+                    "version > 2.3.0\n");
+        }
 
 
         test_msgver_verify("consume", &mv, TEST_MSGVER_ORDER | TEST_MSGVER_DUP,

@@ -69,6 +69,8 @@ int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
 char *test_supported_acks                  = NULL; /**< Supported acks values */
 static double test_sleep_multiplier        = 0.0;  /**< Sleep time multiplier */
+static char *test_skip_numbers =
+    NULL; /**< Comma-separated list of test numbers to skip */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -892,6 +894,11 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
                         rd_free(test_sql_cmd);
                 test_sql_cmd = rd_strdup(val);
                 TEST_UNLOCK();
+        } else if (!strcmp(name, "test.skip.idempotent")) {
+                if (!strcmp(val, "true") || !strcmp(val, "1"))
+                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
+                else
+                        test_neg_flags &= ~TEST_F_IDEMPOTENT_PRODUCER;
         } else if (!strcmp(name, "test.supported.acks")) {
                 TEST_LOCK();
                 if (test_supported_acks)
@@ -901,6 +908,12 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
         } else if (!strcmp(name, "test.sleep.multiplier")) {
                 TEST_LOCK();
                 test_sleep_multiplier = strtod(val, NULL);
+                TEST_UNLOCK();
+        } else if (!strcmp(name, "test.skip.numbers")) {
+                TEST_LOCK();
+                if (test_skip_numbers)
+                        rd_free(test_skip_numbers);
+                test_skip_numbers = rd_strdup(val);
                 TEST_UNLOCK();
         } else
                 return 0;
@@ -975,6 +988,42 @@ void test_wait_for_metadata_propagation(int wait_time) {
                 rd_sleep(sleep_time);
         }
         /* If multiplier is 0, don't sleep at all */
+}
+
+/**
+ * @brief Check if a test should be skipped based on test.skip.numbers config
+ * @param test_number The test number to check (e.g., "0011", "0055")
+ * @returns 1 if test should be skipped, 0 otherwise
+ */
+int test_should_skip_number(const char *test_number) {
+        char *skip_list, *token, *saveptr;
+        int should_skip = 0;
+
+        if (!test_skip_numbers || !*test_skip_numbers)
+                return 0;
+
+        TEST_LOCK();
+        skip_list = rd_strdup(test_skip_numbers);
+        TEST_UNLOCK();
+
+        token = strtok_r(skip_list, ",", &saveptr);
+        while (token) {
+                /* Trim whitespace */
+                while (*token == ' ' || *token == '\t')
+                        token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t'))
+                        *end-- = '\0';
+
+                if (!strcmp(token, test_number)) {
+                        should_skip = 1;
+                        break;
+                }
+                token = strtok_r(NULL, ",", &saveptr);
+        }
+
+        rd_free(skip_list);
+        return should_skip;
 }
 
 /**
@@ -1599,6 +1648,9 @@ static void run_tests(int argc, char **argv) {
                 }
                 if ((test_neg_flags & ~test_flags) & test->flags)
                         skip_reason = "Filtered due to negative test flags";
+                if (test_should_skip_number(testnum))
+                        skip_reason =
+                            "Skipped by test.skip.numbers configuration";
                 if (test_broker_version &&
                     (test->minver > test_broker_version ||
                      (test->maxver && test->maxver < test_broker_version))) {
@@ -2181,6 +2233,9 @@ int main(int argc, char **argv) {
         if (test_sleep_multiplier > 0.0) {
                 TEST_SAY("Test sleep multiplier: %.1fx\n",
                          test_sleep_multiplier);
+        }
+        if (test_skip_numbers) {
+                TEST_SAY("Test skip numbers: %s\n", test_skip_numbers);
         }
 
         {

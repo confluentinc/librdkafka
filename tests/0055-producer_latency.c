@@ -365,6 +365,28 @@ int main_0055_producer_latency(int argc, char **argv) {
                         continue;
                 }
 
+                /* Skip idempotence tests if idempotent producer tests are
+                 * disabled */
+                if (strstr(latconf->name, "idempotence") &&
+                    (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        TEST_SAY(
+                            "Skipping %s test (idempotent producer tests "
+                            "disabled)\n",
+                            latconf->name);
+                        continue;
+                }
+
+                /* Skip transaction tests if idempotent producer tests are
+                 * disabled */
+                if (strstr(latconf->name, "transactions") &&
+                    (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
+                        TEST_SAY(
+                            "Skipping %s test (idempotent producer tests "
+                            "disabled)\n",
+                            latconf->name);
+                        continue;
+                }
+
                 test_producer_latency(topic, latconf);
         }
 
@@ -379,6 +401,10 @@ int main_0055_producer_latency(int argc, char **argv) {
 
                 if (strstr(latconf->name, "no acks") &&
                     !test_is_acks_supported("0")) {
+                        should_skip = 1;
+                } else if ((strstr(latconf->name, "idempotence") ||
+                            strstr(latconf->name, "transactions")) &&
+                           (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)) {
                         should_skip = 1;
                 }
 

@@ -52,6 +52,18 @@ blocks:
         - name: "Run Integration Tests"
           commands:
             - |
+              # Default to master if LIBRDKAFKA_VERSION not set
+              export LIBRDKAFKA_VERSION="${LIBRDKAFKA_VERSION:-master}"
+              
+              echo "=== Configuration ==="
+              echo "LKC: ${LKC:-not set}"
+              echo "ENV_ID: ${ENV_ID:-not set}"
+              echo "ORG_ID: ${ORG_ID:-not set}"
+              echo "KAFKA_TYPE: ${KAFKA_TYPE:-not set}"
+              echo "K8S_CONTEXT: ${K8S_CONTEXT:-not set}"
+              echo "LIBRDKAFKA_VERSION: ${LIBRDKAFKA_VERSION}"
+              echo "===================="
+              
               if [[ -z "$LKC" ]]; then
                 echo "Error: LKC is required"
                 exit 1
@@ -134,6 +146,10 @@ blocks:
             - export API_KEY=$(cat /tmp/api-key.txt)
             - export API_SECRET=$(cat /tmp/api-secret.txt)
             - rm -f /tmp/api-key.json /tmp/cluster-info.json
+            
+            # Set default librdkafka version if not specified
+            - export LIBRDKAFKA_VERSION="${LIBRDKAFKA_VERSION:-master}"
+            - echo "Using librdkafka version: ${LIBRDKAFKA_VERSION}"
 
             # K1 setup
             - |
@@ -148,6 +164,18 @@ blocks:
                 echo "Building tests..."
                 cd tests/
                 make
+                
+                # Build specific version if LIBRDKAFKA_VERSION is set
+                if [[ -n "$LIBRDKAFKA_VERSION" ]]; then
+                  echo "Building librdkafka version: ${LIBRDKAFKA_VERSION}"
+                  mkdir -p /tmp/librd_ver
+                  cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git
+                  cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
+                  ./configure --enable-ssl
+                  make
+                  sudo make install
+                  echo "Custom librdkafka version built at /tmp/librd_ver/librdkafka"
+                fi
                 
                 echo "Creating test.conf..."
                 cat > /tmp/librdkafka/tests/test.conf << EOF
@@ -211,6 +239,14 @@ blocks:
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp && git clone https://github.com/confluentinc/librdkafka.git'
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && ./dev-conf.sh'
+                
+                # Build specific version if LIBRDKAFKA_VERSION is set
+                if [[ -n "$LIBRDKAFKA_VERSION" ]]; then
+                  echo "Building librdkafka version: ${LIBRDKAFKA_VERSION} in pod"
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'mkdir -p /tmp/librd_ver && cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git'
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}"
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librd_ver/librdkafka && ./configure --enable-ssl && make && make install'
+                fi
 
                 cat > /tmp/test.conf << EOF
               security.protocol=SASL_SSL
@@ -241,9 +277,21 @@ blocks:
                 cd /tmp/librdkafka/tests
                 echo "Current directory: $(pwd)"
                 echo "test.conf exists: $(test -f test.conf && echo yes || echo no)"
-                ./run-test.sh || echo "Tests finished with failures"
+                if [[ -n "$LIBRDKAFKA_VERSION" ]]; then
+                  echo "Running tests with librdkafka version: ${LIBRDKAFKA_VERSION}"
+                  LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so" \
+                  LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:$LD_LIBRARY_PATH" \
+                  ./run-test.sh || echo "Tests finished with failures"
+                else
+                  ./run-test.sh || echo "Tests finished with failures"
+                fi
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Executing tests in pod ${TOOLBOX_POD}..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && ./run-test.sh" || echo "Tests finished with failures"
+                if [[ -n "$LIBRDKAFKA_VERSION" ]]; then
+                  echo "Running tests with librdkafka version: ${LIBRDKAFKA_VERSION}"
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' ./run-test.sh" || echo "Tests finished with failures"
+                else
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && ./run-test.sh" || echo "Tests finished with failures"
+                fi
               fi                              

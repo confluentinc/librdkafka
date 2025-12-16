@@ -60,6 +60,13 @@ static void do_test_consume_batch(void) {
         /* Produce messages */
         for (i = 0; i < topic_cnt; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+
+                /* Explicitly create topic for cloud/K2 environments where
+                 * auto-create may be slow or disabled */
+                test_create_topic(NULL, topics[i], partition_cnt, -1);
+                test_wait_topic_exists(NULL, topics[i], tmout_multip(30000));
+                test_wait_for_metadata_propagation(5);
+
                 for (p = 0; p < partition_cnt; p++)
                         test_produce_msgs_easy(topics[i], testid, p,
                                                msgcnt / topic_cnt /
@@ -259,11 +266,22 @@ static void do_test_consume_batch_non_existent_topic(void) {
 
 int main_0022_consume_batch(int argc, char **argv) {
         do_test_consume_batch();
-        /* Subscribing to a non-existent topic doesn't generate a
-         * UNKNOWN_TOPIC_OR_PART error with `consumer` group rebalance protocol.
-         */
-        if (test_consumer_group_protocol_classic()) {
-                do_test_consume_batch_non_existent_topic();
+
+        if (rd_kafka_version() >=
+            0x02020000) { /* consume_batch_non_existent_topic available since
+                             librdkafka 2.2.0 */
+                if (test_consumer_group_protocol_classic()) {
+                        do_test_consume_batch_non_existent_topic();
+                } else {
+                        TEST_SAY(
+                            "SKIPPING: consume_batch_non_existent_topic - "
+                            "requires classic consumer group protocol\n");
+                }
+        } else {
+                TEST_SAY(
+                    "SKIPPING: consume_batch_non_existent_topic - requires "
+                    "librdkafka version >= 2.2.0 (current: 0x%08x)\n",
+                    rd_kafka_version());
         }
         return 0;
 }

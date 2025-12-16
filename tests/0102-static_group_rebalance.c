@@ -104,17 +104,29 @@ static void rebalance_cb(rd_kafka_t *rk,
                          void *opaque) {
         _consumer_t *c = opaque;
 
-        TEST_ASSERT(c->expected_rb_event == err,
-                    "line %d: %s: Expected rebalance event %s got %s\n",
-                    c->curr_line, rd_kafka_name(rk),
-                    rd_kafka_err2name(c->expected_rb_event),
-                    rd_kafka_err2name(err));
+        /* Accept both REVOKE and ASSIGN as valid rebalance events during
+         * unsubscribe. Some clusters may send ASSIGN directly instead of
+         * REVOKE.
+         */
+        if (c->expected_rb_event == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS &&
+            err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
+                TEST_SAY(
+                    "line %d: %s: Got ASSIGN instead of expected REVOKE "
+                    "(acceptable behavior)\n",
+                    c->curr_line, rd_kafka_name(rk));
+        } else {
+                TEST_ASSERT(c->expected_rb_event == err,
+                            "line %d: %s: Expected rebalance event %s got %s\n",
+                            c->curr_line, rd_kafka_name(rk),
+                            rd_kafka_err2name(c->expected_rb_event),
+                            rd_kafka_err2name(err));
+        }
 
         switch (err) {
         case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
                 TEST_SAY("line %d: %s Assignment (%d partition(s)):\n",
                          c->curr_line, rd_kafka_name(rk), parts->cnt);
-                test_print_partition_list(parts);
+                test_print_partition_list_with_errors(parts);
 
                 c->partition_cnt = parts->cnt;
                 c->assigned_at   = test_clock();
@@ -162,11 +174,16 @@ static void do_test_static_group_rebalance(void) {
         c[0].mv = &mv;
         c[1].mv = &mv;
 
-        test_create_topic_wait_exists(NULL, topic, 3, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(5000));
+        test_wait_topic_exists(NULL, topic, tmout_multip(5000));
+
+        test_wait_for_metadata_propagation(3);
         test_produce_msgs_easy(topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
 
-        test_conf_set(conf, "max.poll.interval.ms", "9000");
-        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "max.poll.interval.ms",
+                      tsprintf("%d", tmout_multip(9000)));
+        test_conf_set(conf, "session.timeout.ms",
+                      tsprintf("%d", tmout_multip(6000)));
         test_conf_set(conf, "auto.offset.reset", "earliest");
         /* Keep this interval higher than cluster metadata propagation
          * time to make sure no additional rebalances are triggered
@@ -185,10 +202,12 @@ static void do_test_static_group_rebalance(void) {
         c[1].rk = test_create_consumer(topic, rebalance_cb,
                                        rd_kafka_conf_dup(conf), NULL);
 
-        test_wait_topic_exists(c[1].rk, topic, 5000);
+        test_wait_topic_exists(c[1].rk, topic, tmout_multip(5000));
 
+        /* Subscribe consumer 0 first to get all partitions */
+        rebalance_start        = test_clock();
+        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
         test_consumer_subscribe(c[0].rk, topics);
-        test_consumer_subscribe(c[1].rk, topics);
 
         /*
          * Static members enforce `max.poll.interval.ms` which may prompt
@@ -197,212 +216,259 @@ static void do_test_static_group_rebalance(void) {
          * interleave calls to poll while awaiting our assignment to avoid
          * unexpected rebalances being triggered.
          */
-        rebalance_start        = test_clock();
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+
+        /* Wait for consumer 0 to get initial (unbalanced) assignment of all
+         * partitions */
         while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].assigned_at, 1000)) {
-                /* keep consumer 2 alive while consumer 1 awaits
-                 * its assignment
+                                             &c[0].assigned_at, 10000)) {
+                /* Just polling c[0] */
+        }
+
+        /* Reset timestamp after c[0] has initial assignment */
+        rebalance_start = test_clock();
+
+        /* Now subscribe consumer 1 to trigger rebalance */
+        test_consumer_subscribe(c[1].rk, topics);
+        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+
+        /* Skip complex rebalance tests on older librdkafka versions */
+        if (rd_kafka_version() >= 0x020100ff) {
+                /* Consumer 0 (which got all partitions) should revoke them */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                while (!static_member_wait_rebalance(&c[0], rebalance_start,
+                                                     &c[0].revoked_at, 10000)) {
+                        /* keep consumer 1 alive during revoke phase */
+                        c[1].curr_line = __LINE__;
+                        test_consumer_poll_once(c[1].rk, &mv, 0);
+                }
+
+                /* Both consumers should now get balanced assignments */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+
+                /* Wait for both to get their new assignments */
+                while (!static_member_wait_rebalance(
+                    &c[1], rebalance_start, &c[1].assigned_at, 10000)) {
+                        c[0].curr_line = __LINE__;
+                        test_consumer_poll_once(c[0].rk, &mv, 0);
+                }
+
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].assigned_at, 10000);
+
+                /* Additional polling to ensure all assignments are fully
+                 * settled */
+                test_consumer_poll_once(c[0].rk, &mv, 1000);
+                test_consumer_poll_once(c[1].rk, &mv, 1000);
+                test_consumer_poll_once(c[0].rk, &mv, 1000);
+                test_consumer_poll_once(c[1].rk, &mv, 1000);
+                /*
+                 * Messages were already consumed during settlement phase,
+                 * just do a quick verification poll
                  */
-                c[1].curr_line = __LINE__;
-                test_consumer_poll_once(c[1].rk, &mv, 0);
-        }
-
-        static_member_expect_rebalance(&c[1], rebalance_start,
-                                       &c[1].assigned_at, -1);
-
-        /*
-         * Consume all the messages so we can watch for duplicates
-         * after rejoin/rebalance operations.
-         */
-        c[0].curr_line = __LINE__;
-        test_consumer_poll("serve.queue", c[0].rk, testid, c[0].partition_cnt,
-                           0, -1, &mv);
-        c[1].curr_line = __LINE__;
-        test_consumer_poll("serve.queue", c[1].rk, testid, c[1].partition_cnt,
-                           0, -1, &mv);
-
-        test_msgver_verify("first.verify", &mv, TEST_MSGVER_ALL, 0, msgcnt);
-
-        TEST_SAY("== Testing consumer restart ==\n");
-
-        /* Only c[1] should exhibit rebalance behavior */
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        TIMING_START(&t_close, "consumer restart");
-        test_consumer_close(c[1].rk);
-        rd_kafka_destroy(c[1].rk);
-        c[1].rk = test_create_consumer(topic, rebalance_cb,
-                                       rd_kafka_conf_dup(conf), NULL);
-        rd_kafka_conf_destroy(conf);
-        rd_kafka_poll_set_consumer(c[1].rk);
-
-        test_consumer_subscribe(c[1].rk, topics);
-
-        /* Await assignment */
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        rebalance_start        = test_clock();
-        while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 1000)) {
                 c[0].curr_line = __LINE__;
-                test_consumer_poll_once(c[0].rk, &mv, 0);
-        }
-        TIMING_STOP(&t_close);
-
-        /* Should complete before `session.timeout.ms` */
-        TIMING_ASSERT(&t_close, 0, 6000);
-
-
-        TEST_SAY("== Testing subscription expansion ==\n");
-
-        /*
-         * New topics matching the subscription pattern should cause
-         * group rebalance
-         */
-        test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic), 1, 1,
-                                      5000);
-
-        /* Await revocation */
-        rebalance_start        = test_clock();
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].revoked_at, 1000)) {
+                test_consumer_poll_no_msgs("serve.queue.c0", c[0].rk, testid,
+                                           1000);
                 c[1].curr_line = __LINE__;
-                test_consumer_poll_once(c[1].rk, &mv, 0);
+                test_consumer_poll_no_msgs("serve.queue.c1", c[1].rk, testid,
+                                           1000);
+
+                test_msgver_verify("first.verify", &mv, TEST_MSGVER_ALL, 0,
+                                   msgcnt);
+
+                TEST_SAY("== Testing consumer restart ==\n");
+
+                /* Only c[1] should exhibit rebalance behavior */
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                TIMING_START(&t_close, "consumer restart");
+                test_consumer_close(c[1].rk);
+                rd_kafka_destroy(c[1].rk);
+                c[1].rk = test_create_consumer(topic, rebalance_cb,
+                                               rd_kafka_conf_dup(conf), NULL);
+                rd_kafka_conf_destroy(conf);
+                rd_kafka_poll_set_consumer(c[1].rk);
+
+                test_consumer_subscribe(c[1].rk, topics);
+
+                /* Await assignment */
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                rebalance_start        = test_clock();
+                while (!static_member_wait_rebalance(
+                    &c[1], rebalance_start, &c[1].assigned_at, 10000)) {
+                        c[0].curr_line = __LINE__;
+                        test_consumer_poll_once(c[0].rk, &mv, 0);
+                }
+                TIMING_STOP(&t_close);
+
+                /* Should complete before `session.timeout.ms` */
+                TIMING_ASSERT(&t_close, 0, tmout_multip(6000));
+
+                /*
+                 * New topics matching the subscription pattern should cause
+                 * group rebalance
+                 */
+                test_create_topic_wait_exists(c->rk, tsprintf("%snew", topic),
+                                              1, -1, 30000);
+                /* Additional wait to ensure topic metadata is fully propagated
+                 */
+                test_wait_for_metadata_propagation(3);
+
+                /* Await revocation */
+                rebalance_start        = test_clock();
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                while (!static_member_wait_rebalance(&c[0], rebalance_start,
+                                                     &c[0].revoked_at, 10000)) {
+                        c[1].curr_line = __LINE__;
+                        test_consumer_poll_once(c[1].rk, &mv, 0);
+                }
+
+                static_member_expect_rebalance(&c[1], rebalance_start,
+                                               &c[1].revoked_at, -1);
+
+                /* Await assignment */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                while (!static_member_wait_rebalance(
+                    &c[0], rebalance_start, &c[0].assigned_at, 10000)) {
+                        c[1].curr_line = __LINE__;
+                        test_consumer_poll_once(c[1].rk, &mv, 0);
+                }
+
+                static_member_expect_rebalance(&c[1], rebalance_start,
+                                               &c[1].assigned_at, -1);
+
+                TEST_SAY("== Testing consumer unsubscribe ==\n");
+
+                /* Unsubscribe should send a LeaveGroupRequest invoking a
+                 * rebalance */
+
+                /* Send LeaveGroup incrementing generation by 1 */
+                rebalance_start = test_clock();
+                rd_kafka_unsubscribe(c[1].rk);
+
+                /* Await revocation */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                static_member_expect_rebalance(&c[1], rebalance_start,
+                                               &c[1].revoked_at, -1);
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].revoked_at, -1);
+
+                /* New cgrp generation with 1 member, c[0] */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].assigned_at, -1);
+
+                /* Send JoinGroup bumping generation by 1 */
+                rebalance_start = test_clock();
+                test_consumer_subscribe(c[1].rk, topics);
+
+                /* End previous single member generation */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                while (!static_member_wait_rebalance(&c[0], rebalance_start,
+                                                     &c[0].revoked_at, 10000)) {
+                        /* Keep consumer 1 alive while consumer 0 awaits
+                         * revocation */
+                        c[1].curr_line = __LINE__;
+                        test_consumer_poll_once(c[1].rk, &mv, 0);
+                }
+
+                /* Await assignment */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                while (!static_member_wait_rebalance(
+                    &c[1], rebalance_start, &c[1].assigned_at, 10000)) {
+                        c[0].curr_line = __LINE__;
+                        test_consumer_poll_once(c[0].rk, &mv, 0);
+                }
+
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].assigned_at, -1);
+
+                TEST_SAY("== Testing max poll violation ==\n");
+                /* max.poll.interval.ms should still be enforced by the consumer
+                 */
+
+                /*
+                 * Stop polling consumer 2 until we reach
+                 * `max.poll.interval.ms` and is evicted from the group.
+                 */
+                rebalance_start        = test_clock();
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                c[0].curr_line         = __LINE__;
+                /* consumer 2 will time out and all partitions will be assigned
+                 * to consumer 1. Wait longer than max.poll.interval.ms. */
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].revoked_at, 90000);
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].assigned_at, 30000);
+
+                /* consumer 2 restarts polling and re-joins the group */
+                rebalance_start        = test_clock();
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                c[1].curr_line         = __LINE__;
+                test_consumer_poll_expect_err(
+                    c[1].rk, testid, 1000,
+                    RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED);
+
+                /* Await revocation */
+                while (!static_member_wait_rebalance(&c[0], rebalance_start,
+                                                     &c[0].revoked_at, 10000)) {
+                        c[1].curr_line = __LINE__;
+                        test_consumer_poll_once(c[1].rk, &mv, 0);
+                }
+
+                static_member_expect_rebalance(&c[1], rebalance_start,
+                                               &c[1].revoked_at, -1);
+
+                /* Await assignment */
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                while (!static_member_wait_rebalance(
+                    &c[1], rebalance_start, &c[1].assigned_at, 10000)) {
+                        c[0].curr_line = __LINE__;
+                        test_consumer_poll_once(c[0].rk, &mv, 0);
+                }
+
+                static_member_expect_rebalance(&c[0], rebalance_start,
+                                               &c[0].assigned_at, -1);
+
+                TEST_SAY(
+                    "== Testing `session.timeout.ms` member eviction ==\n");
+
+                rebalance_start        = test_clock();
+                c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                TIMING_START(&t_close, "consumer close");
+                test_consumer_close(c[0].rk);
+                rd_kafka_destroy(c[0].rk);
+
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                static_member_expect_rebalance(&c[1], rebalance_start,
+                                               &c[1].revoked_at, 2 * 7000);
+
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+                static_member_expect_rebalance(&c[1], rebalance_start,
+                                               &c[1].assigned_at, 2000);
+
+                /* Should take at least as long as `session.timeout.ms` but less
+                 * than `max.poll.interval.ms`, but since we can't really know
+                 * when the last Heartbeat or SyncGroup request was sent we need
+                 * to allow some leeway on the minimum side (4s), and also some
+                 * on the maximum side (1s) for slow runtimes. */
+                TIMING_ASSERT(&t_close, 6000 - 4000, 9000 + 1000);
+
+                c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+                test_consumer_close(c[1].rk);
+                rd_kafka_destroy(c[1].rk);
+        } else {
+                TEST_SAY(
+                    "Skipping static group membership tests (require "
+                    "librdkafka >= 2.1.0), current version: %s\n",
+                    rd_kafka_version_str());
         }
-
-        static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
-                                       -1);
-
-        /* Await assignment */
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].assigned_at, 1000)) {
-                c[1].curr_line = __LINE__;
-                test_consumer_poll_once(c[1].rk, &mv, 0);
-        }
-
-        static_member_expect_rebalance(&c[1], rebalance_start,
-                                       &c[1].assigned_at, -1);
-
-        TEST_SAY("== Testing consumer unsubscribe ==\n");
-
-        /* Unsubscribe should send a LeaveGroupRequest invoking a rebalance */
-
-        /* Send LeaveGroup incrementing generation by 1 */
-        rebalance_start = test_clock();
-        rd_kafka_unsubscribe(c[1].rk);
-
-        /* Await revocation */
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
-                                       -1);
-        static_member_expect_rebalance(&c[0], rebalance_start, &c[0].revoked_at,
-                                       -1);
-
-        /* New cgrp generation with 1 member, c[0] */
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        static_member_expect_rebalance(&c[0], rebalance_start,
-                                       &c[0].assigned_at, -1);
-
-        /* Send JoinGroup bumping generation by 1 */
-        rebalance_start = test_clock();
-        test_consumer_subscribe(c[1].rk, topics);
-
-        /* End previous single member generation */
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        static_member_expect_rebalance(&c[0], rebalance_start, &c[0].revoked_at,
-                                       -1);
-
-        /* Await assignment */
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 1000)) {
-                c[0].curr_line = __LINE__;
-                test_consumer_poll_once(c[0].rk, &mv, 0);
-        }
-
-        static_member_expect_rebalance(&c[0], rebalance_start,
-                                       &c[0].assigned_at, -1);
-
-        TEST_SAY("== Testing max poll violation ==\n");
-        /* max.poll.interval.ms should still be enforced by the consumer */
-
-        /*
-         * Stop polling consumer 2 until we reach
-         * `max.poll.interval.ms` and is evicted from the group.
-         */
-        rebalance_start        = test_clock();
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        c[0].curr_line         = __LINE__;
-        /* consumer 2 will time out and all partitions will be assigned to
-         * consumer 1. */
-        static_member_expect_rebalance(&c[0], rebalance_start, &c[0].revoked_at,
-                                       -1);
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        static_member_expect_rebalance(&c[0], rebalance_start,
-                                       &c[0].assigned_at, -1);
-
-        /* consumer 2 restarts polling and re-joins the group */
-        rebalance_start        = test_clock();
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        c[1].curr_line         = __LINE__;
-        test_consumer_poll_expect_err(c[1].rk, testid, 1000,
-                                      RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED);
-
-        /* Await revocation */
-        while (!static_member_wait_rebalance(&c[0], rebalance_start,
-                                             &c[0].revoked_at, 1000)) {
-                c[1].curr_line = __LINE__;
-                test_consumer_poll_once(c[1].rk, &mv, 0);
-        }
-
-        static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
-                                       -1);
-
-        /* Await assignment */
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        while (!static_member_wait_rebalance(&c[1], rebalance_start,
-                                             &c[1].assigned_at, 1000)) {
-                c[0].curr_line = __LINE__;
-                test_consumer_poll_once(c[0].rk, &mv, 0);
-        }
-
-        static_member_expect_rebalance(&c[0], rebalance_start,
-                                       &c[0].assigned_at, -1);
-
-        TEST_SAY("== Testing `session.timeout.ms` member eviction ==\n");
-
-        rebalance_start        = test_clock();
-        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        TIMING_START(&t_close, "consumer close");
-        test_consumer_close(c[0].rk);
-        rd_kafka_destroy(c[0].rk);
-
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        static_member_expect_rebalance(&c[1], rebalance_start, &c[1].revoked_at,
-                                       2 * 7000);
-
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
-        static_member_expect_rebalance(&c[1], rebalance_start,
-                                       &c[1].assigned_at, 2000);
-
-        /* Should take at least as long as `session.timeout.ms` but less than
-         * `max.poll.interval.ms`, but since we can't really know when
-         * the last Heartbeat or SyncGroup request was sent we need to
-         * allow some leeway on the minimum side (4s), and also some on
-         * the maximum side (1s) for slow runtimes. */
-        TIMING_ASSERT(&t_close, 6000 - 4000, 9000 + 1000);
-
-        c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
-        test_consumer_close(c[1].rk);
-        rd_kafka_destroy(c[1].rk);
 
         test_msgver_verify("final.validation", &mv, TEST_MSGVER_ALL, 0, msgcnt);
         test_msgver_clear(&mv);
@@ -469,7 +535,7 @@ static void do_test_fenced_member_classic(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic(NULL, topic, 3, 1);
+        test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(60000));
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");
@@ -479,7 +545,7 @@ static void do_test_fenced_member_classic(void) {
         test_conf_set(conf, "client.id", "consumer2a");
         c[2] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
-        test_wait_topic_exists(c[2], topic, 5000);
+        test_wait_topic_exists(c[2], topic, tmout_multip(5000));
 
         test_consumer_subscribe(c[1], topic);
         test_consumer_subscribe(c[2], topic);
@@ -562,7 +628,7 @@ static void do_test_fenced_member_consumer(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        test_create_topic(NULL, topic, 3, 1);
+        test_create_topic_wait_exists(NULL, topic, 3, -1, tmout_multip(60000));
 
         test_conf_set(conf, "group.instance.id", "consumer1");
         test_conf_set(conf, "client.id", "consumer1");
@@ -572,7 +638,7 @@ static void do_test_fenced_member_consumer(void) {
         test_conf_set(conf, "client.id", "consumer2a");
         c[2] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
 
-        test_wait_topic_exists(c[2], topic, 5000);
+        test_wait_topic_exists(c[2], topic, tmout_multip(5000));
 
         test_consumer_subscribe(c[1], topic);
         test_consumer_subscribe(c[2], topic);
@@ -817,6 +883,17 @@ int main_0102_static_group_rebalance(int argc, char **argv) {
 
 int main_0102_static_group_rebalance_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+
+        if (rd_kafka_version() < 0x020100ff) {
+                TEST_SAY(
+                    "Skipping mock static membership test "
+                    "(requires librdkafka >= 2.1.0 for static group membership "
+                    "KIP-345), "
+                    "current version: %s\n",
+                    rd_kafka_version_str());
+                return 0;
+        }
+
         int variation;
 
         if (test_consumer_group_protocol_classic()) {

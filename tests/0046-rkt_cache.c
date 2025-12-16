@@ -35,7 +35,7 @@
  * Issue #345, #821
  * Test that topic_new() + topic_destroy() can be used as a topic-lookup cache,
  * i.e., as long as the app topic refcount stays above 1 the app can call
- * new() and destroy() any number of times (symetrically).
+ * new() and destroy() any number of times (symmetrically).
  */
 
 
@@ -45,8 +45,7 @@ int main_0046_rkt_cache(int argc, char **argv) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         int i;
 
-        rk = test_create_producer();
-
+        rk  = test_create_producer();
         rkt = test_create_producer_topic(rk, topic, NULL);
 
         for (i = 0; i < 100; i++) {

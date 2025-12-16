@@ -122,7 +122,10 @@ struct test {
         0x4               /**< Manual test, only started when specifically     \
                            *   stated */
 #define TEST_F_SOCKEM 0x8 /**< Test requires socket emulation. */
-        int minver;       /**< Limit tests to broker version range. */
+#define TEST_F_IDEMPOTENT_PRODUCER                                             \
+        0x10        /**< Test requires idempotent (or transactional)           \
+                     *   producer to be supported by broker. */
+        int minver; /**< Limit tests to broker version range. */
         int maxver;
 
         const char *extra; /**< Extra information to print in test_summary. */
@@ -746,17 +749,16 @@ void test_any_conf_set(rd_kafka_conf_t *conf,
 rd_kafka_topic_partition_list_t *test_topic_partitions(int cnt, ...);
 void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions);
+void test_print_partition_list_with_errors(
+    const rd_kafka_topic_partition_list_t *partitions);
+void test_print_partition_list_no_errors(
+    const rd_kafka_topic_partition_list_t *partitions);
 int test_partition_list_cmp(rd_kafka_topic_partition_list_t *al,
                             rd_kafka_topic_partition_list_t *bl);
 int test_partition_list_and_offsets_cmp(rd_kafka_topic_partition_list_t *al,
                                         rd_kafka_topic_partition_list_t *bl);
 
 void test_kafka_topics(const char *fmt, ...);
-void test_admin_create_topic(rd_kafka_t *use_rk,
-                             const char *topicname,
-                             int partition_cnt,
-                             int replication_factor,
-                             const char **configs);
 void test_create_topic(rd_kafka_t *use_rk,
                        const char *topicname,
                        int partition_cnt,
@@ -771,7 +773,6 @@ rd_kafka_resp_err_t test_auto_create_topic_rkt(rd_kafka_t *rk,
                                                int timeout_ms);
 rd_kafka_resp_err_t
 test_auto_create_topic(rd_kafka_t *rk, const char *name, int timeout_ms);
-int test_check_auto_create_topic(void);
 
 void test_create_partitions(rd_kafka_t *use_rk,
                             const char *topicname,

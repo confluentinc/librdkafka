@@ -35,6 +35,7 @@
 #ifndef _RDKAFKA_H_
 typedef struct rd_kafka_s rd_kafka_t;
 typedef struct rd_kafka_conf_s rd_kafka_conf_t;
+typedef struct rd_kafka_queue_s rd_kafka_queue_t;
 #endif
 
 /* ANSI color codes */
@@ -58,6 +59,9 @@ extern int tmout_multip(int msecs);
 
 /** @brief true if tests should run in quick-mode (faster, less data) */
 extern int test_quick;
+
+/** @brief Supported acks values configuration */
+extern char *test_supported_acks;
 
 /** @brief Broker version to int */
 #define TEST_BRKVER(A, B, C, D) (((A) << 24) | ((B) << 16) | ((C) << 8) | (D))
@@ -187,6 +191,10 @@ void test_SKIP(const char *file, int line, const char *str);
 void test_timeout_set(int timeout);
 int test_is_forbidden_conf_group_protocol_consumer(const char *name);
 int test_set_special_conf(const char *name, const char *val, int *timeoutp);
+int test_is_acks_supported(const char *acks_value);
+const char *test_get_available_acks(const char *wanted_acks);
+void test_wait_for_metadata_propagation(int wait_time);
+int test_should_skip_number(const char *test_number);
 char *test_conf_get(const rd_kafka_conf_t *conf, const char *name);
 const char *test_conf_get_path(void);
 const char *test_getenv(const char *env, const char *def);
@@ -412,5 +420,30 @@ const char *test_consumer_group_protocol();
 
 int test_consumer_group_protocol_classic();
 
+void test_admin_create_topic(rd_kafka_t *use_rk,
+                             const char *topicname,
+                             int partition_cnt,
+                             int replication_factor,
+                             const char **configs);
+
+int test_check_auto_create_topic(void);
+void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
+                                               const char *topicname,
+                                               int partition_cnt);
+void test_create_topic_if_auto_create_disabled_with_configs(
+    rd_kafka_t *use_rk,
+    const char *topicname,
+    int partition_cnt,
+    const char **configs);
+
+#ifdef _RDKAFKA_H_
+rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
+                                             rd_kafka_queue_t *useq,
+                                             char **topics,
+                                             size_t topic_cnt,
+                                             void *opaque);
+
+void test_delete_topic_simple(rd_kafka_t *rk, const char *topic_name);
+#endif /* _RDKAFKA_H_ */
 
 #endif /* _TESTSHARED_H_ */

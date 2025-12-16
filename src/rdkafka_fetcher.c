@@ -911,11 +911,13 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         int64_t FirstOffset;
         int64_t LastOffset;
         int16_t DeliveryCount;
-
+        int i;
 
         rd_kafka_buf_read_i32(rkbuf, &PartitionId); // Partition
         rd_kafka_buf_read_i16(rkbuf, &PartitionFetchErrorCode); // PartitionFetchError
         rd_kafka_buf_read_str(rkbuf, &PartitionFetchErrorStr); // ErrorString
+        /* TODO KIP-932: We should reset (to INVALID) previous acknowledgement information in the reply
+           or maybe while sending the request itself? */
         rd_kafka_buf_read_i16(rkbuf, &AcknowledgementErrorCode); // AcknowledgementError
         rd_kafka_buf_read_str(rkbuf, &AcknowledgementErrorStr); // AcknowledgementErrorString
         rd_kafka_buf_read_CurrentLeader(rkbuf, &CurrentLeader); // CurrentLeader
@@ -954,38 +956,53 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        if (unlikely(MessageSetSize <= 0))
-                goto done;
+        if(MessageSetSize > 0) {
+                /**
+                 * Parse MessageSet
+                 */
+                if (!rd_slice_narrow_relative(&rkbuf->rkbuf_reader, &save_slice,
+                                        (size_t) MessageSetSize))
+                        rd_kafka_buf_check_len(rkbuf, MessageSetSize);
 
-        /**
-         * Parse MessageSet
-         */
-        if (!rd_slice_narrow_relative(&rkbuf->rkbuf_reader, &save_slice,
-                                (size_t) MessageSetSize))
-                rd_kafka_buf_check_len(rkbuf, MessageSetSize);
+                /* Parse messages 
+                TODO KIP-932: This part might raise issue as We are adding messages
+                                to the consumer queue in partition by partition manner.
+                                The poll returns messages as soon as they are available in the queue,
+                                so messages for different partitions in the same fetch request might
+                                not be sent at once to the user.
+                */
+                err = rd_kafka_msgset_parse(rkbuf, request, rktp, NULL, &tver);
 
-        /* Parse messages */
-        err = rd_kafka_msgset_parse(rkbuf, request, rktp, NULL, &tver);
+                rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
+                /* Continue with next partition regardless of
+                * parse errors (which are partition-specific) */
 
-
-        rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
-        /* Continue with next partition regardless of
-        * parse errors (which are partition-specific) */
+        }
 
         rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt, -1); // AcquiredRecordsArrayCnt
-        while(AcquiredRecordsArrayCnt-- > 0) {
-                rd_kafka_buf_read_i64(rkbuf, &FirstOffset); // FirstOffset
-                rd_kafka_buf_read_i64(rkbuf, &LastOffset); // LastOffset
-                rd_kafka_buf_read_i16(rkbuf, &DeliveryCount); // DeliveryCount
-                rd_kafka_buf_skip_tags(rkbuf); // AcquiredRecords tags
-                rd_rkb_dbg(rkb, MSG, "SHAREFETCH",
-                        "%.*s [%" PRId32 "]: Acquired Records from offset %" PRId64
-                        " to %" PRId64 ", DeliveryCount %" PRId16,
-                        RD_KAFKAP_STR_PR(topic), PartitionId,
-                        FirstOffset, LastOffset, DeliveryCount);
-                rktp->rktp_share_acknowledge.first_offset = FirstOffset;
-                rktp->rktp_share_acknowledge.last_offset = LastOffset;
-                rktp->rktp_share_acknowledge.delivery_count = DeliveryCount;
+        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "%.*s [%" PRId32 "] : Share Acknowledgement Count: %ld, AcquiredRecordsArrayCnt: %d\n",
+               RD_KAFKAP_STR_PR(topic), PartitionId,
+               rktp->rktp_share_acknowledge_count, AcquiredRecordsArrayCnt);
+        rd_dassert(rktp->rktp_share_acknowledge_count == 0);
+        rd_dassert(rktp->rktp_share_acknowledge == NULL);
+        if(AcquiredRecordsArrayCnt > 0) {
+                rktp->rktp_share_acknowledge_count = AcquiredRecordsArrayCnt;
+                rktp->rktp_share_acknowledge = rd_calloc(AcquiredRecordsArrayCnt,
+                                                        sizeof(*rktp->rktp_share_acknowledge));
+                for (i = 0; i < AcquiredRecordsArrayCnt; i++) {
+                        rd_kafka_buf_read_i64(rkbuf, &FirstOffset); // FirstOffset
+                        rd_kafka_buf_read_i64(rkbuf, &LastOffset); // LastOffset
+                        rd_kafka_buf_read_i16(rkbuf, &DeliveryCount); // DeliveryCount
+                        rd_kafka_buf_skip_tags(rkbuf); // AcquiredRecords tags
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                "%.*s [%" PRId32 "]: Acquired Records from offset %" PRId64
+                                " to %" PRId64 ", DeliveryCount %" PRId16,
+                                RD_KAFKAP_STR_PR(topic), PartitionId,
+                                FirstOffset, LastOffset, DeliveryCount);
+                        rktp->rktp_share_acknowledge[i].first_offset = FirstOffset;
+                        rktp->rktp_share_acknowledge[i].last_offset = LastOffset;
+                        rktp->rktp_share_acknowledge[i].delivery_count = DeliveryCount;
+                }
         }
 
         rd_kafka_buf_skip_tags(rkbuf); // Partition tags
@@ -1032,12 +1049,11 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_str(rkbuf, &ErrorStr);
 
-        if(ErrorCode) {
+        if (ErrorCode) {
                 rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
                            "ShareFetch response error %d: '%.*s'",
                            ErrorCode,
                            RD_KAFKAP_STR_PR(&ErrorStr));
-                rd_kafkap_str_destroy(&ErrorStr);
                 return ErrorCode;
         }
 
@@ -1111,6 +1127,181 @@ err_parse:
 
 
 /**
+ * TODO KIP-932: Implement.
+ */
+// static void rd_kafak_broker_session_reset(rd_kafka_broker_t *rkb) {
+// }
+static void rd_kafka_broker_session_update_epoch(rd_kafka_broker_t *rkb) {
+        if (rkb->rkb_share_fetch_session.epoch == -1) {
+                rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
+                                "Not updating next epoch for -1 as it should be -1 again.");
+                return;
+        }
+        if (rkb->rkb_share_fetch_session.epoch == INT32_MAX)
+                rkb->rkb_share_fetch_session.epoch = 1;
+        else
+                rkb->rkb_share_fetch_session.epoch++;
+}
+
+static void rd_kafka_broker_session_add_partition_to_toppars_in_session(rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
+        rd_kafka_toppar_t *session_rktp, *adding_rktp;
+        TAILQ_FOREACH(session_rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkb_session_link) {
+                if(rktp == session_rktp) {
+                        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
+                                        "%s [%" PRId32
+                                        "]: already in ShareFetch session",
+                                        rktp->rktp_rkt->rkt_topic->str,
+                                        rktp->rktp_partition);
+                        return;
+                }
+        }
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                        "%s [%" PRId32
+                        "]: adding to ShareFetch session",
+                        rktp->rktp_rkt->rkt_topic->str,
+                        rktp->rktp_partition);
+        adding_rktp = rd_kafka_toppar_keep(rktp);
+        TAILQ_INSERT_TAIL(&rkb->rkb_share_fetch_session.toppars_in_session, adding_rktp, rktp_rkb_session_link);
+        rkb->rkb_share_fetch_session.toppars_in_session_cnt++;
+}
+
+static void rd_kafka_broker_session_remove_partition_from_toppars_in_session(rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp) {
+        rd_kafka_toppar_t *session_rktp, *tmp_rktp;
+        TAILQ_FOREACH_SAFE(session_rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkb_session_link, tmp_rktp) {
+                if(rktp == session_rktp) {
+                        TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session, session_rktp, rktp_rkb_session_link);
+                        rd_kafka_toppar_destroy(session_rktp); // from session list
+                        rkb->rkb_share_fetch_session.toppars_in_session_cnt--;
+                        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
+                                        "%s [%" PRId32
+                                        "]: removed from ShareFetch session",
+                                        rktp->rktp_rkt->rkt_topic->str,
+                                        rktp->rktp_partition);
+                        return;
+                }
+        }
+        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
+                        "%s [%" PRId32
+                        "]: not found in ShareFetch session",
+                        rktp->rktp_rkt->rkt_topic->str,
+                        rktp->rktp_partition);
+}
+
+static void rd_kafka_broker_session_update_toppars_in_session(rd_kafka_broker_t *rkb, rd_kafka_toppar_t *rktp, rd_bool_t add) {
+        if(add)
+                rd_kafka_broker_session_add_partition_to_toppars_in_session(rkb, rktp);
+        else
+                rd_kafka_broker_session_remove_partition_from_toppars_in_session(rkb, rktp);
+
+}
+
+
+// static void rd_kafka_broker_session_update_added_partitions(rd_kafka_broker_t *rkb) {
+//         size_t i;
+//         rd_kafka_toppar_t *rktp, *removed_rktp;
+//         rd_list_t *toppars_to_add = rkb->rkb_share_fetch_session.toppars_to_add;
+//         rd_list_t *added_toppars = rkb->rkb_share_fetch_session.adding_toppars;
+
+//         if(added_toppars == NULL || rd_list_cnt(added_toppars) == 0)
+//                 return;
+
+//         RD_LIST_FOREACH(rktp, added_toppars, i) {
+//                 rd_kafka_broker_session_update_toppars_in_session(rkb, rktp, rd_true /* add */);
+//                 if(toppars_to_add) {
+//                         removed_rktp = rd_list_remove(toppars_to_add, rktp);
+//                         if(removed_rktp)
+//                                 rd_kafka_toppar_destroy(removed_rktp); // from partitions list
+//                 }
+//         }
+//         rd_list_destroy(added_toppars);
+//         rkb->rkb_share_fetch_session.adding_toppars = NULL;
+// }
+
+// static void rd_kafka_broker_session_update_removed_partitions(rd_kafka_broker_t *rkb) {
+//         size_t i;
+//         rd_kafka_toppar_t *rktp, *removed_rktp;
+//         rd_list_t *toppars_to_forget = rkb->rkb_share_fetch_session.toppars_to_forget;
+//         rd_list_t *forgotten_toppars = rkb->rkb_share_fetch_session.forgetting_toppars;
+
+//         if(forgotten_toppars == NULL || rd_list_cnt(forgotten_toppars) == 0)
+//                 return;
+
+//         RD_LIST_FOREACH(rktp, forgotten_toppars, i) {
+//                 rd_kafka_broker_session_update_toppars_in_session(rkb, rktp, rd_false /* remove */);
+//                 if(toppars_to_forget) {
+//                         removed_rktp = rd_list_remove(toppars_to_forget, rktp);
+//                         if(removed_rktp)
+//                                 rd_kafka_toppar_destroy(removed_rktp); // from partitions list
+//                 }
+//         }
+//         rd_list_destroy(forgotten_toppars);
+//         rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
+// }
+
+static void rd_kafka_broker_session_update_toppars_list(
+    rd_kafka_broker_t *rkb,
+    rd_list_t **request_toppars_ptr,
+    rd_list_t **toppars_to_remove_ptr,
+    rd_bool_t add) {
+        size_t i;
+        rd_kafka_toppar_t *rktp, *removed_rktp;
+        rd_list_t *request_toppars = *request_toppars_ptr;
+        rd_list_t *toppars_to_remove = *toppars_to_remove_ptr;
+
+        if (request_toppars == NULL || rd_list_cnt(request_toppars) == 0)
+                return;
+
+        RD_LIST_FOREACH(rktp, request_toppars, i) {
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH","%s [%" PRId32 "], add: %d",
+                        rktp->rktp_rkt->rkt_topic->str,
+                        rktp->rktp_partition,
+                        add);
+                rd_kafka_broker_session_update_toppars_in_session(rkb, rktp, add);
+                if (toppars_to_remove) {
+                        removed_rktp = rd_list_remove(toppars_to_remove, rktp);
+                        if (removed_rktp) {
+                                rd_kafka_toppar_destroy(removed_rktp); /* from partitions list */
+                                if(rd_list_empty(toppars_to_remove)) {
+                                        rd_list_destroy(toppars_to_remove);
+                                        *toppars_to_remove_ptr = NULL;
+                                }
+                        }
+                }
+        }
+        rd_list_destroy(request_toppars);
+        *request_toppars_ptr = NULL;
+}
+
+static void rd_kafka_broker_session_update_added_partitions(
+    rd_kafka_broker_t *rkb) {
+        rd_kafka_broker_session_update_toppars_list(
+            rkb, &rkb->rkb_share_fetch_session.adding_toppars,
+            &rkb->rkb_share_fetch_session.toppars_to_add, rd_true);
+}
+
+static void rd_kafka_broker_session_update_removed_partitions(
+    rd_kafka_broker_t *rkb) {
+        rd_kafka_broker_session_update_toppars_list(
+            rkb, &rkb->rkb_share_fetch_session.forgetting_toppars,
+            &rkb->rkb_share_fetch_session.toppars_to_forget, rd_false);
+}
+
+static void rd_kafka_broker_session_update_partitions(rd_kafka_broker_t *rkb) {
+        rd_kafka_broker_session_update_added_partitions(rkb);
+        rd_kafka_broker_session_update_removed_partitions(rkb);
+}
+
+
+/**
+ * Update ShareFetch session state after a Fetch or ShareFetch response.
+ * TODO KIP-932: Improve efficiency of this function.
+ */
+static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
+        rd_kafka_broker_session_update_epoch(rkb);
+        rd_kafka_broker_session_update_partitions(rkb);
+}
+
+/**
  * @broker ShareFetchResponse handling.
  *
  * @locality broker thread  (or any thread if err == __DESTROY).
@@ -1123,9 +1314,10 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                                         void *opaque) {
 
         rd_kafka_op_t *rko_orig = opaque;
-        rkb->rkb_share_fetch_session.epoch++;
 
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                /* TODO KIP-932: Check what is needed out of the below */
+                rd_kafka_broker_session_update(rkb);
                 rd_kafka_op_reply(rko_orig, err);
                 return; /* Terminating */
         }
@@ -1136,10 +1328,13 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         if (!err && reply)
                 err = rd_kafka_share_fetch_reply_handle(rkb, reply, request);
 
-
         if (rko_orig)
                 rd_kafka_op_reply(rko_orig, err);
 
+        rd_kafka_broker_session_update(rkb);
+        // if (rkb->rkb_share_fetch_session.adding_toppars)
+
+        /* TODO KIP-932: Check if this is the right place for this or after error handling */
         rkb->rkb_fetching = 0;
 
         if (unlikely(err)) {
@@ -1172,6 +1367,9 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         break;
                 }
 
+                /*
+                 * TODO KIP-932: Check if this needed or not. If yes, check the working.
+                 */
                 rd_kafka_broker_fetch_backoff(rkb, err);
                 /* FALLTHRU */
         }
@@ -1261,10 +1459,9 @@ void rd_kafka_ShareFetchRequest(
     int32_t max_bytes,
     int32_t max_records,
     int32_t batch_size,
-//     rd_kafka_toppar_t *toppars_to_send,
-//     int32_t toppars_to_send_cnt,
-    rd_kafka_toppar_t *forgotten_toppars,
-    int32_t forgotten_toppars_cnt,
+    rd_list_t *toppars_to_send,
+    rd_list_t *toppars_to_forget,
+    rd_bool_t is_leave_request,
     rd_kafka_op_t *rko_orig,
     rd_ts_t now) {
         rd_kafka_toppar_t *rktp;
@@ -1277,10 +1474,15 @@ void rd_kafka_ShareFetchRequest(
         rd_kafka_topic_t *rkt_last  = NULL;
         int16_t ApiVersion          = 0;
         size_t rkbuf_size           = 0;
-        rd_bool_t has_acknowledgements = rd_false;
-        rd_bool_t has_forgotten_toppars = forgotten_toppars_cnt > 0 ? rd_true : rd_false;
+        int toppars_to_send_cnt    = toppars_to_send ? rd_list_cnt(toppars_to_send) : 0;
+        int i;
+        size_t j;
+        rd_bool_t has_acknowledgements_or_topics_to_add = toppars_to_send && rd_list_cnt(toppars_to_send) > 0 ? rd_true : rd_false;
+        rd_bool_t has_toppars_to_forget = toppars_to_forget && rd_list_cnt(toppars_to_forget) > 0 ? rd_true : rd_false;
         rd_bool_t is_fetching_messages = max_records > 0 ? rd_true : rd_false;
 
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH", "toppars_to_send_cnt=%d, has_acknowledgements_or_topics_to_add=%d, has_toppars_to_forget=%d, is_fetching_messages=%d",
+               toppars_to_send_cnt, has_acknowledgements_or_topics_to_add, has_toppars_to_forget, is_fetching_messages);
         /*
          * Only sending 1 aknowledgement for each partition. StartOffset + LastOffset + AcknowledgementType (ACCEPT for now).
          * TODO KIP-932: Change this to accommodate explicit acknowledgements.
@@ -1295,10 +1497,10 @@ void rd_kafka_ShareFetchRequest(
         /* ShareSessionEpoch + WaitMaxMs + MinBytes + MaxBytes + MaxRecords + BatchSize + TopicArrayCnt*/
         rkbuf_size += 4 + 4 + 4 + 4 + 4 + 4 + 4;
         /* N x (topic id + partition id + acknowledgement) */
-        rkbuf_size += (rkb->rkb_toppar_cnt * (32 + 4 + acknowledgement_size));
-        if( forgotten_toppars_cnt > 0) {
+        rkbuf_size += (toppars_to_send_cnt * (32 + 4 + acknowledgement_size));
+        if( has_toppars_to_forget) {
             /* M x (topic id + partition id) */
-            rkbuf_size += (forgotten_toppars_cnt * (32 + 4));
+            rkbuf_size += (rd_list_cnt(toppars_to_forget) * (32 + 4));
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_ShareFetch,
@@ -1324,8 +1526,8 @@ void rd_kafka_ShareFetchRequest(
         /* MemberId */
         rd_kafka_buf_write_kstr(rkbuf, member_id);
 
-        printf(" --------------------------------------- rd_kafka_ShareFetchRequest: member_id=%.*s\n",
-               RD_KAFKAP_STR_PR(member_id));
+        // printf(" --------------------------------------- rd_kafka_ShareFetchRequest: member_id=%.*s\n",
+        //        RD_KAFKAP_STR_PR(member_id));
 
         /* ShareSessionEpoch */
         rd_kafka_buf_write_i32(rkbuf, share_session_epoch);
@@ -1347,78 +1549,87 @@ void rd_kafka_ShareFetchRequest(
         
         /* Write zero TopicArrayCnt but store pointer for later update */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
-        if (rkb->rkb_toppar_cnt > 0) {
-                TAILQ_FOREACH(rktp, &rkb->rkb_toppars, rktp_rkblink) {
 
-                        rd_kafka_toppar_lock(rktp);
+        RD_LIST_FOREACH(rktp, toppars_to_send, i) {
 
-                        if(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP)) {
-                                rd_kafka_toppar_unlock(rktp);
-                                continue;
-                        }
-                        if (rkt_last != rktp->rktp_rkt) {
-                                if (rkt_last != NULL) {
-                                        /* Update PartitionArrayCnt */
-                                        rd_kafka_buf_finalize_arraycnt(
-                                        rkbuf, of_PartitionArrayCnt,
-                                        PartitionArrayCnt);
-                                        /* Topic tags */
-                                        rd_kafka_buf_write_tags_empty(rkbuf);
-                                }
-
-                                /* Topic ID */
-                                rd_kafka_buf_write_uuid(
-                                rkbuf, &rktp->rktp_rkt->rkt_topic_id);
-                                
-                                TopicArrayCnt++;
-                                rkt_last = rktp->rktp_rkt;
-                                /* Partition count */
-                                of_PartitionArrayCnt =
-                                rd_kafka_buf_write_arraycnt_pos(rkbuf);
-                                PartitionArrayCnt = 0;
+                /* TODO KIP-932: This condition will cause partitions of same topics
+                   to be inside single instance of the topic as toppars_to_send is not
+                   sorted. Eg: T1 0, T1 1, T2 0, T1 3, T1 5, T2 1  will translate to 
+                   T1 (0,1), T2 (0), T1 (3, 5), T2 (1) instead it should be
+                   T1 (0,1,3,5) T2(0,1) Fix this. */
+                if (rkt_last != rktp->rktp_rkt) {
+                        if (rkt_last != NULL) {
+                                /* Update PartitionArrayCnt */
+                                rd_kafka_buf_finalize_arraycnt(
+                                rkbuf, of_PartitionArrayCnt,
+                                PartitionArrayCnt);
+                                /* Topic tags */
+                                rd_kafka_buf_write_tags_empty(rkbuf);
                         }
 
-                        rd_kafka_toppar_unlock(rktp);
+                        rd_kafka_topic_rdlock(rktp->rktp_rkt);
+                        /* Topic ID */
+                        rd_kafka_buf_write_uuid(
+                        rkbuf, &rktp->rktp_rkt->rkt_topic_id);
+                        rd_kafka_topic_rdunlock(rktp->rktp_rkt);
+                        
+                        TopicArrayCnt++;
+                        rkt_last = rktp->rktp_rkt;
+                        /* Partition count */
+                        of_PartitionArrayCnt =
+                        rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                        PartitionArrayCnt = 0;
+                }
 
-                        PartitionArrayCnt++;
+                PartitionArrayCnt++;
 
-                        /* Partition */
-                        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+                /* Partition */
+                rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
 
-                        printf(" ------------------------------------------------------------------ AcknowledgementBatches for topic %.*s [%" PRId32 "] : first_offset=%" PRId64 ", last_offset=%" PRId64 "\n",
-                               RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                               rktp->rktp_partition,
-                               rktp->rktp_share_acknowledge.first_offset,
-                               rktp->rktp_share_acknowledge.last_offset);
-                        /* AcknowledgementBatches */
-                        if (rktp->rktp_share_acknowledge.first_offset >= 0) {
-                                /* For now we only support ACCEPT */
-                                rd_kafka_buf_write_arraycnt(rkbuf, 1); /* ArrayCnt = 1 */
+                // printf(" ------------------------------------------------------------------ AcknowledgementBatches for topic %.*s [%" PRId32 "] : first_offset=%" PRId64 ", last_offset=%" PRId64 "\n",
+                //         RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                //         rktp->rktp_partition,
+                //         rktp->rktp_share_acknowledge.first_offset,
+                //         rktp->rktp_share_acknowledge.last_offset);
+                /* AcknowledgementBatches */
+                if (rktp->rktp_share_acknowledge_count > 0) {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_ShareFetchRequest: topic %.*s [%" PRId32 "] : sending %ld acknowledgements",
+                                        RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                        rktp->rktp_partition,
+                                        rktp->rktp_share_acknowledge_count);
+                        /* For now we only support ACCEPT */
+                        rd_kafka_buf_write_arraycnt(rkbuf, rktp->rktp_share_acknowledge_count); /* ArrayCnt = 1 */
+                        for(j = 0; j < rktp->rktp_share_acknowledge_count; j++) {
                                 /* FirstOffset */
-                                rd_kafka_buf_write_i64(rkbuf, rktp->rktp_share_acknowledge.first_offset);
+                                rd_kafka_buf_write_i64(rkbuf, rktp->rktp_share_acknowledge[j].first_offset);
                                 /* LastOffset */
-                                rd_kafka_buf_write_i64(rkbuf, rktp->rktp_share_acknowledge.last_offset);
+                                rd_kafka_buf_write_i64(rkbuf, rktp->rktp_share_acknowledge[j].last_offset);
                                 /* AcknowledgementType */
                                 rd_kafka_buf_write_arraycnt(rkbuf, 1); /* ArrayCnt = 1 */
                                 rd_kafka_buf_write_i8(rkbuf, 1); /* ACCEPT */
                                 /* Acknowledgement tags */
                                 rd_kafka_buf_write_tags_empty(rkbuf);
-                                has_acknowledgements = rd_true;
-                        } else {
-                                /* No acknowledgements */
-                                rd_kafka_buf_write_arraycnt(rkbuf, 0);
                         }
-
-                        /* Partition tags */
-                        rd_kafka_buf_write_tags_empty(rkbuf);
-
-                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
-                                "Share Fetch topic %.*s [%" PRId32 "]",
+                        rktp->rktp_share_acknowledge_count = 0;
+                        rd_free(rktp->rktp_share_acknowledge);
+                        rktp->rktp_share_acknowledge = NULL;
+                } else {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_ShareFetchRequest: topic %.*s [%" PRId32 "] : No acknowledgements to send",
                                 RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                                 rktp->rktp_partition);
-
-                        cnt++;
+                        /* No acknowledgements */
+                        rd_kafka_buf_write_arraycnt(rkbuf, 0);
                 }
+
+                /* Partition tags */
+                rd_kafka_buf_write_tags_empty(rkbuf);
+
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                        "Share Fetch topic %.*s [%" PRId32 "]",
+                        RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                        rktp->rktp_partition);
+
+                cnt++;
         }
 
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
@@ -1433,11 +1644,21 @@ void rd_kafka_ShareFetchRequest(
                 rd_kafka_buf_write_tags_empty(rkbuf);
         }
 
-        if(has_acknowledgements || has_forgotten_toppars || is_fetching_messages) {
+        /* Update TopicArrayCnt */
+        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
+
+        if(toppars_to_send) {
+                rd_list_destroy(toppars_to_send);
+        }
+
+        /*
+         * TODO KIP-932: Move this to the caller.
+         */
+        if(is_leave_request || has_acknowledgements_or_topics_to_add || has_toppars_to_forget || is_fetching_messages) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                            "Share Fetch Request sent with%s%s%s",
-                           has_acknowledgements ? " acknowledgements," : "",
-                           has_forgotten_toppars ? " forgotten toppars," : "",
+                           has_acknowledgements_or_topics_to_add ? " acknowledgements," : "",
+                           has_toppars_to_forget ? " forgotten toppars," : "",
                            is_fetching_messages ? " fetching messages" : "");
         } else {
                 rd_kafka_buf_destroy(rkbuf);
@@ -1448,14 +1669,67 @@ void rd_kafka_ShareFetchRequest(
                 return;
         }
 
-        /* Update TopicArrayCnt */
-        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
+        if (has_toppars_to_forget) {
+                TopicArrayCnt = 0;
+                PartitionArrayCnt = 0;
+                rkt_last = NULL;
+                /* Write zero TopicArrayCnt but store pointer for later update */
+                of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                           "Forgetting %d toppars", rd_list_cnt(toppars_to_forget));
+                RD_LIST_FOREACH(rktp, toppars_to_forget, i) {
+                        /* TODO KIP-932: This condition will cause partitions of same topics
+                        to be inside single instance of the topic as toppars_to_send is not
+                        sorted. Eg: T1 0, T1 1, T2 0, T1 3, T1 5, T2 1  will translate to 
+                        T1 (0,1), T2 (0), T1 (3, 5), T2 (1) instead it should be
+                        T1 (0,1,3,5) T2(0,1) Fix this. */
+                        if (rkt_last != rktp->rktp_rkt) {
+                                if (rkt_last != NULL) {
+                                        /* Update PartitionArrayCnt */
+                                        rd_kafka_buf_finalize_arraycnt(
+                                        rkbuf, of_PartitionArrayCnt,
+                                        PartitionArrayCnt);
+                                        /* Topic tags */
+                                        rd_kafka_buf_write_tags_empty(rkbuf);
+                                }
 
-        /* ForgottenToppars */
-        rd_kafka_buf_write_arraycnt(rkbuf, 0);
+                                rd_kafka_topic_rdlock(rktp->rktp_rkt);
+                                /* Topic ID */
+                                rd_kafka_buf_write_uuid(
+                                rkbuf, &rktp->rktp_rkt->rkt_topic_id);
+                                rd_kafka_topic_rdunlock(rktp->rktp_rkt);
+                                
+                                TopicArrayCnt++;
+                                rkt_last = rktp->rktp_rkt;
+                                /* Partition count */
+                                of_PartitionArrayCnt =
+                                rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                                PartitionArrayCnt = 0;
+                        }
 
-        if (forgotten_toppars_cnt > 0) {
-                /* TODO KIP-932: Implement forgotten toppars handling */
+                        PartitionArrayCnt++;
+
+                        /* Partition */
+                        rd_kafka_buf_write_i32(rkbuf, rktp->rktp_partition);
+
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                "Forgetting Fetch partition %.*s [%" PRId32 "]",
+                                RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                rktp->rktp_partition);
+
+                }
+                if (rkt_last != NULL) {
+                        /* Update last topic's PartitionArrayCnt */
+                        rd_kafka_buf_finalize_arraycnt(rkbuf, of_PartitionArrayCnt,
+                                                PartitionArrayCnt);
+                        /* Topic tags */
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+                }
+                /* Update TopicArrayCnt */
+                rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
+        } else {
+                /* ForgottenToppars */
+                rd_kafka_buf_write_arraycnt(rkbuf, 0);
         }
 
         /* Consider Fetch requests blocking if fetch.wait.max.ms >= 1s */
@@ -1480,13 +1754,143 @@ void rd_kafka_ShareFetchRequest(
         return;
 }
 
+static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send_on_leave(rd_kafka_broker_t *rkb) {
+        /* TODO KIP-932: Implement this properly. Remaining acknowledgements should be sent */
+
+        // TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkblink) {
+        //         if (rktp->rktp_share_acknowledge.first_offset >= 0) {
+        //                 rd_list_add(toppars_to_send, rktp);
+        //         }
+        // }
+
+        return rd_list_new(0, NULL);
+}
+
+static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send(rd_kafka_broker_t *rkb) {
+        /* TODO KIP-932: Improve this allocation with Acknowledgement implementation */
+        int adding_toppar_cnt = rkb->rkb_share_fetch_session.toppars_to_add ? rd_list_cnt(rkb->rkb_share_fetch_session.toppars_to_add) : 0;
+        int intial_toppars_to_send_cnt = rkb->rkb_toppar_cnt + adding_toppar_cnt;
+        rd_list_t *toppars_to_send = rd_list_new(intial_toppars_to_send_cnt, NULL);
+        rd_kafka_toppar_t *rktp;
+        int i;
+
+        TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkb_session_link) {
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_broker_share_fetch_get_toppars_to_send: checking toppar topic %.*s [%" PRId32 "] with %ld acknowledgements",
+                       RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                       rktp->rktp_partition,
+                       rktp->rktp_share_acknowledge_count);
+                if (rktp->rktp_share_acknowledge_count > 0) {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_broker_share_fetch_get_toppars_to_send: adding to toppars_to_send topic %.*s [%" PRId32 "] with %ld acknowledgements",
+                               RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                               rktp->rktp_partition,
+                               rktp->rktp_share_acknowledge_count);
+                        rd_list_add(toppars_to_send, rktp);
+                } else {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_broker_share_fetch_get_toppars_to_send: not adding to toppars_to_send topic %.*s [%" PRId32 "] since it has no acknowledgements",
+                               RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                               rktp->rktp_partition);
+                }
+        }
+
+        if(rkb->rkb_share_fetch_session.toppars_to_add) {
+                RD_LIST_FOREACH(rktp, rkb->rkb_share_fetch_session.toppars_to_add, i) {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "rd_kafka_broker_share_fetch_get_toppars_to_send: adding topic %.*s [%" PRId32 "] to the session",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition);
+                        rd_list_add(toppars_to_send, rktp);
+                }
+        }
+
+        return toppars_to_send;
+}
+
+void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
+        rd_kafka_toppar_t *rktp, *tmp_rktp;
+
+        rkb->rkb_share_fetch_session.epoch = -1;
+
+        /* Clear toppars in session */
+        TAILQ_FOREACH_SAFE(rktp, &rkb->rkb_share_fetch_session.toppars_in_session, rktp_rkb_session_link, tmp_rktp) {
+                TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session, rktp, rktp_rkb_session_link);
+                if(rktp->rktp_share_acknowledge) {
+                        rd_free(rktp->rktp_share_acknowledge);
+                        rktp->rktp_share_acknowledge = NULL;
+                        rktp->rktp_share_acknowledge_count = 0;
+                }
+                rd_kafka_toppar_destroy(rktp); // from session list
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                                "%s [%" PRId32
+                                "]: removed from ShareFetch session on clear",
+                                rktp->rktp_rkt->rkt_topic->str,
+                                rktp->rktp_partition);
+        }
+        rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
+
+        /* Clear toppars to add */
+        if(rkb->rkb_share_fetch_session.toppars_to_add) {
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                                "Clearing %d toppars to add from ShareFetch session on clear",
+                                rd_list_cnt(rkb->rkb_share_fetch_session.toppars_to_add));
+                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_add);
+                rkb->rkb_share_fetch_session.toppars_to_add = NULL;
+        }
+
+        /* Clear toppars to forget */
+        if(rkb->rkb_share_fetch_session.toppars_to_forget) {
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                                "Clearing %d toppars to forget from ShareFetch session on clear",
+                                rd_list_cnt(rkb->rkb_share_fetch_session.toppars_to_forget));
+                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_forget);
+                rkb->rkb_share_fetch_session.toppars_to_forget = NULL;
+        }
+
+        /* Clear adding toppars */
+        if(rkb->rkb_share_fetch_session.adding_toppars) {
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                                "Clearing %d adding toppars from ShareFetch session on clear",
+                                rd_list_cnt(rkb->rkb_share_fetch_session.adding_toppars));
+                rd_list_destroy(rkb->rkb_share_fetch_session.adding_toppars);
+                rkb->rkb_share_fetch_session.adding_toppars = NULL;
+        }
+
+        /* Clear forgetting toppars */
+        if(rkb->rkb_share_fetch_session.forgetting_toppars) {
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                                "Clearing %d forgetting toppars from ShareFetch session on clear",
+                                rd_list_cnt(rkb->rkb_share_fetch_session.forgetting_toppars));
+                rd_list_destroy(rkb->rkb_share_fetch_session.forgetting_toppars);
+                rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
+        }
+}
+
+void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig, rd_ts_t now) {
+        rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
+        rd_assert(rkb->rkb_rk->rk_cgrp);
+         rd_kafka_ShareFetchRequest(
+            rkb,
+            rkcg->rkcg_group_id, /* group_id */
+            rkcg->rkcg_member_id, /* member_id */
+            rkb->rkb_share_fetch_session.epoch,   /* share_session_epoch */
+            rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
+            rkb->rkb_rk->rk_conf.fetch_min_bytes,
+            rkb->rkb_rk->rk_conf.fetch_max_bytes,
+            0,
+            0,
+            rd_kafka_broker_share_fetch_get_toppars_to_send_on_leave(rkb), /* toppars to send */
+            NULL,    /* forgetting toppars */
+            rd_true, /* leave request */
+            rko_orig, /* rko */
+            now);
+        rd_kafka_broker_share_fetch_session_clear(rkb);
+}
+
 void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig, rd_ts_t now) {
 
         rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
         int32_t max_records = 0;
 
         /* TODO KIP-932: Check if needed while closing the consumer.*/
-        rd_assert(rkb->rkb_rk->rk_cgrp); 
+        rd_assert(rkb->rkb_rk->rk_cgrp);
 
         if(!rkcg->rkcg_member_id) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
@@ -1499,6 +1903,11 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig
                 max_records = 500;
         }
 
+        if(rkb->rkb_share_fetch_session.toppars_to_add)
+                rkb->rkb_share_fetch_session.adding_toppars = rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_add, rd_kafka_toppar_list_copy, NULL);
+        if(rkb->rkb_share_fetch_session.toppars_to_forget)
+                rkb->rkb_share_fetch_session.forgetting_toppars = rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_forget, rd_kafka_toppar_list_copy, NULL);
+
         rd_kafka_ShareFetchRequest(
             rkb,
             rkcg->rkcg_group_id, /* group_id */
@@ -1509,8 +1918,9 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig
             rkb->rkb_rk->rk_conf.fetch_max_bytes,
             max_records,
             500,
-            NULL, /* forgotten toppars */
-            0,    /* forgotten toppars cnt */
+            rd_kafka_broker_share_fetch_get_toppars_to_send(rkb), /* toppars to send */
+            rkb->rkb_share_fetch_session.toppars_to_forget,    /* forgetting toppars */
+            rd_false, /* not leave request */
             rko_orig, /* rko */
             now);
 }
@@ -1634,6 +2044,11 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                 /* Topic tags */
                                 rd_kafka_buf_write_tags_empty(rkbuf);
                         }
+
+                        /* TODO: This is not thread safe as topic can
+                                 be recreated in which case topic id is
+                                 updated from the main thread and we are
+                                 sending topic id from broker thread.*/
                         if (rd_kafka_buf_ApiVersion(rkbuf) > 12) {
                                 /* Topic id must be non-zero here */
                                 rd_dassert(!RD_KAFKA_UUID_IS_ZERO(

@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
          *       and the application must not reference it again after
          *       this call.
          */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rk) {
                 fprintf(stderr, "%% Failed to create new consumer: %s\n",
                         errstr);
@@ -259,7 +259,7 @@ int main(int argc, char **argv) {
                         perror("clock_gettime");
                 double __elapsed_ms =
                         (__t1.tv_sec - __t0.tv_sec) * 1000.0 + (__t1.tv_nsec - __t0.tv_nsec) / 1e6;
-                fprintf(stdout, "%% rd_kafka_share_consume_batch() took %.3f ms\n", __elapsed_ms);
+                // fprintf(stdout, "%% rd_kafka_share_consume_batch() took %.3f ms\n", __elapsed_ms);
 
                 if (error) {
                         fprintf(stderr, "%% Consume error: %s\n",
@@ -268,7 +268,7 @@ int main(int argc, char **argv) {
                         continue;
                 }
 
-                fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
+                // fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
                 for (i = 0; i < (int)rcvd_msgs; i++) {
                         rkm = rkmessages[i];
 
@@ -279,12 +279,11 @@ int main(int argc, char **argv) {
                                 continue;
                         }
 
-                        if((int)rcvd_msgs < 100) {
+                        // if((int)rcvd_msgs < -1) {
                                 /* Proper message. */
-                                printf("Message on %s [%" PRId32 "] at offset %" PRId64
-                                " (leader epoch %" PRId32 "):\n",
+                                printf("Message received on %s [%" PRId32 "] at offset %" PRId64,
                                 rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                                rkm->offset, rd_kafka_message_leader_epoch(rkm));
+                                rkm->offset);
 
                                 /* Print the message key. */
                                 if (rkm->key && is_printable(rkm->key, rkm->key_len))
@@ -296,11 +295,11 @@ int main(int argc, char **argv) {
                                 /* Print the message value/payload. */
                                 if (rkm->payload &&
                                 is_printable(rkm->payload, rkm->len))
-                                        printf(" Value: %.*s\n", (int)rkm->len,
+                                        printf(" - Value: %.*s\n", (int)rkm->len,
                                         (const char *)rkm->payload);
                                 else if (rkm->payload)
-                                        printf(" Value: (%d bytes)\n", (int)rkm->len);
-                        }
+                                        printf(" - Value: (%d bytes)\n", (int)rkm->len);
+                        // }
 
                         rd_kafka_message_destroy(rkm);
                 }

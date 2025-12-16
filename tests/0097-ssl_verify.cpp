@@ -40,19 +40,19 @@ namespace TestSSLVerify {
 static const std::string envname[RdKafka::CERT__CNT][RdKafka::CERT_ENC__CNT] = {
     /* [RdKafka::CERT_PUBLIC_KEY] = */
     {
-        "SSL_pkcs",
+        "",  // PKCS12 disabled for FIPS testing
         "SSL_pub_der",
         "SSL_pub_pem",
     },
     /* [RdKafka::CERT_PRIVATE_KEY] = */
     {
-        "SSL_pkcs",
+        "",  // PKCS12 disabled for FIPS testing
         "SSL_priv_der",
         "SSL_priv_pem",
     },
     /* [RdKafka::CERT_CA] = */
     {
-        "SSL_pkcs",
+        "",  // PKCS12 disabled for FIPS testing
         "SSL_ca_der",
         "SSL_all_cas_pem" /* Contains multiple CA certs */,
     }};
@@ -229,10 +229,16 @@ static void conf_location_to_setter(RdKafka::Conf *conf,
                                     bool use_conf_value_file) {
   std::string loc;
   static const std::string encnames[] = {
-      "PKCS#12",
+      "PKCS#12 (disabled)",  // PKCS12 disabled for FIPS testing
       "DER",
       "PEM",
   };
+
+  /* Skip PKCS12 format for FIPS testing */
+  if (encoding == RdKafka::CERT_ENC_PKCS12) {
+    Test::Skip("PKCS12 format disabled for FIPS testing\n");
+    return;
+  }
 
   /* Clear the config property (e.g., ssl.key.location) */
   std::string errstr;
@@ -554,7 +560,9 @@ int main_0097_ssl_verify(int argc, char **argv) {
     return 0;
   }
 
-  if (!test_getenv("SSL_pkcs", NULL)) {
+  // PKCS12 support disabled for FIPS testing
+  // Check for other required SSL env vars instead
+  if (!test_getenv("SSL_pub_pem", NULL)) {
     Test::Skip("Test requires SSL_* env-vars set up by trivup\n");
     return 0;
   }
@@ -585,10 +593,11 @@ int main_0097_ssl_verify(int argc, char **argv) {
                      untrusted_client_key_intermediate_ca, USE_CONF,
                      RdKafka::CERT_ENC_PEM, USE_CONF, RdKafka::CERT_ENC_PEM,
                      USE_CONF, RdKafka::CERT_ENC_PEM);
-      do_test_verify(__LINE__, true /*verify ok*/, untrusted_client_key,
-                     untrusted_client_key_intermediate_ca, USE_SETTER,
-                     RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_PEM,
-                     USE_SETTER, RdKafka::CERT_ENC_PKCS12);
+      // PKCS12 test disabled for FIPS testing
+      // do_test_verify(__LINE__, true /*verify ok*/, untrusted_client_key,
+      //                untrusted_client_key_intermediate_ca, USE_SETTER,
+      //                RdKafka::CERT_ENC_PEM, USE_SETTER, RdKafka::CERT_ENC_PEM,
+      //                USE_SETTER, RdKafka::CERT_ENC_PKCS12);
     }
   }
 
@@ -611,9 +620,10 @@ int main_0097_ssl_verify(int argc, char **argv) {
     Test::Say("Finished running root CA only tests\n");
   }
 
-  do_test_verify(__LINE__, true /*verify ok*/, false, false, USE_SETTER,
-                 RdKafka::CERT_ENC_PKCS12, USE_SETTER, RdKafka::CERT_ENC_PKCS12,
-                 USE_SETTER, RdKafka::CERT_ENC_PKCS12);
+  // PKCS12 test disabled for FIPS testing
+  // do_test_verify(__LINE__, true /*verify ok*/, false, false, USE_SETTER,
+  //                RdKafka::CERT_ENC_PKCS12, USE_SETTER, RdKafka::CERT_ENC_PKCS12,
+  //                USE_SETTER, RdKafka::CERT_ENC_PKCS12);
 
   return 0;
 }

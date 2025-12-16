@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
          *       and the application must not reference it again after
          *       this call.
          */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rk) {
                 fprintf(stderr, "%% Failed to create new consumer: %s\n",
                         errstr);

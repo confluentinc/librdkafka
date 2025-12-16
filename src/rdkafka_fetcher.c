@@ -1367,6 +1367,9 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         break;
                 }
 
+                /*
+                 * TODO KIP-932: Check if this needed or not. If yes, check the working.
+                 */
                 rd_kafka_broker_fetch_backoff(rkb, err);
                 /* FALLTHRU */
         }
@@ -1648,6 +1651,9 @@ void rd_kafka_ShareFetchRequest(
                 rd_list_destroy(toppars_to_send);
         }
 
+        /*
+         * TODO KIP-932: Move this to the caller.
+         */
         if(is_leave_request || has_acknowledgements_or_topics_to_add || has_toppars_to_forget || is_fetching_messages) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                            "Share Fetch Request sent with%s%s%s",

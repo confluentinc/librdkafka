@@ -4473,6 +4473,9 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
 
                 rd_kafka_broker_unlock(rkb);
 
+                /*
+                 * TODO KIP-932: Check the below connection handling properly.
+                 */
                 if (rkb->rkb_toppar_cnt > 0 &&
                     rkb->rkb_share_fetch_session.epoch >= 0 &&
                     rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
@@ -4701,6 +4704,9 @@ static void rd_kafka_broker_serve(rd_kafka_broker_t *rkb, int timeout_ms) {
         rkb->rkb_persistconn.internal =
             rd_atomic32_get(&rkb->rkb_outbufs.rkbq_cnt) > 0;
 
+        /*
+         * TODO KIP-932: Check internal broker handling for shared consumer.
+         */
         if (rkb->rkb_source == RD_KAFKA_INTERNAL) {
                 rd_kafka_broker_internal_serve(rkb, abs_timeout);
                 return;

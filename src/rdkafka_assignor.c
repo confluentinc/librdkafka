@@ -451,7 +451,8 @@ rd_kafka_assignor_t *rd_kafka_assignor_find(rd_kafka_t *rk,
 /**
  * Destroys an assignor (but does not unlink).
  */
-static void rd_kafka_assignor_destroy(rd_kafka_assignor_t *rkas) {
+static void rd_kafka_assignor_destroy(void *rkasp) {
+        rd_kafka_assignor_t *rkas = (rd_kafka_assignor_t *)rkasp;
         rd_kafkap_str_destroy(rkas->rkas_protocol_type);
         rd_kafkap_str_destroy(rkas->rkas_protocol_name);
         rd_free(rkas);
@@ -580,7 +581,7 @@ int rd_kafka_assignors_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         int idx = 0;
 
         rd_list_init(&rk->rk_conf.partition_assignors, 3,
-                     (void *)rd_kafka_assignor_destroy);
+                     rd_kafka_assignor_destroy);
 
         /* Initialize builtin assignors (ignore errors) */
         rd_kafka_range_assignor_init(rk);

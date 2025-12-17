@@ -6044,6 +6044,9 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
         } else {
 #if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
                 unsigned char random_salt[64];
+#ifdef OPENSSL_IS_BORINGSSL
+#define RAND_priv_bytes(x, sz) RAND_bytes((x),(sz))
+#endif
                 if (RAND_priv_bytes(random_salt, sizeof(random_salt)) == 1) {
                         alteration->alteration.upsertion.salt =
                             rd_kafkap_bytes_new(random_salt,

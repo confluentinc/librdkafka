@@ -156,6 +156,8 @@ int main_0015_offsets_seek(int argc, char **argv) {
 
         testid = test_id_generate();
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, 3);
+
         test_produce_msgs_easy_multi(
             testid, topic, 0, 0 * msg_cnt_per_part, msg_cnt_per_part, topic, 1,
             1 * msg_cnt_per_part, msg_cnt_per_part, topic, 2,

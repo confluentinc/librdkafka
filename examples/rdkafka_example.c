@@ -580,7 +580,6 @@ int main(int argc, char **argv) {
                  * Producer
                  */
                 char buf[2048];
-                int sendcnt = 0;
 
                 /* Set up a message delivery report callback.
                  * It will be called once for each message, either on successful
@@ -661,7 +660,6 @@ int main(int argc, char **argv) {
                                         "%s partition %i\n",
                                         len, rd_kafka_topic_name(rkt),
                                         partition);
-                        sendcnt++;
                         /* Poll to handle delivery reports */
                         rd_kafka_poll(rk, 0);
                 }

@@ -164,7 +164,11 @@ int main_0099_commit_metadata(int argc, char **argv) {
 
         test_str_id_generate(group_id, sizeof(group_id));
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
+
+        /* Wait for topic metadata to propagate to avoid race conditions */
+        test_wait_topic_exists(NULL, topic, tmout_multip(10000));
+        test_wait_for_metadata_propagation(3);
 
         origin_toppar = rd_kafka_topic_partition_list_new(1);
 
@@ -179,7 +183,10 @@ int main_0099_commit_metadata(int argc, char **argv) {
         /* Make sure it's interpreted as bytes.
          * To fail before the fix it needs to be configured
          * with HAVE_STRNDUP */
-        metadata[5] = '\0';
+        if (rd_kafka_version() > 0x02050300) { /* Only run null byte test if
+                                                  librdkafka version > 2.5.3 */
+                metadata[5] = '\0';
+        }
 
         get_committed_metadata(group_id, origin_toppar, origin_toppar);
 

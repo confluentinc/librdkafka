@@ -137,6 +137,8 @@ list_groups(rd_kafka_t *rk, char **groups, int group_cnt, const char *desc) {
                 rd_kafka_group_list_destroy(grplist);
         }
 
+        if (fails > 0)
+                TEST_FAIL("Failed to list %d group(s)", fails);
 
         if (seen_all != seen)
                 return 0;
@@ -163,6 +165,8 @@ static void do_test_list_groups(void) {
 
         /* Handle for group listings */
         rk = test_create_producer();
+
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
 
         /* Produce messages so that topic is auto created */
         rkt = test_create_topic_object(rk, topic, NULL);

@@ -6,9 +6,16 @@
 # For slow connections: multiply test timeouts by this much (float)
 #test.timeout.multiplier=3.5
 
+# Skip specific tests by number (comma-separated list)
+# Example: test.skip.numbers=0011,0055,0081
+#test.skip.numbers=
+
 # Test topic names are constructed by:
 #  <prefix>_<suffix>, where default topic prefix is "rdkafkatest".
 # suffix is specified by the tests.
+# NOTE: When test.topic.prefix is set, run-test.sh will automatically
+#       clean up (delete) all topics starting with this prefix after
+#       each test completes. If no prefix is set, no cleanup occurs.
 #test.topic.prefix=bib
 
 # Make topic names random:
@@ -17,6 +24,21 @@
 
 # Write test results to sqlite3 database
 #test.sql.command=sqlite3 rdktests
+
+# Skip tests that require idempotent producer
+#test.skip.idempotent=true
+
+# Configure which acks values are supported by the cluster
+# Tests using unsupported acks values will be skipped.
+# Examples:
+#test.supported.acks=-1         
+#test.supported.acks=-1,0,1      
+#test.supported.acks=0           
+
+# Multiplies explicit test_wait_for_metadata_propagation() delays for cluster state propagation (set 0 to skip sleeps)
+# Different from test.timeout.multiplier which multiplies API operation timeouts (can't be disabled)
+#test.sleep.multiplier=2.0      (cloud)
+#test.sleep.multiplier=0         
 
 # Bootstrap broker(s)
 metadata.broker.list=localhost:9092

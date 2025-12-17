@@ -155,6 +155,10 @@ static void do_test_consume_batch(const char *strategy) {
         /* Produce messages */
         topic = test_mk_topic_name("0122-buffer_cleaning", 1);
 
+        test_create_topic_if_auto_create_disabled(NULL, topic, partition_cnt);
+
+        test_wait_for_metadata_propagation(2);
+
         for (p = 0; p < partition_cnt; p++)
                 test_produce_msgs_easy(topic, testid, p,
                                        produce_msg_cnt / partition_cnt);

@@ -37,6 +37,8 @@
 
 #ifdef _WIN32
 #include <direct.h> /* _getcwd */
+/* Windows uses strtok_s instead of strtok_r */
+#define strtok_r strtok_s
 #else
 #include <sys/wait.h> /* waitpid */
 #endif
@@ -50,6 +52,7 @@ int test_seed  = 0;
 
 char test_mode[64]                                  = "bare";
 char test_scenario[64]                              = "default";
+int test_scenario_set                               = 0;
 static volatile sig_atomic_t test_exit              = 0;
 static char test_topic_prefix[128]                  = "rdkafkatest";
 static int test_topic_random                        = 0;
@@ -64,6 +67,10 @@ int test_broker_version;
 static const char *test_broker_version_str = "2.4.0.0";
 int test_flags                             = 0;
 int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
+char *test_supported_acks                  = NULL; /**< Supported acks values */
+static double test_sleep_multiplier        = 0.0;  /**< Sleep time multiplier */
+static char *test_skip_numbers =
+    NULL; /**< Comma-separated list of test numbers to skip */
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
 static const char *test_git_version   = "HEAD";
@@ -82,6 +89,8 @@ static const char *skip_tests_till = NULL; /* all */
 static const char *subtests_to_run = NULL; /* all */
 static const char *tests_to_skip   = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
+int test_auto_create_enabled =
+    -1; /**< Cached knowledge of it auto create is enabled, -1: yet to detect */
 
 static int show_summary = 1;
 static int test_summary(int do_lock);
@@ -191,6 +200,7 @@ _TEST_DECL(0073_headers);
 _TEST_DECL(0074_producev);
 _TEST_DECL(0075_retry);
 _TEST_DECL(0076_produce_retry);
+_TEST_DECL(0076_produce_retry_idempotent);
 _TEST_DECL(0076_produce_retry_mock);
 _TEST_DECL(0077_compaction);
 _TEST_DECL(0078_c_from_cpp);
@@ -204,6 +214,7 @@ _TEST_DECL(0084_destroy_flags);
 _TEST_DECL(0085_headers);
 _TEST_DECL(0086_purge_local);
 _TEST_DECL(0086_purge_remote);
+_TEST_DECL(0086_purge_remote_idempotent);
 _TEST_DECL(0088_produce_metadata_timeout);
 _TEST_DECL(0089_max_poll_interval);
 _TEST_DECL(0090_idempotence);
@@ -257,6 +268,7 @@ _TEST_DECL(0134_ssl_provider);
 _TEST_DECL(0135_sasl_credentials);
 _TEST_DECL(0136_resolve_cb);
 _TEST_DECL(0137_barrier_batch_consume);
+_TEST_DECL(0137_barrier_batch_consume_idempotent);
 _TEST_DECL(0138_admin_mock);
 _TEST_DECL(0139_offset_validation_mock);
 _TEST_DECL(0140_commit_metadata);
@@ -412,7 +424,7 @@ struct test tests[] = {
     _TEST(0058_log, TEST_F_LOCAL),
     _TEST(0059_bsearch, 0, TEST_BRKVER(0, 10, 0, 0)),
     _TEST(0060_op_prio, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0061_consumer_lag, 0),
+    _TEST(0061_consumer_lag, TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0062_stats_event, TEST_F_LOCAL),
     _TEST(0063_clusterid, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0064_interceptors, 0, TEST_BRKVER(0, 9, 0, 0)),
@@ -436,6 +448,8 @@ struct test tests[] = {
     _TEST(0075_retry, TEST_F_SOCKEM),
 #endif
     _TEST(0076_produce_retry, TEST_F_SOCKEM),
+    _TEST(0076_produce_retry_idempotent,
+          TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0076_produce_retry_mock, TEST_F_LOCAL),
     _TEST(0077_compaction,
           0,
@@ -455,35 +469,42 @@ struct test tests[] = {
     _TEST(0085_headers, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0086_purge_local, TEST_F_LOCAL),
     _TEST(0086_purge_remote, 0),
+    _TEST(0086_purge_remote_idempotent, TEST_F_IDEMPOTENT_PRODUCER),
 #if WITH_SOCKEM
     _TEST(0088_produce_metadata_timeout, TEST_F_SOCKEM),
 #endif
     _TEST(0089_max_poll_interval, 0, TEST_BRKVER(0, 10, 1, 0)),
-    _TEST(0090_idempotence, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0090_idempotence,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0091_max_poll_interval_timeout, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0092_mixed_msgver, 0, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0093_holb_consumer, 0, TEST_BRKVER(0, 10, 1, 0)),
 #if WITH_SOCKEM
     _TEST(0094_idempotence_msg_timeout,
-          TEST_F_SOCKEM,
+          TEST_F_SOCKEM | TEST_F_IDEMPOTENT_PRODUCER,
           TEST_BRKVER(0, 11, 0, 0)),
 #endif
     _TEST(0095_all_brokers_down, TEST_F_LOCAL),
     _TEST(0097_ssl_verify, 0),
     _TEST(0097_ssl_verify_local, TEST_F_LOCAL),
-    _TEST(0098_consumer_txn, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0098_consumer_txn,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0099_commit_metadata, 0),
     _TEST(0100_thread_interceptors, TEST_F_LOCAL),
     _TEST(0101_fetch_from_follower, 0, TEST_BRKVER(2, 4, 0, 0)),
     _TEST(0102_static_group_rebalance, 0, TEST_BRKVER(2, 3, 0, 0)),
     _TEST(0102_static_group_rebalance_mock, TEST_F_LOCAL),
-    _TEST(0103_transactions_local, TEST_F_LOCAL),
+    _TEST(0103_transactions_local, TEST_F_LOCAL | TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0103_transactions,
-          0,
+          TEST_F_IDEMPOTENT_PRODUCER,
           TEST_BRKVER(0, 11, 0, 0),
           .scenario = "default,ak23"),
     _TEST(0104_fetch_from_follower_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0105_transactions_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0105_transactions_mock,
+          TEST_F_LOCAL | TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0106_cgrp_sess_timeout, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0107_topic_recreate,
           0,
@@ -516,7 +537,9 @@ struct test tests[] = {
     _TEST(0126_oauthbearer_oidc, 0, TEST_BRKVER(3, 1, 0, 0)),
     _TEST(0127_fetch_queue_backoff, 0),
     _TEST(0128_sasl_callback_queue, TEST_F_LOCAL, TEST_BRKVER(2, 0, 0, 0)),
-    _TEST(0129_fetch_aborted_msgs, 0, TEST_BRKVER(0, 11, 0, 0)),
+    _TEST(0129_fetch_aborted_msgs,
+          TEST_F_IDEMPOTENT_PRODUCER,
+          TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0130_store_offsets, 0),
     _TEST(0131_connect_timeout, TEST_F_LOCAL),
     _TEST(0132_strategy_ordering, 0, TEST_BRKVER(2, 4, 0, 0)),
@@ -525,8 +548,9 @@ struct test tests[] = {
     _TEST(0135_sasl_credentials, 0),
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
+    _TEST(0137_barrier_batch_consume_idempotent, TEST_F_IDEMPOTENT_PRODUCER),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0139_offset_validation_mock, 0),
+    _TEST(0139_offset_validation_mock, TEST_F_LOCAL),
     _TEST(0140_commit_metadata, 0),
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
@@ -536,7 +560,7 @@ struct test tests[] = {
     _TEST(0147_consumer_group_consumer_mock, TEST_F_LOCAL),
     _TEST(0148_offset_fetch_commit_error_mock, TEST_F_LOCAL),
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
-    _TEST(0150_telemetry_mock, 0),
+    _TEST(0150_telemetry_mock, TEST_F_LOCAL),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
@@ -781,8 +805,10 @@ static void test_init(void) {
                 test_level = atoi(tmp);
         if ((tmp = test_getenv("TEST_MODE", NULL)))
                 strncpy(test_mode, tmp, sizeof(test_mode) - 1);
-        if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
+        if ((tmp = test_getenv("TEST_SCENARIO", NULL))) {
                 strncpy(test_scenario, tmp, sizeof(test_scenario) - 1);
+                test_scenario_set = 1;
+        }
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
                 test_sockem_conf = tmp;
         if ((tmp = test_getenv("TEST_SEED", NULL)))
@@ -801,6 +827,10 @@ static void test_init(void) {
         }
         test_consumer_group_protocol_str =
             test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+
+        if ((tmp = test_getenv("TEST_BROKER_ENABLE_AUTO_CREATE", NULL)))
+                test_auto_create_enabled =
+                    !rd_strcasecmp(tmp, "true") || !strcmp(tmp, "1");
 
 
 #ifdef _WIN32
@@ -864,10 +894,136 @@ int test_set_special_conf(const char *name, const char *val, int *timeoutp) {
                         rd_free(test_sql_cmd);
                 test_sql_cmd = rd_strdup(val);
                 TEST_UNLOCK();
+        } else if (!strcmp(name, "test.skip.idempotent")) {
+                if (!strcmp(val, "true") || !strcmp(val, "1"))
+                        test_neg_flags |= TEST_F_IDEMPOTENT_PRODUCER;
+                else
+                        test_neg_flags &= ~TEST_F_IDEMPOTENT_PRODUCER;
+        } else if (!strcmp(name, "test.supported.acks")) {
+                TEST_LOCK();
+                if (test_supported_acks)
+                        rd_free(test_supported_acks);
+                test_supported_acks = rd_strdup(val);
+                TEST_UNLOCK();
+        } else if (!strcmp(name, "test.sleep.multiplier")) {
+                TEST_LOCK();
+                test_sleep_multiplier = strtod(val, NULL);
+                TEST_UNLOCK();
+        } else if (!strcmp(name, "test.skip.numbers")) {
+                TEST_LOCK();
+                if (test_skip_numbers)
+                        rd_free(test_skip_numbers);
+                test_skip_numbers = rd_strdup(val);
+                TEST_UNLOCK();
         } else
                 return 0;
 
         return 1;
+}
+
+/**
+ * @brief Check if an acks value is supported
+ * @param acks_value The acks value to check (as string, e.g., "0", "1", "-1")
+ * @returns 1 if supported, 0 if not supported
+ */
+int test_is_acks_supported(const char *acks_value) {
+        char *supported_list, *token, *saveptr;
+        int is_supported = 0;
+
+        if (!test_supported_acks) {
+                /* If no supported acks configured, assume all standard values
+                 * are supported */
+                return (!strcmp(acks_value, "-1") || !strcmp(acks_value, "0") ||
+                        !strcmp(acks_value, "1"));
+        }
+
+        /* Parse the comma-separated list of supported acks values */
+        supported_list = rd_strdup(test_supported_acks);
+        token          = strtok_r(supported_list, ",", &saveptr);
+
+        while (token != NULL) {
+                /* Trim whitespace */
+                while (*token == ' ' || *token == '\t')
+                        token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t'))
+                        *end-- = '\0';
+
+                if (!strcmp(token, acks_value)) {
+                        is_supported = 1;
+                        break;
+                }
+                token = strtok_r(NULL, ",", &saveptr);
+        }
+
+        rd_free(supported_list);
+        return is_supported;
+}
+
+/**
+ * @brief Check if test should run with the requested acks value
+ * @param wanted_acks The acks value the test wants (e.g., "1", "0", "-1",
+ * "all")
+ * @returns The acks value to use, or NULL if test should be skipped
+ */
+const char *test_get_available_acks(const char *wanted_acks) {
+        /* Handle "all" as equivalent to "-1" */
+        if (!strcmp(wanted_acks, "all"))
+                wanted_acks = "-1";
+
+        if (test_is_acks_supported(wanted_acks))
+                return wanted_acks;
+
+        /* Not supported - test should be skipped */
+        return NULL;
+}
+
+/**
+ * @brief Wait for metadata propagation across the cluster
+ * @param wait_time Sleep time in seconds (applies test_sleep_multiplier)
+ */
+void test_wait_for_metadata_propagation(int wait_time) {
+        if (test_sleep_multiplier > 0.0) {
+                int sleep_time = (int)(wait_time * test_sleep_multiplier);
+                rd_sleep(sleep_time);
+        }
+        /* If multiplier is 0, don't sleep at all */
+}
+
+/**
+ * @brief Check if a test should be skipped based on test.skip.numbers config
+ * @param test_number The test number to check (e.g., "0011", "0055")
+ * @returns 1 if test should be skipped, 0 otherwise
+ */
+int test_should_skip_number(const char *test_number) {
+        char *skip_list, *token, *saveptr;
+        int should_skip = 0;
+
+        if (!test_skip_numbers || !*test_skip_numbers)
+                return 0;
+
+        TEST_LOCK();
+        skip_list = rd_strdup(test_skip_numbers);
+        TEST_UNLOCK();
+
+        token = strtok_r(skip_list, ",", &saveptr);
+        while (token) {
+                /* Trim whitespace */
+                while (*token == ' ' || *token == '\t')
+                        token++;
+                char *end = token + strlen(token) - 1;
+                while (end > token && (*end == ' ' || *end == '\t'))
+                        *end-- = '\0';
+
+                if (!strcmp(token, test_number)) {
+                        should_skip = 1;
+                        break;
+                }
+                token = strtok_r(NULL, ",", &saveptr);
+        }
+
+        rd_free(skip_list);
+        return should_skip;
 }
 
 /**
@@ -1492,6 +1648,9 @@ static void run_tests(int argc, char **argv) {
                 }
                 if ((test_neg_flags & ~test_flags) & test->flags)
                         skip_reason = "Filtered due to negative test flags";
+                if (test_should_skip_number(testnum))
+                        skip_reason =
+                            "Skipped by test.skip.numbers configuration";
                 if (test_broker_version &&
                     (test->minver > test_broker_version ||
                      (test->maxver && test->maxver < test_broker_version))) {
@@ -1505,7 +1664,8 @@ static void run_tests(int argc, char **argv) {
                         skip_reason = tmp;
                 }
 
-                if (!strstr(scenario, test_scenario)) {
+                /* Only care about scenarios if user has set them explicitly. */
+                if (test_scenario_set && !strstr(scenario, test_scenario)) {
                         rd_snprintf(tmp, sizeof(tmp),
                                     "requires test scenario %s", scenario);
                         skip_silent = rd_true;
@@ -1889,12 +2049,15 @@ int main(int argc, char **argv) {
                         test_neg_flags |= TEST_F_KNOWN_ISSUE;
                 else if (!strcmp(argv[i], "-E"))
                         test_neg_flags |= TEST_F_SOCKEM;
+                else if (!strcmp(argv[i], "-i"))
+                        test_flags |= TEST_F_IDEMPOTENT_PRODUCER;
                 else if (!strcmp(argv[i], "-V") && i + 1 < argc)
                         test_broker_version_str = argv[++i];
-                else if (!strcmp(argv[i], "-s") && i + 1 < argc)
+                else if (!strcmp(argv[i], "-s") && i + 1 < argc) {
                         strncpy(test_scenario, argv[++i],
                                 sizeof(test_scenario) - 1);
-                else if (!strcmp(argv[i], "-S"))
+                        test_scenario_set = 1;
+                } else if (!strcmp(argv[i], "-S"))
                         show_summary = 0;
                 else if (!strcmp(argv[i], "-D"))
                         test_delete_topics_between = 1;
@@ -1931,6 +2094,8 @@ int main(int argc, char **argv) {
                             "needed)\n"
                             "  -k/-K  Only/dont run tests with known issues\n"
                             "  -E     Don't run sockem tests\n"
+                            "  -i      Only run tests using "
+                            "idempotent/transactional producer\n"
                             "  -a     Assert on failures\n"
                             "  -r     Write test_report_...json file.\n"
                             "  -S     Dont show test summary\n"
@@ -1963,6 +2128,7 @@ int main(int argc, char **argv) {
                             "  TEST_LEVEL - Test verbosity level\n"
                             "  TEST_MODE - bare, helgrind, valgrind\n"
                             "  TEST_SEED - random seed\n"
+                            "  CLUSTER_TYPE - K2 for K2 cluster mode\n"
                             "  RDKAFKA_TEST_CONF - test config file "
                             "(test.conf)\n"
                             "  KAFKA_PATH - Path to kafka source dir\n"
@@ -2035,7 +2201,8 @@ int main(int argc, char **argv) {
                 TEST_SAY("Skip tests before: %s\n", skip_tests_till);
         TEST_SAY("Test mode    : %s%s%s\n", test_quick ? "quick, " : "",
                  test_mode, test_on_ci ? ", CI" : "");
-        TEST_SAY("Test scenario: %s\n", test_scenario);
+        if (test_scenario_set)
+                TEST_SAY("Test scenario: %s\n", test_scenario);
         TEST_SAY("Test filter  : %s\n", (test_flags & TEST_F_LOCAL)
                                             ? "local tests only"
                                             : "no filter");
@@ -2045,8 +2212,31 @@ int main(int argc, char **argv) {
         if (test_rusage)
                 TEST_SAY("Test rusage : yes (%.2fx CPU calibration)\n",
                          test_rusage_cpu_calibration);
-        if (test_idempotent_producer)
+        if (test_idempotent_producer) {
+                if (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)
+                        TEST_WARN(
+                            "Skipping tests that require an idempotent "
+                            "producer while also enabling idempotency for "
+                            "other tests, possible logical inconsistency.\n");
                 TEST_SAY("Test Idempotent Producer: enabled\n");
+        }
+        if (test_neg_flags & TEST_F_IDEMPOTENT_PRODUCER)
+                TEST_SAY(
+                    "Test Idempotent Producer: skipping idempotent tests\n");
+        if (test_supported_acks) {
+                TEST_SAY("Test supported acks: %s\n", test_supported_acks);
+        } else {
+                TEST_SAY(
+                    "Test supported acks: -1,0,1 (default - all standard "
+                    "values)\n");
+        }
+        if (test_sleep_multiplier > 0.0) {
+                TEST_SAY("Test sleep multiplier: %.1fx\n",
+                         test_sleep_multiplier);
+        }
+        if (test_skip_numbers) {
+                TEST_SAY("Test skip numbers: %s\n", test_skip_numbers);
+        }
 
         {
                 char cwd[512], *pcwd;
@@ -2269,6 +2459,12 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
 
         test_conf_init(NULL, &topic_conf, 0);
 
+        /* Make sure all replicas are in-sync after producing
+         * so that consume test won't fail - this is overridden if the user sets
+         * a different value explicitly. */
+        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
+                                errstr, sizeof(errstr));
+
         va_start(ap, topic);
         while ((name = va_arg(ap, const char *)) &&
                (val = va_arg(ap, const char *))) {
@@ -2277,12 +2473,6 @@ test_create_producer_topic(rd_kafka_t *rk, const char *topic, ...) {
                         TEST_FAIL("Conf failed: %s\n", errstr);
         }
         va_end(ap);
-
-        /* Make sure all replicas are in-sync after producing
-         * so that consume test wont fail. */
-        rd_kafka_topic_conf_set(topic_conf, "request.required.acks", "-1",
-                                errstr, sizeof(errstr));
-
 
         rkt = rd_kafka_topic_new(rk, topic, topic_conf);
         if (!rkt)
@@ -4944,6 +5134,71 @@ void test_print_partition_list(
 }
 
 /**
+ * @brief Print partition list with error information (version-safe)
+ */
+void test_print_partition_list_with_errors(
+    const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                /* Only show leader epoch if librdkafka >= 2.1.0 (leader epoch
+                 * APIs) */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        TEST_SAY(
+                            " %s [%" PRId32 "] offset %" PRId64
+                            " (epoch %" PRId32 ") %s%s\n",
+                            partitions->elems[i].topic,
+                            partitions->elems[i].partition,
+                            partitions->elems[i].offset,
+                            rd_kafka_topic_partition_get_leader_epoch(
+                                &partitions->elems[i]),
+                            partitions->elems[i].err ? ": " : "",
+                            partitions->elems[i].err
+                                ? rd_kafka_err2str(partitions->elems[i].err)
+                                : "");
+                } else {
+                        TEST_SAY(
+                            " %s [%" PRId32 "] offset %" PRId64 " %s%s\n",
+                            partitions->elems[i].topic,
+                            partitions->elems[i].partition,
+                            partitions->elems[i].offset,
+                            partitions->elems[i].err ? ": " : "",
+                            partitions->elems[i].err
+                                ? rd_kafka_err2str(partitions->elems[i].err)
+                                : "");
+                }
+        }
+}
+
+/**
+ * @brief Print partition list without error fields
+ */
+void test_print_partition_list_no_errors(
+    const rd_kafka_topic_partition_list_t *partitions) {
+        int i;
+        for (i = 0; i < partitions->cnt; i++) {
+                const rd_kafka_topic_partition_t *p = &partitions->elems[i];
+                int64_t leader_epoch                = -1;
+
+                /* Only call leader epoch API if available (librdkafka >= 2.1.0)
+                 */
+                if (rd_kafka_version() >= 0x020100ff) {
+                        leader_epoch =
+                            rd_kafka_topic_partition_get_leader_epoch(p);
+                }
+
+                if (leader_epoch != -1) {
+                        TEST_SAY("  %s [%d] offset %" PRId64
+                                 " leader epoch %" PRId64 "\n",
+                                 p->topic, p->partition, p->offset,
+                                 leader_epoch);
+                } else {
+                        TEST_SAY("  %s [%d] offset %" PRId64 "\n", p->topic,
+                                 p->partition, p->offset);
+                }
+        }
+}
+
+/**
  * @brief Compare two lists, returning 0 if equal.
  *
  * @remark The lists may be sorted by this function.
@@ -5528,28 +5783,107 @@ test_auto_create_topic(rd_kafka_t *rk, const char *name, int timeout_ms) {
         return err;
 }
 
-
+static int verify_topics_in_metadata(rd_kafka_t *rk,
+                                     rd_kafka_metadata_topic_t *topics,
+                                     size_t topic_cnt,
+                                     rd_kafka_metadata_topic_t *not_topics,
+                                     size_t not_topic_cnt);
 /**
- * @brief Check if topic auto creation works.
+ * @brief Check if topic auto creation works. The result is cached.
  * @returns 1 if it does, else 0.
  */
 int test_check_auto_create_topic(void) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_resp_err_t err;
-        const char *topic = test_mk_topic_name("autocreatetest", 1);
+        const char *topic;
+        rd_kafka_metadata_topic_t mdt = RD_ZERO_INIT;
+        int fails;
+
+        if (test_auto_create_enabled != -1)
+                return test_auto_create_enabled;
+
+        topic     = test_mk_topic_name("autocreatetest", 1);
+        mdt.topic = (char *)topic;
 
         test_conf_init(&conf, NULL, 0);
         rk  = test_create_handle(RD_KAFKA_PRODUCER, conf);
         err = test_auto_create_topic(rk, topic, tmout_multip(5000));
+        TEST_SAY("test_auto_create_topic() returned %s\n",
+                 rd_kafka_err2str(err));
         if (err)
                 TEST_SAY("Auto topic creation of \"%s\" failed: %s\n", topic,
                          rd_kafka_err2str(err));
+
+        /* Actually check if the topic exists or not. Errors only denote errors
+         * in topic creation, and not non-existence. */
+        fails = verify_topics_in_metadata(rk, &mdt, 1, NULL, 0);
+        if (fails > 0)
+                TEST_SAY(
+                    "Auto topic creation of \"%s\" failed as the topic does "
+                    "not exist.\n",
+                    topic);
+
         rd_kafka_destroy(rk);
 
-        return err ? 0 : 1;
+        if (fails == 0 && !err)
+                test_auto_create_enabled = 1;
+        else
+                test_auto_create_enabled = 0;
+
+        return test_auto_create_enabled;
 }
 
+/**
+ * @brief Create topic if auto topic creation is not enabled.
+ * @param use_rk The rdkafka handle to use, or NULL to create a new one.
+ * @param topicname The name of the topic to create.
+ * @param partition_cnt The number of partitions to create.
+ */
+void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
+                                               const char *topicname,
+                                               int partition_cnt) {
+        if (test_check_auto_create_topic()) {
+                return;
+        }
+
+        TEST_SAY("Auto topic creation is not enabled, creating topic %s\n",
+                 topicname);
+
+        /* If auto topic creation is not enabled, we create the topic with
+         * broker default values */
+        test_create_topic(use_rk, topicname, partition_cnt, -1);
+}
+
+/**
+ * @brief Create topic with configs if auto topic creation is not enabled.
+ * @param use_rk The rdkafka handle to use, or NULL to create a new one.
+ * @param topicname The name of the topic to create.
+ * @param partition_cnt The number of partitions to create.
+ * @param configs Topic configurations (key-value pairs), or NULL for defaults.
+ */
+void test_create_topic_if_auto_create_disabled_with_configs(
+    rd_kafka_t *use_rk,
+    const char *topicname,
+    int partition_cnt,
+    const char **configs) {
+        if (test_check_auto_create_topic()) {
+                return;
+        }
+
+        TEST_SAY("Auto topic creation is not enabled, creating topic %s%s\n",
+                 topicname, configs ? " with custom configs" : "");
+
+        /* If auto topic creation is not enabled, create the topic */
+        if (configs) {
+                /* Use admin API with custom configs */
+                test_admin_create_topic(use_rk, topicname, partition_cnt, -1,
+                                        configs);
+        } else {
+                /* Use existing flow with broker default values */
+                test_create_topic(use_rk, topicname, partition_cnt, -1);
+        }
+}
 
 /**
  * @brief Builds and runs a Java application from the java/ directory.
@@ -6172,7 +6506,7 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
-        abs_timeout = test_clock() + ((int64_t)tmout * 1000);
+        abs_timeout = test_clock() + ((int64_t)tmout_multip(tmout) * 1000);
 
         TEST_SAY("Waiting for up to %dms for metadata update\n", tmout);
 
@@ -6581,8 +6915,11 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
 
         for (i = 0; i < topic_cnt; i++) {
                 char errstr[512];
-                new_topics[i] = rd_kafka_NewTopic_new(
-                    topics[i], num_partitions, 1, errstr, sizeof(errstr));
+                /* Use broker default replication factor (-1) */
+                int replication_factor = -1;
+                new_topics[i] = rd_kafka_NewTopic_new(topics[i], num_partitions,
+                                                      replication_factor,
+                                                      errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
                             "Failed to NewTopic(\"%s\", %d) #%" PRIusz ": %s",
                             topics[i], num_partitions, i, errstr);
@@ -6751,6 +7088,34 @@ rd_kafka_resp_err_t test_DeleteTopics_simple(rd_kafka_t *rk,
                 TEST_FAIL("Failed to delete topics: %s", rd_kafka_err2str(err));
 
         return err;
+}
+
+/**
+ * @brief Convenience wrapper to delete a single topic
+ *
+ * @param rk Kafka client handle
+ * @param topic_name Name of the topic to delete
+ */
+void test_delete_topic_simple(rd_kafka_t *rk, const char *topic_name) {
+        char *topics[1];
+        rd_kafka_resp_err_t err;
+
+        if (!topic_name) {
+                TEST_SAY("Skipping topic deletion: topic_name is NULL\n");
+                return;
+        }
+
+        topics[0] = (char *)topic_name;
+
+        TEST_SAY("Deleting topic: %s\n", topic_name);
+        err = test_DeleteTopics_simple(rk, NULL, topics, 1, NULL);
+
+        if (err) {
+                TEST_WARN("Failed to delete topic %s: %s\n", topic_name,
+                          rd_kafka_err2str(err));
+        } else {
+                TEST_SAY("Successfully deleted topic: %s\n", topic_name);
+        }
 }
 
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,

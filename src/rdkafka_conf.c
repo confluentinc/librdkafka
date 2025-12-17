@@ -4258,6 +4258,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                        "for `group.protocol=consumer`. It is "
                                        "defined broker side";
                         }
+
+#if !HAVE_SECURE_RAND_BYTES
+                        return "`group.protocol=consumer` requires "
+                               "librdkafka to be built with secure random "
+                               "number generator support";
+#endif
                 }
 
                 /* Automatically adjust `fetch.max.bytes` to be >=

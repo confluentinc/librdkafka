@@ -48,8 +48,7 @@ verify_rpm_distros() {
     # Last RHEL 8 version is 2.4.0
     verify_rpm rockylinux:8 "2.4.0"
     verify_rpm rockylinux:9 $version
-    # TODO: Enable it after publishing first rpm packages for 10
-    # verify_rpm rockylinux:10 $version
+    verify_rpm rockylinux:10 $version
 }
 
 verify_debian_distros() {

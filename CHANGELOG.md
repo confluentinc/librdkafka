@@ -71,6 +71,7 @@ Starting with **librdkafka 2.12.0**, the next generation consumer group rebalanc
 * Issues: #4878.
   Fix to ensure `rd_kafka_query_watermark_offsets` enforces the specified timeout and does not continue beyond timeout expiry.
   Happening since 2.3.0 (#5201).
+* Issues: #4949: Prevent an FPE in rd_hdr_histogram_new.
 
 ### Telemetry fixes
 

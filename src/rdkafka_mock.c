@@ -1490,8 +1490,6 @@ static int rd_kafka_mock_cluster_thread_main(void *arg) {
 
         rd_kafka_set_thread_name("mock");
         rd_kafka_set_thread_sysname("rdk:mock");
-        rd_kafka_thread_srand(mcluster->rk,
-                              rd_true /* we're in an internal thread */);
         rd_kafka_interceptors_on_thread_start(mcluster->rk,
                                               RD_KAFKA_THREAD_BACKGROUND);
         rd_atomic32_add(&rd_kafka_thread_cnt_curr, 1);

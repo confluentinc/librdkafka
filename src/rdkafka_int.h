@@ -1123,7 +1123,6 @@ extern char RD_TLS rd_kafka_thread_name[64];
 
 void rd_kafka_set_thread_name(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
 void rd_kafka_set_thread_sysname(const char *fmt, ...) RD_FORMAT(printf, 1, 2);
-void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread);
 
 int rd_kafka_path_is_dir(const char *path);
 rd_bool_t rd_kafka_dir_is_empty(const char *path);

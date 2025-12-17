@@ -35,7 +35,7 @@
 #include <openssl/rand.h>
 #endif
 #ifndef HAVE_OSSL_SECURE_RAND_BYTES
-#if HAVE_GETENTROPY
+#if HAVE_GETENTROPY || defined(_WIN32)
 #define HAVE_SECURE_RAND_BYTES 1
 #else
 #define HAVE_SECURE_RAND_BYTES 0

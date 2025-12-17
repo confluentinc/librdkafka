@@ -5877,44 +5877,39 @@ char *rd_kafka_Uuid_str(const rd_kafka_Uuid_t *uuid) {
 }
 
 const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
-    if (*uuid->base64str)
+        if (*uuid->base64str)
+                return uuid->base64str;
+
+        rd_chariov_t in_base64;
+        char *out_base64_str;
+        char *uuid_bytes;
+        uint64_t input_uuid[2];
+
+        input_uuid[0]  = htobe64(uuid->most_significant_bits);
+        input_uuid[1]  = htobe64(uuid->least_significant_bits);
+        uuid_bytes     = (char *)input_uuid;
+        in_base64.ptr  = uuid_bytes;
+        in_base64.size = sizeof(uuid->most_significant_bits) +
+                         sizeof(uuid->least_significant_bits);
+
+        // Standard Base64 encode
+        out_base64_str = rd_base64_encode_str(&in_base64);
+        if (!out_base64_str)
+                return NULL;
+
+        // Convert to URL-safe Base64
+        for (char *p = out_base64_str; *p; p++) {
+                if (*p == '+')
+                        *p = '-';
+                else if (*p == '/')
+                        *p = '_';
+        }
+
+        rd_strlcpy((char *)uuid->base64str, out_base64_str,
+                   23 /* Removing extra ('=') padding */);
+        rd_free(out_base64_str);
+
         return uuid->base64str;
-
-    rd_chariov_t in_base64;
-    char *out_base64_str;
-    char *uuid_bytes;
-    uint64_t input_uuid[2];
-
-    input_uuid[0] = htobe64(uuid->most_significant_bits);
-    input_uuid[1] = htobe64(uuid->least_significant_bits);
-    uuid_bytes = (char *)input_uuid;
-    in_base64.ptr = uuid_bytes;
-    in_base64.size = sizeof(uuid->most_significant_bits) +
-                     sizeof(uuid->least_significant_bits);
-
-    // Standard Base64 encode
-    out_base64_str = rd_base64_encode_str(&in_base64);
-    if (!out_base64_str)
-        return NULL;
-
-    // Convert to URL-safe Base64
-    for (char *p = out_base64_str; *p; p++) {
-        if (*p == '+')
-            *p = '-';
-        else if (*p == '/')
-            *p = '_';
-    }
-
-    // Strip '=' padding (Kafka’s Base64 UUIDs are 22 chars)
-    size_t len = strlen(out_base64_str);
-    while (len > 0 && out_base64_str[len - 1] == '=') {
-        out_base64_str[--len] = '\0';
-    }
-
-    rd_strlcpy((char *)uuid->base64str, out_base64_str, sizeof(uuid->base64str));
-    rd_free(out_base64_str);
-
-    return uuid->base64str;
 }
 
 unsigned int rd_kafka_Uuid_hash(const rd_kafka_Uuid_t *uuid) {

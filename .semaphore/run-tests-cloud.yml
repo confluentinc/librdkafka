@@ -250,6 +250,10 @@ blocks:
                 echo "Current directory: $(pwd)"
                 echo "test.conf exists: $(test -f test.conf && echo yes || echo no)"
                 echo "Running tests with librdkafka ${LIBRDKAFKA_VERSION}..."
+                echo "Debug: checking library paths..."
+                ldd ./test-runner | head -20
+                echo "Debug: checking for system librdkafka..."
+                ldconfig -p | grep rdkafka || echo "No system librdkafka found"
                 LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so" \
                 LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:$LD_LIBRARY_PATH" \
                 TESTS=0001 ./run-test.sh || echo "Tests finished with failures"

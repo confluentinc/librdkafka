@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include <sys/random.h>
 
 int main() {

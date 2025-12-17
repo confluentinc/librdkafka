@@ -216,6 +216,15 @@ void foo (void) {
    (void)rand_r(&seed);
 }"
 
+    # Check if getentropy() is available
+    mkl_compile_check "getentropy" "HAVE_GETENTROPY" disable CC "" \
+"#define _DEFAULT_SOURCE
+#include <sys/random.h>
+int foo (void) {
+   char seed[16];
+   return getentropy((void *)seed, sizeof(seed));
+}"
+
     # Check if strndup() is available (isn't on Solaris 10)
     mkl_compile_check "strndup" "HAVE_STRNDUP" disable CC "" \
 "#include <string.h>

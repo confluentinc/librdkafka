@@ -31,33 +31,83 @@
 #include "rdtime.h"
 #include "tinycthread.h"
 #include "rdmurmur2.h"
+#ifndef _WIN32
+#include <sys/random.h>
+#endif
 
-int rd_jitter(int low, int high) {
+/* Initial seed with time+thread id */
+unsigned int rd_seed() {
+        unsigned int seed = 0;
+        struct timeval tv;
+        rd_gettimeofday(&tv, NULL);
+        seed = (unsigned int)(tv.tv_usec);
+        seed ^= thrd_current_id();
+
+        /* Apply the murmur2 hash to distribute entropy to
+         * the whole seed. */
+        seed = (unsigned int)rd_murmur2(&seed, sizeof(seed));
+        return seed;
+}
+
+static int rd_rand() {
         int rand_num;
 #if HAVE_RAND_R
         static RD_TLS unsigned int seed = 0;
-
-        /* Initial seed with time+thread id */
         if (unlikely(seed == 0)) {
-                struct timeval tv;
-                rd_gettimeofday(&tv, NULL);
-                seed = (unsigned int)(tv.tv_usec);
-                seed ^= thrd_current_id();
-
-                /* When many threads are created at the same time and the
-                 * thread id is different only by a few bits it's possible that
-                 * `rand_r`, that is initially multiplying by `1103515245`,
-                 * truncates the variable bits and uses the same seed for
-                 * different threads. By applying `murmur2` we ensure that seed
-                 * variability is distributed across various bits at different
-                 * positions. */
-                seed = (unsigned int)rd_murmur2(&seed, sizeof(seed));
+                seed = rd_seed();
         }
-
         rand_num = rand_r(&seed);
 #else
         rand_num = rand();
 #endif
+        return rand_num;
+}
+
+#if HAVE_OSSL_SECURE_RAND_BYTES
+static int rd_rand_bytes_by_ossl(unsigned char *buf, int num) {
+        int res = -1;
+        while ((res = RAND_priv_bytes(buf, num)) == 0) {
+                rd_usleep(1000, 0); /* wait for more entropy */
+        }
+        return res;
+}
+#endif
+
+#ifdef _WIN32
+static void rd_rand_bytes_by_rand_s(unsigned char *buf, int num) {
+        unsigned int rand;
+        while (num > 0) {
+                errno_t err = 0;
+                rand_s(&rand);
+                int i = sizeof(int);
+                while (i-- > 0 && num > 0) {
+                        *buf++ = (unsigned char)(rand & 0xff);
+                        rand >>= 8;
+                        num--;
+                }
+        }
+}
+#endif
+
+int rd_rand_bytes(unsigned char *buf, unsigned int num) {
+#if HAVE_OSSL_SECURE_RAND_BYTES
+        if (rd_rand_bytes_by_ossl(buf, num) == 1)
+                return 1;
+#endif
+#if HAVE_GETENTROPY
+        if (getentropy(buf, (size_t)num) == 0)
+                return 1;
+#endif
+#ifdef _WIN32
+        rd_rand_bytes_by_rand_s(buf, num);
+        return 1;
+#else
+        return 0;
+#endif
+}
+
+int rd_jitter(int low, int high) {
+        int rand_num = rd_rand();
         return (low + (rand_num % ((high - low) + 1)));
 }
 

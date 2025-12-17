@@ -32,6 +32,7 @@
 
 #ifndef _WIN32
 #define _GNU_SOURCE /* for strndup() */
+#define _CRT_RAND_S /* for rand_s() on MSVC */
 #endif
 
 #ifdef _MSC_VER

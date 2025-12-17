@@ -57,7 +57,6 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
-#include "rdmurmur2.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -141,16 +140,7 @@ static char RD_TLS rd_kafka_thread_sysname[16] = "app";
  * @brief Seed the PRNG with current microseconds and thread ID.
  */
 static void rd_kafka_srand(void) {
-        unsigned int seed = 0;
-        struct timeval tv;
-        rd_gettimeofday(&tv, NULL);
-        seed = (unsigned int)(tv.tv_usec);
-        seed ^= thrd_current_id();
-
-        /* Apply the murmur2 hash to distribute entropy to
-         * the whole seed. */
-        seed = (unsigned int)rd_murmur2(&seed, sizeof(seed));
-        srand(seed);
+        srand(rd_seed());
 }
 
 void rd_kafka_set_thread_sysname(const char *fmt, ...) {
@@ -174,19 +164,20 @@ void rd_kafka_set_thread_sysname(const char *fmt, ...) {
  * @param internal_thread If true, seed the PRNG if
  *                        it's required per-thread.
  */
-void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread) {
 #ifdef _WIN32
-        rd_bool_t required_per_thread = rd_true;
-#else
-        rd_bool_t required_per_thread = rd_false;
-#endif
-        if ((required_per_thread &&
-             (rk->rk_conf.enable_random_seed || internal_thread)) ||
-            (!required_per_thread && rk->rk_conf.enable_random_seed &&
-             !internal_thread)) {
+void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread) {
+        /* We always call it once per thread in the internal threads and
+         * once per thread in the application threads, if requested. */
+        if (rk->rk_conf.enable_random_seed || internal_thread)
                 call_once(&rd_kafka_srand_once, rd_kafka_srand);
-        }
 }
+#else
+void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread) {
+        /* We call it only in the app threads, only once, if requested. */
+        if (rk->rk_conf.enable_random_seed && !internal_thread)
+                call_once(&rd_kafka_srand_once, rd_kafka_srand);
+}
+#endif
 
 static void rd_kafka_global_init0(void) {
         cJSON_Hooks json_hooks = {.malloc_fn = rd_malloc, .free_fn = rd_free};
@@ -5429,19 +5420,11 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
  * @remark Must be freed after use using rd_kafka_Uuid_destroy().
  */
 rd_kafka_Uuid_t rd_kafka_Uuid_random() {
-        int i;
         unsigned char rand_values_bytes[16] = {0};
         uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
-        unsigned char *rand_values_app;
-        rd_kafka_Uuid_t ret = RD_KAFKA_UUID_ZERO;
-        for (i = 0; i < 16; i += 2) {
-                uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
-                /* No need to convert endianess here because it's still only
-                 * a random value. */
-                rand_values_app = (unsigned char *)&rand_uint16;
-                rand_values_bytes[i] |= rand_values_app[0];
-                rand_values_bytes[i + 1] |= rand_values_app[1];
-        }
+        rd_kafka_Uuid_t ret                 = RD_KAFKA_UUID_ZERO;
+        if (rd_rand_bytes(rand_values_bytes, sizeof(rand_values_bytes)) != 1)
+                return ret;
 
         rand_values_bytes[6] &= 0x0f; /* clear version */
         rand_values_bytes[6] |= 0x40; /* version 4 */

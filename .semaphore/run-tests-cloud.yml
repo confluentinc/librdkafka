@@ -256,17 +256,17 @@ blocks:
                   echo "Running tests with librdkafka version: ${LIBRDKAFKA_VERSION}"
                   LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so" \
                   LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:$LD_LIBRARY_PATH" \
-                  ./run-test.sh || echo "Tests finished with failures"
+                  TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
                 else
-                  ./run-test.sh || echo "Tests finished with failures"
+                  TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
                 fi
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Executing tests in pod ${TOOLBOX_POD}..."
                 if [[ -n "$LIBRDKAFKA_VERSION" ]]; then
                   echo "Running tests with librdkafka version: ${LIBRDKAFKA_VERSION}"
-                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' ./run-test.sh" || echo "Tests finished with failures"
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
                 else
-                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && ./run-test.sh" || echo "Tests finished with failures"
+                  kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && TESTS=0001 ./run-test.sh" || echo "Tests finished with failures"
                 fi
               fi                              

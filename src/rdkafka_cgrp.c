@@ -457,6 +457,9 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
             rkcg->rkcg_assignor_state)
                 rkcg->rkcg_assignor->rkas_destroy_state_cb(
                     rkcg->rkcg_assignor_state);
+        if (rkcg->rkcg_share.share_fetch_fanout_retry_op != NULL) {
+                rd_kafka_op_destroy(rkcg->rkcg_share.share_fetch_fanout_retry_op);
+        }
         rd_free(rkcg);
 }
 

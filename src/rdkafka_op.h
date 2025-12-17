@@ -195,7 +195,10 @@ typedef enum {
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD, /**< share session:
                                            * add partition */
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
-                                           * remove partition */
+                                           * remove partition */        
+        RD_KAFKA_OP_SHARE_FETCH_FANOUT_RETRY, /**< fanout share fetch retry
+                                                *  operation */
+
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

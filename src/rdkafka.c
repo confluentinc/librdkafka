@@ -5396,19 +5396,11 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
  * @remark Must be freed after use using rd_kafka_Uuid_destroy().
  */
 rd_kafka_Uuid_t rd_kafka_Uuid_random() {
-        int i;
         unsigned char rand_values_bytes[16] = {0};
         uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
-        unsigned char *rand_values_app;
-        rd_kafka_Uuid_t ret = RD_KAFKA_UUID_ZERO;
-        for (i = 0; i < 16; i += 2) {
-                uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
-                /* No need to convert endianess here because it's still only
-                 * a random value. */
-                rand_values_app = (unsigned char *)&rand_uint16;
-                rand_values_bytes[i] |= rand_values_app[0];
-                rand_values_bytes[i + 1] |= rand_values_app[1];
-        }
+        rd_kafka_Uuid_t ret                 = RD_KAFKA_UUID_ZERO;
+        if (rd_rand_bytes(rand_values_bytes, sizeof(rand_values_bytes)) != 1)
+                return ret;
 
         rand_values_bytes[6] &= 0x0f; /* clear version */
         rand_values_bytes[6] |= 0x40; /* version 4 */

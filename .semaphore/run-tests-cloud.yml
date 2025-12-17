@@ -157,6 +157,8 @@ blocks:
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
                 ./configure --enable-ssl
                 make
+                sudo make install
+                sudo ldconfig
                 
                 echo "Creating test.conf..."
                 printf '%s\n' \

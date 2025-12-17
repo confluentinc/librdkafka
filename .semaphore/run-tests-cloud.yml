@@ -146,12 +146,8 @@ blocks:
             - export API_KEY=$(cat /tmp/api-key.txt)
             - export API_SECRET=$(cat /tmp/api-secret.txt)
             - rm -f /tmp/api-key.json /tmp/cluster-info.json
-            
-            # Set default librdkafka version if not specified
             - export LIBRDKAFKA_VERSION="${LIBRDKAFKA_VERSION:-master}"
             - echo "Using librdkafka version: ${LIBRDKAFKA_VERSION}"
-
-            # K1 setup
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git

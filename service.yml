@@ -38,7 +38,7 @@ semaphore:
       - name: REPOSITORY_BASE_URL
         required: false
         description: "Base URL of the package repository to verify packages from. 
-          Defaults to https://packages.confluent.io"
+          Defaults to https://packages.confluent.io/clients"
   - name: run-all-tests
     branch: master
     scheduled: false

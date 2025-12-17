@@ -25,7 +25,7 @@ blocks:
           commands:
             - cd packaging/cp
             - ./verify-packages.sh 
-              ${REPOSITORY_BASE_URL:-https://packages.confluent.io} 
+              ${REPOSITORY_BASE_URL:-https://packages.confluent.io/clients} 
               linux/amd64 ${LIBRDKAFKA_VERSION}
   - name: "Verify Linux packages (aarch64)"
     dependencies: []
@@ -38,5 +38,5 @@ blocks:
           commands:
             - cd packaging/cp
             - ./verify-packages.sh 
-              ${REPOSITORY_BASE_URL:-https://packages.confluent.io} 
+              ${REPOSITORY_BASE_URL:-https://packages.confluent.io/clients} 
               linux/arm64 ${LIBRDKAFKA_VERSION}

@@ -30,13 +30,11 @@ blocks:
       epilogue:
         always:
           commands:
-          # Delete test pod
             - |
               if [[ "$KAFKA_TYPE" == "k2" ]]; then
                 echo "Cleaning up pod njc-test-pod-${SEMAPHORE_JOB_ID}..."
                 kubectl --context ${K8S_CONTEXT} delete pod njc-test-pod-${SEMAPHORE_JOB_ID} --ignore-not-found=true || echo "Failed to delete pod"
               fi
-            # Delete API key
             - |
               if [[ -f /tmp/api-key-id.txt ]]; then
                 API_KEY_ID=$(cat /tmp/api-key-id.txt)
@@ -89,8 +87,6 @@ blocks:
                 exit 1
               fi
               echo "Running ${KAFKA_TYPE^^} tests..."
-
-            # Kubectl setup
             - |
               if [[ "$KAFKA_TYPE" == "k2" ]]; then
                 echo "Installing oidc-kubelogin..."
@@ -113,15 +109,11 @@ blocks:
               else
                 echo "K1 mode - skipping K8s setup"
               fi
-
-            # Install Confluent CLI
             - echo "Installing Confluent CLI..."
             - git clone --depth 1 git@github.com:confluentinc/cli.git /tmp/cli
             - cd /tmp/cli && go install github.com/goreleaser/goreleaser@v1.15.2 && make build
             - export CLI_DIR=$(find /tmp/cli/dist -type f -name 'confluent' -executable | head -1 | xargs dirname)
             - export PATH="${CLI_DIR}:${PATH}"
-
-            # Get cluster details
             - export CONFLUENT_CLOUD_EMAIL="${NJC_CCLOUD_USER_EMAIL}"
             - export CONFLUENT_CLOUD_PASSWORD="${NJC_CCLOUD_USER_PASSWORD}"
             - echo "Logging in as ${CONFLUENT_CLOUD_EMAIL}..."
@@ -188,8 +180,6 @@ blocks:
               EOF
                 sed -i 's/^[[:space:]]*//' /tmp/librdkafka/tests/test.conf
               fi
-
-            # K2 setup
             - |
               if [[ "$KAFKA_TYPE" == "k2" ]]; then
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
@@ -263,11 +253,7 @@ blocks:
                 kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf
                 rm -f /tmp/test.conf
               fi
-
-            # Cleanup credentials
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
-
-            # Run tests
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 cd /tmp/librdkafka/tests

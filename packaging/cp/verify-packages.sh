@@ -19,7 +19,7 @@ thisdir="$( cd "$(dirname "$0")" ; pwd -P )"
 
 verify_debian() {
     local version=$2
-    docker run -v $thisdir:/v $1 /v/verify-deb.sh $base_url $version
+    docker run --pull missing -v $thisdir:/v $1 /v/verify-deb.sh $base_url $version
     deb_status=$?
     if [[ $deb_status == 0 ]]; then
         echo "SUCCESS: Debian based $1 $2 packages verified"
@@ -31,7 +31,7 @@ verify_debian() {
 
 verify_rpm() {
     local version=$2
-    docker run -v $thisdir:/v $1 /v/verify-rpm.sh $base_url $version
+    docker run --pull missing -v $thisdir:/v $1 /v/verify-rpm.sh $base_url $version
     rpm_status=$?
     if [[ $rpm_status == 0 ]]; then
         echo "SUCCESS: RPM $1 $2 packages verified"
@@ -48,6 +48,7 @@ verify_rpm_distros() {
     # Last RHEL 8 version is 2.4.0
     verify_rpm rockylinux:8 "2.4.0"
     verify_rpm rockylinux:9 $version
+    verify_rpm rockylinux:10 $version
 }
 
 verify_debian_distros() {

@@ -35,6 +35,10 @@ semaphore:
       - name: LIBRDKAFKA_VERSION
         required: true
         description: librdkafka version to verify
+      - name: REPOSITORY_BASE_URL
+        required: false
+        description: "Base URL of the package repository to verify packages from. 
+          Defaults to https://packages.confluent.io"
   - name: run-all-tests
     branch: master
     scheduled: false

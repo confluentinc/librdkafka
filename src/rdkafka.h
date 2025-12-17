@@ -9611,7 +9611,7 @@ typedef struct rd_kafka_UserScramCredentialAlteration_s
 /**
  * @brief Allocates a new UserScramCredentialUpsertion given its fields.
  *        If salt isn't given a 64 B salt is generated using OpenSSL
- *        RAND_priv_bytes, if available.
+ *        RAND_priv_bytes or RAND_bytes, if available.
  *
  * @param username The username (not empty).
  * @param mechanism SASL/SCRAM mechanism.

@@ -219,6 +219,7 @@ void foo (void) {
     # Check if getentropy() is available
     mkl_compile_check "getentropy" "HAVE_GETENTROPY" disable CC "" \
 "#define _DEFAULT_SOURCE
+#include <unistd.h>
 #include <sys/random.h>
 int foo (void) {
    char seed[16];

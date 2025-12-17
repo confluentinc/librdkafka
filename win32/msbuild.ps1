@@ -21,14 +21,17 @@ if ($LASTEXITCODE -ne 0) {
 cd tests
 $env:CI = "true";
 $env:TEST_CONSUMER_GROUP_PROTOCOL = "classic";
-..\win32\outdir\v142\x64\Release\tests.exe -l -Q
+& ..\win32\outdir\$toolset\$platform\Release\tests.exe -l -Q
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Classic test failed with exit code $LASTEXITCODE"
+    cd ..
     exit $LASTEXITCODE
 }
 $env:TEST_CONSUMER_GROUP_PROTOCOL = "consumer";
-..\win32\outdir\v142\x64\Release\tests.exe -l -Q
+& ..\win32\outdir\$toolset\$platform\Release\tests.exe -l -Q
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Consumer test failed with exit code $LASTEXITCODE"
+    cd ..
     exit $LASTEXITCODE
 }
+cd ..

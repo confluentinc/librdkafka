@@ -1,5 +1,6 @@
 version: v1.0
 name: run-tests-cloud
+
 agent:
   machine:
     type: s1-prod-ubuntu24-04-amd64-00
@@ -47,7 +48,7 @@ blocks:
                 rm -f /tmp/api-key-id.txt
               fi
       jobs:
-        - name: "Run Integration Tests"
+        - name: "run-tests-cloud"
           commands:
             - |
               # Default to master if LIBRDKAFKA_VERSION not set
@@ -141,23 +142,21 @@ blocks:
             - 'export LIBRDKAFKA_VERSION="${LIBRDKAFKA_VERSION:-master}" && echo "Using librdkafka version: ${LIBRDKAFKA_VERSION}"'
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
-                cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
-                cd /tmp/librdkafka && git checkout k2_testing_final
                 
-                echo "Building test harness from k2_testing_final..."
+                # Build the Librdkafka tests which are compatible with Cloud
+                cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
+                cd /tmp/librdkafka && git checkout k2_testing_final                
                 ./configure --enable-ssl
                 make
                 cd tests && make
                 cd /tmp/librdkafka
                 
                 # Build the specific librdkafka version to test
-                echo "Building librdkafka version ${LIBRDKAFKA_VERSION} for testing..."
                 mkdir -p /tmp/librd_ver
                 cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
                 ./configure --enable-ssl
                 make
-                sudo make install
                 
                 echo "Creating test.conf..."
                 printf '%s\n' \

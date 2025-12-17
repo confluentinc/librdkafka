@@ -138,8 +138,7 @@ blocks:
             - export API_KEY=$(cat /tmp/api-key.txt)
             - export API_SECRET=$(cat /tmp/api-secret.txt)
             - rm -f /tmp/api-key.json /tmp/cluster-info.json
-            - export LIBRDKAFKA_VERSION="${LIBRDKAFKA_VERSION:-master}"
-            - echo "Using librdkafka version: ${LIBRDKAFKA_VERSION}"
+            - export LIBRDKAFKA_VERSION="${LIBRDKAFKA_VERSION:-master}" && echo "Using librdkafka version: ${LIBRDKAFKA_VERSION}"
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
@@ -166,19 +165,16 @@ blocks:
                 fi
                 
                 echo "Creating test.conf..."
-                cat > /tmp/librdkafka/tests/test.conf << EOF
-              security.protocol=SASL_SSL
-              sasl.mechanism=PLAIN
-              sasl.username=${API_KEY}
-              sasl.password=${API_SECRET}
-              ssl.endpoint.identification.algorithm=none
-              test.timeout.multiplier=5
-              test.topic.prefix=njc-test-
-              test.topic.random=true
-              metadata.broker.list=${BOOTSTRAP_SERVER}
-              test.sleep.multiplier=2.0
-              EOF
-                sed -i 's/^[[:space:]]*//' /tmp/librdkafka/tests/test.conf
+                echo "security.protocol=SASL_SSL" > /tmp/librdkafka/tests/test.conf
+                echo "sasl.mechanism=PLAIN" >> /tmp/librdkafka/tests/test.conf
+                echo "sasl.username=${API_KEY}" >> /tmp/librdkafka/tests/test.conf
+                echo "sasl.password=${API_SECRET}" >> /tmp/librdkafka/tests/test.conf
+                echo "ssl.endpoint.identification.algorithm=none" >> /tmp/librdkafka/tests/test.conf
+                echo "test.timeout.multiplier=5" >> /tmp/librdkafka/tests/test.conf
+                echo "test.topic.prefix=njc-test-" >> /tmp/librdkafka/tests/test.conf
+                echo "test.topic.random=true" >> /tmp/librdkafka/tests/test.conf
+                echo "metadata.broker.list=${BOOTSTRAP_SERVER}" >> /tmp/librdkafka/tests/test.conf
+                echo "test.sleep.multiplier=2.0" >> /tmp/librdkafka/tests/test.conf
               fi
             - |
               if [[ "$KAFKA_TYPE" == "k2" ]]; then
@@ -234,22 +230,19 @@ blocks:
                   kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librd_ver/librdkafka && ./configure --enable-ssl && make && make install'
                 fi
 
-                cat > /tmp/test.conf << EOF
-              security.protocol=SASL_SSL
-              sasl.mechanism=PLAIN
-              sasl.username=${API_KEY}
-              sasl.password=${API_SECRET}
-              ssl.endpoint.identification.algorithm=none
-              test.timeout.multiplier=20
-              test.topic.prefix=njc-test-
-              test.topic.random=true
-              metadata.broker.list=${BOOTSTRAP_SERVER}
-              test.supported.acks=-1
-              test.sleep.multiplier=3.0
-              test.skip.idempotent=true
-              test.skip.numbers=0011,0059,0081
-              EOF
-                sed -i 's/^[[:space:]]*//' /tmp/test.conf
+                echo "security.protocol=SASL_SSL" > /tmp/test.conf
+                echo "sasl.mechanism=PLAIN" >> /tmp/test.conf
+                echo "sasl.username=${API_KEY}" >> /tmp/test.conf
+                echo "sasl.password=${API_SECRET}" >> /tmp/test.conf
+                echo "ssl.endpoint.identification.algorithm=none" >> /tmp/test.conf
+                echo "test.timeout.multiplier=20" >> /tmp/test.conf
+                echo "test.topic.prefix=njc-test-" >> /tmp/test.conf
+                echo "test.topic.random=true" >> /tmp/test.conf
+                echo "metadata.broker.list=${BOOTSTRAP_SERVER}" >> /tmp/test.conf
+                echo "test.supported.acks=-1" >> /tmp/test.conf
+                echo "test.sleep.multiplier=3.0" >> /tmp/test.conf
+                echo "test.skip.idempotent=true" >> /tmp/test.conf
+                echo "test.skip.numbers=0011,0059,0081" >> /tmp/test.conf
                 kubectl --context ${K8S_CONTEXT} cp /tmp/test.conf ${TOOLBOX_POD}:/tmp/librdkafka/tests/test.conf
                 rm -f /tmp/test.conf
               fi

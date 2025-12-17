@@ -215,14 +215,39 @@ blocks:
                   apt-get install -y openjdk-21-jdk default-jdk
                   apt-get install -y iotop nethogs
                 '
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp && git clone https://github.com/confluentinc/librdkafka.git'
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librdkafka && ./configure --enable-ssl && make && cd tests && make'
+                echo "Cloning librdkafka in pod..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'cd /tmp && git clone https://github.com/confluentinc/librdkafka.git'
+                
+                echo "Checking out k2_testing_final..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
+                
+                echo "Building k2_testing_final..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'cd /tmp/librdkafka && ./configure --enable-ssl && make && cd tests && make' \
+                  || { echo "FAILED: k2_testing_final build"; exit 1; }
+                
+                echo "Verifying build files..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'ls -la /tmp/librdkafka/src/librdkafka.so* && ls -la /tmp/librdkafka/tests/test-runner' \
+                  || { echo "FAILED: build files missing"; exit 1; }
                 
                 echo "Building librdkafka version ${LIBRDKAFKA_VERSION} in pod..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'mkdir -p /tmp/librd_ver && cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git'
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}"
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c 'cd /tmp/librd_ver/librdkafka && ./configure --enable-ssl && make && make install'
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'mkdir -p /tmp/librd_ver && cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git'
+                
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c "cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}"
+                
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'cd /tmp/librd_ver/librdkafka && ./configure --enable-ssl && make && make install' \
+                  || { echo "FAILED: version build"; exit 1; }
+                
+                echo "Verifying version build files..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'ls -la /tmp/librd_ver/librdkafka/src/librdkafka.so*' \
+                  || { echo "FAILED: version build files missing"; exit 1; }
 
                 printf '%s\n' \
                   "security.protocol=SASL_SSL" \
@@ -259,9 +284,20 @@ blocks:
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Executing tests in pod ${TOOLBOX_POD} with librdkafka ${LIBRDKAFKA_VERSION}..."
+                
                 echo "Debug: checking library paths in pod..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && ldd ./test-runner | head -20"
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c "cd /tmp/librdkafka/tests && ldd ./test-runner | head -20"
+                
                 echo "Debug: checking for system librdkafka in pod..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "ldconfig -p | grep rdkafka || echo 'No system librdkafka found'"
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "cd /tmp/librdkafka/tests && LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' ./run-test.sh" || echo "Tests finished with failures"
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c "ldconfig -p | grep rdkafka || echo 'No system librdkafka found'"
+                
+                echo "Running tests..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "
+                  cd /tmp/librdkafka/tests && \
+                  LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' \
+                  LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' \
+                  ./run-test.sh
+                " || echo "Tests finished with failures"
               fi                              

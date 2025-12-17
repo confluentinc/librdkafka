@@ -7,6 +7,7 @@
 # Requires:
 #  trivup python module
 #  gradle in your PATH
+import time
 
 from cluster_testing import (
     LibrdkafkaTestCluster,
@@ -45,7 +46,8 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
     if deploy:
         cluster.deploy()
 
-    cluster.start(timeout=30)
+    cluster.start()
+    time.sleep(60)
 
     if conf.get('test_mode', '') == 'bash':
         rdkafka.finalize_env()

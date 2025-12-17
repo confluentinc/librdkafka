@@ -272,6 +272,8 @@ _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
+_TEST_DECL(0154_ssl_keys_3des_fips);
+_TEST_DECL(0155_ssl_cipher_fips);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -540,6 +542,8 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
+        _TEST(0154_ssl_keys_3des_fips, 0),
+        _TEST(0155_ssl_cipher_fips, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

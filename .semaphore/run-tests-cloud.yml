@@ -148,7 +148,7 @@ blocks:
                 cd /tmp/librdkafka && git checkout k2_testing_final                
                 ./configure --enable-ssl
                 make
-                cd tests && make
+                cd tests && make test-runner
                 cd /tmp/librdkafka
                 
                 # Build the specific librdkafka version to test
@@ -225,8 +225,13 @@ blocks:
                 
                 echo "Building k2_testing_final..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librdkafka && ./configure --enable-ssl && make && cd tests && make' \
-                  || { echo "FAILED: k2_testing_final build"; exit 1; }
+                  bash -c 'cd /tmp/librdkafka && ./configure --enable-ssl && make' \
+                  || { echo "FAILED: k2_testing_final library build"; exit 1; }
+                
+                echo "Building test binaries..."
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
+                  bash -c 'cd /tmp/librdkafka/tests && make test-runner' \
+                  || { echo "FAILED: test-runner build"; exit 1; }
                 
                 echo "Verifying build files..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \

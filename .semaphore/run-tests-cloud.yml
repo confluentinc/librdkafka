@@ -144,13 +144,8 @@ blocks:
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final
                 
-                echo "Configuring librdkafka..."
-                ./configure --enable-ssl
-                echo "Building librdkafka..."
-                make
-                echo "Building tests..."
-                cd tests/
-                make
+                echo "Building librdkafka with dev-conf.sh..."
+                ./dev-conf.sh
                 
                 # Build specific version if LIBRDKAFKA_VERSION is set
                 if [[ -n "$LIBRDKAFKA_VERSION" ]]; then

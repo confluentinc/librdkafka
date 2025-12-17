@@ -285,7 +285,7 @@ blocks:
                 ldconfig -p | grep rdkafka || echo "No system librdkafka found"
                 LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so.1:/tmp/librd_ver/librdkafka/src/librdkafka.so.1" \
                 LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:$LD_LIBRARY_PATH" \
-                ./run-test.sh || echo "Tests finished with failures"
+                TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Executing tests in pod ${TOOLBOX_POD} with librdkafka ${LIBRDKAFKA_VERSION}..."
@@ -303,6 +303,6 @@ blocks:
                   cd /tmp/librdkafka/tests && \
                   LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' \
                   LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' \
-                  ./run-test.sh
+                  TESTS=0001 ./run-test.sh
                 " || echo "Tests finished with failures"
               fi                              

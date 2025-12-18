@@ -146,7 +146,7 @@ static void setup_topics_and_produce(share_test_config_t *config,
 }
 
 /**
- * @brief Subscribe all consumers to all topics
+ * @brief Subscribe consumers to topics
  */
 static void subscribe_consumers(share_test_config_t *config,
                                 share_test_state_t *state) {
@@ -178,7 +178,7 @@ static void subscribe_consumers(share_test_config_t *config,
 }
 
 /**
- * @brief Consume messages using round-robin across consumers
+ * @brief Consume messages function
  */
 static void consume_messages(share_test_config_t *config,
                              share_test_state_t *state) {
@@ -259,7 +259,7 @@ static void consume_messages(share_test_config_t *config,
 }
 
 /**
- * @brief Cleanup: delete topics and destroy consumers
+ * @brief Cleanup function
  */
 static void cleanup_test(share_test_config_t *config,
                          share_test_state_t *state) {
@@ -288,9 +288,9 @@ static void cleanup_test(share_test_config_t *config,
 }
 
 /**
- * @brief Main test runner function
+ * @brief Test Runner function
  * 
- * This function handles the complete test lifecycle:
+ * This function handles:
  * 1. Create consumers
  * 2. Create topics and produce messages
  * 3. Subscribe consumers
@@ -357,7 +357,7 @@ static int run_share_consumer_test(share_test_config_t *config) {
 
 
 /**
- * @brief Test: Single consumer, single topic, single partition
+ * @brief Single consumer, single topic, single partition
  */
 static void test_single_consumer_single_topic_single_partition(void) {
         share_test_config_t config = {
@@ -372,7 +372,7 @@ static void test_single_consumer_single_topic_single_partition(void) {
 }
 
 /**
- * @brief Test: Single consumer, single topic, multiple partitions
+ * @brief Single consumer, single topic, multiple partitions
  */
 static void test_single_consumer_single_topic_multiple_partitions(void) {
         share_test_config_t config = {
@@ -387,7 +387,7 @@ static void test_single_consumer_single_topic_multiple_partitions(void) {
 }
 
 /**
- * @brief Test: Single consumer, multiple topics, single partition each
+ * @brief Single consumer, multiple topics, single partition each
  */
 static void test_single_consumer_multiple_topic_single_partition(void) {
         share_test_config_t config = {
@@ -402,7 +402,7 @@ static void test_single_consumer_multiple_topic_single_partition(void) {
 }
 
 /**
- * @brief Test: Single consumer, multiple topics, multiple partitions
+ * @brief Single consumer, multiple topics, multiple partitions
  */
 static void test_single_consumer_multiple_topic_multiple_partitions(void) {
         share_test_config_t config = {
@@ -417,7 +417,7 @@ static void test_single_consumer_multiple_topic_multiple_partitions(void) {
 }
 
 /**
- * @brief Test: Multiple consumers, single topic, single partition
+ * @brief Multiple consumers, single topic, single partition
  */
 static void test_multiple_consumers_single_topic_single_partition(void) {
         share_test_config_t config = {
@@ -432,7 +432,7 @@ static void test_multiple_consumers_single_topic_single_partition(void) {
 }
 
 /**
- * @brief Test: Multiple consumers, single topic, multiple partitions
+ * @brief Multiple consumers, single topic, multiple partitions
  */
 static void test_multiple_consumers_single_topic_multiple_partitions(void) {
         share_test_config_t config = {
@@ -447,7 +447,7 @@ static void test_multiple_consumers_single_topic_multiple_partitions(void) {
 }
 
 /**
- * @brief Test: Multiple consumers, multiple topics, multiple partitions
+ * @brief Multiple consumers, multiple topics, multiple partitions
  */
 static void test_multiple_consumers_multiple_topics_multiple_partitions(void) {
         share_test_config_t config = {
@@ -464,7 +464,7 @@ static void test_multiple_consumers_multiple_topics_multiple_partitions(void) {
 
 int main_0171_share_consumer_consume(int argc, char **argv) {
         
-        /* Basic tests */
+        /* Single-consumer tests */
         test_single_consumer_single_topic_single_partition();    /* Single consumer, single topic, single partition */
         test_single_consumer_single_topic_multiple_partitions();    /* Single consumer, single topic, multi partitions */
         test_single_consumer_multiple_topic_single_partition();    /* Single consumer, multi topic, single partition each */

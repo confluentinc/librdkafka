@@ -20,17 +20,29 @@ if ($LASTEXITCODE -ne 0) {
 
 cd tests
 $env:CI = "true";
+# Skip tests needing special limits
+$env:TESTS_SKIP = "0153";
 $env:TEST_CONSUMER_GROUP_PROTOCOL = "classic";
 & ..\win32\outdir\$toolset\$platform\Release\tests.exe -l -Q
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Classic test failed with exit code $LASTEXITCODE"
+    Write-Error "Classic group test failed with exit code $LASTEXITCODE"
     cd ..
     exit $LASTEXITCODE
 }
 $env:TEST_CONSUMER_GROUP_PROTOCOL = "consumer";
 & ..\win32\outdir\$toolset\$platform\Release\tests.exe -l -Q
 if ($LASTEXITCODE -ne 0) {
-    Write-Error "Consumer test failed with exit code $LASTEXITCODE"
+    Write-Error "Consumer group test failed with exit code $LASTEXITCODE"
+    cd ..
+    exit $LASTEXITCODE
+}
+# Now run only those tests with different limits
+[void](Add-Type -Member '[DllImport("msvcrt.dll")] public static extern int _setmaxstdio(int n);' -Name "Limit" -PassThru)::_setmaxstdio(2048)
+$env:TESTS_SKIP = "";
+$env:TESTS = "0153";
+& ..\win32\outdir\$toolset\$platform\Release\tests.exe -l -Q
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Consumer group test 0153 failed with exit code $LASTEXITCODE"
     cd ..
     exit $LASTEXITCODE
 }

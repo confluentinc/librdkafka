@@ -56,6 +56,13 @@ blocks:
             - export TEST_CONSUMER_GROUP_PROTOCOL=classic
             - make -C tests run_local_quick
             - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
+            # Skip tests needing special limits
+            - export TESTS_SKIP="0153"
+            - make -C tests run_local_quick
+            # Now run only those tests with different limits
+            - ulimit -n 2048
+            - export TESTS_SKIP=""
+            - export TESTS="0153"
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - (cd dest && tar cvzf ../artifacts/librdkafka.tgz .)

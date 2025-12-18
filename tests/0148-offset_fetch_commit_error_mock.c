@@ -256,6 +256,9 @@ void do_test_OffsetCommit_automatic_stale_member_epoch_error(
                        RD_STR_ToF(during_revocation),
                        RD_STR_ToF(session_times_out));
 
+        mtx_init(&log_lock, mtx_plain);
+        cnd_init(&log_cnd);
+
         rd_kafka_mock_topic_create(mcluster, topic, 2, 2);
         rd_kafka_mock_coordinator_set(mcluster, "group", topic, 1);
         rd_kafka_mock_set_group_consumer_session_timeout_ms(mcluster,
@@ -353,6 +356,9 @@ void do_test_OffsetCommit_automatic_stale_member_epoch_error(
         test_consumer_close(consumer);
         rd_kafka_destroy(consumer);
         rd_kafka_mock_clear_request_errors(mcluster, RD_KAFKAP_OffsetCommit);
+
+        mtx_destroy(&log_lock);
+        cnd_destroy(&log_cnd);
 
         SUB_TEST_PASS();
 }

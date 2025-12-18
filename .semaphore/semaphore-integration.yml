@@ -52,6 +52,7 @@ blocks:
             - examples/rdkafka_example -X builtin.features
             - otool -L src/librdkafka.dylib
             - otool -L src-cpp/librdkafka++.dylib
+            - ulimit -n 2048
             - make -j -C tests build
             - export TEST_CONSUMER_GROUP_PROTOCOL=classic
             - make -C tests run_local_quick

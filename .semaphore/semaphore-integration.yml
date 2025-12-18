@@ -53,6 +53,9 @@ blocks:
             - otool -L src/librdkafka.dylib
             - otool -L src-cpp/librdkafka++.dylib
             - make -j -C tests build
+            - export TEST_CONSUMER_GROUP_PROTOCOL=classic
+            - make -C tests run_local_quick
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - (cd dest && tar cvzf ../artifacts/librdkafka.tgz .)
@@ -79,6 +82,9 @@ blocks:
             - otool -L src/librdkafka.dylib
             - otool -L src-cpp/librdkafka++.dylib
             - make -j -C tests build
+            - export TEST_CONSUMER_GROUP_PROTOCOL=classic
+            - make -C tests run_local_quick
+            - export TEST_CONSUMER_GROUP_PROTOCOL=consumer
             - make -C tests run_local_quick
             - DESTDIR="$PWD/dest" make install
             - (cd dest && tar cvzf ../artifacts/librdkafka.tgz .)

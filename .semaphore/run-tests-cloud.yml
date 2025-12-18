@@ -143,6 +143,11 @@ blocks:
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 
+                # Clean up any existing system librdkafka to avoid LD_PRELOAD conflicts
+                echo "Cleaning up any existing system librdkafka..."
+                sudo rm -f /usr/local/lib/librdkafka*
+                sudo ldconfig
+                
                 # Build the Librdkafka tests which are compatible with Cloud
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final                

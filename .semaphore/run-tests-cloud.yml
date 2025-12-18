@@ -3,7 +3,7 @@ name: run-tests-cloud
 
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-arm64-1
+    type: s1-prod-ubuntu24-04-amd64-1
 
 execution_time_limit:
   hours: 3
@@ -152,8 +152,6 @@ blocks:
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final                
                 ./dev-conf.sh
-                cd tests && make test-runner
-                cd /tmp/librdkafka
                 
                 # Build the specific librdkafka version to test
                 mkdir -p /tmp/librd_ver
@@ -228,13 +226,8 @@ blocks:
                 
                 echo "Building k2_testing_final..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librdkafka && ./dev-conf.sh ' \
-                  || { echo "FAILED: k2_testing_final library build"; exit 1; }
-                
-                echo "Building test binaries..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librdkafka/tests && make test-runner' \
-                  || { echo "FAILED: test-runner build"; exit 1; }
+                  bash -c 'cd /tmp/librdkafka && ./dev-conf.sh' \
+                  || { echo "FAILED: k2_testing_final build"; exit 1; }
                 
                 echo "Verifying build files..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \

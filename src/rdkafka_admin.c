@@ -2318,7 +2318,7 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
         }
 
         /* #topics */
-        rd_kafka_buf_read_i32(reply, &topic_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &topic_cnt, RD_KAFKAP_TOPICS_MAX);
 
         if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -2342,6 +2342,7 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_str(reply, &ktopic);
                 rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_skip_tags(reply);
 
                 /* For non-blocking DeleteTopicsRequests the broker
                  * will returned REQUEST_TIMED_OUT for topics
@@ -2591,7 +2592,7 @@ rd_kafka_CreatePartitionsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
         /* #topics */
-        rd_kafka_buf_read_i32(reply, &topic_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &topic_cnt, RD_KAFKAP_PARTITIONS_MAX);
 
         if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -2618,6 +2619,8 @@ rd_kafka_CreatePartitionsResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_str(reply, &ktopic);
                 rd_kafka_buf_read_i16(reply, &error_code);
                 rd_kafka_buf_read_str(reply, &error_msg);
+                rd_kafka_buf_skip_tags(reply);
+
 
                 /* For non-blocking CreatePartitionsRequests the broker
                  * will returned REQUEST_TIMED_OUT for topics
@@ -4066,10 +4069,10 @@ rd_kafka_DeleteRecordsResponse_parse(rd_kafka_op_t *rko_req,
             RD_KAFKA_TOPIC_PARTITION_FIELD_END};
         offsets = rd_kafka_buf_read_topic_partitions(
             reply, rd_false /*don't use topic_id*/, rd_true, 0, fields);
+
         if (!offsets)
                 rd_kafka_buf_parse_fail(reply,
                                         "Failed to parse topic partitions");
-
 
         rko_result = rd_kafka_admin_result_new(rko_req);
         rd_list_init(&rko_result->rko_u.admin_result.results, 1,
@@ -4760,7 +4763,7 @@ rd_kafka_DeleteGroupsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_buf_read_throttle_time(reply);
 
         /* #group_error_codes */
-        rd_kafka_buf_read_i32(reply, &group_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &group_cnt, RD_KAFKAP_GROUPS_MAX);
 
         if (group_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -4781,6 +4784,7 @@ rd_kafka_DeleteGroupsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_str(reply, &kgroup);
                 rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_skip_tags(reply);
 
                 groupres = rd_kafka_group_result_new(
                     kgroup.str, RD_KAFKAP_STR_LEN(&kgroup), NULL,
@@ -5450,6 +5454,8 @@ rd_kafka_CreateAclsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_buf_read_str(reply, &error_msg);
 
+                rd_kafka_buf_skip_tags(reply);
+
                 if (error_code) {
                         if (RD_KAFKAP_STR_LEN(&error_msg) == 0)
                                 errstr = (char *)rd_kafka_err2str(error_code);
@@ -5620,6 +5626,8 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &khost);
                         rd_kafka_buf_read_i8(reply, &operation);
                         rd_kafka_buf_read_i8(reply, &permission_type);
+                        rd_kafka_buf_skip_tags(reply);
+
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
 
@@ -5653,6 +5661,8 @@ rd_kafka_DescribeAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_list_add(&rko_result->rko_u.admin_result.results,
                                     acl);
                 }
+
+                rd_kafka_buf_skip_tags(reply);
         }
 
         *rko_resultp = rko_result;
@@ -6661,6 +6671,8 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &khost);
                         rd_kafka_buf_read_i8(reply, &operation);
                         rd_kafka_buf_read_i8(reply, &permission_type);
+                        rd_kafka_buf_skip_tags(reply);
+
                         RD_KAFKAP_STR_DUPA(&res_name, &kres_name);
                         RD_KAFKAP_STR_DUPA(&principal, &kprincipal);
                         RD_KAFKAP_STR_DUPA(&host, &khost);
@@ -6717,6 +6729,8 @@ rd_kafka_DeleteAclsResponse_parse(rd_kafka_op_t *rko_req,
                             (rd_list_t *)&result_response->matching_acls,
                             (void *)matching_acl);
                 }
+
+                rd_kafka_buf_skip_tags(reply);
 
                 rd_list_add(&rko_result->rko_u.admin_result.results,
                             (void *)result_response);
@@ -8286,6 +8300,7 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_str(reply, &ClientHost);
                         rd_kafka_buf_read_kbytes(reply, &MemberMetadata);
                         rd_kafka_buf_read_kbytes(reply, &MemberAssignment);
+                        rd_kafka_buf_skip_tags(reply);
                         if (error != NULL)
                                 continue;
 
@@ -8352,6 +8367,8 @@ rd_kafka_DescribeConsumerGroupsResponse_parse(rd_kafka_op_t *rko_req,
                         operations = rd_kafka_AuthorizedOperations_parse(
                             authorized_operations, &operation_cnt);
                 }
+
+                rd_kafka_buf_skip_tags(reply);
 
                 if (error == NULL) {
                         grpdesc = rd_kafka_ConsumerGroupDescription_new(

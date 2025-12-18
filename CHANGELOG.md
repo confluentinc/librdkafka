@@ -1,3 +1,22 @@
+# librdkafka v2.13.0
+
+librdkafka v2.13.0 is a feature release:
+
+* Strip trailing dot of hostname to fix SSL certificate verification issue (#5253).
+* [KIP-482](https://cwiki.apache.org/confluence/display/KAFKA/KIP-482%3A+The+Kafka+Protocol+should+Support+Optional+Tagged+Fields) Upgrade CreateAcls, DescribeAcls, DeleteAcls to the first version supporting this KIP (#5081).
+* [KIP-482](https://cwiki.apache.org/confluence/display/KAFKA/KIP-482%3A+The+Kafka+Protocol+should+Support+Optional+Tagged+Fields) Upgrade DescribeGroups, DeleteTopics, DeleteRecords, CreatePartitions, DeleteGroups to the first version supporting this KIP (#5083).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4348.
+  Strip trailing dot of hostname to fix SSL certificate verification issue.
+  Happening since 1.x (#5253).
+
+
+
 # librdkafka v2.12.1
 
 librdkafka v2.12.1 is a maintenance release:

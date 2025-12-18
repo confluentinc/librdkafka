@@ -515,17 +515,13 @@ static void do_test_poll_after_unsubscribe(void) {
 
 
 int main_0170_share_consumer_subscription(int argc, char **argv) {
-        /* Subscription API tests */
+
         do_test_subscription_count();
         do_test_multiple_unsubscribe();
         do_test_duplicate_subscribe();
         do_test_resubscribe_replaces_old_subscription();
-
-        /* Topic lifecycle tests */
         do_test_subscribe_before_topic_exists();
         do_test_topic_switch();
-
-        /* Edge case tests */
         do_test_poll_empty_topic();
         do_test_poll_no_subscription();
         do_test_poll_after_unsubscribe();

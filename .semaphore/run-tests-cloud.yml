@@ -3,7 +3,7 @@ name: run-tests-cloud
 
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-0
+    type: s1-prod-ubuntu24-04-arm64-1
 
 execution_time_limit:
   hours: 3
@@ -151,8 +151,7 @@ blocks:
                 # Build the Librdkafka tests which are compatible with Cloud
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final                
-                ./configure --enable-ssl
-                make
+                ./dev-conf.sh
                 cd tests && make test-runner
                 cd /tmp/librdkafka
                 
@@ -160,9 +159,8 @@ blocks:
                 mkdir -p /tmp/librd_ver
                 cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
-                ./configure --enable-ssl
-                make
-                make install
+                ./dev-conf.sh
+                sudo make install
                 
                 echo "Creating test.conf..."
                 printf '%s\n' \
@@ -230,7 +228,7 @@ blocks:
                 
                 echo "Building k2_testing_final..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librdkafka && ./configure --enable-ssl && make' \
+                  bash -c 'cd /tmp/librdkafka && ./dev-conf.sh ' \
                   || { echo "FAILED: k2_testing_final library build"; exit 1; }
                 
                 echo "Building test binaries..."
@@ -251,7 +249,7 @@ blocks:
                   bash -c "cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}"
                 
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librd_ver/librdkafka && ./configure --enable-ssl && make && make install' \
+                  bash -c 'cd /tmp/librd_ver/librdkafka && ./dev-conf.sh && make install' \
                   || { echo "FAILED: version build"; exit 1; }
                 
                 echo "Verifying version build files..."

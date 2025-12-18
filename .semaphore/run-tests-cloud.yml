@@ -3,7 +3,7 @@ name: run-tests-cloud
 
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-1
+    type: s1-prod-ubuntu24-04-amd64-0
 
 execution_time_limit:
   hours: 3
@@ -143,17 +143,16 @@ blocks:
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 
-                # Clean up any existing system librdkafka to avoid LD_PRELOAD conflicts
                 echo "Cleaning up any existing system librdkafka..."
                 sudo rm -f /usr/local/lib/librdkafka*
                 sudo ldconfig
                 
-                # Build the Librdkafka tests which are compatible with Cloud
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
-                cd /tmp/librdkafka && git checkout k2_testing_final                
-                ./dev-conf.sh
+                cd /tmp/librdkafka && git checkout k2_testing_final
                 
-                # Build the specific librdkafka version to test
+                echo "Building test harness with lazy binding..."
+                LDFLAGS="-Wl,-z,lazy" ./dev-conf.sh
+                echo "Building librdkafka ${LIBRDKAFKA_VERSION}..."
                 mkdir -p /tmp/librd_ver
                 cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
@@ -272,38 +271,17 @@ blocks:
             - |
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 cd /tmp/librdkafka/tests
-                echo "Current directory: $(pwd)"
-                echo "test.conf exists: $(test -f test.conf && echo yes || echo no)"
                 echo "Running tests with librdkafka ${LIBRDKAFKA_VERSION}..."
-                echo "Debug: checking library paths..."
-                ldd ./test-runner | head -20
-                echo "Debug: checking for system librdkafka..."
-                ldconfig -p | grep rdkafka || echo "No system librdkafka found"
-                echo "Debug: checking LD_PRELOAD library files exist..."
-                ls -la /tmp/librd_ver/librdkafka/src/librdkafka.so* || echo "librdkafka.so not found!"
-                ls -la /tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so* || echo "librdkafka++.so not found!"
                 LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so" \
                 LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:$LD_LIBRARY_PATH" \
-                TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
+                TESTS=0001 ./run-test.sh
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
-                echo "Executing tests in pod ${TOOLBOX_POD} with librdkafka ${LIBRDKAFKA_VERSION}..."
-                
-                echo "Debug: checking library paths in pod..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c "cd /tmp/librdkafka/tests && ldd ./test-runner | head -20"
-                
-                echo "Debug: checking for system librdkafka in pod..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c "ldconfig -p | grep rdkafka || echo 'No system librdkafka found'"
-                
-                echo "Running tests..."
+                echo "Running tests in pod ${TOOLBOX_POD} with librdkafka ${LIBRDKAFKA_VERSION}..."
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "
                   cd /tmp/librdkafka/tests && \
                   LD_PRELOAD='/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so' \
                   LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' \
                   TESTS=0001 ./run-test.sh
-                " || echo "Tests finished with failures"
+                "
               fi
-            - echo "Sleeping for 2 hours for debugging..."
-            - sleep 7200

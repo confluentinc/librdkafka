@@ -423,6 +423,7 @@ extern int unittest_scram(void);
 #endif
 extern int unittest_assignors(void);
 extern int unittest_map(void);
+extern int unittest_fetcher_share_filter_forward(void);
 #if WITH_CURL
 extern int unittest_http(void);
 #endif
@@ -480,6 +481,7 @@ int rd_unittest(void) {
 #endif
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
+            {"fetcher_share_filter_forward", unittest_fetcher_share_filter_forward},
             {"feature", unittest_feature},
             {NULL}};
         int i;

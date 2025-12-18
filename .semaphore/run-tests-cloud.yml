@@ -287,7 +287,10 @@ blocks:
                 ldd ./test-runner | head -20
                 echo "Debug: checking for system librdkafka..."
                 ldconfig -p | grep rdkafka || echo "No system librdkafka found"
-                LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so.1:/tmp/librd_ver/librdkafka/src/librdkafka.so.1" \
+                echo "Debug: checking LD_PRELOAD library files exist..."
+                ls -la /tmp/librd_ver/librdkafka/src/librdkafka.so* || echo "librdkafka.so not found!"
+                ls -la /tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so* || echo "librdkafka++.so not found!"
+                LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so:/tmp/librd_ver/librdkafka/src/librdkafka.so" \
                 LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:$LD_LIBRARY_PATH" \
                 TESTS=0001 ./run-test.sh || echo "Tests finished with failures"
               else

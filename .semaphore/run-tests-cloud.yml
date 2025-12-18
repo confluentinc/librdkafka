@@ -157,7 +157,6 @@ blocks:
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
                 ./configure --enable-ssl
                 make
-                sudo make install
                 
                 echo "Creating test.conf..."
                 printf '%s\n' \
@@ -305,4 +304,6 @@ blocks:
                   LD_LIBRARY_PATH='/tmp/librd_ver/librdkafka/src-cpp:/tmp/librd_ver/librdkafka/src:\$LD_LIBRARY_PATH' \
                   TESTS=0001 ./run-test.sh
                 " || echo "Tests finished with failures"
-              fi                              
+              fi
+            - echo "Sleeping for 2 hours for debugging..."
+            - sleep 7200

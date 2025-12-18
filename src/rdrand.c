@@ -65,15 +65,15 @@ static int rd_rand() {
         return rand_num;
 }
 
-// #if HAVE_OSSL_SECURE_RAND_BYTES
-// static int rd_rand_bytes_by_ossl(unsigned char *buf, int num) {
-//         int res = -1;
-//         while ((res = RAND_priv_bytes(buf, num)) == 0) {
-//                 rd_usleep(1000, 0); /* wait for more entropy */
-//         }
-//         return res;
-// }
-// #endif
+#if HAVE_OSSL_SECURE_RAND_BYTES
+static int rd_rand_bytes_by_ossl(unsigned char *buf, int num) {
+        int res = -1;
+        while ((res = RAND_priv_bytes(buf, num)) == 0) {
+                rd_usleep(1000, 0); /* wait for more entropy */
+        }
+        return res;
+}
+#endif
 
 #ifdef _WIN32
 static void rd_rand_bytes_by_rand_s(unsigned char *buf, int num) {
@@ -92,10 +92,10 @@ static void rd_rand_bytes_by_rand_s(unsigned char *buf, int num) {
 #endif
 
 int rd_rand_bytes(unsigned char *buf, unsigned int num) {
-// #if HAVE_OSSL_SECURE_RAND_BYTES
-//         if (rd_rand_bytes_by_ossl(buf, num) == 1)
-//                 return 1;
-// #endif
+#if HAVE_OSSL_SECURE_RAND_BYTES
+        if (rd_rand_bytes_by_ossl(buf, num) == 1)
+                return 1;
+#endif
 #if HAVE_GETENTROPY
         if (getentropy(buf, (size_t)num) == 0)
                 return 1;

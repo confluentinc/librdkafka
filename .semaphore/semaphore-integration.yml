@@ -47,15 +47,7 @@ blocks:
       jobs:
         - name: 'Build'
           commands:
-            - ./configure --install-deps --source-deps-only --enable-static --disable-lz4-ext --enable-strip
-            - make -j all examples check
-            - examples/rdkafka_example -X builtin.features
-            - otool -L src/librdkafka.dylib
-            - otool -L src-cpp/librdkafka++.dylib
-            - make -j -C tests build
-            - make -C tests run_local_quick
-            - DESTDIR="$PWD/dest" make install
-            - (cd dest && tar cvzf ../artifacts/librdkafka.tgz .)
+            - packaging/macos/build-release-artifacts.sh
 
 
   - name: 'OSX x64'
@@ -73,15 +65,7 @@ blocks:
       jobs:
         - name: 'Build'
           commands:
-            - ./configure --install-deps --source-deps-only --enable-static --disable-lz4-ext --enable-strip
-            - make -j all examples check
-            - examples/rdkafka_example -X builtin.features
-            - otool -L src/librdkafka.dylib
-            - otool -L src-cpp/librdkafka++.dylib
-            - make -j -C tests build
-            - make -C tests run_local_quick
-            - DESTDIR="$PWD/dest" make install
-            - (cd dest && tar cvzf ../artifacts/librdkafka.tgz .)
+            - packaging/macos/build-release-artifacts.sh
 
   - name: 'Linux Ubuntu amd64: integration tests'
     dependencies: []

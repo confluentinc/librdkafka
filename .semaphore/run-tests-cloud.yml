@@ -3,7 +3,7 @@ name: run-tests-cloud
 
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-00
+    type: s1-prod-ubuntu24-04-amd64-0
 
 execution_time_limit:
   hours: 3
@@ -162,6 +162,7 @@ blocks:
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
                 ./configure --enable-ssl
                 make
+                make install
                 
                 echo "Creating test.conf..."
                 printf '%s\n' \

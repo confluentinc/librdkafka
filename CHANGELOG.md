@@ -9,6 +9,10 @@ librdkafka v2.13.0 is a feature release:
 double-free errors (#5240).
 * Fix for the pseudo-random generator seed on Windows involving as well
   the uniqueness of the new consumer group protocol member id (#5265).
+* Add secure random generation functionality used for UUID uniqueness
+  and secure salt generation in `rd_kafka_UserScramCredentialUpsertion`
+  using OpenSSL or the POSIX or WIN32 equivalent calls when it
+  isn't available (#5265).
 
 
 ## Fixes

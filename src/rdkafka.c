@@ -5423,8 +5423,10 @@ rd_kafka_Uuid_t rd_kafka_Uuid_random() {
         unsigned char rand_values_bytes[16] = {0};
         uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
         rd_kafka_Uuid_t ret                 = RD_KAFKA_UUID_ZERO;
-        if (rd_rand_bytes(rand_values_bytes, sizeof(rand_values_bytes)) != 1)
-                return ret;
+        if (rd_rand_bytes(rand_values_bytes, sizeof(rand_values_bytes)) != 1) {
+                rd_assert(!*"BUG: a random UUID cannot be requested without "
+                           "a reliable entropy source");
+        }
 
         rand_values_bytes[6] &= 0x0f; /* clear version */
         rand_values_bytes[6] |= 0x40; /* version 4 */

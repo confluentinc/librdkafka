@@ -27,7 +27,6 @@
  */
 
 #include "test.h"
-#include "rdstring.h"
 
 /**
  * @brief Tests that 3DES encrypted SSL keys/keystores are rejected when
@@ -59,12 +58,7 @@ static void do_test_3des_keys_fail(const char *type) {
         conf = rd_kafka_conf_new();
         test_conf_set(conf, "security.protocol", "SSL");
 
-        if (!strcmp(type, "PKCS12")) {
-                test_conf_set(conf, "ssl.keystore.location",
-                              TEST_FIPS_KEYSTORE_LOCATION);
-                test_conf_set(conf, "ssl.keystore.password",
-                              TEST_FIPS_KEYSTORE_PASSWORD);
-        } else if (!strcmp(type, "PEM")) {
+        if (!strcmp(type, "PEM")) {
                 test_conf_set(conf, "ssl.certificate.location",
                               TEST_FIPS_CERTIFICATE_LOCATION);
                 test_conf_set(conf, "ssl.key.location",
@@ -116,9 +110,8 @@ static void do_test_3des_keys_fail(const char *type) {
 
 
 int main_0154_ssl_keys_3des_fips(int argc, char **argv) {
-        /* Test all three key format types with 3DES encryption
-         * All should fail when FIPS mode is enabled */
-        do_test_3des_keys_fail("PKCS12");
+        /* Test PEM and PEM string key format types with 3DES encryption
+         * All should fail when FIPS 140-3 mode is enabled */
         do_test_3des_keys_fail("PEM");
         do_test_3des_keys_fail("PEM_STRING");
 

@@ -42,7 +42,7 @@ broker_idempotent: $(BIN)
 	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L -Q"}' $(KAFKA_VERSION)
 
 sasl_non_ssl: $(BIN)
-	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --no-ssl --suite "SCRAM" $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --no-ssl $(KAFKA_VERSION)
 
 ssl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --kraft --suite "SSL" 4.1.1

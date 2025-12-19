@@ -46,7 +46,7 @@ def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
     if deploy:
         cluster.deploy()
 
-    cluster.start()
+    cluster.start(timeout=30)
     time.sleep(60)
 
     if conf.get('test_mode', '') == 'bash':

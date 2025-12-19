@@ -37,6 +37,10 @@
 #include <sys/random.h>
 #endif
 
+#ifdef HAVE_OSSL_SECURE_RAND_BYTES
+#include <openssl/rand.h>
+#endif
+
 /* Initial seed with time+thread id */
 unsigned int rd_seed() {
         unsigned int seed = 0;
@@ -66,46 +70,56 @@ static int rd_rand() {
 }
 
 #if HAVE_OSSL_SECURE_RAND_BYTES
-static int rd_rand_bytes_by_ossl(unsigned char *buf, int num) {
-        int res = -1;
-        while ((res = RAND_priv_bytes(buf, num)) == 0) {
+static rd_bool_t rd_rand_bytes_by_ossl(unsigned char *buf, int num) {
+        int res     = -1;
+        int retries = 0;
+        while ((res = RAND_priv_bytes(buf, num)) != 1) {
+                if (++retries == 5)
+                        break;
+
                 rd_usleep(1000, 0); /* wait for more entropy */
         }
-        return res;
+        return res == 1;
 }
 #endif
 
 #ifdef _WIN32
-static void rd_rand_bytes_by_rand_s(unsigned char *buf, int num) {
-        unsigned int rand;
+static rd_bool_t rd_rand_bytes_by_rand_s(unsigned char *buf, int num) {
+        unsigned int rand, retries = 0;
         while (num > 0) {
-                errno_t err = 0;
-                rand_s(&rand);
-                int i = sizeof(int);
+                errno_t err;
+                int i;
+                while ((err = rand_s(&rand)) != 0) {
+                        if (++retries == 5)
+                                return rd_false;
+                        rd_usleep(1000, 0); /* wait for more entropy */
+                }
+                retries = 0;
+                i       = sizeof(int);
                 while (i-- > 0 && num > 0) {
                         *buf++ = (unsigned char)(rand & 0xff);
                         rand >>= 8;
                         num--;
                 }
         }
+        return rd_true;
 }
 #endif
 
-int rd_rand_bytes(unsigned char *buf, unsigned int num) {
+rd_bool_t rd_rand_bytes(unsigned char *buf, unsigned int num) {
 #if HAVE_OSSL_SECURE_RAND_BYTES
-        if (rd_rand_bytes_by_ossl(buf, num) == 1)
-                return 1;
+        if (rd_rand_bytes_by_ossl(buf, num))
+                return rd_true;
 #endif
 #if HAVE_GETENTROPY
         if (getentropy(buf, (size_t)num) == 0)
-                return 1;
+                return rd_true;
 #endif
 #ifdef _WIN32
-        rd_rand_bytes_by_rand_s(buf, num);
-        return 1;
-#else
-        return 0;
+        if (rd_rand_bytes_by_rand_s(buf, num))
+                return rd_true;
 #endif
+        return rd_false;
 }
 
 int rd_jitter(int low, int high) {

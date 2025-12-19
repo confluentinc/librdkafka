@@ -3,7 +3,7 @@ name: run-tests-cloud
 
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-0
+    type: s1-prod-ubuntu24-04-amd64-00
 
 execution_time_limit:
   hours: 3
@@ -141,12 +141,16 @@ blocks:
                 cd /tmp && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librdkafka && git checkout k2_testing_final
                 
-                LDFLAGS="-Wl,-z,lazy" ./dev-conf.sh
+                echo "Building test harness with lazy binding..."
+                LDFLAGS="-Wl,-z,lazy" ./configure --enable-ssl
+                make
+                cd tests && make test-runner
                 echo "Building librdkafka ${LIBRDKAFKA_VERSION}..."
                 mkdir -p /tmp/librd_ver
                 cd /tmp/librd_ver && git clone https://github.com/confluentinc/librdkafka.git
                 cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}
-                ./dev-conf.sh
+                ./configure --enable-ssl
+                make
                 sudo make install
                 
                 echo "Creating test.conf..."
@@ -210,7 +214,7 @@ blocks:
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
                   bash -c 'cd /tmp/librdkafka && git checkout k2_testing_final'
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librdkafka && ./dev-conf.sh' \
+                  bash -c 'cd /tmp/librdkafka && ./configure --enable-ssl && make && cd tests && make test-runner' \
                   || { echo "FAILED: k2_testing_final build"; exit 1; }
                 
                 echo "Building librdkafka version ${LIBRDKAFKA_VERSION} in pod..."
@@ -221,7 +225,7 @@ blocks:
                   bash -c "cd /tmp/librd_ver/librdkafka && git checkout ${LIBRDKAFKA_VERSION}"
                 
                 kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- \
-                  bash -c 'cd /tmp/librd_ver/librdkafka && ./dev-conf.sh && make install' \
+                  bash -c 'cd /tmp/librd_ver/librdkafka && ./configure --enable-ssl && make && make install' \
                   || { echo "FAILED: version build"; exit 1; }
 
                 printf '%s\n' \

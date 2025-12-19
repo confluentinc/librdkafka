@@ -123,6 +123,7 @@ fi
 # Run quick test suite, mark it as CI to avoid time/resource sensitive
 # tests to fail in case the worker is under-powered.
 CI=true make -C tests run_local_quick
+CI=true TEST_CONSUMER_GROUP_PROTOCOL=consumer make -C tests run_local_quick
 
 
 # Install librdkafka and then make a tar ball of the installed files.

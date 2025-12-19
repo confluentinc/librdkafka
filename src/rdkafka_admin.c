@@ -6044,9 +6044,11 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
         } else {
 #if HAVE_SECURE_RAND_BYTES
                 unsigned char random_salt[64];
-                rd_rand_bytes(random_salt, sizeof(random_salt));
-                alteration->alteration.upsertion.salt =
-                    rd_kafkap_bytes_new(random_salt, sizeof(random_salt));
+                if (rd_rand_bytes(random_salt, sizeof(random_salt))) {
+                        alteration->alteration.upsertion.salt =
+                            rd_kafkap_bytes_new(random_salt,
+                                                sizeof(random_salt));
+                }
 #endif
         }
         return alteration;

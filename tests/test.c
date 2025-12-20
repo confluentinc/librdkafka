@@ -276,7 +276,9 @@ _TEST_DECL(0153_memberid);
 /* Manual tests */
 _TEST_DECL(8000_idle);
 _TEST_DECL(8001_fetch_from_follower_mock_manual);
-
+_TEST_DECL(8002_rebalance_performance);
+_TEST_DECL(8003_chaos_testing_consumer_group);
+_TEST_DECL(8004_rebalance_performance_single_consumer);
 
 /* Define test resource usage thresholds if the default limits
  * are not tolerable.
@@ -544,6 +546,9 @@ struct test tests[] = {
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
     _TEST(8001_fetch_from_follower_mock_manual, TEST_F_MANUAL),
+    _TEST(8002_rebalance_performance, TEST_BRKVER(4, 0, 0, 0)),
+    _TEST(8003_chaos_testing_consumer_group, 0, TEST_BRKVER(4, 0, 0, 0)),
+    _TEST(8004_rebalance_performance_single_consumer, TEST_BRKVER(4, 0, 0, 0)),
 
     {NULL}};
 
@@ -3042,7 +3047,9 @@ void test_consume_txn_msgs_easy(const char *group_id,
  * @warning This method will poll the consumer and might thus read messages.
  *          Set \p do_poll to false to use a sleep rather than poll.
  */
-void test_consumer_wait_assignment(rd_kafka_t *rk, rd_bool_t do_poll) {
+void test_consumer_wait_assignment(rd_kafka_t *rk,
+                                   rd_bool_t do_poll,
+                                   int wait_interval_ms) {
         rd_kafka_topic_partition_list_t *assignment = NULL;
         int i;
 
@@ -3059,9 +3066,9 @@ void test_consumer_wait_assignment(rd_kafka_t *rk, rd_bool_t do_poll) {
                 rd_kafka_topic_partition_list_destroy(assignment);
 
                 if (do_poll)
-                        test_consumer_poll_once(rk, NULL, 1000);
+                        test_consumer_poll_once(rk, NULL, wait_interval_ms);
                 else
-                        rd_usleep(1000 * 1000, NULL);
+                        rd_usleep(wait_interval_ms * 1000, NULL);
         }
 
         TEST_SAY("%s: Assignment (%d partition(s)): ", rd_kafka_name(rk),
@@ -3253,32 +3260,61 @@ void test_consumer_subscribe(rd_kafka_t *rk, const char *topic) {
         rd_kafka_topic_partition_list_destroy(topics);
 }
 
-
 /**
  * @brief Start subscribing for multiple topics
  */
-void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...) {
-        rd_kafka_topic_partition_list_t *topics;
+static void test_consumer_subscribe_multi0(rd_kafka_t *rk,
+                                           const char **topics,
+                                           int topic_count) {
+        rd_kafka_topic_partition_list_t *topics_list;
         rd_kafka_resp_err_t err;
-        va_list ap;
         int i;
 
-        topics = rd_kafka_topic_partition_list_new(topic_count);
+        TEST_SAY("%s: Subscribing to %d topic(s)\n", rd_kafka_name(rk),
+                 topic_count);
 
-        va_start(ap, topic_count);
+        topics_list = rd_kafka_topic_partition_list_new(topic_count);
+
         for (i = 0; i < topic_count; i++) {
-                const char *topic = va_arg(ap, const char *);
-                rd_kafka_topic_partition_list_add(topics, topic,
+                TEST_SAY("  %s\n", topics[i]);
+                rd_kafka_topic_partition_list_add(topics_list, topics[i],
                                                   RD_KAFKA_PARTITION_UA);
         }
-        va_end(ap);
 
-        err = rd_kafka_subscribe(rk, topics);
+        err = rd_kafka_subscribe(rk, topics_list);
         if (err)
                 TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
                           rd_kafka_name(rk), rd_kafka_err2str(err));
 
-        rd_kafka_topic_partition_list_destroy(topics);
+        rd_kafka_topic_partition_list_destroy(topics_list);
+}
+
+/**
+ * @brief Start subscribing for multiple topics.
+ */
+void test_consumer_subscribe_multi(rd_kafka_t *rk,
+                                   const char **topics,
+                                   int topic_count) {
+        test_consumer_subscribe_multi0(rk, topics, topic_count);
+}
+
+
+/**
+ * @brief Start subscribing for multiple topics using variable arguments.
+ */
+void test_consumer_subscribe_multi_va(rd_kafka_t *rk, int topic_count, ...) {
+        va_list ap;
+        int i;
+        const char **topics = rd_calloc(topic_count, sizeof(*topics));
+        va_start(ap, topic_count);
+        for (i = 0; i < topic_count; i++) {
+                const char *topic = va_arg(ap, const char *);
+                TEST_SAY0("  %s\n", topic);
+                topics[i] = topic;
+        }
+        va_end(ap);
+        test_consumer_subscribe_multi0(rk, topics, topic_count);
+        rd_free(topics);
 }
 
 

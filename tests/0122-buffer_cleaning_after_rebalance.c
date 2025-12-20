@@ -164,7 +164,7 @@ static void do_test_consume_batch(const char *strategy) {
         c2 = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(c1, topic);
-        test_consumer_wait_assignment(c1, rd_false);
+        test_consumer_wait_assignment(c1, rd_false, 1000);
 
         /* Create generic consume queue */
         rkq1 = rd_kafka_queue_get_consumer(c1);
@@ -183,7 +183,7 @@ static void do_test_consume_batch(const char *strategy) {
                 TEST_FAIL("Failed to create thread for %s", "C1.PRE");
 
         test_consumer_subscribe(c2, topic);
-        test_consumer_wait_assignment(c2, rd_false);
+        test_consumer_wait_assignment(c2, rd_false, 1000);
 
         thrd_join(thread_id, NULL);
 

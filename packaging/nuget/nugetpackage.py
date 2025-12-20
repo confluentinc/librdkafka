@@ -91,7 +91,6 @@ class NugetPackage (Package):
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-arm64/native/librdkafka.so'),
-
         # Linux musl alpine x64 without GSSAPI (no external deps)
         Mapping({'arch': 'x64',
                  'plat': 'linux',
@@ -100,6 +99,14 @@ class NugetPackage (Package):
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-x64/native/alpine-librdkafka.so'),
+        # Linux musl alpine arm64 without GSSAPI (no external deps)
+        Mapping({'arch': 'arm64',
+                 'plat': 'linux',
+                 'dist': 'alpine',
+                 'lnk': 'all'},
+                'librdkafka.tgz',
+                './usr/local/lib/librdkafka.so.1',
+                'runtimes/linux-arm64/native/alpine-librdkafka.so'),
 
         # Common Win runtime
         Mapping({'arch': 'x64',

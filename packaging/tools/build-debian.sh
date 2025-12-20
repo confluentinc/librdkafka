@@ -5,7 +5,7 @@
 #
 # Statically linked
 # WITH openssl 1.0, zlib
-# WITHOUT libsasl2, lz4(ext, using builtin instead)
+# WITHOUT lz4(ext, using builtin instead)
 #
 # Usage (from top-level librdkafka dir):
 #   docker run -it -v $PWD:/v mcr.microsoft.com/dotnet/sdk /v/packaging/tools/build-debian.sh /v /v/librdkafka-debian9.tgz
@@ -48,7 +48,7 @@ git config --global --add safe.directory /v
 
 (cd $LRK_DIR ; git archive --format tar HEAD) | tar xf -
 
-./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static --prefix=$DEST_DIR $CONFIG_ARGS
+./configure --install-deps --disable-lz4-ext --enable-static --prefix=$DEST_DIR $CONFIG_ARGS
 make -j
 examples/rdkafka_example -X builtin.features
 CI=true make -C tests run_local_quick

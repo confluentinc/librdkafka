@@ -2914,8 +2914,19 @@ const char *rd_kafka_ResourcePatternType_name(
 }
 
 const char *rd_kafka_ResourceType_name(rd_kafka_ResourceType_t restype) {
-        static const char *names[] = {"UNKNOWN", "ANY",    "TOPIC",
-                                      "GROUP",   "BROKER", "TRANSACTIONAL_ID"};
+        static const char *names[] = {"UNKNOWN",
+                                      "ANY",
+                                      "TOPIC",
+                                      "GROUP",
+                                      "BROKER",
+                                      "TRANSACTIONAL_ID",
+                                      "DELEGATION_TOKEN",
+                                      "USER"};
+
+        if ((unsigned int)restype >= RD_KAFKA_RESOURCE_CONFIG_RESOURCE__START &&
+            (unsigned int)restype < RD_KAFKA_RESOURCE_CONFIG_RESOURCE__END)
+                return rd_kafka_ConfigResourceType_name(
+                    rd_kafka_ResourceType_to_ConfigResourceType(restype));
 
         if ((unsigned int)restype >= (unsigned int)RD_KAFKA_RESOURCE__CNT)
                 return "UNSUPPORTED";
@@ -2931,6 +2942,10 @@ rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype) {
                 return RD_KAFKA_CONFIG_RESOURCE_TOPIC;
         case RD_KAFKA_RESOURCE_BROKER:
                 return RD_KAFKA_CONFIG_RESOURCE_BROKER;
+        case RD_KAFKA_RESOURCE_BROKER_LOGGER:
+                return RD_KAFKA_CONFIG_RESOURCE_BROKER_LOGGER;
+        case RD_KAFKA_RESOURCE_CLIENT_METRICS:
+                return RD_KAFKA_CONFIG_RESOURCE_CLIENT_METRICS;
         case RD_KAFKA_RESOURCE_GROUP:
                 return RD_KAFKA_CONFIG_RESOURCE_GROUP;
         default:
@@ -2945,10 +2960,36 @@ rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
                 return RD_KAFKA_RESOURCE_TOPIC;
         case RD_KAFKA_CONFIG_RESOURCE_BROKER:
                 return RD_KAFKA_RESOURCE_BROKER;
+        case RD_KAFKA_CONFIG_RESOURCE_BROKER_LOGGER:
+                return RD_KAFKA_RESOURCE_BROKER_LOGGER;
+        case RD_KAFKA_CONFIG_RESOURCE_CLIENT_METRICS:
+                return RD_KAFKA_RESOURCE_CLIENT_METRICS;
         case RD_KAFKA_CONFIG_RESOURCE_GROUP:
                 return RD_KAFKA_RESOURCE_GROUP;
         default:
                 return RD_KAFKA_RESOURCE_UNKNOWN;
+        }
+}
+/**
+ * @brief Get the name of a ConfigResourceType_t.
+ */
+const char *rd_kafka_ConfigResourceType_name(
+    rd_kafka_ConfigResourceType_t config_resource_type) {
+        switch (config_resource_type) {
+        case RD_KAFKA_CONFIG_RESOURCE_UNKNOWN:
+                return "UNKNOWN";
+        case RD_KAFKA_CONFIG_RESOURCE_TOPIC:
+                return "TOPIC";
+        case RD_KAFKA_CONFIG_RESOURCE_BROKER:
+                return "BROKER";
+        case RD_KAFKA_CONFIG_RESOURCE_BROKER_LOGGER:
+                return "BROKER_LOGGER";
+        case RD_KAFKA_CONFIG_RESOURCE_CLIENT_METRICS:
+                return "CLIENT_METRICS";
+        case RD_KAFKA_CONFIG_RESOURCE_GROUP:
+                return "GROUP";
+        default:
+                return "UNSUPPORTED";
         }
 }
 

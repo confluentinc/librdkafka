@@ -554,6 +554,142 @@ char **rd_string_split(const char *input,
 }
 
 /**
+ * @brief Split a character-separated string into an array, supporting quoted
+ * fields.
+ *
+ * @remark This function is designed to handle cases where fields may be
+ * enclosed in double quotes (`"`), allowing separators within quoted fields to
+ * be treated as part of the field rather than as delimiters.
+ *
+ * @param input Input string to parse.
+ * @param sep The separator character (typically ',').
+ * @param skip_empty Do not include empty fields in the output array.
+ * @param result Will be set to the array of fields.
+ * @param cntp Will be set to the number of elements in the array.
+ *
+ * Supports quoted fields using `"`. Escaped characters (e.g., `\n`, `\t`) are
+ * also handled. Quoted fields can contain separators, and the quotes will be
+ * removed in the output. The array and the array elements will be allocated
+ * together and must be freed with a single rd_free(array) call. The array
+ * elements are copied, and any escape sequences or quotes are removed.
+ *
+ * @returns The parsed fields in an array. The number of elements in the
+ *          array is returned in \p cntp.
+ */
+int rd_string_split_csv(const char *input,
+                        char sep,
+                        rd_bool_t skip_empty,
+                        char ***result,
+                        size_t *cntp) {
+        size_t fieldcnt    = 1;
+        rd_bool_t next_esc = rd_false;
+        const char *s;
+        char *p;
+        char **arr;
+        size_t inputlen;
+        size_t i            = 0;
+        size_t elen         = 0;
+        rd_bool_t in_quotes = rd_false;
+
+        *cntp = 0;
+
+        /* Count approximate field count (ignore sep inside quotes) */
+        for (s = input; *s; s++) {
+                if (*s == '"')
+                        in_quotes = !in_quotes;
+                else if (*s == sep && !in_quotes)
+                        fieldcnt++;
+        }
+
+        /* Check for unbalanced quotes */
+        if (in_quotes) {
+                return -1; /* Error: Unbalanced quotes */
+        }
+
+        inputlen = (size_t)(s - input);
+        arr      = rd_malloc((sizeof(*arr) * fieldcnt) + inputlen + 1);
+        p        = (char *)(&arr[fieldcnt]);
+
+        in_quotes = rd_false;
+        next_esc  = rd_false;
+
+        for (s = input;; s++) {
+                rd_bool_t at_end = *s == '\0';
+                rd_bool_t is_esc = next_esc;
+
+                if (at_end)
+                        goto done;
+
+                if (!is_esc && *s == '"') {
+                        in_quotes = !in_quotes;
+                        continue; /* Skip quotes */
+                }
+
+                if (unlikely(!is_esc && *s == '\\')) {
+                        next_esc = rd_true;
+                        continue;
+                }
+
+                next_esc = rd_false;
+
+                /* Strip leading whitespaces (outside quotes) */
+                if (!in_quotes && elen == 0 && isspace((int)*s))
+                        continue;
+
+                /* If not in quotes, sep is a field boundary */
+                if (!in_quotes && !is_esc && *s == sep)
+                        goto done;
+
+                char c = *s;
+                if (is_esc) {
+                        switch (c) {
+                        case 't':
+                                c = '\t';
+                                break;
+                        case 'n':
+                                c = '\n';
+                                break;
+                        case 'r':
+                                c = '\r';
+                                break;
+                        case '0':
+                                c = '\0';
+                                break;
+                        default:
+                                break;
+                        }
+                }
+                p[elen++] = c;
+                continue;
+
+        done:
+                /* Strip trailing whitespace (outside quotes only) */
+                while (elen > 0 && isspace((int)p[elen - 1]))
+                        elen--;
+
+                /* Skip empty if needed */
+                if (elen == 0 && skip_empty) {
+                        if (at_end)
+                                break;
+                        continue;
+                }
+
+                rd_assert(i < fieldcnt);
+                p[elen++] = '\0';
+                arr[i++]  = p;
+                p += elen;
+                elen = 0;
+
+                if (at_end)
+                        break;
+        }
+
+        *cntp   = i;
+        *result = arr;
+        return 0; /* Success */
+}
+
+/**
  * @brief Unittest for rd_string_split()
  */
 static int ut_string_split(void) {
@@ -633,6 +769,136 @@ static int ut_string_split(void) {
 }
 
 /**
+ * @brief Unittest for rd_string_split_csv()
+ */
+static int ut_string_split_csv(void) {
+        static const struct {
+                const char *input;
+                const char sep;
+                rd_bool_t skip_empty;
+                int exp_ret; /* Expected return value (0 for success, -1 for */
+                             /* error) */
+                size_t exp_cnt;
+                const char *exp[16];
+        } tests[] = {
+            /* Valid cases */
+            {
+                "extension1:extension1val,\"extension2:extension2val1,"
+                "extension2val2\"",
+                ',',
+                rd_true,
+                0, /* Success */
+                2,
+                {"extension1:extension1val",
+                 "extension2:extension2val1,extension2val2"},
+            },
+            {
+                "extension1:extension1val,extension2:extension2val1",
+                ',',
+                rd_true,
+                0, /* Success */
+                2,
+                {"extension1:extension1val", "extension2:extension2val1"},
+            },
+            /* Edge case: Empty string */
+            {
+                "",
+                ',',
+                rd_true,
+                0, /* Success */
+                0,
+                {NULL},
+            },
+            /* Edge case: Single key-value pair */
+            {
+                "extension1:extension1val",
+                ',',
+                rd_true,
+                0, /* Success */
+                1,
+                {"extension1:extension1val"},
+            },
+            {"  this is an \\,escaped comma,\\,,\\\\, "
+             "and this is an unbalanced escape: \\\\\\\\\\\\\\",
+             ',',
+             rd_true,
+             0,
+             4,
+             {"this is an ,escaped comma", ",", "\\",
+              "and this is an unbalanced escape: \\\\\\"}},
+            /* Edge case: String with leading and trailing whitespace */
+            {
+                "  extension1:extension1val  ,  extension2:extension2val1  ",
+                ',',
+                rd_true,
+                0, /* Success */
+                2,
+                {"extension1:extension1val", "extension2:extension2val1"},
+            },
+            /* Invalid case: Missing closing quote */
+            {
+                "extension1:extension1val,\"extension2:extension2val1,"
+                "extension2val2",
+                ',', /* Missing closing quote */
+                rd_true,
+                -1, /* Error: Unbalanced quotes */
+                0,
+                {NULL},
+            },
+            {
+                "using|another ||\\|d|elimiter",
+                '|',
+                rd_false,
+                0,
+                5,
+                {"using", "another", "", "|d", "elimiter"},
+            },
+            {NULL},
+        };
+
+        size_t i;
+
+        RD_UT_BEGIN();
+
+        for (i = 0; tests[i].input; i++) {
+                char **ret = NULL;
+                size_t cnt = 0;
+                int rc;
+                size_t j;
+
+                rc = rd_string_split_csv(tests[i].input, tests[i].sep,
+                                         tests[i].skip_empty, &ret, &cnt);
+
+                RD_UT_ASSERT(rc == tests[i].exp_ret,
+                             "#%" PRIusz ": Expected return code %d, got %d", i,
+                             tests[i].exp_ret, rc);
+
+                if (rc == 0) { /* Only validate results if parsing succeeded */
+                        RD_UT_ASSERT(cnt == tests[i].exp_cnt,
+                                     "#%" PRIusz ": Expected %" PRIusz
+                                     " elements, got %" PRIusz,
+                                     i, tests[i].exp_cnt, cnt);
+
+                        for (j = 0; j < cnt; j++) {
+                                RD_UT_ASSERT(!strcmp(tests[i].exp[j], ret[j]),
+                                             "#%" PRIusz
+                                             ": Expected element %" PRIusz
+                                             " to be \"%s\", got \"%s\"",
+                                             i, j, tests[i].exp[j], ret[j]);
+                        }
+
+                        rd_free(ret);
+                } else {
+                        RD_UT_ASSERT(
+                            ret == NULL,
+                            "#%" PRIusz ": Expected NULL result on error", i);
+                }
+        }
+
+        RD_UT_PASS();
+}
+
+/**
  * @brief Unittests for strings
  */
 int unittest_string(void) {
@@ -640,6 +906,7 @@ int unittest_string(void) {
 
         fails += ut_strcasestr();
         fails += ut_string_split();
+        fails += ut_string_split_csv();
 
         return fails;
 }

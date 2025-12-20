@@ -40,6 +40,7 @@
 
 #ifdef _WIN32
 #include <wincrypt.h>
+#undef X509_NAME
 #pragma comment(lib, "crypt32.lib")
 #pragma comment(lib, "libcrypto.lib")
 #pragma comment(lib, "libssl.lib")

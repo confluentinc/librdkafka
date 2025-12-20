@@ -4891,6 +4891,53 @@ void test_any_conf_set(rd_kafka_conf_t *conf,
                           val, errstr);
 }
 
+/**
+ * @brief Set broker configuration property \p name to the given value \p val
+ *        for the resource type \p restype and resource name \p resname.
+ */
+void test_broker_conf_set(rd_kafka_ResourceType_t restype,
+                          const char *resname,
+                          const char *name,
+                          const char *val) {
+        rd_kafka_t *rk;
+        const char *conf_set[] = {name, "SET", val};
+
+        rk = test_create_producer();
+        TEST_CALL_ERR__(test_IncrementalAlterConfigs_simple(
+            rk, restype, resname, conf_set, 1));
+        rd_kafka_destroy(rk);
+}
+
+/**
+ * @brief Set broker group configuration property 'consumer.session.timeout.ms'.
+ *        to the given value \p session_timeout_ms.
+ *
+ * @param group_id Group id to set the configuration for.
+ * @param session_timeout_ms Session timeout in milliseconds.
+ */
+void test_broker_conf_set_group_consumer_session_timeout_ms(
+    const char *group_id,
+    int session_timeout_ms) {
+        test_broker_conf_set(RD_KAFKA_RESOURCE_GROUP, group_id,
+                             "consumer.session.timeout.ms",
+                             tsprintf("%d", session_timeout_ms));
+}
+
+/**
+ * @brief Set broker group configuration property
+ * 'consumer.heartbeat.interval.ms'. to the given value \p
+ * heartbeat_interval_ms.
+ *
+ * @param group_id Group id to set the configuration for.
+ * @param heartbeat_interval_ms Heartbeat interval in milliseconds.
+ */
+void test_broker_conf_set_group_consumer_heartbeat_interval_ms(
+    const char *group_id,
+    int heartbeat_interval_ms) {
+        test_broker_conf_set(RD_KAFKA_RESOURCE_GROUP, group_id,
+                             "consumer.heartbeat.interval.ms",
+                             tsprintf("%d", heartbeat_interval_ms));
+}
 
 /**
  * @returns true if test clients need to be configured for authentication

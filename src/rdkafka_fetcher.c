@@ -1106,6 +1106,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
 
                 if (rd_kafka_buf_ApiVersion(rkbuf) >= 9) {
                         /* CurrentLeaderEpoch */
+                        rd_kafka_toppar_lock(rktp);
                         if (rktp->rktp_leader_epoch < 0 &&
                             rd_kafka_has_reliable_leader_epochs(rkb)) {
                                 /* If current leader epoch is set to -1 and
@@ -1121,6 +1122,7 @@ int rd_kafka_broker_fetch_toppars(rd_kafka_broker_t *rkb, rd_ts_t now) {
                                 rd_kafka_buf_write_i32(rkbuf,
                                                        rktp->rktp_leader_epoch);
                         }
+                        rd_kafka_toppar_unlock(rktp);
                 }
                 /* FetchOffset */
                 rd_kafka_buf_write_i64(rkbuf,

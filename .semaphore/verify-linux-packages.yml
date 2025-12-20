@@ -12,9 +12,6 @@ global_job_config:
   prologue:
     commands:
       - checkout
-  env_vars:
-    - name: REPOSITORY_BASE_URL
-      value: "https://packages.confluent.io"
 
 blocks:
   - name: "Verify Linux packages (x86_64)"
@@ -27,7 +24,9 @@ blocks:
         - name: "Verify packages"
           commands:
             - cd packaging/cp
-            - ./verify-packages.sh ${REPOSITORY_BASE_URL} linux/amd64 ${LIBRDKAFKA_VERSION}
+            - ./verify-packages.sh 
+              ${REPOSITORY_BASE_URL:-https://packages.confluent.io/clients} 
+              linux/amd64 ${LIBRDKAFKA_VERSION}
   - name: "Verify Linux packages (aarch64)"
     dependencies: []
     task:
@@ -38,4 +37,6 @@ blocks:
         - name: "Verify packages"
           commands:
             - cd packaging/cp
-            - ./verify-packages.sh ${REPOSITORY_BASE_URL} linux/arm64 ${LIBRDKAFKA_VERSION}
+            - ./verify-packages.sh 
+              ${REPOSITORY_BASE_URL:-https://packages.confluent.io/clients} 
+              linux/arm64 ${LIBRDKAFKA_VERSION}

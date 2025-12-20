@@ -14,11 +14,11 @@ fi
 apt-get update
 apt-get install -y apt-transport-https wget gnupg2 lsb-release
 
-wget -qO - ${base_url}/clients/deb/archive.key | apt-key add -
+wget -qO - ${base_url}/deb/archive.key | apt-key add -
 
 release=$(lsb_release -cs)
 cat >/etc/apt/sources.list.d/Confluent.list <<EOF
-deb $base_url/clients/deb ${release} main
+deb $base_url/deb ${release} main
 EOF
 
 apt-get update

@@ -14,9 +14,9 @@ fi
 cat >/etc/yum.repos.d/Confluent.repo <<EOF
 [Confluent-Clients]
 name=Confluent Clients repository
-baseurl=$base_url/clients/rpm/centos/\$releasever/\$basearch
+baseurl=$base_url/rpm/centos/\$releasever/\$basearch
 gpgcheck=1
-gpgkey=$base_url/clients/rpm/archive.key
+gpgkey=$base_url/rpm/archive.key
 enabled=1
 EOF
 

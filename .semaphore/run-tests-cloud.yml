@@ -313,13 +313,25 @@ blocks:
                 echo "  <testsuite name=\"librdkafka\" tests=\"${TESTS_RUN}\" failures=\"${TESTS_FAILED}\" errors=\"0\" time=\"${DURATION}\">" >> /tmp/junit_report.xml
                 
                 # Generate and append testcases with proper XML escaping
-                # Note: .tests is an object, not array, so use to_entries
+                # Note: .tests is an object, not array, so use to_entries and sort by name
                 jq -r '
                   def xml_escape: gsub("&";"&amp;") | gsub("<";"&lt;") | gsub(">";"&gt;") | gsub("\"";"&quot;");
-                  .tests | to_entries[] | .value | 
+                  .tests | to_entries | sort_by(.key) | .[].value | 
                   "    <testcase classname=\"librdkafka.tests\" name=\"" + ((.name // "unknown") | xml_escape) + "\" time=\"" + ((.duration // 0) | tostring) + "\">" +
-                  (if .state == "FAILED" then "<failure message=\"Test failed\">" + ((.extra // "") | xml_escape) + "</failure>" 
-                   elif .state == "SKIPPED" then "<skipped/>" else "" end) +
+                  (if .state == "FAILED" then 
+                    "<failure message=\"Test failed\">" + 
+                    (if .extra != "" then (.extra | xml_escape) else "Test failed - check logs for details" end) + 
+                    (if .known_issue then " (Known issue)" else "" end) +
+                    "</failure>"
+                   elif .state == "SKIPPED" then 
+                    "<skipped message=\"" + 
+                    (if .extra != "" then (.extra | xml_escape) 
+                     elif .known_issue then "Known issue - skipped"
+                     else "Test skipped" end) + 
+                    "\"/>"
+                   else 
+                    "<system-out>PASSED</system-out>" 
+                   end) +
                   "</testcase>"' "$REPORT_FILE" 2>/dev/null >> /tmp/junit_report.xml || true
                 
                 # Write XML footer

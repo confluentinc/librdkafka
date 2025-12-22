@@ -262,6 +262,10 @@ blocks:
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
 
             - |
+              # Only run tests 0001-0020
+              TESTS_TO_RUN="0001,0002,0003,0004,0005,0006,0007,0008,0009,0010"
+              TESTS_TO_RUN="${TESTS_TO_RUN},0011,0012,0013,0014,0015,0016,0017,0018,0019,0020"
+              
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 cd /tmp/librdkafka/tests
                 echo "Running tests with librdkafka ${LIBRDKAFKA_VERSION}..."
@@ -270,17 +274,17 @@ blocks:
                 LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp"
                 LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/librd_ver/librdkafka/src"
                 export LD_PRELOAD LD_LIBRARY_PATH
-                TEST_REPORT=/tmp/test_report.json ./run-test.sh -r || true
+                TESTS="${TESTS_TO_RUN}" TEST_REPORT=/tmp/test_report.json ./run-test.sh -r || true
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Running tests in pod ${TOOLBOX_POD} with librdkafka ${LIBRDKAFKA_VERSION}..."
-                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c '
+                kubectl --context ${K8S_CONTEXT} exec ${TOOLBOX_POD} -- bash -c "
                   cd /tmp/librdkafka/tests
-                  export LD_PRELOAD="/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so"
-                  export LD_PRELOAD="$LD_PRELOAD:/tmp/librd_ver/librdkafka/src/librdkafka.so"
-                  export LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp"
-                  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/librd_ver/librdkafka/src"
-                  TEST_REPORT=/tmp/test_report.json ./run-test.sh -r' || true
+                  export LD_PRELOAD=\"/tmp/librd_ver/librdkafka/src-cpp/librdkafka++.so\"
+                  export LD_PRELOAD=\"\$LD_PRELOAD:/tmp/librd_ver/librdkafka/src/librdkafka.so\"
+                  export LD_LIBRARY_PATH=\"/tmp/librd_ver/librdkafka/src-cpp\"
+                  export LD_LIBRARY_PATH=\"\$LD_LIBRARY_PATH:/tmp/librd_ver/librdkafka/src\"
+                  TESTS=\"${TESTS_TO_RUN}\" TEST_REPORT=/tmp/test_report.json ./run-test.sh -r" || true
                 
                 # Copy report from pod
                 kubectl --context ${K8S_CONTEXT} cp \

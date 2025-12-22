@@ -303,27 +303,32 @@ blocks:
                 TESTS_FAILED=$(jq -r '.tests_failed // 0' "$REPORT_FILE")
                 DURATION=$(jq -r '.duration // 0' "$REPORT_FILE")
                 
-                cat > /tmp/junit_report.xml << XMLEOF
-              <?xml version="1.0" encoding="UTF-8"?>
-              <testsuites tests="${TESTS_RUN}" failures="${TESTS_FAILED}" errors="0" time="${DURATION}">
-                <testsuite name="librdkafka" tests="${TESTS_RUN}" failures="${TESTS_FAILED}" errors="0" time="${DURATION}">
-              $(jq -r '.tests[]? | 
-                "<testcase classname=\"librdkafka.tests\" name=\"\(.name // "unknown")\" time=\"\(.duration // 0)\">" +
-                (if .state == "FAILED" then "<failure message=\"\(.reason // "Test failed")\">\(.reason // "")</failure>" 
-                 elif .state == "SKIPPED" then "<skipped/>" else "" end) +
-                "</testcase>"' "$REPORT_FILE" 2>/dev/null || echo "")
-                </testsuite>
-              </testsuites>
-              XMLEOF
+                # Write XML header (no leading whitespace allowed)
+                echo '<?xml version="1.0" encoding="UTF-8"?>' > /tmp/junit_report.xml
+                echo "<testsuites tests=\"${TESTS_RUN}\" failures=\"${TESTS_FAILED}\" errors=\"0\" time=\"${DURATION}\">" >> /tmp/junit_report.xml
+                echo "  <testsuite name=\"librdkafka\" tests=\"${TESTS_RUN}\" failures=\"${TESTS_FAILED}\" errors=\"0\" time=\"${DURATION}\">" >> /tmp/junit_report.xml
+                
+                # Generate and append testcases with proper XML escaping
+                # Note: .tests is an object, not array, so use to_entries
+                jq -r '
+                  def xml_escape: gsub("&";"&amp;") | gsub("<";"&lt;") | gsub(">";"&gt;") | gsub("\"";"&quot;");
+                  .tests | to_entries[] | .value | 
+                  "    <testcase classname=\"librdkafka.tests\" name=\"" + ((.name // "unknown") | xml_escape) + "\" time=\"" + ((.duration // 0) | tostring) + "\">" +
+                  (if .state == "FAILED" then "<failure message=\"Test failed\">" + ((.extra // "") | xml_escape) + "</failure>" 
+                   elif .state == "SKIPPED" then "<skipped/>" else "" end) +
+                  "</testcase>"' "$REPORT_FILE" 2>/dev/null >> /tmp/junit_report.xml || true
+                
+                # Write XML footer
+                echo "  </testsuite>" >> /tmp/junit_report.xml
+                echo "</testsuites>" >> /tmp/junit_report.xml
+                
                 echo "Generated /tmp/junit_report.xml"
               else
                 echo "No test report found, creating empty JUnit report..."
-                cat > /tmp/junit_report.xml << XMLEOF
-              <?xml version="1.0" encoding="UTF-8"?>
-              <testsuites tests="0" failures="0" errors="0" time="0">
-                <testsuite name="librdkafka" tests="0" failures="0" errors="0"/>
-              </testsuites>
-              XMLEOF
+                echo '<?xml version="1.0" encoding="UTF-8"?>' > /tmp/junit_report.xml
+                echo '<testsuites tests="0" failures="0" errors="0" time="0">' >> /tmp/junit_report.xml
+                echo '  <testsuite name="librdkafka" tests="0" failures="0" errors="0"/>' >> /tmp/junit_report.xml
+                echo '</testsuites>' >> /tmp/junit_report.xml
               fi
 
 # Step 3: After-pipeline job to merge all test results

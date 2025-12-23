@@ -262,9 +262,12 @@ blocks:
             - rm -f /tmp/api-key.txt /tmp/api-secret.txt /tmp/bootstrap-server.txt
 
             - |
-              # Only run tests 0001-0020
+              # Only run tests 0001-0050
               TESTS_TO_RUN="0001,0002,0003,0004,0005,0006,0007,0008,0009,0010"
               TESTS_TO_RUN="${TESTS_TO_RUN},0011,0012,0013,0014,0015,0016,0017,0018,0019,0020"
+              TESTS_TO_RUN="${TESTS_TO_RUN},0021,0022,0025,0026,0028,0029,0030,0031,0033,0034"
+              TESTS_TO_RUN="${TESTS_TO_RUN},0035,0036,0037,0038,0039,0040,0041,0042,0043,0044"
+              TESTS_TO_RUN="${TESTS_TO_RUN},0045,0046,0047,0048,0049,0050,0051,0052"
               
               if [[ "$KAFKA_TYPE" == "k1" ]]; then
                 cd /tmp/librdkafka/tests
@@ -326,8 +329,10 @@ blocks:
                    elif .state == "SKIPPED" then 
                     "<skipped message=\"" + 
                     (if .extra != "" then (.extra | xml_escape) 
-                     elif .known_issue then "Known issue - skipped"
-                     else "Test skipped" end) + 
+                     elif .known_issue == true then "Known issue"
+                     elif (.name | test("mock")) then "Requires mock cluster"
+                     elif (.name | test("local")) then "Local test only"
+                     else "Test requirements not met or not selected" end) + 
                     "\"/>"
                    else 
                     "<system-out>PASSED</system-out>" 

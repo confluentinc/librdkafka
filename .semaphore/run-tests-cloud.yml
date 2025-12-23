@@ -277,7 +277,8 @@ blocks:
                 LD_LIBRARY_PATH="/tmp/librd_ver/librdkafka/src-cpp"
                 LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/tmp/librd_ver/librdkafka/src"
                 export LD_PRELOAD LD_LIBRARY_PATH
-                TESTS="${TESTS_TO_RUN}" TEST_REPORT=/tmp/test_report.json ./run-test.sh -r || true
+                # Capture output to extract error messages for failed tests
+                TESTS="${TESTS_TO_RUN}" TEST_REPORT=/tmp/test_report.json ./run-test.sh -r 2>&1 | tee /tmp/test_output.log || true
               else
                 export TOOLBOX_POD="njc-test-pod-${SEMAPHORE_JOB_ID}"
                 echo "Running tests in pod ${TOOLBOX_POD} with librdkafka ${LIBRDKAFKA_VERSION}..."
@@ -287,7 +288,7 @@ blocks:
                   export LD_PRELOAD=\"\$LD_PRELOAD:/tmp/librd_ver/librdkafka/src/librdkafka.so\"
                   export LD_LIBRARY_PATH=\"/tmp/librd_ver/librdkafka/src-cpp\"
                   export LD_LIBRARY_PATH=\"\$LD_LIBRARY_PATH:/tmp/librd_ver/librdkafka/src\"
-                  TESTS=\"${TESTS_TO_RUN}\" TEST_REPORT=/tmp/test_report.json ./run-test.sh -r" || true
+                  TESTS=\"${TESTS_TO_RUN}\" TEST_REPORT=/tmp/test_report.json ./run-test.sh -r" 2>&1 | tee /tmp/test_output.log || true
                 
                 # Copy report from pod
                 kubectl --context ${K8S_CONTEXT} cp \
@@ -300,8 +301,24 @@ blocks:
             # Convert JSON report to JUnit XML for Semaphore test tab
             - |
               REPORT_FILE="/tmp/test_report.json"
+              LOG_FILE="/tmp/test_output.log"
+              
               if [[ ! -f "$REPORT_FILE" ]]; then
                 REPORT_FILE=$(ls /tmp/librdkafka/tests/test_report_*.json 2>/dev/null | head -1)
+              fi
+              
+              # Extract error messages from test output log for failed tests
+              # Format: | test_name | FAILED | time | error_message
+              if [[ -f "$LOG_FILE" ]]; then
+                echo "Extracting error messages from test log..."
+                grep -E "^\|.*FAILED" "$LOG_FILE" | while read -r line; do
+                  # Extract test name and error message
+                  TEST_NAME=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}')
+                  ERROR_MSG=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $5); print $5}')
+                  if [[ -n "$TEST_NAME" && -n "$ERROR_MSG" ]]; then
+                    echo "${TEST_NAME}::${ERROR_MSG}" >> /tmp/test_errors.txt
+                  fi
+                done
               fi
               
               if [[ -f "$REPORT_FILE" && -s "$REPORT_FILE" ]]; then
@@ -310,39 +327,58 @@ blocks:
                 TESTS_FAILED=$(jq -r '.tests_failed // 0' "$REPORT_FILE")
                 DURATION=$(jq -r '.duration // 0' "$REPORT_FILE")
                 
-                # Write XML header (no leading whitespace allowed)
+                # Write XML header
                 echo '<?xml version="1.0" encoding="UTF-8"?>' > /tmp/junit_report.xml
                 echo "<testsuites tests=\"${TESTS_RUN}\" failures=\"${TESTS_FAILED}\" errors=\"0\" time=\"${DURATION}\">" >> /tmp/junit_report.xml
                 echo "  <testsuite name=\"librdkafka\" tests=\"${TESTS_RUN}\" failures=\"${TESTS_FAILED}\" errors=\"0\" time=\"${DURATION}\">" >> /tmp/junit_report.xml
                 
-                # Generate and append testcases with proper XML escaping
-                # Note: .tests is an object, not array, so use to_entries and sort by name
-                jq -r '
-                  def xml_escape: gsub("&";"&amp;") | gsub("<";"&lt;") | gsub(">";"&gt;") | gsub("\"";"&quot;");
-                  .tests | to_entries | sort_by(.key) | .[].value | 
-                  "    <testcase classname=\"librdkafka.tests\" name=\"" + ((.name // "unknown") | xml_escape) + "\" time=\"" + ((.duration // 0) | tostring) + "\">" +
-                  (if .state == "FAILED" then 
-                    "<failure message=\"Test failed\">" + 
-                    (if .extra != "" then (.extra | xml_escape) else "Test failed - check logs for details" end) + 
-                    (if .known_issue then " (Known issue)" else "" end) +
-                    "</failure>"
-                   elif .state == "SKIPPED" then 
-                    "<skipped message=\"" + 
-                    (if .extra != "" then (.extra | xml_escape) 
-                     elif .known_issue == true then "Known issue"
-                     elif (.name | test("mock")) then "Requires mock cluster"
-                     elif (.name | test("local")) then "Local test only"
-                     else "Test requirements not met or not selected" end) + 
-                    "\"/>"
-                   else 
-                    "<system-out>PASSED</system-out>" 
-                   end) +
-                  "</testcase>"' "$REPORT_FILE" 2>/dev/null >> /tmp/junit_report.xml || true
+                # Process each test
+                jq -r '.tests | to_entries | sort_by(.key) | .[] | [.key, .value.name, .value.state, .value.duration, .value.extra, .value.known_issue] | @tsv' "$REPORT_FILE" | \
+                while IFS=$'\t' read -r key name state duration extra known_issue; do
+                  # Escape XML special characters
+                  name_escaped=$(echo "$name" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+                  
+                  echo -n "    <testcase classname=\"librdkafka.tests\" name=\"${name_escaped}\" time=\"${duration}\">" >> /tmp/junit_report.xml
+                  
+                  if [[ "$state" == "FAILED" ]]; then
+                    # Try to get error from captured log
+                    error_msg=""
+                    if [[ -f /tmp/test_errors.txt ]]; then
+                      error_msg=$(grep "^${name}::" /tmp/test_errors.txt 2>/dev/null | head -1 | sed "s/^${name}:://")
+                    fi
+                    if [[ -z "$error_msg" && -n "$extra" && "$extra" != "null" ]]; then
+                      error_msg="$extra"
+                    fi
+                    if [[ -z "$error_msg" ]]; then
+                      error_msg="Test failed - check logs for details"
+                    fi
+                    error_escaped=$(echo "$error_msg" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+                    echo "<failure message=\"Test failed\">${error_escaped}</failure>" >> /tmp/junit_report.xml
+                  elif [[ "$state" == "SKIPPED" ]]; then
+                    skip_reason="Test requirements not met or not selected"
+                    if [[ -n "$extra" && "$extra" != "null" && "$extra" != "" ]]; then
+                      skip_reason="$extra"
+                    elif [[ "$known_issue" == "true" ]]; then
+                      skip_reason="Known issue"
+                    elif [[ "$name" == *"mock"* ]]; then
+                      skip_reason="Requires mock cluster"
+                    elif [[ "$name" == *"local"* ]]; then
+                      skip_reason="Local test only"
+                    fi
+                    skip_escaped=$(echo "$skip_reason" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g; s/"/\&quot;/g')
+                    echo "<skipped message=\"${skip_escaped}\"/>" >> /tmp/junit_report.xml
+                  else
+                    echo "<system-out>PASSED</system-out>" >> /tmp/junit_report.xml
+                  fi
+                  
+                  echo "</testcase>" >> /tmp/junit_report.xml
+                done
                 
                 # Write XML footer
                 echo "  </testsuite>" >> /tmp/junit_report.xml
                 echo "</testsuites>" >> /tmp/junit_report.xml
                 
+                rm -f /tmp/test_errors.txt
                 echo "Generated /tmp/junit_report.xml"
               else
                 echo "No test report found, creating empty JUnit report..."

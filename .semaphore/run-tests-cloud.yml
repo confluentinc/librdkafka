@@ -314,10 +314,10 @@ blocks:
                   "  <testsuite name=\"librdkafka\" tests=\"\(.tests_run // 0)\" failures=\"\(.tests_failed // 0)\" time=\"\(.duration // 0)\">",
                   (.tests | to_entries | sort_by(.key) | .[] | .value |
                     "    <testcase classname=\"librdkafka.tests\" name=\"\(.name | xml_escape)\" time=\"\(.duration // 0)\">" +
-                    (if .state == "FAILED" then
-                      "<failure message=\"\(if .extra != "" then .extra | xml_escape else "Test failed" end)\"/>"
-                    elif .state == "SKIPPED" then
-                      "<skipped message=\"\(if .extra != "" then .extra | xml_escape else "Skipped" end)\"/>"
+                    (if .state == "FAILED" or .state == "RUNNING" then
+                      "<failure message=\"\(if .state == "RUNNING" then "Timed out" elif .extra != "" then .extra | xml_escape else "Test failed" end)\"/>"
+                    elif .state == "SKIPPED" or .state == "DNS" then
+                      "<skipped message=\"\(if .extra != "" then .extra | xml_escape elif .state == "DNS" then "Did not start" else "Skipped" end)\"/>"
                     else
                       ""
                     end) +

@@ -181,7 +181,7 @@ blocks:
                   "sasl.username=${API_KEY}" \
                   "sasl.password=${API_SECRET}" \
                   "ssl.endpoint.identification.algorithm=none" \
-                  "test.timeout.multiplier=5" \
+                  "test.timeout.multiplier=2" \
                   "test.topic.prefix=njc-test-" \
                   "test.topic.random=true" \
                   "metadata.broker.list=${BOOTSTRAP_SERVER}" \
@@ -245,7 +245,7 @@ blocks:
                   "sasl.username=${API_KEY}" \
                   "sasl.password=${API_SECRET}" \
                   "ssl.endpoint.identification.algorithm=none" \
-                  "test.timeout.multiplier=20" \
+                  "test.timeout.multiplier=2" \
                   "test.topic.prefix=njc-test-" \
                   "test.topic.random=true" \
                   "metadata.broker.list=${BOOTSTRAP_SERVER}" \

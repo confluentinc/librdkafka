@@ -194,6 +194,6 @@ Questions and discussions are welcome on the [Discussions](https://github.com/co
   * Tcl: [KafkaTcl](https://github.com/flightaware/kafkatcl)
   * Shell: [kafkacat](https://github.com/edenhill/kafkacat) - Apache Kafka command line tool
   * Swift: [Perfect-Kafka](https://github.com/PerfectlySoft/Perfect-Kafka)
-
+  * 1C: [Simple-1C-Kafka](https://github.com/NuclearAPK/Simple-Kafka_Adapter)
 
 See [Powered by librdkafka](https://github.com/confluentinc/librdkafka/wiki/Powered-by-librdkafka) for an incomplete list of librdkafka users.

@@ -70,6 +70,10 @@ static int rd_rand() {
 }
 
 #if HAVE_OSSL_SECURE_RAND_BYTES
+// Support BoringSSL and other SSL implementations that may not provide RAND_priv_bytes.
+#ifndef RAND_priv_bytes.
+  #define RAND_priv_bytes(x,sz) RAND_bytes((x),(sz))
+#endif
 static rd_bool_t rd_rand_bytes_by_ossl(unsigned char *buf, int num) {
         int res     = -1;
         int retries = 0;

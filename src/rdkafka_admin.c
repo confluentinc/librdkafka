@@ -6042,13 +6042,9 @@ rd_kafka_UserScramCredentialUpsertion_new(const char *username,
                 alteration->alteration.upsertion.salt =
                     rd_kafkap_bytes_new(salt, salt_size);
         } else {
-#if WITH_SSL && OPENSSL_VERSION_NUMBER >= 0x10101000L
-    // Support BoringSSL and other SSL implementations that may not provide RAND_priv_bytes.
-    #ifndef RAND_priv_bytes
-    #define RAND_priv_bytes(x,sz) RAND_bytes((x),(sz))
-    #endif
+#if HAVE_SECURE_RAND_BYTES
                 unsigned char random_salt[64];
-                if (RAND_priv_bytes(random_salt, sizeof(random_salt)) == 1) {
+                if (rd_rand_bytes(random_salt, sizeof(random_salt))) {
                         alteration->alteration.upsertion.salt =
                             rd_kafkap_bytes_new(random_salt,
                                                 sizeof(random_salt));

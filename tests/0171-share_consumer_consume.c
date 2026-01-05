@@ -82,26 +82,11 @@ typedef struct {
  */
 static void create_share_consumers(share_test_config_t *config,
                                    share_test_state_t *state) {
-        char errstr[512];
         int i;
 
         for (i = 0; i < config->consumer_cnt; i++) {
-                rd_kafka_conf_t *conf;
-                test_conf_init(&conf, NULL, 60);
-
-                rd_kafka_conf_set(conf, "share.consumer", "true", 
-                                  errstr, sizeof(errstr));
-                rd_kafka_conf_set(conf, "group.protocol", "consumer", 
-                                  errstr, sizeof(errstr));
-                rd_kafka_conf_set(conf, "group.id", config->group_name, 
-                                  errstr, sizeof(errstr));
-                rd_kafka_conf_set(conf, "enable.auto.commit", "false", 
-                                  errstr, sizeof(errstr));
-
-                state->consumers[i] = rd_kafka_new(RD_KAFKA_CONSUMER, conf, 
-                                                   errstr, sizeof(errstr));
-                TEST_ASSERT(state->consumers[i], 
-                           "Failed to create consumer %d: %s", i, errstr);
+                state->consumers[i] =
+                    test_create_share_consumer(config->group_name);
         }
 
         TEST_SAY("Created %d share consumer(s)\n", config->consumer_cnt);

@@ -2754,6 +2754,141 @@ rd_kafka_t *test_create_consumer(
         return rk;
 }
 
+/**
+ * @brief Create a share consumer with standard configuration.
+ *
+ * @param group_id The share group ID.
+ *
+ * @returns A new share consumer instance.
+ *
+ * @remark TODO: Remove explicit group.id and enable.auto.commit settings
+ *         once these properties are added as defaults to
+ *         rd_kafka_share_consumer_new().
+ */
+rd_kafka_t *test_create_share_consumer(const char *group_id) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 60);
+
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                          sizeof(errstr));
+
+        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
+
+        return rk;
+}
+
+
+/**
+ * @brief Consume share messages and verify they come from expected topics.
+ *
+ * @param rk Share consumer handle.
+ * @param timeout_ms Poll timeout in milliseconds.
+ * @param expected_topics Array of topic names that are valid sources
+ *                        (NULL to skip verification).
+ * @param expected_topic_cnt Number of topics in expected_topics array.
+ * @param out_valid Output: count of valid (non-error) messages received.
+ *
+ * @returns 0 on success, -1 if message from unexpected topic received.
+ */
+int test_share_consume_batch(rd_kafka_t *rk,
+                             int timeout_ms,
+                             const char **expected_topics,
+                             int expected_topic_cnt,
+                             int *out_valid) {
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_error_t *err;
+        size_t rcvd = 0;
+        int valid = 0;
+        size_t i;
+        int j;
+        int ret = 0;
+
+        err = rd_kafka_share_consume_batch(rk, timeout_ms, batch, &rcvd);
+        if (err) {
+                rd_kafka_error_destroy(err);
+                *out_valid = 0;
+                return 0;
+        }
+
+        for (i = 0; i < rcvd; i++) {
+                if (batch[i]->err) {
+                        /* Skip error messages */
+                        rd_kafka_message_destroy(batch[i]);
+                        continue;
+                }
+
+                if (expected_topics) {
+                        const char *msg_topic =
+                            rd_kafka_topic_name(batch[i]->rkt);
+                        int found = 0;
+
+                        /* Verify message is from expected topic */
+                        for (j = 0; j < expected_topic_cnt; j++) {
+                                if (strcmp(msg_topic,
+                                           expected_topics[j]) == 0) {
+                                        found = 1;
+                                        break;
+                                }
+                        }
+
+                        if (!found) {
+                                TEST_SAY(
+                                    "ERROR: Received message from "
+                                    "unexpected topic '%s'\n",
+                                    msg_topic);
+                                ret = -1;
+                        }
+                }
+                valid++;
+                rd_kafka_message_destroy(batch[i]);
+        }
+
+        *out_valid = valid;
+        return ret;
+}
+
+
+/**
+ * @brief Consume share messages until expected count or max attempts.
+ *
+ * @param rk Share consumer handle.
+ * @param expected Number of messages to consume.
+ * @param max_attempts Maximum poll attempts.
+ * @param timeout_ms Timeout per poll in milliseconds.
+ * @param expected_topics Array of valid topic names (NULL to skip verification).
+ * @param expected_topic_cnt Number of topics in expected_topics.
+ *
+ * @returns Number of messages consumed, or -1 if message from wrong topic.
+ */
+int test_share_consume_msgs(rd_kafka_t *rk,
+                            int expected,
+                            int max_attempts,
+                            int timeout_ms,
+                            const char **expected_topics,
+                            int expected_topic_cnt) {
+        int total = 0;
+
+        while (total < expected && max_attempts-- > 0) {
+                int batch_cnt = 0;
+                int ret;
+
+                ret = test_share_consume_batch(rk, timeout_ms, expected_topics,
+                                               expected_topic_cnt, &batch_cnt);
+                if (ret < 0)
+                        return -1; /* Wrong topic detected */
+
+                total += batch_cnt;
+        }
+
+        return total;
+}
+
+
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk,
                                              const char *topic) {
         rd_kafka_topic_t *rkt;
@@ -3283,6 +3418,28 @@ void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...) {
                           rd_kafka_name(rk), rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
+}
+
+
+/**
+ * @brief Get current subscription list.
+ *
+ * @returns The subscription list. Caller must destroy with
+ *          rd_kafka_topic_partition_list_destroy().
+ */
+rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_t *rk) {
+        rd_kafka_topic_partition_list_t *subscription = NULL;
+        rd_kafka_resp_err_t err;
+
+        err = rd_kafka_subscription(rk, &subscription);
+        if (err)
+                TEST_FAIL("%s: Failed to get subscription: %s\n",
+                          rd_kafka_name(rk), rd_kafka_err2str(err));
+
+        TEST_ASSERT(subscription != NULL,
+                    "%s: subscription() returned NULL list", rd_kafka_name(rk));
+
+        return subscription;
 }
 
 

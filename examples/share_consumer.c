@@ -33,16 +33,35 @@
  * (https://github.com/confluentinc/librdkafka)
  */
 
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 199309L
+#endif
+
 #include <stdio.h>
 #include <signal.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 // #include <librdkafka/rdkafka.h>
 #include "rdkafka.h"
+
+
+#define TIME_BLOCK_MS(elapsed_var, expr)                                     \
+        do {                                                                 \
+                struct timespec __t0, __t1;                                  \
+                if (clock_gettime(CLOCK_MONOTONIC, &__t0) != 0)              \
+                        perror("clock_gettime");                             \
+                expr;                                                        \
+                if (clock_gettime(CLOCK_MONOTONIC, &__t1) != 0)              \
+                        perror("clock_gettime");                             \
+                (elapsed_var) =                                              \
+                        (__t1.tv_sec - __t0.tv_sec) * 1000.0 +               \
+                        (__t1.tv_nsec - __t0.tv_nsec) / 1e6;                 \
+        } while (0)
 
 
 static volatile sig_atomic_t run = 1;
@@ -77,7 +96,6 @@ int main(int argc, char **argv) {
         char errstr[512];        /* librdkafka API error reporting buffer */
         const char *brokers;     /* Argument: broker list */
         const char *groupid;     /* Argument: Consumer group id */
-        const char *group_protocol;
         char **topics; /* Argument: list of topics to subscribe to */
         int topic_cnt; /* Number of topics to subscribe to */
         rd_kafka_topic_partition_list_t *subscription; /* Subscribed topics */
@@ -86,10 +104,10 @@ int main(int argc, char **argv) {
         /*
          * Argument validation
          */
-        if (argc < 4) {
+        if (argc < 3) {
                 fprintf(stderr,
                         "%% Usage: "
-                        "%s <broker> <group.id> <group.protocol> <topic1> "
+                        "%s <broker> <group.id> <topic1> "
                         "<topic2>..\n",
                         argv[0]);
                 return 1;
@@ -97,9 +115,8 @@ int main(int argc, char **argv) {
 
         brokers        = argv[1];
         groupid        = argv[2];
-        group_protocol = argv[3];
-        topics         = &argv[4];
-        topic_cnt      = argc - 4;
+        topics         = &argv[3];
+        topic_cnt      = argc - 3;
 
 
         /*
@@ -130,35 +147,16 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        if (rd_kafka_conf_set(conf, "group.protocol", group_protocol, errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
-        /* If there is no previously committed offset for a partition
-         * the auto.offset.reset strategy will be used to decide where
-         * in the partition to start fetching messages.
-         * By setting this to earliest the consumer will read all messages
-         * in the partition if there was no previously committed offset. */
-        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
         /*
-         * Create consumer instance.
+         * Create a new share consumer instance.
          *
-         * NOTE: rd_kafka_new() takes ownership of the conf object
+         * NOTE: rd_kafka_share_consumer_new() takes ownership of the conf object
          *       and the application must not reference it again after
          *       this call.
          */
-        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
+        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rk) {
-                fprintf(stderr, "%% Failed to create new consumer: %s\n",
+                fprintf(stderr, "%% Failed to create new share consumer: %s\n",
                         errstr);
                 return 1;
         }
@@ -167,7 +165,12 @@ int main(int argc, char **argv) {
                       * by the rd_kafka_t instance. */
 
 
-        /* Redirect all messages from per-partition queues to
+        /* 
+         * TODO KIP-932: Check if rd_kafka_poll_set_consumer(rk)
+         * can be skipped for the share consumer.
+         */
+        /*
+         * Redirect all messages from per-partition queues to
          * the main queue so that messages can be consumed with one
          * call from all assigned partitions.
          *
@@ -213,54 +216,62 @@ int main(int argc, char **argv) {
          * since a rebalance may happen at any time.
          * Start polling for messages. */
 
+        rd_kafka_message_t *rkmessages[500];
         while (run) {
-                rd_kafka_message_t *rkm;
+                rd_kafka_message_t *rkm = NULL;
+                size_t rcvd_msgs        = 0;
+                int i;
+                rd_kafka_error_t *error;
+                double __elapsed_ms;
 
-                rkm = rd_kafka_consumer_poll(rk, 100);
-                if (!rkm)
-                        continue; /* Timeout: no message within 100ms,
-                                   *  try again. This short timeout allows
-                                   *  checking for `run` at frequent intervals.
-                                   */
+                TIME_BLOCK_MS(__elapsed_ms, error = rd_kafka_share_consume_batch(rk, 500, rkmessages, &rcvd_msgs));
+                fprintf(stdout, "%% rd_kafka_share_consume_batch() took %.3f ms\n", __elapsed_ms);
 
-                /* consumer_poll() will return either a proper message
-                 * or a consumer error (rkm->err is set). */
-                if (rkm->err) {
-                        /* Consumer errors are generally to be considered
-                         * informational as the consumer will automatically
-                         * try to recover from all types of errors. */
-                        fprintf(stderr, "%% Consumer error: %s\n",
-                                rd_kafka_message_errstr(rkm));
-                        rd_kafka_message_destroy(rkm);
+                if (error) {
+                        fprintf(stderr, "%% Consume error: %s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
                         continue;
                 }
 
-                /* Proper message. */
-                printf("Message on %s [%" PRId32 "] at offset %" PRId64
-                       " (leader epoch %" PRId32 "):\n",
-                       rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                       rkm->offset, rd_kafka_message_leader_epoch(rkm));
+                fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
+                for (i = 0; i < (int)rcvd_msgs; i++) {
+                        rkm = rkmessages[i];
 
-                /* Print the message key. */
-                if (rkm->key && is_printable(rkm->key, rkm->key_len))
-                        printf(" Key: %.*s\n", (int)rkm->key_len,
-                               (const char *)rkm->key);
-                else if (rkm->key)
-                        printf(" Key: (%d bytes)\n", (int)rkm->key_len);
+                        if (rkm->err) {
+                                fprintf(stderr, "%% Consumer error: %d: %s\n",
+                                        rkm->err, rd_kafka_message_errstr(rkm));
+                                rd_kafka_message_destroy(rkm);
+                                continue;
+                        }
 
-                /* Print the message value/payload. */
-                if (rkm->payload && is_printable(rkm->payload, rkm->len))
-                        printf(" Value: %.*s\n", (int)rkm->len,
-                               (const char *)rkm->payload);
-                else if (rkm->payload)
-                        printf(" Value: (%d bytes)\n", (int)rkm->len);
+                        /* Proper message. */
+                        printf("Message received on %s [%" PRId32 "] at offset %" PRId64,
+                        rd_kafka_topic_name(rkm->rkt), rkm->partition,
+                        rkm->offset);
 
-                rd_kafka_message_destroy(rkm);
+                        /* Print the message key. */
+                        if (rkm->key && is_printable(rkm->key, rkm->key_len))
+                                printf(" Key: %.*s\n", (int)rkm->key_len,
+                                (const char *)rkm->key);
+                        else if (rkm->key)
+                                printf(" Key: (%d bytes)\n", (int)rkm->key_len);
+
+                        /* Print the message value/payload. */
+                        if (rkm->payload &&
+                        is_printable(rkm->payload, rkm->len))
+                                printf(" - Value: %.*s\n", (int)rkm->len,
+                                (const char *)rkm->payload);
+                        else if (rkm->payload)
+                                printf(" - Value: (%d bytes)\n", (int)rkm->len);
+
+                        rd_kafka_message_destroy(rkm);
+                }
         }
 
 
         /* Close the consumer: commit final offsets and leave the group. */
-        fprintf(stderr, "%% Closing consumer\n");
+        fprintf(stderr, "%% Closing share consumer\n");
         rd_kafka_consumer_close(rk);
 
 

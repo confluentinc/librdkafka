@@ -2858,6 +2858,9 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        /**
+         * TODO KIP-932: Check if this way of defining share consumer needs to be changed.
+         */
         res = rd_kafka_conf_set(conf, "share.consumer", "true", errstr_internal,
                                 sizeof(errstr_internal));
         if (res != RD_KAFKA_CONF_OK) {
@@ -2868,6 +2871,25 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        /**
+         * TODO KIP-932: Remove this properties once we have removed offset management.
+         */
+        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
+
+        /**
+         * TODO KIP-932: Remove this properties once we have removed offset management.
+         */
+        if (rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
 
         res = rd_kafka_conf_set(conf, "group.protocol", "consumer",
                                 errstr_internal, sizeof(errstr_internal));

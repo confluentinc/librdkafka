@@ -145,6 +145,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rktp_txnlink;               /**< rd_kafka_t.rk_eos.
                                      *   txn_pend_rktps
                                      *   or txn_rktps */
+        TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rkb_session_link; /* rkb_share_fetch_session
+                                                     * toppars_in_session link */
         rd_kafka_topic_t *rktp_rkt; /**< This toppar's topic object */
         int32_t rktp_partition;
         // LOCK: toppar_lock() + topic_wrlock()
@@ -478,6 +480,19 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 rd_atomic64_t rx_ver_drops;      /**< Consumer: outdated message
                                                   *             drops. */
         } rktp_c;
+
+        /*
+         * TODO KIP-932: Change this according to need. Currently very basic. Not even handling GAP.
+         * Sends ACCEPT blindly with implicit acknowledgement.
+         */
+
+        /* Dynamic array of acknowledge entries: NULL until allocated. */
+        struct rd_kafka_toppar_share_ack_entry {
+                int64_t first_offset;
+                int64_t last_offset;
+                int16_t delivery_count;
+        } *rktp_share_acknowledge; /* NULL = not initialized */
+        size_t rktp_share_acknowledge_count; /* number of entries in rktp_share_acknowledge (0 when NULL) */
 };
 
 /**
@@ -533,10 +548,20 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp);
 #define rd_kafka_toppar_destroy(RKTP)                                          \
         do {                                                                   \
                 rd_kafka_toppar_t *_RKTP = (RKTP);                             \
-                if (unlikely(rd_refcnt_sub(&_RKTP->rktp_refcnt) == 0))         \
-                        rd_kafka_toppar_destroy_final(_RKTP);                  \
+                rd_kafka_toppar_destroy0(__FUNCTION__, __LINE__, _RKTP);       \
         } while (0)
 
+/* Common destroy helper used by both the macro and the free-wrapper. */
+static RD_UNUSED RD_INLINE void rd_kafka_toppar_destroy0(const char *func, int line, rd_kafka_toppar_t *rktp) {
+        if (unlikely(rd_refcnt_sub_fl(func, line, &rktp->rktp_refcnt) == 0))
+                rd_kafka_toppar_destroy_final(rktp);
+}
+
+/* Free-function compatible wrapper for rd_list_new and similar APIs
+        * (signature: void (*)(void *)). */
+static RD_UNUSED RD_INLINE void rd_kafka_toppar_destroy_free(void *ptr) {
+        rd_kafka_toppar_destroy0(__FUNCTION__, __LINE__, (rd_kafka_toppar_t *)ptr);
+}
 
 
 #define rd_kafka_toppar_lock(rktp)   mtx_lock(&(rktp)->rktp_lock)
@@ -676,6 +701,10 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
                               rd_async_t async,
                               int flag,
                               rd_kafka_topic_partition_list_t *partitions);
+
+rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp, rd_bool_t do_lock);
+rd_bool_t rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp);
+void *rd_kafka_toppar_list_copy(const void *elem, void *opaque);
 
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,

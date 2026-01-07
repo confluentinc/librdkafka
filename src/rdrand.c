@@ -31,20 +31,24 @@
 #include "rdtime.h"
 #include "tinycthread.h"
 #include "rdmurmur2.h"
-#ifndef _WIN32
+
+#ifdef HAVE_OSSL_SECURE_RAND_BYTES
+#include <openssl/rand.h>
+#elif HAVE_GETENTROPY
 /* getentropy() can be present in one of these two */
 #include <unistd.h>
 #include <sys/random.h>
 #endif
 
-#ifdef HAVE_OSSL_SECURE_RAND_BYTES
-#include <openssl/rand.h>
-#endif
-
 /* Initial seed with time+thread id */
 unsigned int rd_seed() {
-        unsigned int seed = 0;
+        unsigned int seed = 0, rand_bytes_seed = 0;
         struct timeval tv;
+
+        if (rd_rand_bytes((unsigned char *)&rand_bytes_seed,
+                          sizeof(rand_bytes_seed)))
+                return rand_bytes_seed;
+
         rd_gettimeofday(&tv, NULL);
         seed = (unsigned int)(tv.tv_usec);
         seed ^= thrd_current_id();

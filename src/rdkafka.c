@@ -1210,6 +1210,14 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
         rd_kafka_destroy_app(rk, 0);
 }
 
+void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
+        /**
+         * TODO KIP-932: Guard this with checks for rkshare and
+         *               rkshare->rkshare_rk?
+         */
+        rd_kafka_destroy(rkshare->rkshare_rk);
+}
+
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
 }
@@ -2868,9 +2876,10 @@ fail:
         return NULL;
 }
 
-rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
-                                        char *errstr,
-                                        size_t errstr_size) {
+rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
+                                              char *errstr,
+                                              size_t errstr_size) {
+        rd_kafka_share_t *rkshare;
         rd_kafka_t *rk;
         char errstr_internal[512];
         rd_kafka_conf_res_t res;
@@ -2931,7 +2940,10 @@ rd_kafka_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                  * and filled out errstr, so we don't need to do that here. */
                 return NULL;
         }
-        return rk;
+
+        rkshare = rd_calloc(1, sizeof(*rkshare));
+        rkshare->rkshare_rk = rk;
+        return rkshare;
 }
 
 
@@ -3242,13 +3254,14 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 }
 
 rd_kafka_error_t *rd_kafka_share_consume_batch(
-    rd_kafka_t *rk,
+    rd_kafka_share_t *rkshare,
     int timeout_ms,
     /* There is some benefit to making this ***rkmessages and allocating it
        within this function, but on the flipside this means that it will always
        be allocated on the heap. */
     rd_kafka_message_t **rkmessages /* out */,
     size_t *rkmessages_size /* out */) {
+        rd_kafka_t *rk          = rkshare->rkshare_rk;
         rd_kafka_cgrp_t *rkcg;
         rd_ts_t now             = rd_clock();
         rd_ts_t abs_timeout     = rd_timeout_init0(now, timeout_ms);
@@ -3931,6 +3944,10 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk) {
 }
 
 
+rd_kafka_resp_err_t rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare) {
+        return rd_kafka_poll_set_consumer(rkshare->rkshare_rk);
+}
+
 
 rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms) {
         rd_kafka_cgrp_t *rkcg;
@@ -4062,6 +4079,10 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                              "Consumer closed");
 
         return err;
+}
+
+rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
+        return rd_kafka_consumer_close(rkshare->rkshare_rk);
 }
 
 

@@ -772,6 +772,10 @@ struct rd_kafka_s {
         } rk_mock;
 };
 
+struct rd_kafka_share_s {
+        rd_kafka_t *rkshare_rk;        /**< The shared rd_kafka_t instance */
+};
+
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
 #define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk) rwlock_rdunlock(&(rk)->rk_lock)

@@ -90,7 +90,7 @@ static int is_printable(const char *buf, size_t size) {
 
 
 int main(int argc, char **argv) {
-        rd_kafka_t *rk;          /* Consumer instance handle */
+        rd_kafka_share_t *rkshare;          /* Consumer instance handle */
         rd_kafka_conf_t *conf;   /* Temporary configuration object */
         rd_kafka_resp_err_t err; /* librdkafka API error code */
         char errstr[512];        /* librdkafka API error reporting buffer */
@@ -154,8 +154,8 @@ int main(int argc, char **argv) {
          *       and the application must not reference it again after
          *       this call.
          */
-        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        if (!rk) {
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        if (!rkshare) {
                 fprintf(stderr, "%% Failed to create new share consumer: %s\n",
                         errstr);
                 return 1;
@@ -178,7 +178,7 @@ int main(int argc, char **argv) {
          * and each partition queue separately, which requires setting
          * up a rebalance callback and keeping track of the assignment:
          * but that is more complex and typically not recommended. */
-        rd_kafka_poll_set_consumer(rk);
+        rd_kafka_share_poll_set_consumer(rkshare);
 
 
         /* Convert the list of topics to a format suitable for librdkafka */
@@ -190,12 +190,12 @@ int main(int argc, char **argv) {
                                                   RD_KAFKA_PARTITION_UA);
 
         /* Subscribe to the list of topics */
-        err = rd_kafka_subscribe(rk, subscription);
+        err = rd_kafka_share_subscribe(rkshare, subscription);
         if (err) {
                 fprintf(stderr, "%% Failed to subscribe to %d topics: %s\n",
                         subscription->cnt, rd_kafka_err2str(err));
                 rd_kafka_topic_partition_list_destroy(subscription);
-                rd_kafka_destroy(rk);
+                rd_kafka_share_destroy(rkshare);
                 return 1;
         }
 
@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
                 rd_kafka_error_t *error;
                 double __elapsed_ms;
 
-                TIME_BLOCK_MS(__elapsed_ms, error = rd_kafka_share_consume_batch(rk, 500, rkmessages, &rcvd_msgs));
+                TIME_BLOCK_MS(__elapsed_ms, error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages, &rcvd_msgs));
                 fprintf(stdout, "%% rd_kafka_share_consume_batch() took %.3f ms\n", __elapsed_ms);
 
                 if (error) {
@@ -272,11 +272,11 @@ int main(int argc, char **argv) {
 
         /* Close the consumer: commit final offsets and leave the group. */
         fprintf(stderr, "%% Closing share consumer\n");
-        rd_kafka_consumer_close(rk);
+        rd_kafka_share_consumer_close(rkshare);
 
 
         /* Destroy the consumer */
-        rd_kafka_destroy(rk);
+        rd_kafka_share_destroy(rkshare);
 
         return 0;
 }

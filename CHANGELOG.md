@@ -1,3 +1,21 @@
+# librdkafka v2.13.1
+
+librdkafka v2.13.1 is a maintenance release:
+
+* Fix compilation without `getentropy` (#).
+* Use a truly random seed for pseudo-random number generation (#).
+
+## Fixes
+
+### General fixes
+
+* Issues: #5283.
+  Fix compilation without `getentropy`.
+  glibc versions lacking support are those less than 2.25 (2017).
+  Happening since 2.13.0 (@olegrok, #).
+
+
+
 # librdkafka v2.13.0
 
 librdkafka v2.13.0 is a feature release:

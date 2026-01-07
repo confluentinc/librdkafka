@@ -2881,7 +2881,7 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Remove this properties once we have removed offset management.
+         * TODO KIP-932: Remove this property once we have removed offset management.
          */
         if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
@@ -2891,7 +2891,7 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Remove this properties once we have removed offset management.
+         * TODO KIP-932: Remove this property once we have removed offset management.
          */
         if (rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
@@ -2900,6 +2900,10 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        /**
+         * TODO KIP-932: Try removing use of this property when improving share consumer
+         *               rebalancing logic in group management ticket.
+         */
         res = rd_kafka_conf_set(conf, "group.protocol", "consumer",
                                 errstr_internal, sizeof(errstr_internal));
         if (res != RD_KAFKA_CONF_OK) {
@@ -3193,7 +3197,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 }
 
                 if (rkb->rkb_share_fetch_enqueued) {
-                        rd_kafka_broker_unlock(rkb);
                         rd_kafka_dbg(rk, CGRP, "SHARE",
                                      "Unable to enqueue op on broker %s "
                                      "because another op is already pending.",
@@ -3270,6 +3273,12 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                                          0 /* no backoff */);
         }
 
+        /*
+         * TODO KIP-932: Change this to send all the messages present in the
+         *               queue at once instead of sending only
+         *               max_poll_records. How many messages to be sent to the
+         *               user is driven by broker with AcquiredRecords field.
+         */
         /* At this point, there's no reason to deviate from what we already do
          * for returning multiple messages to the user, as the orchestration
          * is handled by the main thread. Later on, we needed, we might need

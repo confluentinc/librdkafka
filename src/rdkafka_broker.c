@@ -3592,10 +3592,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                    "Ignoring SHARE_FETCH op: "
                                    "already fetching");
                         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
+                } else {
+                        rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
                 }
 
-                rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
-                
                 // if (!rko->rko_u.share_fetch.should_fetch) {
                 //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                 //                    "Ignoring SHARE_FETCH op: "
@@ -4487,6 +4487,10 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                         rkb->rkb_persistconn.internal++;
                 }
 
+                /**
+                 * TODO KIP-932: Check if the below is needed. Currently, used
+                 *               as it is from the original consumer serve function.
+                 */
                 /* Check and move retry buffers */
                 if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
                         rd_kafka_broker_retry_bufs_move(rkb, &min_backoff);
@@ -4950,6 +4954,11 @@ static int rd_kafka_broker_thread_main(void *arg) {
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs), r);
                         
+                        /**
+                         * TODO KIP-932: Remove the below destroy logic for the
+                         *               shared fetch session toppar information
+                         *               when the share_close() is properly implemented.
+                         */
                         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
                                    "Partitions in fetch session: %d",
                                    rkb->rkb_share_fetch_session.toppars_in_session_cnt);
@@ -6470,6 +6479,10 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
                 return;
 
+        /**
+         * TODO KIP-932: Not leaving properly. Need to fix this. It will be
+         *               moved to consumer close instead of decommissioning.
+         */
         if(RD_KAFKA_IS_SHARE_CONSUMER(rk) && rkb->rkb_source == RD_KAFKA_LEARNED) {
                 rd_kafka_op_t *rko_sf;
                 rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);

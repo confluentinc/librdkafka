@@ -1472,7 +1472,6 @@ void rd_kafka_ShareFetchRequest(
     int32_t batch_size,
     rd_list_t *toppars_to_send,
     rd_list_t *toppars_to_forget,
-    rd_bool_t is_leave_request,
     rd_kafka_op_t *rko_orig,
     rd_ts_t now) {
         rd_kafka_toppar_t *rktp;
@@ -1660,24 +1659,6 @@ void rd_kafka_ShareFetchRequest(
 
         if(toppars_to_send) {
                 rd_list_destroy(toppars_to_send);
-        }
-
-        /*
-         * TODO KIP-932: Move this to the caller.
-         */
-        if(is_leave_request || has_acknowledgements_or_topics_to_add || has_toppars_to_forget || is_fetching_messages) {
-                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                           "Share Fetch Request sent with%s%s%s",
-                           has_acknowledgements_or_topics_to_add ? " acknowledgements," : "",
-                           has_toppars_to_forget ? " forgotten toppars," : "",
-                           is_fetching_messages ? " fetching messages" : "");
-        } else {
-                rd_kafka_buf_destroy(rkbuf);
-                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                           "Share Fetch Request not sent since there are no "
-                           "acknowledgements, forgotten toppars or messages to fetch");
-                rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__NOOP);
-                return;
         }
 
         if (has_toppars_to_forget) {
@@ -1888,7 +1869,6 @@ void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb, rd_kafka_op_t *rk
             0,
             rd_kafka_broker_share_fetch_get_toppars_to_send_on_leave(rkb), /* toppars to send */
             NULL,    /* forgetting toppars */
-            rd_true, /* leave request */
             rko_orig, /* rko */
             now);
         rd_kafka_broker_share_fetch_session_clear(rkb);
@@ -1898,6 +1878,7 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig
 
         rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
         int32_t max_records = 0;
+        rd_list_t *toppars_to_send;
 
         /* TODO KIP-932: Check if needed while closing the consumer.*/
         rd_assert(rkb->rkb_rk->rk_cgrp);
@@ -1918,6 +1899,24 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig
         if(rkb->rkb_share_fetch_session.toppars_to_forget)
                 rkb->rkb_share_fetch_session.forgetting_toppars = rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_forget, rd_kafka_toppar_list_copy, NULL);
 
+        toppars_to_send = rd_kafka_broker_share_fetch_get_toppars_to_send(rkb);
+
+        if(rd_list_cnt(toppars_to_send) || rkb->rkb_share_fetch_session.toppars_to_forget || rko_orig->rko_u.share_fetch.should_fetch) {
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                           "Sending Share Fetch Request with%s%s%s",
+                           rd_list_cnt(toppars_to_send) ? " acknowledgements," : "",
+                           rkb->rkb_share_fetch_session.toppars_to_forget ? " forgotten toppars," : "",
+                           rko_orig->rko_u.share_fetch.should_fetch ? " fetching messages" : "");
+        } else {
+                rd_list_destroy(toppars_to_send);
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                           "Not sending Share Fetch Request since there are no "
+                           "new topics to add, acknowledgements, forgotten toppars"
+                           " or messages to fetch");
+                rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__NOOP);
+                return;
+        }
+
         rd_kafka_ShareFetchRequest(
             rkb,
             rkcg->rkcg_group_id, /* group_id */
@@ -1928,9 +1927,8 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig
             rkb->rkb_rk->rk_conf.fetch_max_bytes,
             max_records,
             max_records, /* TODO KIP-932: Check if this is correct for batch size or not */
-            rd_kafka_broker_share_fetch_get_toppars_to_send(rkb), /* toppars to send */
+            toppars_to_send, /* toppars to send */
             rkb->rkb_share_fetch_session.toppars_to_forget,    /* forgetting toppars */
-            rd_false, /* not leave request */
             rko_orig, /* rko */
             now);
 }

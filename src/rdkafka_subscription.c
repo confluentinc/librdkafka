@@ -46,6 +46,14 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe(rd_kafka_t *rk) {
             rd_kafka_op_req2(rkcg->rkcg_ops, RD_KAFKA_OP_SUBSCRIBE));
 }
 
+rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
+        /**
+         * TODO KIP-932: Guard this with checks for rkshare and
+         *               rkshare->rkshare_rk?
+         */
+        return rd_kafka_unsubscribe(rkshare->rkshare_rk);
+}
+
 
 /** @returns 1 if the topic is invalid (bad regex, empty), else 0 if valid. */
 static size_t _invalid_topic_cb(const rd_kafka_topic_partition_t *rktpar,
@@ -96,6 +104,16 @@ rd_kafka_subscribe(rd_kafka_t *rk,
 
         return rd_kafka_op_err_destroy(
             rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
+                   const rd_kafka_topic_partition_list_t *topics) {
+        /**
+         * TODO KIP-932: Guard this with checks for rkshare and
+         *               rkshare->rkshare_rk?
+         */
+        return rd_kafka_subscribe(rkshare->rkshare_rk, topics);
 }
 
 
@@ -259,6 +277,15 @@ rd_kafka_subscription(rd_kafka_t *rk,
         return err;
 }
 
+rd_kafka_resp_err_t
+rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
+                            rd_kafka_topic_partition_list_t **topics) {
+        /**
+         * TODO KIP-932: Guard this with checks for rkshare and
+         *               rkshare->rkshare_rk?
+         */
+        return rd_kafka_subscription(rkshare->rkshare_rk, topics);
+}
 
 rd_kafka_resp_err_t
 rd_kafka_pause_partitions(rd_kafka_t *rk,

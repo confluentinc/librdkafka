@@ -122,7 +122,13 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:RD_KAFKA_OP_SET_TELEMETRY_BROKER",
             [RD_KAFKA_OP_TERMINATE_TELEMETRY] =
                 "REPLY:RD_KAFKA_OP_TERMINATE_TELEMETRY",
-            [RD_KAFKA_OP_ELECTLEADERS] = "REPLY:ELECTLEADERS",
+            [RD_KAFKA_OP_ELECTLEADERS]       = "REPLY:ELECTLEADERS",
+            [RD_KAFKA_OP_SHARE_FETCH]        = "REPLY:SHARE_FETCH",
+            [RD_KAFKA_OP_SHARE_FETCH_FANOUT] = "REPLY:SHARE_FETCH_FANOUT",
+            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD] =
+                "REPLY:SHARE_SESSION_PARTITION_ADD",
+            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
+                "REPLY:SHARE_SESSION_PARTITION_REMOVE",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -287,6 +293,13 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.telemetry_broker),
             [RD_KAFKA_OP_TERMINATE_TELEMETRY] = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_ELECTLEADERS] = sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_SHARE_FETCH]  = sizeof(rko->rko_u.share_fetch),
+            [RD_KAFKA_OP_SHARE_FETCH_FANOUT] =
+                sizeof(rko->rko_u.share_fetch_fanout),
+            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD] =
+                _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
+                _RD_KAFKA_OP_EMPTY,
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -505,6 +518,15 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_SET_TELEMETRY_BROKER:
                 RD_IF_FREE(rko->rko_u.telemetry_broker.rkb,
                            rd_kafka_broker_destroy);
+                break;
+
+        case RD_KAFKA_OP_SHARE_FETCH:
+                RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
+                           rd_kafka_broker_destroy);
+                break;
+
+        case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
+                /* No heap-allocated resources to clean up */
                 break;
 
         default:

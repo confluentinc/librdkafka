@@ -1202,49 +1202,6 @@ static void rd_kafka_broker_session_update_toppars_in_session(rd_kafka_broker_t 
 
 }
 
-
-// static void rd_kafka_broker_session_update_added_partitions(rd_kafka_broker_t *rkb) {
-//         size_t i;
-//         rd_kafka_toppar_t *rktp, *removed_rktp;
-//         rd_list_t *toppars_to_add = rkb->rkb_share_fetch_session.toppars_to_add;
-//         rd_list_t *added_toppars = rkb->rkb_share_fetch_session.adding_toppars;
-
-//         if(added_toppars == NULL || rd_list_cnt(added_toppars) == 0)
-//                 return;
-
-//         RD_LIST_FOREACH(rktp, added_toppars, i) {
-//                 rd_kafka_broker_session_update_toppars_in_session(rkb, rktp, rd_true /* add */);
-//                 if(toppars_to_add) {
-//                         removed_rktp = rd_list_remove(toppars_to_add, rktp);
-//                         if(removed_rktp)
-//                                 rd_kafka_toppar_destroy(removed_rktp); // from partitions list
-//                 }
-//         }
-//         rd_list_destroy(added_toppars);
-//         rkb->rkb_share_fetch_session.adding_toppars = NULL;
-// }
-
-// static void rd_kafka_broker_session_update_removed_partitions(rd_kafka_broker_t *rkb) {
-//         size_t i;
-//         rd_kafka_toppar_t *rktp, *removed_rktp;
-//         rd_list_t *toppars_to_forget = rkb->rkb_share_fetch_session.toppars_to_forget;
-//         rd_list_t *forgotten_toppars = rkb->rkb_share_fetch_session.forgetting_toppars;
-
-//         if(forgotten_toppars == NULL || rd_list_cnt(forgotten_toppars) == 0)
-//                 return;
-
-//         RD_LIST_FOREACH(rktp, forgotten_toppars, i) {
-//                 rd_kafka_broker_session_update_toppars_in_session(rkb, rktp, rd_false /* remove */);
-//                 if(toppars_to_forget) {
-//                         removed_rktp = rd_list_remove(toppars_to_forget, rktp);
-//                         if(removed_rktp)
-//                                 rd_kafka_toppar_destroy(removed_rktp); // from partitions list
-//                 }
-//         }
-//         rd_list_destroy(forgotten_toppars);
-//         rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
-// }
-
 static void rd_kafka_broker_session_update_toppars_list(
     rd_kafka_broker_t *rkb,
     rd_list_t **request_toppars_ptr,
@@ -1759,7 +1716,6 @@ static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send_on_leave(rd_ka
 }
 
 static rd_list_t *rd_kafka_broker_share_fetch_get_toppars_to_send(rd_kafka_broker_t *rkb) {
-        /* TODO KIP-932: Improve this allocation with Acknowledgement implementation */
         int adding_toppar_cnt = rkb->rkb_share_fetch_session.toppars_to_add ? rd_list_cnt(rkb->rkb_share_fetch_session.toppars_to_add) : 0;
         int initial_toppars_to_send_cnt = rkb->rkb_toppar_cnt + adding_toppar_cnt;
         rd_list_t *toppars_to_send = rd_list_new(initial_toppars_to_send_cnt, NULL);
@@ -1879,9 +1835,6 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig
         rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
         int32_t max_records = 0;
         rd_list_t *toppars_to_send;
-
-        /* TODO KIP-932: Check if needed while closing the consumer.*/
-        rd_assert(rkb->rkb_rk->rk_cgrp);
 
         if(!rkcg->rkcg_member_id) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",

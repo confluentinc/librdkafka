@@ -4438,7 +4438,9 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
         rd_kafka_broker_unlock(rkb);
 }
 
-
+/**
+ * TODO KIP-932: Remove if not needed later during finalizing share session implementation.
+ */
 // void rd_kafka_broker_update_share_fetch_session(rd_kafka_broker_t *rkb) {
 //         rd_kafka_toppar_t *rktp, *rktp_tmp;
 //         rd_bool_t needs_update = rd_false;

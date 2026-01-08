@@ -1216,6 +1216,7 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          *               rkshare->rkshare_rk?
          */
         rd_kafka_destroy(rkshare->rkshare_rk);
+        rd_free(rkshare);
 }
 
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {

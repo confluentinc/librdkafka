@@ -3549,11 +3549,12 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH:
-                rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
                            "Received SHARE_FETCH op for broker %s with "
-                           "should_fetch = %d",
+                           "should_fetch = %d, should_leave = %d",
                            rd_kafka_broker_name(rkb),
-                           rko->rko_u.share_fetch.should_fetch);
+                           rko->rko_u.share_fetch.should_fetch,
+                           rko->rko_u.share_fetch.should_leave);
                 /* This is only temporary handling for testing to avoid crashing
                  * on assert  - the code below will automatically enqueue a
                  * reply which is not the final behaviour. */
@@ -3568,6 +3569,15 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
                 //         rko = NULL;
                 // }
+
+                if(rko->rko_u.share_fetch.should_leave) {
+                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                   "Processing SHARE_FETCH op: "
+                                   "should_leave is true");
+                        rd_kafka_broker_share_fetch_leave(rkb, rko, rd_clock());
+                        rko = NULL; /* the rko is reused for the reply */
+                        break;
+                }
 
                 if (rd_kafka_broker_or_instance_terminating(rkb)) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
@@ -6451,6 +6461,22 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
         if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
                 return;
+
+        if(RD_KAFKA_IS_SHARE_CONSUMER(rk) && rkb->rkb_source == RD_KAFKA_LEARNED) {
+                rd_kafka_op_t *rko_sf;
+                rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+                rko_sf->rko_u.share_fetch.should_leave = rd_true;
+                rko_sf->rko_u.share_fetch.abs_timeout  = 0; // TODO KIP-932: Check timeout part.
+                rko_sf->rko_u.share_fetch.should_fetch = rd_false;
+                rd_kafka_broker_keep(rkb);
+                rko_sf->rko_u.share_fetch.target_broker = rkb;
+                rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+
+                rd_kafka_dbg(rk, BROKER, "SHAREFETCH",
+                             "Enqueuing leave share fetch op on broker %s: decommissioning broker.",
+                             rd_kafka_broker_name(rkb));
+                rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
+        }
 
         rd_atomic32_add(&rkb->termination_in_progress, 1);
 

@@ -5963,13 +5963,23 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
         in_base64.size = sizeof(uuid->most_significant_bits) +
                          sizeof(uuid->least_significant_bits);
 
+        // Standard Base64 encode
         out_base64_str = rd_base64_encode_str(&in_base64);
         if (!out_base64_str)
                 return NULL;
 
+        // Convert to URL-safe Base64
+        for (char *p = out_base64_str; *p; p++) {
+                if (*p == '+')
+                        *p = '-';
+                else if (*p == '/')
+                        *p = '_';
+        }
+
         rd_strlcpy((char *)uuid->base64str, out_base64_str,
                    23 /* Removing extra ('=') padding */);
         rd_free(out_base64_str);
+
         return uuid->base64str;
 }
 

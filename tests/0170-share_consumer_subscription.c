@@ -28,6 +28,7 @@
 
 #include "test.h"
 #include "testshared.h"
+#include "rdkafka_int.h"
 
 /*
  * Share consumer subscription tests.
@@ -41,6 +42,16 @@
  */
 
 #define MAX_TOPICS 10
+
+/**
+ * Helper: Set group config to earliest offset.
+ */
+static void set_group_offset_earliest(rd_kafka_share_t *rk, const char *group) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_IncrementalAlterConfigs_simple(rk->rkshare_rk,
+                                            RD_KAFKA_RESOURCE_GROUP, group,
+                                            cfg, 1);
+}
 
 /**
  * Configuration for parameterized subscription tests.
@@ -64,14 +75,6 @@ typedef struct {
 } sub_test_config_t;
 
 
-/**
- * Helper: Set group config to earliest offset.
- */
-static void set_group_offset_earliest(rd_kafka_t *rk, const char *group) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_IncrementalAlterConfigs_simple(rk, RD_KAFKA_RESOURCE_GROUP, group,
-                                            cfg, 1);
-}
 
 
 /**
@@ -81,7 +84,7 @@ static void set_group_offset_earliest(rd_kafka_t *rk, const char *group) {
 static void run_subscription_test(const sub_test_config_t *cfg) {
         char group_name[128];
         const char *topics[MAX_TOPICS];
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         rd_kafka_topic_partition_list_t *tlist, *sub;
         int i, j, total_consumed = 0;
         int expected_msgs;
@@ -115,7 +118,7 @@ static void run_subscription_test(const sub_test_config_t *cfg) {
                         rd_kafka_topic_partition_list_add(
                             tlist, topics[i], RD_KAFKA_PARTITION_UA);
                         TEST_SAY("Subscribing to %d topic(s)\n", tlist->cnt);
-                        TEST_CALL_ERR__(rd_kafka_subscribe(rk, tlist));
+                        TEST_CALL_ERR__(rd_kafka_share_subscribe(rk, tlist));
 
                         sub = test_get_subscription(rk);
                         TEST_ASSERT(sub->cnt == i + 1,
@@ -138,7 +141,7 @@ static void run_subscription_test(const sub_test_config_t *cfg) {
                 }
 
                 for (j = 0; j < cfg->subscribe_repeat_count; j++) {
-                        TEST_CALL_ERR__(rd_kafka_subscribe(rk, tlist));
+                        TEST_CALL_ERR__(rd_kafka_share_subscribe(rk, tlist));
                 }
 
                 sub = test_get_subscription(rk);
@@ -164,7 +167,7 @@ static void run_subscription_test(const sub_test_config_t *cfg) {
 
         /* Unsubscribe (if configured) */
         for (j = 0; j < cfg->unsubscribe_repeat_count; j++) {
-                TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
+                TEST_CALL_ERR__(rd_kafka_share_unsubscribe(rk));
         }
 
         if (cfg->verify_empty_after_unsub && cfg->unsubscribe_repeat_count > 0) {
@@ -175,8 +178,8 @@ static void run_subscription_test(const sub_test_config_t *cfg) {
         }
 
         rd_kafka_topic_partition_list_destroy(tlist);
-        rd_kafka_consumer_close(rk);
-        rd_kafka_destroy(rk);
+        rd_kafka_share_consumer_close(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== %s: PASSED ===\n", cfg->name);
 }
@@ -189,7 +192,7 @@ static void run_subscription_test(const sub_test_config_t *cfg) {
 static void do_test_topic_switch(void) {
         const char *group = test_mk_topic_name("share-topic-switch", 1);
         const char *old_topics[2], *new_topics[2];
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         rd_kafka_topic_partition_list_t *sub;
         int i, consumed;
 
@@ -212,12 +215,12 @@ static void do_test_topic_switch(void) {
         set_group_offset_earliest(rk, group);
 
         /* Subscribe to old topics, consume some */
-        test_consumer_subscribe_multi(rk, 2, old_topics[0], old_topics[1]);
+        test_share_consumer_subscribe_multi(rk, 2, old_topics[0], old_topics[1]);
         consumed = test_share_consume_msgs(rk, 10, 15, 2000, old_topics, 2);
         TEST_ASSERT(consumed >= 0, "wrong topic before switch");
 
         /* Switch to new topics */
-        test_consumer_subscribe_multi(rk, 2, new_topics[0], new_topics[1]);
+        test_share_consumer_subscribe_multi(rk, 2, new_topics[0], new_topics[1]);
         sub = test_get_subscription(rk);
         for (i = 0; i < sub->cnt; i++) {
                 TEST_ASSERT(strcmp(sub->elems[i].topic, old_topics[0]) &&
@@ -235,8 +238,8 @@ static void do_test_topic_switch(void) {
         TEST_ASSERT(consumed >= 0, "got message from old topic after switch");
         TEST_ASSERT(consumed == 20, "expected 20, got %d", consumed);
 
-        rd_kafka_consumer_close(rk);
-        rd_kafka_destroy(rk);
+        rd_kafka_share_consumer_close(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Topic switch: PASSED ===\n");
 }
@@ -249,7 +252,7 @@ static void do_test_subscribe_before_topic_exists(void) {
         const char *group = test_mk_topic_name("share-presubscribe", 1);
         const char *topic = test_mk_topic_name("0170-late-create", 1);
         const char *topics[] = {topic};
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         int consumed;
 
         TEST_SAY("=== Subscribe before topic exists ===\n");
@@ -258,7 +261,7 @@ static void do_test_subscribe_before_topic_exists(void) {
         set_group_offset_earliest(rk, group);
 
         /* Subscribe before topic exists */
-        test_consumer_subscribe_multi(rk, 1, topic);
+        test_share_consumer_subscribe_multi(rk, 1, topic);
 
         /* Now create and produce */
         test_create_topic_wait_exists(NULL, topic, 1, -1, 30000);
@@ -268,9 +271,9 @@ static void do_test_subscribe_before_topic_exists(void) {
         TEST_ASSERT(consumed >= 0 && consumed == 5,
                     "expected 5, got %d", consumed);
 
-        test_delete_topic(rk, topic);
-        rd_kafka_consumer_close(rk);
-        rd_kafka_destroy(rk);
+        test_delete_topic(rk->rkshare_rk, topic);
+        rd_kafka_share_consumer_close(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Subscribe before topic exists: PASSED ===\n");
 }
@@ -282,7 +285,7 @@ static void do_test_subscribe_before_topic_exists(void) {
 static void do_test_poll_empty_topic(void) {
         const char *group = test_mk_topic_name("share-empty-poll", 1);
         const char *topic = test_mk_topic_name("0170-empty", 1);
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         int consumed = 0;
 
         TEST_SAY("=== Poll empty topic ===\n");
@@ -290,14 +293,14 @@ static void do_test_poll_empty_topic(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 30000);
 
         rk = test_create_share_consumer(group);
-        test_consumer_subscribe_multi(rk, 1, topic);
+        test_share_consumer_subscribe_multi(rk, 1, topic);
 
         test_share_consume_batch(rk, 3000, NULL, 0, &consumed);
         TEST_ASSERT(consumed == 0, "expected 0, got %d", consumed);
 
-        test_delete_topic(rk, topic);
-        rd_kafka_consumer_close(rk);
-        rd_kafka_destroy(rk);
+        test_delete_topic(rk->rkshare_rk, topic);
+        rd_kafka_share_consumer_close(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Poll empty topic: PASSED ===\n");
 }
@@ -308,7 +311,7 @@ static void do_test_poll_empty_topic(void) {
  */
 static void do_test_poll_no_subscription(void) {
         const char *group = test_mk_topic_name("share-no-sub", 1);
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
         rd_kafka_error_t *err;
         size_t rcvd = 0;
@@ -322,7 +325,7 @@ static void do_test_poll_no_subscription(void) {
         if (err)
                 rd_kafka_error_destroy(err);
 
-        rd_kafka_destroy(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Poll without subscription: PASSED ===\n");
 }
@@ -334,7 +337,7 @@ static void do_test_poll_no_subscription(void) {
 static void do_test_poll_after_unsubscribe(void) {
         const char *group = test_mk_topic_name("share-post-unsub", 1);
         const char *topic = test_mk_topic_name("0170-post-unsub", 1);
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
         rd_kafka_error_t *err;
         size_t rcvd = 0, i;
@@ -346,12 +349,12 @@ static void do_test_poll_after_unsubscribe(void) {
 
         rk = test_create_share_consumer(group);
         set_group_offset_earliest(rk, group);
-        test_consumer_subscribe_multi(rk, 1, topic);
+        test_share_consumer_subscribe_multi(rk, 1, topic);
 
         /* Consume at least one */
         test_share_consume_msgs(rk, 1, 10, 2000, NULL, 0);
 
-        TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
+        TEST_CALL_ERR__(rd_kafka_share_unsubscribe(rk));
 
         err = rd_kafka_share_consume_batch(rk, 2000, batch, &rcvd);
         if (err)
@@ -359,8 +362,8 @@ static void do_test_poll_after_unsubscribe(void) {
         for (i = 0; i < rcvd; i++)
                 rd_kafka_message_destroy(batch[i]);
 
-        test_delete_topic(rk, topic);
-        rd_kafka_destroy(rk);
+        test_delete_topic(rk->rkshare_rk, topic);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Poll after unsubscribe: PASSED ===\n");
 }
@@ -377,7 +380,7 @@ static void do_test_topic_deletion(void) {
             rd_strdup(test_mk_topic_name("0170-delete", 1));
         const char *both[] = {topic_keep, topic_delete};
         const char *keep_only[] = {topic_keep};
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         int consumed;
 
         TEST_SAY("=== Topic deletion while subscribed ===\n");
@@ -389,21 +392,21 @@ static void do_test_topic_deletion(void) {
 
         rk = test_create_share_consumer(group);
         set_group_offset_earliest(rk, group);
-        test_consumer_subscribe_multi(rk, 2, topic_keep, topic_delete);
+        test_share_consumer_subscribe_multi(rk, 2, topic_keep, topic_delete);
 
         consumed = test_share_consume_msgs(rk, 10, 15, 2000, both, 2);
         TEST_ASSERT(consumed >= 0, "wrong topic");
 
-        test_delete_topic(rk, topic_delete);
+        test_delete_topic(rk->rkshare_rk, topic_delete);
         rd_sleep(3);
 
         test_produce_msgs_easy(topic_keep, 0, 0, 5);
         consumed = test_share_consume_msgs(rk, 5, 15, 3000, keep_only, 1);
         TEST_ASSERT(consumed >= 0, "wrong topic after deletion");
 
-        test_delete_topic(rk, topic_keep);
-        rd_kafka_consumer_close(rk);
-        rd_kafka_destroy(rk);
+        test_delete_topic(rk->rkshare_rk, topic_keep);
+        rd_kafka_share_consumer_close(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Topic deletion while subscribed: PASSED ===\n");
 }
@@ -416,7 +419,7 @@ static void do_test_rapid_updates(void) {
         const char *group = test_mk_topic_name("share-rapid", 1);
 #define RAPID_CNT 10
         const char *topics[RAPID_CNT];
-        rd_kafka_t *rk;
+        rd_kafka_share_t *rk;
         rd_kafka_topic_partition_list_t *tlist, *sub;
         int i, j;
 
@@ -441,23 +444,23 @@ static void do_test_rapid_updates(void) {
                             tlist, topics[(i + j) % RAPID_CNT],
                             RD_KAFKA_PARTITION_UA);
                 }
-                TEST_CALL_ERR__(rd_kafka_subscribe(rk, tlist));
+                TEST_CALL_ERR__(rd_kafka_share_subscribe(rk, tlist));
                 rd_kafka_topic_partition_list_destroy(tlist);
 
                 if (i % 5 == 4)
-                        TEST_CALL_ERR__(rd_kafka_unsubscribe(rk));
+                        TEST_CALL_ERR__(rd_kafka_share_unsubscribe(rk));
         }
 
         /* Final: last 3 topics */
-        test_consumer_subscribe_multi(rk, 3, topics[RAPID_CNT - 3],
-                                      topics[RAPID_CNT - 2],
-                                      topics[RAPID_CNT - 1]);
+        test_share_consumer_subscribe_multi(rk, 3, topics[RAPID_CNT - 3],
+                                            topics[RAPID_CNT - 2],
+                                            topics[RAPID_CNT - 1]);
         sub = test_get_subscription(rk);
         TEST_ASSERT(sub->cnt == 3, "expected 3, got %d", sub->cnt);
         rd_kafka_topic_partition_list_destroy(sub);
 
-        rd_kafka_consumer_close(rk);
-        rd_kafka_destroy(rk);
+        rd_kafka_share_consumer_close(rk);
+        rd_kafka_share_destroy(rk);
 
         TEST_SAY("=== Rapid subscription updates: PASSED ===\n");
 #undef RAPID_CNT
@@ -474,7 +477,7 @@ static void do_test_multi_consumer_overlap(void) {
         const char *c2_only = rd_strdup(test_mk_topic_name("0170-c2only", 1));
         const char *c1_topics[] = {shared, c1_only};
         const char *c2_topics[] = {shared, c2_only};
-        rd_kafka_t *c1, *c2;
+        rd_kafka_share_t *c1, *c2;
         int c1_cnt = 0, c2_cnt = 0;
         int attempts;
 
@@ -492,8 +495,8 @@ static void do_test_multi_consumer_overlap(void) {
         c2 = test_create_share_consumer(group);
         set_group_offset_earliest(c1, group);
 
-        test_consumer_subscribe_multi(c1, 2, shared, c1_only);
-        test_consumer_subscribe_multi(c2, 2, shared, c2_only);
+        test_share_consumer_subscribe_multi(c1, 2, shared, c1_only);
+        test_share_consumer_subscribe_multi(c2, 2, shared, c2_only);
 
         /* Give consumers time to join group and receive assignments.
          * Alternate between consumers to allow both to make progress. */
@@ -520,10 +523,10 @@ static void do_test_multi_consumer_overlap(void) {
                  c1_cnt + c2_cnt);
         TEST_ASSERT(c1_cnt > 0 || c2_cnt > 0, "no messages received");
 
-        rd_kafka_consumer_close(c1);
-        rd_kafka_consumer_close(c2);
-        rd_kafka_destroy(c1);
-        rd_kafka_destroy(c2);
+        rd_kafka_share_consumer_close(c1);
+        rd_kafka_share_consumer_close(c2);
+        rd_kafka_share_destroy(c1);
+        rd_kafka_share_destroy(c2);
 
         TEST_SAY("=== Multiple consumers overlapping: PASSED ===\n");
 }

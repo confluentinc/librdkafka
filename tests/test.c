@@ -44,6 +44,7 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
+#include "rdkafka_int.h"
 
 int test_level = 2;
 int test_seed  = 0;
@@ -2770,8 +2771,8 @@ rd_kafka_t *test_create_consumer(
  *         once these properties are added as defaults to
  *         rd_kafka_share_consumer_new().
  */
-rd_kafka_t *test_create_share_consumer(const char *group_id) {
-        rd_kafka_t *rk;
+ rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
+        rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         char errstr[512];
 
@@ -2800,7 +2801,7 @@ rd_kafka_t *test_create_share_consumer(const char *group_id) {
  *
  * @returns 0 on success, -1 if message from unexpected topic received.
  */
-int test_share_consume_batch(rd_kafka_t *rk,
+int test_share_consume_batch(rd_kafka_share_t *rk,
                              int timeout_ms,
                              const char **expected_topics,
                              int expected_topic_cnt,
@@ -2870,7 +2871,7 @@ int test_share_consume_batch(rd_kafka_t *rk,
  *
  * @returns Number of messages consumed, or -1 if message from wrong topic.
  */
-int test_share_consume_msgs(rd_kafka_t *rk,
+int test_share_consume_msgs(rd_kafka_share_t *rk,
                             int expected,
                             int max_attempts,
                             int timeout_ms,
@@ -3427,22 +3428,53 @@ void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...) {
 
 
 /**
- * @brief Get current subscription list.
+ * @brief Start subscribing for multiple topics (share consumers).
+ */
+void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
+                                         int topic_count,
+                                         ...) {
+        rd_kafka_topic_partition_list_t *topics;
+        rd_kafka_resp_err_t err;
+        va_list ap;
+        int i;
+
+        topics = rd_kafka_topic_partition_list_new(topic_count);
+
+        va_start(ap, topic_count);
+        for (i = 0; i < topic_count; i++) {
+                const char *topic = va_arg(ap, const char *);
+                rd_kafka_topic_partition_list_add(topics, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+        va_end(ap);
+
+        err = rd_kafka_share_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
+                          rd_kafka_name(rk->rkshare_rk), rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+}
+
+
+/**
+ * @brief Get current subscription list for share consumers.
  *
  * @returns The subscription list. Caller must destroy with
  *          rd_kafka_topic_partition_list_destroy().
  */
-rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_t *rk) {
+rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
         rd_kafka_topic_partition_list_t *subscription = NULL;
         rd_kafka_resp_err_t err;
 
-        err = rd_kafka_subscription(rk, &subscription);
+        err = rd_kafka_share_subscription(rk, &subscription);
         if (err)
                 TEST_FAIL("%s: Failed to get subscription: %s\n",
-                          rd_kafka_name(rk), rd_kafka_err2str(err));
+                          rd_kafka_name(rk->rkshare_rk), rd_kafka_err2str(err));
 
         TEST_ASSERT(subscription != NULL,
-                    "%s: subscription() returned NULL list", rd_kafka_name(rk));
+                    "%s: subscription() returned NULL list",
+                    rd_kafka_name(rk->rkshare_rk));
 
         return subscription;
 }

@@ -27,6 +27,7 @@
  */
 
 #include "test.h"
+#include "rdkafka_int.h"
 
 /**
  * @brief Maximum supported values for test configuration
@@ -70,7 +71,7 @@ typedef struct {
  * @brief Test state/results structure
  */
 typedef struct {
-        rd_kafka_t *consumers[MAX_CONSUMERS];
+        rd_kafka_share_t *consumers[MAX_CONSUMERS];
         char *topic_names[MAX_TOPICS];
         int per_consumer_count[MAX_CONSUMERS];
         int total_consumed;
@@ -140,7 +141,7 @@ static void subscribe_consumers(share_test_config_t *config,
         int t, i;
 
         /* Set group config using first consumer */
-        test_IncrementalAlterConfigs_simple(state->consumers[0], 
+        test_IncrementalAlterConfigs_simple(state->consumers[0]->rkshare_rk,
                                             RD_KAFKA_RESOURCE_GROUP,
                                             config->group_name, grp_conf, 1);
 
@@ -153,7 +154,7 @@ static void subscribe_consumers(share_test_config_t *config,
 
         /* Subscribe all consumers */
         for (i = 0; i < config->consumer_cnt; i++) {
-                rd_kafka_subscribe(state->consumers[i], subs);
+                rd_kafka_share_subscribe(state->consumers[i], subs);
         }
 
         rd_kafka_topic_partition_list_destroy(subs);
@@ -250,10 +251,10 @@ static void cleanup_test(share_test_config_t *config,
                          share_test_state_t *state) {
         int t, i;
 
-        /* Delete topics (using first consumer) */
+        /* Delete topics using first consumer */
         for (t = 0; t < config->topic_cnt; t++) {
                 if (state->topic_names[t]) {
-                        test_delete_topic(state->consumers[0], 
+                        test_delete_topic(state->consumers[0]->rkshare_rk,
                                           state->topic_names[t]);
                         rd_free(state->topic_names[t]);
                         state->topic_names[t] = NULL;
@@ -263,8 +264,8 @@ static void cleanup_test(share_test_config_t *config,
         /* Destroy consumers */
         for (i = 0; i < config->consumer_cnt; i++) {
                 if (state->consumers[i]) {
-                        rd_kafka_consumer_close(state->consumers[i]);
-                        rd_kafka_destroy(state->consumers[i]);
+                        rd_kafka_share_consumer_close(state->consumers[i]);
+                        rd_kafka_share_destroy(state->consumers[i]);
                         state->consumers[i] = NULL;
                 }
         }

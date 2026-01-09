@@ -1509,6 +1509,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "which indicates where this client is physically located. It "
      "corresponds with the broker config `broker.rack`.",
      .sdef = ""},
+    {_RK_GLOBAL | _RK_HIDDEN, "share.consumer", _RK_C_BOOL,
+     _RK(share.is_share_consumer), "tba description", 0, 1, 0},
+    {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
+     _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},
+
 
     /* Global producer properties */
     {_RK_GLOBAL | _RK_PRODUCER | _RK_HIGH, "transactional.id", _RK_C_STR,

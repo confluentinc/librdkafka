@@ -189,6 +189,13 @@ typedef enum {
         RD_KAFKA_OP_ELECTLEADERS,         /**< Admin:
                                            *   ElectLeaders
                                            *   u.admin_request */
+        RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
+                                    applicable. */
+        RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD, /**< share session:
+                                           * add partition */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
+                                           * remove partition */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -723,6 +730,31 @@ struct rd_kafka_op_s {
                          * on the op handler's thread. */
                         void (*cb)(rd_kafka_t *rk, void *rkb);
                 } terminated;
+
+                struct {
+
+                        rd_bool_t should_leave; /**< Whether this broker should
+                                                 * leave the share-fetch
+                                                 * session. */
+
+                        /** Whether this broker should share-fetch nonzero
+                         * messages. */
+                        rd_bool_t should_fetch;
+
+                        /** Absolute timeout left to complete this share-fetch.
+                         * TODO KIP-932: Use timeout properly.
+                         */
+                        rd_ts_t abs_timeout;
+
+                        /** Target broker to which op is sent. */
+                        rd_kafka_broker_t *target_broker;
+                } share_fetch;
+
+                struct {
+                        /** Absolute timeout for share fetch fanout operation.
+                         */
+                        rd_ts_t abs_timeout;
+                } share_fetch_fanout;
 
         } rko_u;
 };

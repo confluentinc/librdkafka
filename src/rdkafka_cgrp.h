@@ -383,6 +383,7 @@ typedef struct rd_kafka_cgrp_s {
                 rd_kafka_timer_t share_fetch_fanout_tmr; /**< Timer for
                                                           *   share fetch
                                                           *   fanout */
+                rd_kafka_op_t *share_fetch_fanout_retry_op; /* Share fetch fanout retry op*/    
 
         } rkcg_share;
 } rd_kafka_cgrp_t;

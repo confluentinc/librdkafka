@@ -36,6 +36,7 @@
 #include "rdunittest.h"
 
 #include <stdarg.h>
+#include <math.h>
 
 #include <curl/curl.h>
 #include "rdhttp.h"
@@ -46,6 +47,16 @@
 
 /** Maximum response size, increase as necessary. */
 #define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
+
+
+/**
+ * @brief Get the current timestamp in milliseconds
+ */
+long current_milliseconds(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (ts.tv_sec * 1000L) + (ts.tv_nsec / 1000000L);
+}
 
 
 void rd_http_error_destroy(rd_http_error_t *herr) {
@@ -400,9 +411,9 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                              const char *url,
                              char **headers_array,
                              size_t headers_array_cnt,
-                             int timeout_s,
-                             int retries,
-                             int retry_ms,
+                             long timeout_s,
+                             long retry_backoff_ms,
+                             long retry_backoff_max_ms,
                              rd_buf_t **rbufp,
                              char **content_type,
                              int *response_code) {
@@ -410,7 +421,6 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
         rd_http_error_t *herr      = NULL;
         struct curl_slist *headers = NULL;
         char *header;
-        int i;
         size_t len, j;
 
         *rbufp = NULL;
@@ -432,11 +442,20 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
         if (timeout_s > 0)
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
 
-        for (i = 0; i <= retries; i++) {
+        long endMs = current_milliseconds() + retry_backoff_max_ms;
+        long retryBackoffMs = retry_backoff_ms;
+        int currAttempt = 0;
+
+        while (current_milliseconds() <= endMs) {
+                currAttempt++;
+
                 if (rd_kafka_terminating(rk)) {
                         herr = rd_http_error_new(-1, "Terminating");
                         goto done;
                 }
+
+                herr = rd_http_req_perform_sync(&hreq);
+                len  = rd_buf_len(hreq.hreq_buf);
 
                 herr = rd_http_req_perform_sync(&hreq);
                 len  = rd_buf_len(hreq.hreq_buf);
@@ -448,15 +467,22 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                         goto done;
                 }
 
+                long waitMs = retryBackoffMs *
+                          (long)pow(2, currAttempt - 1);
+
+                long diff = endMs - current_milliseconds();
+                if (waitMs > diff)
+                        waitMs = diff;
+
                 /* Retry if HTTP(S) request returns temporary error and there
                  * are remaining retries, else fail. */
-                if (i == retries || !rd_http_is_failure_temporary(herr->code)) {
+                if (waitMs <= 0 || !rd_http_is_failure_temporary(herr->code)) {
                         goto done;
                 }
 
                 /* Retry */
                 rd_http_error_destroy(herr);
-                rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
+                rd_usleep(waitMs * 1000, &rk->rk_terminate);
         }
 
         *rbufp        = hreq.hreq_buf;
@@ -512,7 +538,6 @@ rd_http_error_t *rd_http_parse_json(rd_http_req_t *hreq, cJSON **jsonp) {
         return herr;
 }
 
-
 /**
  * @brief Perform a blocking HTTP(S) request to \p url with
  *        HTTP(S) headers and data with \p timeout_s.
@@ -531,13 +556,12 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                                           const struct curl_slist *headers,
                                           const char *post_fields,
                                           size_t post_fields_size,
-                                          int timeout_s,
-                                          int retries,
-                                          int retry_ms,
+                                          long timeout_s,
+                                          long retry_backoff_ms,
+                                          long retry_backoff_max_ms,
                                           cJSON **jsonp) {
         rd_http_error_t *herr;
         rd_http_req_t hreq;
-        int i;
         size_t len;
         const char *content_type;
 
@@ -552,7 +576,13 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                          post_fields_size);
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, post_fields);
 
-        for (i = 0; i <= retries; i++) {
+        long endMs = current_milliseconds() + retry_backoff_max_ms;
+        long retryBackoffMs = retry_backoff_ms;
+        int currAttempt = 0;
+
+        while (current_milliseconds() <= endMs) {
+                currAttempt++;
+
                 if (rd_kafka_terminating(rk)) {
                         rd_http_req_destroy(&hreq);
                         return rd_http_error_new(-1, "Terminating");
@@ -568,16 +598,24 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                         rd_http_req_destroy(&hreq);
                         return NULL;
                 }
+
+                long waitMs = retryBackoffMs *
+                          (long)pow(2, currAttempt - 1);
+
+                long diff = endMs - current_milliseconds();
+                if (waitMs > diff)
+                        waitMs = diff;
+
                 /* Retry if HTTP(S) request returns temporary error and there
                  * are remaining retries, else fail. */
-                if (i == retries || !rd_http_is_failure_temporary(herr->code)) {
+                if (waitMs <= 0 || !rd_http_is_failure_temporary(herr->code)) {
                         rd_http_req_destroy(&hreq);
                         return herr;
                 }
 
                 /* Retry */
                 rd_http_error_destroy(herr);
-                rd_usleep(retry_ms * 1000 * (i + 1), &rk->rk_terminate);
+                rd_usleep(waitMs * 1000, &rk->rk_terminate);
         }
 
         content_type = rd_http_req_get_content_type(&hreq);
@@ -643,9 +681,9 @@ rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
                                   const char *url,
                                   char **headers_array,
                                   size_t headers_array_cnt,
-                                  int timeout_s,
-                                  int retries,
-                                  int retry_ms,
+                                  long timeout_s,
+                                  long retry_backoff_ms,
+                                  long retry_backoff_max_ms,
                                   cJSON **jsonp) {
         rd_http_error_t *herr;
         int response_code;
@@ -662,7 +700,7 @@ rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
         headers_array_new[headers_array_cnt++] = "Accept: application/json";
 
         herr = rd_http_get(rk, url, headers_array_new, headers_array_cnt,
-                           timeout_s, retries, retry_ms, &rbuf, &content_type,
+                           timeout_s, retry_backoff_ms, retry_backoff_max_ms, &rbuf, &content_type,
                            &response_code);
         rd_free(headers_array_new);
 

@@ -1074,6 +1074,21 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         1,
         0,
     },
+    {_RK_GLOBAL, "sasl.login.connect.timeout.ms", _RK_C_INT, 
+        _RK(sasl.login.connect_timeout_ms), 
+        "The value in milliseconds for the external authentication provider connection timeout. Currently applies only to OAUTHBEARER.",
+        .vdef = 5 * 1000
+    },
+    {_RK_GLOBAL, "sasl.login.retry.backoff.ms", _RK_C_INT, 
+        _RK(sasl.login.retry_backoff_ms), 
+        "The value in milliseconds for the initial wait between login attempts to the external authentication provider. Login uses an exponential backoff algorithm with an initial wait based on the sasl.login.retry.backoff.ms setting and will double in wait length between attempts up to a maximum wait length specified by the sasl.login.retry.backoff.max.ms setting. Currently applies only to OAUTHBEARER.",
+        .vdef = 100
+    },
+    {_RK_GLOBAL, "sasl.login.retry.backoff.max.ms", _RK_C_INT, 
+        _RK(sasl.login.retry_backoff_max_ms), 
+        "The value in milliseconds for the maximum wait between login attempts to the external authentication provider. Login uses an exponential backoff algorithm with an initial wait based on the sasl.login.retry.backoff.ms setting and will double in wait length between attempts up to a maximum wait length specified by the sasl.login.retry.backoff.max.ms setting. Currently applies only to OAUTHBEARER.",
+        .vdef = 10 * 1000
+    },
     {_RK_GLOBAL, "sasl.oauthbearer.method", _RK_C_S2I,
      _RK(sasl.oauthbearer.method),
      "Set to \"default\" or \"oidc\" to control which login method "

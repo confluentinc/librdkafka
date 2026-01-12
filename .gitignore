@@ -33,3 +33,4 @@ gdbrun*.gdb
 TAGS
 vcpkg_installed
 *tmp-KafkaCluster*
+build/

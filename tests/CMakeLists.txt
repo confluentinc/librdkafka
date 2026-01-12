@@ -144,7 +144,9 @@ set(
     0151-purge-brokers.c
     0152-rebootstrap.c
     0153-memberid.c
-    0154-share-consumer.c
+    0170-share_consumer_subscription.c
+    0171-share_consumer_consume.c
+    0172-share_consumer_behaviour.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

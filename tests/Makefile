@@ -39,10 +39,10 @@ broker: $(BIN)
 	./broker_version_tests.py --conf '{"parallel":1, "args":"-Q"}' $(KAFKA_VERSION)
 
 broker_idempotent: $(BIN)
-	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L -Q"}' $(KAFKA_VERSION)
+	./broker_version_tests.py --conf '{"parallel":1, "args":"-P -L -Q"}' --kraft 4.1.1
 
 sasl_non_ssl: $(BIN)
-	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --no-ssl $(KAFKA_VERSION)
+	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --no-ssl --kraft 4.1.1
 
 ssl: $(BIN)
 	./sasl_test.py --conf '{"parallel":1, "args":"-L -Q"}' --kraft --suite "SSL" 4.1.1
@@ -102,7 +102,7 @@ delete_topics:
 
 build: $(BIN) interceptor_test
 
-test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
+#test.o: ../src/librdkafka.a ../src-cpp/librdkafka++.a interceptor_test
 
 
 

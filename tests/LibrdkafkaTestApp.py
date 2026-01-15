@@ -198,8 +198,12 @@ class LibrdkafkaTestApp(App):
 
         conf_blob.append('bootstrap.servers=%s' % bootstrap_servers)
         conf_blob.append('security.protocol=%s' % self.security_protocol)
-
         f.write(('\n'.join(conf_blob)).encode('ascii'))
+
+        # for fips testing
+        f.write('\ndebug=security\n'.encode('ascii'))
+        f.write('ssl.providers=fips,base\n'.encode('ascii'))
+
         f.close()
 
         self.env_add('TEST_SCENARIO', scenario)

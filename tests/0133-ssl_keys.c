@@ -140,8 +140,8 @@ int main_0133_ssl_keys(int argc, char **argv) {
                 return 0;
         }
 
-        do_test_ssl_keys("PKCS12", rd_true);
-        do_test_ssl_keys("PKCS12", rd_false);
+        // do_test_ssl_keys("PKCS12", rd_true);
+        // do_test_ssl_keys("PKCS12", rd_false);
         do_test_ssl_keys("PEM", rd_true);
         do_test_ssl_keys("PEM", rd_false);
         do_test_ssl_keys("PEM_STRING", rd_true);

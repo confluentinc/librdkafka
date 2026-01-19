@@ -114,7 +114,8 @@ typedef struct {
         /* Topics: all created topics */
         char *all_topics[MAX_TOPICS];
         int all_topic_cnt;
-        int msgs_produced[MAX_TOPICS]; /**< Messages produced per topic */
+        int msgs_produced[MAX_TOPICS];    /**< Messages produced per topic */
+        rd_bool_t topic_deleted[MAX_TOPICS]; /**< Track deleted topics */
 
         /* Current subscription tracking per consumer */
         int sub_start_idx[MAX_CONSUMERS]; /**< Start index in all_topics */
@@ -472,6 +473,9 @@ static void exec_delete_topic(sub_test_state_t *state, const test_op_t *op) {
 
         test_delete_topic(test_share_consumer_get_rk(state->consumers[0]),
                           state->all_topics[idx]);
+
+        /* Mark as deleted to skip during cleanup */
+        state->topic_deleted[idx] = rd_true;
 }
 
 /**
@@ -547,9 +551,9 @@ static void state_init(sub_test_state_t *state, const test_scenario_t *scenario)
 static void state_cleanup(sub_test_state_t *state) {
         int i;
 
-        /* Delete all created topics */
+        /* Delete all created topics (skip already deleted ones) */
         for (i = 0; i < state->all_topic_cnt; i++) {
-                if (state->all_topics[i]) {
+                if (state->all_topics[i] && !state->topic_deleted[i]) {
                         test_delete_topic(
                             test_share_consumer_get_rk(state->consumers[0]),
                             state->all_topics[i]);

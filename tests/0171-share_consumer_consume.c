@@ -27,7 +27,6 @@
  */
 
 #include "test.h"
-#include "rdkafka_int.h"
 
 /**
  * @brief Maximum supported values for test configuration
@@ -141,9 +140,9 @@ static void subscribe_consumers(share_test_config_t *config,
         int t, i;
 
         /* Set group config using first consumer */
-        test_IncrementalAlterConfigs_simple(state->consumers[0]->rkshare_rk,
-                                            RD_KAFKA_RESOURCE_GROUP,
-                                            config->group_name, grp_conf, 1);
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(state->consumers[0]),
+            RD_KAFKA_RESOURCE_GROUP, config->group_name, grp_conf, 1);
 
         /* Build subscription list */
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
@@ -254,8 +253,9 @@ static void cleanup_test(share_test_config_t *config,
         /* Delete topics using first consumer */
         for (t = 0; t < config->topic_cnt; t++) {
                 if (state->topic_names[t]) {
-                        test_delete_topic(state->consumers[0]->rkshare_rk,
-                                          state->topic_names[t]);
+                        test_delete_topic(
+                            test_share_consumer_get_rk(state->consumers[0]),
+                            state->topic_names[t]);
                         rd_free(state->topic_names[t]);
                         state->topic_names[t] = NULL;
                 }

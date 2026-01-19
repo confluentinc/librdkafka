@@ -3451,9 +3451,21 @@ void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
         err = rd_kafka_share_subscribe(rk, topics);
         if (err)
                 TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
-                          rd_kafka_name(rk->rkshare_rk), rd_kafka_err2str(err));
+                          rd_kafka_name(test_share_consumer_get_rk(rk)),
+                          rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
+}
+
+
+/**
+ * @brief Get underlying rd_kafka_t handle from share consumer.
+ *
+ * @param rkshare Share consumer handle.
+ * @returns The underlying rd_kafka_t handle.
+ */
+rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
+        return rkshare->rkshare_rk;
 }
 
 
@@ -3470,11 +3482,12 @@ rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
         err = rd_kafka_share_subscription(rk, &subscription);
         if (err)
                 TEST_FAIL("%s: Failed to get subscription: %s\n",
-                          rd_kafka_name(rk->rkshare_rk), rd_kafka_err2str(err));
+                          rd_kafka_name(test_share_consumer_get_rk(rk)),
+                          rd_kafka_err2str(err));
 
         TEST_ASSERT(subscription != NULL,
                     "%s: subscription() returned NULL list",
-                    rd_kafka_name(rk->rkshare_rk));
+                    rd_kafka_name(test_share_consumer_get_rk(rk)));
 
         return subscription;
 }

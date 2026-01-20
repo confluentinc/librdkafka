@@ -1,5 +1,5 @@
-librdkafka - the Apache Kafka C/C++ client library
-==================================================
+librdkafka - the Apache Kafka® C/C++ client library
+===================================================
 
 Copyright (c) 2012-2022, [Magnus Edenhill](http://www.edenhill.se/).
               2023 [Confluent Inc.](https://www.confluent.io/).
@@ -19,7 +19,8 @@ has been licensed for use by librdkafka. librdkafka has no
 affiliation with and is not endorsed by The Apache Software Foundation.
 
 
-# Features #
+# Features
+
   * Full Exactly-Once-Semantics (EOS) support
   * High-level producer, including Idempotent and Transactional producers
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
@@ -168,7 +169,7 @@ File bug reports and feature requests using [GitHub Issues](https://github.com/c
 Questions and discussions are welcome on the [Discussions](https://github.com/confluentinc/librdkafka/discussions) forum, and on the [Confluent Community slack](https://launchpass.com/confluentcommunity) #clients channel.
 
 
-# Language bindings #
+# Language bindings
 
   * C#/.NET: [confluent-kafka-dotnet](https://github.com/confluentinc/confluent-kafka-dotnet) (based on [rdkafka-dotnet](https://github.com/ah-/rdkafka-dotnet))
   * C++: [cppkafka](https://github.com/mfontanini/cppkafka)

@@ -82,8 +82,14 @@
 #endif
 
 
-static once_flag rd_kafka_global_init_once  = ONCE_FLAG_INIT;
-static once_flag rd_kafka_global_srand_once = ONCE_FLAG_INIT;
+static once_flag rd_kafka_global_init_once = ONCE_FLAG_INIT;
+#ifdef _WIN32
+/* On Windows srand needs to be called on each thread. */
+static RD_TLS once_flag rd_kafka_srand_once = ONCE_FLAG_INIT;
+#else
+static once_flag rd_kafka_srand_once = ONCE_FLAG_INIT;
+#endif
+
 
 /**
  * @brief Global counter+lock for all active librdkafka instances
@@ -130,6 +136,13 @@ void rd_kafka_set_thread_name(const char *fmt, ...) {
  */
 static char RD_TLS rd_kafka_thread_sysname[16] = "app";
 
+/**
+ * @brief Seed the PRNG with current microseconds and thread ID.
+ */
+static void rd_kafka_srand(void) {
+        srand(rd_seed());
+}
+
 void rd_kafka_set_thread_sysname(const char *fmt, ...) {
         va_list ap;
 
@@ -140,6 +153,31 @@ void rd_kafka_set_thread_sysname(const char *fmt, ...) {
 
         thrd_setname(rd_kafka_thread_sysname);
 }
+
+/**
+ * @brief Seed the PRNG for the current thread or for the whole process.
+ *        Depending on the platform implementation of srand() the seed can
+ *        be a thread local or global one. In case it's thread local we
+ *        need to call it on each thread.
+ *
+ * @param rk Client instance.
+ * @param internal_thread If true, seed the PRNG if
+ *                        it's required per-thread.
+ */
+#ifdef _WIN32
+void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread) {
+        /* We always call it once per thread in the internal threads and
+         * once per thread in the application threads, if requested. */
+        if (rk->rk_conf.enable_random_seed || internal_thread)
+                call_once(&rd_kafka_srand_once, rd_kafka_srand);
+}
+#else
+void rd_kafka_thread_srand(rd_kafka_t *rk, rd_bool_t internal_thread) {
+        /* We call it only in the app threads, only once, if requested. */
+        if (rk->rk_conf.enable_random_seed && !internal_thread)
+                call_once(&rd_kafka_srand_once, rd_kafka_srand);
+}
+#endif
 
 static void rd_kafka_global_init0(void) {
         cJSON_Hooks json_hooks = {.malloc_fn = rd_malloc, .free_fn = rd_free};
@@ -168,18 +206,6 @@ static void rd_kafka_global_init0(void) {
  */
 void rd_kafka_global_init(void) {
         call_once(&rd_kafka_global_init_once, rd_kafka_global_init0);
-}
-
-
-/**
- * @brief Seed the PRNG with current_time.milliseconds
- */
-static void rd_kafka_global_srand(void) {
-        struct timeval tv;
-
-        rd_gettimeofday(&tv, NULL);
-
-        srand((unsigned int)(tv.tv_usec / 1000));
 }
 
 
@@ -2220,6 +2246,7 @@ static int rd_kafka_thread_main(void *arg) {
 
         rd_kafka_set_thread_name("main");
         rd_kafka_set_thread_sysname("rdk:main");
+        rd_kafka_thread_srand(rk, rd_true /* we're in an internal thread */);
 
         rd_kafka_interceptors_on_thread_start(rk, RD_KAFKA_THREAD_MAIN);
 
@@ -2369,10 +2396,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                 * freed from rd_kafka_destroy_internal()
                                 * as the rk itself is destroyed. */
 
-        /* Seed PRNG, don't bother about HAVE_RAND_R, since it is pretty cheap.
-         */
-        if (rk->rk_conf.enable_random_seed)
-                call_once(&rd_kafka_global_srand_once, rd_kafka_global_srand);
+        rd_kafka_thread_srand(rk, rd_false /* we're on an app thread */);
 
         /* Call on_new() interceptors */
         rd_kafka_interceptors_on_new(rk, &rk->rk_conf);
@@ -5398,18 +5422,12 @@ rd_kafka_Uuid_t *rd_kafka_Uuid_copy(const rd_kafka_Uuid_t *uuid) {
  * @remark Must be freed after use using rd_kafka_Uuid_destroy().
  */
 rd_kafka_Uuid_t rd_kafka_Uuid_random() {
-        int i;
         unsigned char rand_values_bytes[16] = {0};
         uint64_t *rand_values_uint64        = (uint64_t *)rand_values_bytes;
-        unsigned char *rand_values_app;
-        rd_kafka_Uuid_t ret = RD_KAFKA_UUID_ZERO;
-        for (i = 0; i < 16; i += 2) {
-                uint16_t rand_uint16 = (uint16_t)rd_jitter(0, INT16_MAX - 1);
-                /* No need to convert endianess here because it's still only
-                 * a random value. */
-                rand_values_app = (unsigned char *)&rand_uint16;
-                rand_values_bytes[i] |= rand_values_app[0];
-                rand_values_bytes[i + 1] |= rand_values_app[1];
+        rd_kafka_Uuid_t ret                 = RD_KAFKA_UUID_ZERO;
+        if (!rd_rand_bytes(rand_values_bytes, sizeof(rand_values_bytes))) {
+                rd_assert(!*"BUG: a random UUID cannot be requested without "
+                           "a reliable entropy source");
         }
 
         rand_values_bytes[6] &= 0x0f; /* clear version */

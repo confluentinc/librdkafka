@@ -48,26 +48,26 @@
 int test_level = 2;
 int test_seed  = 0;
 
-char test_mode[64]                                  = "bare";
-char test_scenario[64]                              = "default";
-static volatile sig_atomic_t test_exit              = 0;
-static char test_topic_prefix[128]                  = "rdkafkatest";
-static int test_topic_random                        = 0;
-int tests_running_cnt                               = 0;
-int test_concurrent_max                             = 5;
-int test_assert_on_fail                             = 0;
-double test_timeout_multiplier                      = 1.0;
-static char *test_sql_cmd                           = NULL;
-int test_session_timeout_ms                         = 6000;
-static const char *test_consumer_group_protocol_str = NULL;
+char test_mode[64]                            = "bare";
+char test_scenario[64]                        = "default";
+static volatile sig_atomic_t test_exit        = 0;
+static char test_topic_prefix[128]            = "rdkafkatest";
+static int test_topic_random                  = 0;
+int tests_running_cnt                         = 0;
+int test_concurrent_max                       = 5;
+int test_assert_on_fail                       = 0;
+double test_timeout_multiplier                = 1.0;
+static char *test_sql_cmd                     = NULL;
+int test_session_timeout_ms                   = 6000;
+static char *test_consumer_group_protocol_str = NULL;
 int test_broker_version;
-static const char *test_broker_version_str = "2.4.0.0";
-int test_flags                             = 0;
-int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
+static char *test_broker_version_str = "2.4.0.0";
+int test_flags                       = 0;
+int test_neg_flags                   = TEST_F_KNOWN_ISSUE;
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
-static const char *test_git_version   = "HEAD";
-static const char *test_sockem_conf   = "";
+static char *test_git_version         = "HEAD";
+static char *test_sockem_conf         = "";
 int test_on_ci = 0; /* Tests are being run on CI, be more forgiving
                      * with regards to timeouts, etc. */
 int test_quick               = 0; /** Run tests quickly */
@@ -77,10 +77,10 @@ int test_rusage              = 0; /**< Check resource usage */
  *   >1.0: CPU is slower than base line system,
  *   <1.0: CPU is faster than base line system. */
 double test_rusage_cpu_calibration = 1.0;
-static const char *tests_to_run    = NULL; /* all */
-static const char *skip_tests_till = NULL; /* all */
-static const char *subtests_to_run = NULL; /* all */
-static const char *tests_to_skip   = NULL; /* none */
+static char *tests_to_run          = NULL; /* all */
+static char *skip_tests_till       = NULL; /* all */
+static char *subtests_to_run       = NULL; /* all */
+static char *tests_to_skip         = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
 
 static int show_summary = 1;
@@ -540,7 +540,7 @@ struct test tests[] = {
     _TEST(0150_telemetry_mock, 0),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
-    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0154_persistent_broker_failure, TEST_F_LOCAL),
 
     /* Manual tests */
@@ -786,7 +786,8 @@ static void test_init(void) {
         if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
                 strncpy(test_scenario, tmp, sizeof(test_scenario) - 1);
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
-                test_sockem_conf = tmp;
+                test_sockem_conf = (char *)tmp;
+        test_sockem_conf = rd_strdup(test_sockem_conf);
         if ((tmp = test_getenv("TEST_SEED", NULL)))
                 seed = atoi(tmp);
         else
@@ -802,7 +803,10 @@ static void test_init(void) {
                 }
         }
         test_consumer_group_protocol_str =
-            test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+            (char *)test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+        if (test_consumer_group_protocol_str)
+                test_consumer_group_protocol_str =
+                    rd_strdup(test_consumer_group_protocol_str);
 
 
 #ifdef _WIN32
@@ -1831,8 +1835,15 @@ static void test_cleanup(void) {
                 test->report_arr = NULL;
         }
 
-        if (test_sql_cmd)
-                rd_free(test_sql_cmd);
+        RD_IF_FREE(test_sql_cmd, rd_free);
+        RD_IF_FREE(test_consumer_group_protocol_str, rd_free);
+        RD_IF_FREE(tests_to_run, rd_free);
+        RD_IF_FREE(subtests_to_run, rd_free);
+        RD_IF_FREE(tests_to_skip, rd_free);
+        RD_IF_FREE(skip_tests_till, rd_free);
+        RD_IF_FREE(test_broker_version_str, rd_free);
+        RD_IF_FREE(test_git_version, rd_free);
+        RD_IF_FREE(test_sockem_conf, rd_free);
 }
 
 
@@ -1850,17 +1861,23 @@ int main(int argc, char **argv) {
 #ifndef _WIN32
         signal(SIGINT, test_sig_term);
 #endif
-        tests_to_run    = test_getenv("TESTS", NULL);
-        subtests_to_run = test_getenv("SUBTESTS", NULL);
-        tests_to_skip   = test_getenv("TESTS_SKIP", NULL);
-        tmpver          = test_getenv("TEST_KAFKA_VERSION", NULL);
-        skip_tests_till = test_getenv("TESTS_SKIP_BEFORE", NULL);
-
+        tests_to_run = (char *)test_getenv("TESTS", NULL);
+        if (tests_to_run)
+                tests_to_run = rd_strdup(tests_to_run);
+        subtests_to_run = (char *)test_getenv("SUBTESTS", NULL);
+        if (subtests_to_run)
+                subtests_to_run = rd_strdup(subtests_to_run);
+        tests_to_skip = (char *)test_getenv("TESTS_SKIP", NULL);
+        if (tests_to_skip)
+                tests_to_skip = rd_strdup(tests_to_skip);
+        skip_tests_till = (char *)test_getenv("TESTS_SKIP_BEFORE", NULL);
+        if (skip_tests_till)
+                skip_tests_till = rd_strdup(skip_tests_till);
+        tmpver = test_getenv("TEST_KAFKA_VERSION", NULL);
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
-        test_broker_version_str = tmpver;
-
-        test_git_version = test_getenv("RDKAFKA_GITVER", "HEAD");
+        test_broker_version_str = rd_strdup(tmpver);
+        test_git_version = rd_strdup(test_getenv("RDKAFKA_GITVER", "HEAD"));
 
         /* Are we running on CI? */
         if (test_getenv("CI", NULL)) {

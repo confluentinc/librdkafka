@@ -34,7 +34,9 @@
 #ifndef _WIN32
 /* getentropy() can be present in one of these two */
 #include <unistd.h>
+#ifdef HAS_SYS_RANDOM
 #include <sys/random.h>
+#endif
 #endif
 
 #ifdef HAVE_OSSL_SECURE_RAND_BYTES

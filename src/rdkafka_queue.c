@@ -88,9 +88,9 @@ void rd_kafka_q_init0(rd_kafka_q_t *rkq,
                       const char *func,
                       int line) {
         rd_kafka_q_reset(rkq);
-        rkq->rkq_fwdq   = NULL;
-        rkq->rkq_refcnt = 1;
-        rkq->rkq_flags  = RD_KAFKA_Q_F_READY;
+        rkq->rkq_fwdq = NULL;
+        rd_atomic32_init(&rkq->rkq_refcnt, 1);
+        rkq->rkq_flags = RD_KAFKA_Q_F_READY;
         if (for_consume)
                 rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
         rkq->rkq_rk                 = rk;
@@ -1179,8 +1179,8 @@ void rd_kafka_q_dump(FILE *fp, rd_kafka_q_t *rkq) {
         fprintf(fp,
                 "Queue %p \"%s\" (refcnt %d, flags 0x%x, %d ops, "
                 "%" PRId64 " bytes)\n",
-                rkq, rkq->rkq_name, rkq->rkq_refcnt, rkq->rkq_flags,
-                rkq->rkq_qlen, rkq->rkq_qsize);
+                rkq, rkq->rkq_name, rd_atomic32_get(&rkq->rkq_refcnt),
+                rkq->rkq_flags, rkq->rkq_qlen, rkq->rkq_qsize);
 
         if (rkq->rkq_qio)
                 fprintf(fp, " QIO fd %d\n", (int)rkq->rkq_qio->fd);

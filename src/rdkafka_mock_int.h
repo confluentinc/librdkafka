@@ -261,6 +261,38 @@ typedef struct rd_kafka_mock_sgrp_s {
         int fetch_session_cnt;
 } rd_kafka_mock_sgrp_t;
 
+/**
+ * @struct Share group (KIP-932).
+ */
+typedef struct rd_kafka_mock_sharegroup_s {
+        TAILQ_ENTRY(rd_kafka_mock_sharegroup_s) link;
+        struct rd_kafka_mock_cluster_s *cluster; /**< Cluster */
+        char *id;                                /**< Share group Id */
+        int32_t group_epoch;                     /**< Group epoch */
+        int session_timeout_ms;                  /**< Session timeout */
+        rd_kafka_timer_t session_tmr;            /**< Session timeout timer */
+        int heartbeat_interval_ms;               /**< Heartbeat interval */
+        TAILQ_HEAD(, rd_kafka_mock_sharegroup_member_s)
+        members;        /**< Share group members */
+        int member_cnt; /**< Number of share group members */
+} rd_kafka_mock_sharegroup_t;
+
+/**
+ * @struct Share group member (KIP-932).
+ */
+typedef struct rd_kafka_mock_sharegroup_member_s {
+        TAILQ_ENTRY(rd_kafka_mock_sharegroup_member_s) link;
+        char *id;                          /**< MemberId */
+        rd_ts_t ts_last_activity;          /**< Last heartbeat timestamp */
+        int32_t member_epoch;              /**< Current member epoch */
+        int32_t previous_member_epoch;     /**< Previous member epoch (allows
+                                            *   client to catch up if response
+                                            *   with bumped epoch was lost) */
+        rd_list_t *subscribed_topic_names; /**< Subscribed topic names */
+        rd_kafka_topic_partition_list_t *assignment; /**< Current assignment */
+        struct rd_kafka_mock_connection_s *conn;     /**< Connection */
+        rd_kafka_mock_sharegroup_t *mshgrp;          /**< Share group */
+} rd_kafka_mock_sharegroup_member_t;
 
 /**
  * @struct TransactionalId + PID (+ optional sequence state)
@@ -513,6 +545,8 @@ struct rd_kafka_mock_cluster_s {
 
         TAILQ_HEAD(, rd_kafka_mock_sgrp_s) sgrps_share;
 
+        TAILQ_HEAD(, rd_kafka_mock_sharegroup_s) sharegrps;
+
         /** Explicit coordinators (set with mock_set_coordinator()) */
         TAILQ_HEAD(, rd_kafka_mock_coord_s) coords;
 
@@ -551,6 +585,10 @@ struct rd_kafka_mock_cluster_s {
                 int group_consumer_session_timeout_ms;
                 /** Heartbeat interval (KIP 848) */
                 int group_consumer_heartbeat_interval_ms;
+                /** Session timeout (KIP 932) */
+                int sharegroup_session_timeout_ms;
+                /** Heartbeat interval (KIP 932) */
+                int sharegroup_heartbeat_interval_ms;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */
@@ -792,6 +830,43 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
 
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);
+
+/* Share group (KIP-932) */
+
+void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster);
+
+rd_kafka_mock_sharegroup_t *
+rd_kafka_mock_sharegroup_find(rd_kafka_mock_cluster_t *mcluster,
+                              const rd_kafkap_str_t *GroupId);
+
+rd_kafka_mock_sharegroup_t *
+rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
+                             const rd_kafkap_str_t *GroupId);
+
+void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp);
+
+rd_kafka_mock_sharegroup_member_t *
+rd_kafka_mock_sharegroup_member_find(rd_kafka_mock_sharegroup_t *mshgrp,
+                                     const rd_kafkap_str_t *MemberId);
+
+void rd_kafka_mock_sharegroup_member_destroy(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sharegroup_member_t *member);
+
+rd_kafka_mock_sharegroup_member_t *
+rd_kafka_mock_sharegroup_member_get(rd_kafka_mock_sharegroup_t *mshgrp,
+                                    const rd_kafkap_str_t *MemberID,
+                                    int32_t MemberEpoch,
+                                    rd_kafka_mock_connection_t *mconn);
+
+rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
+    rd_kafka_mock_sharegroup_member_t *member,
+    const rd_kafkap_str_t *SubscribedTopicNames,
+    int32_t SubscribedTopicNamesCnt);
+
+void rd_kafka_mock_sharegroup_assignment_recalculate(
+    rd_kafka_mock_sharegroup_t *mshgrp);
+
 /**
  *@}
  */

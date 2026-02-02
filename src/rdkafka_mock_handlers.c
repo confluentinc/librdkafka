@@ -2994,6 +2994,208 @@ err_parse:
 }
 
 /**
+ * @brief Helper to write assignment TopicPartitions to ShareGroupHeartbeat
+ * response.
+ */
+static void rd_kafka_mock_handle_ShareGroupHeartbeat_write_TopicPartitions(
+    rd_kafka_buf_t *resp,
+    rd_kafka_topic_partition_list_t *assignment) {
+        const rd_kafka_topic_partition_field_t fields[] = {
+            RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+            RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+
+        rd_kafka_topic_partition_list_sort_by_topic_id(assignment);
+        rd_kafka_buf_write_topic_partitions(
+            resp, assignment, rd_false /* don't skip invalid offsets */,
+            rd_false /* any offset */, rd_true /* use topic id */,
+            rd_false /* don't use topic name */, fields);
+}
+
+/**
+ * @brief Handle ShareGroupHeartbeat request (API Key 76).
+ */
+static int
+rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
+                                         rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp;
+        rd_kafkap_str_t GroupId, MemberId, RackId;
+        rd_kafkap_str_t *SubscribedTopicNames = NULL;
+        int32_t MemberEpoch, SubscribedTopicNamesCnt;
+        int32_t i;
+        rd_kafka_resp_err_t err                   = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_mock_sharegroup_t *mshgrp        = NULL;
+        rd_kafka_mock_sharegroup_member_t *member = NULL;
+        rd_bool_t assignment_changed              = rd_false;
+
+        resp = rd_kafka_mock_buf_new_response(rkbuf);
+
+        /* GroupId */
+        rd_kafka_buf_read_str(rkbuf, &GroupId);
+
+        /* MemberId */
+        rd_kafka_buf_read_str(rkbuf, &MemberId);
+
+        /* MemberEpoch */
+        rd_kafka_buf_read_i32(rkbuf, &MemberEpoch);
+
+        /* RackId (nullable) */
+        rd_kafka_buf_read_str(rkbuf, &RackId);
+
+        /* SubscribedTopicNames array (nullable) */
+        rd_kafka_buf_read_arraycnt(rkbuf, &SubscribedTopicNamesCnt,
+                                   RD_KAFKAP_TOPICS_MAX);
+        if (SubscribedTopicNamesCnt >= 0) {
+                SubscribedTopicNames = rd_calloc(
+                    SubscribedTopicNamesCnt > 0 ? SubscribedTopicNamesCnt : 1,
+                    sizeof(rd_kafkap_str_t));
+                for (i = 0; i < SubscribedTopicNamesCnt; i++) {
+                        rd_kafka_buf_read_str(rkbuf, &SubscribedTopicNames[i]);
+                }
+        }
+
+        {
+                mtx_lock(&mcluster->lock);
+
+                mshgrp = rd_kafka_mock_sharegroup_get(mcluster, &GroupId);
+
+                if (MemberEpoch == -1) {
+                        /* LEAVE: Member wants to leave */
+                        member = rd_kafka_mock_sharegroup_member_find(
+                            mshgrp, &MemberId);
+                        if (member) {
+                                rd_kafka_mock_sharegroup_member_destroy(mshgrp,
+                                                                        member);
+                                member             = NULL;
+                                assignment_changed = rd_true;
+                        }
+
+                } else if (MemberEpoch == 0) {
+                        /* JOIN: New member wants to join */
+                        member = rd_kafka_mock_sharegroup_member_get(
+                            mshgrp, &MemberId, MemberEpoch, mconn);
+
+                        if (member) {
+                                if (rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
+                                        member, SubscribedTopicNames,
+                                        SubscribedTopicNamesCnt)) {
+                                        assignment_changed = rd_true;
+                                } else {
+                                        /* New member always triggers
+                                         * recalculation */
+                                        assignment_changed = rd_true;
+                                }
+                                MemberEpoch = member->member_epoch;
+                        } else {
+                                err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                        }
+
+                } else {
+                        /* HEARTBEAT: Existing member heartbeat */
+                        member = rd_kafka_mock_sharegroup_member_find(
+                            mshgrp, &MemberId);
+                        if (!member) {
+                                err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                        } else if (MemberEpoch > member->member_epoch) {
+                                /* Client epoch is ahead of server - indicates
+                                 * a bug or stale coordinator. */
+                                err = RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH;
+                        } else if (MemberEpoch < member->member_epoch) {
+                                /* Client epoch is behind. Allow if it matches
+                                 * the previous epoch (response with bumped
+                                 * epoch may have been lost). Otherwise fence.
+                                 */
+                                if (MemberEpoch !=
+                                    member->previous_member_epoch) {
+                                        err =
+                                            RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH;
+                                } else {
+                                        /* Accept previous epoch - client is
+                                         * catching up */
+                                        member->conn = mconn;
+                                        MemberEpoch  = member->member_epoch;
+                                }
+                        } else {
+                                /* Epoch matches - normal heartbeat */
+                                /* Check for subscription changes */
+                                if (SubscribedTopicNamesCnt >= 0 &&
+                                    rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
+                                        member, SubscribedTopicNames,
+                                        SubscribedTopicNamesCnt)) {
+                                        assignment_changed = rd_true;
+                                }
+                                member->conn = mconn;
+                                MemberEpoch  = member->member_epoch;
+                        }
+                }
+
+                /* Recalculate assignments if needed */
+                if (assignment_changed && mshgrp->member_cnt > 0) {
+                        rd_kafka_mock_sharegroup_assignment_recalculate(mshgrp);
+                        if (member)
+                                MemberEpoch = member->member_epoch;
+                }
+
+                mtx_unlock(&mcluster->lock);
+        }
+
+        /*
+         * Build response
+         */
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_write_i32(resp, 0);
+
+        /* ErrorCode */
+        rd_kafka_buf_write_i16(resp, err);
+
+        /* ErrorMessage */
+        if (err)
+                rd_kafka_buf_write_str(resp, rd_kafka_err2str(err), -1);
+        else
+                rd_kafka_buf_write_str(resp, NULL, -1);
+
+        /* MemberId */
+        if (!err && member)
+                rd_kafka_buf_write_str(resp, member->id, -1);
+        else
+                rd_kafka_buf_write_str(resp, NULL, -1);
+
+        /* MemberEpoch */
+        rd_kafka_buf_write_i32(resp, MemberEpoch);
+
+        /* HeartbeatIntervalMs */
+        if (mshgrp)
+                rd_kafka_buf_write_i32(resp, mshgrp->heartbeat_interval_ms);
+        else
+                rd_kafka_buf_write_i32(resp, 5000);
+
+        /* Assignment */
+        if (!err && member && member->assignment &&
+            member->assignment->cnt > 0) {
+                rd_kafka_buf_write_i8(resp, 1);
+                rd_kafka_mock_handle_ShareGroupHeartbeat_write_TopicPartitions(
+                    resp, member->assignment);
+                rd_kafka_buf_write_tags_empty(resp);
+        } else {
+                rd_kafka_buf_write_i8(resp, -1);
+        }
+
+        rd_kafka_buf_write_tags_empty(resp);
+
+        rd_kafka_mock_connection_send_response(mconn, resp);
+
+        RD_IF_FREE(SubscribedTopicNames, rd_free);
+        return 0;
+
+err_parse:
+        RD_IF_FREE(SubscribedTopicNames, rd_free);
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
+/**
  * @brief Default request handlers
  */
 const struct rd_kafka_mock_api_handler
@@ -3025,6 +3227,8 @@ const struct rd_kafka_mock_api_handler
             {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
             {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
+        [RD_KAFKAP_ShareGroupHeartbeat] =
+            {1, 1, 1, rd_kafka_mock_handle_ShareGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
         [RD_KAFKAP_PushTelemetry] = {0, 0, 0,

@@ -387,6 +387,7 @@ struct rd_kafka_conf_s {
                         long retry_backoff_max_ms;
                         long retry_backoff_ms;
                         long connect_timeout_ms;
+                        long read_timeout_ms;
                 } login;
         } sasl;
 

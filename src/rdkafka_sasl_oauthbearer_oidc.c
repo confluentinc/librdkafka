@@ -771,7 +771,8 @@ void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
                                                const char *oauthbearer_config,
                                                void *opaque) {
 
-        const long timeout_s = rk->rk_conf.sasl.login.connect_timeout_ms / 1000;
+        const long timeout_ms = rk->rk_conf.sasl.login.connect_timeout_ms;
+        const long read_timeout_ms = rk->rk_conf.sasl.login.read_timeout_ms;
         const long retry_backoff_ms = rk->rk_conf.sasl.login.retry_backoff_ms;
         const long retry_backoff_max_ms  = rk->rk_conf.sasl.login.retry_backoff_max_ms;
 
@@ -833,7 +834,7 @@ void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
 
         herr = rd_http_post_expect_json(
             rk, rk->rk_conf.sasl.oauthbearer.token_endpoint_url, headers,
-            request_body, strlen(request_body), timeout_s, retry_backoff_ms, retry_backoff_max_ms,
+            request_body, strlen(request_body), timeout_ms, read_timeout_ms, retry_backoff_ms, retry_backoff_max_ms,
             &json);
 
         if (unlikely(herr != NULL)) {
@@ -912,7 +913,8 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
     const char *oauthbearer_config,
     void *opaque) {
         
-        const long timeout_s = rk->rk_conf.sasl.login.connect_timeout_ms / 1000;
+        const long timeout_ms = rk->rk_conf.sasl.login.connect_timeout_ms;
+        const long read_timeout_ms = rk->rk_conf.sasl.login.read_timeout_ms;
         const long retry_backoff_ms = rk->rk_conf.sasl.login.retry_backoff_ms;
         const long retry_backoff_max_ms  = rk->rk_conf.sasl.login.retry_backoff_max_ms;
 
@@ -954,7 +956,8 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
         token_url = rk->rk_conf.sasl.oauthbearer.token_endpoint_url;
 
         herr = rd_http_post_expect_json(rk, token_url, headers, post_fields,
-                                        post_fields_size, timeout_s, retry_backoff_ms,
+                                        post_fields_size, timeout_ms, read_timeout_ms,
+                                        retry_backoff_ms,
                                         retry_backoff_max_ms, &json);
 
         if (unlikely(herr != NULL)) {
@@ -1013,7 +1016,8 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
     const char *oauthbearer_config,
     void *opaque) {
 
-        const long timeout_s = rk->rk_conf.sasl.login.connect_timeout_ms / 1000;
+        const long timeout_ms = rk->rk_conf.sasl.login.connect_timeout_ms;
+        const long read_timeout_ms = rk->rk_conf.sasl.login.read_timeout_ms;
         const long retry_backoff_ms = rk->rk_conf.sasl.login.retry_backoff_ms;
         const long retry_backoff_max_ms  = rk->rk_conf.sasl.login.retry_backoff_max_ms;
 
@@ -1074,7 +1078,7 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
         }
 
         herr = rd_http_get_json(rk, token_endpoint_url, headers_array, 1,
-                                timeout_s, retry_backoff_ms, retry_backoff_max_ms, &json);
+                                timeout_ms, read_timeout_ms, retry_backoff_ms, retry_backoff_max_ms, &json);
 
         if (unlikely(herr != NULL)) {
                 rd_kafka_log(rk, LOG_ERR, "OIDC",

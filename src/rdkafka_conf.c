@@ -1079,6 +1079,11 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         "The value in milliseconds for the external authentication provider connection timeout. Currently applies only to OAUTHBEARER.",
         .vdef = 5 * 1000
     },
+    {_RK_GLOBAL, "sasl.login.read.timeout.ms", _RK_C_INT, 
+        _RK(sasl.login.read_timeout_ms), 
+        "The value in milliseconds for the external authentication provider read timeout. Currently applies only to OAUTHBEARER.",
+        .vdef = 5 * 1000
+    },
     {_RK_GLOBAL, "sasl.login.retry.backoff.ms", _RK_C_INT, 
         _RK(sasl.login.retry_backoff_ms), 
         "The value in milliseconds for the initial wait between login attempts to the external authentication provider. Login uses an exponential backoff algorithm with an initial wait based on the sasl.login.retry.backoff.ms setting and will double in wait length between attempts up to a maximum wait length specified by the sasl.login.retry.backoff.max.ms setting. Currently applies only to OAUTHBEARER.",

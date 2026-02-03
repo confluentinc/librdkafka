@@ -47,6 +47,7 @@
 
 /** Maximum response size, increase as necessary. */
 #define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 
 /**
@@ -327,7 +328,7 @@ rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
                          CURLPROTO_HTTP | CURLPROTO_HTTPS);
 #endif
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_MAXREDIRS, 16);
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_TIMEOUT, 30);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_TIMEOUT_MS, 30000L);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_ERRORBUFFER,
                          hreq->hreq_curl_errstr);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_NOSIGNAL, 1);
@@ -411,7 +412,8 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                              const char *url,
                              char **headers_array,
                              size_t headers_array_cnt,
-                             long timeout_s,
+                             long timeout_ms,
+                             long read_timeout_ms,
                              long retry_backoff_ms,
                              long retry_backoff_max_ms,
                              rd_buf_t **rbufp,
@@ -439,11 +441,14 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                         headers = curl_slist_append(headers, header);
         }
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
-        if (timeout_s > 0)
-                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+        if (timeout_ms > 0) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
+
+                if (read_timeout_ms > 0)
+                        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT_MS, timeout_ms + read_timeout_ms);
+        }
 
         long endMs = current_milliseconds() + retry_backoff_max_ms;
-        long retryBackoffMs = retry_backoff_ms;
         int currAttempt = 0;
 
         while (current_milliseconds() <= endMs) {
@@ -457,9 +462,6 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                 herr = rd_http_req_perform_sync(&hreq);
                 len  = rd_buf_len(hreq.hreq_buf);
 
-                herr = rd_http_req_perform_sync(&hreq);
-                len  = rd_buf_len(hreq.hreq_buf);
-
                 if (!herr) {
                         if (len > 0)
                                 break; /* Success */
@@ -467,10 +469,12 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                         goto done;
                 }
 
-                long waitMs = retryBackoffMs *
+                long waitMs = retry_backoff_ms *
                           (long)pow(2, currAttempt - 1);
 
                 long diff = endMs - current_milliseconds();
+                waitMs = MIN(waitMs, diff);
+
                 if (waitMs > diff)
                         waitMs = diff;
 
@@ -556,7 +560,8 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                                           const struct curl_slist *headers,
                                           const char *post_fields,
                                           size_t post_fields_size,
-                                          long timeout_s,
+                                          long timeout_ms,
+                                          long read_timeout_ms,
                                           long retry_backoff_ms,
                                           long retry_backoff_max_ms,
                                           cJSON **jsonp) {
@@ -570,7 +575,13 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                 return herr;
 
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+
+        if (timeout_ms > 0) {
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
+
+                if (read_timeout_ms > 0)
+                        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT_MS, timeout_ms + read_timeout_ms);
+        }
 
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
                          post_fields_size);
@@ -603,8 +614,7 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                           (long)pow(2, currAttempt - 1);
 
                 long diff = endMs - current_milliseconds();
-                if (waitMs > diff)
-                        waitMs = diff;
+                waitMs = MIN(waitMs, diff);
 
                 /* Retry if HTTP(S) request returns temporary error and there
                  * are remaining retries, else fail. */
@@ -681,7 +691,8 @@ rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
                                   const char *url,
                                   char **headers_array,
                                   size_t headers_array_cnt,
-                                  long timeout_s,
+                                  long timeout_ms,
+                                  long read_timeout_ms,
                                   long retry_backoff_ms,
                                   long retry_backoff_max_ms,
                                   cJSON **jsonp) {
@@ -700,7 +711,7 @@ rd_http_error_t *rd_http_get_json(rd_kafka_t *rk,
         headers_array_new[headers_array_cnt++] = "Accept: application/json";
 
         herr = rd_http_get(rk, url, headers_array_new, headers_array_cnt,
-                           timeout_s, retry_backoff_ms, retry_backoff_max_ms, &rbuf, &content_type,
+                           timeout_ms, read_timeout_ms, retry_backoff_ms, retry_backoff_max_ms, &rbuf, &content_type,
                            &response_code);
         rd_free(headers_array_new);
 
@@ -753,7 +764,7 @@ int unittest_http_get(void) {
 
         /* Try the base url first, parse its JSON and extract a key-value. */
         json = NULL;
-        herr = rd_http_get_json(rk, base_url, NULL, 0, 5, 1, 1000, &json);
+        herr = rd_http_get_json(rk, base_url, NULL, 0, 5, 5, 1, 1000, &json);
         RD_UT_ASSERT(!herr, "Expected get_json(%s) to succeed, got: %s",
                      base_url, herr->errstr);
 
@@ -773,7 +784,7 @@ int unittest_http_get(void) {
 
         /* Try the error URL, verify error code. */
         json = NULL;
-        herr = rd_http_get_json(rk, error_url, NULL, 0, 5, 1, 1000, &json);
+        herr = rd_http_get_json(rk, error_url, NULL, 0, 5, 5, 1, 1000, &json);
         RD_UT_ASSERT(herr != NULL, "Expected get_json(%s) to fail", error_url);
         RD_UT_ASSERT(herr->code >= 400,
                      "Expected get_json(%s) error code >= "

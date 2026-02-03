@@ -36,7 +36,17 @@
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
 
-/* Forward declaration - now declared in header */
+/**
+ * @brief Share group target assignment (manual)
+ */
+typedef struct rd_kafka_mock_sharegroup_target_assignments_s {
+        rd_list_t member_ids; /**< List of member ids (char *) */
+        rd_list_t assignment; /**< List of rd_kafka_topic_partition_list_t */
+} rd_kafka_mock_sharegroup_target_assignment_t;
+
+/* Forward declarations */
+static void rd_kafka_mock_sharegroup_session_tmr_cb(rd_kafka_timers_t *rkts,
+                                                    void *arg);
 
 /**
  * @brief Initializes sharegroups in mock cluster
@@ -87,6 +97,10 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_INIT(&mshgrp->members);
         mshgrp->member_cnt = 0;
 
+        rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
+                             1000 * 1000 /* 1s */,
+                             rd_kafka_mock_sharegroup_session_tmr_cb, mshgrp);
+
         TAILQ_INSERT_TAIL(&mcluster->sharegrps, mshgrp, link);
 
         return mshgrp;
@@ -99,6 +113,8 @@ void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
         rd_kafka_mock_sharegroup_member_t *member;
 
         TAILQ_REMOVE(&mshgrp->cluster->sharegrps, mshgrp, link);
+        rd_kafka_timer_stop(&mshgrp->cluster->timers, &mshgrp->session_tmr,
+                            RD_DO_LOCK);
 
         /* Destroy all members */
         while ((member = TAILQ_FIRST(&mshgrp->members)))
@@ -139,6 +155,57 @@ void rd_kafka_mock_sharegroup_member_destroy(
 }
 
 /**
+ * @brief Mark member as active.
+ */
+void rd_kafka_mock_sharegroup_member_active(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sharegroup_member_t *member) {
+        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
+                     "Marking mock share group member %s as active",
+                     member->id);
+        member->ts_last_activity = rd_clock();
+}
+
+/**
+ * @brief Fence a member.
+ */
+void rd_kafka_mock_sharegroup_member_fenced(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sharegroup_member_t *member) {
+        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
+                     "Member %s is fenced from sharegroup %s", member->id,
+                     mshgrp->id);
+
+        rd_kafka_mock_sharegroup_member_destroy(mshgrp, member);
+}
+
+/**
+ * @brief Check all members for inactivity and remove them if timed out.
+ */
+static void rd_kafka_mock_sharegroup_session_tmr_cb(rd_kafka_timers_t *rkts,
+                                                    void *arg) {
+        rd_kafka_mock_sharegroup_t *mshgrp = arg;
+        rd_kafka_mock_sharegroup_member_t *member, *tmp;
+        rd_ts_t now                       = rd_clock();
+        rd_kafka_mock_cluster_t *mcluster = mshgrp->cluster;
+
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH_SAFE(member, &mshgrp->members, link, tmp) {
+                if (member->ts_last_activity +
+                        (mshgrp->session_timeout_ms * 1000) >
+                    now)
+                        continue;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Member %s session timed out for sharegroup %s",
+                             member->id, mshgrp->id);
+
+                rd_kafka_mock_sharegroup_member_fenced(mshgrp, member);
+        }
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
  * @brief Get or create a share group member.
  */
 rd_kafka_mock_sharegroup_member_t *
@@ -152,6 +219,7 @@ rd_kafka_mock_sharegroup_member_get(rd_kafka_mock_sharegroup_t *mshgrp,
         member = rd_kafka_mock_sharegroup_member_find(mshgrp, MemberID);
         if (member) {
                 member->conn = mconn;
+                rd_kafka_mock_sharegroup_member_active(mshgrp, member);
                 return member;
         }
 
@@ -170,6 +238,7 @@ rd_kafka_mock_sharegroup_member_get(rd_kafka_mock_sharegroup_t *mshgrp,
 
         TAILQ_INSERT_TAIL(&mshgrp->members, member, link);
         mshgrp->member_cnt++;
+        rd_kafka_mock_sharegroup_member_active(mshgrp, member);
 
         return member;
 }
@@ -376,6 +445,10 @@ void rd_kafka_mock_sharegroup_assignment_recalculate(
         if (mshgrp->member_cnt == 0)
                 return;
 
+        /* Skip automatic assignment if manual mode is enabled */
+        if (mshgrp->manual_assignment)
+                return;
+
         TAILQ_FOREACH(member, &mshgrp->members, link) {
                 if (member->assignment) {
                         rd_kafka_topic_partition_list_destroy(
@@ -437,4 +510,170 @@ void rd_kafka_mock_sharegroup_assignment_recalculate(
         fflush(stdout);
 
         rd_list_destroy(all_topics);
+}
+
+/**
+ * @brief Create a new target assignment (manual)
+ */
+rd_kafka_mock_sharegroup_target_assignment_t *
+rd_kafka_mock_sharegroup_target_assignment_new(void) {
+        rd_kafka_mock_sharegroup_target_assignment_t *target_assignment;
+        target_assignment = rd_calloc(1, sizeof(*target_assignment));
+        rd_list_init(&target_assignment->member_ids, 0, rd_free);
+        rd_list_init(&target_assignment->assignment, 0,
+                     (void *)rd_kafka_topic_partition_list_destroy);
+
+        return target_assignment;
+}
+
+/**
+ * @brief Destroy target assignment
+ */
+void rd_kafka_mock_sharegroup_target_assignment_destroy(
+    rd_kafka_mock_sharegroup_target_assignment_t *target_assignment) {
+        rd_list_destroy(&target_assignment->member_ids);
+        rd_list_destroy(&target_assignment->assignment);
+        rd_free(target_assignment);
+}
+
+/**
+ * @brief Set the target assignment for the sharegroup.
+ * This applies the manual assignment to the members.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static void rd_kafka_mock_sharegroup_target_assignment_set(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sharegroup_target_assignment_t *target_assignment) {
+        rd_kafka_mock_sharegroup_member_t *member;
+        size_t i;
+
+        for (i = 0; i < rd_list_cnt(&target_assignment->member_ids); i++) {
+                const char *member_id =
+                    rd_list_elem(&target_assignment->member_ids, i);
+                const rd_kafka_topic_partition_list_t *partitions =
+                    rd_list_elem(&target_assignment->assignment, i);
+                rd_kafkap_str_t *member_id_str;
+
+                member_id_str = rd_kafkap_str_new(member_id, -1);
+                member =
+                    rd_kafka_mock_sharegroup_member_find(mshgrp, member_id_str);
+                rd_kafkap_str_destroy(member_id_str);
+
+                if (!member) {
+                        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
+                                     "Cannot set target assignment for "
+                                     "non-existing member %s in sharegroup %s",
+                                     member_id, mshgrp->id);
+                        continue;
+                }
+
+                if (member->assignment) {
+                        rd_kafka_topic_partition_list_destroy(
+                            member->assignment);
+                }
+
+                member->assignment =
+                    rd_kafka_topic_partition_list_copy(partitions);
+
+                rd_kafka_dbg(
+                    mshgrp->cluster->rk, MOCK, "MOCK",
+                    "Target assignment set for member %s: %d partition(s)",
+                    member_id, member->assignment->cnt);
+        }
+
+        /* Bump the epochs */
+        TAILQ_FOREACH(member, &mshgrp->members, link) {
+                member->previous_member_epoch = member->member_epoch;
+                member->member_epoch          = ++mshgrp->group_epoch;
+        }
+}
+
+/**
+ * @brief Manual target assignment interface for sharegroups.
+ */
+void rd_kafka_mock_sharegroup_target_assignment(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    const char **member_ids,
+    rd_kafka_topic_partition_list_t **assignment,
+    size_t member_cnt) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        rd_kafka_mock_sharegroup_target_assignment_t *target_assignment;
+        size_t i;
+        rd_kafkap_str_t *group_id_str;
+
+        mtx_lock(&mcluster->lock);
+        group_id_str = rd_kafkap_str_new(group_id, -1);
+        mshgrp       = rd_kafka_mock_sharegroup_find(mcluster, group_id_str);
+        rd_kafkap_str_destroy(group_id_str);
+
+        if (!mshgrp) {
+                rd_kafka_log(mcluster->rk, LOG_ERR, "MOCK",
+                             "Sharegroup %s not found for target assignment",
+                             group_id);
+                mtx_unlock(&mcluster->lock);
+                return;
+        }
+
+        mshgrp->manual_assignment = rd_true;
+        target_assignment = rd_kafka_mock_sharegroup_target_assignment_new();
+
+        for (i = 0; i < member_cnt; i++) {
+                rd_list_add(&target_assignment->member_ids,
+                            rd_strdup(member_ids[i]));
+                rd_list_add(&target_assignment->assignment,
+                            rd_kafka_topic_partition_list_copy(assignment[i]));
+        }
+        rd_kafka_mock_sharegroup_target_assignment_set(mshgrp,
+                                                       target_assignment);
+        rd_kafka_mock_sharegroup_target_assignment_destroy(target_assignment);
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the sharegroup session timeout for the sharegroup.
+ */
+void rd_kafka_mock_sharegroup_set_session_timeout(
+    rd_kafka_mock_cluster_t *mcluster,
+    int session_timeout_ms) {
+        mtx_lock(&mcluster->lock);
+        mcluster->defaults.sharegroup_session_timeout_ms = session_timeout_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the sharegroup heartbeat interval for the sharegroup.
+ */
+void rd_kafka_mock_sharegroup_set_heartbeat_interval(
+    rd_kafka_mock_cluster_t *mcluster,
+    int heartbeat_interval_ms) {
+        mtx_lock(&mcluster->lock);
+        mcluster->defaults.sharegroup_heartbeat_interval_ms =
+            heartbeat_interval_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief A client connection closed, check if any sharegroup has any
+ * state for this connection that needs to be cleared.
+ *
+ * @param mcluster Cluster to search in.
+ * @param mconn Connection that was closed.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_sharegrps_connection_closed(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_kafka_mock_connection_t *mconn) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
+                rd_kafka_mock_sharegroup_member_t *member;
+                TAILQ_FOREACH(member, &mshgrp->members, link) {
+                        if (member->conn == mconn) {
+                                member->conn = NULL;
+                        }
+                }
+        }
 }

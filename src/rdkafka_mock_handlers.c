@@ -3022,7 +3022,7 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_t *resp;
         rd_kafkap_str_t GroupId, MemberId, RackId;
         rd_kafkap_str_t *SubscribedTopicNames = NULL;
-        int32_t MemberEpoch, SubscribedTopicNamesCnt;
+        int32_t MemberEpoch                   = 0, SubscribedTopicNamesCnt;
         int32_t i;
         rd_kafka_resp_err_t err                   = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_mock_sharegroup_t *mshgrp        = NULL;
@@ -3031,8 +3031,29 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
 
         resp = rd_kafka_mock_buf_new_response(rkbuf);
 
+        /* Inject Error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+        if (err)
+                goto build_response;
+
         /* GroupId */
         rd_kafka_buf_read_str(rkbuf, &GroupId);
+
+        /* Coordinator check */
+        {
+                rd_kafka_mock_broker_t *mrkb;
+
+                mrkb = rd_kafka_mock_cluster_get_coord(
+                    mcluster, RD_KAFKA_COORD_GROUP, &GroupId);
+
+                if (!mrkb)
+                        err = RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
+                else if (mrkb != mconn->broker)
+                        err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+        }
+
+        if (err)
+                goto build_response;
 
         /* MemberId */
         rd_kafka_buf_read_str(rkbuf, &MemberId);
@@ -3140,9 +3161,7 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                 mtx_unlock(&mcluster->lock);
         }
 
-        /*
-         * Build response
-         */
+build_response:
 
         /* ThrottleTimeMs */
         rd_kafka_buf_write_i32(resp, 0);

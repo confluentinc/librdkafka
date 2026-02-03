@@ -621,6 +621,44 @@ RD_EXPORT void rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
     rd_kafka_mock_cluster_t *mcluster,
     int group_consumer_heartbeat_interval_ms);
 
+/**
+ * @brief Set the sharegroup session timeout in milliseconds.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param session_timeout_ms Session timeout in milliseconds.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_session_timeout(
+    rd_kafka_mock_cluster_t *mcluster,
+    int session_timeout_ms);
+
+/**
+ * @brief Set the sharegroup heartbeat interval in milliseconds.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param heartbeat_interval_ms Heartbeat interval in milliseconds.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_heartbeat_interval(
+    rd_kafka_mock_cluster_t *mcluster,
+    int heartbeat_interval_ms);
+
+/**
+ * @brief Set a manual target assignment for a sharegroup.
+ *
+ * This allows tests to override the automatic partition assignment
+ * and manually specify which partitions each member should get.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_id The sharegroup ID.
+ * @param member_ids Array of member IDs (strings).
+ * @param assignments Array of partition lists (one per member).
+ * @param member_cnt Number of members (length of both arrays).
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_target_assignment(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    const char **member_ids,
+    rd_kafka_topic_partition_list_t **assignments,
+    size_t member_cnt);
 
 /**@}*/
 

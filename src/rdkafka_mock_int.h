@@ -273,8 +273,9 @@ typedef struct rd_kafka_mock_sharegroup_s {
         rd_kafka_timer_t session_tmr;            /**< Session timeout timer */
         int heartbeat_interval_ms;               /**< Heartbeat interval */
         TAILQ_HEAD(, rd_kafka_mock_sharegroup_member_s)
-        members;        /**< Share group members */
-        int member_cnt; /**< Number of share group members */
+        members;                     /**< Share group members */
+        int member_cnt;              /**< Number of share group members */
+        rd_bool_t manual_assignment; /**< Use manual assignment */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -866,6 +867,10 @@ rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
 
 void rd_kafka_mock_sharegroup_assignment_recalculate(
     rd_kafka_mock_sharegroup_t *mshgrp);
+
+void rd_kafka_mock_sharegrps_connection_closed(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_kafka_mock_connection_t *mconn);
 
 /**
  *@}

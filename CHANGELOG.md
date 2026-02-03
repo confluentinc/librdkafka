@@ -1,3 +1,11 @@
+# librdkafka v2.13.1
+
+librdkafka v2.13.1 is a maintenance release:
+
+* The librdkafka.redist NuGet package now includes binary for alpine-arm64 (#5237, @mclayton7)
+
+
+
 # librdkafka v2.13.0
 
 librdkafka v2.13.0 is a feature release:

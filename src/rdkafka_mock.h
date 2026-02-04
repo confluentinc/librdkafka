@@ -640,6 +640,24 @@ RD_EXPORT void rd_kafka_mock_sharegroup_target_assignment(
     rd_kafka_topic_partition_list_t **assignments,
     size_t member_cnt);
 
+/**
+ * @brief Retrieve the member IDs from a sharegroup.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_id The sharegroup ID.
+ * @param member_ids_out Output array of member IDs. Caller must free each
+ *                       string with rd_free() and the array itself.
+ * @param member_cnt_out Output count of members.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND if sharegroup not found.
+ */
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_member_ids(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    char ***member_ids_out,
+    size_t *member_cnt_out);
+
 /**@}*/
 
 #ifdef __cplusplus

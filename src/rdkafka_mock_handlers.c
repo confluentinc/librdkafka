@@ -3191,8 +3191,10 @@ build_response:
                 rd_kafka_buf_write_i32(resp, 5000);
 
         /* Assignment */
-        if (!err && member && member->assignment &&
-            member->assignment->cnt > 0) {
+        if (!err && member && member->assignment) {
+                /* Send assignment even if empty (cnt == 0).
+                 * Null (-1) means "no change", while an empty assignment
+                 * means "you have 0 partitions". */
                 rd_kafka_buf_write_i8(resp, 1);
                 rd_kafka_mock_handle_ShareGroupHeartbeat_write_TopicPartitions(
                     resp, member->assignment);

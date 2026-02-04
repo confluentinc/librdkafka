@@ -576,6 +576,26 @@ static void rd_kafka_mock_sharegroup_target_assignment_set(
                 member->assignment =
                     rd_kafka_topic_partition_list_copy(partitions);
 
+                /* Set topic IDs on each partition so the heartbeat response
+                 * can include them (ShareGroupHeartbeat uses topic IDs) */
+                {
+                        int j;
+                        for (j = 0; j < member->assignment->cnt; j++) {
+                                rd_kafka_topic_partition_t *rktpar =
+                                    &member->assignment->elems[j];
+                                rd_kafkap_str_t topic_str = {
+                                    .str = rktpar->topic,
+                                    .len = strlen(rktpar->topic)};
+                                rd_kafka_mock_topic_t *mtopic =
+                                    rd_kafka_mock_topic_find_by_kstr(
+                                        mshgrp->cluster, &topic_str);
+                                if (mtopic) {
+                                        rd_kafka_topic_partition_set_topic_id(
+                                            rktpar, mtopic->id);
+                                }
+                        }
+                }
+
                 rd_kafka_dbg(
                     mshgrp->cluster->rk, MOCK, "MOCK",
                     "Target assignment set for member %s: %d partition(s)",
@@ -676,4 +696,57 @@ void rd_kafka_mock_sharegrps_connection_closed(
                         }
                 }
         }
+}
+
+/**
+ * @brief Retrieve the member IDs from a sharegroup.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param group_id The sharegroup ID.
+ * @param member_ids_out Output array of member IDs (caller must free each
+ *                       string and the array itself).
+ * @param member_cnt_out Output count of members.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND if sharegroup not found.
+ */
+rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_member_ids(
+    rd_kafka_mock_cluster_t *mcluster,
+    const char *group_id,
+    char ***member_ids_out,
+    size_t *member_cnt_out) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        rd_kafka_mock_sharegroup_member_t *member;
+        rd_kafkap_str_t *group_id_str;
+        char **member_ids;
+        size_t i;
+
+        mtx_lock(&mcluster->lock);
+        group_id_str = rd_kafkap_str_new(group_id, -1);
+        mshgrp       = rd_kafka_mock_sharegroup_find(mcluster, group_id_str);
+        rd_kafkap_str_destroy(group_id_str);
+
+        if (!mshgrp) {
+                mtx_unlock(&mcluster->lock);
+                *member_ids_out = NULL;
+                *member_cnt_out = 0;
+                return RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND;
+        }
+
+        *member_cnt_out = mshgrp->member_cnt;
+        if (mshgrp->member_cnt == 0) {
+                mtx_unlock(&mcluster->lock);
+                *member_ids_out = NULL;
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        member_ids = rd_malloc(sizeof(*member_ids) * mshgrp->member_cnt);
+        i          = 0;
+        TAILQ_FOREACH(member, &mshgrp->members, link) {
+                member_ids[i++] = rd_strdup(member->id);
+        }
+
+        mtx_unlock(&mcluster->lock);
+        *member_ids_out = member_ids;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

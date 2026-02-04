@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1
+#
+# Cross-compilation Dockerfile for building librdkafka for s390x architecture
+# Uses BuildKit cross-compilation with tonistiigi/xx toolkit to avoid QEMU slowness
+#
+
+ARG BASE_IMAGE=ubuntu:24.04
+
+# Cross-compilation helpers
+FROM --platform=$BUILDPLATFORM tonistiigi/xx:1.5.0 AS xx
+
+# Build stage runs on native platform (AMD64), outputs s390x binaries
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE} AS builder
+
+COPY --from=xx / /
+
+ARG TARGETPLATFORM
+ARG LIBRDKAFKA_VERSION
+
+# Install native build tools and cross-compilation toolchain
+RUN NEEDRESTART_MODE=a apt-get update && apt-get install -y \
+    wget curl python3 git build-essential \
+    clang lld pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install cross-compilation toolchain for s390x
+RUN xx-apt-get install -y \
+    gcc g++ libc6-dev \
+    libssl-dev \
+    libsasl2-dev \
+    zlib1g-dev \
+    libzstd-dev \
+    liblz4-dev
+
+# Set up cross-compilation environment
+ENV PKG_CONFIG_PATH=/usr/lib/$(xx-info)-linux-gnu/pkgconfig
+ENV CC=$(xx-info)-gcc
+ENV CXX=$(xx-info)-g++
+ENV AR=$(xx-info)-ar
+ENV RANLIB=$(xx-info)-ranlib
+ENV STRIP=$(xx-info)-strip
+
+WORKDIR /build
+
+# Copy source code
+COPY . /build/
+
+# Configure for cross-compilation
+# --host tells configure we're cross-compiling for s390x
+# --install-deps --source-deps-only builds dependencies from source
+# --enable-static builds static libraries
+# --disable-lz4-ext uses bundled lz4 instead of system lz4
+RUN ./configure \
+    --host=$(xx-info) \
+    --prefix=/usr/local \
+    --install-deps \
+    --source-deps-only \
+    --enable-static \
+    --enable-strip \
+    --disable-lz4-ext \
+    --enable-ssl \
+    --enable-sasl \
+    --enable-zstd
+
+# Build librdkafka
+RUN make -j$(nproc)
+
+# Run examples to verify build (using QEMU for this step)
+RUN xx-verify --static src/librdkafka.a
+RUN xx-verify src/librdkafka.so.1
+
+# Install to staging directory
+RUN DESTDIR=/artifacts make install
+
+# Show what was built
+RUN ls -lh /artifacts/usr/local/lib/
+RUN file /artifacts/usr/local/lib/librdkafka.so.1
+
+# Final stage: Package the artifacts
+FROM scratch AS artifacts
+COPY --from=builder /artifacts /

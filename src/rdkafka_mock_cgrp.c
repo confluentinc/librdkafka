@@ -1873,4 +1873,5 @@ void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn) {
         rd_kafka_mock_cgrps_classic_connection_closed(mcluster, mconn);
         rd_kafka_mock_cgrps_consumer_connection_closed(mcluster, mconn);
+        rd_kafka_mock_sharegrps_connection_closed(mcluster, mconn);
 }

@@ -230,7 +230,8 @@ blocks:
   - name: 'Linux s390x: release artifact cross-compilation builds'
     dependencies: []
     run:
-      when: "tag =~ '^v[0-9]\\.'"
+      # TODO: Remove branch condition after testing - only keep tag condition for production
+      when: "tag =~ '^v[0-9]\\.' or branch = 'feat/s390x-cross-compilation'"
     task:
       agent:
         machine:
@@ -247,19 +248,12 @@ blocks:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
       jobs:
-        - name: 'Build: cross-compiled glibc +gssapi'
-          env_vars:
-            - name: ARTIFACT_KEY
-              value: p-librdkafka__plat-linux__dist-ubuntu__arch-s390x__lnk-std__extra-gssapi
-          commands:
-            - packaging/tools/build-s390x-cross.sh artifacts/librdkafka.tgz
-
-        - name: 'Build: cross-compiled glibc'
+        # TODO: For testing only - running single job. Add back both variants for production.
+        - name: 'Build: cross-compiled s390x (test)'
           env_vars:
             - name: ARTIFACT_KEY
               value: p-librdkafka__plat-linux__dist-ubuntu__arch-s390x__lnk-all
           commands:
-            # Note: Currently building with gssapi - add --disable-gssapi support if needed
             - packaging/tools/build-s390x-cross.sh artifacts/librdkafka.tgz
 
 

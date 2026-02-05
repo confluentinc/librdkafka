@@ -28,17 +28,13 @@ RUN xx-apt-get install -y \
     gcc g++ libc6-dev \
     libssl-dev \
     libsasl2-dev \
+    libcurl4-openssl-dev \
     zlib1g-dev \
     libzstd-dev \
     liblz4-dev
 
 # Set up cross-compilation environment
 ENV PKG_CONFIG_PATH=/usr/lib/$(xx-info)-linux-gnu/pkgconfig
-ENV CC=$(xx-info)-gcc
-ENV CXX=$(xx-info)-g++
-ENV AR=$(xx-info)-ar
-ENV RANLIB=$(xx-info)-ranlib
-ENV STRIP=$(xx-info)-strip
 
 WORKDIR /build
 
@@ -47,20 +43,23 @@ COPY . /build/
 
 # Configure for cross-compilation
 # --host tells configure we're cross-compiling for s390x
-# --install-deps --source-deps-only builds dependencies from source
 # --enable-static builds static libraries
-# --disable-lz4-ext uses bundled lz4 instead of system lz4
-RUN ./configure \
+# We use system packages for dependencies (installed via xx-apt-get above)
+# Must explicitly set CC, AR, etc. as configure doesn't pick up ENV vars reliably
+RUN CC=$(xx-info)-gcc \
+    CXX=$(xx-info)-g++ \
+    AR=$(xx-info)-ar \
+    RANLIB=$(xx-info)-ranlib \
+    STRIP=$(xx-info)-strip \
+    ./configure \
     --host=$(xx-info) \
     --prefix=/usr/local \
-    --install-deps \
-    --source-deps-only \
     --enable-static \
     --enable-strip \
-    --disable-lz4-ext \
     --enable-ssl \
     --enable-sasl \
-    --enable-zstd
+    --enable-zstd \
+    --enable-lz4-ext
 
 # Build librdkafka
 RUN make -j$(nproc)

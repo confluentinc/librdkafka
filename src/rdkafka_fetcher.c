@@ -1471,7 +1471,7 @@ void rd_kafka_ShareFetchRequest(
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_ShareFetch,
-                                                          1, 1, NULL);
+                                                          0, 0, NULL);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ShareFetch, 1,
                                                  rkbuf_size,
@@ -1680,6 +1680,9 @@ void rd_kafka_ShareFetchRequest(
                 /* ForgottenToppars */
                 rd_kafka_buf_write_arraycnt(rkbuf, 0);
         }
+
+        /* Top-level tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
 
         /* Consider Fetch requests blocking if fetch.wait.max.ms >= 1s */
         if (rkb->rkb_rk->rk_conf.fetch_wait_max_ms >= 1000)

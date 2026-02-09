@@ -97,9 +97,20 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_INIT(&mshgrp->members);
         mshgrp->member_cnt = 0;
 
+        /* ShareFetch state */
+        TAILQ_INIT(&mshgrp->partitions);
+        TAILQ_INIT(&mshgrp->fetch_sessions);
+        mshgrp->partition_cnt     = 0;
+        mshgrp->fetch_session_cnt = 0;
+
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,
                              rd_kafka_mock_sharegroup_session_tmr_cb, mshgrp);
+
+        /* Fetch session expiry timer */
+        rd_kafka_timer_start(&mcluster->timers, &mshgrp->fetch_session_tmr,
+                             1000 * 1000 /* 1s */,
+                             rd_kafka_mock_sgrp_fetch_session_tmr_cb, mshgrp);
 
         TAILQ_INSERT_TAIL(&mcluster->sharegrps, mshgrp, link);
 
@@ -111,14 +122,37 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
  */
 void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
         rd_kafka_mock_sharegroup_member_t *member;
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+        rd_kafka_mock_sgrp_fetch_session_t *session;
 
         TAILQ_REMOVE(&mshgrp->cluster->sharegrps, mshgrp, link);
         rd_kafka_timer_stop(&mshgrp->cluster->timers, &mshgrp->session_tmr,
                             RD_DO_LOCK);
+        rd_kafka_timer_stop(&mshgrp->cluster->timers,
+                            &mshgrp->fetch_session_tmr, RD_DO_LOCK);
 
         /* Destroy all members */
         while ((member = TAILQ_FIRST(&mshgrp->members)))
                 rd_kafka_mock_sharegroup_member_destroy(mshgrp, member);
+
+        /* Destroy ShareFetch partition metadata */
+        while ((pmeta = TAILQ_FIRST(&mshgrp->partitions))) {
+                rd_kafka_mock_sgrp_record_state_t *state;
+                TAILQ_REMOVE(&mshgrp->partitions, pmeta, link);
+                while ((state = TAILQ_FIRST(&pmeta->inflight))) {
+                        TAILQ_REMOVE(&pmeta->inflight, state, link);
+                        rd_free(state->owner_member_id);
+                        rd_free(state);
+                }
+                rd_free(pmeta);
+        }
+
+        /* Destroy ShareFetch sessions */
+        while ((session = TAILQ_FIRST(&mshgrp->fetch_sessions))) {
+                TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
+                mshgrp->fetch_session_cnt--;
+                rd_kafka_mock_sgrp_fetch_session_destroy(session);
+        }
 
         rd_free(mshgrp->id);
         rd_free(mshgrp);

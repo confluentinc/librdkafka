@@ -6552,6 +6552,11 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
                 }
         }
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            !rkcg_subscription_topics && rkcg->rkcg_subscription_topics) {
+                rkcg_subscription_topics = rkcg->rkcg_subscription_topics;
+        }
+
         rkcg->rkcg_expedite_heartbeat_retries++;
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {

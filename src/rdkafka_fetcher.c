@@ -1681,6 +1681,9 @@ void rd_kafka_ShareFetchRequest(
                 rd_kafka_buf_write_arraycnt(rkbuf, 0);
         }
 
+        /* Top-level tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
+
         /* Consider Fetch requests blocking if fetch.wait.max.ms >= 1s */
         if (rkb->rkb_rk->rk_conf.fetch_wait_max_ms >= 1000)
                 rkbuf->rkbuf_flags |= RD_KAFKA_OP_F_BLOCKING;

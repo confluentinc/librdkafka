@@ -293,6 +293,26 @@ rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
                                             int64_t hi);
 
 /**
+ * @brief Append a record batch to a partition log.
+ *
+ * The record batch must use the Kafka record batch format (v2), the same
+ * encoding as the ProduceRequest Records field.
+ *
+ * The topic will be created if it does not exist.
+ *
+ * @param transactional_id Optional transactional.id to validate PID/sequence.
+ * @param base_offset Optional pointer to store the first assigned offset.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_partition_produce(rd_kafka_mock_cluster_t *mcluster,
+                                const char *topic,
+                                int32_t partition,
+                                const void *records,
+                                size_t records_size,
+                                const char *transactional_id,
+                                int64_t *base_offset);
+
+/**
  * @brief Push \p cnt Metadata leader response
  *        onto the cluster's stack for the given \p topic and \p partition.
  *
@@ -620,6 +640,32 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_session_timeout(
 RD_EXPORT void rd_kafka_mock_sharegroup_set_heartbeat_interval(
     rd_kafka_mock_cluster_t *mcluster,
     int heartbeat_interval_ms);
+
+/**
+ * @brief Set the maximum number of times a record can be acquired
+ *        before it is automatically archived (dead-lettered).
+ *
+ * Default is 5.  Set to 0 for unlimited deliveries.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param max_attempts Maximum delivery attempts per record.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_max_delivery_attempts(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_attempts);
+
+/**
+ * @brief Set the per-record lock duration in milliseconds.
+ *
+ * When a record is acquired, its lock expires after this duration.
+ * Default is 0, which falls back to the session timeout value.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param lock_duration_ms Lock duration in milliseconds.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_record_lock_duration(
+    rd_kafka_mock_cluster_t *mcluster,
+    int lock_duration_ms);
 
 /**
  * @brief Set a manual target assignment for a sharegroup.

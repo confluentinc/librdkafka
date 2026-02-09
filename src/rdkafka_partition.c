@@ -294,7 +294,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
                      rkt->rkt_topic->str, rktp->rktp_partition, rktp,
                      &rktp->rktp_refcnt, func, line);
 
-        rktp->rktp_share_acknowledgement_list = NULL;
+        rktp->rktp_share_acknowledge = NULL;
         rktp->rktp_share_acknowledge_count = 0;
 
         return rd_kafka_toppar_keep(rktp);
@@ -339,7 +339,7 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
         /* Clear queues */
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
                         rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_share_acknowledgement_list == NULL);
+        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_share_acknowledge == NULL);
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_share_acknowledge_count == 0);
         rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
                          RD_KAFKA_RESP_ERR__DESTROY);

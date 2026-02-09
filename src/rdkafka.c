@@ -1211,10 +1211,36 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
 }
 
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
+        const rd_kafka_topic_partition_t *tp_key;
+        rd_kafka_share_ack_batches_t *batches;
+
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
+
+        /* Destroy inflight map entries */
+        RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
+                if (batches) {
+                        if (batches->topic)
+                                rd_free(batches->topic);
+                        /* Destroy entries list with custom cleanup */
+                        rd_kafka_share_ack_batch_entry_t *entry;
+                        int i;
+                        RD_LIST_FOREACH(entry, &batches->entries, i) {
+                                if (entry->types)
+                                        rd_free(entry->types);
+                                rd_free(entry);
+                        }
+                        rd_list_destroy(&batches->entries);
+                        rd_free(batches);
+                }
+        }
+        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
+
+        /* Clear backpointer before destroying rk */
+        rkshare->rkshare_rk->rk_rkshare = NULL;
+
         rd_kafka_destroy(rkshare->rkshare_rk);
         rd_free(rkshare);
 }
@@ -2948,6 +2974,18 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
 
         rkshare = rd_calloc(1, sizeof(*rkshare));
         rkshare->rkshare_rk = rk;
+        rkshare->rkshare_unacked_cnt = 0;
+
+        /* Set backpointer from rk to rkshare for access in retry handlers */
+        rk->rk_rkshare = rkshare;
+
+        /* Initialize the inflight acks map */
+        RD_MAP_INIT(&rkshare->rkshare_inflight_acks, 16,
+                    rd_kafka_topic_partition_cmp,
+                    rd_kafka_topic_partition_hash,
+                    rd_kafka_topic_partition_destroy_free,
+                    NULL /* value destructor handled manually */);
+
         return rkshare;
 }
 
@@ -3070,6 +3108,12 @@ static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                                        rd_kafka_share_fetch_fanout_op);
                 rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
                 rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+
+                /* Build ack batches from inflight map to send with request.
+                 * Uses rk->rk_rkshare backpointer set in share_consumer_new(). */
+                rd_kafka_share_build_ack_batches_for_fetch(
+                    rk->rk_rkshare, &rko->rko_u.share_fetch_fanout.ack_batches);
+
                 rd_kafka_q_enq(rk->rk_ops, rko);
         }
 }
@@ -3333,7 +3377,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
             rkcg->rkcg_q, timeout_ms, /* Use this timeout directly as prior
                              operations aren't blocking, so no need to
                              re-convert the abs_timeout into a relative one.*/
-            rkmessages, max_poll_records);
+            rkmessages, max_poll_records, rkshare);
 
         return NULL;
 }

@@ -285,6 +285,14 @@ typedef struct rd_kafka_mock_sharegroup_s {
         fetch_sessions;                      /**< Active fetch sessions */
         int fetch_session_cnt;               /**< Number of fetch sessions */
         rd_kafka_timer_t fetch_session_tmr;  /**< Fetch session expiry timer */
+
+        /* Per-record limits */
+        int max_delivery_attempts;           /**< Max times a record can be
+                                              *   acquired before being archived.
+                                              *   0 = unlimited (default 5). */
+        int record_lock_duration_ms;         /**< Per-record lock duration in ms.
+                                              *   0 = use session_timeout_ms
+                                              *   as fallback (default 0). */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -642,6 +650,12 @@ struct rd_kafka_mock_cluster_s {
                 int sharegroup_session_timeout_ms;
                 /** Heartbeat interval (KIP 932) */
                 int sharegroup_heartbeat_interval_ms;
+                /** Max delivery attempts per record (KIP 932).
+                 *  0 = unlimited. */
+                int sharegroup_max_delivery_attempts;
+                /** Per-record lock duration in ms (KIP 932).
+                 *  0 = use session_timeout_ms. */
+                int sharegroup_record_lock_duration_ms;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

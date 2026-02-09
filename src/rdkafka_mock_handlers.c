@@ -3908,6 +3908,7 @@ rd_kafka_mock_sgrp_acquire_available_offsets(
     const rd_kafka_mock_partition_t *mpart,
     const rd_kafkap_str_t *member_id,
     rd_ts_t lock_expiry_ts,
+    int max_delivery_attempts,
     int64_t *remaining_records,
     int64_t *remaining_bytes,
     int *acquired_cnt,
@@ -3928,6 +3929,18 @@ rd_kafka_mock_sgrp_acquire_available_offsets(
             if (state &&
                 state->state != RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE)
                     continue;
+
+            /* Check max delivery attempts: if the record has already
+             * been acquired (and released/expired) too many times,
+             * archive it instead of re-acquiring. */
+            if (max_delivery_attempts > 0 && state &&
+                state->delivery_count >= max_delivery_attempts) {
+                    state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                    RD_IF_FREE(state->owner_member_id, rd_free);
+                    state->owner_member_id = NULL;
+                    state->lock_expiry_ts  = 0;
+                    continue;
+            }
 
             mset = rd_kafka_mock_msgset_find(mpart, offset, rd_false);
             if (!mset)
@@ -4362,7 +4375,11 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     pmeta, mpart,
                                     &MemberId,
                                     now +
-                                        (sgrp->session_timeout_ms * 1000),
+                                        ((sgrp->record_lock_duration_ms > 0
+                                              ? sgrp->record_lock_duration_ms
+                                              : sgrp->session_timeout_ms) *
+                                         1000),
+                                    sgrp->max_delivery_attempts,
                                     MaxRecords > 0 ? &remaining_records : NULL,
                                     MaxBytes > 0 ? &remaining_bytes : NULL,
                                     &acquired_cnt, &acquired_bytes);

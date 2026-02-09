@@ -131,6 +131,99 @@ rd_kafka_fetch_pos_make(int64_t offset,
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
                    rd_kafka_toppar_s) rd_kafka_toppar_tqhead_t;
 
+typedef enum rd_kafka_share_acknowledgement_type {
+        RD_KAFKA_SHARE_ACK_ACQUIRED   = -1, /* Acquired records, not acknowledged yet */
+        RD_KAFKA_SHARE_ACK_GAP    = 0,  /* gap */
+        RD_KAFKA_SHARE_ACK_ACCEPT = 1,   /* accept */
+        RD_KAFKA_SHARE_ACK_RELEASE = 2,   /* release */
+        RD_KAFKA_SHARE_ACK_REJECT = 3   /* reject */
+} rd_kafka_share_acknowledgement_type;
+
+/**
+ * @brief Offset range for acquired records.
+ */
+typedef struct rd_kafka_share_ack_range_s {
+        int64_t start_offset; /**< First offset in range */
+        int64_t end_offset;   /**< Last offset in range (inclusive) */
+} rd_kafka_share_ack_range_t;
+
+/**
+ * @brief Per topic-partition acquired records info for a share fetch response.
+ *
+ * Contains leader information and acquired record ranges for acknowledgement.
+ */
+typedef struct rd_kafka_share_partition_ack_s {
+        char *topic;              /**< Topic name (allocated) */
+        int32_t partition;        /**< Partition id */
+        int32_t leader_id;        /**< Leader broker id */
+        int32_t leader_epoch;     /**< Leader epoch */
+        int32_t acquired_msg_cnt; /**< Total acquired messages count */
+        int32_t acquired_ranges_cnt;            /**< Count of ranges */
+        rd_kafka_share_ack_range_t *acquired_ranges; /**< Array of ranges (allocated) */
+} rd_kafka_share_partition_ack_t;
+
+
+/**
+ * @brief Acknowledgement batch entry for a contiguous offset range.
+ *
+ * Tracks acknowledgement status for each offset in the range.
+ * Used for building ShareAcknowledge requests.
+ */
+typedef struct rd_kafka_share_ack_batch_entry_s {
+        int64_t start_offset;   /**< First offset in range */
+        int64_t end_offset;     /**< Last offset in range (inclusive) */
+        int64_t size;           /**< Number of offsets (end - start + 1) */
+        rd_kafka_share_acknowledgement_type *types; /**< Array of ack types,
+                                                     *   one per offset */
+} rd_kafka_share_ack_batch_entry_t;
+
+/**
+ * @brief Per topic-partition inflight acknowledgement batches.
+ *
+ * Tracks all acquired records for a topic-partition that are
+ * pending acknowledgement from the application.
+ */
+typedef struct rd_kafka_share_ack_batches_s {
+        char *topic;              /**< Topic name (allocated) */
+        int32_t partition;        /**< Partition id */
+        int32_t leader_id;        /**< Leader broker id */
+        int32_t leader_epoch;     /**< Leader epoch */
+        int32_t number_of_acquired_msgs; /**< Total acquired messages */
+        rd_list_t entries;        /**< rd_kafka_share_ack_batch_entry_t*,
+                                   *   sorted by start_offset */
+} rd_kafka_share_ack_batches_t;
+
+
+/**
+ * @brief Collated acknowledgement range for ShareFetch request.
+ *
+ * A contiguous offset range where all offsets have the same ack type.
+ * Used when sending acknowledgements with ShareFetch requests.
+ * ACQUIRED type is converted to AVAILABLE when building these ranges.
+ */
+typedef struct rd_kafka_share_fetch_ack_range_s {
+        int64_t start_offset;   /**< First offset in range */
+        int64_t end_offset;     /**< Last offset in range (inclusive) */
+        rd_kafka_share_acknowledgement_type type; /**< Ack type for entire range */
+} rd_kafka_share_fetch_ack_range_t;
+
+/**
+ * @brief Per topic-partition acknowledgement batch for ShareFetch request.
+ *
+ * Contains collated acknowledgement ranges to send with a ShareFetch request.
+ * Built from the inflight acknowledgement map by collating consecutive
+ * offsets with the same type.
+ */
+typedef struct rd_kafka_share_fetch_ack_batch_s {
+        char *topic;              /**< Topic name (allocated) */
+        int32_t partition;        /**< Partition id */
+        int32_t leader_id;        /**< Leader broker id */
+        int32_t leader_epoch;     /**< Leader epoch */
+        rd_list_t ranges;         /**< rd_kafka_share_fetch_ack_range_t*,
+                                   *   sorted by start_offset */
+} rd_kafka_share_fetch_ack_batch_t;
+
+
 /**
  * Topic + Partition combination
  */
@@ -184,6 +277,8 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         rd_kafka_q_t *rktp_fetchq; /* Queue of fetched messages
                                     * from broker.
                                     * Broker thread -> App */
+        rd_kafka_q_t *rktp_temp_fetchq; /* Temporary fetch queue
+                                        * used to filter acquired records */
         rd_kafka_q_t *rktp_ops;    /* * -> Main thread */
 
         rd_atomic32_t rktp_msgs_inflight; /**< Current number of
@@ -491,7 +586,7 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 int64_t first_offset;
                 int64_t last_offset;
                 int16_t delivery_count;
-        } *rktp_share_acknowledge; /* NULL = not initialized */
+        } *rktp_share_acknowledge; /* NULL = not initialized */;
         size_t rktp_share_acknowledge_count; /* number of entries in rktp_share_acknowledge (0 when NULL) */
 };
 

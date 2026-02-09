@@ -4028,20 +4028,20 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp              = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafkap_str_t GroupId, MemberId;
-        int32_t SessionId = -1, SessionEpoch = -1, MaxWaitMs = 0, MinBytes = 0,
+        int32_t SessionEpoch = -1, MaxWaitMs = 0, MinBytes = 0,
                 MaxBytes = 0, MaxRecords = 0, BatchSize = 0;
         int32_t TopicsCnt;
         rd_kafka_topic_partition_list_t *requested_partitions = NULL;
         rd_kafka_resp_err_t err                               = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_mock_sgrp_t *sgrp                            = NULL;
         rd_kafka_mock_sgrp_fetch_session_t *session           = NULL;
-        static int32_t next_session_id                        = 1;
 
         (void)log_decode_errors;
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
         rd_kafka_buf_read_str(rkbuf, &MemberId);
-        /* Fetcher sends SessionEpoch only (no SessionId) */
+        /* KIP-932: ShareFetch has ShareSessionEpoch only, no SessionId.
+         * Sessions are keyed by (GroupId, MemberId). */
         rd_kafka_buf_read_i32(rkbuf, &SessionEpoch);
         rd_kafka_buf_read_i32(rkbuf, &MaxWaitMs);
         rd_kafka_buf_read_i32(rkbuf, &MinBytes);
@@ -4095,12 +4095,12 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
                      "ShareFetch parsed: group %.*s member %.*s "
-                     "session_id %" PRId32 " session_epoch %" PRId32
+                     "session_epoch %" PRId32
                      " max_wait %" PRId32 " min_bytes %" PRId32
                      " max_bytes %" PRId32 " max_records %" PRId32
                      " batch_size %" PRId32,
                      RD_KAFKAP_STR_PR(&GroupId), RD_KAFKAP_STR_PR(&MemberId),
-                     SessionId, SessionEpoch, MaxWaitMs, MinBytes, MaxBytes,
+                     SessionEpoch, MaxWaitMs, MinBytes, MaxBytes,
                      MaxRecords, BatchSize);
 
         err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -4114,49 +4114,39 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 int64_t acquired_bytes = 0;
                 rd_ts_t now = rd_clock();
 
-                // Handle ShareFetch session management
+                /* KIP-932 session management.
+                 * Sessions are keyed by (GroupId, MemberId).
+                 * SessionEpoch: 0 = open new session,
+                 *              -1 = close session,
+                 *              >0 = continue (must match expected epoch). */
                 mtx_lock(&mcluster->lock);
                 sgrp = rd_kafka_mock_sgrp_get(mcluster, &GroupId);
 
-                if (SessionId < 0) {
-                        TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
-                                if (!rd_kafkap_str_cmp_str(&MemberId,
-                                                           session->member_id))
-                                        break;
-                        }
+                /* Look up existing session by MemberId */
+                TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
+                        if (!rd_kafkap_str_cmp_str(&MemberId,
+                                                   session->member_id))
+                                break;
+                }
+
+                if (SessionEpoch == 0) {
+                        /* Open a new session (or reuse if one already exists
+                         * for this member). */
                         if (!session) {
                                 session = rd_calloc(1, sizeof(*session));
-                                session->member_id = RD_KAFKAP_STR_DUP(&MemberId);
-                                session->session_id = next_session_id++;
+                                session->member_id =
+                                    RD_KAFKAP_STR_DUP(&MemberId);
                                 session->session_epoch = 0;
-                                session->ts_last_activity = rd_clock();
                                 session->partitions =
                                     rd_kafka_topic_partition_list_copy(
                                         requested_partitions);
-                                TAILQ_INSERT_TAIL(&sgrp->fetch_sessions, session,
-                                                  link);
+                                TAILQ_INSERT_TAIL(&sgrp->fetch_sessions,
+                                                  session, link);
                                 sgrp->fetch_session_cnt++;
-                        }
-                } else {
-                        TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
-                                if (session->session_id != SessionId)
-                                        continue;
-                                if (rd_kafkap_str_cmp_str(&MemberId,
-                                                          session->member_id))
-                                        continue;
-                                break;
-                        }
-                }
-
-                if (!session) {
-                        err = RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
-                } else if (SessionEpoch != -1 &&
-                           SessionEpoch != session->session_epoch) {
-                        err = RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
-                } else {
-                        if (!rd_kafka_mock_tplist_equal_by_id(
-                                requested_partitions, session->partitions)) {
-                                session->session_epoch++;
+                        } else {
+                                /* Session already exists for this member;
+                                 * reset it. */
+                                session->session_epoch = 0;
                                 RD_IF_FREE(
                                     session->partitions,
                                     rd_kafka_topic_partition_list_destroy);
@@ -4164,7 +4154,47 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     rd_kafka_topic_partition_list_copy(
                                         requested_partitions);
                         }
+                } else if (SessionEpoch == -1) {
+                        /* Close the session. */
+                        if (session) {
+                                TAILQ_REMOVE(&sgrp->fetch_sessions, session,
+                                             link);
+                                sgrp->fetch_session_cnt--;
+                                rd_kafka_mock_sgrp_fetch_session_destroy(
+                                    session);
+                                session = NULL;
+                        }
+                        /* Closing a non-existent session is not an error;
+                         * proceed with an empty response. */
+                } else {
+                        /* Continue existing session: validate epoch. */
+                        if (!session) {
+                                err =
+                                    RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        } else if (SessionEpoch !=
+                                   session->session_epoch) {
+                                err =
+                                    RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        } else {
+                                /* Update partition list if changed */
+                                if (!rd_kafka_mock_tplist_equal_by_id(
+                                        requested_partitions,
+                                        session->partitions)) {
+                                        RD_IF_FREE(
+                                            session->partitions,
+                                            rd_kafka_topic_partition_list_destroy);
+                                        session->partitions =
+                                            rd_kafka_topic_partition_list_copy(
+                                                requested_partitions);
+                                }
+                        }
+                }
+
+                /* For all successful, non-close requests: update activity
+                 * timestamp and increment epoch for next request. */
+                if (!err && session) {
                         session->ts_last_activity = rd_clock();
+                        session->session_epoch++;
                 }
 
                 if (!err && sgrp) {

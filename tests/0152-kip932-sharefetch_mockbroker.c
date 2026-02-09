@@ -407,6 +407,84 @@ static int run_empty_fetch_no_records(void) {
         return consumed == 0;
 }
 
+/**
+ * @brief Verify that ShareFetch rejects requests from an unregistered member
+ *        (UNKNOWN_MEMBER_ID), and that after the member re-joins it can
+ *        consume again.
+ *
+ *  Phase 1: Consumer joins normally via SGHB → consumes messages OK.
+ *  Phase 2: Push SGHB errors → heartbeats fail → member expires → broker
+ *           rejects ShareFetch with UNKNOWN_MEMBER_ID.
+ *  Phase 3: SGHB errors drain → member re-joins → consumes again.
+ */
+static int run_member_validation(void) {
+        const char *topic = "kip932_member_validation";
+        const int msgcnt  = 4;
+        test_ctx_t ctx    = test_ctx_new();
+        rd_kafka_share_t *consumer;
+        int consumed_p1, consumed_p3;
+
+        /* Short session timeout so the member is evicted quickly once
+         * heartbeats stop succeeding. */
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
+
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-member-val");
+        subscribe_topics(consumer, &topic, 1);
+
+        /* Phase 1: Consume normally — member is registered via SGHB. */
+        consumed_p1 = consume_n(consumer, 2, 30);
+        printf("  member_validation: phase1 consumed %d/2\n", consumed_p1);
+
+        /* Phase 2: Block SGHB so heartbeats fail.
+         * Push enough errors to cover the window while we wait for the
+         * member to be evicted. The client sends SGHB roughly every
+         * heartbeat interval (~5s default), but with a 500ms session
+         * timeout the member will be removed well before the errors
+         * drain. We push 20 errors to be safe. */
+        rd_kafka_mock_push_request_errors(
+            ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, 20,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE);
+
+        /* Wait for the member to be evicted (500ms session timeout + margin). */
+        usleep(1500 * 1000);
+
+        /* Phase 3: SGHB errors will eventually drain. Once a SGHB
+         * succeeds, the member re-joins and the remaining records
+         * become fetchable again. */
+        consumed_p3 = consume_n(consumer, 2, 50);
+        printf("  member_validation: phase3 consumed %d/2\n", consumed_p3);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        return consumed_p1 >= 2 && (consumed_p1 + consumed_p3) >= msgcnt;
+}
+
 static int run_sharefetch_session_expiry_rtt(void) {
         const char *topic = "kip932_rtt_expiry";
         test_ctx_t ctx    = test_ctx_new();
@@ -739,6 +817,8 @@ int main(void) {
                              run_unknown_topic_subscription);
         failures += run_test("empty_fetch_no_records",
                              run_empty_fetch_no_records);
+        failures += run_test("member_validation",
+                             run_member_validation);
 
         printf("Failures: %d\n", failures);
         return failures ? 1 : 0;

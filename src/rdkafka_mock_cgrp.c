@@ -1879,7 +1879,7 @@ rd_kafka_mock_sgrp_partmeta_destroy(rd_kafka_mock_sgrp_partmeta_t *pmeta) {
 /**
  * @brief Destroy share fetch session.
  */
-static void rd_kafka_mock_sgrp_fetch_session_destroy(
+void rd_kafka_mock_sgrp_fetch_session_destroy(
     rd_kafka_mock_sgrp_fetch_session_t *session) {
         rd_free(session->member_id);
         RD_IF_FREE(session->partitions, rd_kafka_topic_partition_list_destroy);

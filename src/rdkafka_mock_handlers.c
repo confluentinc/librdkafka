@@ -4441,7 +4441,7 @@ const struct rd_kafka_mock_api_handler
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
         [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
                                      rd_kafka_mock_handle_PushTelemetry},
-        [RD_KAFKAP_ShareFetch] = {0, 0, 0, rd_kafka_mock_handle_ShareFetch},
+        [RD_KAFKAP_ShareFetch] = {1, 1, 1, rd_kafka_mock_handle_ShareFetch},
 };
 
 

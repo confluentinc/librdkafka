@@ -63,7 +63,7 @@ static test_ctx_t test_ctx_new(void) {
             RD_KAFKA_RESP_ERR_NO_ERROR)
                 die("Failed to enable ShareGroupHeartbeat");
         if (rd_kafka_mock_set_apiversion(
-                ctx.mcluster, RD_KAFKAP_ShareFetch, 0, 0) !=
+                ctx.mcluster, RD_KAFKAP_ShareFetch, 1, 1) !=
             RD_KAFKA_RESP_ERR_NO_ERROR)
                 die("Failed to enable ShareFetch");
 

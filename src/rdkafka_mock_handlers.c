@@ -3660,14 +3660,27 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 mtx_lock(&mcluster->lock);
                 sgrp = rd_kafka_mock_sharegroup_get(mcluster, &GroupId);
 
+                /* Member validation: verify the MemberId is a registered
+                 * member of this share group (joined via SGHB). */
+                if (!rd_kafka_mock_sharegroup_member_find(sgrp, &MemberId)) {
+                        err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                        rd_kafka_dbg(
+                            mconn->broker->cluster->rk, MOCK, "MOCK",
+                            "ShareFetch: unknown member %.*s in group %.*s",
+                            RD_KAFKAP_STR_PR(&MemberId),
+                            RD_KAFKAP_STR_PR(&GroupId));
+                }
+
                 /* Look up existing session by MemberId */
+                if (!err) {
                 TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
                         if (!rd_kafkap_str_cmp_str(&MemberId,
                                                    session->member_id))
                                 break;
                 }
+                }
 
-                if (SessionEpoch == 0) {
+                if (!err && SessionEpoch == 0) {
                         /* Open a new session (or reuse if one already exists
                          * for this member). */
                         if (!session) {
@@ -3692,7 +3705,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     rd_kafka_topic_partition_list_copy(
                                         requested_partitions);
                         }
-                } else if (SessionEpoch == -1) {
+                } else if (!err && SessionEpoch == -1) {
                         /* Close the session and release all locks held
                          * by this member. */
                         if (session) {
@@ -3707,7 +3720,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         }
                         /* Closing a non-existent session is not an error;
                          * proceed with an empty response. */
-                } else {
+                } else if (!err) {
                         /* Continue existing session: validate epoch. */
                         if (!session) {
                                 err =

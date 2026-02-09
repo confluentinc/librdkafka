@@ -214,6 +214,87 @@ typedef struct rd_kafka_mock_sharegroup_member_s {
 } rd_kafka_mock_sharegroup_member_t;
 
 /**
+ * @struct Share group member (KIP-932).
+ */
+typedef struct rd_kafka_mock_sgrp_member_s {
+        TAILQ_ENTRY(rd_kafka_mock_sgrp_member_s) link;
+        char *id;                 /**< MemberId */
+        char *instance_id;        /**< Group instance id */
+        rd_ts_t ts_last_activity; /**< Last activity */
+        int32_t current_member_epoch; /**< Current member epoch */
+        int32_t target_member_epoch;  /**< Target member epoch */
+        rd_kafka_topic_partition_list_t *current_assignment;
+        rd_kafka_topic_partition_list_t *target_assignment;
+        rd_kafka_topic_partition_list_t *returned_assignment;
+        rd_list_t *subscribed_topics;
+        rd_list_t *subscribed_topic_names;
+        char *subscribed_topic_regex;
+        rd_bool_t left_static_membership;
+        struct rd_kafka_mock_connection_s *conn;
+        struct rd_kafka_mock_sgrp_s *sgrp;
+} rd_kafka_mock_sgrp_member_t;
+
+/**
+ * @brief Share record state.
+ */
+enum rd_kafka_mock_sgrp_record_state_e {
+        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE = 0,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED  = 1,
+        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED  = 2
+};
+
+typedef struct rd_kafka_mock_sgrp_record_state_s {
+        TAILQ_ENTRY(rd_kafka_mock_sgrp_record_state_s) link;
+        int64_t offset;
+        char *owner_member_id;
+        rd_ts_t lock_expiry_ts;
+        int32_t delivery_count;
+        enum rd_kafka_mock_sgrp_record_state_e state;
+} rd_kafka_mock_sgrp_record_state_t;
+
+/**
+ * @brief Share partition metadata.
+ */
+typedef struct rd_kafka_mock_sgrp_partmeta_s {
+        TAILQ_ENTRY(rd_kafka_mock_sgrp_partmeta_s) link;
+        rd_kafka_Uuid_t topic_id;
+        int32_t partition;
+        int64_t spso;
+        int64_t speo;
+        TAILQ_HEAD(, rd_kafka_mock_sgrp_record_state_s) inflight;
+        int inflight_cnt;
+} rd_kafka_mock_sgrp_partmeta_t;
+
+/**
+ * @brief Share fetch session.
+ */
+typedef struct rd_kafka_mock_sgrp_fetch_session_s {
+        TAILQ_ENTRY(rd_kafka_mock_sgrp_fetch_session_s) link;
+        char *member_id;
+        int32_t session_epoch;
+        rd_ts_t ts_last_activity;
+        rd_kafka_topic_partition_list_t *partitions;
+} rd_kafka_mock_sgrp_fetch_session_t;
+
+/**
+ * @brief Share group (KIP-932).
+ */
+typedef struct rd_kafka_mock_sgrp_s {
+        TAILQ_ENTRY(rd_kafka_mock_sgrp_s) link;
+        struct rd_kafka_mock_cluster_s *cluster;
+        char *id;
+        int32_t group_epoch;
+        int session_timeout_ms;
+        rd_kafka_timer_t session_tmr;
+        TAILQ_HEAD(, rd_kafka_mock_sgrp_member_s) members;
+        int member_cnt;
+        TAILQ_HEAD(, rd_kafka_mock_sgrp_partmeta_s) partitions;
+        int partition_cnt;
+        TAILQ_HEAD(, rd_kafka_mock_sgrp_fetch_session_s) fetch_sessions;
+        int fetch_session_cnt;
+} rd_kafka_mock_sgrp_t;
+
+/**
  * @struct TransactionalId + PID (+ optional sequence state)
  */
 typedef struct rd_kafka_mock_pid_s {
@@ -463,6 +544,7 @@ struct rd_kafka_mock_cluster_s {
         TAILQ_HEAD(, rd_kafka_mock_cgrp_consumer_s) cgrps_consumer;
 
         TAILQ_HEAD(, rd_kafka_mock_sharegroup_s) sharegrps;
+        TAILQ_HEAD(, rd_kafka_mock_sgrp_s) sgrps_share;
 
         /** Explicit coordinators (set with mock_set_coordinator()) */
         TAILQ_HEAD(, rd_kafka_mock_coord_s) coords;
@@ -579,6 +661,18 @@ rd_kafka_mock_topic_find_by_kstr(const rd_kafka_mock_cluster_t *mcluster,
 rd_kafka_mock_topic_t *
 rd_kafka_mock_topic_find_by_id(const rd_kafka_mock_cluster_t *mcluster,
                                rd_kafka_Uuid_t id);
+
+rd_kafka_mock_sgrp_t *
+rd_kafka_mock_sgrp_find(rd_kafka_mock_cluster_t *mcluster,
+                        const rd_kafkap_str_t *GroupId);
+rd_kafka_mock_sgrp_t *
+rd_kafka_mock_sgrp_get(rd_kafka_mock_cluster_t *mcluster,
+                       const rd_kafkap_str_t *GroupId);
+void rd_kafka_mock_sgrp_destroy(rd_kafka_mock_sgrp_t *sgrp);
+void rd_kafka_mock_sgrp_fetch_session_destroy(
+    rd_kafka_mock_sgrp_fetch_session_t *session);
+void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sgrp_t *sgrp,
+                                             const char *member_id);
 
 rd_kafka_mock_broker_t *
 rd_kafka_mock_cluster_get_coord(rd_kafka_mock_cluster_t *mcluster,

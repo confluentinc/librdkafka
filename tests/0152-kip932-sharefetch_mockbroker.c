@@ -482,6 +482,58 @@ static int run_forgotten_topics(void) {
         return consumed >= 4;
 }
 
+/**
+ * @brief Multi-consumer lock expiry test.
+ *
+ * Consumer A acquires records, then crashes (destroyed without close).
+ * After the lock expiry timeout, consumer B should be able to pick up
+ * the same records because the proactive lock-expiry scan releases them.
+ */
+static int run_multi_consumer_lock_expiry(void) {
+        const char *topic = "kip932_multi_consumer_lock";
+        const int msgcnt  = 3;
+        test_ctx_t ctx    = test_ctx_new();
+        rd_kafka_share_t *consumer_a, *consumer_b;
+        int consumed_a, consumed_b;
+
+        /* Use a short session/lock timeout so the test runs quickly. */
+        rd_kafka_mock_set_group_consumer_session_timeout_ms(ctx.mcluster, 500);
+
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer A: subscribe and consume all records (acquires locks). */
+        consumer_a =
+            new_share_consumer(ctx.bootstraps, "sg-multi-consumer-lock");
+        subscribe_topics(consumer_a, &topic, 1);
+        consumed_a = consume_n(consumer_a, msgcnt, 50);
+        printf("  multi_consumer: A consumed %d/%d\n", consumed_a, msgcnt);
+
+        /* Simulate crash: destroy consumer A without calling close.
+         * The session will time out and the proactive lock-expiry
+         * timer will release A's locks. */
+        rd_kafka_share_destroy(consumer_a);
+
+        /* Wait for locks to expire (session_timeout=500ms, add margin). */
+        usleep(1500 * 1000);
+
+        /* Consumer B: joins the same share group, should get the same
+         * records once the locks have been released. */
+        consumer_b =
+            new_share_consumer(ctx.bootstraps, "sg-multi-consumer-lock");
+        subscribe_topics(consumer_b, &topic, 1);
+        consumed_b = consume_n(consumer_b, msgcnt, 50);
+        printf("  multi_consumer: B consumed %d/%d\n", consumed_b, msgcnt);
+
+        rd_kafka_share_consumer_close(consumer_b);
+        rd_kafka_share_destroy(consumer_b);
+        test_ctx_destroy(&ctx);
+
+        return consumed_a == msgcnt && consumed_b == msgcnt;
+}
+
 static int run_test(const char *name, int (*fn)(void)) {
         int ok = fn();
         printf("[%s] %s\n", ok ? "OK" : "FAIL", name);
@@ -502,6 +554,8 @@ int main(void) {
         failures += run_test("sharefetch_session_expiry_rtt",
                              run_sharefetch_session_expiry_rtt);
         failures += run_test("forgotten_topics", run_forgotten_topics);
+        failures += run_test("multi_consumer_lock_expiry",
+                             run_multi_consumer_lock_expiry);
 
         /* Negative scenarios */
         failures += run_test("sharefetch_invalid_session_epoch",

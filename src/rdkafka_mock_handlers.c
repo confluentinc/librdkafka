@@ -3652,8 +3652,11 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         requested_partitions);
                         }
                 } else if (SessionEpoch == -1) {
-                        /* Close the session. */
+                        /* Close the session and release all locks held
+                         * by this member. */
                         if (session) {
+                                rd_kafka_mock_sgrp_release_member_locks(
+                                    sgrp, session->member_id);
                                 TAILQ_REMOVE(&sgrp->fetch_sessions, session,
                                              link);
                                 sgrp->fetch_session_cnt--;

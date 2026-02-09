@@ -1887,7 +1887,67 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
 }
 
 /**
- * @brief Check if any share fetch sessions have expired.
+ * @brief Release all ACQUIRED records owned by \p member_id across all
+ *        share-partition metadata in the share group.
+ *
+ * This is called when a session is closed (epoch=-1), when a session
+ * times out, or as part of periodic lock-expiry reclamation.
+ */
+void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sgrp_t *sgrp,
+                                             const char *member_id) {
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+
+        TAILQ_FOREACH(pmeta, &sgrp->partitions, link) {
+                rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+                TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
+                        if (state->state !=
+                            RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                                continue;
+                        if (!state->owner_member_id)
+                                continue;
+                        if (strcmp(state->owner_member_id, member_id) != 0)
+                                continue;
+
+                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        rd_free(state->owner_member_id);
+                        state->owner_member_id = NULL;
+                        state->lock_expiry_ts  = 0;
+                }
+        }
+}
+
+/**
+ * @brief Proactively release any expired acquisition locks.
+ *
+ * Iterates all partition metadata in the share group and flips
+ * ACQUIRED records whose lock_expiry_ts has passed back to AVAILABLE.
+ */
+static void
+rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sgrp_t *sgrp, rd_ts_t now) {
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+
+        TAILQ_FOREACH(pmeta, &sgrp->partitions, link) {
+                rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+                TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
+                        if (state->state !=
+                            RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                                continue;
+                        if (!state->lock_expiry_ts ||
+                            state->lock_expiry_ts > now)
+                                continue;
+
+                        /* Lock has expired — release back to AVAILABLE */
+                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        RD_IF_FREE(state->owner_member_id, rd_free);
+                        state->owner_member_id = NULL;
+                        state->lock_expiry_ts  = 0;
+                }
+        }
+}
+
+/**
+ * @brief Periodic timer: expire stale share-fetch sessions and
+ *        proactively reclaim expired acquisition locks.
  */
 static void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
                                                     void *arg) {
@@ -1897,16 +1957,27 @@ static void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
 
         (void)rkts;
 
+        /* 1. Expire stale sessions and release their member locks. */
         TAILQ_FOREACH_SAFE(session, &sgrp->fetch_sessions, link, tmp) {
                 if (session->ts_last_activity +
                         (sgrp->session_timeout_ms * 1000) >
                     now)
                         continue;
 
+                /* Release all locks held by this member before
+                 * destroying the session. */
+                rd_kafka_mock_sgrp_release_member_locks(sgrp,
+                                                        session->member_id);
+
                 TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                 sgrp->fetch_session_cnt--;
                 rd_kafka_mock_sgrp_fetch_session_destroy(session);
         }
+
+        /* 2. Proactively reclaim any expired acquisition locks.
+         *    This catches records whose owning consumer crashed
+         *    without closing its session cleanly. */
+        rd_kafka_mock_sgrp_expire_locks(sgrp, now);
 }
 
 /**

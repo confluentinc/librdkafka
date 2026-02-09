@@ -413,8 +413,9 @@ static int run_sharefetch_session_expiry_rtt(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
-        rd_kafka_mock_set_group_consumer_session_timeout_ms(ctx.mcluster, 200);
-        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 500);
+        /* Session timeout must be long enough for normal requests
+         * to complete, but short enough to expire during high RTT. */
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 1000);
 
         if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
             RD_KAFKA_RESP_ERR_NO_ERROR)
@@ -424,9 +425,22 @@ static int run_sharefetch_session_expiry_rtt(void) {
         consumer = new_share_consumer(ctx.bootstraps, "sg-rtt-expiry");
         subscribe_topics(consumer, &topic, 1);
 
+        /* Phase 1: consume one message with normal RTT (no injection). */
         consumed = consume_n(consumer, 1, 20);
-        usleep(1000 * 1000); /* allow session timeout to elapse */
-        consumed += consume_n(consumer, 1, 20);
+        printf("  rtt_expiry: phase1 consumed %d/1\n", consumed);
+
+        /* Phase 2: inject RTT >> session timeout to force session expiry.
+         * All requests to broker 1 now take 3s, but the session
+         * expires after 1s of inactivity. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 3000);
+        usleep(2000 * 1000); /* wait for session to expire */
+
+        /* Phase 3: clear RTT and let the consumer recover.
+         * It should re-create the session (epoch=0) and consume
+         * the remaining message. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 0);
+        consumed += consume_n(consumer, 1, 30);
+        printf("  rtt_expiry: phase3 consumed %d/2 total\n", consumed);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -497,7 +511,7 @@ static int run_multi_consumer_lock_expiry(void) {
         int consumed_a, consumed_b;
 
         /* Use a short session/lock timeout so the test runs quickly. */
-        rd_kafka_mock_set_group_consumer_session_timeout_ms(ctx.mcluster, 500);
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
 
         if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
             RD_KAFKA_RESP_ERR_NO_ERROR)

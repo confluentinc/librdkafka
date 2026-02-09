@@ -3820,7 +3820,7 @@ rd_kafka_mock_tplist_equal_by_id(rd_kafka_topic_partition_list_t *a,
 }
 
 static rd_kafka_mock_sgrp_partmeta_t *
-rd_kafka_mock_sgrp_partmeta_find(rd_kafka_mock_sgrp_t *sgrp,
+rd_kafka_mock_sgrp_partmeta_find(rd_kafka_mock_sharegroup_t *sgrp,
                                  rd_kafka_Uuid_t topic_id,
                                  int32_t partition) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
@@ -3836,7 +3836,7 @@ rd_kafka_mock_sgrp_partmeta_find(rd_kafka_mock_sgrp_t *sgrp,
 }
 
 static rd_kafka_mock_sgrp_partmeta_t *
-rd_kafka_mock_sgrp_partmeta_get(rd_kafka_mock_sgrp_t *sgrp,
+rd_kafka_mock_sgrp_partmeta_get(rd_kafka_mock_sharegroup_t *sgrp,
                                 rd_kafka_Uuid_t topic_id,
                                 int32_t partition,
                                 const rd_kafka_mock_partition_t *mpart) {
@@ -4034,7 +4034,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
         rd_kafka_topic_partition_list_t *requested_partitions = NULL;
         rd_kafka_topic_partition_list_t *forgotten_partitions = NULL;
         rd_kafka_resp_err_t err                               = RD_KAFKA_RESP_ERR_NO_ERROR;
-        rd_kafka_mock_sgrp_t *sgrp                            = NULL;
+        rd_kafka_mock_sharegroup_t *sgrp                            = NULL;
         rd_kafka_mock_sgrp_fetch_session_t *session           = NULL;
 
         (void)log_decode_errors;
@@ -4166,7 +4166,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                  *              -1 = close session,
                  *              >0 = continue (must match expected epoch). */
                 mtx_lock(&mcluster->lock);
-                sgrp = rd_kafka_mock_sgrp_get(mcluster, &GroupId);
+                sgrp = rd_kafka_mock_sharegroup_get(mcluster, &GroupId);
 
                 /* Look up existing session by MemberId */
                 TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {

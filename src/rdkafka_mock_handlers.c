@@ -1191,7 +1191,8 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_mock_cluster_t *mcluster,
         int i;
         int partition_cnt =
             (!mtopic || err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
-             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID)
+             err == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID ||
+             mcluster->broker_cnt_override == 0)
                 ? 0
                 : mtopic->partition_cnt;
 
@@ -1309,6 +1310,10 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
 
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (mcluster->broker_cnt_override >= 0 &&
+                    response_Brokers_cnt >= mcluster->broker_cnt_override) {
+                        break;
+                }
                 if (!mrkb->up)
                         continue;
                 /* Response: Brokers.Nodeid */
@@ -1334,7 +1339,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
                 /* Response: ControllerId */
-                rd_kafka_buf_write_i32(resp, mcluster->controller_id);
+                rd_kafka_buf_write_i32(resp, response_Brokers_cnt > 0 ? mcluster->controller_id : -1);
         }
 
         /* #Topics */

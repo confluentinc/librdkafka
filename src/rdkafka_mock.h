@@ -400,6 +400,17 @@ rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster, int32_t broker_id);
 
+/**
+ * @brief Override broker count for Metadata responses.
+ *
+ * @param mcluster The mock cluster
+ * @param broker_cnt The override value, or -1 to remove override.
+ *
+ * @returns Error value or 0 if no error occurred
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_count_override(rd_kafka_mock_cluster_t *mcluster, int broker_cnt);
+
 
 /**
  * @brief Explicitly sets the coordinator. If this API is not a standard

@@ -546,6 +546,113 @@ static int run_multi_batch_consume(void) {
         return consumed == msgcnt;
 }
 
+/**
+ * @brief Verify that max_delivery_attempts causes records to be archived
+ *        after the limit is exceeded. Consumer A acquires all records, then
+ *        its session times out (releasing locks). Consumer B acquires them
+ *        again, and its session also times out. After the delivery limit is
+ *        exhausted, Consumer C should see 0 available records.
+ */
+static int run_max_delivery_attempts(void) {
+        const char *topic = "kip932_max_delivery";
+        const int msgcnt  = 3;
+        test_ctx_t ctx    = test_ctx_new();
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b, consumed_c;
+
+        /* Set max delivery attempts to 2 and a short session timeout
+         * so locks expire quickly after consumer destruction. */
+        rd_kafka_mock_sharegroup_set_max_delivery_attempts(ctx.mcluster, 2);
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
+
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Delivery 1: Consumer A acquires and "crashes" (no ack). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-max-delivery");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_a = consume_n(consumer, msgcnt, 50);
+        printf("  max_delivery: A consumed %d/%d (delivery 1)\n",
+               consumed_a, msgcnt);
+        rd_kafka_share_destroy(consumer);
+        usleep(1500 * 1000); /* wait for lock expiry */
+
+        /* Delivery 2: Consumer B acquires same records again (delivery_count
+         * reaches 2 = limit) and "crashes". */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-max-delivery");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, msgcnt, 50);
+        printf("  max_delivery: B consumed %d/%d (delivery 2)\n",
+               consumed_b, msgcnt);
+        rd_kafka_share_destroy(consumer);
+        usleep(1500 * 1000); /* wait for lock expiry */
+
+        /* Delivery 3 attempt: Consumer C should get 0 records because
+         * all records have been archived (delivery_count >= max). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-max-delivery");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_c = consume_n(consumer, 1, 10);
+        printf("  max_delivery: C consumed %d/0 (should be archived)\n",
+               consumed_c);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        return consumed_a == msgcnt && consumed_b == msgcnt && consumed_c == 0;
+}
+
+/**
+ * @brief Verify that record_lock_duration_ms controls how long acquired
+ *        records stay locked, independently of session_timeout_ms.
+ *        Sets a short lock duration (300ms) with a longer session timeout
+ *        (10s). Consumer A acquires records and "crashes". After the short
+ *        lock duration expires, Consumer B should be able to acquire them
+ *        even though A's session hasn't timed out yet.
+ */
+static int run_record_lock_duration(void) {
+        const char *topic = "kip932_lock_duration";
+        const int msgcnt  = 3;
+        test_ctx_t ctx    = test_ctx_new();
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b;
+
+        /* Long session timeout, short record lock duration. */
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 10000);
+        rd_kafka_mock_sharegroup_set_record_lock_duration(ctx.mcluster, 300);
+
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer A acquires records, then crashes (no close). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-lock-duration");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_a = consume_n(consumer, msgcnt, 50);
+        printf("  lock_duration: A consumed %d/%d\n", consumed_a, msgcnt);
+        rd_kafka_share_destroy(consumer);
+
+        /* Wait for record lock to expire (300ms + margin),
+         * but NOT session timeout (10s). */
+        usleep(800 * 1000);
+
+        /* Consumer B should get the records because locks have expired
+         * even though A's session is still technically alive. */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-lock-duration");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, msgcnt, 50);
+        printf("  lock_duration: B consumed %d/%d\n", consumed_b, msgcnt);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        return consumed_a == msgcnt && consumed_b == msgcnt;
+}
+
 static int run_multi_consumer_lock_expiry(void) {
         const char *topic = "kip932_multi_consumer_lock";
         const int msgcnt  = 3;
@@ -612,6 +719,10 @@ int main(void) {
                              run_sharefetch_session_expiry_rtt);
         failures += run_test("forgotten_topics", run_forgotten_topics);
         failures += run_test("multi_batch_consume", run_multi_batch_consume);
+        failures += run_test("max_delivery_attempts",
+                             run_max_delivery_attempts);
+        failures += run_test("record_lock_duration",
+                             run_record_lock_duration);
         failures += run_test("multi_consumer_lock_expiry",
                              run_multi_consumer_lock_expiry);
 

@@ -236,7 +236,6 @@
     <ClCompile Include="..\..\tests\0153-memberid.c" />
     <ClCompile Include="..\..\tests\0170-share_consumer_subscription.c" />
     <ClCompile Include="..\..\tests\0171-share_consumer_consume.c" />
-    <ClCompile Include="..\..\tests\0172-share_consumer_behaviour.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

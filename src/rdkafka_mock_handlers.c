@@ -1461,24 +1461,6 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
 
-        /* ForgottenToppars */
-        {
-                int32_t ForgottenTopicsCnt;
-                rd_kafka_buf_read_arraycnt(rkbuf, &ForgottenTopicsCnt,
-                                           RD_KAFKAP_TOPICS_MAX);
-                while (ForgottenTopicsCnt-- > 0) {
-                        rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
-                        int32_t PartitionCnt;
-                        rd_kafka_buf_read_uuid(rkbuf, &TopicId);
-                        rd_kafka_buf_read_arraycnt(rkbuf, &PartitionCnt,
-                                                   RD_KAFKAP_PARTITIONS_MAX);
-                        while (PartitionCnt-- > 0) {
-                                rd_kafka_buf_read_i32(rkbuf, NULL); /* Partition */
-                        }
-                        rd_kafka_buf_skip_tags(rkbuf); /* Topic tags */
-                }
-        }
-
         if (rd_kafka_buf_read_remain(rkbuf) > 0)
                 rd_kafka_buf_skip_tags(rkbuf);
         rd_kafka_buf_write_tags_empty(resp);
@@ -3430,7 +3412,7 @@ rd_kafka_mock_sgrp_partmeta_prune_archived(rd_kafka_mock_sgrp_partmeta_t *pmeta)
         TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
                 if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED)
                         continue;
-                if (state->offset <= pmeta->speo)
+                if (state->offset >= pmeta->spso)
                         continue;
 
                 TAILQ_REMOVE(&pmeta->inflight, state, link);
@@ -3440,36 +3422,82 @@ rd_kafka_mock_sgrp_partmeta_prune_archived(rd_kafka_mock_sgrp_partmeta_t *pmeta)
         }
 }
 
-static const rd_kafka_mock_msgset_t *
-rd_kafka_mock_sgrp_first_acquired_msgset(
+/**
+ * @brief Write all acquired record batches for the given partition and member
+ *        into the response buffer as a single Records field (compact bytes
+ *        containing concatenated RecordBatches).
+ *
+ * @returns the total number of record data bytes written (0 if none).
+ */
+static size_t
+rd_kafka_mock_sgrp_write_acquired_records(
+    rd_kafka_buf_t *resp,
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     const rd_kafka_mock_partition_t *mpart,
     const rd_kafkap_str_t *member_id,
     rd_ts_t now) {
+        const rd_kafka_mock_msgset_t *msgsets[256];
+        int msgset_cnt = 0;
         int64_t offset;
+        size_t total_len = 0;
+        int i;
 
+        /* Collect unique msgsets containing acquired records for this member */
         for (offset = pmeta->spso; offset <= pmeta->speo; offset++) {
                 rd_kafka_mock_sgrp_record_state_t *state =
                     rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
                 const rd_kafka_mock_msgset_t *mset;
+                int j, dup;
 
                 if (!state ||
                     state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
                         continue;
 
-                if (state->lock_expiry_ts &&
-                    state->lock_expiry_ts <= now)
+                if (state->lock_expiry_ts && state->lock_expiry_ts <= now)
                         continue;
 
                 if (rd_kafkap_str_cmp_str(member_id, state->owner_member_id))
                         continue;
 
                 mset = rd_kafka_mock_msgset_find(mpart, offset, rd_false);
-                if (mset)
-                        return mset;
+                if (!mset)
+                        continue;
+
+                /* Deduplicate: multiple offsets may fall in the same batch */
+                dup = 0;
+                for (j = 0; j < msgset_cnt; j++) {
+                        if (msgsets[j] == mset) {
+                                dup = 1;
+                                break;
+                        }
+                }
+                if (dup)
+                        continue;
+
+                if (msgset_cnt >=
+                    (int)(sizeof(msgsets) / sizeof(msgsets[0])))
+                        break; /* safety cap */
+
+                msgsets[msgset_cnt++] = mset;
+                total_len += RD_KAFKAP_BYTES_LEN(&mset->bytes);
         }
 
-        return NULL;
+        if (msgset_cnt == 0) {
+                /* No acquired records: write NULL compact bytes */
+                rd_kafka_buf_write_kbytes(resp, NULL);
+                return 0;
+        }
+
+        /* Write compact bytes length prefix (N+1 encoding) */
+        rd_kafka_buf_write_uvarint(resp, (uint64_t)(total_len + 1));
+
+        /* Write each msgset's raw bytes back-to-back */
+        for (i = 0; i < msgset_cnt; i++) {
+                rd_kafka_buf_write(resp, msgsets[i]->bytes.data,
+                                   RD_KAFKAP_BYTES_LEN(&msgsets[i]->bytes));
+        }
+
+        return total_len;
 }
 
 static int
@@ -3876,12 +3904,6 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                       sgrp, topic_id,
                                                       rktpar->partition)
                                                 : NULL;
-                                        const rd_kafka_mock_msgset_t *mset =
-                                            (mpart && pmeta)
-                                                ? rd_kafka_mock_sgrp_first_acquired_msgset(
-                                                      pmeta, mpart, &MemberId,
-                                                      now)
-                                                : NULL;
                                         rd_kafka_resp_err_t part_err =
                                             mpart ? RD_KAFKA_RESP_ERR_NO_ERROR
                                                   : RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
@@ -3908,9 +3930,15 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         rd_kafka_buf_write_i32(resp, -1);
                                         rd_kafka_buf_write_i32(resp, -1);
                                         rd_kafka_buf_write_tags_empty(resp);
-                                        /* Response: Records */
-                                        rd_kafka_buf_write_kbytes(
-                                            resp, mset ? &mset->bytes : NULL);
+                                        /* Response: Records (all acquired
+                                         * batches concatenated) */
+                                        if (mpart && pmeta)
+                                                rd_kafka_mock_sgrp_write_acquired_records(
+                                                    resp, pmeta, mpart,
+                                                    &MemberId, now);
+                                        else
+                                                rd_kafka_buf_write_kbytes(
+                                                    resp, NULL);
                                         /* Response: AcquiredRecords */
                                         rd_kafka_buf_write_arraycnt(resp, 0);
                                         /* Response: Partition tags */

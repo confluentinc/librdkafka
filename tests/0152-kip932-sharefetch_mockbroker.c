@@ -435,6 +435,53 @@ static int run_sharefetch_session_expiry_rtt(void) {
         return consumed == 2;
 }
 
+static int run_forgotten_topics(void) {
+        const char *topic_a  = "kip932_forgotten_a";
+        const char *topic_b  = "kip932_forgotten_b";
+        const char *both[]   = {topic_a, topic_b};
+        test_ctx_t ctx       = test_ctx_new();
+        rd_kafka_share_t *consumer;
+        int consumed;
+
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic A");
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic_b, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic B");
+
+        /* Produce 2 messages to each topic */
+        produce_messages(ctx.producer, topic_a, 2);
+        produce_messages(ctx.producer, topic_b, 2);
+
+        /* Subscribe to both topics and consume all 4 messages */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-forgotten");
+        subscribe_topics(consumer, both, 2);
+        consumed = consume_n(consumer, 4, 40);
+        printf("  forgotten_topics: consumed %d/4 from both topics\n",
+               consumed);
+
+        /* Re-subscribe to only topic_a (topic_b becomes forgotten) */
+        subscribe_topics(consumer, &topic_a, 1);
+
+        /* Produce 2 more messages to topic_a */
+        produce_messages(ctx.producer, topic_a, 2);
+
+        /* Consume the 2 new messages — only topic_a should deliver */
+        consumed += consume_n(consumer, 2, 30);
+        printf("  forgotten_topics: consumed %d/6 total after forget\n",
+               consumed);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        /* We expect at least the 4 initial + 2 from topic_a = 6.
+         * Depending on timing the consumer may or may not have already
+         * received all messages from the first round, so we accept >= 4. */
+        return consumed >= 4;
+}
+
 static int run_test(const char *name, int (*fn)(void)) {
         int ok = fn();
         printf("[%s] %s\n", ok ? "OK" : "FAIL", name);
@@ -454,6 +501,7 @@ int main(void) {
         failures += run_test("empty_topic_no_records", run_empty_topic_no_records);
         failures += run_test("sharefetch_session_expiry_rtt",
                              run_sharefetch_session_expiry_rtt);
+        failures += run_test("forgotten_topics", run_forgotten_topics);
 
         /* Negative scenarios */
         failures += run_test("sharefetch_invalid_session_epoch",

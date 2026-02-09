@@ -4032,6 +4032,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 MaxBytes = 0, MaxRecords = 0, BatchSize = 0;
         int32_t TopicsCnt;
         rd_kafka_topic_partition_list_t *requested_partitions = NULL;
+        rd_kafka_topic_partition_list_t *forgotten_partitions = NULL;
         rd_kafka_resp_err_t err                               = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_mock_sgrp_t *sgrp                            = NULL;
         rd_kafka_mock_sgrp_fetch_session_t *session           = NULL;
@@ -4091,6 +4092,51 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
+        /* ForgottenTopicsData */
+        {
+                int32_t ForgottenTopicsCnt;
+                rd_kafka_buf_read_arraycnt(rkbuf, &ForgottenTopicsCnt,
+                                           RD_KAFKAP_TOPICS_MAX);
+                if (ForgottenTopicsCnt > 0)
+                        forgotten_partitions =
+                            rd_kafka_topic_partition_list_new(
+                                ForgottenTopicsCnt);
+                while (ForgottenTopicsCnt-- > 0) {
+                        rd_kafka_Uuid_t ForgTopicId = RD_KAFKA_UUID_ZERO;
+                        int32_t ForgPartCnt;
+                        rd_kafka_buf_read_uuid(rkbuf, &ForgTopicId);
+                        rd_kafka_buf_read_arraycnt(rkbuf, &ForgPartCnt,
+                                                   RD_KAFKAP_PARTITIONS_MAX);
+                        while (ForgPartCnt-- > 0) {
+                                int32_t ForgPartition;
+                                rd_kafka_topic_partition_t *ftp;
+                                rd_kafka_buf_read_i32(rkbuf, &ForgPartition);
+
+                                /* Record in forgotten list for session
+                                 * removal and inflight release. */
+                                ftp = rd_kafka_topic_partition_list_add(
+                                    forgotten_partitions, "", ForgPartition);
+                                rd_kafka_topic_partition_set_topic_id(
+                                    ftp, ForgTopicId);
+
+                                /* Remove from requested_partitions so they
+                                 * are not fetched in this request. */
+                                if (requested_partitions) {
+                                        int idx =
+                                            rd_kafka_topic_partition_list_find_idx_by_id(
+                                                requested_partitions,
+                                                ForgTopicId, ForgPartition);
+                                        if (idx >= 0)
+                                                rd_kafka_topic_partition_list_del_by_idx(
+                                                    requested_partitions, idx);
+                                }
+                        }
+                        /* ForgottenTopic tags */
+                        rd_kafka_buf_skip_tags(rkbuf);
+                }
+        }
+
+        /* Top-level tags */
         rd_kafka_buf_skip_tags(rkbuf);
 
         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
@@ -4195,6 +4241,59 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 if (!err && session) {
                         session->ts_last_activity = rd_clock();
                         session->session_epoch++;
+                }
+
+                /* Remove forgotten partitions from session and release
+                 * any in-flight ACQUIRED records owned by this member. */
+                if (!err && session && forgotten_partitions &&
+                    forgotten_partitions->cnt > 0) {
+                        rd_kafka_topic_partition_t *ftp;
+                        RD_KAFKA_TPLIST_FOREACH(ftp, forgotten_partitions) {
+                                rd_kafka_Uuid_t ftid =
+                                    rd_kafka_topic_partition_get_topic_id(ftp);
+                                rd_kafka_mock_sgrp_partmeta_t *pmeta;
+
+                                /* Remove from session partition list */
+                                if (session->partitions) {
+                                        int idx =
+                                            rd_kafka_topic_partition_list_find_idx_by_id(
+                                                session->partitions, ftid,
+                                                ftp->partition);
+                                        if (idx >= 0)
+                                                rd_kafka_topic_partition_list_del_by_idx(
+                                                    session->partitions, idx);
+                                }
+
+                                /* Release ACQUIRED records for this
+                                 * member on this partition. */
+                                pmeta = rd_kafka_mock_sgrp_partmeta_find(
+                                    sgrp, ftid, ftp->partition);
+                                if (pmeta) {
+                                        rd_kafka_mock_sgrp_record_state_t
+                                            *state, *tmp;
+                                        TAILQ_FOREACH_SAFE(
+                                            state, &pmeta->inflight, link,
+                                            tmp) {
+                                                if (state->state !=
+                                                    RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                                                        continue;
+                                                if (!state->owner_member_id)
+                                                        continue;
+                                                if (rd_kafkap_str_cmp_str(
+                                                        &MemberId,
+                                                        state
+                                                            ->owner_member_id))
+                                                        continue;
+                                                /* Release: mark AVAILABLE */
+                                                state->state =
+                                                    RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                                                rd_free(
+                                                    state->owner_member_id);
+                                                state->owner_member_id = NULL;
+                                                state->lock_expiry_ts  = 0;
+                                        }
+                                }
+                        }
                 }
 
                 if (!err && sgrp) {
@@ -4381,6 +4480,8 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_mock_connection_send_response0(mconn, resp, rd_true);
 
                 rd_kafka_topic_partition_list_destroy(requested_partitions);
+                RD_IF_FREE(forgotten_partitions,
+                           rd_kafka_topic_partition_list_destroy);
                 return 0;
         }
 
@@ -4395,10 +4496,14 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_mock_connection_send_response0(mconn, resp, rd_true);
         rd_kafka_topic_partition_list_destroy(requested_partitions);
+        RD_IF_FREE(forgotten_partitions,
+                   rd_kafka_topic_partition_list_destroy);
         return 0;
 
 err_parse:
         RD_IF_FREE(requested_partitions, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(forgotten_partitions,
+                   rd_kafka_topic_partition_list_destroy);
         rd_kafka_buf_destroy(resp);
         return -1;
 }

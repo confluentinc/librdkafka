@@ -755,6 +755,8 @@ rd_kafka_mock_sgrp_get(rd_kafka_mock_cluster_t *mcluster,
 void rd_kafka_mock_sgrp_destroy(rd_kafka_mock_sgrp_t *sgrp);
 void rd_kafka_mock_sgrp_fetch_session_destroy(
     rd_kafka_mock_sgrp_fetch_session_t *session);
+void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sgrp_t *sgrp,
+                                             const char *member_id);
 
 rd_kafka_mock_broker_t *
 rd_kafka_mock_cluster_get_coord(rd_kafka_mock_cluster_t *mcluster,

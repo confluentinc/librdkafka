@@ -1471,7 +1471,7 @@ void rd_kafka_ShareFetchRequest(
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_ShareFetch,
-                                                          0, 0, NULL);
+                                                          1, 1, NULL);
 
         rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_ShareFetch, 1,
                                                  rkbuf_size,

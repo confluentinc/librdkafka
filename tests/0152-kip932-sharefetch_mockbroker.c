@@ -503,6 +503,49 @@ static int run_forgotten_topics(void) {
  * After the lock expiry timeout, consumer B should be able to pick up
  * the same records because the proactive lock-expiry scan releases them.
  */
+/**
+ * @brief Produce messages one-at-a-time (each flush creates a separate
+ *        msgset on the mock partition), then consume and verify all are
+ *        received. This validates that the ShareFetch response includes
+ *        records from *all* acquired msgsets, not just the first one.
+ */
+static int run_multi_batch_consume(void) {
+        const char *topic = "kip932_multi_batch";
+        const int msgcnt  = 5;
+        test_ctx_t ctx    = test_ctx_new();
+        rd_kafka_share_t *consumer;
+        int consumed;
+
+        if (rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) !=
+            RD_KAFKA_RESP_ERR_NO_ERROR)
+                die("Failed to create mock topic");
+
+        /* Produce each message individually with a flush in between,
+         * guaranteeing separate msgsets on the mock partition. */
+        for (int i = 0; i < msgcnt; i++) {
+                char payload[64];
+                snprintf(payload, sizeof(payload), "batch-%d", i);
+                if (rd_kafka_producev(
+                        ctx.producer, RD_KAFKA_V_TOPIC(topic),
+                        RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                        RD_KAFKA_V_END) != RD_KAFKA_RESP_ERR_NO_ERROR)
+                        die("Produce failed");
+                rd_kafka_flush(ctx.producer, 5000);
+        }
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-multi-batch");
+        subscribe_topics(consumer, &topic, 1);
+        consumed = consume_n(consumer, msgcnt, 50);
+        printf("  multi_batch: consumed %d/%d\n", consumed, msgcnt);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        return consumed == msgcnt;
+}
+
 static int run_multi_consumer_lock_expiry(void) {
         const char *topic = "kip932_multi_consumer_lock";
         const int msgcnt  = 3;
@@ -568,6 +611,7 @@ int main(void) {
         failures += run_test("sharefetch_session_expiry_rtt",
                              run_sharefetch_session_expiry_rtt);
         failures += run_test("forgotten_topics", run_forgotten_topics);
+        failures += run_test("multi_batch_consume", run_multi_batch_consume);
         failures += run_test("multi_consumer_lock_expiry",
                              run_multi_consumer_lock_expiry);
 

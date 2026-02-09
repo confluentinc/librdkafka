@@ -2224,6 +2224,47 @@ rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_partition_produce(rd_kafka_mock_cluster_t *mcluster,
+                                const char *topic,
+                                int32_t partition,
+                                const void *records,
+                                size_t records_size,
+                                const char *transactional_id,
+                                int64_t *base_offset) {
+        rd_kafka_op_t *rko;
+        rd_kafka_op_t *reply;
+
+        if (!mcluster || !topic || partition < 0 || !records ||
+            records_size == 0 || records_size > INT32_MAX) {
+                if (base_offset)
+                        *base_offset = -1;
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+        rko->rko_u.mock.name      = rd_strdup(topic);
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.records =
+            rd_kafkap_bytes_new(records, (int32_t)records_size);
+        rko->rko_u.mock.base_offset = -1;
+        if (transactional_id)
+                rko->rko_u.mock.str = rd_strdup(transactional_id);
+        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_PART_PRODUCE;
+
+        reply = rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE);
+        if (!reply) {
+                if (base_offset)
+                        *base_offset = -1;
+                return RD_KAFKA_RESP_ERR__TIMED_OUT;
+        }
+
+        if (base_offset)
+                *base_offset = reply->rko_u.mock.base_offset;
+
+        return rd_kafka_op_err_destroy(reply);
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_partition_push_leader_response(rd_kafka_mock_cluster_t *mcluster,
                                              const char *topic,
                                              int partition,
@@ -2588,6 +2629,33 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mpart->update_follower_end_offset = rd_false;
                 }
                 break;
+        case RD_KAFKA_MOCK_CMD_PART_PRODUCE: {
+                rd_kafkap_str_t TransactionalId = RD_KAFKAP_STR_INITIALIZER;
+
+                mpart = rd_kafka_mock_partition_get(
+                    mcluster, rko->rko_u.mock.name, rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+                if (!mpart->leader)
+                        return RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+
+                if (!rko->rko_u.mock.records ||
+                    RD_KAFKAP_BYTES_IS_NULL(rko->rko_u.mock.records) ||
+                    RD_KAFKAP_BYTES_LEN(rko->rko_u.mock.records) == 0)
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+                if (rko->rko_u.mock.str && rko->rko_u.mock.str[0]) {
+                        TransactionalId.str = rko->rko_u.mock.str;
+                        TransactionalId.len =
+                            (int)strlen(rko->rko_u.mock.str);
+                }
+
+                rko->rko_u.mock.base_offset = -1;
+                err = rd_kafka_mock_partition_log_append(
+                    mpart, rko->rko_u.mock.records, &TransactionalId,
+                    &rko->rko_u.mock.base_offset);
+                return err;
+        }
         case RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE:
                 mpart = rd_kafka_mock_partition_get(
                     mcluster, rko->rko_u.mock.name, rko->rko_u.mock.partition);
@@ -2709,6 +2777,7 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_cgrp_classic_t *mcgrp_classic;
         rd_kafka_mock_cgrp_consumer_t *mcgrp_consumer;
         rd_kafka_mock_sharegroup_t *mshgrp;
+        rd_kafka_mock_sgrp_t *msgrp;
         rd_kafka_mock_coord_t *mcoord;
         rd_kafka_mock_error_stack_t *errstack;
         thrd_t dummy_rkb_thread;
@@ -2729,6 +2798,9 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
 
         while ((mshgrp = TAILQ_FIRST(&mcluster->sharegrps)))
                 rd_kafka_mock_sharegroup_destroy(mshgrp);
+
+        while ((msgrp = TAILQ_FIRST(&mcluster->sgrps_share)))
+                rd_kafka_mock_sgrp_destroy(msgrp);
 
         while ((mcoord = TAILQ_FIRST(&mcluster->coords)))
                 rd_kafka_mock_coord_destroy(mcluster, mcoord);
@@ -2848,6 +2920,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->cgrps_consumer);
 
         rd_kafka_mock_sharegrps_init(mcluster);
+        TAILQ_INIT(&mcluster->sgrps_share);
 
         TAILQ_INIT(&mcluster->coords);
 

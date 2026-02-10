@@ -591,7 +591,6 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
                                 RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
-                                RD_KAFKA_MOCK_CMD_PART_PRODUCE,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
@@ -613,11 +612,9 @@ struct rd_kafka_op_s {
                                                   *    BROKER_SET_RACK
                                                   *    COORD_SET (key_type)
                                                   *    PART_PUSH_LEADER_RESPONSE
-                                                  *    PART_PRODUCE
                                                   */
                         char *str;               /**< For:
                                                   *    COORD_SET (key)
-                                                  *    PART_PRODUCE
                                                   */
                         int32_t partition;       /**< For:
                                                   *    PART_SET_FOLLOWER
@@ -625,7 +622,6 @@ struct rd_kafka_op_s {
                                                   *    PART_SET_LEADER
                                                   *    APIVERSION_SET (ApiKey)
                                                   *    PART_PUSH_LEADER_RESPONSE
-                                                  *    PART_PRODUCE
                                                   */
                         int32_t broker_id;       /**< For:
                                                   *    PART_SET_FOLLOWER
@@ -657,12 +653,6 @@ struct rd_kafka_op_s {
                                                   */
                         char **metrics;          /**< Metrics requested, for:
                                                   *   REQUESTED_METRICS_SET */
-                        rd_kafkap_bytes_t *records; /**< Records, for:
-                                                    *   PART_PRODUCE
-                                                    */
-                        int64_t base_offset;        /**< BaseOffset for:
-                                                    *   PART_PRODUCE reply
-                                                    */
                 } mock;
 
                 struct {

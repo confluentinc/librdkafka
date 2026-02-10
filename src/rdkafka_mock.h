@@ -293,26 +293,6 @@ rd_kafka_mock_partition_set_follower_wmarks(rd_kafka_mock_cluster_t *mcluster,
                                             int64_t hi);
 
 /**
- * @brief Append a record batch to a partition log.
- *
- * The record batch must use the Kafka record batch format (v2), the same
- * encoding as the ProduceRequest Records field.
- *
- * The topic will be created if it does not exist.
- *
- * @param transactional_id Optional transactional.id to validate PID/sequence.
- * @param base_offset Optional pointer to store the first assigned offset.
- */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_mock_partition_produce(rd_kafka_mock_cluster_t *mcluster,
-                                const char *topic,
-                                int32_t partition,
-                                const void *records,
-                                size_t records_size,
-                                const char *transactional_id,
-                                int64_t *base_offset);
-
-/**
  * @brief Push \p cnt Metadata leader response
  *        onto the cluster's stack for the given \p topic and \p partition.
  *

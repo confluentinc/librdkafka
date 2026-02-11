@@ -3449,18 +3449,18 @@ rd_kafka_mock_sgrp_write_acquired_records(
     const rd_kafka_mock_partition_t *mpart,
     const rd_kafkap_str_t *member_id,
     rd_ts_t now) {
-        const rd_kafka_mock_msgset_t *msgsets[256];
-        int msgset_cnt = 0;
+        rd_list_t msgsets;
         int64_t offset;
         size_t total_len = 0;
         int i;
+
+        rd_list_init(&msgsets, 16, NULL); /* no free_cb: borrowed ptrs */
 
         /* Collect unique msgsets containing acquired records for this member */
         for (offset = pmeta->spso; offset <= pmeta->speo; offset++) {
                 rd_kafka_mock_sgrp_record_state_t *state =
                     rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
                 const rd_kafka_mock_msgset_t *mset;
-                int j, dup;
 
                 if (!state ||
                     state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
@@ -3477,26 +3477,16 @@ rd_kafka_mock_sgrp_write_acquired_records(
                         continue;
 
                 /* Deduplicate: multiple offsets may fall in the same batch */
-                dup = 0;
-                for (j = 0; j < msgset_cnt; j++) {
-                        if (msgsets[j] == mset) {
-                                dup = 1;
-                                break;
-                        }
-                }
-                if (dup)
+                if (rd_list_find(&msgsets, mset, rd_list_cmp_ptr))
                         continue;
 
-                if (msgset_cnt >=
-                    (int)(sizeof(msgsets) / sizeof(msgsets[0])))
-                        break; /* safety cap */
-
-                msgsets[msgset_cnt++] = mset;
+                rd_list_add(&msgsets, (void *)mset);
                 total_len += RD_KAFKAP_BYTES_LEN(&mset->bytes);
         }
 
-        if (msgset_cnt == 0) {
+        if (rd_list_cnt(&msgsets) == 0) {
                 /* No acquired records: write NULL compact bytes */
+                rd_list_destroy(&msgsets);
                 rd_kafka_buf_write_kbytes(resp, NULL);
                 return 0;
         }
@@ -3505,11 +3495,14 @@ rd_kafka_mock_sgrp_write_acquired_records(
         rd_kafka_buf_write_uvarint(resp, (uint64_t)(total_len + 1));
 
         /* Write each msgset's raw bytes back-to-back */
-        for (i = 0; i < msgset_cnt; i++) {
-                rd_kafka_buf_write(resp, msgsets[i]->bytes.data,
-                                   RD_KAFKAP_BYTES_LEN(&msgsets[i]->bytes));
+        for (i = 0; i < rd_list_cnt(&msgsets); i++) {
+                const rd_kafka_mock_msgset_t *mset =
+                    rd_list_elem(&msgsets, i);
+                rd_kafka_buf_write(resp, mset->bytes.data,
+                                   RD_KAFKAP_BYTES_LEN(&mset->bytes));
         }
 
+        rd_list_destroy(&msgsets);
         return total_len;
 }
 

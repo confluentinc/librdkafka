@@ -1513,6 +1513,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(share.is_share_consumer), "tba description", 0, 1, 0},
     {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
      _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},
+    {_RK_GLOBAL | _RK_CONSUMER, "share.acknowledgement.mode", _RK_C_S2I,
+     _RK(share.explicit_acks),
+     "Acknowledgement mode for share consumers. "
+     "'implicit' - messages are implicitly acknowledged when the next poll "
+     "is called. 'explicit' - messages must be explicitly acknowledged "
+     "using rd_kafka_share_acknowledge*() APIs.",
+     .vdef = 0,
+     .s2i = {{0, "implicit"}, {1, "explicit"}}},
 
 
     /* Global producer properties */

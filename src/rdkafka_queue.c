@@ -902,9 +902,9 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
                 old_batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, key);
                 if (old_batches) {
                         RD_LIST_FOREACH(entry, &old_batches->entries, i) {
-                                for (k = 0; k < entry->types_cnt; k++) {
+                                for (k = 0; k < (int32_t)entry->size; k++) {
                                         if (entry->types[k] ==
-                                            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
+                                            (rd_kafka_share_acknowledgement_type)RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
                                                 rkshare->rkshare_unacked_cnt--;
                                 }
                         }
@@ -914,9 +914,9 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
 
                 /* Count ACQUIRED types for unacked tracking */
                 RD_LIST_FOREACH(entry, &batches->entries, i) {
-                        for (k = 0; k < entry->types_cnt; k++) {
+                        for (k = 0; k < (int32_t)entry->size; k++) {
                                 if (entry->types[k] ==
-                                    RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
+                                    (rd_kafka_share_acknowledgement_type)RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
                                         rkshare->rkshare_unacked_cnt++;
                         }
                 }
@@ -974,7 +974,7 @@ rd_kafka_share_ack_batch_entry_collated_new(
     rd_kafka_share_internal_acknowledgement_type type) {
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(start_offset, end_offset, 1);
-        entry->types[0] = type;
+        entry->types[0] = (rd_kafka_share_acknowledgement_type)type;
         return entry;
 }
 
@@ -1012,7 +1012,7 @@ rd_kafka_share_ack_batches_collate(const rd_kafka_share_ack_batches_t *src,
                         entry->types[0]);
 
                 /* Collate consecutive offsets with same type */
-                for (j = 1; j < entry->types_cnt; j++) {
+                for (j = 1; j < (int64_t)entry->size; j++) {
                         rd_kafka_share_internal_acknowledgement_type
                             this_type = rd_kafka_share_ack_convert_acquired_to_accept(
                                 entry->types[j]);

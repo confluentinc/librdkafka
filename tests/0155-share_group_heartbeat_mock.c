@@ -471,16 +471,17 @@ static void do_test_share_group_rtt_injection(void) {
         wait_share_heartbeats(mcluster, 1, 500);
         rd_kafka_consumer_poll(c, 2000);
 
-        /* Test RTT injection API */
+        /* Test RTT injection API - inject 500ms latency */
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
-            RD_KAFKA_RESP_ERR_NO_ERROR, 0);
+            RD_KAFKA_RESP_ERR_NO_ERROR, 500);
 
-        rd_kafka_consumer_poll(c, 2000);
+        rd_kafka_consumer_poll(c, 3000);
 
-        found_heartbeats = wait_share_heartbeats(mcluster, 2, 200);
+        found_heartbeats = wait_share_heartbeats(mcluster, 2, 500);
         TEST_ASSERT(found_heartbeats >= 1,
-                    "Expected at least 1 heartbeat, got %d", found_heartbeats);
+                    "Expected at least 1 heartbeat after RTT injection, got %d",
+                    found_heartbeats);
 
         /* Cleanup */
         rd_kafka_consumer_close(c);

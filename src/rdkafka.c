@@ -1230,6 +1230,8 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
                         RD_LIST_FOREACH(entry, &batches->entries, i) {
                                 if (entry->types)
                                         rd_free(entry->types);
+                                if (entry->is_error)
+                                        rd_free(entry->is_error);
                                 rd_free(entry);
                         }
                         rd_list_destroy(&batches->entries);
@@ -3443,7 +3445,7 @@ rd_kafka_share_inflight_ack_update_delivered(
 }
 
 /**
- * @brief Internal helper to update ack type for error records (API 3).
+ * @brief Internal helper to update ack type for error records.
  *
  * @param rkshare Share consumer handle
  * @param topic Topic name

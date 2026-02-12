@@ -936,6 +936,16 @@ void rd_kafka_share_build_ack_mapping(
                         memcpy(dst_entry->types, src_entry->types,
                                src_entry->size * sizeof(*dst_entry->types));
 
+                        /* Copy is_error array */
+                        if (src_entry->is_error) {
+                                dst_entry->is_error =
+                                    rd_calloc(src_entry->size,
+                                              sizeof(*dst_entry->is_error));
+                                memcpy(dst_entry->is_error, src_entry->is_error,
+                                       src_entry->size *
+                                           sizeof(*dst_entry->is_error));
+                        }
+
                         rd_list_add(&dst_batches->entries, dst_entry);
                         dst_batches->number_of_acquired_msgs +=
                             (int32_t)src_entry->size;

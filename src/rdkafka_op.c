@@ -567,6 +567,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                         RD_LIST_FOREACH(entry, &batches->entries, j) {
                                 if (entry->types)
                                         rd_free(entry->types);
+                                if (entry->is_error)
+                                        rd_free(entry->is_error);
                                 rd_free(entry);
                         }
                         rd_list_destroy(&batches->entries);

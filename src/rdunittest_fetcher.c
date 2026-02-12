@@ -182,6 +182,8 @@ static void ut_destroy_rkshare(rd_kafka_share_t *rkshare) {
                         RD_LIST_FOREACH(entry, &batches->entries, i) {
                                 if (entry->types)
                                         rd_free(entry->types);
+                                if (entry->is_error)
+                                        rd_free(entry->is_error);
                                 rd_free(entry);
                         }
                         rd_list_destroy(&batches->entries);
@@ -306,9 +308,17 @@ static rd_kafka_op_t *ut_make_share_fetch_response(
         entry->end_offset = acquired_end;
         entry->size = range_size;
         entry->types = rd_calloc(range_size, sizeof(*entry->types));
+        entry->is_error = rd_calloc(range_size, sizeof(*entry->is_error));
 
         /* Copy types from input */
         memcpy(entry->types, ack_types, range_size * sizeof(*entry->types));
+
+        /* Set is_error based on type (RELEASE/REJECT = error record) */
+        for (int64_t k = 0; k < range_size; k++) {
+                entry->is_error[k] =
+                    (ack_types[k] == RD_KAFKA_SHARE_ACK_RELEASE ||
+                     ack_types[k] == RD_KAFKA_SHARE_ACK_REJECT);
+        }
 
         rd_list_add(&batches->entries, entry);
         rd_list_add(&response_rko->rko_u.share_fetch_response.inflight_acks,
@@ -349,6 +359,8 @@ static void ut_destroy_share_fetch_response(rd_kafka_op_t *rko) {
                 RD_LIST_FOREACH(entry, &batches->entries, j) {
                         if (entry->types)
                                 rd_free(entry->types);
+                        if (entry->is_error)
+                                rd_free(entry->is_error);
                         rd_free(entry);
                 }
                 rd_list_destroy(&batches->entries);
@@ -844,8 +856,11 @@ static int ut_case_collate_all_same_type(rd_kafka_t *rk) {
         entry->end_offset = 4;
         entry->size = 4;
         entry->types = rd_calloc(4, sizeof(*entry->types));
-        for (int i = 0; i < 4; i++)
+        entry->is_error = rd_calloc(4, sizeof(*entry->is_error));
+        for (int i = 0; i < 4; i++) {
                 entry->types[i] = RD_KAFKA_SHARE_ACK_ACQUIRED;
+                entry->is_error[i] = rd_false; /* Delivered records */
+        }
         rd_list_add(&batches->entries, entry);
 
         rd_kafka_topic_partition_t *key =
@@ -897,6 +912,7 @@ static int ut_case_collate_mixed_types(rd_kafka_t *rk) {
         entry->end_offset = 9;
         entry->size = 9;
         entry->types = rd_calloc(9, sizeof(*entry->types));
+        entry->is_error = rd_calloc(9, sizeof(*entry->is_error));
         /* ACQ, ACQ, GAP, ACQ, ACQ, REJ, REJ, ACQ, ACQ */
         entry->types[0] = RD_KAFKA_SHARE_ACK_ACQUIRED;
         entry->types[1] = RD_KAFKA_SHARE_ACK_ACQUIRED;
@@ -907,6 +923,9 @@ static int ut_case_collate_mixed_types(rd_kafka_t *rk) {
         entry->types[6] = RD_KAFKA_SHARE_ACK_REJECT;
         entry->types[7] = RD_KAFKA_SHARE_ACK_ACQUIRED;
         entry->types[8] = RD_KAFKA_SHARE_ACK_ACQUIRED;
+        /* Set is_error for REJECT records */
+        entry->is_error[5] = rd_true;
+        entry->is_error[6] = rd_true;
         rd_list_add(&batches->entries, entry);
 
         rd_kafka_topic_partition_t *key =
@@ -1017,12 +1036,14 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         entry1->end_offset = 6;
         entry1->size = 6;
         entry1->types = rd_calloc(6, sizeof(*entry1->types));
+        entry1->is_error = rd_calloc(6, sizeof(*entry1->is_error));
         entry1->types[0] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 1 */
         entry1->types[1] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 2 */
         entry1->types[2] = RD_KAFKA_SHARE_ACK_GAP;       /* off 3 */
         entry1->types[3] = RD_KAFKA_SHARE_ACK_GAP;       /* off 4 */
         entry1->types[4] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 5 */
         entry1->types[5] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 6 */
+        /* All are delivered records (ACQUIRED) or GAP */
         rd_list_add(&batches1->entries, entry1);
 
         rd_kafka_topic_partition_t *key1 =
@@ -1042,6 +1063,7 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         entry2->end_offset = 8;
         entry2->size = 8;
         entry2->types = rd_calloc(8, sizeof(*entry2->types));
+        entry2->is_error = rd_calloc(8, sizeof(*entry2->is_error));
         entry2->types[0] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 1 */
         entry2->types[1] = RD_KAFKA_SHARE_ACK_REJECT;    /* off 2 */
         entry2->types[2] = RD_KAFKA_SHARE_ACK_GAP;       /* off 3 */
@@ -1050,6 +1072,10 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         entry2->types[5] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 6 */
         entry2->types[6] = RD_KAFKA_SHARE_ACK_ACQUIRED;  /* off 7 */
         entry2->types[7] = RD_KAFKA_SHARE_ACK_GAP;       /* off 8 */
+        /* Set is_error for REJECT records */
+        entry2->is_error[1] = rd_true;
+        entry2->is_error[3] = rd_true;
+        entry2->is_error[4] = rd_true;
         rd_list_add(&batches2->entries, entry2);
 
         rd_kafka_topic_partition_t *key2 =

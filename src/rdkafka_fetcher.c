@@ -1122,6 +1122,7 @@ static rd_kafka_op_t *rd_kafka_share_build_response_rko(
                         entry->end_offset = end;
                         entry->size = size;
                         entry->types = rd_calloc(size, sizeof(*entry->types));
+                        entry->is_error = rd_calloc(size, sizeof(*entry->is_error));
 
                         /* Process each offset in the range */
                         for (int64_t off = start; off <= end; off++) {
@@ -1170,12 +1171,19 @@ static rd_kafka_op_t *rd_kafka_share_build_response_rko(
                                                 rkm = &msg_rko->rko_u.fetch.rkm;
                                         else
                                                 rkm = &msg_rko->rko_u.err.rkm;
-                                        entry->types[type_idx] =
+                                        rd_kafka_share_acknowledgement_type ack_type =
                                             (rd_kafka_share_acknowledgement_type)
                                             rkm->rkm_u.consumer.ack_type;
-                } else {
+                                        entry->types[type_idx] = ack_type;
+
+                                        /* Mark as error record if RELEASE or REJECT */
+                                        entry->is_error[type_idx] =
+                                            (ack_type == RD_KAFKA_SHARE_ACK_RELEASE ||
+                                             ack_type == RD_KAFKA_SHARE_ACK_REJECT);
+                                } else {
                                         /* No message - mark as GAP */
                                         entry->types[type_idx] = RD_KAFKA_SHARE_ACK_GAP;
+                                        entry->is_error[type_idx] = rd_false;
                                         gap_cnt++;
                                 }
                         }

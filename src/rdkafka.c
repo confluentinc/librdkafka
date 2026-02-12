@@ -3339,6 +3339,188 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
 }
 
 /**
+ * @brief Internal helper to update ack type for delivered records.
+ *
+ * @param rkshare Share consumer handle
+ * @param topic Topic name
+ * @param partition Partition id
+ * @param offset Offset to acknowledge
+ * @param type New acknowledgement type (ACCEPT, REJECT, RELEASE)
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
+ * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
+ * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or error record
+ */
+static rd_kafka_resp_err_t
+rd_kafka_share_inflight_ack_update_delivered(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_acknowledgement_type type) {
+        rd_kafka_topic_partition_t lookup_key;
+        rd_kafka_share_ack_batches_t *batches;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+        int64_t idx;
+
+        /* Find partition in inflight_acks map */
+        lookup_key.topic     = (char *)topic;
+        lookup_key.partition = partition;
+
+        batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, &lookup_key);
+        if (!batches)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Find entry containing offset */
+        RD_LIST_FOREACH(entry, &batches->entries, i) {
+                if (offset >= entry->start_offset &&
+                    offset <= entry->end_offset) {
+                        /* Found the entry containing this offset */
+                        idx = offset - entry->start_offset;
+
+                        /* GAP records cannot be acknowledged */
+                        if (entry->types[idx] == RD_KAFKA_SHARE_ACK_GAP)
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Error records must use offset-based API */
+                        if (entry->is_error && entry->is_error[idx])
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Update the type (allows re-acknowledgement) */
+                        entry->types[idx] = type;
+
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
+
+        /* Offset not found in any entry */
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+}
+
+/**
+ * @brief Internal helper to update ack type for error records (API 3).
+ *
+ * @param rkshare Share consumer handle
+ * @param topic Topic name
+ * @param partition Partition id
+ * @param offset Offset to acknowledge
+ * @param type New acknowledgement type (ACCEPT, RELEASE, REJECT)
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
+ * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
+ * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or delivered record
+ */
+static rd_kafka_resp_err_t
+rd_kafka_share_inflight_ack_update_error(rd_kafka_share_t *rkshare,
+                                         const char *topic,
+                                         int32_t partition,
+                                         int64_t offset,
+                                         rd_kafka_share_acknowledgement_type type) {
+        rd_kafka_topic_partition_t lookup_key;
+        rd_kafka_share_ack_batches_t *batches;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+        int64_t idx;
+
+        /* Find partition in inflight_acks map */
+        lookup_key.topic     = (char *)topic;
+        lookup_key.partition = partition;
+
+        batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, &lookup_key);
+        if (!batches)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Find entry containing offset */
+        RD_LIST_FOREACH(entry, &batches->entries, i) {
+                if (offset >= entry->start_offset &&
+                    offset <= entry->end_offset) {
+                        /* Found the entry containing this offset */
+                        idx = offset - entry->start_offset;
+
+                        /* GAP records cannot be acknowledged */
+                        if (entry->types[idx] == RD_KAFKA_SHARE_ACK_GAP)
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Only error records can use offset-based API */
+                        if (!entry->is_error || !entry->is_error[idx])
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Update the type (allows re-acknowledgement) */
+                        entry->types[idx] = type;
+
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
+
+        /* Offset not found in any entry */
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
+                           const rd_kafka_message_t *rkmessage) {
+        if (!rkshare || !rkmessage)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Record-based API: only for delivered records */
+        return rd_kafka_share_inflight_ack_update_delivered(
+            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
+            rkmessage->offset,
+            (rd_kafka_share_acknowledgement_type)RD_KAFKA_SHARE_ACK_TYPE_ACCEPT);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
+                                const rd_kafka_message_t *rkmessage,
+                                rd_kafka_share_ack_type_t type) {
+        if (!rkshare || !rkmessage)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Validate type - only ACCEPT, REJECT, RELEASE allowed */
+        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
+            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Record-based API: only for delivered records */
+        return rd_kafka_share_inflight_ack_update_delivered(
+            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
+            rkmessage->offset, (rd_kafka_share_acknowledgement_type)type);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
+                                  const char *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  rd_kafka_share_ack_type_t type) {
+        if (!rkshare || !topic)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Validate type - ACCEPT, RELEASE, REJECT allowed */
+        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
+            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Offset-based API: only for error records (RELEASE/REJECT state) */
+        return rd_kafka_share_inflight_ack_update_error(
+            rkshare, topic, partition, offset,
+            (rd_kafka_share_acknowledgement_type)type);
+}
+
+/**
  * Schedules a rebootstrap of the cluster immediately.
  *
  * @locks none

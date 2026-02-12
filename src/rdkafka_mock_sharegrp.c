@@ -35,6 +35,7 @@
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
+#include "rdkafka_mock_group_common.h"
 
 /**
  * @brief Share group target assignment (manual)
@@ -63,12 +64,8 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
 rd_kafka_mock_sharegroup_t *
 rd_kafka_mock_sharegroup_find(rd_kafka_mock_cluster_t *mcluster,
                               const rd_kafkap_str_t *GroupId) {
-        rd_kafka_mock_sharegroup_t *mshgrp;
-        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
-                if (!rd_kafkap_str_cmp_str(GroupId, mshgrp->id))
-                        return mshgrp;
-        }
-        return NULL;
+        return RD_KAFKA_MOCK_GROUP_FIND(&mcluster->sharegrps, GroupId,
+                                        rd_kafka_mock_sharegroup_t);
 }
 
 /**
@@ -130,12 +127,8 @@ void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
 rd_kafka_mock_sharegroup_member_t *
 rd_kafka_mock_sharegroup_member_find(rd_kafka_mock_sharegroup_t *mshgrp,
                                      const rd_kafkap_str_t *MemberId) {
-        rd_kafka_mock_sharegroup_member_t *member;
-        TAILQ_FOREACH(member, &mshgrp->members, link) {
-                if (!rd_kafkap_str_cmp_str(MemberId, member->id))
-                        return member;
-        }
-        return NULL;
+        return RD_KAFKA_MOCK_MEMBER_FIND(&mshgrp->members, MemberId,
+                                         rd_kafka_mock_sharegroup_member_t);
 }
 
 /**
@@ -160,10 +153,9 @@ void rd_kafka_mock_sharegroup_member_destroy(
 void rd_kafka_mock_sharegroup_member_active(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_member_t *member) {
-        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
-                     "Marking mock share group member %s as active",
-                     member->id);
-        member->ts_last_activity = rd_clock();
+        rd_kafka_mock_group_member_mark_active(mshgrp->cluster->rk, "share",
+                                               member->id,
+                                               &member->ts_last_activity);
 }
 
 /**
@@ -177,6 +169,10 @@ void rd_kafka_mock_sharegroup_member_fenced(
                      mshgrp->id);
 
         rd_kafka_mock_sharegroup_member_destroy(mshgrp, member);
+
+        /* Recalculate assignments so remaining members get the
+         * freed partitions. */
+        rd_kafka_mock_sharegroup_assignment_recalculate(mshgrp);
 }
 
 /**
@@ -487,28 +483,6 @@ void rd_kafka_mock_sharegroup_assignment_recalculate(
                 member->member_epoch          = mshgrp->group_epoch;
         }
 
-        /* Print all member assignments */
-        printf("\n=== SHARE GROUP ASSIGNMENT (epoch %d) ===\n",
-               mshgrp->group_epoch);
-        TAILQ_FOREACH(member, &mshgrp->members, link) {
-                printf("  %s -> ", member->id);
-                if (member->assignment && member->assignment->cnt > 0) {
-                        int j;
-                        for (j = 0; j < member->assignment->cnt; j++) {
-                                rd_kafka_topic_partition_t *p =
-                                    &member->assignment->elems[j];
-                                printf("%s[%d]%s", p->topic, p->partition,
-                                       j < member->assignment->cnt - 1 ? ", "
-                                                                       : "");
-                        }
-                } else {
-                        printf("(none)");
-                }
-                printf("\n");
-        }
-        printf("=========================================\n\n");
-        fflush(stdout);
-
         rd_list_destroy(all_topics);
 }
 
@@ -689,10 +663,11 @@ void rd_kafka_mock_sharegrps_connection_closed(
         rd_kafka_mock_sharegroup_t *mshgrp;
 
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
-                rd_kafka_mock_sharegroup_member_t *member;
-                TAILQ_FOREACH(member, &mshgrp->members, link) {
+                rd_kafka_mock_sharegroup_member_t *member, *tmp;
+                TAILQ_FOREACH_SAFE(member, &mshgrp->members, link, tmp) {
                         if (member->conn == mconn) {
-                                member->conn = NULL;
+                                rd_kafka_mock_sharegroup_member_fenced(mshgrp,
+                                                                       member);
                         }
                 }
         }

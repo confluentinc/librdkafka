@@ -37,6 +37,7 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_msgset.h"
 #include "rdkafka_fetcher.h"
+#include "rdkafka_partition.h"
 #include "rdkafka_request.h"
 
 
@@ -1117,10 +1118,15 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                         entry->types[type_idx] =
                                             (rd_kafka_share_internal_acknowledgement_type)
                                                 rkm->rkm_u.consumer.ack_type;
+                                        
+                                        /* Mark as error record if RELEASE or REJECT */
+                                        entry->is_error[type_idx] =
+                                            (entry->types[type_idx] == RD_KAFKA_INTERNAL_SHARE_ACK_REJECT ||
+                                             entry->types[type_idx] == RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE);
                                 } else {
                                         /* No message - mark as GAP */
-                                        entry->types[type_idx] =
-                                            RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
+                                        entry->types[type_idx] = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
+                                        entry->is_error[type_idx] = rd_false;
                                         gap_cnt++;
                                 }
                         }

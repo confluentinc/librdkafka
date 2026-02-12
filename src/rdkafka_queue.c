@@ -967,6 +967,16 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
                         memcpy(dst_entry->types, src_entry->types,
                                src_entry->types_cnt * sizeof(*dst_entry->types));
 
+                        /* Copy is_error array */
+                        if (src_entry->is_error) {
+                                dst_entry->is_error =
+                                    rd_calloc(src_entry->size,
+                                              sizeof(*dst_entry->is_error));
+                                memcpy(dst_entry->is_error, src_entry->is_error,
+                                       src_entry->size *
+                                           sizeof(*dst_entry->is_error));
+                        }
+
                         rd_list_add(&dst_batches->entries, dst_entry);
 
                         /* Count only ACQUIRED types for tracking */

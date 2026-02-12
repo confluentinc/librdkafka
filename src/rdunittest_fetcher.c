@@ -159,6 +159,8 @@ static void ut_destroy_rkshare(rd_kafka_share_t *rkshare) {
                         RD_LIST_FOREACH(entry, &batches->entries, i) {
                                 if (entry->types)
                                         rd_free(entry->types);
+                                if (entry->is_error)
+                                        rd_free(entry->is_error);
                                 rd_free(entry);
                         }
                         rd_list_destroy(&batches->entries);
@@ -276,9 +278,17 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
         entry->size         = range_size;
         entry->types_cnt    = (int32_t)range_size;
         entry->types        = rd_calloc(range_size, sizeof(*entry->types));
+        entry->is_error = rd_calloc(range_size, sizeof(*entry->is_error));
 
         /* Copy types from input */
         memcpy(entry->types, ack_types, range_size * sizeof(*entry->types));
+
+        /* Set is_error based on type (RELEASE/REJECT = error record) */
+        for (int64_t k = 0; k < range_size; k++) {
+                entry->is_error[k] =
+                    (ack_types[k] == RD_KAFKA_SHARE_ACK_RELEASE ||
+                     ack_types[k] == RD_KAFKA_SHARE_ACK_REJECT);
+        }
 
         rd_list_add(&batches->entries, entry);
         rd_list_add(&response_rko->rko_u.share_fetch_response.inflight_acks,
@@ -309,6 +319,8 @@ static void ut_destroy_share_fetch_response(rd_kafka_op_t *rko) {
                 RD_LIST_FOREACH(entry, &batches->entries, j) {
                         if (entry->types)
                                 rd_free(entry->types);
+                        if (entry->is_error)
+                                rd_free(entry->is_error);
                         rd_free(entry);
                 }
                 rd_list_destroy(&batches->entries);

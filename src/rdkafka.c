@@ -3400,7 +3400,7 @@ rd_kafka_share_inflight_ack_update_delivered(
 }
 
 /**
- * @brief Internal helper to update ack type for error records (API 3).
+ * @brief Internal helper to update ack type for error records.
  *
  * @param rkshare Share consumer handle
  * @param topic Topic name

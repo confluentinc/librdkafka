@@ -692,7 +692,7 @@ static void do_test_share_group_target_assignment(void) {
         SUB_TEST_PASS();
 }
 
-int main_0155_share_consumer_mock(int argc, char **argv) {
+int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
         /* Run all tests */

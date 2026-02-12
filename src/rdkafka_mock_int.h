@@ -762,6 +762,10 @@ void rd_kafka_mock_sharegroup_member_destroy(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_member_t *member);
 
+void rd_kafka_mock_sharegroup_member_active(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sharegroup_member_t *member);
+
 rd_kafka_mock_sharegroup_member_t *
 rd_kafka_mock_sharegroup_member_get(rd_kafka_mock_sharegroup_t *mshgrp,
                                     const rd_kafkap_str_t *MemberID,

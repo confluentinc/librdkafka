@@ -241,19 +241,40 @@ rd_kafka_mock_sharegroup_member_get(rd_kafka_mock_sharegroup_t *mshgrp,
 
 /**
  * @brief Update share group member's subscribed topic names.
+ *
+ * @param member The member to update.
+ * @param SubscribedTopicNames Array of topic names.
+ * @param SubscribedTopicNamesCnt Count of topic names:
+ *        -1 = unchanged (no modification)
+ *         0 = clear all subscriptions
+ *        >0 = set to provided topics
+ *
+ * @returns rd_true if subscriptions changed, rd_false otherwise.
  */
 rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
     rd_kafka_mock_sharegroup_member_t *member,
     const rd_kafkap_str_t *SubscribedTopicNames,
     int32_t SubscribedTopicNamesCnt) {
-        rd_bool_t changed = rd_false;
         int32_t i;
 
-        if (!SubscribedTopicNamesCnt) {
-                /* No change */
+        if (SubscribedTopicNamesCnt < 0) {
+                /* -1 means unchanged */
                 return rd_false;
         }
 
+        if (SubscribedTopicNamesCnt == 0) {
+                /* 0 means clear all subscriptions */
+                if (!member->subscribed_topic_names ||
+                    rd_list_cnt(member->subscribed_topic_names) == 0) {
+                        /* Already empty, no change */
+                        return rd_false;
+                }
+                rd_list_destroy(member->subscribed_topic_names);
+                member->subscribed_topic_names = NULL;
+                return rd_true;
+        }
+
+        /* SubscribedTopicNamesCnt > 0: Check if subscription changed */
         if (member->subscribed_topic_names) {
                 if (rd_list_cnt(member->subscribed_topic_names) ==
                     SubscribedTopicNamesCnt) {
@@ -283,7 +304,6 @@ rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
         }
 
         /* Subscription changed, update the list */
-        changed = rd_true;
         RD_IF_FREE(member->subscribed_topic_names, rd_list_destroy);
         member->subscribed_topic_names =
             rd_list_new(SubscribedTopicNamesCnt, rd_free);
@@ -293,7 +313,7 @@ rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
                             RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
         }
 
-        return changed;
+        return rd_true;
 }
 
 /**

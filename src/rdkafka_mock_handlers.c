@@ -3136,6 +3136,8 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                          * catching up */
                                         member->conn = mconn;
                                         MemberEpoch  = member->member_epoch;
+                                        rd_kafka_mock_sharegroup_member_active(
+                                            mshgrp, member);
                                 }
                         } else {
                                 /* Epoch matches - normal heartbeat */
@@ -3148,6 +3150,8 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                 }
                                 member->conn = mconn;
                                 MemberEpoch  = member->member_epoch;
+                                rd_kafka_mock_sharegroup_member_active(mshgrp,
+                                                                       member);
                         }
                 }
 

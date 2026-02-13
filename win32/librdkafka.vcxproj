@@ -237,6 +237,7 @@
     <ClCompile Include="..\src\rdkafka_mock.c" />
     <ClCompile Include="..\src\rdkafka_mock_handlers.c" />
     <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
+    <ClCompile Include="..\src\rdkafka_mock_sharegrp.c" />
     <ClCompile Include="..\src\rdkafka_error.c" />
     <ClCompile Include="..\src\rdkafka_fetcher.c" />
     <ClCompile Include="..\src\rdkafka_telemetry.c" />

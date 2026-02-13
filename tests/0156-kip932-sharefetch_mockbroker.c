@@ -352,14 +352,24 @@ static void do_test_sghb_error(rd_kafka_resp_err_t err, int count) {
         test_ctx_t ctx    = test_ctx_new();
         rd_kafka_share_t *consumer;
         int consumed;
+        rd_kafka_resp_err_t *errs;
+        int i;
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
         produce_messages(ctx.producer, topic, 1);
 
-        rd_kafka_mock_push_request_errors(
-            ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, count, err);
+        /* Build an array of 'count' identical errors and push them all.
+         * Using the array variant avoids UB from mismatched varargs count. */
+        errs = malloc(sizeof(*errs) * count);
+        TEST_ASSERT(errs != NULL, "malloc failed");
+        for (i = 0; i < count; i++)
+                errs[i] = err;
+        rd_kafka_mock_push_request_errors_array(
+            ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat,
+            (size_t)count, errs);
+        free(errs);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-sghb");
         subscribe_topics(consumer, &topic, 1);

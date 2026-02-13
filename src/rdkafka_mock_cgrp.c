@@ -35,6 +35,7 @@
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
+#include "rdkafka_mock_group_common.h"
 
 
 static const char *rd_kafka_mock_cgrp_classic_state_names[] = {
@@ -72,10 +73,9 @@ rd_kafka_mock_cgrp_classic_set_state(rd_kafka_mock_cgrp_classic_t *mcgrp,
 void rd_kafka_mock_cgrp_classic_member_active(
     rd_kafka_mock_cgrp_classic_t *mcgrp,
     rd_kafka_mock_cgrp_classic_member_t *member) {
-        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
-                     "Marking mock consumer group member %s as active",
-                     member->id);
-        member->ts_last_activity = rd_clock();
+        rd_kafka_mock_group_member_mark_active(mcgrp->cluster->rk, "classic",
+                                               member->id,
+                                               &member->ts_last_activity);
 }
 
 
@@ -537,13 +537,8 @@ static void rd_kafka_mock_cgrp_classic_member_destroy(
 rd_kafka_mock_cgrp_classic_member_t *rd_kafka_mock_cgrp_classic_member_find(
     const rd_kafka_mock_cgrp_classic_t *mcgrp,
     const rd_kafkap_str_t *MemberId) {
-        const rd_kafka_mock_cgrp_classic_member_t *member;
-        TAILQ_FOREACH(member, &mcgrp->members, link) {
-                if (!rd_kafkap_str_cmp_str(MemberId, member->id))
-                        return (rd_kafka_mock_cgrp_classic_member_t *)member;
-        }
-
-        return NULL;
+        return RD_KAFKA_MOCK_MEMBER_FIND(&mcgrp->members, MemberId,
+                                         rd_kafka_mock_cgrp_classic_member_t);
 }
 
 
@@ -659,13 +654,8 @@ void rd_kafka_mock_cgrp_classic_destroy(rd_kafka_mock_cgrp_classic_t *mcgrp) {
 rd_kafka_mock_cgrp_classic_t *
 rd_kafka_mock_cgrp_classic_find(rd_kafka_mock_cluster_t *mcluster,
                                 const rd_kafkap_str_t *GroupId) {
-        rd_kafka_mock_cgrp_classic_t *mcgrp;
-        TAILQ_FOREACH(mcgrp, &mcluster->cgrps_classic, link) {
-                if (!rd_kafkap_str_cmp_str(GroupId, mcgrp->id))
-                        return mcgrp;
-        }
-
-        return NULL;
+        return RD_KAFKA_MOCK_GROUP_FIND(&mcluster->cgrps_classic, GroupId,
+                                        rd_kafka_mock_cgrp_classic_t);
 }
 
 
@@ -1335,10 +1325,9 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
 void rd_kafka_mock_cgrp_consumer_member_active(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
     rd_kafka_mock_cgrp_consumer_member_t *member) {
-        rd_kafka_dbg(mcgrp->cluster->rk, MOCK, "MOCK",
-                     "Marking mock consumer group member %s as active",
-                     member->id);
-        member->ts_last_activity = rd_clock();
+        rd_kafka_mock_group_member_mark_active(
+            mcgrp->cluster->rk, "consumer", member->id,
+            &member->ts_last_activity);
 }
 
 /**
@@ -1353,13 +1342,8 @@ void rd_kafka_mock_cgrp_consumer_member_active(
 rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_find(
     const rd_kafka_mock_cgrp_consumer_t *mcgrp,
     const rd_kafkap_str_t *MemberId) {
-        const rd_kafka_mock_cgrp_consumer_member_t *member;
-        TAILQ_FOREACH(member, &mcgrp->members, link) {
-                if (!rd_kafkap_str_cmp_str(MemberId, member->id))
-                        return (rd_kafka_mock_cgrp_consumer_member_t *)member;
-        }
-
-        return NULL;
+        return RD_KAFKA_MOCK_MEMBER_FIND(&mcgrp->members, MemberId,
+                                         rd_kafka_mock_cgrp_consumer_member_t);
 }
 
 /**
@@ -1700,13 +1684,8 @@ void rd_kafka_mock_cgrp_consumer_member_fenced(
 rd_kafka_mock_cgrp_consumer_t *
 rd_kafka_mock_cgrp_consumer_find(const rd_kafka_mock_cluster_t *mcluster,
                                  const rd_kafkap_str_t *GroupId) {
-        rd_kafka_mock_cgrp_consumer_t *mcgrp;
-        TAILQ_FOREACH(mcgrp, &mcluster->cgrps_consumer, link) {
-                if (!rd_kafkap_str_cmp_str(GroupId, mcgrp->id))
-                        return mcgrp;
-        }
-
-        return NULL;
+        return RD_KAFKA_MOCK_GROUP_FIND(&mcluster->cgrps_consumer, GroupId,
+                                        rd_kafka_mock_cgrp_consumer_t);
 }
 
 /**

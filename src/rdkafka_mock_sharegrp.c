@@ -35,6 +35,7 @@
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
+#include "rdkafka_mock_group_common.h"
 
 /**
  * @brief Share group target assignment (manual)
@@ -65,12 +66,8 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
 rd_kafka_mock_sharegroup_t *
 rd_kafka_mock_sharegroup_find(rd_kafka_mock_cluster_t *mcluster,
                               const rd_kafkap_str_t *GroupId) {
-        rd_kafka_mock_sharegroup_t *mshgrp;
-        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
-                if (!rd_kafkap_str_cmp_str(GroupId, mshgrp->id))
-                        return mshgrp;
-        }
-        return NULL;
+        return RD_KAFKA_MOCK_GROUP_FIND(&mcluster->sharegrps, GroupId,
+                                        rd_kafka_mock_sharegroup_t);
 }
 
 /**
@@ -172,12 +169,8 @@ void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
 rd_kafka_mock_sharegroup_member_t *
 rd_kafka_mock_sharegroup_member_find(rd_kafka_mock_sharegroup_t *mshgrp,
                                      const rd_kafkap_str_t *MemberId) {
-        rd_kafka_mock_sharegroup_member_t *member;
-        TAILQ_FOREACH(member, &mshgrp->members, link) {
-                if (!rd_kafkap_str_cmp_str(MemberId, member->id))
-                        return member;
-        }
-        return NULL;
+        return RD_KAFKA_MOCK_MEMBER_FIND(&mshgrp->members, MemberId,
+                                         rd_kafka_mock_sharegroup_member_t);
 }
 
 /**
@@ -202,10 +195,9 @@ void rd_kafka_mock_sharegroup_member_destroy(
 void rd_kafka_mock_sharegroup_member_active(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_member_t *member) {
-        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
-                     "Marking mock share group member %s as active",
-                     member->id);
-        member->ts_last_activity = rd_clock();
+        rd_kafka_mock_group_member_mark_active(mshgrp->cluster->rk, "share",
+                                               member->id,
+                                               &member->ts_last_activity);
 }
 
 /**
@@ -219,6 +211,10 @@ void rd_kafka_mock_sharegroup_member_fenced(
                      mshgrp->id);
 
         rd_kafka_mock_sharegroup_member_destroy(mshgrp, member);
+
+        /* Recalculate assignments so remaining members get the
+         * freed partitions. */
+        rd_kafka_mock_sharegroup_assignment_recalculate(mshgrp);
 }
 
 /**
@@ -287,19 +283,40 @@ rd_kafka_mock_sharegroup_member_get(rd_kafka_mock_sharegroup_t *mshgrp,
 
 /**
  * @brief Update share group member's subscribed topic names.
+ *
+ * @param member The member to update.
+ * @param SubscribedTopicNames Array of topic names.
+ * @param SubscribedTopicNamesCnt Count of topic names:
+ *        -1 = unchanged (no modification)
+ *         0 = clear all subscriptions
+ *        >0 = set to provided topics
+ *
+ * @returns rd_true if subscriptions changed, rd_false otherwise.
  */
 rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
     rd_kafka_mock_sharegroup_member_t *member,
     const rd_kafkap_str_t *SubscribedTopicNames,
     int32_t SubscribedTopicNamesCnt) {
-        rd_bool_t changed = rd_false;
         int32_t i;
 
-        if (!SubscribedTopicNamesCnt) {
-                /* No change */
+        if (SubscribedTopicNamesCnt < 0) {
+                /* -1 means unchanged */
                 return rd_false;
         }
 
+        if (SubscribedTopicNamesCnt == 0) {
+                /* 0 means clear all subscriptions */
+                if (!member->subscribed_topic_names ||
+                    rd_list_cnt(member->subscribed_topic_names) == 0) {
+                        /* Already empty, no change */
+                        return rd_false;
+                }
+                rd_list_destroy(member->subscribed_topic_names);
+                member->subscribed_topic_names = NULL;
+                return rd_true;
+        }
+
+        /* SubscribedTopicNamesCnt > 0: Check if subscription changed */
         if (member->subscribed_topic_names) {
                 if (rd_list_cnt(member->subscribed_topic_names) ==
                     SubscribedTopicNamesCnt) {
@@ -329,7 +346,6 @@ rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
         }
 
         /* Subscription changed, update the list */
-        changed = rd_true;
         RD_IF_FREE(member->subscribed_topic_names, rd_list_destroy);
         member->subscribed_topic_names =
             rd_list_new(SubscribedTopicNamesCnt, rd_free);
@@ -339,7 +355,7 @@ rd_bool_t rd_kafka_mock_sharegroup_member_subscribed_topic_names_set(
                             RD_KAFKAP_STR_DUP(&SubscribedTopicNames[i]));
         }
 
-        return changed;
+        return rd_true;
 }
 
 /**
@@ -528,28 +544,6 @@ void rd_kafka_mock_sharegroup_assignment_recalculate(
                 member->previous_member_epoch = member->member_epoch;
                 member->member_epoch          = mshgrp->group_epoch;
         }
-
-        /* Print all member assignments */
-        printf("\n=== SHARE GROUP ASSIGNMENT (epoch %d) ===\n",
-               mshgrp->group_epoch);
-        TAILQ_FOREACH(member, &mshgrp->members, link) {
-                printf("  %s -> ", member->id);
-                if (member->assignment && member->assignment->cnt > 0) {
-                        int j;
-                        for (j = 0; j < member->assignment->cnt; j++) {
-                                rd_kafka_topic_partition_t *p =
-                                    &member->assignment->elems[j];
-                                printf("%s[%d]%s", p->topic, p->partition,
-                                       j < member->assignment->cnt - 1 ? ", "
-                                                                       : "");
-                        }
-                } else {
-                        printf("(none)");
-                }
-                printf("\n");
-        }
-        printf("=========================================\n\n");
-        fflush(stdout);
 
         rd_list_destroy(all_topics);
 }
@@ -877,10 +871,11 @@ void rd_kafka_mock_sharegrps_connection_closed(
         rd_kafka_mock_sharegroup_t *mshgrp;
 
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
-                rd_kafka_mock_sharegroup_member_t *member;
-                TAILQ_FOREACH(member, &mshgrp->members, link) {
+                rd_kafka_mock_sharegroup_member_t *member, *tmp;
+                TAILQ_FOREACH_SAFE(member, &mshgrp->members, link, tmp) {
                         if (member->conn == mconn) {
-                                member->conn = NULL;
+                                rd_kafka_mock_sharegroup_member_fenced(mshgrp,
+                                                                       member);
                         }
                 }
         }

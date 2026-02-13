@@ -51,6 +51,7 @@ set(
     rdkafka_mock.c
     rdkafka_mock_handlers.c
     rdkafka_mock_cgrp.c
+    rdkafka_mock_sharegrp.c
     rdkafka_error.c
     rdkafka_fetcher.c
     rdkafka_telemetry.c

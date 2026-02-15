@@ -146,6 +146,7 @@ set(
     0153-memberid.c
     0154-share-consumer.c
     0155-share_group_heartbeat_mock.c
+    0156-kip932-sharefetch_mockbroker.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

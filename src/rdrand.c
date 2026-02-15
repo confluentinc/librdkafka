@@ -32,9 +32,11 @@
 #include "tinycthread.h"
 #include "rdmurmur2.h"
 #ifndef _WIN32
+#if HAVE_GETENTROPY
 /* getentropy() can be present in one of these two */
 #include <unistd.h>
 #include <sys/random.h>
+#endif
 #endif
 
 #ifdef HAVE_OSSL_SECURE_RAND_BYTES

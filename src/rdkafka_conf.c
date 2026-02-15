@@ -4429,8 +4429,13 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 conf->buffering_max_ms_dbl) {
                                 if (rd_kafka_conf_is_modified(conf,
                                                               "linger.ms"))
-                                        return "`message.timeout.ms` must be "
-                                               "greater than `linger.ms`";
+                                        return "`delivery.timeout.ms` "
+                                               "(alias "
+                                               "`message.timeout.ms`) "
+                                               "must be greater than "
+                                               "`linger.ms` "
+                                               "(alias "
+                                               "`queue.buffering.max.ms`)";
                                 else /* Auto adjust linger.ms to be lower
                                       * than message.timeout.ms */
                                         conf->buffering_max_ms_dbl =
@@ -4506,7 +4511,9 @@ const char *rd_kafka_topic_conf_finalize(rd_kafka_type_t cltype,
         if (tconf->message_timeout_ms != 0 &&
             (double)tconf->message_timeout_ms <= conf->buffering_max_ms_dbl &&
             rd_kafka_conf_is_modified(conf, "linger.ms"))
-                return "`message.timeout.ms` must be greater than `linger.ms`";
+                return "`delivery.timeout.ms` "
+                       "(alias `message.timeout.ms`) must be greater than "
+                       "`linger.ms` (alias `queue.buffering.max.ms`)";
 
         return NULL;
 }

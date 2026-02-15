@@ -614,7 +614,8 @@ struct rd_kafka_op_s {
                                                   *    PART_PUSH_LEADER_RESPONSE
                                                   */
                         char *str;               /**< For:
-                                                  *    COORD_SET (key) */
+                                                  *    COORD_SET (key)
+                                                  */
                         int32_t partition;       /**< For:
                                                   *    PART_SET_FOLLOWER
                                                   *    PART_SET_FOLLOWER_WMARKS

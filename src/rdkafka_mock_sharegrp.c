@@ -54,8 +54,10 @@ static void rd_kafka_mock_sharegroup_session_tmr_cb(rd_kafka_timers_t *rkts,
  */
 void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         TAILQ_INIT(&mcluster->sharegrps);
-        mcluster->defaults.sharegroup_session_timeout_ms    = 45000;
-        mcluster->defaults.sharegroup_heartbeat_interval_ms = 5000;
+        mcluster->defaults.sharegroup_session_timeout_ms      = 45000;
+        mcluster->defaults.sharegroup_heartbeat_interval_ms   = 5000;
+        mcluster->defaults.sharegroup_max_delivery_attempts   = 5;
+        mcluster->defaults.sharegroup_record_lock_duration_ms = 0;
 }
 
 /**
@@ -94,9 +96,26 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_INIT(&mshgrp->members);
         mshgrp->member_cnt = 0;
 
+        /* ShareFetch state */
+        TAILQ_INIT(&mshgrp->partitions);
+        TAILQ_INIT(&mshgrp->fetch_sessions);
+        mshgrp->partition_cnt     = 0;
+        mshgrp->fetch_session_cnt = 0;
+
+        /* Per-record limits */
+        mshgrp->max_delivery_attempts =
+            mcluster->defaults.sharegroup_max_delivery_attempts;
+        mshgrp->record_lock_duration_ms =
+            mcluster->defaults.sharegroup_record_lock_duration_ms;
+
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,
                              rd_kafka_mock_sharegroup_session_tmr_cb, mshgrp);
+
+        /* Fetch session expiry timer */
+        rd_kafka_timer_start(&mcluster->timers, &mshgrp->fetch_session_tmr,
+                             1000 * 1000 /* 1s */,
+                             rd_kafka_mock_sgrp_fetch_session_tmr_cb, mshgrp);
 
         TAILQ_INSERT_TAIL(&mcluster->sharegrps, mshgrp, link);
 
@@ -108,14 +127,37 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
  */
 void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
         rd_kafka_mock_sharegroup_member_t *member;
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+        rd_kafka_mock_sgrp_fetch_session_t *session;
 
         TAILQ_REMOVE(&mshgrp->cluster->sharegrps, mshgrp, link);
         rd_kafka_timer_stop(&mshgrp->cluster->timers, &mshgrp->session_tmr,
                             RD_DO_LOCK);
+        rd_kafka_timer_stop(&mshgrp->cluster->timers,
+                            &mshgrp->fetch_session_tmr, RD_DO_LOCK);
 
         /* Destroy all members */
         while ((member = TAILQ_FIRST(&mshgrp->members)))
                 rd_kafka_mock_sharegroup_member_destroy(mshgrp, member);
+
+        /* Destroy ShareFetch partition metadata */
+        while ((pmeta = TAILQ_FIRST(&mshgrp->partitions))) {
+                rd_kafka_mock_sgrp_record_state_t *state;
+                TAILQ_REMOVE(&mshgrp->partitions, pmeta, link);
+                while ((state = TAILQ_FIRST(&pmeta->inflight))) {
+                        TAILQ_REMOVE(&pmeta->inflight, state, link);
+                        rd_free(state->owner_member_id);
+                        rd_free(state);
+                }
+                rd_free(pmeta);
+        }
+
+        /* Destroy ShareFetch sessions */
+        while ((session = TAILQ_FIRST(&mshgrp->fetch_sessions))) {
+                TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
+                mshgrp->fetch_session_cnt--;
+                rd_kafka_mock_sgrp_fetch_session_destroy(session);
+        }
 
         rd_free(mshgrp->id);
         rd_free(mshgrp);
@@ -665,6 +707,152 @@ void rd_kafka_mock_sharegroup_set_heartbeat_interval(
         mtx_lock(&mcluster->lock);
         mcluster->defaults.sharegroup_heartbeat_interval_ms =
             heartbeat_interval_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the maximum delivery attempts per record for the sharegroup.
+ */
+void rd_kafka_mock_sharegroup_set_max_delivery_attempts(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_attempts) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+            mshgrp->max_delivery_attempts = max_attempts;
+        mcluster->defaults.sharegroup_max_delivery_attempts = max_attempts;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the per-record lock duration in milliseconds for the sharegroup.
+ */
+void rd_kafka_mock_sharegroup_set_record_lock_duration(
+    rd_kafka_mock_cluster_t *mcluster,
+    int lock_duration_ms) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+            mshgrp->record_lock_duration_ms = lock_duration_ms;
+        mcluster->defaults.sharegroup_record_lock_duration_ms =
+            lock_duration_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Destroy share fetch session.
+ */
+void rd_kafka_mock_sgrp_fetch_session_destroy(
+    rd_kafka_mock_sgrp_fetch_session_t *session) {
+        rd_free(session->member_id);
+        RD_IF_FREE(session->partitions, rd_kafka_topic_partition_list_destroy);
+        rd_free(session);
+}
+
+/**
+ * @brief Release all ACQUIRED records owned by \p member_id across all
+ *        share-partition metadata in the share group.
+ *
+ * This is called when a session is closed (epoch=-1), when a session
+ * times out, or as part of periodic lock-expiry reclamation.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_sgrp_release_member_locks(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    const char *member_id) {
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+
+        TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
+                rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+                TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
+                        if (state->state !=
+                            RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                                continue;
+                        if (!state->owner_member_id)
+                                continue;
+                        if (strcmp(state->owner_member_id, member_id) != 0)
+                                continue;
+
+                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        rd_free(state->owner_member_id);
+                        state->owner_member_id = NULL;
+                        state->lock_expiry_ts  = 0;
+                }
+        }
+}
+
+/**
+ * @brief Proactively release any expired acquisition locks.
+ *
+ * Iterates all partition metadata in the share group and flips
+ * ACQUIRED records whose lock_expiry_ts has passed back to AVAILABLE.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+static void
+rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
+                                rd_ts_t now) {
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+
+        TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
+                rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+                TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
+                        if (state->state !=
+                            RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                                continue;
+                        if (!state->lock_expiry_ts ||
+                            state->lock_expiry_ts > now)
+                                continue;
+
+                        /* Lock has expired — release back to AVAILABLE */
+                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        RD_IF_FREE(state->owner_member_id, rd_free);
+                        state->owner_member_id = NULL;
+                        state->lock_expiry_ts  = 0;
+                }
+        }
+}
+
+/**
+ * @brief Periodic timer: expire stale share-fetch sessions and
+ *        proactively reclaim expired acquisition locks.
+ *
+ * @locks mcluster->lock is acquired and released.
+ */
+void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
+                                             void *arg) {
+        rd_kafka_mock_sharegroup_t *mshgrp = arg;
+        rd_kafka_mock_sgrp_fetch_session_t *session, *tmp;
+        rd_ts_t now                       = rd_clock();
+        rd_kafka_mock_cluster_t *mcluster = mshgrp->cluster;
+
+        (void)rkts;
+
+        mtx_lock(&mcluster->lock);
+
+        /* 1. Expire stale sessions and release their member locks. */
+        TAILQ_FOREACH_SAFE(session, &mshgrp->fetch_sessions, link, tmp) {
+                if (session->ts_last_activity +
+                        (mshgrp->session_timeout_ms * 1000) >
+                    now)
+                        continue;
+
+                /* Release all locks held by this member before
+                 * destroying the session. */
+                rd_kafka_mock_sgrp_release_member_locks(mshgrp,
+                                                        session->member_id);
+
+                TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
+                mshgrp->fetch_session_cnt--;
+                rd_kafka_mock_sgrp_fetch_session_destroy(session);
+        }
+
+        /* 2. Proactively reclaim any expired acquisition locks.
+         *    This catches records whose owning consumer crashed
+         *    without closing its session cleanly. */
+        rd_kafka_mock_sgrp_expire_locks(mshgrp, now);
+
         mtx_unlock(&mcluster->lock);
 }
 

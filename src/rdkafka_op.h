@@ -196,7 +196,7 @@ typedef enum {
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD,    /**< share session:
                                                      * add partition */
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
-                                           * remove partition */        
+                                                     * remove partition */
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
@@ -789,14 +789,16 @@ struct rd_kafka_op_s {
                         /** List of per-partition inflight ack mappings.
                          *  Type: rd_kafka_share_ack_batches_t*
                          *  Contains per-offset ack types (ACQUIRED/GAP/REJECT).
-                         *  Built in broker thread, merged to rkshare in app thread.
+                         *  Built in broker thread, merged to rkshare in app
+                         * thread.
                          */
                         rd_list_t inflight_acks;
 
                         /** Index of next message to deliver.
                          *  Used when max_poll_records limits delivery -
                          *  the RKO is re-enqueued and this tracks progress.
-                         *  TODO KIP-932: Temporary field for partial consumption.
+                         *  TODO KIP-932: Temporary field for partial
+                         * consumption.
                          */
                         int next_msg_idx;
                 } share_fetch_response;

@@ -129,8 +129,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:SHARE_SESSION_PARTITION_ADD",
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
                 "REPLY:SHARE_SESSION_PARTITION_REMOVE",
-            [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
-                "REPLY:SHARE_FETCH_RESPONSE",
+            [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] = "REPLY:SHARE_FETCH_RESPONSE",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -298,10 +297,8 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_FETCH]  = sizeof(rko->rko_u.share_fetch),
             [RD_KAFKA_OP_SHARE_FETCH_FANOUT] =
                 sizeof(rko->rko_u.share_fetch_fanout),
-            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD] =
-                _RD_KAFKA_OP_EMPTY,
-            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
-                _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD]    = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
                 sizeof(rko->rko_u.share_fetch_response),
         };
@@ -546,12 +543,15 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 }
                 rd_list_destroy(&rko->rko_u.share_fetch_response.messages);
 
-                /* Free partition_acks list (destructor handles element cleanup) */
-                rd_list_destroy(&rko->rko_u.share_fetch_response.partition_acks);
+                /* Free partition_acks list (destructor handles element cleanup)
+                 */
+                rd_list_destroy(
+                    &rko->rko_u.share_fetch_response.partition_acks);
 
                 /* Free inflight_acks list */
                 RD_LIST_FOREACH(batches,
-                                &rko->rko_u.share_fetch_response.inflight_acks, i) {
+                                &rko->rko_u.share_fetch_response.inflight_acks,
+                                i) {
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int j;
                         if (batches->topic)

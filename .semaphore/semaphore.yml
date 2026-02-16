@@ -18,7 +18,7 @@ global_job_config:
       - mkdir dest
   env_vars:
     - name: CACHE_TAG
-      value: '7'
+      value: '8'
     - name: CI
       value: 'true'
     - name: KAFKA_VERSION

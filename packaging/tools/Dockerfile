@@ -2,10 +2,20 @@ FROM ubuntu:24.04
 
 ARG UID
 
+# Install prerequisites for adding LLVM repository
+RUN apt-get update && apt-get install -y gnupg wget software-properties-common
+
+# Add LLVM repository for clang-format 18.1.8
+RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc && \
+    echo "deb http://apt.llvm.org/noble/ llvm-toolchain-noble-18 main" > /etc/apt/sources.list.d/llvm.list
+
 RUN NEEDRESTART_MODE=a apt-get update && apt-get install -y \
     wget curl python3 git openjdk-21-jdk-headless python3-venv \
     python3-setuptools build-essential libssl-dev libcurl4-openssl-dev \
     zlib1g-dev libsasl2-dev libzstd-dev clang-format-18 doxygen graphviz
+
+# Verify clang-format version
+RUN clang-format-18 --version
 
 RUN wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb && \
     dpkg -i rapidjson-dev.deb && \

@@ -33,7 +33,8 @@ int main_0154_share_consumer(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_t *rk;
         rd_kafka_topic_partition_list_t *topics;
-        char *topic = "test-topic";// test_mk_topic_name("0154-share-consumer", 0);
+        char *topic =
+            "test-topic";  // test_mk_topic_name("0154-share-consumer", 0);
         char *group = "test-group-0";
 
         test_create_topic_wait_exists(NULL, topic, 3, -1, 60 * 1000);

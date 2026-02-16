@@ -3060,8 +3060,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
 RD_EXPORT
 rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
-                                        char *errstr,
-                                        size_t errstr_size);
+                                              char *errstr,
+                                              size_t errstr_size);
 
 /**
  * @brief Consume a batch of messages from the share consumer instance.
@@ -4786,7 +4786,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
-                   const rd_kafka_topic_partition_list_t *topics);
+                         const rd_kafka_topic_partition_list_t *topics);
 
 
 /**
@@ -4806,7 +4806,8 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare);
  *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_share_subscription(rd_kafka_share_t *rkshare, rd_kafka_topic_partition_list_t **topics);
+rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
+                            rd_kafka_topic_partition_list_t **topics);
 
 
 

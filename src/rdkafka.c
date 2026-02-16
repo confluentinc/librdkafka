@@ -2893,7 +2893,8 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Check if this way of defining share consumer needs to be changed.
+         * TODO KIP-932: Check if this way of defining share consumer needs to
+         * be changed.
          */
         res = rd_kafka_conf_set(conf, "share.consumer", "true", errstr_internal,
                                 sizeof(errstr_internal));
@@ -2906,7 +2907,8 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Remove this property once we have removed offset management.
+         * TODO KIP-932: Remove this property once we have removed offset
+         * management.
          */
         if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
@@ -2916,7 +2918,8 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Remove this property once we have removed offset management.
+         * TODO KIP-932: Remove this property once we have removed offset
+         * management.
          */
         if (rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
@@ -2926,8 +2929,8 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Try removing use of this property when improving share consumer
-         *               rebalancing logic in group management ticket.
+         * TODO KIP-932: Try removing use of this property when improving share
+         * consumer rebalancing logic in group management ticket.
          */
         res = rd_kafka_conf_set(conf, "group.protocol", "consumer",
                                 errstr_internal, sizeof(errstr_internal));
@@ -2946,7 +2949,7 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
-        rkshare = rd_calloc(1, sizeof(*rkshare));
+        rkshare             = rd_calloc(1, sizeof(*rkshare));
         rkshare->rkshare_rk = rk;
         return rkshare;
 }
@@ -3238,16 +3241,15 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 rko_sf->rko_u.share_fetch.target_broker = rkb;
                 rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
 
-                rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
-                             "Enqueuing share fetch op on broker %s "
-                             "(%s leave), (%s fetch)",
-                             rd_kafka_broker_name(rkb),
-                             rko_sf->rko_u.share_fetch.should_leave
-                                 ? "should"
-                                 : "should not",
-                             rko_sf->rko_u.share_fetch.should_fetch
-                                 ? "should"
-                                 : "should not");
+                rd_kafka_dbg(
+                    rk, CGRP, "SHAREFETCH",
+                    "Enqueuing share fetch op on broker %s "
+                    "(%s leave), (%s fetch)",
+                    rd_kafka_broker_name(rkb),
+                    rko_sf->rko_u.share_fetch.should_leave ? "should"
+                                                           : "should not",
+                    rko_sf->rko_u.share_fetch.should_fetch ? "should"
+                                                           : "should not");
                 rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
         }
         rd_kafka_rdunlock(rk);
@@ -3265,7 +3267,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
        be allocated on the heap. */
     rd_kafka_message_t **rkmessages /* out */,
     size_t *rkmessages_size /* out */) {
-        rd_kafka_t *rk          = rkshare->rkshare_rk;
+        rd_kafka_t *rk = rkshare->rkshare_rk;
         rd_kafka_cgrp_t *rkcg;
         rd_ts_t now             = rd_clock();
         rd_ts_t abs_timeout     = rd_timeout_init0(now, timeout_ms);
@@ -3282,8 +3284,8 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                           "Consumer group not initialized");
 
         /* If we have any pending items on the consumer queue, don't issue new
-         * requests, rather, deal with them first. 
-         * 
+         * requests, rather, deal with them first.
+         *
          * TODO KIP-932:
          * Above statement might be incorrect as we have to send all the pending
          * acknowledgements irrespective of whether there are messages to be
@@ -3954,7 +3956,8 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk) {
 }
 
 
-rd_kafka_resp_err_t rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare) {
+rd_kafka_resp_err_t
+rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare) {
         return rd_kafka_poll_set_consumer(rkshare->rkshare_rk);
 }
 

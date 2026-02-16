@@ -870,9 +870,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 }
 
 int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
-                                int timeout_ms,
-                                rd_kafka_message_t **rkmessages,
-                                size_t rkmessages_size) {
+                                      int timeout_ms,
+                                      rd_kafka_message_t **rkmessages,
+                                      size_t rkmessages_size) {
         unsigned int cnt = 0;
         TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
         struct rd_kafka_op_tailq ctrl_msg_q =
@@ -887,8 +887,8 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 /* Since the q_pop may block we need to release the parent
                  * queue's lock. */
                 mtx_unlock(&rkq->rkq_lock);
-                cnt = rd_kafka_q_serve_share_rkmessages(fwdq, timeout_ms, rkmessages,
-                                                  rkmessages_size);
+                cnt = rd_kafka_q_serve_share_rkmessages(
+                    fwdq, timeout_ms, rkmessages, rkmessages_size);
                 rd_kafka_q_destroy(fwdq);
                 return cnt;
         }
@@ -984,8 +984,8 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         /* Discard ctrl msgs */
         next = TAILQ_FIRST(&ctrl_msg_q);
         while (next) {
-                rko                     = next;
-                next                    = TAILQ_NEXT(next, rko_link);
+                rko  = next;
+                next = TAILQ_NEXT(next, rko_link);
                 rd_kafka_op_destroy(rko);
         }
 

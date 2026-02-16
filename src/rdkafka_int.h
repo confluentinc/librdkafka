@@ -334,6 +334,13 @@ struct rd_kafka_s {
 
         struct rd_kafka_cgrp_s *rk_cgrp;
 
+        rd_kafka_share_t
+            *rk_rkshare; /**< Share consumer handle (if share
+                          *   consumer), NULL otherwise.
+                          *   Set when rd_kafka_share_consumer_new()
+                          *   is called, used to access inflight
+                          *   acks for building ack batches. */
+
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */
         char rk_name[128];
@@ -772,8 +779,25 @@ struct rd_kafka_s {
         } rk_mock;
 };
 
+/**
+ * @brief Map type for tracking inflight share acknowledgements.
+ *        Key: topic-partition, Value: ack batches for that partition.
+ */
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_share_ack_batches_t *)
+    rd_kafka_share_inflight_map_t;
+
 struct rd_kafka_share_s {
         rd_kafka_t *rkshare_rk; /**< The shared rd_kafka_t instance */
+
+        /** Map of inflight acknowledgements per topic-partition.
+         *  Key: rd_kafka_topic_partition_t*
+         *  Value: rd_kafka_share_ack_batches_t*
+         */
+        rd_kafka_share_inflight_map_t rkshare_inflight_acks;
+
+        /** Total number of unacknowledged messages across all partitions. */
+        int64_t rkshare_unacked_cnt;
 };
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)

@@ -154,6 +154,11 @@ typedef struct rd_kafka_msg_s {
                                                     *   protocol msg */
                         int32_t leader_epoch;      /**< Leader epoch at the time
                                                     *   the message was fetched. */
+                        int8_t
+                            ack_type; /**< Share consumer: acknowledgement
+                                       *   type
+                                       * (rd_kafka_share_acknowledgement_type).
+                                       *   Set during response processing. */
                 } consumer;
         } rkm_u;
 } rd_kafka_msg_t;

@@ -4201,7 +4201,7 @@ setupRackAwareAssignment0(rd_kafka_t *rk,
 
         for (i = 0; initialize_members && i < member_cnt; i++) {
                 char member_id[11];
-                snprintf(member_id, 11, "consumer%d", (int)(i + 1));
+                rd_snprintf(member_id, 11, "consumer%d", (int)(i + 1));
                 ut_init_member_with_rack(
                     &members[i], member_id, ALL_RACKS[consumer_racks[i]],
                     subscriptions[i], subscriptions_count[i]);

@@ -1115,11 +1115,8 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 if (rko->rko_type == RD_KAFKA_OP_SHARE_FETCH_RESPONSE) {
                         rd_kafka_op_t *msg_rko;
                         int i;
-                        int start_idx =
-                            rko->rko_u.share_fetch_response.next_msg_idx;
                         int total_msgs = rd_list_cnt(
                             &rko->rko_u.share_fetch_response.messages);
-                        rd_bool_t is_first_pass = (start_idx == 0);
 
                         /*
                          * TODO KIP-932: This is a temporary fix to track
@@ -1136,15 +1133,13 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                         int64_t min_offset           = -1;
                         int64_t max_offset           = -1;
 
-                        /* Build acknowledgement mapping from partition_acks -
-                         * only on first pass */
-                        if (is_first_pass && rkshare) {
+                        /* Build acknowledgement mapping from partition_acks */
+                        if (rkshare) {
                                 rd_kafka_share_build_ack_mapping(rkshare, rko);
                         }
 
-                        /* Process messages from the list, starting at
-                         * next_msg_idx */
-                        for (i = start_idx; i < total_msgs; i++) {
+                        /* Process all messages from the list */
+                        for (i = 0; i < total_msgs; i++) {
                                 rd_kafka_msg_t *rkm = NULL;
                                 rd_kafka_share_acknowledgement_type ack_type;
                                 rd_kafka_toppar_t *msg_rktp;
@@ -1312,20 +1307,6 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                                 rd_kafka_toppar_unlock(last_rktp);
                         }
 
-                        /*
-                         * TODO KIP-932: Handle partial consumption.
-                         * If there are more messages to deliver, re-enqueue
-                         * this RKO at the head of the queue for the next poll.
-                         */
-                        if (i < total_msgs) {
-                                /* More messages remain - update index and
-                                 * re-enqueue */
-                                rko->rko_u.share_fetch_response.next_msg_idx =
-                                    i;
-                                mtx_lock(&rkq->rkq_lock);
-                                rd_kafka_q_reenq(rkq, rko);
-                                mtx_unlock(&rkq->rkq_lock);
-                        }
                         /* Note: Don't destroy response_rko here - the message
                          * ops inside are now referenced by rkmessages array.
                          * They will be destroyed when application calls

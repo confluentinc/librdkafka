@@ -793,14 +793,6 @@ struct rd_kafka_op_s {
                          * thread.
                          */
                         rd_list_t inflight_acks;
-
-                        /** Index of next message to deliver.
-                         *  Used when max_poll_records limits delivery -
-                         *  the RKO is re-enqueued and this tracks progress.
-                         *  TODO KIP-932: Temporary field for partial
-                         * consumption.
-                         */
-                        int next_msg_idx;
                 } share_fetch_response;
 
         } rko_u;

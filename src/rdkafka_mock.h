@@ -607,9 +607,9 @@ RD_EXPORT void rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
  * @param mcluster Mock cluster instance.
  * @param session_timeout_ms Session timeout in milliseconds.
  */
-RD_EXPORT void rd_kafka_mock_sharegroup_set_session_timeout(
-    rd_kafka_mock_cluster_t *mcluster,
-    int session_timeout_ms);
+RD_EXPORT void
+rd_kafka_mock_sharegroup_set_session_timeout(rd_kafka_mock_cluster_t *mcluster,
+                                             int session_timeout_ms);
 
 /**
  * @brief Set the sharegroup heartbeat interval in milliseconds.
@@ -678,11 +678,11 @@ RD_EXPORT void rd_kafka_mock_sharegroup_target_assignment(
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND if sharegroup not found.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_member_ids(
-    rd_kafka_mock_cluster_t *mcluster,
-    const char *group_id,
-    char ***member_ids_out,
-    size_t *member_cnt_out);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_sharegroup_get_member_ids(rd_kafka_mock_cluster_t *mcluster,
+                                        const char *group_id,
+                                        char ***member_ids_out,
+                                        size_t *member_cnt_out);
 
 /**@}*/
 

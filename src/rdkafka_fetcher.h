@@ -40,18 +40,21 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                                      rd_kafka_broker_t *rkb,
                                      int force_remove);
 
-void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig, rd_ts_t now);
-void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko_orig, rd_ts_t now);
+void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
+                                       rd_kafka_op_t *rko_orig,
+                                       rd_ts_t now);
+void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
+                                 rd_kafka_op_t *rko_orig,
+                                 rd_ts_t now);
 int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko);
-void rd_kafka_share_filter_forward(
-    rd_kafka_broker_t *rkb,
-    rd_kafka_toppar_t *rktp,
-    rd_kafka_q_t *temp_fetchq,
-    rd_kafka_q_t *temp_appq,
-    int32_t AcquiredRecordsArrayCnt,
-    const int64_t *FirstOffsets,
-    const int64_t *LastOffsets,
-    const int16_t *DeliveryCounts);
+void rd_kafka_share_filter_forward(rd_kafka_broker_t *rkb,
+                                   rd_kafka_toppar_t *rktp,
+                                   rd_kafka_q_t *temp_fetchq,
+                                   rd_kafka_q_t *temp_appq,
+                                   int32_t AcquiredRecordsArrayCnt,
+                                   const int64_t *FirstOffsets,
+                                   const int64_t *LastOffsets,
+                                   const int16_t *DeliveryCounts);
 
 
 #endif /* _RDKAFKA_FETCHER_H_ */

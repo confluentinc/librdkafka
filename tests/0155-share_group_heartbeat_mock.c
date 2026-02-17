@@ -2485,8 +2485,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_session_timeout();
         do_test_share_group_target_assignment();
 
-        /* NOT YET COMPATIBLE */
-        /* do_test_unknown_member_id_error(); */
+        do_test_unknown_member_id_error();
         do_test_fenced_member_epoch_error();
         do_test_coordinator_not_available_error();
         do_test_not_coordinator_error();

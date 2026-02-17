@@ -573,11 +573,20 @@ rd_kafka_q_concat0(rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 
                 rd_kafka_q_mark_served(srcq);
                 rd_kafka_q_reset(srcq);
-        } else
-                r = rd_kafka_q_concat0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
-                                       srcq, rkq->rkq_fwdq ? do_lock : 0);
-        if (do_lock)
-                mtx_unlock(&rkq->rkq_lock);
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+        } else {
+                /* Queue is being forwarded. To avoid lock-order-inversion
+                 * (potential deadlock), release the current queue's lock
+                 * before locking the forwarded queue.
+                 * Same pattern as rd_kafka_q_enq1(). */
+                rd_kafka_q_t *fwdq = rkq->rkq_fwdq;
+                rd_kafka_q_keep(fwdq);
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+                r = rd_kafka_q_concat0(fwdq, srcq, 1 /*do_lock*/);
+                rd_kafka_q_destroy(fwdq);
+        }
 
         return r;
 }
@@ -612,12 +621,28 @@ rd_kafka_q_prepend0(rd_kafka_q_t *rkq, rd_kafka_q_t *srcq, int do_lock) {
 
                 rd_kafka_q_mark_served(srcq);
                 rd_kafka_q_reset(srcq);
-        } else
-                rd_kafka_q_prepend0(rkq->rkq_fwdq ? rkq->rkq_fwdq : rkq,
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+        } else if (rkq->rkq_fwdq) {
+                /* Destination queue is being forwarded. To avoid
+                 * lock-order-inversion (potential deadlock), release the
+                 * current queue's lock before locking the forwarded queue.
+                 * Same pattern as rd_kafka_q_enq1(). */
+                rd_kafka_q_t *fwdq = rkq->rkq_fwdq;
+                rd_kafka_q_keep(fwdq);
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+                rd_kafka_q_prepend0(fwdq,
                                     srcq->rkq_fwdq ? srcq->rkq_fwdq : srcq,
-                                    rkq->rkq_fwdq ? do_lock : 0);
-        if (do_lock)
-                mtx_unlock(&rkq->rkq_lock);
+                                    1 /*do_lock*/);
+                rd_kafka_q_destroy(fwdq);
+        } else {
+                /* Only source queue is forwarded, no nested locking needed
+                 * since we recurse on the same rkq without re-locking. */
+                rd_kafka_q_prepend0(rkq, srcq->rkq_fwdq, 0 /*already locked*/);
+                if (do_lock)
+                        mtx_unlock(&rkq->rkq_lock);
+        }
 }
 
 #define rd_kafka_q_prepend(dstq, srcq)                                         \

@@ -40,7 +40,6 @@ typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
-typedef struct rd_kafka_share_partition_ack_s rd_kafka_share_partition_ack_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -762,9 +761,11 @@ struct rd_kafka_op_s {
                         rd_ts_t abs_timeout;
 
                         /** List of all acknowledgement batches to send.
-                         *  Type: rd_kafka_share_fetch_ack_batch_t*
+                         *  Type: rd_kafka_share_ack_batches_t*
                          *  Built from inflight ack map, will be filtered
                          *  by leader when creating SHARE_FETCH ops.
+                         *  Each entry uses size=1 with types[0] holding the
+                         *  single ack type for the collated range.
                          */
                         rd_list_t ack_batches;
                 } share_fetch_fanout;
@@ -779,12 +780,6 @@ struct rd_kafka_op_s {
                          *  no GAP placeholder ops.
                          */
                         rd_list_t messages;
-
-                        /** List of per-partition acquired records info.
-                         *  Type: rd_kafka_share_partition_ack_t*
-                         *  Contains acquired ranges from broker response.
-                         */
-                        rd_list_t partition_acks;
 
                         /** List of per-partition inflight ack mappings.
                          *  Type: rd_kafka_share_ack_batches_t*

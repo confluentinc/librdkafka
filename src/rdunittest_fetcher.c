@@ -172,8 +172,6 @@ static void ut_destroy_rkshare(rd_kafka_share_t *rkshare) {
 
         RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
                 if (batches) {
-                        if (batches->topic)
-                                rd_free(batches->topic);
                         /* Destroy entries list with custom cleanup */
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int i;
@@ -247,8 +245,6 @@ static rd_kafka_op_t *ut_make_share_fetch_response(
         /* Initialize lists */
         rd_list_init(&response_rko->rko_u.share_fetch_response.messages,
                      (int)range_size, NULL);
-        rd_list_init(&response_rko->rko_u.share_fetch_response.partition_acks,
-                     1, NULL);
         rd_list_init(&response_rko->rko_u.share_fetch_response.inflight_acks, 1,
                      NULL);
 
@@ -275,28 +271,20 @@ static rd_kafka_op_t *ut_make_share_fetch_response(
                             msg_rko);
         }
 
-        /* Add partition ack info */
-        rd_kafka_share_partition_ack_t *packs = rd_calloc(1, sizeof(*packs));
-        packs->topic                          = rd_strdup(topic);
-        packs->partition                      = partition;
-        packs->leader_id                      = 1;
-        packs->leader_epoch                   = 1;
-        packs->acquired_ranges_cnt            = 1;
-        packs->acquired_ranges = rd_calloc(1, sizeof(*packs->acquired_ranges));
-        packs->acquired_ranges[0].start_offset = acquired_start;
-        packs->acquired_ranges[0].end_offset   = acquired_end;
-        packs->acquired_msg_cnt                = (int32_t)range_size;
-
-        rd_list_add(&response_rko->rko_u.share_fetch_response.partition_acks,
-                    packs);
-
         /* Build inflight_acks - this is what broker thread does */
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
-        batches->topic                        = rd_strdup(topic);
-        batches->partition                    = partition;
-        batches->leader_id                    = 1;
-        batches->leader_epoch                 = 1;
-        batches->number_of_acquired_msgs      = (int32_t)range_size;
+        {
+                rd_kafka_topic_partition_private_t *parpriv;
+                batches->rktpar        = rd_calloc(1, sizeof(*batches->rktpar));
+                batches->rktpar->topic = rd_strdup(topic);
+                batches->rktpar->partition = partition;
+                batches->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+                parpriv               = rd_kafka_topic_partition_private_new();
+                parpriv->leader_epoch = 1;
+                batches->rktpar->_private = parpriv;
+        }
+        batches->leader_id               = 1;
+        batches->number_of_acquired_msgs = (int32_t)range_size;
         rd_list_init(&batches->entries, 1, NULL);
 
         rd_kafka_share_ack_batch_entry_t *entry = rd_calloc(1, sizeof(*entry));
@@ -327,24 +315,12 @@ static void ut_destroy_share_fetch_response(rd_kafka_op_t *rko) {
         }
         rd_list_destroy(&rko->rko_u.share_fetch_response.messages);
 
-        /* Destroy partition_acks */
-        rd_kafka_share_partition_ack_t *packs;
-        RD_LIST_FOREACH(packs, &rko->rko_u.share_fetch_response.partition_acks,
-                        i) {
-                if (packs->topic)
-                        rd_free(packs->topic);
-                if (packs->acquired_ranges)
-                        rd_free(packs->acquired_ranges);
-                rd_free(packs);
-        }
-        rd_list_destroy(&rko->rko_u.share_fetch_response.partition_acks);
-
         /* Destroy inflight_acks */
         rd_kafka_share_ack_batches_t *batches;
         RD_LIST_FOREACH(batches, &rko->rko_u.share_fetch_response.inflight_acks,
                         i) {
-                if (batches->topic)
-                        rd_free(batches->topic);
+                if (batches->rktpar)
+                        rd_kafka_topic_partition_destroy(batches->rktpar);
                 rd_kafka_share_ack_batch_entry_t *entry;
                 RD_LIST_FOREACH(entry, &batches->entries, j) {
                         if (entry->types)
@@ -509,13 +485,6 @@ static int ut_case_rko_structure_all_acquired(rd_kafka_t *rk) {
                 6,
             "message cnt %d != 6",
             rd_list_cnt(&response_rko->rko_u.share_fetch_response.messages));
-
-        RD_UT_ASSERT(
-            rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.partition_acks) == 1,
-            "partition_acks cnt %d != 1",
-            rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.partition_acks));
 
         /* Verify inflight_acks was created */
         RD_UT_ASSERT(
@@ -685,8 +654,10 @@ static int ut_case_merge_single_partition(rd_kafka_t *rk) {
         RD_UT_ASSERT(merged != NULL, "merged batches not found");
 
         /* Verify merged data */
-        RD_UT_ASSERT(strcmp(merged->topic, "T1") == 0, "topic mismatch");
-        RD_UT_ASSERT(merged->partition == 0, "partition mismatch");
+        RD_UT_ASSERT(merged->rktpar != NULL, "rktpar is NULL");
+        RD_UT_ASSERT(strcmp(merged->rktpar->topic, "T1") == 0,
+                     "topic mismatch");
+        RD_UT_ASSERT(merged->rktpar->partition == 0, "partition mismatch");
         RD_UT_ASSERT(rd_list_cnt(&merged->entries) == 1,
                      "entries cnt mismatch");
 
@@ -861,10 +832,17 @@ static int ut_case_collate_all_same_type(rd_kafka_t *rk) {
 
         /* Manually populate inflight map with all ACQUIRED */
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
-        batches->topic                        = rd_strdup("T1");
-        batches->partition                    = 0;
-        batches->leader_id                    = 1;
-        batches->leader_epoch                 = 1;
+        {
+                rd_kafka_topic_partition_private_t *parpriv;
+                batches->rktpar        = rd_calloc(1, sizeof(*batches->rktpar));
+                batches->rktpar->topic = rd_strdup("T1");
+                batches->rktpar->partition = 0;
+                batches->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+                parpriv               = rd_kafka_topic_partition_private_new();
+                parpriv->leader_epoch = 1;
+                batches->rktpar->_private = parpriv;
+        }
+        batches->leader_id = 1;
         rd_list_init(&batches->entries, 1, NULL);
 
         rd_kafka_share_ack_batch_entry_t *entry = rd_calloc(1, sizeof(*entry));
@@ -883,22 +861,24 @@ static int ut_case_collate_all_same_type(rd_kafka_t *rk) {
         rd_list_t ack_batches_out;
         rd_kafka_share_build_ack_batches_for_fetch(rkshare, &ack_batches_out);
 
-        /* Should produce 1 batch with 1 range (all ACCEPT) */
+        /* Should produce 1 batch with 1 entry (all ACCEPT) */
         RD_UT_ASSERT(rd_list_cnt(&ack_batches_out) == 1,
                      "ack_batches cnt %d != 1", rd_list_cnt(&ack_batches_out));
 
-        rd_kafka_share_fetch_ack_batch_t *out_batch =
+        rd_kafka_share_ack_batches_t *out_batch =
             rd_list_elem(&ack_batches_out, 0);
-        RD_UT_ASSERT(rd_list_cnt(&out_batch->ranges) == 1, "ranges cnt %d != 1",
-                     rd_list_cnt(&out_batch->ranges));
+        RD_UT_ASSERT(rd_list_cnt(&out_batch->entries) == 1,
+                     "entries cnt %d != 1", rd_list_cnt(&out_batch->entries));
 
-        rd_kafka_share_fetch_ack_range_t *range =
-            rd_list_elem(&out_batch->ranges, 0);
-        RD_UT_ASSERT(range->start_offset == 1 && range->end_offset == 4,
-                     "range %" PRId64 "-%" PRId64 " != 1-4",
-                     range->start_offset, range->end_offset);
-        RD_UT_ASSERT(range->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "type %d != ACCEPT", range->type);
+        rd_kafka_share_ack_batch_entry_t *collated =
+            rd_list_elem(&out_batch->entries, 0);
+        RD_UT_ASSERT(collated->start_offset == 1 && collated->end_offset == 4,
+                     "collated %" PRId64 "-%" PRId64 " != 1-4",
+                     collated->start_offset, collated->end_offset);
+        RD_UT_ASSERT(collated->size == 1, "size %" PRId64 " != 1",
+                     collated->size);
+        RD_UT_ASSERT(collated->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "type %d != ACCEPT", collated->types[0]);
 
         rd_list_destroy(&ack_batches_out);
         ut_destroy_rkshare(rkshare);
@@ -913,10 +893,17 @@ static int ut_case_collate_mixed_types(rd_kafka_t *rk) {
 
         /* Manually populate: ACQ, ACQ, GAP, ACQ, ACQ, REJ, REJ, ACQ, ACQ */
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
-        batches->topic                        = rd_strdup("T1");
-        batches->partition                    = 0;
-        batches->leader_id                    = 1;
-        batches->leader_epoch                 = 1;
+        {
+                rd_kafka_topic_partition_private_t *parpriv;
+                batches->rktpar        = rd_calloc(1, sizeof(*batches->rktpar));
+                batches->rktpar->topic = rd_strdup("T1");
+                batches->rktpar->partition = 0;
+                batches->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+                parpriv               = rd_kafka_topic_partition_private_new();
+                parpriv->leader_epoch = 1;
+                batches->rktpar->_private = parpriv;
+        }
+        batches->leader_id = 1;
         rd_list_init(&batches->entries, 1, NULL);
 
         rd_kafka_share_ack_batch_entry_t *entry = rd_calloc(1, sizeof(*entry));
@@ -943,50 +930,50 @@ static int ut_case_collate_mixed_types(rd_kafka_t *rk) {
         rd_list_t ack_batches_out;
         rd_kafka_share_build_ack_batches_for_fetch(rkshare, &ack_batches_out);
 
-        /* Should produce 1 batch with 5 ranges */
+        /* Should produce 1 batch with 5 entries */
         RD_UT_ASSERT(rd_list_cnt(&ack_batches_out) == 1,
                      "ack_batches cnt %d != 1", rd_list_cnt(&ack_batches_out));
 
-        rd_kafka_share_fetch_ack_batch_t *out_batch =
+        rd_kafka_share_ack_batches_t *out_batch =
             rd_list_elem(&ack_batches_out, 0);
-        RD_UT_ASSERT(rd_list_cnt(&out_batch->ranges) == 5, "ranges cnt %d != 5",
-                     rd_list_cnt(&out_batch->ranges));
+        RD_UT_ASSERT(rd_list_cnt(&out_batch->entries) == 5,
+                     "entries cnt %d != 5", rd_list_cnt(&out_batch->entries));
 
-        /* Verify ranges:
+        /* Verify entries (each with size=1, types[0]=type):
          * {1-2, ACCEPT}, {3-3, GAP}, {4-5, ACCEPT}, {6-7, REJECT}, {8-9,
          * ACCEPT}
          */
-        rd_kafka_share_fetch_ack_range_t *r;
+        rd_kafka_share_ack_batch_entry_t *e;
 
-        r = rd_list_elem(&out_batch->ranges, 0);
-        RD_UT_ASSERT(r->start_offset == 1 && r->end_offset == 2 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "range[0] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&out_batch->entries, 0);
+        RD_UT_ASSERT(e->start_offset == 1 && e->end_offset == 2 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "entry[0] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&out_batch->ranges, 1);
-        RD_UT_ASSERT(r->start_offset == 3 && r->end_offset == 3 &&
-                         r->type == RD_KAFKA_SHARE_ACK_GAP,
-                     "range[1] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&out_batch->entries, 1);
+        RD_UT_ASSERT(e->start_offset == 3 && e->end_offset == 3 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_GAP,
+                     "entry[1] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&out_batch->ranges, 2);
-        RD_UT_ASSERT(r->start_offset == 4 && r->end_offset == 5 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "range[2] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&out_batch->entries, 2);
+        RD_UT_ASSERT(e->start_offset == 4 && e->end_offset == 5 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "entry[2] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&out_batch->ranges, 3);
-        RD_UT_ASSERT(r->start_offset == 6 && r->end_offset == 7 &&
-                         r->type == RD_KAFKA_SHARE_ACK_REJECT,
-                     "range[3] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&out_batch->entries, 3);
+        RD_UT_ASSERT(e->start_offset == 6 && e->end_offset == 7 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_REJECT,
+                     "entry[3] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&out_batch->ranges, 4);
-        RD_UT_ASSERT(r->start_offset == 8 && r->end_offset == 9 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "range[4] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&out_batch->entries, 4);
+        RD_UT_ASSERT(e->start_offset == 8 && e->end_offset == 9 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "entry[4] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
         rd_list_destroy(&ack_batches_out);
         ut_destroy_rkshare(rkshare);
@@ -1034,10 +1021,17 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         /* Populate Tp1 */
         rd_kafka_share_ack_batches_t *batches1 =
             rd_calloc(1, sizeof(*batches1));
-        batches1->topic        = rd_strdup("Tp1");
-        batches1->partition    = 0;
-        batches1->leader_id    = 1;
-        batches1->leader_epoch = 1;
+        {
+                rd_kafka_topic_partition_private_t *parpriv;
+                batches1->rktpar = rd_calloc(1, sizeof(*batches1->rktpar));
+                batches1->rktpar->topic     = rd_strdup("Tp1");
+                batches1->rktpar->partition = 0;
+                batches1->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+                parpriv               = rd_kafka_topic_partition_private_new();
+                parpriv->leader_epoch = 1;
+                batches1->rktpar->_private = parpriv;
+        }
+        batches1->leader_id = 1;
         rd_list_init(&batches1->entries, 1, NULL);
 
         rd_kafka_share_ack_batch_entry_t *entry1 =
@@ -1061,10 +1055,17 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         /* Populate Tp2 */
         rd_kafka_share_ack_batches_t *batches2 =
             rd_calloc(1, sizeof(*batches2));
-        batches2->topic        = rd_strdup("Tp2");
-        batches2->partition    = 0;
-        batches2->leader_id    = 2;
-        batches2->leader_epoch = 1;
+        {
+                rd_kafka_topic_partition_private_t *parpriv;
+                batches2->rktpar = rd_calloc(1, sizeof(*batches2->rktpar));
+                batches2->rktpar->topic     = rd_strdup("Tp2");
+                batches2->rktpar->partition = 0;
+                batches2->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+                parpriv               = rd_kafka_topic_partition_private_new();
+                parpriv->leader_epoch = 1;
+                batches2->rktpar->_private = parpriv;
+        }
+        batches2->leader_id = 2;
         rd_list_init(&batches2->entries, 1, NULL);
 
         rd_kafka_share_ack_batch_entry_t *entry2 =
@@ -1096,15 +1097,16 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
                      "ack_batches cnt %d != 2", rd_list_cnt(&ack_batches_out));
 
         /* Find Tp1 and Tp2 batches */
-        rd_kafka_share_fetch_ack_batch_t *tp1_batch = NULL;
-        rd_kafka_share_fetch_ack_batch_t *tp2_batch = NULL;
-        rd_kafka_share_fetch_ack_batch_t *batch;
+        rd_kafka_share_ack_batches_t *tp1_batch = NULL;
+        rd_kafka_share_ack_batches_t *tp2_batch = NULL;
+        rd_kafka_share_ack_batches_t *batch;
         int i;
 
         RD_LIST_FOREACH(batch, &ack_batches_out, i) {
-                if (strcmp(batch->topic, "Tp1") == 0)
+                if (batch->rktpar && strcmp(batch->rktpar->topic, "Tp1") == 0)
                         tp1_batch = batch;
-                else if (strcmp(batch->topic, "Tp2") == 0)
+                else if (batch->rktpar &&
+                         strcmp(batch->rktpar->topic, "Tp2") == 0)
                         tp2_batch = batch;
         }
 
@@ -1112,71 +1114,73 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         RD_UT_ASSERT(tp2_batch != NULL, "Tp2 batch not found");
 
         /*
-         * Tp1 expected ranges:
+         * Tp1 expected entries:
          * {1-2, ACCEPT}, {3-4, GAP}, {5-6, ACCEPT}
          */
-        RD_UT_ASSERT(rd_list_cnt(&tp1_batch->ranges) == 3,
-                     "Tp1 ranges cnt %d != 3", rd_list_cnt(&tp1_batch->ranges));
+        RD_UT_ASSERT(rd_list_cnt(&tp1_batch->entries) == 3,
+                     "Tp1 entries cnt %d != 3",
+                     rd_list_cnt(&tp1_batch->entries));
 
-        rd_kafka_share_fetch_ack_range_t *r;
-        r = rd_list_elem(&tp1_batch->ranges, 0);
-        RD_UT_ASSERT(r->start_offset == 1 && r->end_offset == 2 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "Tp1 range[0] mismatch");
+        rd_kafka_share_ack_batch_entry_t *e;
+        e = rd_list_elem(&tp1_batch->entries, 0);
+        RD_UT_ASSERT(e->start_offset == 1 && e->end_offset == 2 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "Tp1 entry[0] mismatch");
 
-        r = rd_list_elem(&tp1_batch->ranges, 1);
-        RD_UT_ASSERT(r->start_offset == 3 && r->end_offset == 4 &&
-                         r->type == RD_KAFKA_SHARE_ACK_GAP,
-                     "Tp1 range[1] mismatch");
+        e = rd_list_elem(&tp1_batch->entries, 1);
+        RD_UT_ASSERT(e->start_offset == 3 && e->end_offset == 4 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_GAP,
+                     "Tp1 entry[1] mismatch");
 
-        r = rd_list_elem(&tp1_batch->ranges, 2);
-        RD_UT_ASSERT(r->start_offset == 5 && r->end_offset == 6 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "Tp1 range[2] mismatch");
+        e = rd_list_elem(&tp1_batch->entries, 2);
+        RD_UT_ASSERT(e->start_offset == 5 && e->end_offset == 6 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "Tp1 entry[2] mismatch");
 
         /*
-         * Tp2 expected ranges:
+         * Tp2 expected entries:
          * {1-1, ACCEPT}, {2-2, REJECT}, {3-3, GAP}, {4-5, REJECT}, {6-7,
          * ACCEPT}, {8-8, GAP}
          */
-        RD_UT_ASSERT(rd_list_cnt(&tp2_batch->ranges) == 6,
-                     "Tp2 ranges cnt %d != 6", rd_list_cnt(&tp2_batch->ranges));
+        RD_UT_ASSERT(rd_list_cnt(&tp2_batch->entries) == 6,
+                     "Tp2 entries cnt %d != 6",
+                     rd_list_cnt(&tp2_batch->entries));
 
-        r = rd_list_elem(&tp2_batch->ranges, 0);
-        RD_UT_ASSERT(r->start_offset == 1 && r->end_offset == 1 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "Tp2 range[0] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&tp2_batch->entries, 0);
+        RD_UT_ASSERT(e->start_offset == 1 && e->end_offset == 1 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "Tp2 entry[0] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&tp2_batch->ranges, 1);
-        RD_UT_ASSERT(r->start_offset == 2 && r->end_offset == 2 &&
-                         r->type == RD_KAFKA_SHARE_ACK_REJECT,
-                     "Tp2 range[1] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&tp2_batch->entries, 1);
+        RD_UT_ASSERT(e->start_offset == 2 && e->end_offset == 2 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_REJECT,
+                     "Tp2 entry[1] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&tp2_batch->ranges, 2);
-        RD_UT_ASSERT(r->start_offset == 3 && r->end_offset == 3 &&
-                         r->type == RD_KAFKA_SHARE_ACK_GAP,
-                     "Tp2 range[2] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&tp2_batch->entries, 2);
+        RD_UT_ASSERT(e->start_offset == 3 && e->end_offset == 3 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_GAP,
+                     "Tp2 entry[2] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&tp2_batch->ranges, 3);
-        RD_UT_ASSERT(r->start_offset == 4 && r->end_offset == 5 &&
-                         r->type == RD_KAFKA_SHARE_ACK_REJECT,
-                     "Tp2 range[3] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&tp2_batch->entries, 3);
+        RD_UT_ASSERT(e->start_offset == 4 && e->end_offset == 5 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_REJECT,
+                     "Tp2 entry[3] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&tp2_batch->ranges, 4);
-        RD_UT_ASSERT(r->start_offset == 6 && r->end_offset == 7 &&
-                         r->type == RD_KAFKA_SHARE_ACK_ACCEPT,
-                     "Tp2 range[4] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&tp2_batch->entries, 4);
+        RD_UT_ASSERT(e->start_offset == 6 && e->end_offset == 7 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_ACCEPT,
+                     "Tp2 entry[4] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
-        r = rd_list_elem(&tp2_batch->ranges, 5);
-        RD_UT_ASSERT(r->start_offset == 8 && r->end_offset == 8 &&
-                         r->type == RD_KAFKA_SHARE_ACK_GAP,
-                     "Tp2 range[5] mismatch: %" PRId64 "-%" PRId64 " type=%d",
-                     r->start_offset, r->end_offset, r->type);
+        e = rd_list_elem(&tp2_batch->entries, 5);
+        RD_UT_ASSERT(e->start_offset == 8 && e->end_offset == 8 &&
+                         e->types[0] == RD_KAFKA_SHARE_ACK_GAP,
+                     "Tp2 entry[5] mismatch: %" PRId64 "-%" PRId64 " type=%d",
+                     e->start_offset, e->end_offset, e->types[0]);
 
         rd_list_destroy(&ack_batches_out);
         ut_destroy_rkshare(rkshare);

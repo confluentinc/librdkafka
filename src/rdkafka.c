@@ -1222,8 +1222,6 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
         /* Destroy inflight map entries */
         RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
                 if (batches) {
-                        if (batches->topic)
-                                rd_free(batches->topic);
                         /* Destroy entries list with custom cleanup */
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int i;

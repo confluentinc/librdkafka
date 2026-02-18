@@ -790,6 +790,10 @@ typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
 struct rd_kafka_share_s {
         rd_kafka_t *rkshare_rk; /**< The shared rd_kafka_t instance */
 
+        /**
+         * TODO KIP-932: Decide whether we want to keep this here 
+         * or move it in rd_kafka_t.
+        */
         /** Map of inflight acknowledgements per topic-partition.
          *  Key: rd_kafka_topic_partition_t*
          *  Value: rd_kafka_share_ack_batches_t*

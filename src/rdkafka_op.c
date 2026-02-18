@@ -543,19 +543,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 }
                 rd_list_destroy(&rko->rko_u.share_fetch_response.messages);
 
-                /* Free partition_acks list (destructor handles element cleanup)
-                 */
-                rd_list_destroy(
-                    &rko->rko_u.share_fetch_response.partition_acks);
-
                 /* Free inflight_acks list */
                 RD_LIST_FOREACH(batches,
                                 &rko->rko_u.share_fetch_response.inflight_acks,
                                 i) {
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int j;
-                        if (batches->topic)
-                                rd_free(batches->topic);
                         RD_LIST_FOREACH(entry, &batches->entries, j) {
                                 if (entry->types)
                                         rd_free(entry->types);

@@ -144,6 +144,7 @@ set(
     0151-purge-brokers.c
     0152-rebootstrap.c
     0153-memberid.c
+    0157-kip932-shareack_mockbroker.c
     0154-share-consumer.c
     0155-share_group_heartbeat_mock.c
     0156-kip932-sharefetch_mockbroker.c

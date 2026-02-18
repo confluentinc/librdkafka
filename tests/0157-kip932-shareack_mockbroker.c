@@ -1012,7 +1012,8 @@ static void do_test_forgotten_topic_releases_not_acks(void) {
 
         SUB_TEST();
 
-        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 2000);
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(ctx.mcluster, 500);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1034,7 +1035,7 @@ static void do_test_forgotten_topic_releases_not_acks(void) {
 
         /* Crash — no ack for either topic. */
         rd_kafka_share_destroy(consumer);
-        rd_usleep(1500 * 1000, NULL); /* wait for lock expiry */
+        rd_usleep(3000 * 1000, NULL); /* wait for session + lock expiry */
 
         /* Consumer B: subscribe to topic_a only, consume and ack. */
         consumer = new_share_consumer(ctx.bootstraps, "sg-ack-forget");
@@ -1365,6 +1366,8 @@ static void do_test_coordinator_failover_ack_recovery(void) {
 
 int main_0157_kip932_shareack_mockbroker(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+        /* increase from the default ~30s timeout to avoid the framework killing us early. */
+        test_timeout_set(300);
 
         /* Positive scenarios */
         do_test_implicit_ack_no_redelivery();

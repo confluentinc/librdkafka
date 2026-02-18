@@ -3484,9 +3484,13 @@ rd_kafka_mock_sgrp_write_acquired_records(
         }
 
         if (rd_list_cnt(&msgsets) == 0) {
-                /* No acquired records: write NULL compact bytes */
+                /* No acquired records: write empty compact bytes
+                 * (uvarint(1) = 0 data bytes).  Do NOT write NULL
+                 * (uvarint(0)) because the client reads this field
+                 * with rd_kafka_buf_read_arraycnt() which decodes
+                 * NULL as -1 and triggers a parse failure. */
                 rd_list_destroy(&msgsets);
-                rd_kafka_buf_write_kbytes(resp, NULL);
+                rd_kafka_buf_write_uvarint(resp, 1);
                 return 0;
         }
 
@@ -4153,8 +4157,8 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                     resp, pmeta, mpart,
                                                     &MemberId, now);
                                         else
-                                        rd_kafka_buf_write_kbytes(
-                                                    resp, NULL);
+                                                rd_kafka_buf_write_uvarint(
+                                                    resp, 1);
                                         /* Response: AcquiredRecords */
                                         if (mpart && pmeta)
                                                 rd_kafka_mock_sgrp_write_acquired_records_meta(

@@ -1121,6 +1121,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.sub.claim.name", _RK_C_STR,
+     _RK(sasl.oauthbearer.sub_claim_name),
+     "JWT claim name to use as the subject (principal) when validating "
+     "OIDC access tokens. Must be present in the JWT payload with a "
+     "non-empty value. Should match the broker's "
+     "sasl.oauthbearer.sub.claim.name configuration for consistent "
+     "authentication. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
+     0, 0, 0,
+     .sdef = "sub",
+     _UNSUPPORTED_OIDC},
     {
         _RK_GLOBAL,
         "sasl.oauthbearer.grant.type",

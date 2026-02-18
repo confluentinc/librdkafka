@@ -376,6 +376,7 @@ struct rd_kafka_conf_s {
 
 
                         char *extensions_str;
+                        char *sub_claim_name; /* JWT claim name for subject/principal (default: "sub") */
                         rd_bool_t builtin_token_refresh_cb;
                         /* SASL/OAUTHBEARER token refresh event callback */
                         void (*token_refresh_cb)(rd_kafka_t *rk,

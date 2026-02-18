@@ -674,6 +674,7 @@ static char *rd_kafka_oidc_assertion_read_from_file(const char *file_path) {
  */
 static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                                               const char *field,
+                                              const char *sub_claim_name,
                                               char **sub,
                                               double *exp,
                                               char *errstr,
@@ -729,19 +730,25 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        jwt_sub = cJSON_GetObjectItem(payloads, "sub");
+        /* Use configured subject claim name, default to "sub" if not set */
+        if (!sub_claim_name || !*sub_claim_name)
+                sub_claim_name = "sub";
+
+        jwt_sub = cJSON_GetObjectItem(payloads, sub_claim_name);
         if (jwt_sub == NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
-                            "\"sub\" field");
+                            "\"%s\" field",
+                            sub_claim_name);
                 goto fail;
         }
 
         *sub = cJSON_GetStringValue(jwt_sub);
-        if (*sub == NULL) {
+        if (*sub == NULL || !**sub) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
-                            "valid \"sub\" field");
+                            "valid \"%s\" field (non-empty value required)",
+                            sub_claim_name);
                 goto fail;
         }
         *sub = rd_strdup(*sub);
@@ -857,13 +864,14 @@ void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
          * This function will try to validate the `access_token` and then the
          * `id_token`.
          */
-        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
-                                                     &exp, validate_errstr,
-                                                     sizeof(validate_errstr));
+        jwt_token = rd_kafka_oidc_token_try_validate(
+            json, "access_token", rk->rk_conf.sasl.oauthbearer.sub_claim_name,
+            &sub, &exp, validate_errstr, sizeof(validate_errstr));
         if (!jwt_token)
                 jwt_token = rd_kafka_oidc_token_try_validate(
-                    json, "id_token", &sub, &exp, validate_errstr,
-                    sizeof(validate_errstr));
+                    json, "id_token",
+                    rk->rk_conf.sasl.oauthbearer.sub_claim_name, &sub, &exp,
+                    validate_errstr, sizeof(validate_errstr));
 
         if (!jwt_token) {
                 rd_kafka_oauthbearer_set_token_failure(rk, validate_errstr);
@@ -965,9 +973,9 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
                 goto done;
         }
 
-        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
-                                                     &exp, set_token_errstr,
-                                                     sizeof(set_token_errstr));
+        jwt_token = rd_kafka_oidc_token_try_validate(
+            json, "access_token", rk->rk_conf.sasl.oauthbearer.sub_claim_name,
+            &sub, &exp, set_token_errstr, sizeof(set_token_errstr));
         if (!jwt_token) {
                 rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
                 goto done;
@@ -1083,9 +1091,9 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
                 goto done;
         }
 
-        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
-                                                     &exp, set_token_errstr,
-                                                     sizeof(set_token_errstr));
+        jwt_token = rd_kafka_oidc_token_try_validate(
+            json, "access_token", rk->rk_conf.sasl.oauthbearer.sub_claim_name,
+            &sub, &exp, set_token_errstr, sizeof(set_token_errstr));
         if (!jwt_token) {
                 rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
                 goto done;

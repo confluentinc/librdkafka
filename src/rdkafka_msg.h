@@ -157,7 +157,7 @@ typedef struct rd_kafka_msg_s {
                         int8_t
                             ack_type; /**< Share consumer: acknowledgement
                                        *   type
-                                       * (rd_kafka_share_acknowledgement_type).
+                                       * (rd_kafka_internal_ShareAcknowledgement_type_t).
                                        *   Set during response processing. */
                 } consumer;
         } rkm_u;

@@ -547,7 +547,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 RD_LIST_FOREACH(batches,
                                 &rko->rko_u.share_fetch_response.inflight_acks,
                                 i) {
-                        rd_kafka_share_ack_batch_entry_t *entry;
+                        rd_kafka_share_ack_batch_entry_acquired_records_t
+                            *entry;
                         int j;
                         RD_LIST_FOREACH(entry, &batches->entries, j) {
                                 if (entry->types)

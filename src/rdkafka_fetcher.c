@@ -982,7 +982,7 @@ static rd_bool_t rd_kafka_op_matches_partition(const rd_kafka_op_t *rko,
  */
 static void rd_kafka_share_ack_batches_destroy(void *ptr) {
         rd_kafka_share_ack_batches_t *batches = ptr;
-        rd_kafka_share_ack_batch_entry_t *entry;
+        rd_kafka_share_ack_batch_entry_acquired_records_t *entry;
         int i;
 
         if (!batches)
@@ -1022,9 +1022,9 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
         rd_kafka_op_t *response_rko;
         rd_kafka_op_t *rko;
         rd_kafka_share_ack_batches_t *batches;
-        int32_t msg_cnt            = 0;
-        int32_t gap_cnt            = 0;
-        int32_t inflight_acks_cnt  = rd_list_cnt(inflight_acks);
+        int32_t msg_cnt           = 0;
+        int32_t gap_cnt           = 0;
+        int32_t inflight_acks_cnt = rd_list_cnt(inflight_acks);
         int i, pi, ei;
         rd_list_t temp_msgs;
         rd_bool_t *msg_used = NULL;
@@ -1064,7 +1064,8 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                 msg_used = rd_calloc(total_msgs, sizeof(*msg_used));
         }
 
-        /* Process each partition: update inflight_acks types and add messages */
+        /* Process each partition: update inflight_acks types and add messages
+         */
         RD_LIST_FOREACH(batches, inflight_acks, pi) {
                 /* Skip partitions with unknown topic (rktpar is NULL) */
                 if (batches->rktpar == NULL)
@@ -1094,7 +1095,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                 int partition_msg_cnt = rd_list_cnt(&partition_msgs);
 
                 /* Process each entry (acquired range) and update types */
-                rd_kafka_share_ack_batch_entry_t *entry;
+                rd_kafka_share_ack_batch_entry_acquired_records_t *entry;
                 RD_LIST_FOREACH(entry, &batches->entries, ei) {
                         int64_t start = entry->start_offset;
                         int64_t end   = entry->end_offset;
@@ -1141,7 +1142,8 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                             msg_rko);
                                         msg_cnt++;
 
-                                        /* Update type from message's ack_type */
+                                        /* Update type from message's ack_type
+                                         */
                                         rd_kafka_msg_t *rkm;
                                         if (msg_rko->rko_type ==
                                             RD_KAFKA_OP_FETCH)
@@ -1149,7 +1151,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                         else
                                                 rkm = &msg_rko->rko_u.err.rkm;
                                         entry->types[type_idx] =
-                                            (rd_kafka_share_acknowledgement_type)
+                                            (rd_kafka_internal_ShareAcknowledgement_type_t)
                                                 rkm->rkm_u.consumer.ack_type;
                                 } else {
                                         /* No message - mark as GAP */
@@ -1170,7 +1172,8 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         msg_cnt++;
                 }
 
-                /* Destroy partition_msgs list (elements not freed, just list) */
+                /* Destroy partition_msgs list (elements not freed, just list)
+                 */
                 rd_list_destroy(&partition_msgs);
 
                 /* Move batches to inflight_acks list (transfer ownership) */
@@ -1220,7 +1223,8 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
  *
  * Creates rd_kafka_share_ack_batches_t directly with per-offset tracking.
  * All offsets are initialized to ACQUIRED state; types will be updated
- * later when matching with actual messages (GAP for missing, REJECT for errors).
+ * later when matching with actual messages (GAP for missing, REJECT for
+ * errors).
  *
  * @param rkb Broker handle
  * @param topic Topic name
@@ -1316,7 +1320,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 }
                 /* Initialize batches_out with NULL rktpar for unknown topic */
                 batches_out->rktpar                  = NULL;
-                batches_out->leader_id               = -1;
+                batches_out->acquired_leader_id      = -1;
+                batches_out->acquired_leader_epoch   = -1;
                 batches_out->number_of_acquired_msgs = 0;
                 rd_list_init(&batches_out->entries, 0, NULL);
                 rd_kafka_q_destroy(temp_fetchq);
@@ -1360,24 +1365,24 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         rd_dassert(rktp->rktp_share_acknowledge_count == 0);
         rd_dassert(rktp->rktp_share_acknowledge == NULL);
 
- 
-                rd_kafka_topic_partition_private_t *parpriv;
 
-                /* Allocate and initialize the topic partition */
-                batches_out->rktpar = rd_calloc(1, sizeof(*batches_out->rktpar));
-                batches_out->rktpar->topic =
-                    rd_strndup(topic->str, RD_KAFKAP_STR_LEN(topic));
-                batches_out->rktpar->partition = PartitionId;
-                batches_out->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+        rd_kafka_topic_partition_private_t *parpriv;
 
-                /* Allocate and fill the private structure */
-                parpriv = rd_kafka_topic_partition_private_new();
-                parpriv->rktp = rd_kafka_toppar_keep(rktp);
-                parpriv->leader_epoch = CurrentLeader.LeaderEpoch;
-                parpriv->topic_id     = topic_id;
-                batches_out->rktpar->_private = parpriv;
+        /* Allocate and initialize the topic partition */
+        batches_out->rktpar = rd_calloc(1, sizeof(*batches_out->rktpar));
+        batches_out->rktpar->topic =
+            rd_strndup(topic->str, RD_KAFKAP_STR_LEN(topic));
+        batches_out->rktpar->partition = PartitionId;
+        batches_out->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
 
-        batches_out->leader_id               = CurrentLeader.LeaderId;
+        /* Allocate and fill the private structure */
+        parpriv                       = rd_kafka_topic_partition_private_new();
+        parpriv->rktp                 = rd_kafka_toppar_keep(rktp);
+        parpriv->topic_id             = topic_id;
+        batches_out->rktpar->_private = parpriv;
+
+        batches_out->acquired_leader_id      = CurrentLeader.LeaderId;
+        batches_out->acquired_leader_epoch   = CurrentLeader.LeaderEpoch;
         batches_out->number_of_acquired_msgs = 0;
         rd_list_init(&batches_out->entries, AcquiredRecordsArrayCnt, NULL);
 
@@ -1405,9 +1410,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                                    FirstOffsets[i], LastOffsets[i],
                                    DeliveryCounts[i]);
 
-                        /* Create batch entry with types initialized to ACQUIRED */
-                        rd_kafka_share_ack_batch_entry_t *entry =
-                            rd_calloc(1, sizeof(*entry));
+                        /* Create batch entry with types initialized to ACQUIRED
+                         */
+                        rd_kafka_share_ack_batch_entry_acquired_records_t
+                            *entry          = rd_calloc(1, sizeof(*entry));
                         entry->start_offset = FirstOffsets[i];
                         entry->end_offset   = LastOffsets[i];
                         entry->size         = size;

@@ -1223,7 +1223,8 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
         RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
                 if (batches) {
                         /* Destroy entries list with custom cleanup */
-                        rd_kafka_share_ack_batch_entry_t *entry;
+                        rd_kafka_share_ack_batch_entry_acquired_records_t
+                            *entry;
                         int i;
                         RD_LIST_FOREACH(entry, &batches->entries, i) {
                                 if (entry->types)

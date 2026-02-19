@@ -131,14 +131,14 @@ rd_kafka_fetch_pos_make(int64_t offset,
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
                    rd_kafka_toppar_s) rd_kafka_toppar_tqhead_t;
 
-typedef enum rd_kafka_share_acknowledgement_type {
+typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_SHARE_ACK_ACQUIRED =
             -1, /* Acquired records, not acknowledged yet */
         RD_KAFKA_SHARE_ACK_GAP     = 0, /* gap */
         RD_KAFKA_SHARE_ACK_ACCEPT  = 1, /* accept */
         RD_KAFKA_SHARE_ACK_RELEASE = 2, /* release */
         RD_KAFKA_SHARE_ACK_REJECT  = 3  /* reject */
-} rd_kafka_share_acknowledgement_type;
+} rd_kafka_internal_ShareAcknowledgement_type_t;
 
 /**
  * @brief Acknowledgement batch entry for a contiguous offset range.
@@ -146,13 +146,14 @@ typedef enum rd_kafka_share_acknowledgement_type {
  * Tracks acknowledgement status for each offset in the range.
  * Used for building ShareAcknowledge requests.
  */
-typedef struct rd_kafka_share_ack_batch_entry_s {
+typedef struct rd_kafka_share_ack_batch_entry_acquired_records_s {
         int64_t start_offset; /**< First offset in range */
         int64_t end_offset;   /**< Last offset in range (inclusive) */
         int64_t size;         /**< Number of offsets (end - start + 1) */
-        rd_kafka_share_acknowledgement_type *types; /**< Array of ack types,
-                                                     *   one per offset */
-} rd_kafka_share_ack_batch_entry_t;
+        rd_kafka_internal_ShareAcknowledgement_type_t
+            *types; /**< Array of ack types,
+                     *   one per offset */
+} rd_kafka_share_ack_batch_entry_acquired_records_t;
 
 /**
  * @brief Per topic-partition inflight acknowledgement batches.
@@ -162,17 +163,24 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
  *
  * The rktpar field contains topic, partition, and in its _private:
  *   - rktp (toppar reference, refcount held)
- *   - leader_epoch
  *   - topic_id
+ *
+ * The acquired_leader_id and acquired_leader_epoch are the leader info
+ * at the time records were acquired. These may differ from the current
+ * leader when sending acknowledgements.
  */
 typedef struct rd_kafka_share_ack_batches_s {
-        rd_kafka_topic_partition_t *rktpar; /**< Topic-partition with rktp ref */
-        int32_t leader_id;               /**< Leader broker id */
+        rd_kafka_topic_partition_t
+            *rktpar;                     /**< Topic-partition with rktp ref */
+        int32_t acquired_leader_id;      /**< Leader broker id when records
+                                          *   were acquired */
+        int32_t acquired_leader_epoch;   /**< Leader epoch when records
+                                          *   were acquired */
         int32_t number_of_acquired_msgs; /**< Total acquired messages */
-        rd_list_t entries;               /**< rd_kafka_share_ack_batch_entry_t*,
-                                          *   sorted by start_offset */
+        rd_list_t
+            entries; /**< rd_kafka_share_ack_batch_entry_acquired_records_t*,
+                      *   sorted by start_offset */
 } rd_kafka_share_ack_batches_t;
-
 
 
 

@@ -3758,6 +3758,7 @@ int rd_kafka_consume_start(rd_kafka_topic_t *rkt,
                            int32_t partition,
                            int64_t offset);
 
+
 /**
  * @brief Same as rd_kafka_consume_start() but re-routes incoming messages to
  * the provided queue \p rkqu (which must have been previously allocated

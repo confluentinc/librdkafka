@@ -254,6 +254,8 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int record_lock_duration_ms;         /**< Per-record lock duration in ms.
                                               *   0 = use session_timeout_ms
                                               *   as fallback (default 0). */
+        int max_size;                        /**< Max members allowed.
+                                              *   0 = unlimited (default). */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -573,6 +575,9 @@ struct rd_kafka_mock_cluster_s {
                 /** Per-record lock duration in ms (KIP 932).
                  *  0 = use session_timeout_ms. */
                 int sharegroup_record_lock_duration_ms;
+                /** Max members allowed in share group (KIP 932).
+                 *  0 = unlimited. */
+                int sharegroup_max_size;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

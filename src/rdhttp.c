@@ -48,6 +48,7 @@
 /** Maximum response size, increase as necessary. */
 #define RD_HTTP_RESPONSE_SIZE_MAX 1024 * 1024 * 500 /* 500kb */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 
 /**
@@ -441,18 +442,20 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                         headers = curl_slist_append(headers, header);
         }
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
+
+        timeout_ms = MAX(timeout_ms, 0);
+        read_timeout_ms = MAX(read_timeout_ms, 0);
         if (timeout_ms > 0) {
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
-
-                if (read_timeout_ms > 0)
-                        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT_MS, timeout_ms + read_timeout_ms);
         }
+        if (read_timeout_ms > 0)
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT_MS, timeout_ms + read_timeout_ms);
 
-        long endMs = current_milliseconds() + retry_backoff_max_ms;
-        int currAttempt = 0;
+        long end_ms = current_milliseconds() + retry_backoff_max_ms;
+        int curr_attempt = 0;
 
-        while (current_milliseconds() <= endMs) {
-                currAttempt++;
+        while (current_milliseconds() <= end_ms) {
+                curr_attempt++;
 
                 if (rd_kafka_terminating(rk)) {
                         herr = rd_http_error_new(-1, "Terminating");
@@ -469,24 +472,21 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
                         goto done;
                 }
 
-                long waitMs = retry_backoff_ms *
-                          (long)pow(2, currAttempt - 1);
+                long wait_ms = retry_backoff_ms *
+                          (long)pow(2, curr_attempt - 1);
 
-                long diff = endMs - current_milliseconds();
-                waitMs = MIN(waitMs, diff);
-
-                if (waitMs > diff)
-                        waitMs = diff;
+                long diff = end_ms - current_milliseconds();
+                wait_ms = MIN(wait_ms, diff);
 
                 /* Retry if HTTP(S) request returns temporary error and there
                  * are remaining retries, else fail. */
-                if (waitMs <= 0 || !rd_http_is_failure_temporary(herr->code)) {
+                if (wait_ms <= 0 || !rd_http_is_failure_temporary(herr->code)) {
                         goto done;
                 }
 
                 /* Retry */
                 rd_http_error_destroy(herr);
-                rd_usleep(waitMs * 1000, &rk->rk_terminate);
+                rd_usleep(wait_ms * 1000, &rk->rk_terminate);
         }
 
         *rbufp        = hreq.hreq_buf;
@@ -576,23 +576,23 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
 
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
 
+        timeout_ms = MAX(timeout_ms, 0);
+        read_timeout_ms = MAX(read_timeout_ms, 0);
         if (timeout_ms > 0) {
                 curl_easy_setopt(hreq.hreq_curl, CURLOPT_CONNECTTIMEOUT_MS, timeout_ms);
-
-                if (read_timeout_ms > 0)
-                        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT_MS, timeout_ms + read_timeout_ms);
         }
+        if (read_timeout_ms > 0)
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT_MS, timeout_ms + read_timeout_ms);
 
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
                          post_fields_size);
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDS, post_fields);
 
-        long endMs = current_milliseconds() + retry_backoff_max_ms;
-        long retryBackoffMs = retry_backoff_ms;
-        int currAttempt = 0;
+        long end_ms = current_milliseconds() + retry_backoff_max_ms;
+        int curr_attempt = 0;
 
-        while (current_milliseconds() <= endMs) {
-                currAttempt++;
+        while (current_milliseconds() <= end_ms) {
+                curr_attempt++;
 
                 if (rd_kafka_terminating(rk)) {
                         rd_http_req_destroy(&hreq);
@@ -610,22 +610,22 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                         return NULL;
                 }
 
-                long waitMs = retryBackoffMs *
-                          (long)pow(2, currAttempt - 1);
+                long wait_ms = retry_backoff_ms *
+                          (long)pow(2, curr_attempt - 1);
 
-                long diff = endMs - current_milliseconds();
-                waitMs = MIN(waitMs, diff);
+                long diff = end_ms - current_milliseconds();
+                wait_ms = MIN(wait_ms, diff);
 
                 /* Retry if HTTP(S) request returns temporary error and there
                  * are remaining retries, else fail. */
-                if (waitMs <= 0 || !rd_http_is_failure_temporary(herr->code)) {
+                if (wait_ms <= 0 || !rd_http_is_failure_temporary(herr->code)) {
                         rd_http_req_destroy(&hreq);
                         return herr;
                 }
 
                 /* Retry */
                 rd_http_error_destroy(herr);
-                rd_usleep(waitMs * 1000, &rk->rk_terminate);
+                rd_usleep(wait_ms * 1000, &rk->rk_terminate);
         }
 
         content_type = rd_http_req_get_content_type(&hreq);

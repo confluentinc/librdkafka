@@ -1,3 +1,22 @@
+# librdkafka v2.13.1
+
+librdkafka v2.13.1 is a maintenance release:
+
+* Remove CPU usage regression when a subscription matches no topics (#5324).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #5324.
+  Remove CPU usage regression when a subscription matches no topics.
+  The increased CPU usage (~30%) was seen in particular when there are many topics
+  in the clusters and the given subscription regex doesn't match any.
+  Happening since 2.10.0 (#5324).
+
+
+
 # librdkafka v2.13.0
 
 librdkafka v2.13.0 is a feature release:

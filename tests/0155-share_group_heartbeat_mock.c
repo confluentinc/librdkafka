@@ -686,6 +686,89 @@ static void do_test_share_group_target_assignment(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that a healthy, continuously-heartbeating member is never
+ *        fenced by the mock broker's session timeout timer.
+ *
+ * Uses a short session timeout (2000ms) and polls the consumer for
+ * well beyond the timeout (12 seconds).  The assignment is checked
+ * every 500ms — if the heartbeat handler fails to refresh the
+ * member's activity timestamp (via rd_kafka_mock_sharegroup_member_active),
+ * the timer would fence the member, causing the assignment to drop.
+ */
+static void do_test_share_group_no_spurious_fencing(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *subscription, *assignment;
+        rd_kafka_t *c;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        const char *group = "test-share-group-no-fence";
+        int i;
+
+        SUB_TEST();
+
+        /* Setup with a short session timeout. */
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+        rd_kafka_mock_sharegroup_set_session_timeout(mcluster, 2000);
+
+        c = create_share_consumer(bootstraps, group);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        /* Wait for join and initial assignment. */
+        rd_kafka_consumer_poll(c, 3000);
+
+        TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
+        TEST_ASSERT(assignment->cnt == 3,
+                    "Expected 3 partitions initially, got %d", assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(assignment);
+
+        /* Poll for 12 seconds (6x the session timeout).
+         * Check the assignment every 500ms.  If the member is being
+         * spuriously fenced, the assignment will temporarily drop. */
+        for (i = 0; i < 24; i++) {
+                rd_kafka_consumer_poll(c, 500);
+
+                TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
+                TEST_ASSERT(
+                    assignment->cnt == 3,
+                    "Iteration %d: expected 3 partitions but got %d "
+                    "(member may have been spuriously fenced)",
+                    i, assignment->cnt);
+                rd_kafka_topic_partition_list_destroy(assignment);
+        }
+
+        /* Verify member is still in the group. */
+        {
+                char **member_ids;
+                size_t member_cnt;
+                rd_kafka_resp_err_t err;
+
+                err = rd_kafka_mock_sharegroup_get_member_ids(
+                    mcluster, group, &member_ids, &member_cnt);
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "get_member_ids failed: %s",
+                            rd_kafka_err2str(err));
+                TEST_ASSERT(member_cnt == 1,
+                            "Expected 1 member, got %zu", member_cnt);
+                rd_free(member_ids[0]);
+                rd_free(member_ids);
+        }
+
+        /* Cleanup */
+        rd_kafka_consumer_close(c);
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -697,6 +780,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_rtt_injection();
         do_test_share_group_session_timeout();
         do_test_share_group_target_assignment();
+        do_test_share_group_no_spurious_fencing();
 
         return 0;
 }

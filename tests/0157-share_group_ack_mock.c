@@ -1364,7 +1364,7 @@ static void do_test_coordinator_failover_ack_recovery(void) {
  *  Test runner
  * =================================================================== */
 
-int main_0157_kip932_shareack_mockbroker(int argc, char **argv) {
+int main_0157_share_group_ack_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         /* increase from the default ~30s timeout to avoid the framework killing us early. */
         test_timeout_set(300);

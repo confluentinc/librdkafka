@@ -274,8 +274,8 @@ _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
 _TEST_DECL(0154_share_consumer);
 _TEST_DECL(0155_share_group_heartbeat_mock);
-_TEST_DECL(0156_kip932_sharefetch_mockbroker);
-_TEST_DECL(0157_kip932_shareack_mockbroker);
+_TEST_DECL(0156_share_group_fetch_mock);
+_TEST_DECL(0157_share_group_ack_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -546,8 +546,8 @@ struct test tests[] = {
     _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0154_share_consumer, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
-    _TEST(0156_kip932_sharefetch_mockbroker, TEST_F_LOCAL),
-    _TEST(0157_kip932_shareack_mockbroker, TEST_F_LOCAL),
+    _TEST(0156_share_group_fetch_mock, TEST_F_LOCAL),
+    _TEST(0157_share_group_ack_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

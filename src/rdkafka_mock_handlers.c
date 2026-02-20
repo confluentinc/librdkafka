@@ -3136,6 +3136,8 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                          * catching up */
                                         member->conn = mconn;
                                         MemberEpoch  = member->member_epoch;
+                                        rd_kafka_mock_sharegroup_member_active(
+                                            mshgrp, member);
                                 }
                         } else {
                                 /* Epoch matches - normal heartbeat */
@@ -3148,6 +3150,8 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                                 }
                                 member->conn = mconn;
                                 MemberEpoch  = member->member_epoch;
+                                rd_kafka_mock_sharegroup_member_active(mshgrp,
+                                                                       member);
                         }
                 }
 
@@ -3513,7 +3517,7 @@ rd_kafka_mock_sgrp_write_acquired_records(
  * @brief Temporary structure for accumulating acknowledgement batches
  *        during ShareFetch request parsing.
  */
-struct mock_sgrp_ack_entry {
+struct rd_kafka_mock_sgrp_ack_entry {
         rd_kafka_Uuid_t topic_id;
         int32_t partition;
         int64_t first_offset;
@@ -3732,7 +3736,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_skip_tags(rkbuf);
 
                                 if (AckType >= 0) {
-                                        struct mock_sgrp_ack_entry *entry =
+                                        struct rd_kafka_mock_sgrp_ack_entry *entry =
                                             rd_calloc(1, sizeof(*entry));
                                         entry->topic_id     = TopicId;
                                         entry->partition    = Partition;
@@ -3945,7 +3949,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                             rd_list_cnt(&ack_entries),
                             RD_KAFKAP_STR_PR(&MemberId));
                         for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
-                                struct mock_sgrp_ack_entry *entry =
+                                struct rd_kafka_mock_sgrp_ack_entry *entry =
                                     rd_list_elem(&ack_entries, k);
                                 rd_kafka_mock_sgrp_apply_ack(
                                     sgrp, entry->topic_id, entry->partition,
@@ -4251,7 +4255,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_skip_tags(rkbuf);
 
                                 if (AckType >= 0) {
-                                        struct mock_sgrp_ack_entry *entry =
+                                        struct rd_kafka_mock_sgrp_ack_entry *entry =
                                             rd_calloc(1, sizeof(*entry));
                                         entry->topic_id     = TopicId;
                                         entry->partition    = Partition;
@@ -4314,7 +4318,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                             rd_list_cnt(&ack_entries),
                             RD_KAFKAP_STR_PR(&MemberId));
                         for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
-                                struct mock_sgrp_ack_entry *entry =
+                                struct rd_kafka_mock_sgrp_ack_entry *entry =
                                     rd_list_elem(&ack_entries, k);
                                 rd_kafka_mock_sgrp_apply_ack(
                                     sgrp, entry->topic_id, entry->partition,

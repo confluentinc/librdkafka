@@ -2174,6 +2174,34 @@ rd_kafka_mock_topic_create(rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_topic_delete(rd_kafka_mock_cluster_t *mcluster,
+                           const char *topic) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.name = rd_strdup(topic);
+        rko->rko_u.mock.cmd  = RD_KAFKA_MOCK_CMD_TOPIC_DELETE;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_delete_records(rd_kafka_mock_cluster_t *mcluster,
+                                       const char *topic,
+                                       int32_t partition,
+                                       int64_t before_offset) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.name      = rd_strdup(topic);
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_PART_DELETE_RECORDS;
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.lo        = before_offset;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_partition_set_leader(rd_kafka_mock_cluster_t *mcluster,
                                    const char *topic,
                                    int32_t partition,
@@ -2513,6 +2541,51 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                                              (int)rko->rko_u.mock.hi))
                         return RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION;
                 break;
+
+        case RD_KAFKA_MOCK_CMD_TOPIC_DELETE:
+                mtopic =
+                    rd_kafka_mock_topic_find(mcluster, rko->rko_u.mock.name);
+                if (!mtopic)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                rd_kafka_mock_topic_destroy(mtopic);
+                break;
+
+        case RD_KAFKA_MOCK_CMD_PART_DELETE_RECORDS: {
+                rd_kafka_mock_msgset_t *mset, *tmp;
+                int64_t before_offset = rko->rko_u.mock.lo;
+
+                mtopic = rd_kafka_mock_topic_find(mcluster,
+                                                  rko->rko_u.mock.name);
+                mpart  = rd_kafka_mock_partition_find(
+                    mtopic, rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                if (before_offset > mpart->end_offset)
+                        return RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE;
+
+                /* Remove all msgsets fully before before_offset */
+                TAILQ_FOREACH_SAFE(mset, &mpart->msgsets, link, tmp) {
+                        if (mset->last_offset >= before_offset)
+                                break;
+                        rd_kafka_mock_msgset_destroy(mpart, mset);
+                }
+
+                /* Advance start offset */
+                mpart->start_offset = before_offset;
+                if (mpart->update_follower_start_offset)
+                        mpart->follower_start_offset = mpart->start_offset;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Delete records %s [%" PRId32
+                             "] before offset %" PRId64
+                             " (log now %" PRId64 "..%" PRId64 ")",
+                             rko->rko_u.mock.name,
+                             rko->rko_u.mock.partition, before_offset,
+                             mpart->start_offset, mpart->end_offset);
+                break;
+        }
 
         case RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR:
                 mtopic =

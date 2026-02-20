@@ -372,8 +372,6 @@ static void do_test_share_group_multi_topic_assignment(void) {
  *
  * When a fatal exception occurs during heartbeat, the consumer should
  * transition to fatal state and no longer be usable.
- *
- * Source: testFailureOnFatalException (ShareHeartbeatRequestManagerTest.java)
  */
 static void do_test_share_group_error_injection(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -444,8 +442,6 @@ static void do_test_share_group_error_injection(void) {
  *
  * When a heartbeat times out due to network latency, the consumer should
  * handle the timeout and retry with backoff, eventually recovering.
- *
- * Source: testNetworkTimeout (ShareHeartbeatRequestManagerTest.java)
  */
 static void do_test_share_group_rtt_injection(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -736,9 +732,6 @@ static void do_test_share_group_target_assignment(void) {
  * When a consumer receives UNKNOWN_MEMBER_ID error, it should rejoin
  * with epoch=0 (fresh join).
  *
- * Source:
- * ShareHeartbeatRequestManagerTest.testHeartbeatResponseOnErrorHandling()
- *
  * NOT YET COMPATIBLE: UNKNOWN_MEMBER_ID triggers an incorrect assert in
  * development builds (rdkafka_cgrp.c:6631). Pending fix by Pranav.
  * See sghb_test_discrepancies.txt #3.
@@ -816,9 +809,6 @@ static void do_test_unknown_member_id_error(void) {
  *
  * When a consumer receives FENCED_MEMBER_EPOCH error, it should be fenced
  * and then rejoin with epoch=0.
- *
- * Source:
- * ShareHeartbeatRequestManagerTest.testHeartbeatResponseOnErrorHandling()
  */
 static void do_test_fenced_member_epoch_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -894,9 +884,6 @@ static void do_test_fenced_member_epoch_error(void) {
  *
  * When a consumer receives COORDINATOR_NOT_AVAILABLE, it should retry
  * (retriable error).
- *
- * Source:
- * ShareHeartbeatRequestManagerTest.testHeartbeatResponseOnErrorHandling()
  */
 static void do_test_coordinator_not_available_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -970,9 +957,6 @@ static void do_test_coordinator_not_available_error(void) {
  * @brief NOT_COORDINATOR error handling.
  *
  * When a consumer receives NOT_COORDINATOR, it should find a new coordinator.
- *
- * Source:
- * ShareHeartbeatRequestManagerTest.testHeartbeatResponseOnErrorHandling()
  */
 static void do_test_not_coordinator_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1048,9 +1032,6 @@ static void do_test_not_coordinator_error(void) {
  *
  * When a consumer receives GROUP_AUTHORIZATION_FAILED, it should treat
  * it as a fatal error.
- *
- * Source:
- * ShareHeartbeatRequestManagerTest.testHeartbeatResponseOnErrorHandling()
  */
 static void do_test_group_authorization_failed_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1113,8 +1094,6 @@ static void do_test_group_authorization_failed_error(void) {
  *
  * When a new member tries to join and gets GROUP_MAX_SIZE_REACHED,
  * the error should be treated as fatal for that consumer.
- *
- * Source: testShareGroupNewMemberIsRejectedWithMaximumMembersIsReached()
  */
 static void do_test_group_max_size_reached_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1195,8 +1174,6 @@ static void do_test_group_max_size_reached_error(void) {
  *
  * A member in stable state (epoch > 0) that sends heartbeat with epoch=0
  * should be treated as a rejoin and assigned a new member ID.
- *
- * Source: testShareGroupMemberCanRejoinWithEpochZero()
  */
 static void do_test_member_rejoin_with_epoch_zero(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1270,8 +1247,6 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
  *
  * When a member sends leave heartbeat (epoch=-1), the group epoch should
  * be bumped and remaining members should get updated assignment.
- *
- * Source: testShareGroupLeavingMemberBumpsGroupEpoch()
  */
 static void do_test_leaving_member_bumps_group_epoch(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1346,8 +1321,6 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
  *
  * Note: This test is limited in mock broker - we can test initial assignment
  * with multiple topics in subscription, but cannot dynamically add topics.
- *
- * Source: testPartitionAssignmentWithChangingTopics()
  */
 static void do_test_partition_assignment_with_multiple_topics(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1419,8 +1392,6 @@ static void do_test_partition_assignment_with_multiple_topics(void) {
  * Note: Share groups may allow the same partition to be assigned to
  * multiple consumers, so we check for fair distribution rather than
  * exclusive assignment.
- *
- * Source: testShareGroupHeartbeatWithMultipleMembers()
  */
 static void do_test_multiple_members_partition_distribution(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1509,8 +1480,6 @@ static void do_test_multiple_members_partition_distribution(void) {
  *
  * When a member sends leave heartbeat (epoch=-1), verify successful
  * response completes the leave.
- *
- * Source: testHeartbeatSuccessfulResponseWhenLeavingGroupCompletesLeave()
  */
 static void do_test_leave_heartbeat_completes_successfully(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1568,8 +1537,6 @@ static void do_test_leave_heartbeat_completes_successfully(void) {
  *
  * When a member sends leave heartbeat and gets an error response,
  * the leave should still complete (best effort).
- *
- * Source: testHeartbeatFailedResponseWhenLeavingGroupCompletesLeave()
  */
 static void do_test_leave_heartbeat_completes_on_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1635,8 +1602,6 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
  *
  * Consumer subscribed to topic A, change subscription to topic B,
  * verify assignment updates.
- *
- * Source: client-side tests
  */
 static void do_test_subscription_change(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1728,8 +1693,6 @@ static void do_test_subscription_change(void) {
  * When a member that has already unsubscribed receives GROUP_ID_NOT_FOUND,
  * it should be treated as benign (the group may have been auto-deleted).
  * This should NOT cause a fatal error.
- *
- * Source: testGroupIdNotFoundExceptionWhileUnsubscribed()
  */
 static void do_test_group_id_not_found_while_unsubscribed(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1807,8 +1770,6 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
  *
  * When an active member (epoch > 0) receives GROUP_ID_NOT_FOUND,
  * it should be treated as a fatal error (group unexpectedly deleted).
- *
- * Source: testGroupIdNotFoundWhileStableIsFatal()
  *
  * NOT YET COMPATIBLE: GROUP_ID_NOT_FOUND is not in the SGHB fatal error
  * list in rdkafka_cgrp.c. It is treated as permanent non-fatal instead.
@@ -1889,8 +1850,6 @@ static void do_test_group_id_not_found_while_stable_is_fatal(void) {
  *
  * When a consumer receives INVALID_REQUEST error, it should be treated
  * as a fatal error.
- *
- * Source: testHeartbeatResponseOnErrorHandling()
  */
 static void do_test_invalid_request_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1953,8 +1912,6 @@ static void do_test_invalid_request_error(void) {
  *
  * When a consumer receives UNSUPPORTED_VERSION error, it should be
  * treated as a fatal error.
- *
- * Source: testUnsupportedVersionGeneratedOnTheBroker()
  */
 static void do_test_unsupported_version_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -2017,8 +1974,6 @@ static void do_test_unsupported_version_error(void) {
  *
  * When a consumer receives COORDINATOR_LOAD_IN_PROGRESS, it should
  * retry with backoff (transient error).
- *
- * Source: testHeartbeatResponseOnErrorHandling()
  */
 static void do_test_coordinator_load_in_progress_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -2092,8 +2047,6 @@ static void do_test_coordinator_load_in_progress_error(void) {
  *
  * Consumer in stable state leaves group gracefully, sending leave
  * heartbeat with epoch=-1.
- *
- * Source: testLeaveGroupWhenStateIsStable()
  */
 static void do_test_graceful_shutdown_stable_state(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -2158,9 +2111,6 @@ static void do_test_graceful_shutdown_stable_state(void) {
  * @brief Consumer resubscribes after unsubscribe.
  *
  * Tests the unsubscribe then resubscribe flow.
- *
- * Source: testOnSubscriptionUpdatedTransitionsToJoiningOnPollIfNotInGroup
- * (ShareMembershipManagerTest.java)
  */
 static void do_test_resubscribe_after_unsubscribe(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -2238,8 +2188,6 @@ static void do_test_resubscribe_after_unsubscribe(void) {
  * @brief Consumer leaves and remaining consumers get reassigned.
  *
  * Tests rebalance when a consumer leaves the group.
- *
- * Source: testLeavingMemberBumpsGroupEpoch (GroupMetadataManagerTest.java)
  */
 static void do_test_consumer_leave_rebalance(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -2439,8 +2387,6 @@ static void do_test_empty_topic_subscription(void) {
  * librdkafka intentionally rejects subscribe() with an empty topic list,
  * unlike Java which treats it as unsubscribe(). This is an intentional
  * difference (see sghb_test_discrepancies.txt #1).
- *
- * Source: testEmptySubscription() (Java equivalent not replicated)
  */
 static void do_test_empty_topic_list_subscription(void) {
         rd_kafka_mock_cluster_t *mcluster;

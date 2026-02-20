@@ -856,8 +856,6 @@ static void do_test_multi_consumer_lock_expiry(void) {
  *
  * Injects 1 error of type \p err into the ShareFetch path,
  * then verifies the consumer returns no records on that fetch.
- *
- * Java: testFetchError, testHandleFetchResponseError
  */
 static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
         const char *topic = "kip932_fetch_error";
@@ -901,9 +899,6 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
 
 /**
  * @brief NOT_LEADER_OR_FOLLOWER in ShareFetch -> no records returned.
- *
- * Java: testFetchError,
- *       testHandleFetchResponseError(NOT_LEADER_OR_FOLLOWER)
  */
 static void do_test_sharefetch_fetch_error_not_leader(void) {
         SUB_TEST();
@@ -914,8 +909,6 @@ static void do_test_sharefetch_fetch_error_not_leader(void) {
 
 /**
  * @brief UNKNOWN_TOPIC_OR_PARTITION in ShareFetch -> no records returned.
- *
- * Java: testHandleFetchResponseError(UNKNOWN_TOPIC_OR_PARTITION)
  */
 static void do_test_sharefetch_fetch_error_unknown_topic_or_part(void) {
         SUB_TEST();
@@ -925,8 +918,6 @@ static void do_test_sharefetch_fetch_error_unknown_topic_or_part(void) {
 
 /**
  * @brief UNKNOWN_TOPIC_ID in ShareFetch -> no records returned.
- *
- * Java: testHandleFetchResponseError(UNKNOWN_TOPIC_ID)
  */
 static void do_test_sharefetch_fetch_error_unknown_topic_id(void) {
         SUB_TEST();
@@ -936,8 +927,6 @@ static void do_test_sharefetch_fetch_error_unknown_topic_id(void) {
 
 /**
  * @brief FENCED_LEADER_EPOCH in ShareFetch -> no records returned.
- *
- * Java: testHandleFetchResponseError(FENCED_LEADER_EPOCH)
  */
 static void do_test_sharefetch_fetch_error_fenced_leader_epoch(void) {
         SUB_TEST();
@@ -947,8 +936,6 @@ static void do_test_sharefetch_fetch_error_fenced_leader_epoch(void) {
 
 /**
  * @brief UNKNOWN_LEADER_EPOCH in ShareFetch -> no records returned.
- *
- * Java: testHandleFetchResponseError(UNKNOWN_LEADER_EPOCH)
  */
 static void do_test_sharefetch_fetch_error_unknown_leader_epoch(void) {
         SUB_TEST();
@@ -958,8 +945,6 @@ static void do_test_sharefetch_fetch_error_unknown_leader_epoch(void) {
 
 /**
  * @brief TOPIC_AUTHORIZATION_FAILED in ShareFetch -> no records returned.
- *
- * Java: testUnauthorizedTopic
  */
 static void do_test_sharefetch_topic_authorization_failed(void) {
         SUB_TEST();
@@ -970,8 +955,6 @@ static void do_test_sharefetch_topic_authorization_failed(void) {
 
 /**
  * @brief CORRUPT_MESSAGE (INVALID_MSG) in ShareFetch -> no records returned.
- *
- * Java: testCorruptMessageError
  */
 static void do_test_sharefetch_corrupt_message(void) {
         SUB_TEST();
@@ -981,8 +964,6 @@ static void do_test_sharefetch_corrupt_message(void) {
 
 /**
  * @brief Disconnect during ShareFetch -> no records returned.
- *
- * Java: testFetchDisconnected
  */
 static void do_test_sharefetch_fetch_disconnected(void) {
         const char *topic = "kip932_disconnect";
@@ -1031,8 +1012,6 @@ static void do_test_sharefetch_fetch_disconnected(void) {
  *
  * Verifies that a consumer can fetch records and then close successfully.
  * The close sends ShareAcknowledge with epoch=-1 to release the session.
- *
- * Java: testVerifyFetchAndCloseImplicit
  */
 static void do_test_sharefetch_fetch_and_close_implicit(void) {
         const char *topic = "kip932_fetch_close";

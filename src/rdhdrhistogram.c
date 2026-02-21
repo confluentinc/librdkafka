@@ -275,8 +275,7 @@ typedef struct rd_hdr_iter_s {
         int64_t highestEquivalentValue;
 } rd_hdr_iter_t;
 
-#define RD_HDR_ITER_INIT(hdr)                                                  \
-        { .hdr = hdr, .subBucketIdx = -1 }
+#define RD_HDR_ITER_INIT(hdr) {.hdr = hdr, .subBucketIdx = -1}
 
 static int rd_hdr_iter_next(rd_hdr_iter_t *it) {
         const rd_hdr_histogram_t *hdr = it->hdr;

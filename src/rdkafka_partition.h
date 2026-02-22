@@ -32,6 +32,7 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_broker.h"
+#include <stdint.h>
 
 extern const char *rd_kafka_fetch_states[];
 
@@ -132,12 +133,12 @@ typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
                    rd_kafka_toppar_s) rd_kafka_toppar_tqhead_t;
 
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
-        RD_KAFKA_SHARE_ACK_ACQUIRED =
+        RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED =
             -1, /* Acquired records, not acknowledged yet */
-        RD_KAFKA_SHARE_ACK_GAP     = 0, /* gap */
-        RD_KAFKA_SHARE_ACK_ACCEPT  = 1, /* accept */
-        RD_KAFKA_SHARE_ACK_RELEASE = 2, /* release */
-        RD_KAFKA_SHARE_ACK_REJECT  = 3  /* reject */
+        RD_KAFKA_INTERNAL_SHARE_ACK_GAP     = 0, /* gap */
+        RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT  = 1, /* accept */
+        RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE = 2, /* release */
+        RD_KAFKA_INTERNAL_SHARE_ACK_REJECT  = 3  /* reject */
 } rd_kafka_internal_ShareAcknowledgement_type_t;
 
 /**
@@ -145,14 +146,21 @@ typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
  *
  * Tracks acknowledgement status for each offset in the range.
  * Used for building ShareAcknowledge requests.
+ *
+ * The size field always represents the number of offsets in the range
+ * (end_offset - start_offset + 1).
+ *
+ * The types_cnt field represents the actual size of the types array:
+ *   - For inflight tracking: types_cnt == size (one type per offset)
+ *   - For collated batches: types_cnt == 1 (single consolidated type)
  */
 typedef struct rd_kafka_share_ack_batch_entry_acquired_records_s {
         int64_t start_offset; /**< First offset in range */
         int64_t end_offset;   /**< Last offset in range (inclusive) */
         int64_t size;         /**< Number of offsets (end - start + 1) */
+        int32_t types_cnt;    /**< Number of elements in types array */
         rd_kafka_internal_ShareAcknowledgement_type_t
-            *types; /**< Array of ack types,
-                     *   one per offset */
+            *types; /**< Array of ack types */
 } rd_kafka_share_ack_batch_entry_acquired_records_t;
 
 /**
@@ -176,7 +184,7 @@ typedef struct rd_kafka_share_ack_batches_s {
                                           *   were acquired */
         int32_t acquired_leader_epoch;   /**< Leader epoch when records
                                           *   were acquired */
-        int32_t number_of_acquired_msgs; /**< Total acquired messages */
+        int64_t acquired_msgs_count; /**< Total acquired messages */
         rd_list_t
             entries; /**< rd_kafka_share_ack_batch_entry_acquired_records_t*,
                       *   sorted by start_offset */

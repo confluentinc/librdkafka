@@ -538,10 +538,10 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
                 /* Destroy all message ops in the list */
                 RD_LIST_FOREACH(msg_rko,
-                                &rko->rko_u.share_fetch_response.messages, i) {
+                                &rko->rko_u.share_fetch_response.message_rkos, i) {
                         rd_kafka_op_destroy(msg_rko);
                 }
-                rd_list_destroy(&rko->rko_u.share_fetch_response.messages);
+                rd_list_destroy(&rko->rko_u.share_fetch_response.message_rkos);
 
                 /* Free inflight_acks list */
                 RD_LIST_FOREACH(batches,

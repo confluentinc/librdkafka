@@ -896,23 +896,21 @@ int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko) {
         return RD_KAFKA_OFFSET_INVALID;
 }
 
-void rd_kafka_share_filter_forward(rd_kafka_broker_t *rkb,
-                                   rd_kafka_toppar_t *rktp,
-                                   rd_kafka_q_t *temp_fetchq,
-                                   rd_kafka_q_t *temp_appq,
+void rd_kafka_share_filter_forward(rd_kafka_q_t *temp_fetchq,
+                                   rd_list_t *filtered_msgs,
                                    int32_t AcquiredRecordsArrayCnt,
                                    const int64_t *FirstOffsets,
-                                   const int64_t *LastOffsets,
-                                   const int16_t *DeliveryCounts) {
+                                   const int64_t *LastOffsets) {
 
         rd_kafka_op_t *rko;
 
         /* Iterate through all messages in temp_fetchq and forward
-         * only those whose offset falls within an acquired range. */
+         * only those whose offset falls within an acquired range.
+         * Also set the ack type based on the op type. */
         while ((rko = rd_kafka_q_pop(temp_fetchq, RD_POLL_NOWAIT, 0)) != NULL) {
                 int64_t rko_offset          = rd_kafka_op_get_offset(rko);
                 rd_bool_t in_acquired_range = rd_false;
-                int range_idx;
+                int32_t range_idx;
 
                 /* Check if this message's offset is within any acquired range
                  */
@@ -926,15 +924,25 @@ void rd_kafka_share_filter_forward(rd_kafka_broker_t *rkb,
                 }
 
                 if (in_acquired_range) {
-                        /* Forward message to application queue */
-                        rd_kafka_q_enq(temp_appq, rko);
+                        /* Set ack type based on op type */
+                        rd_kafka_msg_t *rkm = NULL;
+                        if (rko->rko_type == RD_KAFKA_OP_FETCH) {
+                                rkm = &rko->rko_u.fetch.rkm;
+                                rkm->rkm_u.consumer.ack_type =
+                                    RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+                        } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
+                                rkm = &rko->rko_u.err.rkm;
+                                rkm->rkm_u.consumer.ack_type =
+                                    RD_KAFKA_INTERNAL_SHARE_ACK_REJECT;
+                        }
+
+                        /* Add to filtered messages list */
+                        rd_list_add(filtered_msgs, rko);
                 } else {
                         /* Discard message not in any acquired range */
                         rd_kafka_op_destroy(rko);
                 }
         }
-
-        rd_kafka_q_destroy_owner(temp_fetchq);
 }
 
 
@@ -1001,14 +1009,14 @@ static void rd_kafka_share_ack_batches_destroy(void *ptr) {
  * @brief Build share fetch response RKO with messages and update inflight acks.
  *
  * This function:
- * 1. Collects all messages from temp_appq
+ * 1. Uses filtered messages (already have ack types set)
  * 2. Updates existing inflight_acks entries (set GAP for missing offsets,
  *    REJECT for error messages, keep ACQUIRED for normal messages)
  * 3. Moves inflight_acks batches to the response RKO
  * 4. Adds only actual messages (no GAP placeholders) to the response
  *
  * @param rkb Broker handle
- * @param temp_appq Queue containing message/error ops
+ * @param filtered_msgs List of filtered message ops (with ack types already set)
  * @param inflight_acks List of rd_kafka_share_ack_batches_t* (ownership
  *                      transferred to RKO)
  *
@@ -1016,76 +1024,50 @@ static void rd_kafka_share_ack_batches_destroy(void *ptr) {
  */
 static rd_kafka_op_t *
 rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
-                                  rd_kafka_q_t *temp_appq,
+                                  rd_list_t *filtered_msgs,
                                   rd_list_t *inflight_acks) {
 
         rd_kafka_op_t *response_rko;
-        rd_kafka_op_t *rko;
         rd_kafka_share_ack_batches_t *batches;
         int32_t msg_cnt           = 0;
         int32_t gap_cnt           = 0;
         int32_t inflight_acks_cnt = rd_list_cnt(inflight_acks);
-        int i, pi, ei;
-        rd_list_t temp_msgs;
-        rd_bool_t *msg_used = NULL;
+        int pi, ei;
+        int total_msgs    = rd_list_cnt(filtered_msgs);
+        int msg_start_idx = 0;
 
         /* Create response rko */
         response_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH_RESPONSE);
         response_rko->rko_rk = rkb->rkb_rk;
 
         /* Initialize lists */
-        rd_list_init(&response_rko->rko_u.share_fetch_response.messages, 0,
+        rd_list_init(&response_rko->rko_u.share_fetch_response.message_rkos, 0,
                      NULL);
         rd_list_init(&response_rko->rko_u.share_fetch_response.inflight_acks, 0,
                      NULL);
 
-        /* Collect all ops from temp_appq into temporary list */
-        rd_list_init(&temp_msgs, 0, NULL);
-        while ((rko = rd_kafka_q_pop(temp_appq, RD_POLL_NOWAIT, 0)) != NULL) {
-                rd_kafka_msg_t *rkm = NULL;
-
-                if (rko->rko_type == RD_KAFKA_OP_FETCH) {
-                        rkm = &rko->rko_u.fetch.rkm;
-                        rkm->rkm_u.consumer.ack_type =
-                            RD_KAFKA_SHARE_ACK_ACQUIRED;
-                } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
-                        rkm = &rko->rko_u.err.rkm;
-                        rkm->rkm_u.consumer.ack_type =
-                            RD_KAFKA_SHARE_ACK_REJECT;
-                }
-
-                rd_list_add(&temp_msgs, rko);
-        }
-
-        int total_msgs = rd_list_cnt(&temp_msgs);
-
-        /* Track which messages have been used (to avoid duplicates) */
-        if (total_msgs > 0) {
-                msg_used = rd_calloc(total_msgs, sizeof(*msg_used));
-        }
-
-        /* Process each partition: update inflight_acks types and add messages
-         */
+        /* Process each partition: update inflight_acks types and add messages.
+         * Messages in filtered_msgs are grouped by partition in the same order
+         * as inflight_acks, so we can process them sequentially. */
         RD_LIST_FOREACH(batches, inflight_acks, pi) {
                 /* Skip partitions with unknown topic (rktpar is NULL) */
                 if (batches->rktpar == NULL)
                         continue;
 
-                /* Collect messages for this specific partition */
+                /* Collect messages for this partition.
+                 * Messages are grouped by partition, so collect from current
+                 * position until we hit a different partition. */
                 rd_list_t partition_msgs;
                 rd_list_init(&partition_msgs, 0, NULL);
 
-                /* Filter messages belonging to this partition */
-                for (i = 0; i < total_msgs; i++) {
-                        if (msg_used[i])
-                                continue;
-
-                        rd_kafka_op_t *candidate = rd_list_elem(&temp_msgs, i);
-                        if (rd_kafka_op_matches_partition(
-                                candidate, batches->rktpar->partition)) {
-                                rd_list_add(&partition_msgs, candidate);
-                                msg_used[i] = rd_true;
-                        }
+                while (msg_start_idx < total_msgs) {
+                        rd_kafka_op_t *candidate =
+                            rd_list_elem(filtered_msgs, msg_start_idx);
+                        if (!rd_kafka_op_matches_partition(
+                                candidate, batches->rktpar->partition))
+                                break;
+                        rd_list_add(&partition_msgs, candidate);
+                        msg_start_idx++;
                 }
 
                 /* Sort this partition's messages by offset */
@@ -1112,18 +1094,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                         int64_t cand_off =
                                             rd_kafka_op_get_offset(candidate);
 
-                                        if (cand_off < off) {
-                                                /* Message before current offset
-                                                 * - add to response */
-                                                rd_list_add(
-                                                    &response_rko->rko_u
-                                                         .share_fetch_response
-                                                         .messages,
-                                                    candidate);
-                                                msg_cnt++;
-                                                msg_idx++;
-                                                continue;
-                                        } else if (cand_off == off) {
+                                        if (cand_off == off) {
                                                 /* Found matching message */
                                                 msg_rko = candidate;
                                                 msg_idx++;
@@ -1138,7 +1109,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                         /* Add message to response */
                                         rd_list_add(
                                             &response_rko->rko_u
-                                                 .share_fetch_response.messages,
+                                                 .share_fetch_response.message_rkos,
                                             msg_rko);
                                         msg_cnt++;
 
@@ -1156,21 +1127,15 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                 } else {
                                         /* No message - mark as GAP */
                                         entry->types[type_idx] =
-                                            RD_KAFKA_SHARE_ACK_GAP;
+                                            RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
                                         gap_cnt++;
                                 }
                         }
                 }
 
-                /* Add any remaining messages from this partition */
-                for (; msg_idx < partition_msg_cnt; msg_idx++) {
-                        rd_kafka_op_t *remaining =
-                            rd_list_elem(&partition_msgs, msg_idx);
-                        rd_list_add(
-                            &response_rko->rko_u.share_fetch_response.messages,
-                            remaining);
-                        msg_cnt++;
-                }
+                /* All messages should have been processed since filtering
+                 * ensures messages are only within acquired ranges */
+                rd_dassert(msg_idx == partition_msg_cnt);
 
                 /* Destroy partition_msgs list (elements not freed, just list)
                  */
@@ -1184,24 +1149,6 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
 
         /* Clear input list without freeing elements (ownership transferred) */
         rd_list_init(inflight_acks, 0, NULL);
-
-        /* Add any messages that weren't matched to any partition */
-        for (i = 0; i < total_msgs; i++) {
-                if (!msg_used[i]) {
-                        rd_kafka_op_t *unmatched = rd_list_elem(&temp_msgs, i);
-                        rd_list_add(
-                            &response_rko->rko_u.share_fetch_response.messages,
-                            unmatched);
-                        msg_cnt++;
-                }
-        }
-
-        /* Free tracking array */
-        if (msg_used)
-                rd_free(msg_used);
-
-        /* Destroy temp list (elements moved to response, so don't free them) */
-        rd_list_destroy(&temp_msgs);
 
         /* If no messages and no partitions, destroy rko and return NULL */
         if (msg_cnt == 0 && inflight_acks_cnt == 0) {
@@ -1236,6 +1183,10 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
  * @param batches_out Output: inflight acks batches for this partition
  *
  * @returns Error code or RD_KAFKA_RESP_ERR_NO_ERROR on success
+ * 
+ * TODO KIP-932: Check if we can reduce the number of args in this method.
+ * Can we remove the topic field from the args, since it is a derived value 
+ * from rkt and initialize a topic variable inside this function?
  */
 static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
     rd_kafka_broker_t *rkb,
@@ -1244,7 +1195,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
     rd_kafka_topic_t *rkt /*possibly NULL*/,
     rd_kafka_buf_t *rkbuf,
     rd_kafka_buf_t *request,
-    rd_kafka_q_t *temp_appq,
+    rd_list_t *filtered_msgs,
     rd_kafka_share_ack_batches_t *batches_out) {
 
         int32_t PartitionId;
@@ -1322,7 +1273,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 batches_out->rktpar                  = NULL;
                 batches_out->acquired_leader_id      = -1;
                 batches_out->acquired_leader_epoch   = -1;
-                batches_out->number_of_acquired_msgs = 0;
+                batches_out->acquired_msgs_count = 0;
                 rd_list_init(&batches_out->entries, 0, NULL);
                 rd_kafka_q_destroy(temp_fetchq);
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -1335,6 +1286,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
+        /**
+         * TODO KIP-932: Currently for CRC error, we are sending reject for only 1 
+         * offset. We should send reject for all offsets in the range.
+        */
         if (MessageSetSize > 0) {
                 /**
                  * Parse MessageSet
@@ -1346,8 +1301,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 /*
                  * Parse messages
                  */
-                err = rd_kafka_share_msgset_parse(rkbuf, request, rktp, NULL,
-                                                  &tver, temp_fetchq);
+                err = rd_kafka_share_msgset_parse(rkbuf, rktp, NULL, &tver,
+                                                  temp_fetchq);
 
                 rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
                 /* Continue with next partition regardless of
@@ -1367,13 +1322,13 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
 
         rd_kafka_topic_partition_private_t *parpriv;
+        char *topic_str;
 
         /* Allocate and initialize the topic partition */
-        batches_out->rktpar = rd_calloc(1, sizeof(*batches_out->rktpar));
-        batches_out->rktpar->topic =
-            rd_strndup(topic->str, RD_KAFKAP_STR_LEN(topic));
-        batches_out->rktpar->partition = PartitionId;
-        batches_out->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
+        topic_str           = RD_KAFKAP_STR_DUP(topic);
+        batches_out->rktpar = rd_kafka_topic_partition_new(topic_str, PartitionId);
+        rd_free(topic_str);
+        batches_out->rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 
         /* Allocate and fill the private structure */
         parpriv                       = rd_kafka_topic_partition_private_new();
@@ -1383,7 +1338,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
         batches_out->acquired_leader_id      = CurrentLeader.LeaderId;
         batches_out->acquired_leader_epoch   = CurrentLeader.LeaderEpoch;
-        batches_out->number_of_acquired_msgs = 0;
+        batches_out->acquired_msgs_count = 0;
         rd_list_init(&batches_out->entries, AcquiredRecordsArrayCnt, NULL);
 
         if (AcquiredRecordsArrayCnt > 0) {
@@ -1417,22 +1372,23 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         entry->start_offset = FirstOffsets[i];
                         entry->end_offset   = LastOffsets[i];
                         entry->size         = size;
+                        entry->types_cnt    = (int32_t)size;
                         entry->types = rd_calloc(size, sizeof(*entry->types));
 
                         /* Initialize all offsets to ACQUIRED (will be updated
                          * later when matching with messages) */
                         for (int64_t j = 0; j < size; j++) {
-                                entry->types[j] = RD_KAFKA_SHARE_ACK_ACQUIRED;
+                                entry->types[j] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
                         }
 
                         rd_list_add(&batches_out->entries, entry);
-                        batches_out->number_of_acquired_msgs += (int32_t)size;
+                        batches_out->acquired_msgs_count += (int32_t)size;
                 }
 
                 /* Filter and forward messages in acquired ranges */
-                rd_kafka_share_filter_forward(
-                    rkb, rktp, temp_fetchq, temp_appq, AcquiredRecordsArrayCnt,
-                    FirstOffsets, LastOffsets, DeliveryCounts);
+                rd_kafka_share_filter_forward(temp_fetchq, filtered_msgs,
+                                              AcquiredRecordsArrayCnt,
+                                              FirstOffsets, LastOffsets);
 
                 rd_free(FirstOffsets);
                 rd_free(LastOffsets);
@@ -1442,8 +1398,9 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 rd_kafka_op_t *rko;
                 while ((rko = rd_kafka_q_pop(temp_fetchq, RD_POLL_NOWAIT, 0)))
                         rd_kafka_op_destroy(rko);
-                rd_kafka_q_destroy_owner(temp_fetchq);
         }
+
+        rd_kafka_q_destroy_owner(temp_fetchq);
 
         rd_kafka_buf_skip_tags(rkbuf);  // Partition tags
 
@@ -1478,8 +1435,10 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
         NodeEndpoints.NodeEndpoints   = NULL;
         NodeEndpoints.NodeEndpointCnt = 0;
-        rd_kafka_q_t *temp_appq       = rd_kafka_q_new(rkb->rkb_rk);
+        rd_list_t filtered_msgs;
         rd_list_t inflight_acks;
+
+        rd_list_init(&filtered_msgs, 0, NULL);
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1490,7 +1449,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
                            "ShareFetch response error %d: '%.*s'", ErrorCode,
                            RD_KAFKAP_STR_PR(&ErrorStr));
-                rd_kafka_q_destroy_owner(temp_appq);
+                rd_list_destroy(&filtered_msgs);
                 return ErrorCode;
         }
 
@@ -1523,9 +1482,15 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
                         if (rd_kafka_share_fetch_reply_handle_partition(
                                 rkb, &topic, topic_id, rkt, rkbuf, request,
-                                temp_appq, batches)) {
+                                &filtered_msgs, batches)) {
                                 rd_kafka_share_ack_batches_destroy(batches);
                                 goto err_parse;
+                        }
+
+                        /* Skip unknown topics - don't add to inflight_acks */
+                        if (batches->rktpar == NULL) {
+                                rd_kafka_share_ack_batches_destroy(batches);
+                                continue;
                         }
 
                         rd_list_add(&inflight_acks, batches);
@@ -1543,12 +1508,12 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
         /* Build response rko with messages and inflight_acks */
         rd_kafka_op_t *response_rko =
-            rd_kafka_share_build_response_rko(rkb, temp_appq, &inflight_acks);
+            rd_kafka_share_build_response_rko(rkb, &filtered_msgs, &inflight_acks);
 
         if (response_rko)
                 rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q, response_rko);
 
-        rd_kafka_q_destroy_owner(temp_appq);
+        rd_list_destroy(&filtered_msgs);
 
         /* Top level tags */
         rd_kafka_buf_skip_tags(rkbuf);
@@ -1569,7 +1534,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 err_parse:
         /* Free inflight_acks list on error (destructor handles cleanup) */
         rd_list_destroy(&inflight_acks);
-        rd_kafka_q_destroy_owner(temp_appq);
+        rd_list_destroy(&filtered_msgs);
 
         if (rkt)
                 rd_kafka_topic_destroy0(rkt);

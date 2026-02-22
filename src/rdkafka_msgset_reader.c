@@ -1500,9 +1500,16 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
         return err;
 }
 
+
+/**
+ * @brief Parse one MessageSet at the current buffer read position,
+ *        enqueueing messages, propagating errors, etc.
+ * @remark The current rkbuf_reader slice must be limited to the MessageSet size
+ *
+ * @returns see rd_kafka_msgset_reader_run()
+ */
 rd_kafka_resp_err_t
 rd_kafka_share_msgset_parse(rd_kafka_buf_t *rkbuf,
-                            rd_kafka_buf_t *request,
                             rd_kafka_toppar_t *rktp,
                             rd_kafka_aborted_txns_t *aborted_txns,
                             const struct rd_kafka_toppar_ver *tver,

@@ -959,11 +959,7 @@ static int rd_kafka_op_offset_cmp(const void *_a, const void *_b) {
         int64_t off_a          = rd_kafka_op_get_offset(a);
         int64_t off_b          = rd_kafka_op_get_offset(b);
 
-        if (off_a < off_b)
-                return -1;
-        else if (off_a > off_b)
-                return 1;
-        return 0;
+        return (off_a > off_b) - (off_a < off_b);
 }
 
 /**

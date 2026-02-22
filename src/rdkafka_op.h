@@ -779,7 +779,11 @@ struct rd_kafka_op_s {
                          *  Contains only actual messages (ACQUIRED/REJECT),
                          *  no GAP placeholder ops.
                          */
-                        rd_list_t messages;
+                         /*
+                          * TODO KIP-932: Check if we can send the messages only
+                         *  instead of the message rkos.
+                          */
+                        rd_list_t message_rkos;
 
                         /** List of per-partition inflight ack mappings.
                          *  Type: rd_kafka_share_ack_batches_t*

@@ -1210,6 +1210,9 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
         rd_kafka_destroy_app(rk, 0);
 }
 
+/**
+ * TODO KIP-932: Destroy inflight map entries should be done in consumer close.
+*/
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
         const rd_kafka_topic_partition_t *tp_key;
         rd_kafka_share_ack_batches_t *batches;
@@ -1218,27 +1221,6 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-
-        /* Destroy inflight map entries */
-        RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
-                if (batches) {
-                        /* Destroy entries list with custom cleanup */
-                        rd_kafka_share_ack_batch_entry_acquired_records_t
-                            *entry;
-                        int i;
-                        RD_LIST_FOREACH(entry, &batches->entries, i) {
-                                if (entry->types)
-                                        rd_free(entry->types);
-                                rd_free(entry);
-                        }
-                        rd_list_destroy(&batches->entries);
-                        rd_free(batches);
-                }
-        }
-        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
-
-        /* Clear backpointer before destroying rk */
-        rkshare->rkshare_rk->rk_rkshare = NULL;
 
         rd_kafka_destroy(rkshare->rkshare_rk);
         rd_free(rkshare);

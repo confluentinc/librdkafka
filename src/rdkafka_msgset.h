@@ -80,7 +80,6 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
 
 rd_kafka_resp_err_t
 rd_kafka_share_msgset_parse(rd_kafka_buf_t *rkbuf,
-                            rd_kafka_buf_t *request,
                             rd_kafka_toppar_t *rktp,
                             rd_kafka_aborted_txns_t *aborted_txns,
                             const struct rd_kafka_toppar_ver *tver,

@@ -898,13 +898,15 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
                     rd_kafka_topic_partition_get_topic_id(batches->rktpar),
                     batches->rktpar->partition);
 
-                /* If overwriting same topic+partition, subtract old ACQUIRED count */
+                /* If overwriting same topic+partition, subtract old ACQUIRED
+                 * count */
                 old_batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, key);
                 if (old_batches) {
                         RD_LIST_FOREACH(entry, &old_batches->entries, i) {
-                                for (k = 0; k < entry->types_cnt; k++) {
+                                for (k = 0; k < (int32_t)entry->size; k++) {
                                         if (entry->types[k] ==
-                                            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
+                                            (rd_kafka_share_internal_acknowledgement_type)
+                                                RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
                                                 rkshare->rkshare_unacked_cnt--;
                                 }
                         }
@@ -914,9 +916,10 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
 
                 /* Count ACQUIRED types for unacked tracking */
                 RD_LIST_FOREACH(entry, &batches->entries, i) {
-                        for (k = 0; k < entry->types_cnt; k++) {
+                        for (k = 0; k < (int32_t)entry->size; k++) {
                                 if (entry->types[k] ==
-                                    RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
+                                    (rd_kafka_share_internal_acknowledgement_type)
+                                        RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
                                         rkshare->rkshare_unacked_cnt++;
                         }
                 }
@@ -936,7 +939,7 @@ static void rd_kafka_share_collated_batch_destroy(void *ptr) {
         if (!batch)
                 return;
         RD_LIST_FOREACH(entry, &batch->entries, i)
-                rd_kafka_share_ack_batch_entry_destroy(entry);
+        rd_kafka_share_ack_batch_entry_destroy(entry);
         rd_list_destroy(&batch->entries);
         rd_free(batch);
 }
@@ -951,7 +954,9 @@ static rd_kafka_share_internal_acknowledgement_type
 rd_kafka_share_ack_convert_acquired_to_accept(
     rd_kafka_share_internal_acknowledgement_type type) {
         if (type == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
-                return RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT;
+                return RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT; /* AVAILABLE/ACCEPT
+                                                            * for broker
+                                                            */
         return type;
 }
 
@@ -974,7 +979,7 @@ rd_kafka_share_ack_batch_entry_collated_new(
     rd_kafka_share_internal_acknowledgement_type type) {
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(start_offset, end_offset, 1);
-        entry->types[0] = type;
+        entry->types[0] = (rd_kafka_share_internal_acknowledgement_type)type;
         return entry;
 }
 
@@ -1012,10 +1017,11 @@ rd_kafka_share_ack_batches_collate(const rd_kafka_share_ack_batches_t *src,
                         entry->types[0]);
 
                 /* Collate consecutive offsets with same type */
-                for (j = 1; j < entry->types_cnt; j++) {
-                        rd_kafka_share_internal_acknowledgement_type
-                            this_type = rd_kafka_share_ack_convert_acquired_to_accept(
-                                entry->types[j]);
+                for (j = 1; j < (int64_t)entry->size; j++) {
+                        rd_kafka_share_internal_acknowledgement_type this_type =
+                            rd_kafka_share_ack_convert_acquired_to_accept(
+                                (rd_kafka_share_internal_acknowledgement_type)
+                                    entry->types[j]);
 
                         if (this_type != current_type) {
                                 /* Type changed - emit collated entry */
@@ -1088,7 +1094,6 @@ void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
 
 
 
-
 /**
  * @brief Process a share fetch response op and deliver messages.
  *
@@ -1123,9 +1128,10 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
                     &rko->rko_u.share_fetch_response.message_rkos, i);
 
                 /**
-                 * TODO KIP-932: Check and update the handling of control messages                     
+                 * TODO KIP-932: Check and update the handling of control
+                 * messages
                  */
-                    if (unlikely(rd_kafka_op_is_ctrl_msg(msg_rko)))
+                if (unlikely(rd_kafka_op_is_ctrl_msg(msg_rko)))
                         continue;
 
                 /* Return message to application */
@@ -1136,16 +1142,17 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
 }
 
 /**
- * TODO KIP-932: Update the handling of callbacks and other op types. Currently we are only 
- * enqueing RD_KAFKA_OP_SHARE_FETCH_RESPONSE and RD_KAFKA_OP_CONSUMER_ERR opps 
- * to the application thread.
+ * TODO KIP-932: Update the handling of callbacks and other op types. Currently
+ * we are only enqueing RD_KAFKA_OP_SHARE_FETCH_RESPONSE and
+ * RD_KAFKA_OP_CONSUMER_ERR opps to the application thread.
  */
 // static unsigned int rd_kafka_share_handle_other_op(rd_kafka_t *rk,
 //                                                    rd_kafka_q_t *rkq,
 //                                                    rd_kafka_op_t *rko,
-//                                                    rd_kafka_message_t **rkmessages,
-//                                                    unsigned int cnt,
-//                                                    rd_bool_t *should_break) {
+//                                                    rd_kafka_message_t
+//                                                    **rkmessages, unsigned int
+//                                                    cnt, rd_bool_t
+//                                                    *should_break) {
 //         rd_kafka_op_res_t res;
 
 //         *should_break = rd_false;
@@ -1160,12 +1167,13 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
 //         if (res == RD_KAFKA_OP_RES_KEEP || res == RD_KAFKA_OP_RES_HANDLED)
 //                 return cnt;
 
-//         if (unlikely(res == RD_KAFKA_OP_RES_YIELD || rd_kafka_yield_thread)) {
+//         if (unlikely(res == RD_KAFKA_OP_RES_YIELD || rd_kafka_yield_thread))
+//         {
 //                 *should_break = rd_true;
 //                 return cnt;
 //         }
 
-        
+
 
 //         return cnt;
 // }
@@ -1177,13 +1185,13 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
  * rkmessages, set *rkmessages_size_out, return NULL. Caller must call multiple
  * times to drain multiple CONSUMER_ERR ops before getting the fetch response.
  */
-rd_kafka_error_t *rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
-                                                    int timeout_ms,
-                                                    rd_kafka_message_t
-                                                        **rkmessages,
-                                                    size_t rkmessages_size,
-                                                    rd_kafka_share_t *rkshare,
-                                                    size_t *rkmessages_size_out) {
+rd_kafka_error_t *
+rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
+                                  int timeout_ms,
+                                  rd_kafka_message_t **rkmessages,
+                                  size_t rkmessages_size,
+                                  rd_kafka_share_t *rkshare,
+                                  size_t *rkmessages_size_out) {
         rd_kafka_op_t *rko;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
@@ -1210,8 +1218,8 @@ rd_kafka_error_t *rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         mtx_lock(&rkq->rkq_lock);
         while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
                !rd_kafka_q_check_yield(rkq) &&
-               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
-                                 abs_timeout) == thrd_success)
+               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock, abs_timeout) ==
+                   thrd_success)
                 ;
         rd_kafka_q_mark_served(rkq);
         if (!rko) {
@@ -1224,7 +1232,7 @@ rd_kafka_error_t *rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
 
         if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                 if (rko->rko_error) {
-                        error = rko->rko_error;
+                        error          = rko->rko_error;
                         rko->rko_error = NULL;
                 } else {
                         error = rd_kafka_error_new(

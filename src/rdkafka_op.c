@@ -129,6 +129,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:SHARE_SESSION_PARTITION_ADD",
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
                 "REPLY:SHARE_SESSION_PARTITION_REMOVE",
+            [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] = "REPLY:SHARE_FETCH_RESPONSE",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -298,6 +299,8 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.share_fetch_fanout),
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD]    = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
+                sizeof(rko->rko_u.share_fetch_response),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -524,8 +527,40 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* No heap-allocated resources to clean up */
+                /* Destroy ack_batches list */
+                rd_list_destroy(&rko->rko_u.share_fetch_fanout.ack_batches);
                 break;
+
+        case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {
+                rd_kafka_op_t *msg_rko;
+                rd_kafka_share_ack_batches_t *batches;
+                int i;
+
+                /* Destroy all message ops in the list */
+                RD_LIST_FOREACH(msg_rko,
+                                &rko->rko_u.share_fetch_response.message_rkos, i) {
+                        rd_kafka_op_destroy(msg_rko);
+                }
+                rd_list_destroy(&rko->rko_u.share_fetch_response.message_rkos);
+
+                /* Free inflight_acks list */
+                RD_LIST_FOREACH(batches,
+                                &rko->rko_u.share_fetch_response.inflight_acks,
+                                i) {
+                        rd_kafka_share_ack_batch_entry_t
+                            *entry;
+                        int j;
+                        RD_LIST_FOREACH(entry, &batches->entries, j) {
+                                if (entry->types)
+                                        rd_free(entry->types);
+                                rd_free(entry);
+                        }
+                        rd_list_destroy(&batches->entries);
+                        rd_free(batches);
+                }
+                rd_list_destroy(&rko->rko_u.share_fetch_response.inflight_acks);
+                break;
+        }
 
         default:
                 break;

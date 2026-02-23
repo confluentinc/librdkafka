@@ -869,47 +869,421 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         return cnt;
 }
 
+/**
+ * @brief Merge inflight acks from response RKO into rkshare's inflight map.
+ *
+ * The broker thread has already built the inflight_acks list with per-offset
+ * types (ACQUIRED/GAP/REJECT). This function merges them into rkshare's
+ * persistent inflight map.
+ *
+ * @param rkshare Share consumer handle
+ * @param response_rko The share fetch response RKO containing inflight_acks
+ */
+void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
+                                      rd_kafka_op_t *response_rko) {
+        rd_kafka_share_ack_batches_t *src_batches;
+        int i, j;
+
+        /* Merge each partition's inflight acks from response into rkshare map
+         */
+        RD_LIST_FOREACH(src_batches,
+                        &response_rko->rko_u.share_fetch_response.inflight_acks,
+                        i) {
+                rd_kafka_topic_partition_t lookup_key;
+                rd_kafka_share_ack_batches_t *dst_batches;
+
+                /* Unknown topics are filtered out during parsing */
+                rd_dassert(src_batches->rktpar != NULL);
+
+                lookup_key.topic     = src_batches->rktpar->topic;
+                lookup_key.partition = src_batches->rktpar->partition;
+
+                /* Look up or create batches for this partition in rkshare */
+                dst_batches =
+                    RD_MAP_GET(&rkshare->rkshare_inflight_acks, &lookup_key);
+                if (!dst_batches) {
+                        rd_kafka_topic_partition_private_t *src_priv =
+                            src_batches->rktpar->_private;
+                        rd_kafka_topic_partition_private_t *dst_priv;
+
+                        /* Create new batches entry in rkshare */
+                        dst_batches = rd_calloc(1, sizeof(*dst_batches));
+
+                        /* Create rktpar with private containing rktp ref */
+                        dst_batches->rktpar =
+                            rd_calloc(1, sizeof(*dst_batches->rktpar));
+                        dst_batches->rktpar->topic =
+                            rd_strdup(src_batches->rktpar->topic);
+                        dst_batches->rktpar->partition =
+                            src_batches->rktpar->partition;
+                        dst_batches->rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+
+                        /* Copy the private structure with rktp reference */
+                        dst_priv = rd_kafka_topic_partition_private_new();
+                        if (src_priv) {
+                                if (src_priv->rktp)
+                                        dst_priv->rktp = rd_kafka_toppar_keep(
+                                            src_priv->rktp);
+                                dst_priv->topic_id = src_priv->topic_id;
+                        }
+                        dst_batches->rktpar->_private = dst_priv;
+
+                        dst_batches->acquired_leader_id =
+                            src_batches->acquired_leader_id;
+                        dst_batches->acquired_leader_epoch =
+                            src_batches->acquired_leader_epoch;
+                        dst_batches->acquired_msgs_count = 0;
+                        rd_list_init(&dst_batches->entries, 0, NULL);
+
+                        /* Create key for map */
+                        rd_kafka_topic_partition_t *key =
+                            rd_kafka_topic_partition_new(
+                                src_batches->rktpar->topic,
+                                src_batches->rktpar->partition);
+                        RD_MAP_SET(&rkshare->rkshare_inflight_acks, key,
+                                   dst_batches);
+                }
+
+                /* Update leader info from when records were acquired */
+                dst_batches->acquired_leader_id =
+                    src_batches->acquired_leader_id;
+                dst_batches->acquired_leader_epoch =
+                    src_batches->acquired_leader_epoch;
+
+                /* Copy each entry from source to destination */
+                rd_kafka_share_ack_batch_entry_t *src_entry;
+                RD_LIST_FOREACH(src_entry, &src_batches->entries, j) {
+                        /* Create a copy of the entry for rkshare */
+                        rd_kafka_share_ack_batch_entry_t
+                            *dst_entry = rd_calloc(1, sizeof(*dst_entry));
+                        dst_entry->start_offset = src_entry->start_offset;
+                        dst_entry->end_offset   = src_entry->end_offset;
+                        dst_entry->size         = src_entry->size;
+                        dst_entry->types_cnt    = src_entry->types_cnt;
+
+                        /* Copy types array */
+                        dst_entry->types = rd_calloc(src_entry->types_cnt,
+                                                     sizeof(*dst_entry->types));
+                        memcpy(dst_entry->types, src_entry->types,
+                               src_entry->types_cnt * sizeof(*dst_entry->types));
+
+                        rd_list_add(&dst_batches->entries, dst_entry);
+
+                        /* Count only ACQUIRED types for tracking */
+                        for (int32_t k = 0; k < src_entry->types_cnt; k++) {
+                                if (src_entry->types[k] ==
+                                    RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED) {
+                                        dst_batches->acquired_msgs_count++;
+                                        rkshare->rkshare_unacked_cnt++;
+                                }
+                        }
+                }
+        }
+}
+
+/**
+ * @brief Free a collated share ack batch and its entries.
+ *
+ * Note: Does NOT destroy rktpar as it's shared with the source inflight map.
+ */
+static void rd_kafka_share_collated_batch_destroy(void *ptr) {
+        rd_kafka_share_ack_batches_t *batch = ptr;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+
+        if (!batch)
+                return;
+
+        RD_LIST_FOREACH(entry, &batch->entries, i) {
+                if (entry->types)
+                        rd_free(entry->types);
+                rd_free(entry);
+        }
+        rd_list_destroy(&batch->entries);
+        rd_free(batch);
+}
+
+/**
+ * @brief Convert ack type for sending: ACQUIRED becomes AVAILABLE.
+ */
+static rd_kafka_share_internal_acknowledgement_type
+rd_kafka_share_ack_type_for_send(
+    rd_kafka_share_internal_acknowledgement_type type) {
+        if (type == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
+                return RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT; /* AVAILABLE/ACCEPT for broker
+                                                   */
+        return type;
+}
+
+/**
+ * @brief Create a new collated batch entry with a single acknowledgement type.
+ *
+ * Creates an entry where size=1 and types[0] holds the single ack type
+ * for the entire offset range [start_offset, end_offset].
+ *
+ * @param start_offset First offset in the range
+ * @param end_offset Last offset in the range (inclusive)
+ * @param type The acknowledgement type for the entire range
+ *
+ * @returns Newly allocated collated entry (caller must free)
+ */
+static rd_kafka_share_ack_batch_entry_t *
+rd_kafka_share_ack_batch_entry_collated_new(
+    int64_t start_offset,
+    int64_t end_offset,
+    rd_kafka_share_internal_acknowledgement_type type) {
+        rd_kafka_share_ack_batch_entry_t *entry =
+            rd_calloc(1, sizeof(*entry));
+        entry->start_offset = start_offset;
+        entry->end_offset   = end_offset;
+        entry->size         = end_offset - start_offset + 1;
+        entry->types_cnt    = 1;
+        entry->types        = rd_malloc(sizeof(*entry->types));
+        entry->types[0]     = type;
+        return entry;
+}
+
+/**
+ * @brief Collate a batch with per-offset types into single-type entries.
+ *
+ * Takes an input batch where each entry has a types[] array with per-offset
+ * acknowledgement types, and produces an output batch where consecutive
+ * offsets with the same type are merged into single entries (types_cnt=1,
+ * types[0]=type, size=offset count).
+ *
+ * ACQUIRED type is converted to ACCEPT for sending to broker.
+ *
+ * @param src Source batch with per-offset types array
+ * @param dst Output batch to populate with collated entries
+ *            (must be pre-initialized with rd_list_init on entries)
+ *
+ * Example: Input entry with types [ACQ, ACQ, GAP, REJ, REJ] for offsets 1-5
+ *          produces output entries:
+ *          - {start:1, end:2, size:1, types[0]:ACCEPT}
+ *          - {start:3, end:3, size:1, types[0]:GAP}
+ *          - {start:4, end:5, size:1, types[0]:REJECT}
+ */
+static void
+rd_kafka_share_ack_batches_collate(const rd_kafka_share_ack_batches_t *src,
+                                   rd_kafka_share_ack_batches_t *dst) {
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+
+        RD_LIST_FOREACH(entry, &src->entries, i) {
+                int64_t j;
+                int64_t range_start = entry->start_offset;
+                rd_kafka_share_internal_acknowledgement_type current_type =
+                    rd_kafka_share_ack_type_for_send(entry->types[0]);
+
+                /* Collate consecutive offsets with same type */
+                for (j = 1; j < entry->types_cnt; j++) {
+                        rd_kafka_share_internal_acknowledgement_type
+                            this_type = rd_kafka_share_ack_type_for_send(
+                                entry->types[j]);
+
+                        if (this_type != current_type) {
+                                /* Type changed - emit collated entry */
+                                rd_list_add(
+                                    &dst->entries,
+                                    rd_kafka_share_ack_batch_entry_collated_new(
+                                        range_start,
+                                        entry->start_offset + j - 1,
+                                        current_type));
+
+                                /* Start new range */
+                                range_start  = entry->start_offset + j;
+                                current_type = this_type;
+                        }
+                }
+
+                /* Emit final collated entry */
+                rd_list_add(&dst->entries,
+                            rd_kafka_share_ack_batch_entry_collated_new(
+                                range_start, entry->end_offset, current_type));
+        }
+}
+
+/**
+ * @brief Build collated acknowledgement batches from inflight map.
+ *
+ * Iterates through the inflight acknowledgement map and collates consecutive
+ * offsets with the same type into ranges using
+ * rd_kafka_share_ack_batches_collate(). ACQUIRED type is converted to AVAILABLE
+ * (ACCEPT) for sending to broker.
+ *
+ * Each collated range is represented as rd_kafka_share_ack_batch_entry_t with
+ * types_cnt=1 and types[0] holding the single ack type for the entire range.
+ * The size field contains the actual number of offsets in the range.
+ *
+ * @param rkshare Share consumer handle
+ * @param ack_batches_out Output list to populate with
+ * rd_kafka_share_ack_batches_t*
+ */
+void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
+                                                rd_list_t *ack_batches_out) {
+        const rd_kafka_topic_partition_t *tp_key;
+        rd_kafka_share_ack_batches_t *inflight_batches;
+
+        rd_list_init(ack_batches_out, 0, rd_kafka_share_collated_batch_destroy);
+
+        /* Handle NULL rkshare - just return empty list */
+        if (!rkshare)
+                return;
+
+        /* Iterate through all topic-partitions in the inflight map */
+        RD_MAP_FOREACH(tp_key, inflight_batches,
+                       &rkshare->rkshare_inflight_acks) {
+                rd_kafka_share_ack_batches_t *batch;
+
+                /* Unknown topics are filtered out during parsing */
+                rd_dassert(inflight_batches->rktpar != NULL);
+
+                /* Create output batch for this topic-partition.
+                 * Reuse the rktpar from source (not copied, not destroyed). */
+                batch         = rd_calloc(1, sizeof(*batch));
+                batch->rktpar = inflight_batches->rktpar;
+                batch->acquired_leader_id =
+                    inflight_batches->acquired_leader_id;
+                batch->acquired_leader_epoch =
+                    inflight_batches->acquired_leader_epoch;
+                rd_list_init(&batch->entries, 0, NULL);
+
+                /* Collate entries from source to destination */
+                rd_kafka_share_ack_batches_collate(inflight_batches, batch);
+
+                rd_list_add(ack_batches_out, batch);
+        }
+}
+
+
+
+
+/**
+ * @brief Process a share fetch response op and deliver messages.
+ *
+ * @param rko The share fetch response op
+ * @param rkshare The share consumer handle
+ * @param rkmessages Output array for messages
+ * @param rkmessages_size Size of output array
+ * @param cnt Current count of messages in array
+ *
+ * @returns Updated count of messages in array
+ */
+static unsigned int
+rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
+                                      rd_kafka_share_t *rkshare,
+                                      rd_kafka_message_t **rkmessages,
+                                      unsigned int cnt) {
+        rd_kafka_op_t *msg_rko;
+        int i;
+        int total_msgs =
+            rd_list_cnt(&rko->rko_u.share_fetch_response.message_rkos);
+
+        /* Build acknowledgement mapping from inflight_acks */
+        rd_kafka_share_build_ack_mapping(rkshare, rko);
+
+        /* Process all messages from the list. */
+        for (i = 0; i < total_msgs; i++) {
+                rd_kafka_msg_t *rkm = NULL;
+                rd_kafka_toppar_t *msg_rktp;
+                int64_t msg_offset;
+
+                msg_rko = rd_list_elem(
+                    &rko->rko_u.share_fetch_response.message_rkos, i);
+
+                if (unlikely(rd_kafka_op_is_ctrl_msg(msg_rko)))
+                        continue;
+
+                /* Return message to application */
+                rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
+        }
+
+        return cnt;
+}
+
+/**
+ * @brief Handle a non-share-fetch op in the share consumer poll loop.
+ *
+ * @param rk Kafka handle
+ * @param rkq Queue
+ * @param rko The op to handle
+ * @param rkmessages Output array for messages
+ * @param cnt Current count of messages
+ * @param should_break Output: set to true if loop should break
+ *
+ * @returns Updated count of messages
+ */
+static unsigned int rd_kafka_share_handle_other_op(rd_kafka_t *rk,
+                                                   rd_kafka_q_t *rkq,
+                                                   rd_kafka_op_t *rko,
+                                                   rd_kafka_message_t **rkmessages,
+                                                   unsigned int cnt,
+                                                   rd_bool_t *should_break) {
+        rd_kafka_op_res_t res;
+
+        *should_break = rd_false;
+
+        /* Handle outdated ops */
+        if (rd_kafka_op_version_outdated(rko, 0)) {
+                rd_kafka_op_destroy(rko);
+                return cnt;
+        }
+
+        res = rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
+        if (res == RD_KAFKA_OP_RES_KEEP || res == RD_KAFKA_OP_RES_HANDLED)
+                return cnt;
+
+        if (unlikely(res == RD_KAFKA_OP_RES_YIELD || rd_kafka_yield_thread)) {
+                *should_break = rd_true;
+                return cnt;
+        }
+
+        /* For non-share-fetch ops that pass through, handle normally */
+        if (rko->rko_type == RD_KAFKA_OP_FETCH) {
+                if (!rd_kafka_op_is_ctrl_msg(rko))
+                        rkmessages[cnt++] = rd_kafka_message_get(rko);
+                else
+                        rd_kafka_op_destroy(rko);
+        } else {
+                rd_kafka_op_destroy(rko);
+        }
+
+        return cnt;
+}
+
 int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                                       int timeout_ms,
                                       rd_kafka_message_t **rkmessages,
-                                      size_t rkmessages_size) {
+                                      size_t rkmessages_size,
+                                      rd_kafka_share_t *rkshare) {
         unsigned int cnt = 0;
-        TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
-        struct rd_kafka_op_tailq ctrl_msg_q =
-            TAILQ_HEAD_INITIALIZER(ctrl_msg_q);
-        rd_kafka_op_t *rko, *next;
+        rd_kafka_op_t *rko;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         rd_ts_t abs_timeout;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-                /* Since the q_pop may block we need to release the parent
-                 * queue's lock. */
                 mtx_unlock(&rkq->rkq_lock);
                 cnt = rd_kafka_q_serve_share_rkmessages(
-                    fwdq, timeout_ms, rkmessages, rkmessages_size);
+                    fwdq, timeout_ms, rkmessages, rkmessages_size, rkshare);
                 rd_kafka_q_destroy(fwdq);
                 return cnt;
         }
-
         mtx_unlock(&rkq->rkq_lock);
 
         abs_timeout = rd_timeout_init(timeout_ms);
-
         rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
-
         rd_kafka_yield_thread = 0;
+
         while (cnt < rkmessages_size) {
-                rd_kafka_op_res_t res;
+                rd_bool_t should_break;
 
                 mtx_lock(&rkq->rkq_lock);
 
+                /* Wait for op if none available and no messages yet */
                 while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
-                       !rd_kafka_q_check_yield(rkq) &&
-                       /* Only do a timed wait if no messages are ready, if we
-                          have gotten even one message, just return with it. */
-                       cnt == 0 &&
+                       !rd_kafka_q_check_yield(rkq) && cnt == 0 &&
                        cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
                                          abs_timeout) == thrd_success)
                         ;
@@ -922,75 +1296,23 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 }
 
                 rd_kafka_q_deq0(rkq, rko);
-
                 mtx_unlock(&rkq->rkq_lock);
 
-                /* TODO KIP-932: We should never have outdated rko as we are
-                 *               not using version barriers for share
-                 *               consumers.
-                 *               Check from where are we getting outdated msgs.
-                 *               Fix those and then remove this condition. */
-                if (rd_kafka_op_version_outdated(rko, 0)) {
-                        /* Outdated op, put on discard queue */
-                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
+                /* Handle share fetch response */
+                if (rko->rko_type == RD_KAFKA_OP_SHARE_FETCH_RESPONSE) {
+                        cnt = rd_kafka_share_process_fetch_response(
+                            rko, rkshare, rkmessages, cnt);
                         continue;
                 }
 
-                /* Serve non-FETCH callbacks */
-                res =
-                    rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
-                if (res == RD_KAFKA_OP_RES_KEEP ||
-                    res == RD_KAFKA_OP_RES_HANDLED) {
-                        /* Callback served, rko is destroyed (if HANDLED). */
-                        continue;
-                } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
-                                    rd_kafka_yield_thread)) {
-                        /* Yield. */
+                /* Handle other op types */
+                cnt = rd_kafka_share_handle_other_op(rk, rkq, rko, rkmessages,
+                                                     cnt, &should_break);
+                if (should_break)
                         break;
-                }
-                rd_dassert(res == RD_KAFKA_OP_RES_PASS);
-
-                /* If this is a control messages, don't return message to
-                 * application. Add it to a tmp queue from where we can store
-                 * the offset and destroy the op */
-                /* TODO KIP-932: Is this the right place to check ctrl msgs or
-                 * should it be done earlier in broker thread while receiving
-                 * the response. Should be decided once explicit acknowledgement
-                 * design is complete */
-                if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
-                        TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
-                        continue;
-                }
-
-                /* Get rkmessage from rko and append to array. */
-                rkmessages[cnt++] = rd_kafka_message_get(rko);
-        }
-
-        /* NOTE: KIP-932:
-         * For a share consumer, we are not using version barriers, and ideally,
-         * tmpq should be empty. However, the discard code is retained as
-         * non-share-consumer might still be around. This assert exists to spot
-         * any issues as they arise during testing.*/
-        rd_dassert(TAILQ_EMPTY(&tmpq));
-
-        /* Discard non-desired and already handled ops */
-        next = TAILQ_FIRST(&tmpq);
-        while (next) {
-                rko  = next;
-                next = TAILQ_NEXT(next, rko_link);
-                rd_kafka_op_destroy(rko);
-        }
-
-        /* Discard ctrl msgs */
-        next = TAILQ_FIRST(&ctrl_msg_q);
-        while (next) {
-                rko  = next;
-                next = TAILQ_NEXT(next, rko_link);
-                rd_kafka_op_destroy(rko);
         }
 
         rd_kafka_app_polled(rk, rkq);
-
         return cnt;
 }
 

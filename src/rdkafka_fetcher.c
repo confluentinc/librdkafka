@@ -1097,9 +1097,11 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
                         entry->is_error[offset - entry->start_offset] =
                             (entry->types[offset - entry->start_offset] ==
-                             (rd_kafka_share_acknowledgement_type)RD_KAFKA_INTERNAL_SHARE_ACK_REJECT ||
+                                 (rd_kafka_share_internal_acknowledgement_type)
+                                     RD_KAFKA_INTERNAL_SHARE_ACK_REJECT ||
                              entry->types[offset - entry->start_offset] ==
-                             (rd_kafka_share_acknowledgement_type)RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE);
+                                 (rd_kafka_share_internal_acknowledgement_type)
+                                     RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE);
 
                         if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rd_list_add(
@@ -1172,8 +1174,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
     rd_kafka_share_ack_batches_t *batches_out) {
 
         /* TODO: KIP-932: Check rd_kafka_fetch_reply_handle_partition
-                         * and modify as needed for ShareFetch.
-                         */
+         * and modify as needed for ShareFetch.
+         */
         int32_t PartitionId;
         int16_t PartitionFetchErrorCode;
         rd_kafkap_str_t PartitionFetchErrorStr =

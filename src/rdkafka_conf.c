@@ -1519,8 +1519,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "'implicit' - messages are implicitly acknowledged when the next poll "
      "is called. 'explicit' - messages must be explicitly acknowledged "
      "using rd_kafka_share_acknowledge*() APIs.",
-     .vdef = 0,
-     .s2i = {{0, "implicit"}, {1, "explicit"}}},
+     .vdef = 0, .s2i = {{0, "implicit"}, {1, "explicit"}}},
 
 
     /* Global producer properties */

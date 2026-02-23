@@ -951,7 +951,9 @@ static rd_kafka_share_internal_acknowledgement_type
 rd_kafka_share_ack_convert_acquired_to_accept(
     rd_kafka_share_internal_acknowledgement_type type) {
         if (type == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED)
-                return RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT;
+                return RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT; /* AVAILABLE/ACCEPT
+                                                            * for broker
+                                                            */
         return type;
 }
 
@@ -1015,7 +1017,7 @@ rd_kafka_share_ack_batches_collate(const rd_kafka_share_ack_batches_t *src,
                 for (j = 1; j < (int64_t)entry->size; j++) {
                         rd_kafka_share_internal_acknowledgement_type
                             this_type = rd_kafka_share_ack_convert_acquired_to_accept(
-                                entry->types[j]);
+                                (rd_kafka_share_internal_acknowledgement_type)entry->types[j]);
 
                         if (this_type != current_type) {
                                 /* Type changed - emit collated entry */
@@ -1085,7 +1087,6 @@ void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
                 rd_list_add(ack_batches_out, batch);
         }
 }
-
 
 
 

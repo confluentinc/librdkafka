@@ -31,7 +31,8 @@
  * @brief Unit tests for Share Consumer acknowledgement flow
  *
  * Tests the following flow:
- * 1. rd_kafka_share_filter_msg_from_acq_records() - Filter messages by acquired ranges
+ * 1. rd_kafka_share_filter_msg_from_acq_records() - Filter messages by acquired
+ * ranges
  * 2. rd_kafka_share_build_response_rko() - Build SHARE_FETCH_RESPONSE with:
  *    - messages list (actual messages only, no GAP placeholders)
  *    - inflight_acks list (per-offset type mapping including GAPs)
@@ -241,8 +242,9 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
                         rkm     = &msg_rko->rko_u.fetch.rkm;
                 }
                 rkm->rkm_u.consumer.ack_type = (int8_t)ack_types[i];
-                rd_list_add(&response_rko->rko_u.share_fetch_response.message_rkos,
-                            msg_rko);
+                rd_list_add(
+                    &response_rko->rko_u.share_fetch_response.message_rkos,
+                    msg_rko);
         }
 
         /* Build inflight_acks - this is what broker thread does */
@@ -294,7 +296,8 @@ static void ut_destroy_share_fetch_response(rd_kafka_op_t *rko) {
         /* Destroy message ops using ut_destroy_op to handle minimal toppars */
         rd_kafka_op_t *msg_rko;
         int i, j;
-        RD_LIST_FOREACH(msg_rko, &rko->rko_u.share_fetch_response.message_rkos, i) {
+        RD_LIST_FOREACH(msg_rko, &rko->rko_u.share_fetch_response.message_rkos,
+                        i) {
                 ut_destroy_op(msg_rko);
         }
         rd_list_destroy(&rko->rko_u.share_fetch_response.message_rkos);
@@ -331,12 +334,12 @@ static int ut_case_filter_all_in_range(rd_kafka_t *rk) {
         int64_t first[] = {0};
         int64_t last[]  = {4};
 
-        rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs, 1, first,
-                                      last);
+        rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs,
+                                                   1, first, last);
 
         /* All 5 messages should be forwarded */
-        RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5, "filtered_msgs len %d != 5",
-                     rd_list_cnt(&filtered_msgs));
+        RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5,
+                     "filtered_msgs len %d != 5", rd_list_cnt(&filtered_msgs));
 
         /* Verify offsets and ack types */
         for (int64_t exp = 0; exp <= 4; exp++) {
@@ -378,12 +381,12 @@ static int ut_case_filter_partial_range(rd_kafka_t *rk) {
         int64_t first[] = {2};
         int64_t last[]  = {5};
 
-        rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs, 1, first,
-                                      last);
+        rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs,
+                                                   1, first, last);
 
         /* Only 4 messages should be forwarded (offsets 2,3,4,5) */
-        RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 4, "filtered_msgs len %d != 4",
-                     rd_list_cnt(&filtered_msgs));
+        RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 4,
+                     "filtered_msgs len %d != 4", rd_list_cnt(&filtered_msgs));
 
         /* Cleanup ops in the list */
         rd_kafka_op_t *rko;
@@ -417,12 +420,12 @@ static int ut_case_filter_multiple_ranges(rd_kafka_t *rk) {
         int64_t first[] = {1, 5, 9};
         int64_t last[]  = {2, 6, 9};
 
-        rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs, 3, first,
-                                      last);
+        rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs,
+                                                   3, first, last);
 
         /* 5 messages should be forwarded (1,2,5,6,9) */
-        RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5, "filtered_msgs len %d != 5",
-                     rd_list_cnt(&filtered_msgs));
+        RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5,
+                     "filtered_msgs len %d != 5", rd_list_cnt(&filtered_msgs));
 
         /* Cleanup ops in the list */
         rd_kafka_op_t *rko;
@@ -451,9 +454,12 @@ static int ut_case_rko_structure_all_acquired(rd_kafka_t *rk) {
 
         /* Create response with all ACQUIRED messages */
         rd_kafka_share_internal_acknowledgement_type types[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
 
         rd_kafka_op_t *response_rko =
             ut_make_share_fetch_response(rk, rktp, "T1", 0,
@@ -462,10 +468,11 @@ static int ut_case_rko_structure_all_acquired(rd_kafka_t *rk) {
         /* Verify the response structure */
         /* All 6 messages should be present (no GAPs) */
         RD_UT_ASSERT(
-            rd_list_cnt(&response_rko->rko_u.share_fetch_response.message_rkos) ==
-                6,
+            rd_list_cnt(
+                &response_rko->rko_u.share_fetch_response.message_rkos) == 6,
             "message cnt %d != 6",
-            rd_list_cnt(&response_rko->rko_u.share_fetch_response.message_rkos));
+            rd_list_cnt(
+                &response_rko->rko_u.share_fetch_response.message_rkos));
 
         /* Verify inflight_acks was created */
         RD_UT_ASSERT(
@@ -488,9 +495,12 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
 
         /* Create response with gaps: ACQ, ACQ, GAP, GAP, ACQ, ACQ */
         rd_kafka_share_internal_acknowledgement_type types[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
-            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,      RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
+            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
 
         rd_kafka_op_t *response_rko =
             ut_make_share_fetch_response(rk, rktp, "T1", 0,
@@ -498,10 +508,11 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
 
         /* Only 4 messages should be present (2 GAPs excluded) */
         RD_UT_ASSERT(
-            rd_list_cnt(&response_rko->rko_u.share_fetch_response.message_rkos) ==
-                4,
+            rd_list_cnt(
+                &response_rko->rko_u.share_fetch_response.message_rkos) == 4,
             "message cnt %d != 4",
-            rd_list_cnt(&response_rko->rko_u.share_fetch_response.message_rkos));
+            rd_list_cnt(
+                &response_rko->rko_u.share_fetch_response.message_rkos));
 
         /* Verify inflight_acks has all 6 offsets including GAPs */
         rd_kafka_share_ack_batches_t *batches = rd_list_elem(
@@ -528,10 +539,12 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "type[5] != ACQ");
 
-        /* Verify is_error: all false (ACQUIRED and GAP are not error records) */
+        /* Verify is_error: all false (ACQUIRED and GAP are not error records)
+         */
         RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
         for (int k = 0; k < 6; k++)
-                RD_UT_ASSERT(!entry->is_error[k], "is_error[%d] should be false", k);
+                RD_UT_ASSERT(!entry->is_error[k],
+                             "is_error[%d] should be false", k);
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -546,9 +559,12 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
 
         /* Create response with rejects: ACQ, REJ, GAP, REJ, REJ, ACQ */
         rd_kafka_share_internal_acknowledgement_type types[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
-            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,      RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
-            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,   RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
+            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
+            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
+            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
 
         rd_kafka_op_t *response_rko =
             ut_make_share_fetch_response(rk, rktp, "T1", 0,
@@ -556,16 +572,18 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
 
         /* 5 messages present (1 GAP excluded): ACQ, REJ, REJ, REJ, ACQ */
         RD_UT_ASSERT(
-            rd_list_cnt(&response_rko->rko_u.share_fetch_response.message_rkos) ==
-                5,
+            rd_list_cnt(
+                &response_rko->rko_u.share_fetch_response.message_rkos) == 5,
             "message cnt %d != 5",
-            rd_list_cnt(&response_rko->rko_u.share_fetch_response.message_rkos));
+            rd_list_cnt(
+                &response_rko->rko_u.share_fetch_response.message_rkos));
 
         /* Count CONSUMER_ERR ops (should be 3 REJECTs) */
         rd_kafka_op_t *msg_rko;
         int i, reject_cnt = 0;
         RD_LIST_FOREACH(msg_rko,
-                        &response_rko->rko_u.share_fetch_response.message_rkos, i) {
+                        &response_rko->rko_u.share_fetch_response.message_rkos,
+                        i) {
                 if (msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR)
                         reject_cnt++;
         }
@@ -590,7 +608,8 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "type[5] != ACQ");
 
-        /* Verify is_error: true for REJECT (1,3,4), false for ACQUIRED (0,5) and GAP (2) */
+        /* Verify is_error: true for REJECT (1,3,4), false for ACQUIRED (0,5)
+         * and GAP (2) */
         RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
         RD_UT_ASSERT(!entry->is_error[0], "is_error[0] (ACQ) should be false");
         RD_UT_ASSERT(entry->is_error[1], "is_error[1] (REJ) should be true");
@@ -620,9 +639,12 @@ static int ut_case_merge_single_partition(rd_kafka_t *rk) {
 
         /* Create response with: ACQ, ACQ, GAP, ACQ, ACQ, REJ */
         rd_kafka_share_internal_acknowledgement_type types[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
-            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,      RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_REJECT};
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT};
 
         rd_kafka_op_t *response_rko =
             ut_make_share_fetch_response(rk, rktp, "T1", 0,
@@ -667,17 +689,24 @@ static int ut_case_merge_single_partition(rd_kafka_t *rk) {
                      "offset range mismatch");
 
         /* Verify types were copied correctly */
-        RD_UT_ASSERT(entry->types[0] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, "type[0]");
-        RD_UT_ASSERT(entry->types[1] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, "type[1]");
-        RD_UT_ASSERT(entry->types[2] == RD_KAFKA_INTERNAL_SHARE_ACK_GAP, "type[2]");
-        RD_UT_ASSERT(entry->types[3] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, "type[3]");
-        RD_UT_ASSERT(entry->types[4] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, "type[4]");
-        RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_REJECT, "type[5]");
+        RD_UT_ASSERT(entry->types[0] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+                     "type[0]");
+        RD_UT_ASSERT(entry->types[1] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+                     "type[1]");
+        RD_UT_ASSERT(entry->types[2] == RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
+                     "type[2]");
+        RD_UT_ASSERT(entry->types[3] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+                     "type[3]");
+        RD_UT_ASSERT(entry->types[4] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+                     "type[4]");
+        RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
+                     "type[5]");
 
         /* Verify is_error was copied: only index 5 (REJECT) is true */
         RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
         for (int k = 0; k < 5; k++)
-                RD_UT_ASSERT(!entry->is_error[k], "is_error[%d] should be false", k);
+                RD_UT_ASSERT(!entry->is_error[k],
+                             "is_error[%d] should be false", k);
         RD_UT_ASSERT(entry->is_error[5], "is_error[5] (REJ) should be true");
 
         ut_destroy_share_fetch_response(response_rko);
@@ -698,7 +727,8 @@ static int ut_case_merge_multiple_rkos(rd_kafka_t *rk) {
 
         /* First RKO from broker 1: T1-0 with ACQ, ACQ, GAP */
         rd_kafka_share_internal_acknowledgement_type types1[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
             RD_KAFKA_INTERNAL_SHARE_ACK_GAP};
         rd_kafka_op_t *rko1 =
             ut_make_share_fetch_response(rk, rktp1, "T1", 0,
@@ -707,7 +737,8 @@ static int ut_case_merge_multiple_rkos(rd_kafka_t *rk) {
         /* Second RKO from broker 2: T2-0 with ACQ, REJ, ACQ (distinct topic_id) */
         static const rd_kafka_Uuid_t ut_topic_id_t2 = { 0, 1, "" };
         rd_kafka_share_internal_acknowledgement_type types2[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
             RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
         rd_kafka_op_t *rko2 =
             ut_make_share_fetch_response(rk, rktp2, "T2", 0,
@@ -787,7 +818,8 @@ static int ut_case_merge_same_partition_multiple_rkos(rd_kafka_t *rk) {
 
         /* First RKO: T1-0 offsets 1-3 */
         rd_kafka_share_internal_acknowledgement_type types1[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
             RD_KAFKA_INTERNAL_SHARE_ACK_GAP};
         rd_kafka_op_t *rko1 =
             ut_make_share_fetch_response(rk, rktp, "T1", 0,
@@ -795,7 +827,8 @@ static int ut_case_merge_same_partition_multiple_rkos(rd_kafka_t *rk) {
 
         /* Second RKO: T1-0 offsets 10-12 (different range, same partition) */
         rd_kafka_share_internal_acknowledgement_type types2[] = {
-            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
+            RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
+            RD_KAFKA_INTERNAL_SHARE_ACK_REJECT,
             RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED};
         rd_kafka_op_t *rko2 =
             ut_make_share_fetch_response(rk, rktp, "T1", 0,
@@ -1099,12 +1132,12 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         entry2->types[5]     = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED; /* off 6 */
         entry2->types[6]     = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED; /* off 7 */
         entry2->types[7]     = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;      /* off 8 */
-        entry2->is_error[0] = rd_false;
-        entry2->is_error[1] = rd_true;
-        entry2->is_error[2] = rd_false;
+        entry2->is_error[0]  = rd_false;
+        entry2->is_error[1]  = rd_true;
+        entry2->is_error[2]  = rd_false;
         entry2->is_error[3] = entry2->is_error[4] = rd_true;
         entry2->is_error[5] = entry2->is_error[6] = rd_false;
-        entry2->is_error[7] = rd_false;
+        entry2->is_error[7]                       = rd_false;
         rd_list_add(&batches2->entries, entry2);
 
         /* Tp2 uses distinct topic_id so map has two entries */

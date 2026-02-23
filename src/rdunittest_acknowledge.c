@@ -161,8 +161,8 @@ static void ut_ack_destroy_rkshare(rd_kafka_share_t *rkshare) {
 
         RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
                 if (batches) {
-                        if (batches->topic)
-                                rd_free(batches->topic);
+                        if (batches->rktpar)
+                                rd_kafka_topic_partition_destroy(batches->rktpar);
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int i;
                         RD_LIST_FOREACH(entry, &batches->entries, i) {
@@ -192,15 +192,22 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
                                  int32_t partition,
                                  int64_t start_offset,
                                  int64_t end_offset) {
+        rd_kafka_topic_partition_private_t *parpriv;
         rd_kafka_share_ack_batches_t *batches =
             rd_calloc(1, sizeof(*batches));
-        batches->topic = rd_strdup(topic);
-        batches->partition = partition;
-        batches->leader_id = 1;
-        batches->leader_epoch = 1;
+
+        batches->rktpar = rd_calloc(1, sizeof(*batches->rktpar));
+        batches->rktpar->topic = rd_strdup(topic);
+        batches->rktpar->partition = partition;
+        batches->rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+        parpriv = rd_kafka_topic_partition_private_new();
+        batches->rktpar->_private = parpriv;
+
+        batches->acquired_leader_id = 1;
+        batches->acquired_leader_epoch = 1;
 
         int64_t size = end_offset - start_offset + 1;
-        batches->number_of_acquired_msgs = (int32_t)size;
+        batches->acquired_msgs_count = (int32_t)size;
 
         rd_list_init(&batches->entries, 1, NULL);
 
@@ -209,12 +216,13 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
         entry->start_offset = start_offset;
         entry->end_offset = end_offset;
         entry->size = size;
+        entry->types_cnt = (int32_t)size;
         entry->types = rd_calloc(size, sizeof(*entry->types));
         entry->is_error = rd_calloc(size, sizeof(*entry->is_error));
 
         /* Initialize all offsets to ACQUIRED (delivered records, not errors) */
         for (int64_t i = 0; i < size; i++) {
-                entry->types[i] = RD_KAFKA_SHARE_ACK_ACQUIRED;
+                entry->types[i] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
                 entry->is_error[i] = rd_false; /* Delivered record */
         }
 
@@ -236,15 +244,22 @@ static void ut_ack_add_partition_error(rd_kafka_share_t *rkshare,
                                        int32_t partition,
                                        int64_t start_offset,
                                        int64_t end_offset) {
+        rd_kafka_topic_partition_private_t *parpriv;
         rd_kafka_share_ack_batches_t *batches =
             rd_calloc(1, sizeof(*batches));
-        batches->topic = rd_strdup(topic);
-        batches->partition = partition;
-        batches->leader_id = 1;
-        batches->leader_epoch = 1;
+
+        batches->rktpar = rd_calloc(1, sizeof(*batches->rktpar));
+        batches->rktpar->topic = rd_strdup(topic);
+        batches->rktpar->partition = partition;
+        batches->rktpar->offset = RD_KAFKA_OFFSET_INVALID;
+        parpriv = rd_kafka_topic_partition_private_new();
+        batches->rktpar->_private = parpriv;
+
+        batches->acquired_leader_id = 1;
+        batches->acquired_leader_epoch = 1;
 
         int64_t size = end_offset - start_offset + 1;
-        batches->number_of_acquired_msgs = (int32_t)size;
+        batches->acquired_msgs_count = (int32_t)size;
 
         rd_list_init(&batches->entries, 1, NULL);
 
@@ -253,12 +268,13 @@ static void ut_ack_add_partition_error(rd_kafka_share_t *rkshare,
         entry->start_offset = start_offset;
         entry->end_offset = end_offset;
         entry->size = size;
+        entry->types_cnt = (int32_t)size;
         entry->types = rd_calloc(size, sizeof(*entry->types));
         entry->is_error = rd_calloc(size, sizeof(*entry->is_error));
 
         /* Initialize all offsets as error records (RELEASE state) */
         for (int64_t i = 0; i < size; i++) {
-                entry->types[i] = RD_KAFKA_SHARE_ACK_RELEASE;
+                entry->types[i] = RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE;
                 entry->is_error[i] = rd_true; /* Error record */
         }
 
@@ -291,7 +307,7 @@ static void ut_ack_set_gap(rd_kafka_share_t *rkshare,
                 if (offset >= entry->start_offset &&
                     offset <= entry->end_offset) {
                         int64_t idx = offset - entry->start_offset;
-                        entry->types[idx] = RD_KAFKA_SHARE_ACK_GAP;
+                        entry->types[idx] = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
                         return;
                 }
         }
@@ -300,7 +316,7 @@ static void ut_ack_set_gap(rd_kafka_share_t *rkshare,
 /**
  * @brief Get the ack type for a specific offset in the inflight map.
  */
-static rd_kafka_share_acknowledgement_type
+static rd_kafka_share_internal_acknowledgement_type
 ut_ack_get_type(rd_kafka_share_t *rkshare,
                 const char *topic,
                 int32_t partition,
@@ -369,7 +385,7 @@ static int ut_case_acknowledge_accept(rd_kafka_t *rk) {
 
         /* Verify offset 5 is currently ACQUIRED */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "offset 5 should be ACQUIRED before acknowledge");
 
         /* Call rd_kafka_share_acknowledge */
@@ -384,10 +400,10 @@ static int ut_case_acknowledge_accept(rd_kafka_t *rk) {
 
         /* Verify other offsets are still ACQUIRED */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 4) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "offset 4 should still be ACQUIRED");
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 6) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "offset 6 should still be ACQUIRED");
 
         ut_ack_destroy_message(msg);
@@ -542,7 +558,7 @@ static int ut_case_acknowledge_offset_multiple_errors(rd_kafka_t *rk) {
                      "offset 2 should be REJECT");
         /* Offset 3 was not acknowledged, should still be RELEASE (initial error state) */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 3) ==
-                         RD_KAFKA_SHARE_ACK_RELEASE,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE,
                      "offset 3 should still be RELEASE");
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
                          RD_KAFKA_SHARE_ACK_TYPE_RELEASE,
@@ -766,7 +782,7 @@ static int ut_case_error_gap_record(rd_kafka_t *rk) {
 
         /* Verify GAP record is unchanged */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
-                         RD_KAFKA_SHARE_ACK_GAP,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_GAP,
                      "offset 5 should still be GAP");
 
         ut_ack_destroy_message(msg);
@@ -799,7 +815,7 @@ static int ut_case_error_offset_api_on_delivered(rd_kafka_t *rk) {
 
         /* Verify record is unchanged */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "offset 5 should still be ACQUIRED");
 
         ut_ack_destroy_rkshare(rkshare);
@@ -834,7 +850,7 @@ static int ut_case_error_record_api_on_error(rd_kafka_t *rk) {
 
         /* Verify record is unchanged (still RELEASE - initial error state) */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
-                         RD_KAFKA_SHARE_ACK_RELEASE,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE,
                      "offset 5 should still be RELEASE");
 
         ut_ack_destroy_message(msg);
@@ -921,7 +937,7 @@ static int ut_case_error_invalid_type(rd_kafka_t *rk) {
 
         /* Verify offset is still ACQUIRED (not modified) */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "offset 5 should still be ACQUIRED after invalid type");
 
         ut_ack_destroy_message(msg);
@@ -1025,7 +1041,7 @@ static int ut_case_error_implicit_mode(rd_kafka_t *rk) {
 
         /* Verify offset is still ACQUIRED (not modified) */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 5) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "offset 5 should still be ACQUIRED in implicit mode");
 
         ut_ack_destroy_message(msg);
@@ -1091,10 +1107,10 @@ static int ut_case_acknowledge_multiple_partitions(rd_kafka_t *rk) {
 
         /* Verify other offsets unchanged */
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 0, 4) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "T1-0 offset 4 should be ACQUIRED");
         RD_UT_ASSERT(ut_ack_get_type(rkshare, "T1", 1, 104) ==
-                         RD_KAFKA_SHARE_ACK_ACQUIRED,
+                         RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "T1-1 offset 104 should be ACQUIRED");
 
         ut_ack_destroy_message(msg1);

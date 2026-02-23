@@ -158,7 +158,8 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
         int64_t start_offset;   /**< First offset in range */
         int64_t end_offset;     /**< Last offset in range (inclusive) */
         int64_t size;           /**< Number of offsets (end - start + 1) */
-        rd_kafka_share_acknowledgement_type *types; /**< Array of ack types,
+        int32_t types_cnt;    /**< Number of elements in types array */
+        rd_kafka_share_internal_acknowledgement_type *types; /**< Array of ack types,
                                                      *   one per offset */
         rd_bool_t *is_error; /**< Array tracking error records (true) vs
                               *   delivered records (false), one per offset.

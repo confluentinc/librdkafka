@@ -139,7 +139,7 @@ typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT  = 1, /* accept */
         RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE = 2, /* release */
         RD_KAFKA_INTERNAL_SHARE_ACK_REJECT  = 3  /* reject */
-} rd_kafka_internal_ShareAcknowledgement_type_t;
+} rd_kafka_share_internal_acknowledgement_type;
 
 /**
  * @brief Acknowledgement batch entry for a contiguous offset range.
@@ -154,14 +154,14 @@ typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
  *   - For inflight tracking: types_cnt == size (one type per offset)
  *   - For collated batches: types_cnt == 1 (single consolidated type)
  */
-typedef struct rd_kafka_share_ack_batch_entry_acquired_records_s {
+typedef struct rd_kafka_share_ack_batch_entry_s {
         int64_t start_offset; /**< First offset in range */
         int64_t end_offset;   /**< Last offset in range (inclusive) */
         int64_t size;         /**< Number of offsets (end - start + 1) */
         int32_t types_cnt;    /**< Number of elements in types array */
-        rd_kafka_internal_ShareAcknowledgement_type_t
+        rd_kafka_share_internal_acknowledgement_type
             *types; /**< Array of ack types */
-} rd_kafka_share_ack_batch_entry_acquired_records_t;
+} rd_kafka_share_ack_batch_entry_t;
 
 /**
  * @brief Per topic-partition inflight acknowledgement batches.
@@ -186,7 +186,7 @@ typedef struct rd_kafka_share_ack_batches_s {
                                           *   were acquired */
         int64_t acquired_msgs_count; /**< Total acquired messages */
         rd_list_t
-            entries; /**< rd_kafka_share_ack_batch_entry_acquired_records_t*,
+            entries; /**< rd_kafka_share_ack_batch_entry_t*,
                       *   sorted by start_offset */
 } rd_kafka_share_ack_batches_t;
 

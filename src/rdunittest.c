@@ -485,7 +485,8 @@ int rd_unittest(void) {
 #endif
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
-            {"fetcher_share_filter_forward", unittest_fetcher_share_filter_forward},
+            {"fetcher_share_filter_forward",
+             unittest_fetcher_share_filter_forward},
             {"share_acknowledge", unittest_share_acknowledge},
             {"feature", unittest_feature},
 #if WITH_SSL

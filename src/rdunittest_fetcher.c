@@ -626,10 +626,12 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
                      "type[5] != ACQ");
 
-        /* Verify is_error: all false (ACQUIRED and GAP are not error records) */
+        /* Verify is_error: all false (ACQUIRED and GAP are not error records)
+         */
         RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
         for (int k = 0; k < 6; k++)
-                RD_UT_ASSERT(!entry->is_error[k], "is_error[%d] should be false", k);
+                RD_UT_ASSERT(!entry->is_error[k],
+                             "is_error[%d] should be false", k);
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -692,7 +694,8 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
                      "type[5] != ACQ");
 
-        /* Verify is_error: true for REJECT (1,3,4), false for ACQUIRED (0,5) and GAP (2) */
+        /* Verify is_error: true for REJECT (1,3,4), false for ACQUIRED (0,5)
+         * and GAP (2) */
         RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
         RD_UT_ASSERT(!entry->is_error[0], "is_error[0] (ACQ) should be false");
         RD_UT_ASSERT(entry->is_error[1], "is_error[1] (REJ) should be true");
@@ -787,7 +790,8 @@ static int ut_case_merge_single_partition(rd_kafka_t *rk) {
         /* Verify is_error was copied: only index 5 (REJECT) is true */
         RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
         for (int k = 0; k < 5; k++)
-                RD_UT_ASSERT(!entry->is_error[k], "is_error[%d] should be false", k);
+                RD_UT_ASSERT(!entry->is_error[k],
+                             "is_error[%d] should be false", k);
         RD_UT_ASSERT(entry->is_error[5], "is_error[5] (REJ) should be true");
 
         ut_destroy_share_fetch_response(response_rko);

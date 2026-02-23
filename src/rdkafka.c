@@ -3349,8 +3349,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
  * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
  * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or error record
  */
-static rd_kafka_resp_err_t
-rd_kafka_share_inflight_ack_update_delivered(
+static rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_delivered(
     rd_kafka_share_t *rkshare,
     const char *topic,
     int32_t partition,
@@ -3378,7 +3377,8 @@ rd_kafka_share_inflight_ack_update_delivered(
                         idx = offset - entry->start_offset;
 
                         /* GAP records cannot be acknowledged */
-                        if (entry->types[idx] == RD_KAFKA_INTERNAL_SHARE_ACK_GAP)
+                        if (entry->types[idx] ==
+                            RD_KAFKA_INTERNAL_SHARE_ACK_GAP)
                                 return RD_KAFKA_RESP_ERR__STATE;
 
                         /* Error records must use offset-based API */
@@ -3409,12 +3409,12 @@ rd_kafka_share_inflight_ack_update_delivered(
  * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
  * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or delivered record
  */
-static rd_kafka_resp_err_t
-rd_kafka_share_inflight_ack_update_error(rd_kafka_share_t *rkshare,
-                                         const char *topic,
-                                         int32_t partition,
-                                         int64_t offset,
-                                         rd_kafka_share_internal_acknowledgement_type type) {
+static rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_error(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_internal_acknowledgement_type type) {
         rd_kafka_topic_partition_t lookup_key;
         rd_kafka_share_ack_batches_t *batches;
         rd_kafka_share_ack_batch_entry_t *entry;
@@ -3437,7 +3437,8 @@ rd_kafka_share_inflight_ack_update_error(rd_kafka_share_t *rkshare,
                         idx = offset - entry->start_offset;
 
                         /* GAP records cannot be acknowledged */
-                        if (entry->types[idx] == RD_KAFKA_INTERNAL_SHARE_ACK_GAP)
+                        if (entry->types[idx] ==
+                            RD_KAFKA_INTERNAL_SHARE_ACK_GAP)
                                 return RD_KAFKA_RESP_ERR__STATE;
 
                         /* Only error records can use offset-based API */
@@ -3469,7 +3470,8 @@ rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
         return rd_kafka_share_inflight_ack_update_delivered(
             rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
             rkmessage->offset,
-            (rd_kafka_share_internal_acknowledgement_type)RD_KAFKA_SHARE_ACK_TYPE_ACCEPT);
+            (rd_kafka_share_internal_acknowledgement_type)
+                RD_KAFKA_SHARE_ACK_TYPE_ACCEPT);
 }
 
 rd_kafka_resp_err_t
@@ -3491,7 +3493,8 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
         /* Record-based API: only for delivered records */
         return rd_kafka_share_inflight_ack_update_delivered(
             rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
-            rkmessage->offset, (rd_kafka_share_internal_acknowledgement_type)type);
+            rkmessage->offset,
+            (rd_kafka_share_internal_acknowledgement_type)type);
 }
 
 rd_kafka_resp_err_t

@@ -159,6 +159,7 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
         int64_t end_offset;   /**< Last offset in range (inclusive) */
         int64_t size;         /**< Number of offsets (end - start + 1) */
         int32_t types_cnt;    /**< Number of elements in types array */
+        int16_t delivery_count; /**< From AcquiredRecords DeliveryCount */
         rd_kafka_share_internal_acknowledgement_type
             *types; /**< Array of ack types */
 } rd_kafka_share_ack_batch_entry_t;
@@ -190,6 +191,20 @@ typedef struct rd_kafka_share_ack_batches_s {
                       *   sorted by start_offset */
 } rd_kafka_share_ack_batches_t;
 
+/** Allocate and initialize a share ack batch entry (offset range + types array). */
+rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_new(
+    int64_t start_offset,
+    int64_t end_offset,
+    int32_t types_cnt);
+/** Destroy a share ack batch entry (frees types array and entry). */
+void rd_kafka_share_ack_batch_entry_destroy(
+    rd_kafka_share_ack_batch_entry_t *entry);
+
+/** Allocate and initialize a share ack batches (list of entries). */
+rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void);
+/** Destroy share ack batches. If \p free_rktpar is true, destroys rktpar too. */
+void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches,
+                                        rd_bool_t free_rktpar);
 
 
 /**
@@ -868,6 +883,7 @@ int rd_kafka_topic_partition_match(rd_kafka_t *rk,
 int rd_kafka_topic_partition_cmp(const void *_a, const void *_b);
 int rd_kafka_topic_partition_by_id_cmp(const void *_a, const void *_b);
 unsigned int rd_kafka_topic_partition_hash(const void *a);
+unsigned int rd_kafka_topic_partition_hash_by_id(const void *a);
 
 int rd_kafka_topic_partition_list_find_idx(
     const rd_kafka_topic_partition_list_t *rktparlist,

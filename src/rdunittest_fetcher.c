@@ -528,6 +528,11 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "type[5] != ACQ");
 
+        /* Verify is_error: all false (ACQUIRED and GAP are not error records) */
+        RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
+        for (int k = 0; k < 6; k++)
+                RD_UT_ASSERT(!entry->is_error[k], "is_error[%d] should be false", k);
+
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
 
@@ -584,6 +589,15 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
                      "type[4] != REJ");
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "type[5] != ACQ");
+
+        /* Verify is_error: true for REJECT (1,3,4), false for ACQUIRED (0,5) and GAP (2) */
+        RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
+        RD_UT_ASSERT(!entry->is_error[0], "is_error[0] (ACQ) should be false");
+        RD_UT_ASSERT(entry->is_error[1], "is_error[1] (REJ) should be true");
+        RD_UT_ASSERT(!entry->is_error[2], "is_error[2] (GAP) should be false");
+        RD_UT_ASSERT(entry->is_error[3], "is_error[3] (REJ) should be true");
+        RD_UT_ASSERT(entry->is_error[4], "is_error[4] (REJ) should be true");
+        RD_UT_ASSERT(!entry->is_error[5], "is_error[5] (ACQ) should be false");
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -659,6 +673,12 @@ static int ut_case_merge_single_partition(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[3] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, "type[3]");
         RD_UT_ASSERT(entry->types[4] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED, "type[4]");
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_INTERNAL_SHARE_ACK_REJECT, "type[5]");
+
+        /* Verify is_error was copied: only index 5 (REJECT) is true */
+        RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
+        for (int k = 0; k < 5; k++)
+                RD_UT_ASSERT(!entry->is_error[k], "is_error[%d] should be false", k);
+        RD_UT_ASSERT(entry->is_error[5], "is_error[5] (REJ) should be true");
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -741,6 +761,12 @@ static int ut_case_merge_multiple_rkos(rd_kafka_t *rk) {
                      "T2 type[1]");
         RD_UT_ASSERT(entry2->types[2] == RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED,
                      "T2 type[2]");
+
+        /* Verify is_error was copied: only index 1 (REJECT) is true */
+        RD_UT_ASSERT(entry2->is_error != NULL, "T2 is_error array is NULL");
+        RD_UT_ASSERT(!entry2->is_error[0], "T2 is_error[0] should be false");
+        RD_UT_ASSERT(entry2->is_error[1], "T2 is_error[1] should be true");
+        RD_UT_ASSERT(!entry2->is_error[2], "T2 is_error[2] should be false");
 
         ut_destroy_share_fetch_response(rko1);
         ut_destroy_share_fetch_response(rko2);
@@ -844,8 +870,10 @@ static int ut_case_collate_all_same_type(rd_kafka_t *rk) {
 
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(1, 4, 4);
-        for (int i = 0; i < 4; i++)
-                entry->types[i] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        for (int i = 0; i < 4; i++) {
+                entry->types[i]    = (rd_kafka_share_acknowledgement_type)RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+                entry->is_error[i] = rd_false;
+        }
         rd_list_add(&batches->entries, entry);
 
         rd_kafka_topic_partition_t *key =
@@ -904,15 +932,19 @@ static int ut_case_collate_mixed_types(rd_kafka_t *rk) {
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(1, 9, 9);
         /* ACQ, ACQ, GAP, ACQ, ACQ, REJ, REJ, ACQ, ACQ */
-        entry->types[0] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
-        entry->types[1] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
-        entry->types[2] = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
-        entry->types[3] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
-        entry->types[4] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
-        entry->types[5] = RD_KAFKA_INTERNAL_SHARE_ACK_REJECT;
-        entry->types[6] = RD_KAFKA_INTERNAL_SHARE_ACK_REJECT;
-        entry->types[7] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
-        entry->types[8] = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->types[0]    = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->types[1]    = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->types[2]    = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
+        entry->types[3]    = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->types[4]    = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->types[5]    = RD_KAFKA_INTERNAL_SHARE_ACK_REJECT;
+        entry->types[6]    = RD_KAFKA_INTERNAL_SHARE_ACK_REJECT;
+        entry->types[7]    = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->types[8]    = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+        entry->is_error[0] = entry->is_error[1] = entry->is_error[2] = rd_false;
+        entry->is_error[3] = entry->is_error[4] = rd_false;
+        entry->is_error[5] = entry->is_error[6] = rd_true;
+        entry->is_error[7] = entry->is_error[8] = rd_false;
         rd_list_add(&batches->entries, entry);
 
         rd_kafka_topic_partition_t *key =
@@ -1034,6 +1066,8 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         entry1->types[3]     = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;      /* off 4 */
         entry1->types[4]     = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED; /* off 5 */
         entry1->types[5]     = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED; /* off 6 */
+        for (int i = 0; i < 6; i++)
+                entry1->is_error[i] = rd_false;
         rd_list_add(&batches1->entries, entry1);
 
         rd_kafka_topic_partition_t *key1 =
@@ -1065,6 +1099,12 @@ static int ut_case_full_flow_multi_partition(rd_kafka_t *rk) {
         entry2->types[5]     = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED; /* off 6 */
         entry2->types[6]     = RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED; /* off 7 */
         entry2->types[7]     = RD_KAFKA_INTERNAL_SHARE_ACK_GAP;      /* off 8 */
+        entry2->is_error[0] = rd_false;
+        entry2->is_error[1] = rd_true;
+        entry2->is_error[2] = rd_false;
+        entry2->is_error[3] = entry2->is_error[4] = rd_true;
+        entry2->is_error[5] = entry2->is_error[6] = rd_false;
+        entry2->is_error[7] = rd_false;
         rd_list_add(&batches2->entries, entry2);
 
         /* Tp2 uses distinct topic_id so map has two entries */

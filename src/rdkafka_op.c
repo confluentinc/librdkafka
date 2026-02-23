@@ -533,7 +533,6 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {
                 rd_kafka_op_t *msg_rko;
-                rd_kafka_share_ack_batches_t *batches;
                 int i;
 
                 /* Destroy all message ops in the list */
@@ -543,21 +542,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 }
                 rd_list_destroy(&rko->rko_u.share_fetch_response.message_rkos);
 
-                /* Free inflight_acks list */
-                RD_LIST_FOREACH(batches,
-                                &rko->rko_u.share_fetch_response.inflight_acks,
-                                i) {
-                        rd_kafka_share_ack_batch_entry_t
-                            *entry;
-                        int j;
-                        RD_LIST_FOREACH(entry, &batches->entries, j) {
-                                if (entry->types)
-                                        rd_free(entry->types);
-                                rd_free(entry);
-                        }
-                        rd_list_destroy(&batches->entries);
-                        rd_free(batches);
-                }
+                /* inflight_acks batches were transferred to rkshare in
+                 * rd_kafka_share_build_ack_mapping(); only destroy the list. */
                 rd_list_destroy(&rko->rko_u.share_fetch_response.inflight_acks);
                 break;
         }

@@ -2963,9 +2963,10 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         /* Set backpointer from rk to rkshare for access in retry handlers */
         rk->rk_rkshare = rkshare;
 
-        /* Initialize the inflight acks map */
+        /* Inflight acks map keyed by topic_id + partition */
         RD_MAP_INIT(&rkshare->rkshare_inflight_acks, 16,
-                    rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
+                    rd_kafka_topic_partition_by_id_cmp,
+                    rd_kafka_topic_partition_hash_by_id,
                     rd_kafka_topic_partition_destroy_free,
                     NULL /* value destructor handled manually */);
 
@@ -3326,16 +3327,14 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          *               max_poll_records. How many messages to be sent to the
          *               user is driven by broker with AcquiredRecords field.
          */
-        /* At this point, there's no reason to deviate from what we already do
-         * for returning multiple messages to the user, as the orchestration
-         * is handled by the main thread. Later on, we needed, we might need
-         * a custom loop if we need any changes. */
-        *rkmessages_size = rd_kafka_q_serve_share_rkmessages(
-            rkcg->rkcg_q, timeout_ms, /* Use this timeout directly as prior
-                             operations aren't blocking, so no need to
-                             re-convert the abs_timeout into a relative one.*/
-            rkmessages, max_poll_records, rkshare);
-
+        /* One op per call: CONSUMER_ERR returns that error; SHARE_FETCH_RESPONSE
+         * fills messages. Caller may need to call multiple times to drain
+         * CONSUMER_ERR ops before getting messages. */
+        rd_kafka_error_t *error = rd_kafka_q_serve_share_rkmessages(
+            rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records, rkshare,
+            rkmessages_size);
+        if (error)
+                return error;
         return NULL;
 }
 

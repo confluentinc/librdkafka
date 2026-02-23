@@ -46,6 +46,12 @@ void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
 void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
                                  rd_kafka_op_t *rko_orig,
                                  rd_ts_t now);
+int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko);
+void rd_kafka_share_filter_msg_from_acq_records(rd_kafka_q_t *temp_fetchq,
+                                   rd_list_t *filtered_msgs,
+                                   int32_t AcquiredRecordsArrayCnt,
+                                   const int64_t *FirstOffsets,
+                                   const int64_t *LastOffsets);
 
 
 #endif /* _RDKAFKA_FETCHER_H_ */

@@ -51,19 +51,20 @@
  * @brief Operation types for subscription tests
  */
 typedef enum {
-        TEST_OP_END = 0,            /**< End of operations marker */
-        TEST_OP_SUBSCRIBE,          /**< Subscribe to N new topics */
-        TEST_OP_SUBSCRIBE_ADD,      /**< Add N topics to existing subscription */
-        TEST_OP_UNSUBSCRIBE,        /**< Unsubscribe from all topics */
-        TEST_OP_RESUBSCRIBE,        /**< Replace subscription with N new topics */
-        TEST_OP_PRODUCE,            /**< Produce to specified topic set */
-        TEST_OP_CONSUME,            /**< Consume messages */
-        TEST_OP_VERIFY_SUB_CNT,     /**< Verify subscription count */
-        TEST_OP_DELETE_TOPIC,       /**< Delete topic by index */
-        TEST_OP_WAIT,               /**< Wait for specified milliseconds */
-        TEST_OP_CREATE_CONSUMER,    /**< Create additional consumer */
-        TEST_OP_POLL_NO_SUB,        /**< Poll without subscription (edge case) */
-        TEST_OP_CREATE_TOPIC,       /**< Create subscribed topics that weren't created */
+        TEST_OP_END = 0,         /**< End of operations marker */
+        TEST_OP_SUBSCRIBE,       /**< Subscribe to N new topics */
+        TEST_OP_SUBSCRIBE_ADD,   /**< Add N topics to existing subscription */
+        TEST_OP_UNSUBSCRIBE,     /**< Unsubscribe from all topics */
+        TEST_OP_RESUBSCRIBE,     /**< Replace subscription with N new topics */
+        TEST_OP_PRODUCE,         /**< Produce to specified topic set */
+        TEST_OP_CONSUME,         /**< Consume messages */
+        TEST_OP_VERIFY_SUB_CNT,  /**< Verify subscription count */
+        TEST_OP_DELETE_TOPIC,    /**< Delete topic by index */
+        TEST_OP_WAIT,            /**< Wait for specified milliseconds */
+        TEST_OP_CREATE_CONSUMER, /**< Create additional consumer */
+        TEST_OP_POLL_NO_SUB,     /**< Poll without subscription (edge case) */
+        TEST_OP_CREATE_TOPIC, /**< Create subscribed topics that weren't created
+                               */
         TEST_OP_SUBSCRIBE_EXISTING, /**< Subscribe to already created topics */
         TEST_OP_PRODUCE_TO_TOPIC,   /**< Produce to specific topic index */
 } test_op_type_t;
@@ -72,9 +73,9 @@ typedef enum {
  * @brief Flags for operations
  */
 typedef enum {
-        TEST_OP_F_NONE = 0,
-        TEST_OP_F_SKIP_TOPIC_CREATE  = 1 << 0, /**< Don't create topics */
-        TEST_OP_F_PRODUCE_TO_OLD     = 1 << 1, /**< Produce to old subscription */
+        TEST_OP_F_NONE              = 0,
+        TEST_OP_F_SKIP_TOPIC_CREATE = 1 << 0, /**< Don't create topics */
+        TEST_OP_F_PRODUCE_TO_OLD = 1 << 1, /**< Produce to old subscription */
         TEST_OP_F_VERIFY_NO_OLD_MSGS = 1 << 2, /**< Verify no old messages */
 } test_op_flags_t;
 
@@ -82,16 +83,17 @@ typedef enum {
  * @brief Single operation in a test scenario
  */
 typedef struct {
-        test_op_type_t op;      /**< Operation type */
-        int topic_cnt;          /**< Number of topics (SUBSCRIBE/RESUBSCRIBE) */
-        int msgs_per_topic;     /**< Messages per topic (PRODUCE) */
-        int expected_msgs;      /**< Expected message count (CONSUME, -1=any) */
-        int expected_sub_cnt;   /**< Expected subscription count (VERIFY_SUB_CNT) */
-        int topic_idx;          /**< Topic index (DELETE_TOPIC) */
-        int wait_ms;            /**< Wait time (WAIT) */
-        int consumer_idx;       /**< Consumer index (multi-consumer) */
-        int repeat_cnt;         /**< Repeat count (SUBSCRIBE/UNSUBSCRIBE) */
-        test_op_flags_t flags;  /**< Operation flags */
+        test_op_type_t op;     /**< Operation type */
+        int topic_cnt;         /**< Number of topics (SUBSCRIBE/RESUBSCRIBE) */
+        int msgs_per_topic;    /**< Messages per topic (PRODUCE) */
+        int expected_msgs;     /**< Expected message count (CONSUME, -1=any) */
+        int expected_sub_cnt;  /**< Expected subscription count (VERIFY_SUB_CNT)
+                                */
+        int topic_idx;         /**< Topic index (DELETE_TOPIC) */
+        int wait_ms;           /**< Wait time (WAIT) */
+        int consumer_idx;      /**< Consumer index (multi-consumer) */
+        int repeat_cnt;        /**< Repeat count (SUBSCRIBE/UNSUBSCRIBE) */
+        test_op_flags_t flags; /**< Operation flags */
 } test_op_t;
 
 /**
@@ -114,7 +116,7 @@ typedef struct {
         /* Topics: all created topics */
         char *all_topics[MAX_TOPICS];
         int all_topic_cnt;
-        int msgs_produced[MAX_TOPICS];    /**< Messages produced per topic */
+        int msgs_produced[MAX_TOPICS];       /**< Messages produced per topic */
         rd_bool_t topic_deleted[MAX_TOPICS]; /**< Track deleted topics */
 
         /* Current subscription tracking per consumer */
@@ -130,31 +132,44 @@ typedef struct {
 } sub_test_state_t;
 
 
-#define SUBSCRIBE(n)           {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = 1}
-#define SUBSCRIBE_REPEAT(n, r) {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = (r)}
-#define SUBSCRIBE_ADD(n)       {.op = TEST_OP_SUBSCRIBE_ADD, .topic_cnt = (n)}
-#define SUBSCRIBE_NO_CREATE(n) {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = 1, \
-                                .flags = TEST_OP_F_SKIP_TOPIC_CREATE}
-#define UNSUBSCRIBE()          {.op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = 1}
-#define UNSUBSCRIBE_REPEAT(r)  {.op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = (r)}
-#define RESUBSCRIBE(n)         {.op = TEST_OP_RESUBSCRIBE, .topic_cnt = (n)}
-#define PRODUCE(msgs)          {.op = TEST_OP_PRODUCE, .msgs_per_topic = (msgs)}
-#define PRODUCE_TO_OLD(msgs)   {.op = TEST_OP_PRODUCE, .msgs_per_topic = (msgs), \
-                                .flags = TEST_OP_F_PRODUCE_TO_OLD}
-#define PRODUCE_TO_TOPIC(idx, msgs) {.op = TEST_OP_PRODUCE_TO_TOPIC, .topic_idx = (idx), \
-                                     .msgs_per_topic = (msgs)}
-#define CONSUME(expected)      {.op = TEST_OP_CONSUME, .expected_msgs = (expected)}
-#define CONSUME_VERIFY_NO_OLD(expected) {.op = TEST_OP_CONSUME, .expected_msgs = (expected), \
-                                         .flags = TEST_OP_F_VERIFY_NO_OLD_MSGS}
-#define CONSUME_ANY()          {.op = TEST_OP_CONSUME, .expected_msgs = -1}
-#define VERIFY_SUB(cnt)        {.op = TEST_OP_VERIFY_SUB_CNT, .expected_sub_cnt = (cnt)}
-#define DELETE_TOPIC(idx)      {.op = TEST_OP_DELETE_TOPIC, .topic_idx = (idx)}
-#define WAIT_MS(ms)            {.op = TEST_OP_WAIT, .wait_ms = (ms)}
-#define CREATE_CONSUMER(idx)   {.op = TEST_OP_CREATE_CONSUMER, .consumer_idx = (idx)}
-#define CREATE_TOPIC(n)        {.op = TEST_OP_CREATE_TOPIC, .topic_cnt = (n)}
-#define SUBSCRIBE_EXISTING()   {.op = TEST_OP_SUBSCRIBE_EXISTING, .repeat_cnt = 1}
-#define POLL_NO_SUB()          {.op = TEST_OP_POLL_NO_SUB}
-#define TEST_OPS_END()         {.op = TEST_OP_END}
+#define SUBSCRIBE(n)                                                           \
+        {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = 1}
+#define SUBSCRIBE_REPEAT(n, r)                                                 \
+        {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = (r)}
+#define SUBSCRIBE_ADD(n) {.op = TEST_OP_SUBSCRIBE_ADD, .topic_cnt = (n)}
+#define SUBSCRIBE_NO_CREATE(n)                                                 \
+        {.op         = TEST_OP_SUBSCRIBE,                                      \
+         .topic_cnt  = (n),                                                    \
+         .repeat_cnt = 1,                                                      \
+         .flags      = TEST_OP_F_SKIP_TOPIC_CREATE}
+#define UNSUBSCRIBE()         {.op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = 1}
+#define UNSUBSCRIBE_REPEAT(r) {.op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = (r)}
+#define RESUBSCRIBE(n)        {.op = TEST_OP_RESUBSCRIBE, .topic_cnt = (n)}
+#define PRODUCE(msgs)         {.op = TEST_OP_PRODUCE, .msgs_per_topic = (msgs)}
+#define PRODUCE_TO_OLD(msgs)                                                   \
+        {.op             = TEST_OP_PRODUCE,                                    \
+         .msgs_per_topic = (msgs),                                             \
+         .flags          = TEST_OP_F_PRODUCE_TO_OLD}
+#define PRODUCE_TO_TOPIC(idx, msgs)                                            \
+        {.op             = TEST_OP_PRODUCE_TO_TOPIC,                           \
+         .topic_idx      = (idx),                                              \
+         .msgs_per_topic = (msgs)}
+#define CONSUME(expected) {.op = TEST_OP_CONSUME, .expected_msgs = (expected)}
+#define CONSUME_VERIFY_NO_OLD(expected)                                        \
+        {.op            = TEST_OP_CONSUME,                                     \
+         .expected_msgs = (expected),                                          \
+         .flags         = TEST_OP_F_VERIFY_NO_OLD_MSGS}
+#define CONSUME_ANY() {.op = TEST_OP_CONSUME, .expected_msgs = -1}
+#define VERIFY_SUB(cnt)                                                        \
+        {.op = TEST_OP_VERIFY_SUB_CNT, .expected_sub_cnt = (cnt)}
+#define DELETE_TOPIC(idx) {.op = TEST_OP_DELETE_TOPIC, .topic_idx = (idx)}
+#define WAIT_MS(ms)       {.op = TEST_OP_WAIT, .wait_ms = (ms)}
+#define CREATE_CONSUMER(idx)                                                   \
+        {.op = TEST_OP_CREATE_CONSUMER, .consumer_idx = (idx)}
+#define CREATE_TOPIC(n)      {.op = TEST_OP_CREATE_TOPIC, .topic_cnt = (n)}
+#define SUBSCRIBE_EXISTING() {.op = TEST_OP_SUBSCRIBE_EXISTING, .repeat_cnt = 1}
+#define POLL_NO_SUB()        {.op = TEST_OP_POLL_NO_SUB}
+#define TEST_OPS_END()       {.op = TEST_OP_END}
 
 
 /**
@@ -183,7 +198,8 @@ static const char *state_create_topic(sub_test_state_t *state,
 
         if (wait_exists) {
                 test_create_topic_wait_exists(
-                    NULL, state->all_topics[state->all_topic_cnt], 1, -1, 30000);
+                    NULL, state->all_topics[state->all_topic_cnt], 1, -1,
+                    30000);
         }
 
         state->msgs_produced[state->all_topic_cnt] = 0;
@@ -228,7 +244,8 @@ static void exec_subscribe(sub_test_state_t *state, const test_op_t *op) {
 }
 
 /**
- * @brief Execute TEST_OP_SUBSCRIBE_ADD (incremental - add to existing subscription)
+ * @brief Execute TEST_OP_SUBSCRIBE_ADD (incremental - add to existing
+ * subscription)
  */
 static void exec_subscribe_add(sub_test_state_t *state, const test_op_t *op) {
         rd_kafka_topic_partition_list_t *tlist;
@@ -236,11 +253,13 @@ static void exec_subscribe_add(sub_test_state_t *state, const test_op_t *op) {
         int i;
         int new_start = state->all_topic_cnt;
 
-        TEST_SAY("  SUBSCRIBE_ADD: adding %d topic(s) to existing %d, consumer=%d\n",
-                 op->topic_cnt, state->sub_count[cidx], cidx);
+        TEST_SAY(
+            "  SUBSCRIBE_ADD: adding %d topic(s) to existing %d, consumer=%d\n",
+            op->topic_cnt, state->sub_count[cidx], cidx);
 
         /* Build subscription list including existing + new topics */
-        tlist = rd_kafka_topic_partition_list_new(state->sub_count[cidx] + op->topic_cnt);
+        tlist = rd_kafka_topic_partition_list_new(state->sub_count[cidx] +
+                                                  op->topic_cnt);
 
         /* Add existing subscribed topics */
         for (i = 0; i < state->sub_count[cidx]; i++) {
@@ -256,7 +275,8 @@ static void exec_subscribe_add(sub_test_state_t *state, const test_op_t *op) {
                                                   RD_KAFKA_PARTITION_UA);
         }
 
-        TEST_CALL_ERR__(rd_kafka_share_subscribe(state->consumers[cidx], tlist));
+        TEST_CALL_ERR__(
+            rd_kafka_share_subscribe(state->consumers[cidx], tlist));
 
         /* Update subscription tracking - topics are now spread across ranges */
         state->sub_start_idx[cidx] = new_start - state->sub_count[cidx];
@@ -272,14 +292,15 @@ static void exec_create_topic(sub_test_state_t *state, const test_op_t *op) {
         int cidx = op->consumer_idx;
         int i;
 
-        TEST_SAY("  CREATE_TOPIC: creating subscribed topics for consumer=%d\n", cidx);
+        TEST_SAY("  CREATE_TOPIC: creating subscribed topics for consumer=%d\n",
+                 cidx);
 
         /* Create the topics that were subscribed to but not yet created */
         for (i = 0; i < state->sub_count[cidx]; i++) {
                 int idx = state->sub_start_idx[cidx] + i;
                 if (state->all_topics[idx]) {
-                        test_create_topic_wait_exists(NULL, state->all_topics[idx],
-                                                      1, -1, 30000);
+                        test_create_topic_wait_exists(
+                            NULL, state->all_topics[idx], 1, -1, 30000);
                 }
         }
 }
@@ -287,7 +308,8 @@ static void exec_create_topic(sub_test_state_t *state, const test_op_t *op) {
 /**
  * @brief Execute TEST_OP_SUBSCRIBE_EXISTING (subscribe to all created topics)
  */
-static void exec_subscribe_existing(sub_test_state_t *state, const test_op_t *op) {
+static void exec_subscribe_existing(sub_test_state_t *state,
+                                    const test_op_t *op) {
         rd_kafka_topic_partition_list_t *tlist;
         int cidx = op->consumer_idx;
         int i;
@@ -299,13 +321,14 @@ static void exec_subscribe_existing(sub_test_state_t *state, const test_op_t *op
 
         for (i = 0; i < state->all_topic_cnt; i++) {
                 rd_kafka_topic_partition_list_add(tlist, state->all_topics[i],
-                                          RD_KAFKA_PARTITION_UA);
+                                                  RD_KAFKA_PARTITION_UA);
         }
 
-        TEST_CALL_ERR__(rd_kafka_share_subscribe(state->consumers[cidx], tlist));
+        TEST_CALL_ERR__(
+            rd_kafka_share_subscribe(state->consumers[cidx], tlist));
 
         state->sub_start_idx[cidx] = 0;
-        state->sub_count[cidx] = state->all_topic_cnt;
+        state->sub_count[cidx]     = state->all_topic_cnt;
 
         rd_kafka_topic_partition_list_destroy(tlist);
 }
@@ -313,18 +336,20 @@ static void exec_subscribe_existing(sub_test_state_t *state, const test_op_t *op
 /**
  * @brief Execute TEST_OP_PRODUCE_TO_TOPIC (produce to specific topic by index)
  */
-static void exec_produce_to_topic(sub_test_state_t *state, const test_op_t *op) {
+static void exec_produce_to_topic(sub_test_state_t *state,
+                                  const test_op_t *op) {
         int cidx = op->consumer_idx;
-        int idx = state->sub_start_idx[cidx] + op->topic_idx;
+        int idx  = state->sub_start_idx[cidx] + op->topic_idx;
 
         TEST_ASSERT(op->topic_idx < state->sub_count[cidx],
-                    "Topic index %d out of range (sub_count=%d)",
-                    op->topic_idx, state->sub_count[cidx]);
+                    "Topic index %d out of range (sub_count=%d)", op->topic_idx,
+                    state->sub_count[cidx]);
 
         TEST_SAY("  PRODUCE_TO_TOPIC: %d msgs to topic[%d] (%s)\n",
                  op->msgs_per_topic, op->topic_idx, state->all_topics[idx]);
 
-        test_produce_msgs_easy(state->all_topics[idx], 0, 0, op->msgs_per_topic);
+        test_produce_msgs_easy(state->all_topics[idx], 0, 0,
+                               op->msgs_per_topic);
         state->msgs_produced[idx] += op->msgs_per_topic;
 }
 
@@ -336,8 +361,8 @@ static void exec_resubscribe(sub_test_state_t *state, const test_op_t *op) {
         int cidx = op->consumer_idx;
         int i;
 
-        TEST_SAY("  RESUBSCRIBE: %d new topic(s), consumer=%d\n",
-                 op->topic_cnt, cidx);
+        TEST_SAY("  RESUBSCRIBE: %d new topic(s), consumer=%d\n", op->topic_cnt,
+                 cidx);
 
         /* Save old subscription */
         state->old_sub_start_idx = state->sub_start_idx[cidx];
@@ -355,7 +380,8 @@ static void exec_resubscribe(sub_test_state_t *state, const test_op_t *op) {
                                                   RD_KAFKA_PARTITION_UA);
         }
 
-        TEST_CALL_ERR__(rd_kafka_share_subscribe(state->consumers[cidx], tlist));
+        TEST_CALL_ERR__(
+            rd_kafka_share_subscribe(state->consumers[cidx], tlist));
         rd_kafka_topic_partition_list_destroy(tlist);
 }
 
@@ -366,11 +392,12 @@ static void exec_unsubscribe(sub_test_state_t *state, const test_op_t *op) {
         int cidx = op->consumer_idx;
         int r;
 
-        TEST_SAY("  UNSUBSCRIBE: repeat=%d, consumer=%d\n",
-                 op->repeat_cnt, cidx);
+        TEST_SAY("  UNSUBSCRIBE: repeat=%d, consumer=%d\n", op->repeat_cnt,
+                 cidx);
 
         for (r = 0; r < op->repeat_cnt; r++) {
-                TEST_CALL_ERR__(rd_kafka_share_unsubscribe(state->consumers[cidx]));
+                TEST_CALL_ERR__(
+                    rd_kafka_share_unsubscribe(state->consumers[cidx]));
         }
 
         state->sub_count[cidx] = 0;
@@ -430,8 +457,8 @@ static void exec_consume(sub_test_state_t *state, const test_op_t *op) {
                                     "Received message from old subscription!");
                 }
                 TEST_ASSERT(consumed == op->expected_msgs,
-                            "Expected %d messages, got %d",
-                            op->expected_msgs, consumed);
+                            "Expected %d messages, got %d", op->expected_msgs,
+                            consumed);
         } else {
                 /* Consume any available */
                 TEST_SAY("  CONSUME: any available from %d topic(s)\n", count);
@@ -452,8 +479,8 @@ static void exec_verify_sub_cnt(sub_test_state_t *state, const test_op_t *op) {
 
         sub = test_get_subscription(state->consumers[cidx]);
         TEST_ASSERT(sub->cnt == op->expected_sub_cnt,
-                    "Expected %d subscriptions, got %d",
-                    op->expected_sub_cnt, sub->cnt);
+                    "Expected %d subscriptions, got %d", op->expected_sub_cnt,
+                    sub->cnt);
         rd_kafka_topic_partition_list_destroy(sub);
 }
 
@@ -462,14 +489,14 @@ static void exec_verify_sub_cnt(sub_test_state_t *state, const test_op_t *op) {
  */
 static void exec_delete_topic(sub_test_state_t *state, const test_op_t *op) {
         int cidx = op->consumer_idx;
-        int idx = state->sub_start_idx[cidx] + op->topic_idx;
+        int idx  = state->sub_start_idx[cidx] + op->topic_idx;
 
         TEST_ASSERT(op->topic_idx < state->sub_count[cidx],
-                    "Topic index %d out of range (sub_count=%d)",
-                    op->topic_idx, state->sub_count[cidx]);
+                    "Topic index %d out of range (sub_count=%d)", op->topic_idx,
+                    state->sub_count[cidx]);
 
-        TEST_SAY("  DELETE_TOPIC: index %d (%s)\n",
-                 op->topic_idx, state->all_topics[idx]);
+        TEST_SAY("  DELETE_TOPIC: index %d (%s)\n", op->topic_idx,
+                 state->all_topics[idx]);
 
         test_delete_topic(test_share_consumer_get_rk(state->consumers[0]),
                           state->all_topics[idx]);
@@ -512,12 +539,12 @@ static void exec_poll_no_sub(sub_test_state_t *state, const test_op_t *op) {
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
         rd_kafka_error_t *err;
         size_t rcvd = 0;
-        int cidx = op->consumer_idx;
+        int cidx    = op->consumer_idx;
 
         TEST_SAY("  POLL_NO_SUB: consumer=%d\n", cidx);
 
-        err = rd_kafka_share_consume_batch(state->consumers[cidx], 2000,
-                                           batch, &rcvd);
+        err = rd_kafka_share_consume_batch(state->consumers[cidx], 2000, batch,
+                                           &rcvd);
         /* TODO KIP-932: Should return error */
         if (err)
                 rd_kafka_error_destroy(err);
@@ -526,19 +553,22 @@ static void exec_poll_no_sub(sub_test_state_t *state, const test_op_t *op) {
 /**
  * @brief Initialize test state
  */
-static void state_init(sub_test_state_t *state, const test_scenario_t *scenario) {
+static void state_init(sub_test_state_t *state,
+                       const test_scenario_t *scenario) {
         int i;
 
         memset(state, 0, sizeof(*state));
 
-        rd_snprintf(state->group_name, sizeof(state->group_name),
-                    "share-%s", scenario->name);
+        rd_snprintf(state->group_name, sizeof(state->group_name), "share-%s",
+                    scenario->name);
 
-        state->consumer_cnt = scenario->consumer_cnt > 0 ? scenario->consumer_cnt : 1;
+        state->consumer_cnt =
+            scenario->consumer_cnt > 0 ? scenario->consumer_cnt : 1;
 
         /* Create initial consumers */
         for (i = 0; i < state->consumer_cnt; i++) {
-                state->consumers[i] = test_create_share_consumer(state->group_name);
+                state->consumers[i] =
+                    test_create_share_consumer(state->group_name);
         }
 
         /* Set group offset to earliest */
@@ -578,9 +608,11 @@ static void do_test_scenario(const test_scenario_t *scenario) {
         int op_idx;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== %s ===\n", scenario->name);
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         state_init(&state, scenario);
 
@@ -646,169 +678,100 @@ static void do_test_scenario(const test_scenario_t *scenario) {
  * Basic subscription tests
  */
 static const test_scenario_t test_single_subscribe = {
-        .name = "single-subscribe",
-        .ops = {
-                SUBSCRIBE(2),
-                PRODUCE(5),
-                VERIFY_SUB(2),
-                CONSUME(10),
-                TEST_OPS_END()
-        }
-};
+    .name = "single-subscribe",
+    .ops  = {SUBSCRIBE(2), PRODUCE(5), VERIFY_SUB(2), CONSUME(10),
+             TEST_OPS_END()}};
 
 static const test_scenario_t test_single_unsubscribe = {
-        .name = "single-unsubscribe",
-        .ops = {
-                SUBSCRIBE(2),
-                PRODUCE(5),
-                CONSUME(10),
-                UNSUBSCRIBE(),
-                VERIFY_SUB(0),
-                TEST_OPS_END()
-        }
-};
+    .name = "single-unsubscribe",
+    .ops = {SUBSCRIBE(2), PRODUCE(5), CONSUME(10), UNSUBSCRIBE(), VERIFY_SUB(0),
+            TEST_OPS_END()}};
 
 static const test_scenario_t test_repeated_subscribe = {
-        .name = "repeated-subscribe-no-duplicates",
-        .ops = {
-                SUBSCRIBE_REPEAT(2, 3),  /* Subscribe 3 times to same topics */
-                PRODUCE(5),
-                VERIFY_SUB(2),           /* Should still be 2, not 6 */
-                CONSUME(10),
-                TEST_OPS_END()
-        }
-};
+    .name = "repeated-subscribe-no-duplicates",
+    .ops  = {SUBSCRIBE_REPEAT(2, 3),    /* Subscribe 3 times to same topics */
+             PRODUCE(5), VERIFY_SUB(2), /* Should still be 2, not 6 */
+             CONSUME(10), TEST_OPS_END()}};
 
 static const test_scenario_t test_repeated_unsubscribe = {
-        .name = "repeated-unsubscribe-no-error",
-        .ops = {
-                SUBSCRIBE(2),
-                PRODUCE(5),
-                CONSUME(10),
-                UNSUBSCRIBE_REPEAT(3),   /* Unsubscribe 3 times */
-                VERIFY_SUB(0),
-                TEST_OPS_END()
-        }
-};
+    .name = "repeated-unsubscribe-no-error",
+    .ops  = {SUBSCRIBE(2), PRODUCE(5), CONSUME(10),
+             UNSUBSCRIBE_REPEAT(3), /* Unsubscribe 3 times */
+             VERIFY_SUB(0), TEST_OPS_END()}};
 
 /**
  * Subscription replacement tests
  */
 static const test_scenario_t test_topic_switch = {
-        .name = "topic-switch",
-        .ops = {
-                SUBSCRIBE(2),
-                PRODUCE(10),
-                CONSUME_ANY(),
-                RESUBSCRIBE(2),          /* Switch to 2 new topics */
-                PRODUCE(10),             /* Produce to new topics */
-                PRODUCE_TO_OLD(5),       /* Produce to old topics */
-                CONSUME_VERIFY_NO_OLD(20), /* Should only get new topic msgs */
-                TEST_OPS_END()
-        }
-};
+    .name = "topic-switch",
+    .ops  = {SUBSCRIBE(2), PRODUCE(10), CONSUME_ANY(),
+             RESUBSCRIBE(2),            /* Switch to 2 new topics */
+             PRODUCE(10),               /* Produce to new topics */
+             PRODUCE_TO_OLD(5),         /* Produce to old topics */
+             CONSUME_VERIFY_NO_OLD(20), /* Should only get new topic msgs */
+             TEST_OPS_END()}};
 
 static const test_scenario_t test_incremental_subscription = {
-        .name = "incremental-subscription",
-        .ops = {
-                /* Start with 1 topic */
-                SUBSCRIBE(1),
-                PRODUCE(10),
-                VERIFY_SUB(1),
-                CONSUME(10),
-                /* Add 1 more topic (now 2 total) */
-                SUBSCRIBE_ADD(1),
-                PRODUCE(10),
-                VERIFY_SUB(2),
-                CONSUME(20),             /* 10 from each of 2 topics */
-                /* Add 1 more topic (now 3 total) */
-                SUBSCRIBE_ADD(1),
-                PRODUCE(10),
-                VERIFY_SUB(3),
-                CONSUME(30),             /* 10 from each of 3 topics */
-                TEST_OPS_END()
-        }
-};
+    .name = "incremental-subscription",
+    .ops  = {/* Start with 1 topic */
+            SUBSCRIBE(1), PRODUCE(10), VERIFY_SUB(1), CONSUME(10),
+            /* Add 1 more topic (now 2 total) */
+            SUBSCRIBE_ADD(1), PRODUCE(10), VERIFY_SUB(2),
+            CONSUME(20), /* 10 from each of 2 topics */
+            /* Add 1 more topic (now 3 total) */
+            SUBSCRIBE_ADD(1), PRODUCE(10), VERIFY_SUB(3),
+            CONSUME(30), /* 10 from each of 3 topics */
+            TEST_OPS_END()}};
 
 /**
  * Edge case tests
  */
 static const test_scenario_t test_subscribe_before_topic_exists = {
-        .name = "subscribe-before-topic-exists",
-        .ops = {
-                SUBSCRIBE_NO_CREATE(1),  /* Subscribe without creating topic */
-                CREATE_TOPIC(0),         /* Now create the subscribed topic */
-                PRODUCE(5),              /* Produce to the topic */
-                CONSUME(5),              /* Should receive all messages */
-                TEST_OPS_END()
-        }
-};
+    .name = "subscribe-before-topic-exists",
+    .ops  = {SUBSCRIBE_NO_CREATE(1), /* Subscribe without creating topic */
+             CREATE_TOPIC(0),        /* Now create the subscribed topic */
+             PRODUCE(5),             /* Produce to the topic */
+             CONSUME(5),             /* Should receive all messages */
+             TEST_OPS_END()}};
 
 static const test_scenario_t test_poll_empty_topic = {
-        .name = "poll-empty-topic",
-        .ops = {
-                SUBSCRIBE(1),
-                /* Don't produce - topic is empty */
-                CONSUME(0),              /* Should return 0, not error */
-                TEST_OPS_END()
-        }
-};
+    .name = "poll-empty-topic",
+    .ops  = {SUBSCRIBE(1),
+             /* Don't produce - topic is empty */
+             CONSUME(0), /* Should return 0, not error */
+             TEST_OPS_END()}};
 
 static const test_scenario_t test_poll_no_subscription = {
-        .name = "poll-no-subscription",
-        .ops = {
-                POLL_NO_SUB(),           /* Poll without subscribing */
-                TEST_OPS_END()
-        }
-};
+    .name = "poll-no-subscription",
+    .ops  = {POLL_NO_SUB(), /* Poll without subscribing */
+             TEST_OPS_END()}};
 
 static const test_scenario_t test_poll_after_unsubscribe = {
-        .name = "poll-after-unsubscribe",
-        .ops = {
-                SUBSCRIBE(1),
-                PRODUCE(5),
-                CONSUME_ANY(),           /* Consume some */
-                UNSUBSCRIBE(),
-                POLL_NO_SUB(),           /* Poll after unsubscribe */
-                TEST_OPS_END()
-        }
-};
+    .name = "poll-after-unsubscribe",
+    .ops  = {SUBSCRIBE(1), PRODUCE(5), CONSUME_ANY(), /* Consume some */
+             UNSUBSCRIBE(), POLL_NO_SUB(), /* Poll after unsubscribe */
+             TEST_OPS_END()}};
 
 /**
  * Topic deletion tests
  */
 static const test_scenario_t test_topic_deletion = {
-        .name = "topic-deletion-while-subscribed",
-        .ops = {
-                SUBSCRIBE(2),
-                PRODUCE(10),
-                CONSUME_ANY(),
-                DELETE_TOPIC(1),         /* Delete second topic */
-                WAIT_MS(3000),
-                PRODUCE_TO_TOPIC(0, 5),  /* Produce to remaining topic */
-                CONSUME_ANY(),           /* Continue consuming from remaining */
-                TEST_OPS_END()
-        }
-};
+    .name = "topic-deletion-while-subscribed",
+    .ops  = {SUBSCRIBE(2), PRODUCE(10), CONSUME_ANY(),
+             DELETE_TOPIC(1), /* Delete second topic */
+             WAIT_MS(3000),
+             PRODUCE_TO_TOPIC(0, 5), /* Produce to remaining topic */
+             CONSUME_ANY(),          /* Continue consuming from remaining */
+             TEST_OPS_END()}};
 
 /**
  * Stress tests
  */
 static const test_scenario_t test_rapid_updates = {
-        .name = "rapid-subscription-updates",
-        .ops = {
-                SUBSCRIBE(2),
-                RESUBSCRIBE(1),
-                RESUBSCRIBE(3),
-                UNSUBSCRIBE(),
-                SUBSCRIBE(2),
-                RESUBSCRIBE(2),
-                UNSUBSCRIBE(),
-                SUBSCRIBE(3),
-                VERIFY_SUB(3),
-                TEST_OPS_END()
-        }
-};
+    .name = "rapid-subscription-updates",
+    .ops  = {SUBSCRIBE(2), RESUBSCRIBE(1), RESUBSCRIBE(3), UNSUBSCRIBE(),
+             SUBSCRIBE(2), RESUBSCRIBE(2), UNSUBSCRIBE(), SUBSCRIBE(3),
+             VERIFY_SUB(3), TEST_OPS_END()}};
 
 /**
  * @brief Multi-consumer overlap test (standalone)
@@ -822,9 +785,9 @@ static const test_scenario_t test_rapid_updates = {
  */
 static void do_test_multi_consumer_overlap(void) {
         const char *group = test_mk_topic_name("share-overlap", 1);
-        char *shared  = rd_strdup(test_mk_topic_name("0170-shared", 1));
-        char *c0_only = rd_strdup(test_mk_topic_name("0170-c0only", 1));
-        char *c1_only = rd_strdup(test_mk_topic_name("0170-c1only", 1));
+        char *shared      = rd_strdup(test_mk_topic_name("0170-shared", 1));
+        char *c0_only     = rd_strdup(test_mk_topic_name("0170-c0only", 1));
+        char *c1_only     = rd_strdup(test_mk_topic_name("0170-c1only", 1));
         const char *c0_topics[] = {shared, c0_only};
         const char *c1_topics[] = {shared, c1_only};
         rd_kafka_share_t *rkshare0, *rkshare1;
@@ -833,9 +796,11 @@ static void do_test_multi_consumer_overlap(void) {
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== multi-consumer-overlapping-subscriptions ===\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         /* Create topics */
         test_create_topic_wait_exists(NULL, shared, 1, -1, 30000);
@@ -853,8 +818,8 @@ static void do_test_multi_consumer_overlap(void) {
 
         /* Set group offset */
         test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(rkshare0),
-            RD_KAFKA_RESOURCE_GROUP, group, cfg, 1);
+            test_share_consumer_get_rk(rkshare0), RD_KAFKA_RESOURCE_GROUP,
+            group, cfg, 1);
 
         /* Subscribe with overlapping topics */
         test_share_consumer_subscribe_multi(rkshare0, 2, shared, c0_only);
@@ -878,7 +843,8 @@ static void do_test_multi_consumer_overlap(void) {
                 c1_cnt += batch_cnt;
         }
 
-        TEST_SAY("C0: %d, C1: %d (total: %d)\n", c0_cnt, c1_cnt, c0_cnt + c1_cnt);
+        TEST_SAY("C0: %d, C1: %d (total: %d)\n", c0_cnt, c1_cnt,
+                 c0_cnt + c1_cnt);
         TEST_ASSERT(c0_cnt > 0 || c1_cnt > 0, "no messages received");
 
         /* Cleanup */

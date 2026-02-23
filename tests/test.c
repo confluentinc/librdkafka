@@ -2771,7 +2771,7 @@ rd_kafka_t *test_create_consumer(
  *         once these properties are added as defaults to
  *         rd_kafka_share_consumer_new().
  */
- rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
+rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         char errstr[512];
@@ -2809,7 +2809,7 @@ int test_share_consume_batch(rd_kafka_share_t *rk,
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
         rd_kafka_error_t *err;
         size_t rcvd = 0;
-        int valid = 0;
+        int valid   = 0;
         size_t i;
         int j;
         int ret = 0;
@@ -2835,8 +2835,8 @@ int test_share_consume_batch(rd_kafka_share_t *rk,
 
                         /* Verify message is from expected topic */
                         for (j = 0; j < expected_topic_cnt; j++) {
-                                if (strcmp(msg_topic,
-                                           expected_topics[j]) == 0) {
+                                if (strcmp(msg_topic, expected_topics[j]) ==
+                                    0) {
                                         found = 1;
                                         break;
                                 }
@@ -2866,7 +2866,8 @@ int test_share_consume_batch(rd_kafka_share_t *rk,
  * @param expected Number of messages to consume.
  * @param max_attempts Maximum poll attempts.
  * @param timeout_ms Timeout per poll in milliseconds.
- * @param expected_topics Array of valid topic names (NULL to skip verification).
+ * @param expected_topics Array of valid topic names (NULL to skip
+ * verification).
  * @param expected_topic_cnt Number of topics in expected_topics.
  *
  * @returns Number of messages consumed, or -1 if message from wrong topic.

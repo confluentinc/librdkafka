@@ -194,18 +194,20 @@ typedef struct rd_kafka_share_ack_batches_s {
                                         *   sorted by start_offset */
 } rd_kafka_share_ack_batches_t;
 
-/** Allocate and initialize a share ack batch entry (offset range + types array). */
-rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_new(
-    int64_t start_offset,
-    int64_t end_offset,
-    int32_t types_cnt);
+/** Allocate and initialize a share ack batch entry (offset range + types
+ * array). */
+rd_kafka_share_ack_batch_entry_t *
+rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
+                                   int64_t end_offset,
+                                   int32_t types_cnt);
 /** Destroy a share ack batch entry (frees types array and entry). */
 void rd_kafka_share_ack_batch_entry_destroy(
     rd_kafka_share_ack_batch_entry_t *entry);
 
 /** Allocate and initialize a share ack batches (list of entries). */
 rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void);
-/** Destroy share ack batches. If \p free_rktpar is true, destroys rktpar too. */
+/** Destroy share ack batches. If \p free_rktpar is true, destroys rktpar too.
+ */
 void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches,
                                         rd_bool_t free_rktpar);
 

@@ -879,13 +879,13 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                                 rd_kafka_message_t **rkmessages,
                                 size_t rkmessages_size);
 /** Returns error (caller must destroy) or NULL. Processes one op per call. */
-rd_kafka_error_t *rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
-                                                    int timeout_ms,
-                                                    rd_kafka_message_t
-                                                        **rkmessages,
-                                                    size_t rkmessages_size,
-                                                    rd_kafka_share_t *rkshare,
-                                                    size_t *rkmessages_size_out);
+rd_kafka_error_t *
+rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
+                                  int timeout_ms,
+                                  rd_kafka_message_t **rkmessages,
+                                  size_t rkmessages_size,
+                                  rd_kafka_share_t *rkshare,
+                                  size_t *rkmessages_size_out);
 void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
                                                 rd_list_t *ack_batches_out);
 void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,

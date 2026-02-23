@@ -250,6 +250,47 @@ rd_kafka_mock_topic_create(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
+ * @brief Deletes a topic and all its partitions.
+ *
+ * Subsequent requests referencing the topic will recieve
+ * UNKNOWN_TOPIC_OR_PARTITION.
+ *
+ * @param mcluster The mock cluster instance.
+ * @param topic The topic to delete.
+ *
+ * @return RD_KAFKA_RESP_ERR_NO_ERROR on success
+ *         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PARTITION if the topic does not
+ * exist.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_topic_delete(rd_kafka_mock_cluster_t *mcluster,
+                           const char *topic);
+
+
+/**
+ * @brief Delete records before \p before_offset in \p topic [\p partition].
+ *
+ * Advances the partition's start offset (log start offset) to
+ * \p before_offset and removes all message sets fully before that offset.
+ *
+ * @param mcluster      The mock cluster.
+ * @param topic         Topic name.
+ * @param partition     Partition id.
+ * @param before_offset Delete all records before this offset.
+ *                      The new start offset will be set to this value.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART if partition doesn't exist,
+ *          RD_KAFKA_RESP_ERR_OFFSET_OUT_OF_RANGE if before_offset > end_offset.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_partition_delete_records(rd_kafka_mock_cluster_t *mcluster,
+                                       const char *topic,
+                                       int32_t partition,
+                                       int64_t before_offset);
+
+
+/**
  * @brief Sets the partition leader.
  *
  * The topic will be created if it does not exist.
@@ -607,9 +648,9 @@ RD_EXPORT void rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(
  * @param mcluster Mock cluster instance.
  * @param session_timeout_ms Session timeout in milliseconds.
  */
-RD_EXPORT void rd_kafka_mock_sharegroup_set_session_timeout(
-    rd_kafka_mock_cluster_t *mcluster,
-    int session_timeout_ms);
+RD_EXPORT void
+rd_kafka_mock_sharegroup_set_session_timeout(rd_kafka_mock_cluster_t *mcluster,
+                                             int session_timeout_ms);
 
 /**
  * @brief Set the sharegroup heartbeat interval in milliseconds.
@@ -648,6 +689,21 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_record_lock_duration(
     int lock_duration_ms);
 
 /**
+ * @brief Set the maximum number of members allowed in a share group.
+ *
+ * New members attempting to join via ShareGroupHeartbeat when the group
+ * is at capacity will receive GROUP_MAX_SIZE_REACHED.
+ *
+ * Default is 0 (unlimited).
+ *
+ * @param mcluster Mock cluster instance.
+ * @param max_size Maximum members allowed. 0 = unlimited.
+ */
+RD_EXPORT void
+rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
+                                      int max_size);
+
+/**
  * @brief Set a manual target assignment for a sharegroup.
  *
  * This allows tests to override the automatic partition assignment
@@ -678,11 +734,11 @@ RD_EXPORT void rd_kafka_mock_sharegroup_target_assignment(
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND if sharegroup not found.
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_member_ids(
-    rd_kafka_mock_cluster_t *mcluster,
-    const char *group_id,
-    char ***member_ids_out,
-    size_t *member_cnt_out);
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_sharegroup_get_member_ids(rd_kafka_mock_cluster_t *mcluster,
+                                        const char *group_id,
+                                        char ***member_ids_out,
+                                        size_t *member_cnt_out);
 
 /**@}*/
 

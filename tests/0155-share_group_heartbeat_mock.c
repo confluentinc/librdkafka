@@ -727,6 +727,82 @@ static void do_test_share_group_target_assignment(void) {
 }
 
 /**
+ * @brief Test rd_kafka_mock_sharegroup_set_max_size().
+ *
+ * Set max_size=1, join one consumer successfully, then verify that a
+ * second consumer fails to join (gets no assignment / fenced).
+ */
+static void do_test_share_group_max_size(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *subscription;
+        rd_kafka_topic_partition_list_t *c1_assignment, *c2_assignment;
+        rd_kafka_t *c1, *c2;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        const char *group = "test-share-group-max-size";
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+
+        /* Limit share group to 1 member */
+        rd_kafka_mock_sharegroup_set_max_size(mcluster, 1);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        /* C1 joins - should succeed and get all 3 partitions */
+        c1 = create_share_consumer(bootstraps, group);
+        TEST_CALL_ERR__(rd_kafka_subscribe(c1, subscription));
+
+        wait_share_heartbeats(mcluster, 1, 500);
+        rd_kafka_consumer_poll(c1, 2000);
+
+        TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assignment));
+        TEST_ASSERT(c1_assignment->cnt == 3,
+                    "Expected C1 to have 3 partitions, got %d",
+                    c1_assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(c1_assignment);
+
+        /* C2 joins - should be rejected (GROUP_MAX_SIZE_REACHED) */
+        c2 = create_share_consumer(bootstraps, group);
+        TEST_CALL_ERR__(rd_kafka_subscribe(c2, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        /* Give C2 time to attempt join and get rejected */
+        rd_kafka_consumer_poll(c2, 3000);
+
+        /* C2 should have no assignment since it was rejected */
+        TEST_CALL_ERR__(rd_kafka_assignment(c2, &c2_assignment));
+        TEST_ASSERT(c2_assignment->cnt == 0,
+                    "Expected C2 to have 0 partitions (rejected), got %d",
+                    c2_assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(c2_assignment);
+
+        /* C1 should still have its assignment */
+        TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assignment));
+        TEST_ASSERT(c1_assignment->cnt == 3,
+                    "Expected C1 to still have 3 partitions, got %d",
+                    c1_assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(c1_assignment);
+
+        /* Cleanup */
+        rd_kafka_consumer_close(c1);
+        rd_kafka_consumer_close(c2);
+        rd_kafka_destroy(c1);
+        rd_kafka_destroy(c2);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief UNKNOWN_MEMBER_ID error handling.
  *
  * When a consumer receives UNKNOWN_MEMBER_ID error, it should rejoin
@@ -2430,6 +2506,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_rtt_injection();
         do_test_share_group_session_timeout();
         do_test_share_group_target_assignment();
+        do_test_share_group_max_size();
 
         do_test_unknown_member_id_error();
         do_test_fenced_member_epoch_error();

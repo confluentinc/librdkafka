@@ -587,6 +587,8 @@ struct rd_kafka_op_s {
                         enum {
                                 RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
                                 RD_KAFKA_MOCK_CMD_TOPIC_CREATE,
+                                RD_KAFKA_MOCK_CMD_TOPIC_DELETE,
+                                RD_KAFKA_MOCK_CMD_PART_DELETE_RECORDS,
                                 RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
@@ -637,6 +639,8 @@ struct rd_kafka_op_s {
                                                   *    BROKER_SET_UPDOWN
                                                   *    APIVERSION_SET (minver)
                                                   *    BROKER_SET_RTT
+                                                  *    PART_DELETE_RECORDS
+                                                  *      (before_offset)
                                                   */
                         int64_t hi;              /**< High offset, for:
                                                   *    TOPIC_CREATE (repl fact)

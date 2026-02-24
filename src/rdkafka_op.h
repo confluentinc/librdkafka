@@ -196,6 +196,10 @@ typedef enum {
                                                      * add partition */
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
                                                      * remove partition */
+        RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
+                                           *   all messages and partition acks
+                                           *   from a single broker response. */
+
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -755,7 +759,40 @@ struct rd_kafka_op_s {
                         /** Absolute timeout for share fetch fanout operation.
                          */
                         rd_ts_t abs_timeout;
+
+                        /** List of all acknowledgement batches to send.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Built from inflight ack map, will be filtered
+                         *  by leader when creating SHARE_FETCH ops.
+                         *  Each entry uses size=1 with types[0] holding the
+                         *  single ack type for the collated range.
+                         */
+                        rd_list_t ack_batches;
                 } share_fetch_fanout;
+
+                /**
+                 * Share fetch response - single rko containing all messages
+                 * and partition ack info from one broker response.
+                 */
+                struct {
+                        /** List of message ops (rd_kafka_op_t*).
+                         *  Contains only actual messages (ACQUIRED/REJECT),
+                         *  no GAP placeholder ops.
+                         */
+                        /*
+                         * TODO KIP-932: Check if we can send the messages only
+                         *  instead of the message rkos.
+                         */
+                        rd_list_t message_rkos;
+
+                        /** List of per-partition inflight ack mappings.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Contains per-offset ack types (ACQUIRED/GAP/REJECT).
+                         *  Built in broker thread, merged to rkshare in app
+                         * thread.
+                         */
+                        rd_list_t inflight_acks;
+                } share_fetch_response;
 
         } rko_u;
 };

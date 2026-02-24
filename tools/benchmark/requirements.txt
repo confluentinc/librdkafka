@@ -13,3 +13,6 @@ numpy>=1.24.0
 
 # YAML preset schema validation
 jsonschema>=4.21.0
+
+# CPU and memory sampling of producer/consumer processes
+psutil>=5.9.0

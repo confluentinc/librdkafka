@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "benchmark_low_latency_20260224_100711",
+  "preset": "low_latency",
+  "broker": "localhost:9092",
+  "client_impl": "rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples",
+  "runs_requested": 3,
+  "runs_completed": 3,
+  "runs_failed": 0,
+  "msg_count": 100000,
+  "msg_size": 128,
+  "timestamp_utc": "2026-02-24T10:07:11.874123+00:00",
+  "config": {
+    "meta": {
+      "name": "low_latency",
+      "description": "Minimize end-to-end latency \u2014 no batching, no linger, single-partition"
+    },
+    "workload": {
+      "msg_count": 100000,
+      "msg_size": 128,
+      "duration_sec": null,
+      "num_partitions": 1,
+      "replication_factor": 1,
+      "topic_name": null,
+      "topic_auto_delete": true,
+      "compression": "none"
+    },
+    "producer": {
+      "acks": "1",
+      "linger_ms": 0,
+      "batch_size": 1,
+      "batch_num_messages": 1,
+      "queue_buffering_max_messages": 1,
+      "queue_buffering_max_kbytes": 1024,
+      "message_send_max_retries": 3,
+      "retry_backoff_ms": 100,
+      "enable_idempotence": false,
+      "transactional_id": null,
+      "transaction_timeout_ms": 60000,
+      "extra_config": {
+        "socket.nagle.disable": "true"
+      }
+    },
+    "consumer": {
+      "group_id": null,
+      "auto_offset_reset": "earliest",
+      "fetch_min_bytes": 1,
+      "fetch_wait_max_ms": 0,
+      "queued_min_messages": 1,
+      "session_timeout_ms": 10000,
+      "max_poll_interval_ms": 300000,
+      "enable_auto_commit": true,
+      "extra_config": {}
+    },
+    "timeouts": {
+      "producer_timeout_sec": 60,
+      "consumer_timeout_sec": 90,
+      "consumer_catchup_grace_sec": 30
+    },
+    "kafka": {
+      "bootstrap_servers": "localhost:9092"
+    },
+    "runs": 3
+  },
+  "runs": [
+    {
+      "run_id": 1,
+      "topic": "benchmark-low_latency-947d8b3f",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 100000,
+        "msgs_delivered": 100000,
+        "msgs_failed": 0,
+        "bytes_delivered": 12800000,
+        "elapsed_sec": 17.96,
+        "msgs_per_sec": 5569.04,
+        "mb_per_sec": 0.68,
+        "dr_latency_avg_us": 356.63,
+        "dr_latency_p50_us": 344.0,
+        "dr_latency_p95_us": 434.0,
+        "dr_latency_p99_us": 506.0,
+        "dr_latency_min_us": 212.0,
+        "dr_latency_max_us": 10344.0,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 100000,
+        "bytes_consumed": 12800000,
+        "elapsed_sec": 18.14,
+        "msgs_per_sec": 5513.97,
+        "mb_per_sec": 0.67,
+        "e2e_latency_avg_ms": 1035.03,
+        "e2e_latency_p50_ms": 1034.28,
+        "e2e_latency_p95_ms": 1726.96,
+        "e2e_latency_p99_ms": 1876.41,
+        "e2e_latency_min_ms": 16.5,
+        "e2e_latency_max_ms": 1989.71,
+        "consumer_lag_at_end": 0,
+        "error": null
+      },
+      "error": null
+    },
+    {
+      "run_id": 2,
+      "topic": "benchmark-low_latency-7fe742c8",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 100000,
+        "msgs_delivered": 100000,
+        "msgs_failed": 0,
+        "bytes_delivered": 12800000,
+        "elapsed_sec": 17.6,
+        "msgs_per_sec": 5681.21,
+        "mb_per_sec": 0.69,
+        "dr_latency_avg_us": 349.6,
+        "dr_latency_p50_us": 339.0,
+        "dr_latency_p95_us": 419.0,
+        "dr_latency_p99_us": 492.0,
+        "dr_latency_min_us": 210.0,
+        "dr_latency_max_us": 13095.0,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 100000,
+        "bytes_consumed": 12800000,
+        "elapsed_sec": 18.14,
+        "msgs_per_sec": 5512.31,
+        "mb_per_sec": 0.67,
+        "e2e_latency_avg_ms": 1219.32,
+        "e2e_latency_p50_ms": 1231.73,
+        "e2e_latency_p95_ms": 2003.65,
+        "e2e_latency_p99_ms": 2204.38,
+        "e2e_latency_min_ms": 26.85,
+        "e2e_latency_max_ms": 2321.39,
+        "consumer_lag_at_end": 0,
+        "error": null
+      },
+      "error": null
+    },
+    {
+      "run_id": 3,
+      "topic": "benchmark-low_latency-810071fe",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 100000,
+        "msgs_delivered": 100000,
+        "msgs_failed": 0,
+        "bytes_delivered": 12800000,
+        "elapsed_sec": 17.45,
+        "msgs_per_sec": 5729.22,
+        "mb_per_sec": 0.7,
+        "dr_latency_avg_us": 346.62,
+        "dr_latency_p50_us": 337.0,
+        "dr_latency_p95_us": 415.0,
+        "dr_latency_p99_us": 484.0,
+        "dr_latency_min_us": 217.0,
+        "dr_latency_max_us": 9344.0,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 100000,
+        "bytes_consumed": 12800000,
+        "elapsed_sec": 18.14,
+        "msgs_per_sec": 5513.14,
+        "mb_per_sec": 0.67,
+        "e2e_latency_avg_ms": 1228.67,
+        "e2e_latency_p50_ms": 1208.72,
+        "e2e_latency_p95_ms": 2146.67,
+        "e2e_latency_p99_ms": 2382.66,
+        "e2e_latency_min_ms": 46.8,
+        "e2e_latency_max_ms": 2518.73,
+        "consumer_lag_at_end": 0,
+        "error": null
+      },
+      "error": null
+    }
+  ],
+  "aggregated": {
+    "producer": {
+      "msgs_per_sec": {
+        "mean": 5659.823333333334,
+        "stddev": 82.20371179778536,
+        "min": 5569.04,
+        "max": 5729.22,
+        "p50": 5681.21,
+        "runs": 3
+      },
+      "mb_per_sec": {
+        "mean": 0.69,
+        "stddev": 0.009999999999999953,
+        "min": 0.68,
+        "max": 0.7,
+        "p50": 0.69,
+        "runs": 3
+      },
+      "dr_latency_avg_us": {
+        "mean": 350.95,
+        "stddev": 5.139737347374856,
+        "min": 346.62,
+        "max": 356.63,
+        "p50": 349.6,
+        "runs": 3
+      },
+      "dr_latency_p99_us": {
+        "mean": 494.0,
+        "stddev": 11.135528725660043,
+        "min": 484.0,
+        "max": 506.0,
+        "p50": 492.0,
+        "runs": 3
+      },
+      "msgs_failed": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      }
+    },
+    "consumer": {
+      "msgs_per_sec": {
+        "mean": 5513.14,
+        "stddev": 0.8299999999999272,
+        "min": 5512.31,
+        "max": 5513.97,
+        "p50": 5513.14,
+        "runs": 3
+      },
+      "mb_per_sec": {
+        "mean": 0.67,
+        "stddev": 0.0,
+        "min": 0.67,
+        "max": 0.67,
+        "p50": 0.67,
+        "runs": 3
+      },
+      "e2e_latency_avg_ms": {
+        "mean": 1161.0066666666667,
+        "stddev": 109.19911187062529,
+        "min": 1035.03,
+        "max": 1228.67,
+        "p50": 1219.32,
+        "runs": 3
+      },
+      "e2e_latency_p99_ms": {
+        "mean": 2154.4833333333336,
+        "stddev": 256.78692262911926,
+        "min": 1876.41,
+        "max": 2382.66,
+        "p50": 2204.38,
+        "runs": 3
+      },
+      "consumer_lag_at_end": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      }
+    }
+  }
+}

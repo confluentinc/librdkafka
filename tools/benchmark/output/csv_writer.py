@@ -32,6 +32,11 @@ _COLUMNS = [
     "p_dr_lat_p99_us",
     "p_dr_lat_min_us",
     "p_dr_lat_max_us",
+    # Producer resource usage (process tree; see accuracy note in README)
+    "p_cpu_avg_pct",
+    "p_cpu_max_pct",
+    "p_mem_avg_mb",
+    "p_mem_peak_mb",
     # Consumer
     "c_msgs_consumed",
     "c_bytes_consumed",
@@ -45,6 +50,11 @@ _COLUMNS = [
     "c_e2e_lat_min_ms",
     "c_e2e_lat_max_ms",
     "c_consumer_lag_at_end",
+    # Consumer resource usage (process tree; see accuracy note in README)
+    "c_cpu_avg_pct",
+    "c_cpu_max_pct",
+    "c_mem_avg_mb",
+    "c_mem_peak_mb",
 ]
 
 
@@ -65,6 +75,10 @@ def _p_fields(p: Optional[ProducerResult]) -> dict:
         "p_dr_lat_p99_us": p.dr_latency_p99_us,
         "p_dr_lat_min_us": p.dr_latency_min_us,
         "p_dr_lat_max_us": p.dr_latency_max_us,
+        "p_cpu_avg_pct":  p.cpu_avg_pct,
+        "p_cpu_max_pct":  p.cpu_max_pct,
+        "p_mem_avg_mb":   p.mem_avg_mb,
+        "p_mem_peak_mb":  p.mem_peak_mb,
     }
 
 
@@ -84,6 +98,10 @@ def _c_fields(c: Optional[ConsumerResult]) -> dict:
         "c_e2e_lat_min_ms": c.e2e_latency_min_ms,
         "c_e2e_lat_max_ms": c.e2e_latency_max_ms,
         "c_consumer_lag_at_end": c.consumer_lag_at_end,
+        "c_cpu_avg_pct":  c.cpu_avg_pct,
+        "c_cpu_max_pct":  c.cpu_max_pct,
+        "c_mem_avg_mb":   c.mem_avg_mb,
+        "c_mem_peak_mb":  c.mem_peak_mb,
     }
 
 

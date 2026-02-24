@@ -229,10 +229,14 @@ def _per_run_table(runs: list) -> str:
             f'<td>{_safe(p.mb_per_sec, 2) if p else "—"}</td>'
             f'<td>{_safe(p.dr_latency_avg_us) if p else "—"}</td>'
             f'<td>{_safe(p.dr_latency_p99_us) if p else "—"}</td>'
+            f'<td>{_safe(p.cpu_avg_pct) if p else "—"}</td>'
+            f'<td>{_safe(p.mem_peak_mb) if p else "—"}</td>'
             f'<td>{_safe(c.msgs_per_sec, 0) if c else "—"}</td>'
             f'<td>{_safe(c.mb_per_sec, 2) if c else "—"}</td>'
             f'<td>{_safe(c.e2e_latency_avg_ms) if c else "—"}</td>'
             f'<td>{_safe(c.e2e_latency_p99_ms) if c else "—"}</td>'
+            f'<td>{_safe(c.cpu_avg_pct) if c else "—"}</td>'
+            f'<td>{_safe(c.mem_peak_mb) if c else "—"}</td>'
             f'<td>{_safe(c.consumer_lag_at_end, 0) if c else "—"}</td>'
             f'</tr>'
         )
@@ -245,14 +249,43 @@ def _per_run_table(runs: list) -> str:
           <th>Run</th><th>Status</th>
           <th>P msgs/s</th><th>P MB/s</th>
           <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+          <th>P CPU avg%†</th><th>P mem peak MB†</th>
           <th>C msgs/s</th><th>C MB/s</th>
           <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+          <th>C CPU avg%†</th><th>C mem peak MB†</th>
           <th>C-lag</th>
         </tr>
       </thead>
       <tbody>{"".join(rows)}</tbody>
     </table>
     """
+
+
+def _resource_callout(client_impl: str) -> str:
+    is_rdkafka = "rdkafka_benchmark" in client_impl or "rdkafka_perf" in client_impl
+    if is_rdkafka:
+        note = (
+            "<strong>rdkafka_perf client:</strong> CPU and memory are sampled on the "
+            "C binary process tree. This closely reflects librdkafka's own resource usage."
+        )
+        color = "#c6f6d5"
+        border = "#276749"
+    else:
+        note = (
+            "<strong>confluent client:</strong> CPU and memory include Python interpreter "
+            "overhead (~30&ndash;50 MB RSS baseline, ~5&ndash;15% CPU for the Python GIL/runtime). "
+            "These figures are <em>not</em> a pure measure of librdkafka's usage. "
+            "For accurate librdkafka-only figures, run with <code>--client rdkafka_perf</code>."
+        )
+        color = "#fefcbf"
+        border = "#d69e2e"
+    return (
+        f'<div style="background:{color};border-left:4px solid {border};'
+        f'padding:10px 14px;border-radius:6px;font-size:0.83rem;'
+        f'margin-bottom:20px">'
+        f'† CPU/memory accuracy note: {note}'
+        f"</div>"
+    )
 
 
 def _aggregated_tables(summary: BenchmarkSummary) -> str:
@@ -264,9 +297,21 @@ def _aggregated_tables(summary: BenchmarkSummary) -> str:
       </tr>
     </thead>"""
 
+    has_resource = (
+        summary.producer and summary.producer.cpu_avg_pct is not None
+        or summary.consumer and summary.consumer.cpu_avg_pct is not None
+    )
+    callout = _resource_callout(summary.client_impl) if has_resource else ""
+
     prod_html = ""
     if summary.producer:
         p = summary.producer
+        cpu_rows = ""
+        if p.cpu_avg_pct is not None:
+            cpu_rows = f"""
+        {_agg_row("CPU avg (%)†",   p.cpu_avg_pct, dp=1)}
+        {_agg_row("CPU max (%)†",   p.cpu_max_pct, dp=1)}
+        {_agg_row("mem peak (MB)†", p.mem_peak_mb, dp=1)}"""
         prod_html = f"""
     <h2>Producer — Aggregated</h2>
     <table>
@@ -277,12 +322,19 @@ def _aggregated_tables(summary: BenchmarkSummary) -> str:
         {_agg_row("DR lat avg (µs)", p.dr_latency_avg_us,  dp=1)}
         {_agg_row("DR lat p99 (µs)", p.dr_latency_p99_us,  dp=1)}
         {_agg_row("msgs failed",     p.msgs_failed,        dp=0)}
+        {cpu_rows}
       </tbody>
     </table>"""
 
     cons_html = ""
     if summary.consumer:
         c = summary.consumer
+        cpu_rows = ""
+        if c.cpu_avg_pct is not None:
+            cpu_rows = f"""
+        {_agg_row("CPU avg (%)†",   c.cpu_avg_pct, dp=1)}
+        {_agg_row("CPU max (%)†",   c.cpu_max_pct, dp=1)}
+        {_agg_row("mem peak (MB)†", c.mem_peak_mb, dp=1)}"""
         cons_html = f"""
     <h2>Consumer — Aggregated</h2>
     <table>
@@ -293,10 +345,11 @@ def _aggregated_tables(summary: BenchmarkSummary) -> str:
         {_agg_row("E2E lat avg (ms)", c.e2e_latency_avg_ms,  dp=2)}
         {_agg_row("E2E lat p99 (ms)", c.e2e_latency_p99_ms,  dp=2)}
         {_agg_row("lag at end",       c.consumer_lag_at_end, dp=0)}
+        {cpu_rows}
       </tbody>
     </table>"""
 
-    return prod_html + cons_html
+    return callout + prod_html + cons_html
 
 
 def _charts(runs: list) -> str:

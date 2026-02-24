@@ -1212,10 +1212,8 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
 
 /**
  * TODO KIP-932: Destroy inflight map entries should be done in consumer close.
-*/
+ */
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
-        const rd_kafka_topic_partition_t *tp_key;
-        rd_kafka_share_ack_batches_t *batches;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
@@ -3327,9 +3325,9 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          *               max_poll_records. How many messages to be sent to the
          *               user is driven by broker with AcquiredRecords field.
          */
-        /* One op per call: CONSUMER_ERR returns that error; SHARE_FETCH_RESPONSE
-         * fills messages. Caller may need to call multiple times to drain
-         * CONSUMER_ERR ops before getting messages. */
+        /* One op per call: CONSUMER_ERR returns that error;
+         * SHARE_FETCH_RESPONSE fills messages. Caller may need to call multiple
+         * times to drain CONSUMER_ERR ops before getting messages. */
         rd_kafka_error_t *error = rd_kafka_q_serve_share_rkmessages(
             rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records, rkshare,
             rkmessages_size);

@@ -2962,20 +2962,19 @@ void rd_kafka_topic_partition_destroy(rd_kafka_topic_partition_t *rktpar) {
 }
 
 
-rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_new(
-    int64_t start_offset,
-    int64_t end_offset,
-    int32_t types_cnt) {
+rd_kafka_share_ack_batch_entry_t *
+rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
+                                   int64_t end_offset,
+                                   int32_t types_cnt) {
         rd_kafka_share_ack_batch_entry_t *entry;
 
-        entry = rd_calloc(1, sizeof(*entry));
+        entry                 = rd_calloc(1, sizeof(*entry));
         entry->start_offset   = start_offset;
         entry->end_offset     = end_offset;
         entry->size           = end_offset - start_offset + 1;
         entry->types_cnt      = types_cnt;
         entry->delivery_count = 0;
-        entry->types          = rd_calloc((size_t)types_cnt,
-                                          sizeof(*entry->types));
+        entry->types = rd_calloc((size_t)types_cnt, sizeof(*entry->types));
         return entry;
 }
 
@@ -2992,10 +2991,10 @@ rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void) {
 
         batches = rd_calloc(1, sizeof(*batches));
         rd_list_init(&batches->entries, 0, NULL);
-        batches->rktpar               = NULL;
-        batches->acquired_leader_id   = 0;
+        batches->rktpar                = NULL;
+        batches->acquired_leader_id    = 0;
         batches->acquired_leader_epoch = 0;
-        batches->acquired_msgs_count  = 0;
+        batches->acquired_msgs_count   = 0;
         return batches;
 }
 
@@ -3007,7 +3006,7 @@ void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches,
         if (!batches)
                 return;
         RD_LIST_FOREACH(entry, &batches->entries, i)
-                rd_kafka_share_ack_batch_entry_destroy(entry);
+        rd_kafka_share_ack_batch_entry_destroy(entry);
         rd_list_destroy(&batches->entries);
         if (free_rktpar && batches->rktpar)
                 rd_kafka_topic_partition_destroy(batches->rktpar);

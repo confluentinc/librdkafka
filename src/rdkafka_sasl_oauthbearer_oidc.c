@@ -745,6 +745,9 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
 
         *sub = cJSON_GetStringValue(jwt_sub);
         if (*sub == NULL || !**sub) {
+                /* Reset to NULL to prevent a dangling pointer to cJSON
+                 * internal memory after cJSON_Delete(payloads) at done: */
+                *sub = NULL;
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
                             "valid \"%s\" field (non-empty value required)",
@@ -1322,6 +1325,152 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
 
 
 /**
+ * @brief Unit tests for sasl.oauthbearer.sub.claim.name (KIP-768 parity).
+ *
+ *        Verifies that rd_kafka_oidc_token_try_validate() correctly extracts
+ *        the subject from the configured JWT claim name, falls back to "sub"
+ *        when unconfigured, and rejects missing or empty claim values.
+ *
+ *        All JWTs use a fake signature since token_try_validate() only
+ *        decodes and inspects the payload; signature verification is done
+ *        separately by the broker.
+ *
+ *        JWT payloads (decoded):
+ *          JWT_SUB_ONLY:
+ *            {"exp":9999999999,"iat":1000000000,"sub":"subject"}
+ *
+ *          JWT_MULTI_CLAIMS:
+ *            {"exp":9999999999,"iat":1000000000,"sub":"subject",
+ *             "client_id":"client_id_123","azp":"azp_123"}
+ *
+ *          JWT_EMPTY_SUB:
+ *            {"exp":9999999999,"iat":1000000000,"sub":""}
+ *
+ *          JWT_MISSING_SUB:
+ *            {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"}
+ */
+/* JWT tokens for ut_sasl_oauthbearer_oidc_sub_claim_name().
+ * All use a fake signature since rd_kafka_oidc_token_try_validate() only
+ * decodes the payload; signature verification is done separately by the
+ * broker.
+ *
+ * payload: {"exp":9999999999,"iat":1000000000,"sub":"subject"} */
+#define UT_JWT_SUB_ONLY                                                        \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic"                  \
+        "3ViIjoic3ViamVjdCJ9"                                                  \
+        "."                                                                    \
+        "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject",
+ *           "client_id":"client_id_123","azp":"azp_123"} */
+#define UT_JWT_MULTI_CLAIMS                                                    \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoic3ViamVj"  \
+        "dCIsImNsaWVudF9pZCI6ImNsaWVudF9pZF8xMjMiLCJhenAiOiJhenBfMTIzIn0"  \
+        "."                                                                    \
+        "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":""} */
+#define UT_JWT_EMPTY_SUB                                                       \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoiIn0"        \
+        "."                                                                    \
+        "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"} */
+#define UT_JWT_MISSING_SUB                                                     \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwiY2xpZW50X2lkIjoi"  \
+        "Y2xpZW50X2lkXzEyMyJ9"                                                \
+        "."                                                                    \
+        "fakesignature"
+
+static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
+
+        const struct {
+                const char *test_name;
+                const char *jwt;
+                const char *sub_claim_name;
+                rd_bool_t expect_success;
+                const char *expected_sub; /* checked only when expect_success */
+        } tests[] = {
+            /* NULL sub_claim_name: must default to "sub" */
+            {"NULL sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, NULL,
+             rd_true, "subject"},
+            /* Empty sub_claim_name: must default to "sub" */
+            {"Empty sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, "",
+             rd_true, "subject"},
+            /* Explicitly configured "sub" works same as default */
+            {"Explicit 'sub' claim name", UT_JWT_SUB_ONLY, "sub", rd_true,
+             "subject"},
+            /* Custom claim "client_id" extracted with distinct value */
+            {"Custom 'client_id' claim", UT_JWT_MULTI_CLAIMS, "client_id",
+             rd_true, "client_id_123"},
+            /* Custom claim "azp" extracted with distinct value */
+            {"Custom 'azp' claim", UT_JWT_MULTI_CLAIMS, "azp", rd_true,
+             "azp_123"},
+            /* "sub" absent from token: must fail */
+            {"Missing 'sub' claim fails", UT_JWT_MISSING_SUB, "sub", rd_false,
+             NULL},
+            /* "sub" present but empty: must fail */
+            {"Empty 'sub' value fails", UT_JWT_EMPTY_SUB, "sub", rd_false,
+             NULL},
+            /* Configured claim not present in token: must fail */
+            {"Nonexistent claim name fails", UT_JWT_SUB_ONLY, "nonexistent",
+             rd_false, NULL},
+        };
+
+        unsigned int i;
+
+        RD_UT_BEGIN();
+
+        for (i = 0; i < RD_ARRAYSIZE(tests); i++) {
+                char *sub    = NULL;
+                double exp_v = 0;
+                char errstr[256];
+                char *result;
+                cJSON *json;
+                char access_token_json[2048];
+
+                rd_snprintf(access_token_json, sizeof(access_token_json),
+                            "{\"access_token\":\"%s\"}", tests[i].jwt);
+                json = cJSON_Parse(access_token_json);
+                RD_UT_ASSERT(json != NULL, "[%s] Failed to build test JSON",
+                             tests[i].test_name);
+
+                result = rd_kafka_oidc_token_try_validate(
+                    json, "access_token", tests[i].sub_claim_name, &sub,
+                    &exp_v, errstr, sizeof(errstr));
+
+                if (tests[i].expect_success) {
+                        RD_UT_ASSERT(result != NULL,
+                                     "[%s] Expected success but got error: %s",
+                                     tests[i].test_name, errstr);
+                        RD_UT_ASSERT(sub != NULL,
+                                     "[%s] Expected non-NULL sub",
+                                     tests[i].test_name);
+                        RD_UT_ASSERT(
+                            !strcmp(sub, tests[i].expected_sub),
+                            "[%s] Expected sub '%s', got '%s'",
+                            tests[i].test_name, tests[i].expected_sub, sub);
+                } else {
+                        RD_UT_ASSERT(
+                            result == NULL,
+                            "[%s] Expected failure but got sub '%s'",
+                            tests[i].test_name, sub ? sub : "(null)");
+                }
+
+                RD_IF_FREE(sub, rd_free);
+                cJSON_Delete(json);
+        }
+
+        RD_UT_PASS();
+}
+
+
+/**
  * @brief make sure the jwt is able to be extracted from HTTP(S) requests
  *        or fail as expected.
  */
@@ -1331,6 +1480,7 @@ int unittest_sasl_oauthbearer_oidc(void) {
         fails += ut_sasl_oauthbearer_oidc_with_empty_key();
         fails += ut_sasl_oauthbearer_oidc_post_fields();
         fails += ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope();
+        fails += ut_sasl_oauthbearer_oidc_sub_claim_name();
         return fails;
 }
 

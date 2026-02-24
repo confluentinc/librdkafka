@@ -1245,8 +1245,8 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
 
         rd_kafka_rdlock(rk);
         map = (map_str_str_t)RD_MAP_INITIALIZER(
-            0, rd_map_str_cmp, rd_map_str_hash, NULL /* topic list element */,
-            NULL /* topic list element */);
+            rk->rk_metadata_cache.rkmc_cnt, rd_map_str_cmp, rd_map_str_hash,
+            NULL /* topic list element */, NULL /* topic list element */);
         /* To keep track of which patterns and topics in `match` that
          * did not match any topic (or matched an errored topic), we
          * create a set of all topics to match in `unmatched` and then
@@ -1315,8 +1315,8 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                         cnt++;
                 }
         }
-        RD_MAP_DESTROY(&map);
         rd_kafka_rdunlock(rk);
+        RD_MAP_DESTROY(&map);
 
         /* Any topics/patterns still in unmatched did not match any
          * existing topics, add them to `errored`. */

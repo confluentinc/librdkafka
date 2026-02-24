@@ -827,14 +827,14 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 
         for (i = cnt - 1; i >= 0; i--) {
                 rko = (rd_kafka_op_t *)rkmessages[i]->_private;
-                rd_kafka_toppar_t *rktp = rko->rko_rktp;
+                rd_kafka_toppar_t *rktp  = rko->rko_rktp;
                 rd_kafka_fetch_pos_t pos = RD_KAFKA_FETCH_POS(
                     rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1,
                     rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch);
                 if (unlikely(rktp && !rko->rko_err &&
                              rko->rko_type == RD_KAFKA_OP_FETCH &&
-                             rd_kafka_fetch_pos_cmp(&pos,
-                                                    &rktp->rktp_app_pos) > 0))
+                             rd_kafka_fetch_pos_cmp(&pos, &rktp->rktp_app_pos) >
+                                 0))
                         rd_kafka_update_app_pos(rk, rktp, pos, RD_DO_LOCK);
         }
 
@@ -849,9 +849,9 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         /* Discard ctrl msgs */
         next = TAILQ_FIRST(&ctrl_msg_q);
         while (next) {
-                rko                     = next;
-                next                    = TAILQ_NEXT(next, rko_link);
-                rd_kafka_toppar_t *rktp = rko->rko_rktp;
+                rko                      = next;
+                next                     = TAILQ_NEXT(next, rko_link);
+                rd_kafka_toppar_t *rktp  = rko->rko_rktp;
                 rd_kafka_fetch_pos_t pos = RD_KAFKA_FETCH_POS(
                     rko->rko_u.fetch.rkm.rkm_rkmessage.offset + 1,
                     rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch);

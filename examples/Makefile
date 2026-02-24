@@ -1,4 +1,4 @@
-EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
+EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_benchmark rdkafka_example_cpp \
 	rdkafka_complex_consumer_example rdkafka_complex_consumer_example_cpp \
 	kafkatest_verifiable_client \
 	producer consumer idempotent_producer transactions \
@@ -108,6 +108,17 @@ rdkafka_complex_consumer_example: ../src/librdkafka.a rdkafka_complex_consumer_e
 	@echo "#"
 	@echo "# More usage options:"
 	@echo "./$@ -h"
+
+rdkafka_benchmark: ../src/librdkafka.a rdkafka_benchmark.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_benchmark.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+	@echo "# $@ is ready"
+	@echo "#"
+	@echo "# Run producer"
+	@echo "./$@ -P -b <brokers> -t <topic> -s <msgsize> -c <msgcount>"
+	@echo "#"
+	@echo "# Run consumer"
+	@echo "./$@ -C -b <brokers> -t <topic> -G <group> -c <msgcount>"
 
 rdkafka_performance: ../src/librdkafka.a rdkafka_performance.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_performance.c -o $@ $(LDFLAGS) \

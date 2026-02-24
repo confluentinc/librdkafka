@@ -1,0 +1,44 @@
+meta:
+  name: eos
+  description: "Exactly-once semantics overhead — transactional producer, read_committed consumer"
+
+workload:
+  msg_count: 500000
+  msg_size: 512
+  num_partitions: 3
+  replication_factor: 1
+  topic_name: null
+  topic_auto_delete: true
+  compression: none
+
+producer:
+  acks: all
+  linger_ms: 5
+  batch_size: 524288
+  batch_num_messages: 5000
+  queue_buffering_max_messages: 100000
+  queue_buffering_max_kbytes: 1048576
+  message_send_max_retries: 3
+  retry_backoff_ms: 100
+  enable_idempotence: true
+  # transactional_id suffix "-run<id>" is appended per run to avoid epoch fencing
+  transactional_id: "benchmark-eos-txn"
+  transaction_timeout_ms: 60000
+  extra_config: {}
+
+consumer:
+  group_id: null
+  auto_offset_reset: earliest
+  fetch_min_bytes: 1
+  fetch_wait_max_ms: 500
+  queued_min_messages: 100000
+  session_timeout_ms: 10000
+  max_poll_interval_ms: 300000
+  enable_auto_commit: true
+  # isolation.level=read_committed is injected automatically when transactional_id is set
+  extra_config: {}
+
+timeouts:
+  producer_timeout_sec: 240
+  consumer_timeout_sec: 300
+  consumer_catchup_grace_sec: 60

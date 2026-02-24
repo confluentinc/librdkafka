@@ -1,0 +1,15 @@
+# Core Kafka client — wraps librdkafka natively (same underlying library)
+confluent-kafka>=2.3.0
+
+# YAML preset loading
+PyYAML>=6.0.1
+
+# Terminal table rendering
+tabulate>=0.9.0
+
+# Percentile computation (p50/p95/p99 for latency distributions)
+# Falls back to stdlib statistics if not installed (p50 only)
+numpy>=1.24.0
+
+# YAML preset schema validation
+jsonschema>=4.21.0

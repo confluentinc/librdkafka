@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "benchmark_sustained_throughput_20260224_094127",
+  "preset": "sustained_throughput",
+  "broker": "localhost:9092",
+  "client_impl": "rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples",
+  "runs_requested": 1,
+  "runs_completed": 1,
+  "runs_failed": 0,
+  "msg_count": 150422600,
+  "msg_size": 1024,
+  "timestamp_utc": "2026-02-24T09:41:27.168211+00:00",
+  "config": {
+    "meta": {
+      "name": "sustained_throughput",
+      "description": "Time-driven sustained throughput (60s per run) \u2014 reports max msgs achievable over fixed duration"
+    },
+    "workload": {
+      "msg_count": 9223372036854775807,
+      "msg_size": 1024,
+      "duration_sec": 60,
+      "num_partitions": 6,
+      "replication_factor": 1,
+      "topic_name": null,
+      "topic_auto_delete": true,
+      "compression": "lz4"
+    },
+    "producer": {
+      "acks": "1",
+      "linger_ms": 20,
+      "batch_size": 1048576,
+      "batch_num_messages": 50000,
+      "queue_buffering_max_messages": 500000,
+      "queue_buffering_max_kbytes": 1048576,
+      "message_send_max_retries": 3,
+      "retry_backoff_ms": 100,
+      "enable_idempotence": false,
+      "transactional_id": null,
+      "transaction_timeout_ms": 60000,
+      "extra_config": {}
+    },
+    "consumer": {
+      "group_id": null,
+      "auto_offset_reset": "earliest",
+      "fetch_min_bytes": 16384,
+      "fetch_wait_max_ms": 500,
+      "queued_min_messages": 500000,
+      "session_timeout_ms": 10000,
+      "max_poll_interval_ms": 300000,
+      "enable_auto_commit": true,
+      "extra_config": {}
+    },
+    "timeouts": {
+      "producer_timeout_sec": 120,
+      "consumer_timeout_sec": 180,
+      "consumer_catchup_grace_sec": 30
+    },
+    "kafka": {
+      "bootstrap_servers": "localhost:9092"
+    },
+    "runs": 1
+  },
+  "runs": [
+    {
+      "run_id": 1,
+      "topic": "benchmark-sustained_throughput-56640414",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 150422600,
+        "msgs_delivered": 150422600,
+        "msgs_failed": 0,
+        "bytes_delivered": 154032742400,
+        "elapsed_sec": 60.0,
+        "msgs_per_sec": 2507043.33,
+        "mb_per_sec": 2448.28,
+        "dr_latency_avg_us": 3595.43,
+        "dr_latency_p50_us": 2965.0,
+        "dr_latency_p95_us": 5232.0,
+        "dr_latency_p99_us": 10576.0,
+        "dr_latency_min_us": 1808.0,
+        "dr_latency_max_us": 26643.0,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 45485866,
+        "bytes_consumed": 46577526784,
+        "elapsed_sec": 89.81,
+        "msgs_per_sec": 506491.96,
+        "mb_per_sec": 494.62,
+        "e2e_latency_avg_ms": 8314.15,
+        "e2e_latency_p50_ms": 8219.04,
+        "e2e_latency_p95_ms": 16047.16,
+        "e2e_latency_p99_ms": 17345.01,
+        "e2e_latency_min_ms": 1.88,
+        "e2e_latency_max_ms": 17656.14,
+        "consumer_lag_at_end": 0,
+        "error": null
+      },
+      "error": null
+    }
+  ],
+  "aggregated": {
+    "producer": {
+      "msgs_per_sec": {
+        "mean": 2507043.33,
+        "stddev": 0.0,
+        "min": 2507043.33,
+        "max": 2507043.33,
+        "p50": 2507043.33,
+        "runs": 1
+      },
+      "mb_per_sec": {
+        "mean": 2448.28,
+        "stddev": 0.0,
+        "min": 2448.28,
+        "max": 2448.28,
+        "p50": 2448.28,
+        "runs": 1
+      },
+      "dr_latency_avg_us": {
+        "mean": 3595.43,
+        "stddev": 0.0,
+        "min": 3595.43,
+        "max": 3595.43,
+        "p50": 3595.43,
+        "runs": 1
+      },
+      "dr_latency_p99_us": {
+        "mean": 10576.0,
+        "stddev": 0.0,
+        "min": 10576.0,
+        "max": 10576.0,
+        "p50": 10576.0,
+        "runs": 1
+      },
+      "msgs_failed": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 1
+      }
+    },
+    "consumer": {
+      "msgs_per_sec": {
+        "mean": 506491.96,
+        "stddev": 0.0,
+        "min": 506491.96,
+        "max": 506491.96,
+        "p50": 506491.96,
+        "runs": 1
+      },
+      "mb_per_sec": {
+        "mean": 494.62,
+        "stddev": 0.0,
+        "min": 494.62,
+        "max": 494.62,
+        "p50": 494.62,
+        "runs": 1
+      },
+      "e2e_latency_avg_ms": {
+        "mean": 8314.15,
+        "stddev": 0.0,
+        "min": 8314.15,
+        "max": 8314.15,
+        "p50": 8314.15,
+        "runs": 1
+      },
+      "e2e_latency_p99_ms": {
+        "mean": 17345.01,
+        "stddev": 0.0,
+        "min": 17345.01,
+        "max": 17345.01,
+        "p50": 17345.01,
+        "runs": 1
+      },
+      "consumer_lag_at_end": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+meta:
+  name: high_throughput
+  description: "Maximize msgs/s and MB/s — trades durability for speed (acks=1, lz4, large batches)"
+
+workload:
+  msg_count: 5000000
+  msg_size: 512
+  num_partitions: 12
+  replication_factor: 1
+  topic_name: null
+  topic_auto_delete: true
+  compression: lz4
+
+producer:
+  acks: "1"
+  linger_ms: 50
+  batch_size: 1048576
+  batch_num_messages: 100000
+  queue_buffering_max_messages: 1000000
+  queue_buffering_max_kbytes: 2097152
+  message_send_max_retries: 3
+  retry_backoff_ms: 100
+  enable_idempotence: false
+  transactional_id: null
+  transaction_timeout_ms: 60000
+  extra_config:
+    socket.send.buffer.bytes: "1048576"
+
+consumer:
+  group_id: null
+  auto_offset_reset: earliest
+  fetch_min_bytes: 65536
+  fetch_wait_max_ms: 500
+  queued_min_messages: 1000000
+  session_timeout_ms: 10000
+  max_poll_interval_ms: 300000
+  enable_auto_commit: true
+  extra_config: {}
+
+timeouts:
+  producer_timeout_sec: 300
+  consumer_timeout_sec: 360
+  consumer_catchup_grace_sec: 60

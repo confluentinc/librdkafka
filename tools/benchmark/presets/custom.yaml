@@ -1,0 +1,175 @@
+# ================================================================
+# custom.yaml — User-editable benchmark preset
+#
+# Usage:
+#   python benchmark.py --preset custom --broker localhost:9092
+#
+# All fields are optional. Omitted fields use their built-in defaults.
+# For a reference of all librdkafka properties, see:
+#   https://github.com/confluentinc/librdkafka/blob/master/CONFIGURATION.md
+# ================================================================
+
+meta:
+  name: custom
+  description: "Edit this description to describe your scenario"
+
+# ---------------------------------------------------------------
+# workload: Defines what the benchmark produces and consumes
+# ---------------------------------------------------------------
+workload:
+  # Total number of messages to produce and consume per run.
+  # Override at runtime with: --msg-count <N>
+  msg_count: 1000000
+
+  # Size of each message payload in bytes.
+  # The first 8 bytes are reserved for an E2E latency timestamp.
+  # Values < 8 disable E2E latency measurement.
+  # Override at runtime with: --msg-size <N>
+  msg_size: 1024
+
+  # Run duration in seconds (TIME-DRIVEN mode).
+  # When set, the producer runs for this many seconds; msg_count becomes a safety cap.
+  # Set msg_count to null (no cap) for pure time-driven mode.
+  # null = disabled — use msg_count to control when the run ends (COUNT mode).
+  # Override at runtime with: --duration <seconds>
+  #
+  # Examples:
+  #   duration_sec: 60    # run for 60 seconds, report what was achieved
+  #   duration_sec: null  # count-driven (default)
+  duration_sec: null
+
+  # Number of topic partitions.
+  # More partitions allow higher parallelism but add coordination overhead.
+  # Tune to match your broker's partition capacity.
+  num_partitions: 6
+
+  # Replication factor. Must be <= the number of brokers in your cluster.
+  # Use 1 for a single-broker setup (e.g. local Docker).
+  replication_factor: 1
+
+  # Topic name. null = auto-generate a unique name per run ("benchmark-custom-<id>").
+  # Set to a fixed name if you want to target an existing topic.
+  # If the topic exists but has different partition count, a warning is logged.
+  topic_name: null
+
+  # If true, the topic is deleted after each run.
+  # Set to false to inspect messages after the benchmark.
+  topic_auto_delete: true
+
+  # Compression codec for produced messages.
+  # Options: none | gzip | snappy | lz4 | zstd
+  # lz4 typically offers the best throughput/CPU tradeoff.
+  compression: none
+
+# ---------------------------------------------------------------
+# producer: librdkafka producer configuration
+# ---------------------------------------------------------------
+producer:
+  # Required acknowledgements before a produce() call is considered successful.
+  #   0   = fire-and-forget (fastest, no durability)
+  #   1   = leader ack only
+  #   all = full ISR acknowledgement (safest, slowest)
+  acks: all
+
+  # Milliseconds to wait for additional messages before sending a batch.
+  # Higher values → larger batches → better throughput.
+  # 0 = no waiting (minimize latency at the cost of throughput).
+  linger_ms: 5
+
+  # Maximum size of a single produce request batch in bytes.
+  # Increase for higher throughput with large message volumes.
+  batch_size: 1048576
+
+  # Maximum number of messages in a single batch.
+  batch_num_messages: 10000
+
+  # Maximum number of messages allowed in the producer's internal queue.
+  # produce() will block when this limit is reached (backpressure).
+  queue_buffering_max_messages: 100000
+
+  # Maximum total bytes in the producer's internal queue (KB).
+  queue_buffering_max_kbytes: 1048576
+
+  # Number of automatic retries on transient errors (e.g. leader change).
+  message_send_max_retries: 3
+
+  # Milliseconds to wait between retries.
+  retry_backoff_ms: 100
+
+  # Enable idempotent producer: prevents duplicate messages on retries.
+  # Automatically sets acks=all and max.in.flight=5.
+  # Required when transactional_id is set.
+  enable_idempotence: false
+
+  # Set to a unique string to enable transactional (EOS) producing.
+  # Requires enable_idempotence: true and a Kafka broker >= 0.11.
+  # null = transactional mode disabled.
+  transactional_id: null
+
+  # Timeout for transactional operations (commit, abort) in milliseconds.
+  transaction_timeout_ms: 60000
+
+  # Pass any additional librdkafka property as key/value pairs.
+  # Example:
+  #   extra_config:
+  #     message.max.bytes: "10485760"
+  #     socket.send.buffer.bytes: "1048576"
+  extra_config: {}
+
+# ---------------------------------------------------------------
+# consumer: librdkafka consumer configuration
+# ---------------------------------------------------------------
+consumer:
+  # Consumer group ID. null = auto-generate a unique ID per run.
+  # Set to a fixed value to reuse committed offsets across runs.
+  group_id: null
+
+  # Where to start consuming if no committed offset exists for the group.
+  #   earliest = from the beginning of the topic (default for benchmarks)
+  #   latest   = only new messages produced after the consumer started
+  auto_offset_reset: earliest
+
+  # Minimum bytes the broker must have available before responding to a fetch.
+  # Higher = fewer round trips = better throughput.
+  # Lower = lower latency (broker responds immediately even with little data).
+  fetch_min_bytes: 1
+
+  # Maximum milliseconds the broker waits before responding to a fetch,
+  # even if fetch_min_bytes is not met.
+  fetch_wait_max_ms: 500
+
+  # Minimum number of messages librdkafka tries to maintain in its local queue.
+  # Increase for high-throughput scenarios to pipeline fetch requests.
+  queued_min_messages: 100000
+
+  # Consumer group session timeout. If no heartbeat is received within this
+  # window, the broker considers the consumer dead and triggers a rebalance.
+  session_timeout_ms: 10000
+
+  # Maximum time between poll() calls before the consumer is considered dead.
+  # Increase if your message processing is slow.
+  max_poll_interval_ms: 300000
+
+  # Commit offsets automatically in the background.
+  # Set to false for manual commit control (not needed for benchmarking).
+  enable_auto_commit: true
+
+  # Pass any additional librdkafka property as key/value pairs.
+  # Example:
+  #   extra_config:
+  #     fetch.max.bytes: "52428800"
+  extra_config: {}
+
+# ---------------------------------------------------------------
+# timeouts: Safety limits per run
+# ---------------------------------------------------------------
+timeouts:
+  # Kill the producer process if it hasn't finished within this many seconds.
+  producer_timeout_sec: 120
+
+  # Kill the consumer process if it hasn't finished within this many seconds.
+  consumer_timeout_sec: 180
+
+  # Extra seconds the consumer gets after the producer finishes before timeout.
+  # Increase if the consumer frequently lags behind.
+  consumer_catchup_grace_sec: 30

@@ -1,0 +1,5 @@
+benchmark_id,preset,run_id,topic,status,error,p_msgs_produced,p_msgs_delivered,p_msgs_failed,p_bytes_delivered,p_elapsed_sec,p_msgs_per_sec,p_mb_per_sec,p_dr_lat_avg_us,p_dr_lat_p50_us,p_dr_lat_p95_us,p_dr_lat_p99_us,p_dr_lat_min_us,p_dr_lat_max_us,c_msgs_consumed,c_bytes_consumed,c_elapsed_sec,c_msgs_per_sec,c_mb_per_sec,c_e2e_lat_avg_ms,c_e2e_lat_p50_ms,c_e2e_lat_p95_ms,c_e2e_lat_p99_ms,c_e2e_lat_min_ms,c_e2e_lat_max_ms,c_consumer_lag_at_end
+benchmark_low_latency_20260224_084801,low_latency,1,benchmark-low_latency-fc972800,failed,"Failed to create topic 'benchmark-low_latency-fc972800': KafkaError{code=_TIMED_OUT,val=-185,str=""Failed while waiting for controller: Local: Timed out""}
+Hint: If replication_factor > broker count, reduce it in your preset.",,,,,,,,,,,,,,,,,,,,,,,,,
+benchmark_low_latency_20260224_084801,low_latency,2,benchmark-low_latency-c63ed912,failed,"Failed to create topic 'benchmark-low_latency-c63ed912': KafkaError{code=_TIMED_OUT,val=-185,str=""Failed while waiting for controller: Local: Timed out""}
+Hint: If replication_factor > broker count, reduce it in your preset.",,,,,,,,,,,,,,,,,,,,,,,,,

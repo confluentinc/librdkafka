@@ -1,0 +1,47 @@
+meta:
+  name: sustained_throughput
+  description: "Time-driven sustained throughput (60s per run) — reports max msgs achievable over fixed duration"
+
+workload:
+  # No msg_count — runs for exactly duration_sec seconds
+  msg_count: null
+  msg_size: 1024
+  # Run the producer for 60 seconds, then measure total throughput achieved
+  duration_sec: 60
+  num_partitions: 6
+  replication_factor: 1
+  topic_name: null
+  topic_auto_delete: true
+  compression: lz4
+
+producer:
+  acks: "1"
+  linger_ms: 20
+  batch_size: 1048576
+  batch_num_messages: 50000
+  queue_buffering_max_messages: 500000
+  queue_buffering_max_kbytes: 1048576
+  message_send_max_retries: 3
+  retry_backoff_ms: 100
+  enable_idempotence: false
+  transactional_id: null
+  transaction_timeout_ms: 60000
+  extra_config: {}
+
+consumer:
+  group_id: null
+  auto_offset_reset: earliest
+  fetch_min_bytes: 16384
+  fetch_wait_max_ms: 500
+  queued_min_messages: 500000
+  session_timeout_ms: 10000
+  max_poll_interval_ms: 300000
+  enable_auto_commit: true
+  extra_config: {}
+
+timeouts:
+  # Not used in time mode (auto-calculated as duration_sec + 60)
+  producer_timeout_sec: 120
+  consumer_timeout_sec: 180
+  # Extra seconds for consumer to drain after producer stops
+  consumer_catchup_grace_sec: 30

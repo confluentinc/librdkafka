@@ -1,0 +1,42 @@
+meta:
+  name: balanced
+  description: "Durability + throughput tradeoff — acks=all, snappy, idempotent producer"
+
+workload:
+  msg_count: 1000000
+  msg_size: 1024
+  num_partitions: 6
+  replication_factor: 1
+  topic_name: null
+  topic_auto_delete: true
+  compression: snappy
+
+producer:
+  acks: all
+  linger_ms: 5
+  batch_size: 1048576
+  batch_num_messages: 10000
+  queue_buffering_max_messages: 100000
+  queue_buffering_max_kbytes: 1048576
+  message_send_max_retries: 3
+  retry_backoff_ms: 100
+  enable_idempotence: true
+  transactional_id: null
+  transaction_timeout_ms: 60000
+  extra_config: {}
+
+consumer:
+  group_id: null
+  auto_offset_reset: earliest
+  fetch_min_bytes: 1
+  fetch_wait_max_ms: 500
+  queued_min_messages: 100000
+  session_timeout_ms: 10000
+  max_poll_interval_ms: 300000
+  enable_auto_commit: true
+  extra_config: {}
+
+timeouts:
+  producer_timeout_sec: 120
+  consumer_timeout_sec: 180
+  consumer_catchup_grace_sec: 30

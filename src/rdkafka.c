@@ -1214,12 +1214,10 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
  * TODO KIP-932: Destroy inflight map entries should be done in consumer close.
  */
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
-
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-
         rd_kafka_destroy(rkshare->rkshare_rk);
         rd_free(rkshare);
 }

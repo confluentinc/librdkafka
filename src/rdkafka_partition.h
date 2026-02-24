@@ -573,7 +573,7 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 int64_t last_offset;
                 int16_t delivery_count;
         } *rktp_share_acknowledge; /* NULL = not initialized */
-        ;
+
         size_t rktp_share_acknowledge_count; /* number of entries in
                                                 rktp_share_acknowledge (0 when
                                                 NULL) */

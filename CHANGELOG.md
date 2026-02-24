@@ -17,6 +17,11 @@ librdkafka v2.14.2 is a maintenance release:
   Fix data race in timers. The callback and its argument could have been modified after the lock is released.
   Happening since 1.x (#5089).
 
+### Consumer fixes
+
+* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
+  is unavailable during consumer close. The error logging path dereferenced
+  a potentially NULL broker pointer. Happening since 1.x.
 
 ### Admin client fixes
 

@@ -627,7 +627,7 @@ static void do_test_consume_batch_eof_position(void) {
         const int partition                 = 0;
         const int produce_msg_cnt           = 5;
         const int consume_msg_cnt           = 10;
-        const int timeout_ms                = 5000;
+        const int timeout_ms                = 1000;
         const int session_timeout_s         = 60;
         const int replication_factor        = -1;
         const int topic_creation_timeout_ms = 5000;
@@ -640,7 +640,7 @@ static void do_test_consume_batch_eof_position(void) {
         rd_kafka_resp_err_t err;
         int eof_received = 0;
 
-        SUB_TEST("Testing EOF position with consume_batch_queue");
+        SUB_TEST_QUICK("Testing EOF position with consume_batch_queue");
 
         /* Create consumer configuration with enable.partition.eof=true */
         test_conf_init(&conf, NULL, session_timeout_s);

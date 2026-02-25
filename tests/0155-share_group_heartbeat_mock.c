@@ -727,6 +727,73 @@ static void do_test_share_group_target_assignment(void) {
 }
 
 /**
+ * @brief Test that a healthy, continuously-heartbeating member is never
+ *        fenced by the mock broker's session timeout timer.
+ *
+ * This test sets a 2-second session timeout and then keeps the consumer
+ * polling for 10 seconds. If the session timeout timer incorrectly fences
+ * active members, the assignment would drop. This validates that the timer
+ * only fences truly timed-out members (those that stopped heartbeating).
+ * Related to KIP-932 session timeout logic.
+ */
+static void do_test_share_group_no_spurious_fencing(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *subscription, *assignment;
+        rd_kafka_t *c;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        const char *group = "test-share-group-no-fence";
+        int i;
+
+        SUB_TEST();
+
+        /* Setup with a short session timeout. */
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+        rd_kafka_mock_sharegroup_set_session_timeout(mcluster, 2000);
+
+        c = create_share_consumer(bootstraps, group);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        /* Wait for join and initial assignment. */
+        rd_kafka_consumer_poll(c, 3000);
+
+        TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
+        TEST_ASSERT(assignment->cnt == 3,
+                    "Expected 3 partitions initially, got %d", assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(assignment);
+
+        /* Poll continuously for 10s (5x the 2s session timeout).
+         * If the broker's session timeout timer incorrectly fences active
+         * members, the assignment will drop. */
+        TEST_SAY("Polling for 10 seconds with 2s session timeout...\n");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_consumer_poll(c, 1000);
+
+                /* Verify assignment is still intact */
+                TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
+                TEST_ASSERT(assignment->cnt == 3,
+                            "Assignment dropped at %ds (spurious fencing!)",
+                            i + 1);
+                rd_kafka_topic_partition_list_destroy(assignment);
+        }
+
+        TEST_SAY("No spurious fencing after 10 seconds\n");
+
+        /* Cleanup */
+        rd_kafka_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief UNKNOWN_MEMBER_ID error handling.
  *
  * When a consumer receives UNKNOWN_MEMBER_ID error, it should rejoin
@@ -2430,6 +2497,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_rtt_injection();
         do_test_share_group_session_timeout();
         do_test_share_group_target_assignment();
+        do_test_share_group_no_spurious_fencing();
 
         do_test_unknown_member_id_error();
         do_test_fenced_member_epoch_error();

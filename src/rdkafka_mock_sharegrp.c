@@ -749,6 +749,85 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
         rd_free(session);
 }
 
+
+/**
+ * @brief Common share-session validation for ShareFetch / ShareAcknowledge.
+ *
+ * Performs:
+ *  1. Member validation (MemberId must be a registered group member).
+ *  2. Session lookup by MemberId.
+ *  3. SessionEpoch == -1 : close session and release member locks.
+ *  4. SessionEpoch  > 0  : validate that session exists and epoch matches.
+ *
+ * On return, \p *sessionp is set to the looked-up session (or NULL if
+ * no session was found or it was closed).
+ *
+ * @note Does NOT handle SessionEpoch == 0 (open new session), which is
+ *       ShareFetch-specific.  The caller is also responsible for
+ *       incrementing session_epoch and updating ts_last_activity on
+ *       success.
+ *
+ * @param sgrp          Share group.
+ * @param MemberId      Member identifier from the request.
+ * @param SessionEpoch  Session epoch from the request.
+ * @param sessionp      [out] Session pointer.
+ * @param api_name      API name for debug messages ("ShareFetch" etc.).
+ *
+ * @returns Error code, or RD_KAFKA_RESP_ERR_NO_ERROR on success.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
+    rd_kafka_mock_sharegroup_t *sgrp,
+    const rd_kafkap_str_t *MemberId,
+    int32_t SessionEpoch,
+    rd_kafka_mock_sgrp_fetch_session_t **sessionp,
+    const char *api_name) {
+        rd_kafka_mock_sgrp_fetch_session_t *session = NULL;
+
+        *sessionp = NULL;
+
+        /* 1. Member validation: MemberId must be a registered member. */
+        if (!rd_kafka_mock_sharegroup_member_find(sgrp, MemberId)) {
+                rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCK",
+                             "%s: unknown member %.*s in group %s",
+                             api_name, RD_KAFKAP_STR_PR(MemberId), sgrp->id);
+                return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+        }
+
+        /* 2. Look up existing session by MemberId. */
+        TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
+                if (!rd_kafkap_str_cmp_str(MemberId, session->member_id))
+                        break;
+        }
+
+        /* 3. SessionEpoch == -1: close session. */
+        if (SessionEpoch == -1) {
+                if (session) {
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            sgrp, session->member_id);
+                        TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
+                        sgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
+                        session = NULL;
+                }
+                /* Closing a non-existent session is not an error. */
+        } else if (SessionEpoch > 0) {
+                /* 4. SessionEpoch > 0: validate epoch. */
+                if (!session) {
+                        *sessionp = NULL;
+                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                } else if (SessionEpoch != session->session_epoch) {
+                        *sessionp = session;
+                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                }
+        }
+
+        *sessionp = session;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 /**
  * @brief Release all ACQUIRED records owned by \p member_id across all
  *        share-partition metadata in the share group.

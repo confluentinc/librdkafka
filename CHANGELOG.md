@@ -1,3 +1,43 @@
+# librdkafka v2.13.0
+
+librdkafka v2.13.0 is a feature release:
+
+* [KIP-482](https://cwiki.apache.org/confluence/display/KAFKA/KIP-482%3A+The+Kafka+Protocol+should+Support+Optional+Tagged+Fields) Upgrade CreateAcls, DescribeAcls, DeleteAcls to the first version supporting this KIP (#5081).
+* [KIP-482](https://cwiki.apache.org/confluence/display/KAFKA/KIP-482%3A+The+Kafka+Protocol+should+Support+Optional+Tagged+Fields) Upgrade DescribeGroups, DeleteTopics, DeleteRecords, CreatePartitions, DeleteGroups to the first version supporting this KIP (#5083).
+* Strip trailing dot of hostname to fix SSL certificate verification issue (#5253).
+* Fix memory management for interceptors in rd_kafka_conf to prevent
+double-free errors (#5240).
+* Fix for the pseudo-random generator seed on Windows involving as well
+  the uniqueness of the new consumer group protocol member id (#5265).
+* Add secure random generation functionality used for UUID uniqueness
+  and secure salt generation in `rd_kafka_UserScramCredentialUpsertion`
+  using OpenSSL or the POSIX or WIN32 equivalent calls when it
+  isn't available (#5265).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #4348.
+  Strip trailing dot of hostname to fix SSL certificate verification issue.
+  Happening since 1.x (#5253).
+* Issues: #4142.
+  Fix memory management for interceptors in rd_kafka_conf to prevent double-free errors.
+  In case the client instance fails the users needs to destroy the configuration
+  data structure, it was causing a double-free because the interceptors were
+  already freed in the constructor.
+  Happening since 1.x (#5240).
+* Issues: #5263, #3929.
+  Fix for the pseudo-random seed on Windows. The function `rand_r` isn't present
+  on Windows and the global seed wasn't based on the current microseconds and thread
+  id. Also it wasn't called on every thread as required on this platform but
+  only once per process. The fix allows on this platform the uniqueness of client side 
+  member id generation in next-generation consumer group protocol.
+  Happening since 1.x (#5265).
+
+
+
 # librdkafka v2.12.1
 
 librdkafka v2.12.1 is a maintenance release:

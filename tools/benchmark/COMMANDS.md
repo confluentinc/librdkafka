@@ -89,6 +89,15 @@ python benchmark.py --preset high_throughput --auto-broker \
 
 ## Client selection
 
+Four clients are available. Choose based on what you want to measure:
+
+| Client | Language | librdkafka source | Use for |
+|--------|----------|-------------------|---------|
+| `confluent` | Python | Bundled in pip package | General benchmarking, default |
+| `rdkafka_perf` | C | Local build | Testing local librdkafka C changes |
+| `rdkafka_perf_cpp` | C++ | Local build | Testing local changes via C++ API |
+| `confluent_cpp` | C++ | System-installed | C++ API benchmarking against packaged version |
+
 ### confluent (default)
 Uses `confluent-kafka-python` with a bundled librdkafka. No build step required.
 
@@ -96,8 +105,8 @@ Uses `confluent-kafka-python` with a bundled librdkafka. No build step required.
 python benchmark.py --preset balanced --auto-broker --client confluent
 ```
 
-### rdkafka_perf (local librdkafka build)
-Wraps `examples/rdkafka_benchmark` compiled from the local source tree.
+### rdkafka_perf (C, local librdkafka build)
+Wraps `examples/rdkafka_benchmark` (C binary) compiled from the local source tree.
 Accurately measures librdkafka's own CPU and memory. Build required.
 
 ```bash
@@ -112,6 +121,39 @@ python benchmark.py --preset balanced --auto-broker --client rdkafka_perf
 # Benchmark current working-tree changes
 make -C ../../examples rdkafka_benchmark   # incremental rebuild
 python benchmark.py --preset high_throughput --auto-broker --client rdkafka_perf
+```
+
+### rdkafka_perf_cpp (C++, local librdkafka build)
+Wraps `examples/rdkafka_benchmark_cpp` (C++ binary) compiled against the local
+`src-cpp/librdkafka++.a`. Tests local changes via the C++ API layer.
+
+```bash
+# Build
+cd /path/to/librdkafka && make -C examples rdkafka_benchmark_cpp
+
+cd tools/benchmark
+
+# Run against local C++ build
+python benchmark.py --preset balanced --auto-broker --client rdkafka_perf_cpp
+
+# Benchmark current changes via C++ API
+make -C ../../examples rdkafka_benchmark_cpp   # incremental rebuild
+python benchmark.py --preset high_throughput --auto-broker --client rdkafka_perf_cpp
+```
+
+### confluent_cpp (C++, system-installed librdkafka)
+Wraps `examples/rdkafka_benchmark_cpp_sys` compiled against the system-installed
+librdkafka. Analogous to the `confluent` Python client using its bundled version.
+Does NOT test local source changes.
+
+```bash
+# Build (links against system -lrdkafka++ -lrdkafka)
+cd /path/to/librdkafka && make -C examples rdkafka_benchmark_cpp_sys
+
+cd tools/benchmark
+
+# Run
+python benchmark.py --preset balanced --auto-broker --client confluent_cpp
 ```
 
 ---

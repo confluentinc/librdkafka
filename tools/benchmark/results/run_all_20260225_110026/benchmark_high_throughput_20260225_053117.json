@@ -1,0 +1,336 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "benchmark_high_throughput_20260225_053117",
+  "preset": "high_throughput",
+  "broker": "localhost:9092",
+  "client_impl": "rdkafka_benchmark_cpp @ /Users/pranavshah/workspace/librdkafka/examples (local build)",
+  "runs_requested": 3,
+  "runs_completed": 3,
+  "runs_failed": 0,
+  "msg_count": 5000000,
+  "msg_size": 512,
+  "timestamp_utc": "2026-02-25T05:31:17.918511+00:00",
+  "config": {
+    "meta": {
+      "name": "high_throughput",
+      "description": "Maximize msgs/s and MB/s \u2014 trades durability for speed (acks=1, lz4, large batches)"
+    },
+    "workload": {
+      "msg_count": 5000000,
+      "msg_size": 512,
+      "duration_sec": null,
+      "num_partitions": 12,
+      "replication_factor": 1,
+      "topic_name": null,
+      "topic_auto_delete": true,
+      "compression": "lz4"
+    },
+    "producer": {
+      "acks": "1",
+      "linger_ms": 50,
+      "batch_size": 1048576,
+      "batch_num_messages": 100000,
+      "queue_buffering_max_messages": 1000000,
+      "queue_buffering_max_kbytes": 2097152,
+      "message_send_max_retries": 3,
+      "retry_backoff_ms": 100,
+      "enable_idempotence": false,
+      "transactional_id": null,
+      "transaction_timeout_ms": 60000,
+      "extra_config": {
+        "socket.send.buffer.bytes": "1048576"
+      }
+    },
+    "consumer": {
+      "group_id": null,
+      "auto_offset_reset": "earliest",
+      "fetch_min_bytes": 65536,
+      "fetch_wait_max_ms": 500,
+      "queued_min_messages": 1000000,
+      "session_timeout_ms": 10000,
+      "max_poll_interval_ms": 300000,
+      "enable_auto_commit": true,
+      "extra_config": {}
+    },
+    "timeouts": {
+      "producer_timeout_sec": 300,
+      "consumer_timeout_sec": 360,
+      "consumer_catchup_grace_sec": 60
+    },
+    "kafka": {
+      "bootstrap_servers": "localhost:9092"
+    },
+    "runs": 3
+  },
+  "runs": [
+    {
+      "run_id": 1,
+      "topic": "benchmark-high_throughput-7a17f846",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 5000000,
+        "msgs_delivered": 5000000,
+        "msgs_failed": 0,
+        "bytes_delivered": 2560000000,
+        "elapsed_sec": 1.57,
+        "msgs_per_sec": 3184425.3,
+        "mb_per_sec": 1554.9,
+        "dr_latency_avg_us": 7448.71,
+        "dr_latency_p50_us": 3740.0,
+        "dr_latency_p95_us": 38038.0,
+        "dr_latency_p99_us": 41432.0,
+        "dr_latency_min_us": 1490.0,
+        "dr_latency_max_us": 91558.0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 253.25390625,
+        "mem_peak_mb": 374.796875,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 5000000,
+        "bytes_consumed": 2560000000,
+        "elapsed_sec": 10.94,
+        "msgs_per_sec": 457221.32,
+        "mb_per_sec": 223.25,
+        "e2e_latency_avg_ms": 3238.63,
+        "e2e_latency_p50_ms": 2590.11,
+        "e2e_latency_p95_ms": 8881.02,
+        "e2e_latency_p99_ms": 9910.49,
+        "e2e_latency_min_ms": 206.28,
+        "e2e_latency_max_ms": 9912.64,
+        "consumer_lag_at_end": 0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 1017.0703125,
+        "mem_peak_mb": 1166.046875,
+        "error": null
+      },
+      "error": null
+    },
+    {
+      "run_id": 2,
+      "topic": "benchmark-high_throughput-c3e98886",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 5000000,
+        "msgs_delivered": 5000000,
+        "msgs_failed": 0,
+        "bytes_delivered": 2560000000,
+        "elapsed_sec": 1.52,
+        "msgs_per_sec": 3288069.86,
+        "mb_per_sec": 1605.5,
+        "dr_latency_avg_us": 3438.04,
+        "dr_latency_p50_us": 3513.0,
+        "dr_latency_p95_us": 4444.0,
+        "dr_latency_p99_us": 12639.0,
+        "dr_latency_min_us": 1743.0,
+        "dr_latency_max_us": 54050.0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 119.3984375,
+        "mem_peak_mb": 198.984375,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 5000000,
+        "bytes_consumed": 2560000000,
+        "elapsed_sec": 5.92,
+        "msgs_per_sec": 844083.01,
+        "mb_per_sec": 412.15,
+        "e2e_latency_avg_ms": 2368.52,
+        "e2e_latency_p50_ms": 2268.38,
+        "e2e_latency_p95_ms": 4999.89,
+        "e2e_latency_p99_ms": 5183.74,
+        "e2e_latency_min_ms": 100.03,
+        "e2e_latency_max_ms": 6031.56,
+        "consumer_lag_at_end": 0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 953.6328125,
+        "mem_peak_mb": 1162.078125,
+        "error": null
+      },
+      "error": null
+    },
+    {
+      "run_id": 3,
+      "topic": "benchmark-high_throughput-64ad3a4a",
+      "status": "ok",
+      "producer": {
+        "msgs_produced": 5000000,
+        "msgs_delivered": 5000000,
+        "msgs_failed": 0,
+        "bytes_delivered": 2560000000,
+        "elapsed_sec": 1.52,
+        "msgs_per_sec": 3296891.46,
+        "mb_per_sec": 1609.81,
+        "dr_latency_avg_us": 3278.33,
+        "dr_latency_p50_us": 3394.0,
+        "dr_latency_p95_us": 4259.0,
+        "dr_latency_p99_us": 8146.0,
+        "dr_latency_min_us": 1637.0,
+        "dr_latency_max_us": 53944.0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 117.06640625,
+        "mem_peak_mb": 193.53125,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 5000000,
+        "bytes_consumed": 2560000000,
+        "elapsed_sec": 13.06,
+        "msgs_per_sec": 382755.81,
+        "mb_per_sec": 186.89,
+        "e2e_latency_avg_ms": 3574.07,
+        "e2e_latency_p50_ms": 2723.95,
+        "e2e_latency_p95_ms": 10436.11,
+        "e2e_latency_p99_ms": 12452.37,
+        "e2e_latency_min_ms": 247.78,
+        "e2e_latency_max_ms": 12453.51,
+        "consumer_lag_at_end": 0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 779.05859375,
+        "mem_peak_mb": 858.609375,
+        "error": null
+      },
+      "error": null
+    }
+  ],
+  "aggregated": {
+    "producer": {
+      "msgs_per_sec": {
+        "mean": 3256462.2066666665,
+        "stddev": 62541.522992461105,
+        "min": 3184425.3,
+        "max": 3296891.46,
+        "p50": 3288069.86,
+        "runs": 3
+      },
+      "mb_per_sec": {
+        "mean": 1590.07,
+        "stddev": 30.53425453486618,
+        "min": 1554.9,
+        "max": 1609.81,
+        "p50": 1605.5,
+        "runs": 3
+      },
+      "dr_latency_avg_us": {
+        "mean": 4721.693333333334,
+        "stddev": 2363.015392720355,
+        "min": 3278.33,
+        "max": 7448.71,
+        "p50": 3438.04,
+        "runs": 3
+      },
+      "dr_latency_p99_us": {
+        "mean": 20739.0,
+        "stddev": 18060.923259900086,
+        "min": 8146.0,
+        "max": 41432.0,
+        "p50": 12639.0,
+        "runs": 3
+      },
+      "msgs_failed": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      },
+      "cpu_avg_pct": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      },
+      "cpu_max_pct": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      },
+      "mem_peak_mb": {
+        "mean": 255.77083333333334,
+        "stddev": 103.11562970371033,
+        "min": 193.53125,
+        "max": 374.796875,
+        "p50": 198.984375,
+        "runs": 3
+      }
+    },
+    "consumer": {
+      "msgs_per_sec": {
+        "mean": 561353.38,
+        "stddev": 247665.72392005057,
+        "min": 382755.81,
+        "max": 844083.01,
+        "p50": 457221.32,
+        "runs": 3
+      },
+      "mb_per_sec": {
+        "mean": 274.09666666666664,
+        "stddev": 120.93202443246095,
+        "min": 186.89,
+        "max": 412.15,
+        "p50": 223.25,
+        "runs": 3
+      },
+      "e2e_latency_avg_ms": {
+        "mean": 3060.4066666666668,
+        "stddev": 622.2221211378887,
+        "min": 2368.52,
+        "max": 3574.07,
+        "p50": 3238.63,
+        "runs": 3
+      },
+      "e2e_latency_p99_ms": {
+        "mean": 9182.2,
+        "stddev": 3688.6379955615057,
+        "min": 5183.74,
+        "max": 12452.37,
+        "p50": 9910.49,
+        "runs": 3
+      },
+      "consumer_lag_at_end": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      },
+      "cpu_avg_pct": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      },
+      "cpu_max_pct": {
+        "mean": 0.0,
+        "stddev": 0.0,
+        "min": 0.0,
+        "max": 0.0,
+        "p50": 0.0,
+        "runs": 3
+      },
+      "mem_peak_mb": {
+        "mean": 1062.2447916666667,
+        "stddev": 176.36460794302192,
+        "min": 858.609375,
+        "max": 1166.046875,
+        "p50": 1162.078125,
+        "runs": 3
+      }
+    }
+  }
+}

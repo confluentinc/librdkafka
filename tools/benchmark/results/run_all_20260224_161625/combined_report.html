@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Benchmark: Combined Report</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f4f6f9; color: #2d3748; padding: 24px; }
+    h1  { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+    h2  { font-size: 1.1rem; font-weight: 600; margin: 28px 0 10px;
+           color: #4a5568; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+    h3  { font-size: 0.95rem; font-weight: 600; margin: 20px 0 8px; color: #2d3748; }
+    .meta { font-size: 0.85rem; color: #718096; margin-bottom: 20px; }
+    .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .card { background: white; border-radius: 10px; padding: 16px 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08); min-width: 140px; flex: 1; }
+    .card-label { font-size: 0.75rem; color: #718096; text-transform: uppercase;
+                  letter-spacing:.05em; margin-bottom: 4px; }
+    .card-value { font-size: 1.3rem; font-weight: 700; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:12px;
+             font-size:.78rem; font-weight:600; }
+    .badge-ok   { background:#c6f6d5; color:#276749; }
+    .badge-fail { background:#fed7d7; color:#9b2c2c; }
+    table { width:100%; border-collapse:collapse; background:white;
+            border-radius:10px; overflow:hidden;
+            box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:24px; }
+    th { background:#2d3748; color:white; font-size:.78rem;
+         text-align:left; padding:10px 12px; font-weight:600; }
+    td { padding:8px 12px; font-size:.83rem; border-bottom:1px solid #edf2f7; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:#f7fafc; }
+    .na { color:#a0aec0; }
+    .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px;
+                   margin-bottom:28px; }
+    .chart-box { background:white; border-radius:10px; padding:16px;
+                 box-shadow:0 1px 4px rgba(0,0,0,.08); }
+    .chart-title { font-size:.85rem; font-weight:600; color:#4a5568; margin-bottom:10px; }
+    .preset-section { background:white; border-radius:10px; padding:20px;
+                      box-shadow:0 1px 4px rgba(0,0,0,.08); margin-bottom:20px; }
+    .preset-section h3 { margin-top:0; font-size:1rem; border-bottom:1px solid #e2e8f0;
+                          padding-bottom:8px; margin-bottom:12px; }
+    .run-ok  td:first-child { border-left:3px solid #48bb78; }
+    .run-fail td:first-child { border-left:3px solid #fc8181; }
+    footer { font-size:.75rem; color:#a0aec0; margin-top:28px; text-align:center; }
+    @media (max-width:700px) { .charts-grid { grid-template-columns:1fr; } }
+    </style>
+</head>
+<body>
+  
+    <h1>Kafka Benchmark — Combined Report</h1>
+    <p class="meta">Generated 2026-02-24 10:53 UTC &nbsp;|&nbsp; run_all_20260224_161625</p>
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Presets</div>
+        <div class="card-value">4</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Total runs</div>
+        <div class="card-value">
+          <span class="badge badge-ok">12 ok</span>
+          
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-label">Client</div>
+        <div class="card-value" style="font-size:.95rem">rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples</div>
+      </div>
+    </div>
+  
+    <h2>Comparison Charts</h2>
+    <div class="charts-grid">
+      
+        <div class="chart-box">
+          <div class="chart-title">Producer msgs/s (mean)</div>
+          <canvas id="cmp_p_msgs"></canvas>
+          <script>
+            new Chart(document.getElementById('cmp_p_msgs'), {
+              type: 'bar',
+              data: {
+                labels: ["balanced", "high_throughput", "low_latency", "sustained_throughput"],
+                datasets: [{
+                  label: 'msgs/s',
+                  data: [839147.55, 3464558.12, 5817.44, 2716766.03],
+                  backgroundColor: ["rgba(54,162,235,0.8)", "rgba(255,159,64,0.8)", "rgba(75,192,192,0.8)", "rgba(153,102,255,0.8)"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+      
+        <div class="chart-box">
+          <div class="chart-title">Consumer msgs/s (mean)</div>
+          <canvas id="cmp_c_msgs"></canvas>
+          <script>
+            new Chart(document.getElementById('cmp_c_msgs'), {
+              type: 'bar',
+              data: {
+                labels: ["balanced", "high_throughput", "low_latency", "sustained_throughput"],
+                datasets: [{
+                  label: 'msgs/s',
+                  data: [1608732.48, 465418.74, 5418.18, 512014.27],
+                  backgroundColor: ["rgba(54,162,235,0.8)", "rgba(255,159,64,0.8)", "rgba(75,192,192,0.8)", "rgba(153,102,255,0.8)"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+      
+        <div class="chart-box">
+          <div class="chart-title">Producer DR Latency p99 (µs)</div>
+          <canvas id="cmp_dr_p99"></canvas>
+          <script>
+            new Chart(document.getElementById('cmp_dr_p99'), {
+              type: 'bar',
+              data: {
+                labels: ["balanced", "high_throughput", "low_latency", "sustained_throughput"],
+                datasets: [{
+                  label: 'µs',
+                  data: [795257.0, 25803.33, 460.33, 8013.33],
+                  backgroundColor: ["rgba(54,162,235,0.8)", "rgba(255,159,64,0.8)", "rgba(75,192,192,0.8)", "rgba(153,102,255,0.8)"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+      
+        <div class="chart-box">
+          <div class="chart-title">E2E Latency p99 (ms)</div>
+          <canvas id="cmp_e2e_p99"></canvas>
+          <script>
+            new Chart(document.getElementById('cmp_e2e_p99'), {
+              type: 'bar',
+              data: {
+                labels: ["balanced", "high_throughput", "low_latency", "sustained_throughput"],
+                datasets: [{
+                  label: 'ms',
+                  data: [796.71, 9758.18, 2593.05, 16556.71],
+                  backgroundColor: ["rgba(54,162,235,0.8)", "rgba(255,159,64,0.8)", "rgba(75,192,192,0.8)", "rgba(153,102,255,0.8)"]
+                }]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+    </div>
+  
+    <h2>Overview — All Presets</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Preset</th><th>Status</th>
+          <th>P msgs/s</th><th>P MB/s</th>
+          <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+          <th>C msgs/s</th><th>C MB/s</th>
+          <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+        </tr>
+      </thead>
+      <tbody><tr><td><strong>balanced</strong></td><td><span class="badge badge-ok">3/3 ok</span></td><td>839,147</td><td>819.48</td><td>125,876.8</td><td>795,257.0</td><td>1,608,732</td><td>1,571.03</td><td>127.61</td><td>796.71</td></tr><tr><td><strong>high_throughput</strong></td><td><span class="badge badge-ok">3/3 ok</span></td><td>3,464,558</td><td>1,691.68</td><td>5,764.6</td><td>25,803.3</td><td>465,418</td><td>227.25</td><td>3,347.55</td><td>9,758.18</td></tr><tr><td><strong>low_latency</strong></td><td><span class="badge badge-ok">3/3 ok</span></td><td>5,817</td><td>0.71</td><td>341.4</td><td>460.3</td><td>5,418</td><td>0.66</td><td>1,370.16</td><td>2,593.05</td></tr><tr><td><strong>sustained_throughput</strong></td><td><span class="badge badge-ok">3/3 ok</span></td><td>2,716,766</td><td>2,653.09</td><td>3,215.1</td><td>8,013.3</td><td>512,014</td><td>500.01</td><td>8,226.47</td><td>16,556.71</td></tr></tbody>
+    </table>
+  <h2>Per-Preset Details</h2>
+  
+    <div class="preset-section">
+      <h3>balanced
+        <span style="font-weight:400;color:#718096;font-size:.85rem;margin-left:8px">
+          broker: localhost:9092 &nbsp;|&nbsp; client: rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples
+          &nbsp;|&nbsp; msg_size: 1,024 B
+          &nbsp;|&nbsp; msg_count: 1,000,000
+        </span>
+      </h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Run</th><th>Status</th>
+            <th>P msgs/s</th><th>P MB/s</th>
+            <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+            <th>C msgs/s</th><th>C MB/s</th>
+            <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+          </tr>
+        </thead>
+        <tbody><tr class="run-ok"><td>1</td><td><span class="badge badge-ok">OK</span></td><td>618,272</td><td>603.78</td><td>163,621.4</td><td>1,173,101.0</td><td>1,540,485</td><td>1,504.38</td><td>165.2</td><td>1,174.6</td></tr><tr class="run-ok"><td>2</td><td><span class="badge badge-ok">OK</span></td><td>951,540</td><td>929.24</td><td>106,863.7</td><td>616,665.0</td><td>1,648,412</td><td>1,609.78</td><td>109.2</td><td>618.6</td></tr><tr class="run-ok"><td>3</td><td><span class="badge badge-ok">OK</span></td><td>947,629</td><td>925.42</td><td>107,145.3</td><td>596,005.0</td><td>1,637,299</td><td>1,598.93</td><td>108.5</td><td>596.9</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="preset-section">
+      <h3>high_throughput
+        <span style="font-weight:400;color:#718096;font-size:.85rem;margin-left:8px">
+          broker: localhost:9092 &nbsp;|&nbsp; client: rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples
+          &nbsp;|&nbsp; msg_size: 512 B
+          &nbsp;|&nbsp; msg_count: 5,000,000
+        </span>
+      </h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Run</th><th>Status</th>
+            <th>P msgs/s</th><th>P MB/s</th>
+            <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+            <th>C msgs/s</th><th>C MB/s</th>
+            <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+          </tr>
+        </thead>
+        <tbody><tr class="run-ok"><td>1</td><td><span class="badge badge-ok">OK</span></td><td>3,425,194</td><td>1,672.46</td><td>10,637.3</td><td>59,601.0</td><td>560,622</td><td>273.74</td><td>3,163.5</td><td>7,832.1</td></tr><tr class="run-ok"><td>2</td><td><span class="badge badge-ok">OK</span></td><td>3,487,436</td><td>1,702.85</td><td>3,431.7</td><td>12,113.0</td><td>417,915</td><td>204.06</td><td>3,283.4</td><td>10,767.5</td></tr><tr class="run-ok"><td>3</td><td><span class="badge badge-ok">OK</span></td><td>3,481,043</td><td>1,699.73</td><td>3,225.0</td><td>5,696.0</td><td>417,718</td><td>203.96</td><td>3,595.8</td><td>10,674.9</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="preset-section">
+      <h3>low_latency
+        <span style="font-weight:400;color:#718096;font-size:.85rem;margin-left:8px">
+          broker: localhost:9092 &nbsp;|&nbsp; client: rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples
+          &nbsp;|&nbsp; msg_size: 128 B
+          &nbsp;|&nbsp; msg_count: 100,000
+        </span>
+      </h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Run</th><th>Status</th>
+            <th>P msgs/s</th><th>P MB/s</th>
+            <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+            <th>C msgs/s</th><th>C MB/s</th>
+            <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+          </tr>
+        </thead>
+        <tbody><tr class="run-ok"><td>1</td><td><span class="badge badge-ok">OK</span></td><td>5,785</td><td>0.71</td><td>343.3</td><td>465.0</td><td>5,226</td><td>0.64</td><td>1,333.0</td><td>2,517.1</td></tr><tr class="run-ok"><td>2</td><td><span class="badge badge-ok">OK</span></td><td>5,823</td><td>0.71</td><td>341.1</td><td>459.0</td><td>5,514</td><td>0.67</td><td>1,384.0</td><td>2,610.8</td></tr><tr class="run-ok"><td>3</td><td><span class="badge badge-ok">OK</span></td><td>5,843</td><td>0.71</td><td>340.0</td><td>457.0</td><td>5,513</td><td>0.67</td><td>1,393.4</td><td>2,651.2</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="preset-section">
+      <h3>sustained_throughput
+        <span style="font-weight:400;color:#718096;font-size:.85rem;margin-left:8px">
+          broker: localhost:9092 &nbsp;|&nbsp; client: rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples
+          &nbsp;|&nbsp; msg_size: 1,024 B
+          &nbsp;|&nbsp; msg_count: 160,859,575
+        </span>
+      </h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Run</th><th>Status</th>
+            <th>P msgs/s</th><th>P MB/s</th>
+            <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+            <th>C msgs/s</th><th>C MB/s</th>
+            <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+          </tr>
+        </thead>
+        <tbody><tr class="run-ok"><td>1</td><td><span class="badge badge-ok">OK</span></td><td>2,680,992</td><td>2,618.16</td><td>3,273.1</td><td>11,011.0</td><td>512,731</td><td>500.71</td><td>8,206.7</td><td>16,235.2</td></tr><tr class="run-ok"><td>2</td><td><span class="badge badge-ok">OK</span></td><td>2,753,658</td><td>2,689.12</td><td>3,184.2</td><td>5,967.0</td><td>511,505</td><td>499.52</td><td>8,279.8</td><td>16,611.2</td></tr><tr class="run-ok"><td>3</td><td><span class="badge badge-ok">OK</span></td><td>2,715,646</td><td>2,652.00</td><td>3,187.9</td><td>7,062.0</td><td>511,805</td><td>499.81</td><td>8,193.0</td><td>16,823.7</td></tr></tbody>
+      </table>
+    </div>
+  <footer>
+    Generated by librdkafka benchmark tool &mdash;
+    <a href="https://github.com/confluentinc/librdkafka">github.com/confluentinc/librdkafka</a>
+  </footer>
+</body>
+</html>

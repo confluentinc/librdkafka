@@ -36,15 +36,20 @@ def _agg_row(label: str, field: Optional[AggregatedField],
 
 def _resource_note(client_impl: str) -> str:
     """Return a contextual accuracy note for CPU/memory metrics."""
-    if "rdkafka_benchmark" in client_impl or "rdkafka_perf" in client_impl:
+    if "local build" in client_impl:
         return (
             "  * CPU/memory: process-tree measurement; closely reflects "
-            "librdkafka's own usage (rdkafka_perf client)."
+            "librdkafka's own usage (local build client)."
+        )
+    if "system librdkafka" in client_impl:
+        return (
+            "  * CPU/memory: process-tree measurement against system-installed librdkafka. "
+            "Does not reflect local source changes. Use --client rdkafka_perf_cpp for local build."
         )
     return (
         "  * CPU/memory: process-tree measurement includes Python interpreter "
         "overhead (~30-50 MB RSS baseline, ~5-15% CPU). "
-        "For pure librdkafka figures use --client rdkafka_perf."
+        "For pure librdkafka figures use --client rdkafka_perf or --client rdkafka_perf_cpp."
     )
 
 

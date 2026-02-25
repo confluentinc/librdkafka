@@ -1,4 +1,5 @@
-EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_benchmark rdkafka_example_cpp \
+EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_benchmark \
+	rdkafka_benchmark_cpp rdkafka_example_cpp \
 	rdkafka_complex_consumer_example rdkafka_complex_consumer_example_cpp \
 	kafkatest_verifiable_client \
 	producer consumer idempotent_producer transactions \
@@ -119,6 +120,20 @@ rdkafka_benchmark: ../src/librdkafka.a rdkafka_benchmark.c
 	@echo "#"
 	@echo "# Run consumer"
 	@echo "./$@ -C -b <brokers> -t <topic> -G <group> -c <msgcount>"
+
+# C++ benchmark — local build (links local static libs; tests local librdkafka changes)
+rdkafka_benchmark_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a rdkafka_benchmark_cpp.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) rdkafka_benchmark_cpp.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
+	@echo "# $@ is ready (local librdkafka C++ build)"
+
+# C++ benchmark — system build (links system-installed librdkafka; confluent_cpp client)
+# Adds /usr/local/include/librdkafka so "rdkafkacpp.h" resolves to the system header
+rdkafka_benchmark_cpp_sys: rdkafka_benchmark_cpp.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -I/usr/local/include/librdkafka \
+		rdkafka_benchmark_cpp.cpp -o $@ $(LDFLAGS) \
+		-lrdkafka++ -lrdkafka $(LIBS)
+	@echo "# $@ is ready (system librdkafka C++ build)"
 
 rdkafka_performance: ../src/librdkafka.a rdkafka_performance.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) rdkafka_performance.c -o $@ $(LDFLAGS) \

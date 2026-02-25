@@ -1,0 +1,4 @@
+benchmark_id,preset,run_id,topic,status,error,p_msgs_produced,p_msgs_delivered,p_msgs_failed,p_bytes_delivered,p_elapsed_sec,p_msgs_per_sec,p_mb_per_sec,p_dr_lat_avg_us,p_dr_lat_p50_us,p_dr_lat_p95_us,p_dr_lat_p99_us,p_dr_lat_min_us,p_dr_lat_max_us,p_cpu_avg_pct,p_cpu_max_pct,p_mem_avg_mb,p_mem_peak_mb,c_msgs_consumed,c_bytes_consumed,c_elapsed_sec,c_msgs_per_sec,c_mb_per_sec,c_e2e_lat_avg_ms,c_e2e_lat_p50_ms,c_e2e_lat_p95_ms,c_e2e_lat_p99_ms,c_e2e_lat_min_ms,c_e2e_lat_max_ms,c_consumer_lag_at_end,c_cpu_avg_pct,c_cpu_max_pct,c_mem_avg_mb,c_mem_peak_mb
+benchmark_low_latency_20260225_052338,low_latency,1,benchmark-low_latency-5b1ca489,failed,"Consumer error: No JSON from consumer binary (exit=-11). stderr=% Consumer: topic=benchmark-low_latency-5b1ca489 group=benchmark-cg-fe203bc0 count=3000
+% Consumer error: Local: Timed out
+",3000,3000,0,384000,0.54,5557.0,0.68,357.38,334.0,455.0,554.0,222.0,6719.0,0.0,0.0,22.359375,35.46875,0,0,0.0,0.0,0.0,,,,,,,0,,,,

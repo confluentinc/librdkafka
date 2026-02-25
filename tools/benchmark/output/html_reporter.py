@@ -262,20 +262,26 @@ def _per_run_table(runs: list) -> str:
 
 
 def _resource_callout(client_impl: str) -> str:
-    is_rdkafka = "rdkafka_benchmark" in client_impl or "rdkafka_perf" in client_impl
-    if is_rdkafka:
+    # Local builds (C and C++) accurately reflect librdkafka's own usage.
+    # System/bundled builds (confluent Python, confluent_cpp) include runtime overhead.
+    is_local_build = "local build" in client_impl
+    if is_local_build:
         note = (
-            "<strong>rdkafka_perf client:</strong> CPU and memory are sampled on the "
-            "C binary process tree. This closely reflects librdkafka's own resource usage."
+            "<strong>Local build client (rdkafka_perf / rdkafka_perf_cpp):</strong> "
+            "CPU and memory are sampled on the benchmark binary process tree. "
+            "This closely reflects librdkafka's own resource usage."
         )
         color = "#c6f6d5"
         border = "#276749"
     else:
         note = (
-            "<strong>confluent client:</strong> CPU and memory include Python interpreter "
-            "overhead (~30&ndash;50 MB RSS baseline, ~5&ndash;15% CPU for the Python GIL/runtime). "
-            "These figures are <em>not</em> a pure measure of librdkafka's usage. "
-            "For accurate librdkafka-only figures, run with <code>--client rdkafka_perf</code>."
+            "<strong>Bundled/system librdkafka client:</strong> "
+            "For the Python <em>confluent</em> client, CPU and memory include Python "
+            "interpreter overhead (~30&ndash;50 MB RSS baseline, ~5&ndash;15% CPU for the GIL/runtime). "
+            "For the C++ <em>confluent_cpp</em> client, figures reflect the system-installed "
+            "librdkafka, not your local source changes. "
+            "Use <code>--client rdkafka_perf</code> or <code>--client rdkafka_perf_cpp</code> "
+            "for accurate local-build measurements."
         )
         color = "#fefcbf"
         border = "#d69e2e"

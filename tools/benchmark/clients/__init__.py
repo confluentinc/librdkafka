@@ -5,9 +5,10 @@ Imports are lazy so that --list-presets and config validation work
 without confluent-kafka being installed.
 
 Available clients:
-  confluent      - confluent-kafka-python (bundles its own librdkafka)
-  rdkafka_perf   - wraps examples/rdkafka_benchmark built from local source
-                   (use this to benchmark local librdkafka changes)
+  confluent        - confluent-kafka-python (bundles its own librdkafka)
+  rdkafka_perf     - wraps examples/rdkafka_benchmark (C, local build)
+  rdkafka_perf_cpp - wraps examples/rdkafka_benchmark_cpp (C++, local build)
+  confluent_cpp    - wraps examples/rdkafka_benchmark_cpp_sys (C++, system librdkafka)
 
 To add a new client implementation:
   1. Create clients/<name>.py with classes subclassing BenchmarkProducer/Consumer.
@@ -24,13 +25,29 @@ from clients.base import BenchmarkConsumer, BenchmarkProducer
 # Registry: name → dotted module paths for (ProducerClass, ConsumerClass)
 _REGISTRY: Dict[str, Tuple[str, str, str, str]] = {
     # "name": ("module", "ProducerClass", "module", "ConsumerClass")
+
+    # Python confluent-kafka — bundles its own librdkafka
     "confluent": (
         "clients.confluent", "ConfluentProducer",
         "clients.confluent", "ConfluentConsumer",
     ),
+
+    # C binary — local librdkafka build (tests local source changes)
     "rdkafka_perf": (
         "clients.rdkafka_perf", "RdkafkaPerfProducer",
         "clients.rdkafka_perf", "RdkafkaPerfConsumer",
+    ),
+
+    # C++ binary — local librdkafka build (tests local changes via C++ API)
+    "rdkafka_perf_cpp": (
+        "clients.rdkafka_perf_cpp", "RdkafkaPerfCppProducer",
+        "clients.rdkafka_perf_cpp", "RdkafkaPerfCppConsumer",
+    ),
+
+    # C++ binary — system-installed librdkafka (analogous to confluent Python client)
+    "confluent_cpp": (
+        "clients.confluent_cpp", "ConfluentCppProducer",
+        "clients.confluent_cpp", "ConfluentCppConsumer",
     ),
 }
 

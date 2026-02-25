@@ -43,32 +43,22 @@ _BINARY    = _REPO_ROOT / "examples" / "rdkafka_benchmark"
 _READY_SENTINEL = "BENCHMARK_READY"
 
 
-def _check_binary() -> Path:
+def _check_binary(binary: Path) -> Path:
     """Verify the binary exists; raise RuntimeError with a helpful message."""
-    if not _BINARY.exists():
+    if not binary.exists():
         raise RuntimeError(
-            f"rdkafka_benchmark binary not found at {_BINARY}\n"
+            f"Binary not found at {binary}\n"
             f"Build it with:\n"
             f"  cd {_REPO_ROOT}\n"
             f"  ./configure && make"
         )
-    if not os.access(_BINARY, os.X_OK):
+    if not os.access(binary, os.X_OK):
         raise RuntimeError(
-            f"{_BINARY} exists but is not executable. "
+            f"{binary} exists but is not executable. "
             f"Re-run 'make' in {_REPO_ROOT}."
         )
-    return _BINARY
+    return binary
 
-
-def _binary_version() -> str:
-    """Return the librdkafka version string from the binary."""
-    try:
-        # Run a trivial invocation that prints usage and parse the binary name
-        # The JSON from any run includes librdkafka_version; for client_name()
-        # we return a static label since we'd need a full run to get the version.
-        return f"rdkafka_benchmark @ {_BINARY.parent}"
-    except Exception:
-        return "rdkafka_benchmark (local build)"
 
 
 def _build_producer_cmd(
@@ -167,8 +157,12 @@ def _parse_consumer_result(data: dict) -> ConsumerResult:
 class RdkafkaPerfProducer(BenchmarkProducer):
     """Wraps the locally-built rdkafka_benchmark binary in producer mode."""
 
+    def _binary_path(self) -> Path:
+        """Return the path to the benchmark binary. Override in subclasses."""
+        return _BINARY
+
     def client_name(self) -> str:
-        return _binary_version()
+        return f"rdkafka_benchmark @ {self._binary_path().parent}"
 
     def run(
         self,
@@ -179,7 +173,7 @@ class RdkafkaPerfProducer(BenchmarkProducer):
     ) -> None:
         result = ProducerResult()
         try:
-            binary = _check_binary()
+            binary = _check_binary(self._binary_path())
             cmd = _build_producer_cmd(
                 binary, self.broker, self.topic,
                 msg_size, msg_count, duration_sec, self.config,
@@ -246,8 +240,12 @@ class RdkafkaPerfProducer(BenchmarkProducer):
 class RdkafkaPerfConsumer(BenchmarkConsumer):
     """Wraps the locally-built rdkafka_benchmark binary in consumer mode."""
 
+    def _binary_path(self) -> Path:
+        """Return the path to the benchmark binary. Override in subclasses."""
+        return _BINARY
+
     def client_name(self) -> str:
-        return _binary_version()
+        return f"rdkafka_benchmark @ {self._binary_path().parent}"
 
     def run(
         self,
@@ -262,7 +260,7 @@ class RdkafkaPerfConsumer(BenchmarkConsumer):
         proc = None
 
         try:
-            binary = _check_binary()
+            binary = _check_binary(self._binary_path())
             cmd = _build_consumer_cmd(
                 binary, self.broker, self.topic, msg_count, self.config,
             )

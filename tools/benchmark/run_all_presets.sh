@@ -57,12 +57,21 @@ while [[ $i -lt ${#args[@]} ]]; do
     i=$((i+1))
 done
 
-# Pick preset list based on client
+# Pick preset list and rebuild binary based on client
 if [[ "$CLIENT" == "rdkafka_perf" ]]; then
     PRESETS=("${RDKAFKA_PRESETS[@]}")
-    # Rebuild binary before running
-    echo "==> Building rdkafka_benchmark from local source..."
+    echo "==> Building rdkafka_benchmark (C, local) from local source..."
     make -C "${SCRIPT_DIR}/../../examples" rdkafka_benchmark
+    echo ""
+elif [[ "$CLIENT" == "rdkafka_perf_cpp" ]]; then
+    PRESETS=("${RDKAFKA_PRESETS[@]}")
+    echo "==> Building rdkafka_benchmark_cpp (C++, local) from local source..."
+    make -C "${SCRIPT_DIR}/../../examples" rdkafka_benchmark_cpp
+    echo ""
+elif [[ "$CLIENT" == "confluent_cpp" ]]; then
+    PRESETS=("${RDKAFKA_PRESETS[@]}")  # eos not supported by C++ binary
+    echo "==> Building rdkafka_benchmark_cpp_sys (C++, system librdkafka)..."
+    make -C "${SCRIPT_DIR}/../../examples" rdkafka_benchmark_cpp_sys
     echo ""
 else
     PRESETS=("${ALL_PRESETS[@]}")

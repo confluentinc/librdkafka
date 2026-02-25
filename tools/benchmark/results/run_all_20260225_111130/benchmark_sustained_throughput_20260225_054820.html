@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Benchmark: sustained_throughput</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #f4f6f9; color: #2d3748; padding: 24px; }
+    h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+    h2 { font-size: 1.1rem; font-weight: 600; margin: 24px 0 10px;
+         color: #4a5568; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+    .meta { font-size: 0.85rem; color: #718096; margin-bottom: 20px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 12px;
+             font-size: 0.78rem; font-weight: 600; }
+    .badge-ok   { background: #c6f6d5; color: #276749; }
+    .badge-fail { background: #fed7d7; color: #9b2c2c; }
+    .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+    .card { background: white; border-radius: 10px; padding: 16px 20px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08); min-width: 150px; flex: 1; }
+    .card-label { font-size: 0.75rem; color: #718096; text-transform: uppercase;
+                  letter-spacing: .05em; margin-bottom: 4px; }
+    .card-value { font-size: 1.4rem; font-weight: 700; }
+    table { width: 100%; border-collapse: collapse; background: white;
+            border-radius: 10px; overflow: hidden;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 24px; }
+    th { background: #2d3748; color: white; font-size: 0.78rem;
+         text-align: left; padding: 10px 12px; font-weight: 600; }
+    td { padding: 9px 12px; font-size: 0.84rem; border-bottom: 1px solid #edf2f7; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f7fafc; }
+    .run-ok  td:first-child { border-left: 3px solid #48bb78; }
+    .run-fail td:first-child { border-left: 3px solid #fc8181; }
+    .na { color: #a0aec0; }
+    .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+              margin-bottom: 24px; }
+    .chart-box { background: white; border-radius: 10px; padding: 16px;
+                 box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    .chart-title { font-size: 0.85rem; font-weight: 600; color: #4a5568;
+                   margin-bottom: 10px; }
+    .section { margin-bottom: 8px; }
+    .config-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr));
+                   gap: 10px; background: white; border-radius: 10px; padding: 16px;
+                   box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 24px; }
+    .config-item { font-size: 0.82rem; }
+    .config-key   { color: #718096; font-weight: 500; }
+    .config-val   { color: #2d3748; font-weight: 600; }
+    footer { font-size: 0.75rem; color: #a0aec0; margin-top: 24px; text-align: center; }
+    @media (max-width: 700px) { .charts { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+  
+    <h1>Kafka Benchmark Report</h1>
+    <p class="meta">Generated 2026-02-25 05:48 UTC</p>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Preset</div>
+        <div class="card-value">sustained_throughput</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Runs</div>
+        <div class="card-value"><span class="badge badge-ok">3 ok</span></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Broker</div>
+        <div class="card-value" style="font-size:1rem">localhost:9092</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Client</div>
+        <div class="card-value" style="font-size:0.9rem">rdkafka_benchmark @ /Users/pranavshah/workspace/librdkafka/examples</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Msg size</div>
+        <div class="card-value">1,024 B</div>
+      </div>
+    </div>
+    
+  
+    <h2>Configuration</h2>
+    <div class="config-grid"><div class="config-item"><span class="config-key">compression</span>: <span class="config-val">lz4</span></div><div class="config-item"><span class="config-key">acks</span>: <span class="config-val">1</span></div><div class="config-item"><span class="config-key">linger_ms</span>: <span class="config-val">20</span></div><div class="config-item"><span class="config-key">batch_size</span>: <span class="config-val">1,048,576 B</span></div><div class="config-item"><span class="config-key">idempotent</span>: <span class="config-val">no</span></div><div class="config-item"><span class="config-key">EOS (txn)</span>: <span class="config-val">no</span></div><div class="config-item"><span class="config-key">fetch_min_bytes</span>: <span class="config-val">16384</span></div><div class="config-item"><span class="config-key">queued_min_msgs</span>: <span class="config-val">500,000</span></div><div class="config-item"><span class="config-key">num_partitions</span>: <span class="config-val">6</span></div><div class="config-item"><span class="config-key">replication_factor</span>: <span class="config-val">1</span></div></div>
+    
+  <h2>Charts</h2>
+  
+    <h2>Charts</h2>
+    <div class="charts">
+      
+        <div class="chart-box">
+          <div class="chart-title">Throughput — msgs/s</div>
+          <canvas id="chart_throughput"></canvas>
+          <script>
+            new Chart(document.getElementById('chart_throughput'), {
+              type: 'bar',
+              data: {
+                labels: ["Run 1", "Run 2", "Run 3"],
+                datasets: [{"label": "Producer msgs/s", "data": [2715967.68, 2748808.45, 2739797.12], "backgroundColor": "rgba(54,162,235,0.75)"}, {"label": "Consumer msgs/s", "data": [509925.3, 513852.66, 514774.8], "backgroundColor": "rgba(255,159,64,0.75)"}]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+      
+        <div class="chart-box">
+          <div class="chart-title">Throughput — MB/s</div>
+          <canvas id="chart_mbps"></canvas>
+          <script>
+            new Chart(document.getElementById('chart_mbps'), {
+              type: 'bar',
+              data: {
+                labels: ["Run 1", "Run 2", "Run 3"],
+                datasets: [{"label": "Producer MB/s", "data": [2652.31, 2684.38, 2675.58], "backgroundColor": "rgba(54,162,235,0.75)"}, {"label": "Consumer MB/s", "data": [497.97, 501.81, 502.71], "backgroundColor": "rgba(255,159,64,0.75)"}]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+      
+        <div class="chart-box">
+          <div class="chart-title">Producer DR Latency (µs)</div>
+          <canvas id="chart_dr"></canvas>
+          <script>
+            new Chart(document.getElementById('chart_dr'), {
+              type: 'bar',
+              data: {
+                labels: ["Run 1", "Run 2", "Run 3"],
+                datasets: [{"label": "avg (\u00b5s)", "data": [3166.63, 3162.5, 3128.45], "backgroundColor": "rgba(75,192,192,0.75)"}, {"label": "p99 (\u00b5s)", "data": [5794.0, 8583.0, 5375.0], "backgroundColor": "rgba(153,102,255,0.75)"}]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+      
+        <div class="chart-box">
+          <div class="chart-title">E2E Latency (ms)</div>
+          <canvas id="chart_e2e"></canvas>
+          <script>
+            new Chart(document.getElementById('chart_e2e'), {
+              type: 'bar',
+              data: {
+                labels: ["Run 1", "Run 2", "Run 3"],
+                datasets: [{"label": "avg (ms)", "data": [8196.09, 8244.33, 8189.46], "backgroundColor": "rgba(75,192,192,0.75)"}, {"label": "p99 (ms)", "data": [16722.82, 16807.55, 16320.8], "backgroundColor": "rgba(153,102,255,0.75)"}]
+              },
+              options: {
+                responsive: true,
+                plugins: { legend: { position: 'bottom' } },
+                scales: { y: { beginAtZero: true } }
+              }
+            });
+          </script>
+        </div>
+    </div>
+    
+  
+    <h2>Per-Run Results</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Run</th><th>Status</th>
+          <th>P msgs/s</th><th>P MB/s</th>
+          <th>DR avg (µs)</th><th>DR p99 (µs)</th>
+          <th>P CPU avg%†</th><th>P mem peak MB†</th>
+          <th>C msgs/s</th><th>C MB/s</th>
+          <th>E2E avg (ms)</th><th>E2E p99 (ms)</th>
+          <th>C CPU avg%†</th><th>C mem peak MB†</th>
+          <th>C-lag</th>
+        </tr>
+      </thead>
+      <tbody><tr class="run-ok"><td>1</td><td><span class="badge badge-ok">OK</span></td><td>2,715,967</td><td>2,652.31</td><td>3,166.6</td><td>5,794.0</td><td>0.0</td><td>196.3</td><td>509,925</td><td>497.97</td><td>8,196.1</td><td>16,722.8</td><td>0.0</td><td>1,105.5</td><td>0</td></tr><tr class="run-ok"><td>2</td><td><span class="badge badge-ok">OK</span></td><td>2,748,808</td><td>2,684.38</td><td>3,162.5</td><td>8,583.0</td><td>0.0</td><td>254.2</td><td>513,852</td><td>501.81</td><td>8,244.3</td><td>16,807.5</td><td>0.0</td><td>1,261.2</td><td>0</td></tr><tr class="run-ok"><td>3</td><td><span class="badge badge-ok">OK</span></td><td>2,739,797</td><td>2,675.58</td><td>3,128.4</td><td>5,375.0</td><td>0.0</td><td>195.1</td><td>514,774</td><td>502.71</td><td>8,189.5</td><td>16,320.8</td><td>0.0</td><td>1,157.1</td><td>0</td></tr></tbody>
+    </table>
+    
+  <div style="background:#fefcbf;border-left:4px solid #d69e2e;padding:10px 14px;border-radius:6px;font-size:0.83rem;margin-bottom:20px">† CPU/memory accuracy note: <strong>Bundled/system librdkafka client:</strong> For the Python <em>confluent</em> client, CPU and memory include Python interpreter overhead (~30&ndash;50 MB RSS baseline, ~5&ndash;15% CPU for the GIL/runtime). For the C++ <em>confluent_cpp</em> client, figures reflect the system-installed librdkafka, not your local source changes. Use <code>--client rdkafka_perf</code> or <code>--client rdkafka_perf_cpp</code> for accurate local-build measurements.</div>
+    <h2>Producer — Aggregated</h2>
+    <table>
+      
+    <thead>
+      <tr>
+        <th>Metric</th><th>mean</th><th>stddev</th>
+        <th>min</th><th>max</th><th>p50</th>
+      </tr>
+    </thead>
+      <tbody>
+        <tr><td>msgs/s</td><td>2,734,857</td><td>16,968</td><td>2,715,967</td><td>2,748,808</td><td>2,739,797</td></tr>
+        <tr><td>MB/s</td><td>2,670.76</td><td>16.57</td><td>2,652.31</td><td>2,684.38</td><td>2,675.58</td></tr>
+        <tr><td>DR lat avg (µs)</td><td>3,152.5</td><td>21.0</td><td>3,128.4</td><td>3,166.6</td><td>3,162.5</td></tr>
+        <tr><td>DR lat p99 (µs)</td><td>6,584.0</td><td>1,743.8</td><td>5,375.0</td><td>8,583.0</td><td>5,794.0</td></tr>
+        <tr><td>msgs failed</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        
+        <tr><td>CPU avg (%)†</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr><td>CPU max (%)†</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr><td>mem peak (MB)†</td><td>215.2</td><td>33.8</td><td>195.1</td><td>254.2</td><td>196.3</td></tr>
+      </tbody>
+    </table>
+    <h2>Consumer — Aggregated</h2>
+    <table>
+      
+    <thead>
+      <tr>
+        <th>Metric</th><th>mean</th><th>stddev</th>
+        <th>min</th><th>max</th><th>p50</th>
+      </tr>
+    </thead>
+      <tbody>
+        <tr><td>msgs/s</td><td>512,850</td><td>2,575</td><td>509,925</td><td>514,774</td><td>513,852</td></tr>
+        <tr><td>MB/s</td><td>500.83</td><td>2.52</td><td>497.97</td><td>502.71</td><td>501.81</td></tr>
+        <tr><td>E2E lat avg (ms)</td><td>8,209.96</td><td>29.95</td><td>8,189.46</td><td>8,244.33</td><td>8,196.09</td></tr>
+        <tr><td>E2E lat p99 (ms)</td><td>16,617.06</td><td>260.04</td><td>16,320.80</td><td>16,807.55</td><td>16,722.82</td></tr>
+        <tr><td>lag at end</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+        
+        <tr><td>CPU avg (%)†</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr><td>CPU max (%)†</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td><td>0.0</td></tr>
+        <tr><td>mem peak (MB)†</td><td>1,174.6</td><td>79.3</td><td>1,105.5</td><td>1,261.2</td><td>1,157.1</td></tr>
+      </tbody>
+    </table>
+  <footer>
+    Generated by librdkafka benchmark tool &mdash;
+    <a href="https://github.com/confluentinc/librdkafka">github.com/confluentinc/librdkafka</a>
+  </footer>
+</body>
+</html>

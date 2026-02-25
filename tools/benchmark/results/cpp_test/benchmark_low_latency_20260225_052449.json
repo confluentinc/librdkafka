@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "benchmark_id": "benchmark_low_latency_20260225_052449",
+  "preset": "low_latency",
+  "broker": "localhost:9092",
+  "client_impl": "rdkafka_benchmark_cpp @ /Users/pranavshah/workspace/librdkafka/examples (local build)",
+  "runs_requested": 1,
+  "runs_completed": 0,
+  "runs_failed": 1,
+  "msg_count": 3000,
+  "msg_size": 128,
+  "timestamp_utc": "2026-02-25T05:24:49.891642+00:00",
+  "config": {
+    "meta": {
+      "name": "low_latency",
+      "description": "Minimize end-to-end latency \u2014 no batching, no linger, single-partition"
+    },
+    "workload": {
+      "msg_count": 3000,
+      "msg_size": 128,
+      "duration_sec": null,
+      "num_partitions": 1,
+      "replication_factor": 1,
+      "topic_name": null,
+      "topic_auto_delete": true,
+      "compression": "none"
+    },
+    "producer": {
+      "acks": "1",
+      "linger_ms": 0,
+      "batch_size": 1,
+      "batch_num_messages": 1,
+      "queue_buffering_max_messages": 1,
+      "queue_buffering_max_kbytes": 1024,
+      "message_send_max_retries": 3,
+      "retry_backoff_ms": 100,
+      "enable_idempotence": false,
+      "transactional_id": null,
+      "transaction_timeout_ms": 60000,
+      "extra_config": {
+        "socket.nagle.disable": "true"
+      }
+    },
+    "consumer": {
+      "group_id": null,
+      "auto_offset_reset": "earliest",
+      "fetch_min_bytes": 1,
+      "fetch_wait_max_ms": 0,
+      "queued_min_messages": 1,
+      "session_timeout_ms": 10000,
+      "max_poll_interval_ms": 300000,
+      "enable_auto_commit": true,
+      "extra_config": {}
+    },
+    "timeouts": {
+      "producer_timeout_sec": 60,
+      "consumer_timeout_sec": 90,
+      "consumer_catchup_grace_sec": 30
+    },
+    "kafka": {
+      "bootstrap_servers": "localhost:9092"
+    },
+    "runs": 1
+  },
+  "runs": [
+    {
+      "run_id": 1,
+      "topic": "benchmark-low_latency-a4a540a1",
+      "status": "failed",
+      "producer": {
+        "msgs_produced": 3000,
+        "msgs_delivered": 3000,
+        "msgs_failed": 0,
+        "bytes_delivered": 384000,
+        "elapsed_sec": 0.85,
+        "msgs_per_sec": 3540.08,
+        "mb_per_sec": 0.43,
+        "dr_latency_avg_us": 562.55,
+        "dr_latency_p50_us": 492.0,
+        "dr_latency_p95_us": 900.0,
+        "dr_latency_p99_us": 1091.0,
+        "dr_latency_min_us": 270.0,
+        "dr_latency_max_us": 22428.0,
+        "cpu_avg_pct": 0.0,
+        "cpu_max_pct": 0.0,
+        "mem_avg_mb": 22.140625,
+        "mem_peak_mb": 35.359375,
+        "error": null
+      },
+      "consumer": {
+        "msgs_consumed": 0,
+        "bytes_consumed": 0,
+        "elapsed_sec": 0.0,
+        "msgs_per_sec": 0.0,
+        "mb_per_sec": 0.0,
+        "e2e_latency_avg_ms": null,
+        "e2e_latency_p50_ms": null,
+        "e2e_latency_p95_ms": null,
+        "e2e_latency_p99_ms": null,
+        "e2e_latency_min_ms": null,
+        "e2e_latency_max_ms": null,
+        "consumer_lag_at_end": 0,
+        "cpu_avg_pct": null,
+        "cpu_max_pct": null,
+        "mem_avg_mb": null,
+        "mem_peak_mb": null,
+        "error": "No JSON from consumer binary (exit=-11). stderr=% Consumer: topic=benchmark-low_latency-a4a540a1 group=benchmark-cg-05675db2 count=3000\n% Consumer error: Local: Timed out\n"
+      },
+      "error": "Consumer error: No JSON from consumer binary (exit=-11). stderr=% Consumer: topic=benchmark-low_latency-a4a540a1 group=benchmark-cg-05675db2 count=3000\n% Consumer error: Local: Timed out\n"
+    }
+  ],
+  "aggregated": {
+    "producer": null,
+    "consumer": null
+  }
+}

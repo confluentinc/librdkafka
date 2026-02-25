@@ -798,6 +798,12 @@ struct rd_kafka_share_s {
          *  Key: rd_kafka_topic_partition_t*
          *  Value: rd_kafka_share_ack_batches_t*
          */
+        /**
+         * TODO KIP-932: Decide on cleanup of this map,
+         *  new colleated entries are created when we will be sending
+         *  the contents of this map with Commit/Next Poll
+         *  We would have to cleanup this map then.
+         */
         rd_kafka_share_inflight_map_t rkshare_inflight_acks;
 
         /** Total number of unacknowledged messages across all partitions. */

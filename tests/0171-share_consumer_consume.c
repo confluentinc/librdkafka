@@ -342,6 +342,8 @@ static int run_share_consumer_test(share_test_config_t *config) {
                  state.total_consumed, state.total_expected, dist_str);
 
         /* Cleanup */
+        /** TODO KIP-932: Uncomment it when all the cleanups are properly done.
+         */
         // cleanup_test(config, &state);
 
         return 0;

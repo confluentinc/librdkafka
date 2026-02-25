@@ -26,6 +26,7 @@ set(
     rdkafka_offset.c
     rdkafka_op.c
     rdkafka_partition.c
+    rdkafka_share_acknowledgement.c
     rdkafka_pattern.c
     rdkafka_queue.c
     rdkafka_range_assignor.c

@@ -41,7 +41,8 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_conf.c rdkafka_timer.c rdkafka_offset.c \
 		rdkafka_transport.c rdkafka_buf.c rdkafka_queue.c rdkafka_op.c \
 		rdkafka_request.c rdkafka_cgrp.c rdkafka_pattern.c \
-		rdkafka_partition.c rdkafka_subscription.c \
+		rdkafka_partition.c rdkafka_share_acknowledgement.c \
+		rdkafka_subscription.c \
 		rdkafka_assignment.c \
 		rdkafka_assignor.c rdkafka_range_assignor.c \
 		rdkafka_roundrobin_assignor.c rdkafka_sticky_assignor.c \
@@ -56,7 +57,7 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		rdkafka_header.c rdkafka_admin.c rdkafka_aux.c \
 		rdkafka_background.c rdkafka_idempotence.c rdkafka_cert.c \
 		rdkafka_txnmgr.c rdkafka_coord.c rdbase64.c \
-		rdvarint.c rdbuf.c rdmap.c rdunittest.c \
+		rdvarint.c rdbuf.c rdmap.c rdunittest.c rdunittest_fetcher.c \
 		rdkafka_mock.c rdkafka_mock_handlers.c rdkafka_mock_cgrp.c rdkafka_mock_sharegrp.c \
 		rdkafka_error.c rdkafka_fetcher.c rdkafka_telemetry.c \
 		rdkafka_telemetry_encode.c rdkafka_telemetry_decode.c \

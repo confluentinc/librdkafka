@@ -869,129 +869,178 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
         return cnt;
 }
 
-int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
-                                      int timeout_ms,
+
+/**
+ * @brief Process a share fetch response op and deliver messages.
+ *
+ * @param rko The share fetch response op
+ * @param rkshare The share consumer handle
+ * @param rkmessages Output array for messages
+ * @param rkmessages_size Size of output array
+ * @param cnt Current count of messages in array
+ *
+ * @returns Updated count of messages in array
+ */
+static unsigned int
+rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
+                                      rd_kafka_share_t *rkshare,
                                       rd_kafka_message_t **rkmessages,
-                                      size_t rkmessages_size) {
-        unsigned int cnt = 0;
-        TAILQ_HEAD(, rd_kafka_op_s) tmpq = TAILQ_HEAD_INITIALIZER(tmpq);
-        struct rd_kafka_op_tailq ctrl_msg_q =
-            TAILQ_HEAD_INITIALIZER(ctrl_msg_q);
-        rd_kafka_op_t *rko, *next;
+                                      unsigned int cnt) {
+        rd_kafka_op_t *msg_rko;
+        int i;
+        int total_msgs =
+            rd_list_cnt(rko->rko_u.share_fetch_response.message_rkos);
+
+        /* Build acknowledgement mapping from inflight_acks */
+        rd_kafka_share_build_ack_mapping(rkshare, rko);
+
+        /* Process all messages from the list. */
+        for (i = 0; i < total_msgs; i++) {
+                msg_rko = rd_list_elem(
+                    rko->rko_u.share_fetch_response.message_rkos, i);
+
+                /**
+                 * TODO KIP-932: Check and update the handling of control
+                 * messages
+                 */
+                if (unlikely(rd_kafka_op_is_ctrl_msg(msg_rko)))
+                        continue;
+
+                /* Return message to application */
+                rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
+        }
+
+        return cnt;
+}
+
+/**
+ * TODO KIP-932: Update the handling of callbacks and other op types. Currently
+ * we are only enqueing RD_KAFKA_OP_SHARE_FETCH_RESPONSE and
+ * RD_KAFKA_OP_CONSUMER_ERR opps to the application thread.
+ */
+// static unsigned int rd_kafka_share_handle_other_op(rd_kafka_t *rk,
+//                                                    rd_kafka_q_t *rkq,
+//                                                    rd_kafka_op_t *rko,
+//                                                    rd_kafka_message_t
+//                                                    **rkmessages, unsigned int
+//                                                    cnt, rd_bool_t
+//                                                    *should_break) {
+//         rd_kafka_op_res_t res;
+
+//         *should_break = rd_false;
+
+//         /* Handle outdated ops */
+//         if (rd_kafka_op_version_outdated(rko, 0)) {
+//                 rd_kafka_op_destroy(rko);
+//                 return cnt;
+//         }
+
+//         res = rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
+//         if (res == RD_KAFKA_OP_RES_KEEP || res == RD_KAFKA_OP_RES_HANDLED)
+//                 return cnt;
+
+//         if (unlikely(res == RD_KAFKA_OP_RES_YIELD || rd_kafka_yield_thread))
+//         {
+//                 *should_break = rd_true;
+//                 return cnt;
+//         }
+
+
+
+//         return cnt;
+// }
+
+/**
+ * Serve all ops from the share consumer queue. Only CONSUMER_ERR and
+ * SHARE_FETCH_RESPONSE are enqueued. Processes all available ops:
+ * - On CONSUMER_ERR: return that error immediately
+ * - On SHARE_FETCH_RESPONSE: accumulate messages from all responses
+ */
+rd_kafka_error_t *
+rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
+                                  int timeout_ms,
+                                  rd_kafka_message_t **rkmessages,
+                                  size_t rkmessages_size,
+                                  size_t *rkmessages_size_out) {
+        rd_kafka_op_t *rko;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         rd_ts_t abs_timeout;
+        rd_kafka_error_t *error = NULL;
+        unsigned int cnt        = 0;
+
+        *rkmessages_size_out = 0;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
-                /* Since the q_pop may block we need to release the parent
-                 * queue's lock. */
                 mtx_unlock(&rkq->rkq_lock);
-                cnt = rd_kafka_q_serve_share_rkmessages(
-                    fwdq, timeout_ms, rkmessages, rkmessages_size);
+                error = rd_kafka_q_serve_share_rkmessages(
+                    fwdq, timeout_ms, rkmessages, rkmessages_size,
+                    rkmessages_size_out);
                 rd_kafka_q_destroy(fwdq);
-                return cnt;
+                return error;
         }
-
         mtx_unlock(&rkq->rkq_lock);
 
         abs_timeout = rd_timeout_init(timeout_ms);
-
         rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
-
         rd_kafka_yield_thread = 0;
-        while (cnt < rkmessages_size) {
-                rd_kafka_op_res_t res;
 
-                mtx_lock(&rkq->rkq_lock);
+        /* Wait for at least one op to arrive */
+        mtx_lock(&rkq->rkq_lock);
+        while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
+               !rd_kafka_q_check_yield(rkq) &&
+               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock, abs_timeout) ==
+                   thrd_success)
+                ;
+        rd_kafka_q_mark_served(rkq);
 
-                while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
-                       !rd_kafka_q_check_yield(rkq) &&
-                       /* Only do a timed wait if no messages are ready, if we
-                          have gotten even one message, just return with it. */
-                       cnt == 0 &&
-                       cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
-                                         abs_timeout) == thrd_success)
-                        ;
+        if (!rko) {
+                mtx_unlock(&rkq->rkq_lock);
+                rd_kafka_app_polled(rk, rkq);
+                return NULL;
+        }
 
-                rd_kafka_q_mark_served(rkq);
-
-                if (!rko) {
-                        mtx_unlock(&rkq->rkq_lock);
-                        break; /* Timed out */
-                }
-
+        /* Process all available ops in the queue */
+        while ((rko = TAILQ_FIRST(&rkq->rkq_q))) {
                 rd_kafka_q_deq0(rkq, rko);
-
                 mtx_unlock(&rkq->rkq_lock);
 
-                /* TODO KIP-932: We should never have outdated rko as we are
-                 *               not using version barriers for share
-                 *               consumers.
-                 *               Check from where are we getting outdated msgs.
-                 *               Fix those and then remove this condition. */
-                if (rd_kafka_op_version_outdated(rko, 0)) {
-                        /* Outdated op, put on discard queue */
-                        TAILQ_INSERT_TAIL(&tmpq, rko, rko_link);
-                        continue;
+                if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
+                        /* Return error immediately */
+                        if (rko->rko_error) {
+                                error          = rko->rko_error;
+                                rko->rko_error = NULL;
+                        } else {
+                                error = rd_kafka_error_new(
+                                    rko->rko_err, "%s",
+                                    rko->rko_u.err.errstr
+                                        ? rko->rko_u.err.errstr
+                                        : "");
+                        }
+                        rd_kafka_op_destroy(rko);
+                        rd_kafka_app_polled(rk, rkq);
+                        *rkmessages_size_out = cnt;
+                        return error;
                 }
 
-                /* Serve non-FETCH callbacks */
-                res =
-                    rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN, NULL);
-                if (res == RD_KAFKA_OP_RES_KEEP ||
-                    res == RD_KAFKA_OP_RES_HANDLED) {
-                        /* Callback served, rko is destroyed (if HANDLED). */
-                        continue;
-                } else if (unlikely(res == RD_KAFKA_OP_RES_YIELD ||
-                                    rd_kafka_yield_thread)) {
-                        /* Yield. */
-                        break;
-                }
-                rd_dassert(res == RD_KAFKA_OP_RES_PASS);
-
-                /* If this is a control messages, don't return message to
-                 * application. Add it to a tmp queue from where we can store
-                 * the offset and destroy the op */
-                /* TODO KIP-932: Is this the right place to check ctrl msgs or
-                 * should it be done earlier in broker thread while receiving
-                 * the response. Should be decided once explicit acknowledgement
-                 * design is complete */
-                if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
-                        TAILQ_INSERT_TAIL(&ctrl_msg_q, rko, rko_link);
-                        continue;
+                if (rko->rko_type == RD_KAFKA_OP_SHARE_FETCH_RESPONSE) {
+                        /* Accumulate messages from this response */
+                        cnt = rd_kafka_share_process_fetch_response(
+                            rko, rkq->rkq_rk->rk_rkshare, rkmessages, cnt);
                 }
 
-                /* Get rkmessage from rko and append to array. */
-                rkmessages[cnt++] = rd_kafka_message_get(rko);
-        }
+                /* Destroy other op types */
+                if (rko->rko_type != RD_KAFKA_OP_SHARE_FETCH_RESPONSE)
+                        rd_kafka_op_destroy(rko);
 
-        /* NOTE: KIP-932:
-         * For a share consumer, we are not using version barriers, and ideally,
-         * tmpq should be empty. However, the discard code is retained as
-         * non-share-consumer might still be around. This assert exists to spot
-         * any issues as they arise during testing.*/
-        rd_dassert(TAILQ_EMPTY(&tmpq));
-
-        /* Discard non-desired and already handled ops */
-        next = TAILQ_FIRST(&tmpq);
-        while (next) {
-                rko  = next;
-                next = TAILQ_NEXT(next, rko_link);
-                rd_kafka_op_destroy(rko);
+                mtx_lock(&rkq->rkq_lock);
         }
-
-        /* Discard ctrl msgs */
-        next = TAILQ_FIRST(&ctrl_msg_q);
-        while (next) {
-                rko  = next;
-                next = TAILQ_NEXT(next, rko_link);
-                rd_kafka_op_destroy(rko);
-        }
+        mtx_unlock(&rkq->rkq_lock);
 
         rd_kafka_app_polled(rk, rkq);
-
-        return cnt;
+        *rkmessages_size_out = cnt;
+        return NULL;
 }
 
 

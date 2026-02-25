@@ -82,6 +82,7 @@ librdkafka also provides a native C++ interface.
       - [Contract Changes](#contract-changes)
         - [Client Configuration changes](#client-configuration-changes)
         - [Rebalance Callback Changes](#rebalance-callback-changes)
+        - [Regex Subscription Changes](#regex-subscription-changes)
         - [Static Group Membership](#static-group-membership)
         - [Session Timeout \& Fetching](#session-timeout--fetching)
         - [Closing / Auto-Commit](#closing--auto-commit)
@@ -1743,6 +1744,16 @@ All [KIP-848](https://cwiki.apache.org/confluence/display/KAFKA/KIP-848%3A+The+N
 | `group.protocol.type`                            | Not used in the new protocol                          |
 
 **Note:** The properties listed under “Classic Protocol (Deprecated Configs in KIP-848)” are **no longer used** when using the KIP-848 consumer protocol.
+
+<a name="regex-subscription-changes"></a>
+##### Regex Subscription Changes
+
+Regex matching in the `consumer` protocol is performed on the broker side, using the **Google RE2/J** regex engine.  
+This differs from the `classic` protocol—where librdkafka and derived clients performed regex evaluation locally using the **libc regex** engine.  
+
+As part of adopting the `consumer` protocol, librdkafka (and derived clients) now rely on the broker’s RE2/J engine for regex-based subscriptions, effectively replacing the previous `libc`-based matching behavior.
+
+**A known case which would fail with the new protocol**: we have topics `topic-1` and `topic-2`. If we subscribe with `^topic` or `^topic*` in the `classic` protocol, it's assigned partitions from both topics but no partitions is assigned with the `consumer` protocol. That's because the broker side regex implementation as well as the Java classic protocol one requires that regexes match the complete topic, while `libc` one only finds the pattern into the topic, that could also be present as a prefix. To obtain the same result with this example you'd use `^topic.*` instead.
 
 <a name="rebalance-callback-changes"></a>
 ##### Rebalance Callback Changes

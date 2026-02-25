@@ -1753,7 +1753,7 @@ This differs from the `classic` protocol—where librdkafka and derived clients 
 
 As part of adopting the `consumer` protocol, librdkafka (and derived clients) now rely on the broker’s RE2/J engine for regex-based subscriptions, effectively replacing the previous `libc`-based matching behavior.
 
-Known case which would fail with the new protocol - We have `topic-1` and `topic-2`. If we subscribe with `^topic*` in the `classic` protocol, it works but it won't work in the `consumer` protocol. Use `^topic.*` instead.
+**A known case which would fail with the new protocol**: we have topics `topic-1` and `topic-2`. If we subscribe with `^topic` or `^topic*` in the `classic` protocol, it's assigned partitions from both topics but no partitions is assigned with the `consumer` protocol. That's because the broker side regex implementation as well as the Java classic protocol one requires that regexes match the complete topic, while `libc` one only finds the pattern into the topic, that could also be present as a prefix. To obtain the same result with this example you'd use `^topic.*` instead.
 
 <a name="rebalance-callback-changes"></a>
 ##### Rebalance Callback Changes

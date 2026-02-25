@@ -3052,8 +3052,6 @@ static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
  * @param backoff_ms If >0 the op will be enqueued after this many milliseconds.
  * Else, it will be immediate.
  * @locality any thread
- * TODO KIP-932: We have to use rd_kafka_share_build_ack_batches_for_fetch here
- * for building ack batches.
  */
 static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                                                      rd_ts_t abs_timeout,
@@ -3063,6 +3061,10 @@ static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
             rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
         rko->rko_u.share_fetch_fanout.abs_timeout = abs_timeout;
         rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+
+        /* Build ack_batches from inflight map to send with fetch request */
+        rd_kafka_share_build_ack_batches_for_fetch(
+            rk->rk_rkshare, &rko->rko_u.share_fetch_fanout.ack_batches);
 
         if (backoff_ms > 0)
                 rd_kafka_timer_start_oneshot(
@@ -3327,7 +3329,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          * SHARE_FETCH_RESPONSE fills messages. Caller may need to call multiple
          * times to drain CONSUMER_ERR ops before getting messages. */
         rd_kafka_error_t *error = rd_kafka_q_serve_share_rkmessages(
-            rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records, rkshare,
+            rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records,
             rkmessages_size);
         if (error)
                 return error;

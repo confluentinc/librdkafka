@@ -929,11 +929,11 @@ void rd_kafka_share_filter_msg_from_acq_records(rd_kafka_q_t *temp_fetchq,
                         if (rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rkm = &rko->rko_u.fetch.rkm;
                                 rkm->rkm_u.consumer.ack_type =
-                                    RD_KAFKA_INTERNAL_SHARE_ACK_ACQUIRED;
+                                    RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED;
                         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rkm = &rko->rko_u.err.rkm;
                                 rkm->rkm_u.consumer.ack_type =
-                                    RD_KAFKA_INTERNAL_SHARE_ACK_REJECT;
+                                    RD_KAFKA_SHARE_INTERNAL_ACK_REJECT;
                         }
 
                         /* Add to filtered messages list */
@@ -1066,7 +1066,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
          * where we have a message. */
         RD_LIST_FOREACH(batches, inflight_acks, pi) {
 
-                total_offsets += batches->acquired_msgs_count;
+                total_offsets += batches->response_msgs_count;
 
                 rd_list_t partition_msgs;
                 rd_list_init(&partition_msgs, 0, NULL);
@@ -1301,9 +1301,9 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         parpriv->topic_id             = topic_id;
         batches_out->rktpar->_private = parpriv;
 
-        batches_out->acquired_leader_id    = CurrentLeader.LeaderId;
-        batches_out->acquired_leader_epoch = CurrentLeader.LeaderEpoch;
-        batches_out->acquired_msgs_count   = 0;
+        batches_out->response_leader_id    = CurrentLeader.LeaderId;
+        batches_out->response_leader_epoch = CurrentLeader.LeaderEpoch;
+        batches_out->response_msgs_count   = 0;
         rd_list_init(&batches_out->entries, AcquiredRecordsArrayCnt, NULL);
 
         if (AcquiredRecordsArrayCnt > 0) {
@@ -1352,11 +1352,11 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                          * message. */
                         for (int64_t j = 0; j < size; j++) {
                                 entry->types[j] =
-                                    RD_KAFKA_INTERNAL_SHARE_ACK_GAP;
+                                    RD_KAFKA_SHARE_INTERNAL_ACK_GAP;
                         }
 
                         rd_list_add(&batches_out->entries, entry);
-                        batches_out->acquired_msgs_count += (int32_t)size;
+                        batches_out->response_msgs_count += (int32_t)size;
                 }
 
                 /* Filter and forward messages in acquired ranges */

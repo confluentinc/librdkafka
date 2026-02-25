@@ -457,6 +457,17 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
          * this broker's op queue or not.
          */
         rd_bool_t rkb_share_fetch_enqueued;
+
+        rd_list_t *rkb_share_async_ack_details; /**< Pending ack batches for
+                                                  *   this broker (as partition
+                                                  *   leader). Type:
+                                                  *   rd_kafka_share_ack_batches_t*.
+                                                  *   Allocated by main thread
+                                                  *   FANOUT handler, moved to
+                                                  *   SHARE_FETCH op and set to
+                                                  *   NULL. Freed by broker
+                                                  *   thread after use.
+                                                  *   @locality main thread */
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

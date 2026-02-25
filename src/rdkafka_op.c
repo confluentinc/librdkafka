@@ -527,7 +527,12 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* No heap-allocated resources to clean up */
+                /* Destroy ack_batches list if not already transferred */
+                if (rko->rko_u.share_fetch_fanout.ack_batches) {
+                        rd_list_destroy(
+                            rko->rko_u.share_fetch_fanout.ack_batches);
+                        rd_free(rko->rko_u.share_fetch_fanout.ack_batches);
+                }
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {

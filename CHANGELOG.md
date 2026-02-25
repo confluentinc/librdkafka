@@ -6,9 +6,18 @@ librdkafka v2.13.1 is a maintenance release:
 * Remove CPU usage regression when a subscription matches no topics (#5324).
 * Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
   position on EOF or error messages (#5213).
+* Fix compilation without `getentropy` (@olegrok, @lpsinger, #5288).
+* Use a truly random seed for pseudo-random number generation whenever available (#5288).
 
 
 ## Fixes
+
+### General fixes
+
+* Issues: #5283.
+  Fix compilation without `getentropy`.
+  glibc versions lacking support are those less than 2.25 (2017).
+  Happening since 2.13.0 (@olegrok, @lpsinger, #5288).
 
 ### Consumer fixes
 

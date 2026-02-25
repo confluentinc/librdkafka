@@ -487,22 +487,6 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                                   *             drops. */
         } rktp_c;
 
-        /*
-         * TODO KIP-932: Change this according to need. Currently very basic.
-         * Not even handling GAP. Sends ACCEPT blindly with implicit
-         * acknowledgement.
-         */
-
-        /* Dynamic array of acknowledge entries: NULL until allocated. */
-        struct rd_kafka_toppar_share_ack_entry {
-                int64_t first_offset;
-                int64_t last_offset;
-                int16_t delivery_count;
-        } *rktp_share_acknowledge; /* NULL = not initialized */
-
-        size_t rktp_share_acknowledge_count; /* number of entries in
-                                                rktp_share_acknowledge (0 when
-                                                NULL) */
 };
 
 /**
@@ -716,8 +700,6 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 
 rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp,
                                      rd_bool_t do_lock);
-rd_bool_t
-rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp);
 void *rd_kafka_toppar_list_copy(const void *elem, void *opaque);
 
 

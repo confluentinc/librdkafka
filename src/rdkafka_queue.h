@@ -878,10 +878,13 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                                 int timeout_ms,
                                 rd_kafka_message_t **rkmessages,
                                 size_t rkmessages_size);
-int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
-                                      int timeout_ms,
-                                      rd_kafka_message_t **rkmessages,
-                                      size_t rkmessages_size);
+/** Returns error (caller must destroy) or NULL. Processes one op per call. */
+rd_kafka_error_t *
+rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
+                                  int timeout_ms,
+                                  rd_kafka_message_t **rkmessages,
+                                  size_t rkmessages_size,
+                                  size_t *rkmessages_size_out);
 rd_kafka_resp_err_t rd_kafka_q_wait_result(rd_kafka_q_t *rkq, int timeout_ms);
 
 int rd_kafka_q_apply(rd_kafka_q_t *rkq,

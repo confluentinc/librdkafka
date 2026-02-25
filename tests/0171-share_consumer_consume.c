@@ -34,7 +34,7 @@
 #define MAX_CONSUMERS  16
 #define MAX_TOPICS     16
 #define MAX_PARTITIONS 32
-#define BATCH_SIZE     500
+#define BATCH_SIZE     10000
 
 /**
  * @brief Test configuration structure
@@ -342,7 +342,7 @@ static int run_share_consumer_test(share_test_config_t *config) {
                  state.total_consumed, state.total_expected, dist_str);
 
         /* Cleanup */
-        cleanup_test(config, &state);
+        // cleanup_test(config, &state);
 
         return 0;
 }

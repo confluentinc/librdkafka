@@ -649,6 +649,12 @@ rd_kafka_mock_topic_find_by_id(const rd_kafka_mock_cluster_t *mcluster,
 
 void rd_kafka_mock_sgrp_fetch_session_destroy(
     rd_kafka_mock_sgrp_fetch_session_t *session);
+rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
+    rd_kafka_mock_sharegroup_t *sgrp,
+    const rd_kafkap_str_t *MemberId,
+    int32_t SessionEpoch,
+    rd_kafka_mock_sgrp_fetch_session_t **sessionp,
+    const char *api_name);
 void rd_kafka_mock_sgrp_release_member_locks(
     rd_kafka_mock_sharegroup_t *mshgrp,
     const char *member_id);

@@ -889,7 +889,7 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
         rd_kafka_op_t *msg_rko;
         int i;
         int total_msgs =
-            rd_list_cnt(&rko->rko_u.share_fetch_response.message_rkos);
+            rd_list_cnt(rko->rko_u.share_fetch_response.message_rkos);
 
         /* Build acknowledgement mapping from inflight_acks */
         rd_kafka_share_build_ack_mapping(rkshare, rko);
@@ -897,7 +897,7 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
         /* Process all messages from the list. */
         for (i = 0; i < total_msgs; i++) {
                 msg_rko = rd_list_elem(
-                    &rko->rko_u.share_fetch_response.message_rkos, i);
+                    rko->rko_u.share_fetch_response.message_rkos, i);
 
                 /**
                  * TODO KIP-932: Check and update the handling of control

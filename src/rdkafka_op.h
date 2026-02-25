@@ -767,7 +767,7 @@ struct rd_kafka_op_s {
                          *  Each entry uses size=1 with types[0] holding the
                          *  single ack type for the collated range.
                          */
-                        rd_list_t ack_batches;
+                        rd_list_t *ack_batches;
                 } share_fetch_fanout;
 
                 /**
@@ -783,7 +783,7 @@ struct rd_kafka_op_s {
                          * TODO KIP-932: Check if we can send the messages only
                          *  instead of the message rkos.
                          */
-                        rd_list_t message_rkos;
+                        rd_list_t *message_rkos;
 
                         /** List of per-partition inflight ack mappings.
                          *  Type: rd_kafka_share_ack_batches_t*
@@ -791,7 +791,7 @@ struct rd_kafka_op_s {
                          *  Built in broker thread, merged to rkshare in app
                          * thread.
                          */
-                        rd_list_t inflight_acks;
+                        rd_list_t *inflight_acks;
                 } share_fetch_response;
 
         } rko_u;

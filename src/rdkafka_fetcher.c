@@ -1055,10 +1055,10 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
         response_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH_RESPONSE);
         response_rko->rko_rk = rkb->rkb_rk;
 
-        rd_list_init(&response_rko->rko_u.share_fetch_response.message_rkos, 0,
-                     NULL);
-        rd_list_init(&response_rko->rko_u.share_fetch_response.inflight_acks, 0,
-                     NULL);
+        response_rko->rko_u.share_fetch_response.message_rkos =
+            rd_list_new(0, NULL);
+        response_rko->rko_u.share_fetch_response.inflight_acks =
+            rd_list_new(0, NULL);
 
         /* Process each partition: set types for message offsets, add messages.
          * Messages in filtered_msgs are grouped by partition in the same order
@@ -1098,8 +1098,8 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
 
                         if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rd_list_add(
-                                    &response_rko->rko_u.share_fetch_response
-                                         .message_rkos,
+                                    response_rko->rko_u.share_fetch_response
+                                        .message_rkos,
                                     msg_rko);
                                 msg_cnt++;
                         } else {
@@ -1112,7 +1112,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
 
                 rd_list_destroy(&partition_msgs);
                 rd_list_add(
-                    &response_rko->rko_u.share_fetch_response.inflight_acks,
+                    response_rko->rko_u.share_fetch_response.inflight_acks,
                     batches);
         }
 

@@ -94,7 +94,7 @@ void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches,
 void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
                                       rd_kafka_op_t *response_rko) {
         rd_list_t *list =
-            &response_rko->rko_u.share_fetch_response.inflight_acks;
+            response_rko->rko_u.share_fetch_response.inflight_acks;
 
         while (rd_list_cnt(list) > 0) {
                 rd_kafka_share_ack_batches_t *batches = rd_list_pop(list);

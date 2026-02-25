@@ -313,10 +313,10 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
         int64_t range_size = acquired_end - acquired_start + 1;
 
         /* Initialize lists */
-        rd_list_init(&response_rko->rko_u.share_fetch_response.message_rkos,
-                     (int)range_size, NULL);
-        rd_list_init(&response_rko->rko_u.share_fetch_response.inflight_acks, 1,
-                     NULL);
+        response_rko->rko_u.share_fetch_response.message_rkos =
+            rd_list_new((int)range_size, NULL);
+        response_rko->rko_u.share_fetch_response.inflight_acks =
+            rd_list_new(1, NULL);
 
         /* Add messages ONLY for non-GAP offsets */
         for (int64_t i = 0; i < range_size; i++) {
@@ -338,7 +338,7 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
                 }
                 rkm->rkm_u.consumer.ack_type = (int8_t)ack_types[i];
                 rd_list_add(
-                    &response_rko->rko_u.share_fetch_response.message_rkos,
+                    response_rko->rko_u.share_fetch_response.message_rkos,
                     msg_rko);
         }
 
@@ -365,7 +365,7 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
         memcpy(entry->types, ack_types, range_size * sizeof(*entry->types));
 
         rd_list_add(&batches->entries, entry);
-        rd_list_add(&response_rko->rko_u.share_fetch_response.inflight_acks,
+        rd_list_add(response_rko->rko_u.share_fetch_response.inflight_acks,
                     batches);
 
         return response_rko;
@@ -378,19 +378,25 @@ static void ut_destroy_share_fetch_response(rd_kafka_op_t *rko) {
         /* Destroy message ops using ut_destroy_op to handle minimal toppars */
         rd_kafka_op_t *msg_rko;
         int i;
-        RD_LIST_FOREACH(msg_rko, &rko->rko_u.share_fetch_response.message_rkos,
-                        i) {
-                ut_destroy_op(msg_rko);
+        if (rko->rko_u.share_fetch_response.message_rkos) {
+                RD_LIST_FOREACH(
+                    msg_rko, rko->rko_u.share_fetch_response.message_rkos, i) {
+                        ut_destroy_op(msg_rko);
+                }
+                rd_list_destroy_free(
+                    rko->rko_u.share_fetch_response.message_rkos);
         }
-        rd_list_destroy(&rko->rko_u.share_fetch_response.message_rkos);
 
         /* Destroy inflight_acks */
         rd_kafka_share_ack_batches_t *batches;
-        RD_LIST_FOREACH(batches, &rko->rko_u.share_fetch_response.inflight_acks,
-                        i) {
-                rd_kafka_share_ack_batches_destroy(batches, rd_true);
+        if (rko->rko_u.share_fetch_response.inflight_acks) {
+                RD_LIST_FOREACH(
+                    batches, rko->rko_u.share_fetch_response.inflight_acks, i) {
+                        rd_kafka_share_ack_batches_destroy(batches, rd_true);
+                }
+                rd_list_destroy_free(
+                    rko->rko_u.share_fetch_response.inflight_acks);
         }
-        rd_list_destroy(&rko->rko_u.share_fetch_response.inflight_acks);
 
         rd_free(rko);
 }
@@ -550,18 +556,17 @@ static int ut_case_rko_structure_all_acquired(rd_kafka_t *rk) {
         /* All 6 messages should be present (no GAPs) */
         RD_UT_ASSERT(
             rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.message_rkos) == 6,
+                response_rko->rko_u.share_fetch_response.message_rkos) == 6,
             "message cnt %d != 6",
-            rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.message_rkos));
+            rd_list_cnt(response_rko->rko_u.share_fetch_response.message_rkos));
 
         /* Verify inflight_acks was created */
         RD_UT_ASSERT(
             rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.inflight_acks) == 1,
+                response_rko->rko_u.share_fetch_response.inflight_acks) == 1,
             "inflight_acks cnt %d != 1",
             rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.inflight_acks));
+                response_rko->rko_u.share_fetch_response.inflight_acks));
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -589,14 +594,13 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
         /* Only 4 messages should be present (2 GAPs excluded) */
         RD_UT_ASSERT(
             rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.message_rkos) == 4,
+                response_rko->rko_u.share_fetch_response.message_rkos) == 4,
             "message cnt %d != 4",
-            rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.message_rkos));
+            rd_list_cnt(response_rko->rko_u.share_fetch_response.message_rkos));
 
         /* Verify inflight_acks has all 6 offsets including GAPs */
         rd_kafka_share_ack_batches_t *batches = rd_list_elem(
-            &response_rko->rko_u.share_fetch_response.inflight_acks, 0);
+            response_rko->rko_u.share_fetch_response.inflight_acks, 0);
         RD_UT_ASSERT(batches != NULL, "inflight_acks[0] is NULL");
 
         rd_kafka_share_ack_batch_entry_t *entry =
@@ -645,17 +649,15 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
         /* 5 messages present (1 GAP excluded): ACQ, REJ, REJ, REJ, ACQ */
         RD_UT_ASSERT(
             rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.message_rkos) == 5,
+                response_rko->rko_u.share_fetch_response.message_rkos) == 5,
             "message cnt %d != 5",
-            rd_list_cnt(
-                &response_rko->rko_u.share_fetch_response.message_rkos));
+            rd_list_cnt(response_rko->rko_u.share_fetch_response.message_rkos));
 
         /* Count CONSUMER_ERR ops (should be 3 REJECTs) */
         rd_kafka_op_t *msg_rko;
         int i, reject_cnt = 0;
-        RD_LIST_FOREACH(msg_rko,
-                        &response_rko->rko_u.share_fetch_response.message_rkos,
-                        i) {
+        RD_LIST_FOREACH(
+            msg_rko, response_rko->rko_u.share_fetch_response.message_rkos, i) {
                 if (msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR)
                         reject_cnt++;
         }
@@ -663,7 +665,7 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
 
         /* Verify inflight_acks has correct types */
         rd_kafka_share_ack_batches_t *batches = rd_list_elem(
-            &response_rko->rko_u.share_fetch_response.inflight_acks, 0);
+            response_rko->rko_u.share_fetch_response.inflight_acks, 0);
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_list_elem(&batches->entries, 0);
 

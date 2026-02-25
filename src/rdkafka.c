@@ -3063,8 +3063,10 @@ static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
         rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
 
         /* Build ack_batches from inflight map to send with fetch request */
+        rko->rko_u.share_fetch_fanout.ack_batches =
+            rd_calloc(1, sizeof(rd_list_t));
         rd_kafka_share_build_ack_batches_for_fetch(
-            rk->rk_rkshare, &rko->rko_u.share_fetch_fanout.ack_batches);
+            rk->rk_rkshare, rko->rko_u.share_fetch_fanout.ack_batches);
 
         if (backoff_ms > 0)
                 rd_kafka_timer_start_oneshot(

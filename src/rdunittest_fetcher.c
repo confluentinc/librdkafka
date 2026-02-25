@@ -212,10 +212,15 @@ static rd_kafka_share_ack_batch_entry_t *ut_create_entry(int64_t start_offset,
                                                types_cnt);
         va_list ap;
         va_start(ap, types_cnt);
-        for (int i = 0; i < types_cnt; i++)
+        for (int i = 0; i < types_cnt; i++) {
                 entry->types[i] =
                     (rd_kafka_share_internal_acknowledgement_type)va_arg(ap,
                                                                          int);
+                /* Set is_error based on type (RELEASE/REJECT = error record) */
+                entry->is_error[i] =
+                    (entry->types[i] == RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE ||
+                     entry->types[i] == RD_KAFKA_SHARE_INTERNAL_ACK_REJECT);
+        }
         va_end(ap);
         return entry;
 }
@@ -363,6 +368,13 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
             rd_kafka_share_ack_batch_entry_new(acquired_start, acquired_end,
                                                (int32_t)range_size);
         memcpy(entry->types, ack_types, range_size * sizeof(*entry->types));
+
+        /* Set is_error based on type (RELEASE/REJECT = error record) */
+        for (int64_t k = 0; k < range_size; k++) {
+                entry->is_error[k] =
+                    (ack_types[k] == RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE ||
+                     ack_types[k] == RD_KAFKA_SHARE_INTERNAL_ACK_REJECT);
+        }
 
         rd_list_add(&batches->entries, entry);
         rd_list_add(&response_rko->rko_u.share_fetch_response.inflight_acks,
@@ -619,6 +631,13 @@ static int ut_case_rko_structure_with_gaps(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
                      "type[5] != ACQ");
 
+        /* Verify is_error: all false (ACQUIRED and GAP are not error records)
+         */
+        RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
+        for (int k = 0; k < 6; k++)
+                RD_UT_ASSERT(!entry->is_error[k],
+                             "is_error[%d] should be false", k);
+
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
 
@@ -679,6 +698,16 @@ static int ut_case_rko_structure_with_rejects(rd_kafka_t *rk) {
                      "type[4] != REJ");
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
                      "type[5] != ACQ");
+
+        /* Verify is_error: true for REJECT (1,3,4), false for ACQUIRED (0,5)
+         * and GAP (2) */
+        RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
+        RD_UT_ASSERT(!entry->is_error[0], "is_error[0] (ACQ) should be false");
+        RD_UT_ASSERT(entry->is_error[1], "is_error[1] (REJ) should be true");
+        RD_UT_ASSERT(!entry->is_error[2], "is_error[2] (GAP) should be false");
+        RD_UT_ASSERT(entry->is_error[3], "is_error[3] (REJ) should be true");
+        RD_UT_ASSERT(entry->is_error[4], "is_error[4] (REJ) should be true");
+        RD_UT_ASSERT(!entry->is_error[5], "is_error[5] (ACQ) should be false");
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -762,6 +791,13 @@ static int ut_case_merge_single_partition(rd_kafka_t *rk) {
                      "type[4]");
         RD_UT_ASSERT(entry->types[5] == RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
                      "type[5]");
+        
+        /* Verify is_error was copied: only index 5 (REJECT) is true */
+        RD_UT_ASSERT(entry->is_error != NULL, "is_error array is NULL");
+        for (int k = 0; k < 5; k++)
+                RD_UT_ASSERT(!entry->is_error[k],
+                             "is_error[%d] should be false", k);
+        RD_UT_ASSERT(entry->is_error[5], "is_error[5] (REJ) should be true");
 
         ut_destroy_share_fetch_response(response_rko);
         ut_destroy_toppar(rktp);
@@ -846,6 +882,12 @@ static int ut_case_merge_multiple_rkos(rd_kafka_t *rk) {
         RD_UT_ASSERT(entry2->types[2] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
                      "T2 type[2]");
 
+        /* Verify is_error was copied: only index 1 (REJECT) is true */
+        RD_UT_ASSERT(entry2->is_error != NULL, "T2 is_error array is NULL");
+        RD_UT_ASSERT(!entry2->is_error[0], "T2 is_error[0] should be false");
+        RD_UT_ASSERT(entry2->is_error[1], "T2 is_error[1] should be true");
+        RD_UT_ASSERT(!entry2->is_error[2], "T2 is_error[2] should be false");
+
         ut_destroy_share_fetch_response(rko1);
         ut_destroy_share_fetch_response(rko2);
         ut_destroy_toppar(rktp1);
@@ -896,8 +938,8 @@ static int ut_case_collate_all_same_type(rd_kafka_t *rk) {
         UT_ASSERT_COLLATED(collated, 1, 4, RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT);
         RD_UT_ASSERT(collated->size == 4, "size %" PRId64 " != 4",
                      collated->size);
-        RD_UT_ASSERT(collated->types_cnt == 1, "types_cnt %d != 1",
-                     collated->types_cnt);
+        RD_UT_ASSERT(collated->types[0] == RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT,
+                     "type %d != ACCEPT", collated->types[0]);
 
         rd_list_destroy(&ack_batches_out);
         ut_destroy_rkshare(rkshare);

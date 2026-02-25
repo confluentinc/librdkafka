@@ -3080,6 +3080,76 @@ rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
                              size_t *rkmessages_size /* out */);
 
 /**
+ * @enum rd_kafka_share_ack_type_t
+ * @brief Share consumer acknowledgement types (exposed to Public APIs).
+ */
+typedef enum rd_kafka_share_ack_type_s {
+        RD_KAFKA_SHARE_ACK_TYPE_ACCEPT  = 1, /**< Accept the message */
+        RD_KAFKA_SHARE_ACK_TYPE_RELEASE = 2, /**< Release the message for
+                                              *   redelivery */
+        RD_KAFKA_SHARE_ACK_TYPE_REJECT = 3   /**< Reject the message */
+} rd_kafka_share_ack_type_t;
+
+/**
+ * @brief Acknowledge a message with ACCEPT type.
+ *
+ * This is equivalent to calling rd_kafka_share_acknowledge_type() with
+ * RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT.
+ *
+ * @param rkshare Share consumer handle.
+ * @param rkmessage Message to acknowledge.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid,
+ *          RD_KAFKA_RESP_ERR__STATE if message is not in ACQUIRED state.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
+                           const rd_kafka_message_t *rkmessage);
+
+/**
+ * @brief Acknowledge a message with specified acknowledgement type.
+ *
+ * @param rkshare Share consumer handle.
+ * @param rkmessage Message to acknowledge.
+ * @param type Acknowledgement type (ACCEPT, RELEASE, or REJECT).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid or type is
+ * invalid, RD_KAFKA_RESP_ERR__STATE if message is not in ACQUIRED state.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
+                                const rd_kafka_message_t *rkmessage,
+                                rd_kafka_share_ack_type_t type);
+
+/**
+ * @brief Acknowledge an offset directly with specified acknowledgement type.
+ *
+ * This function is primarily for acknowledging error records that were not
+ * delivered as proper messages.
+ *
+ * @param rkshare Share consumer handle.
+ * @param topic Topic name.
+ * @param partition Partition id.
+ * @param offset Offset to acknowledge.
+ * @param type Acknowledgement type (ACCEPT, RELEASE, or REJECT).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid or type is
+ * invalid, RD_KAFKA_RESP_ERR__STATE if offset is not in ACQUIRED state.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
+                                  const char *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  rd_kafka_share_ack_type_t type);
+
+/**
  * @brief Destroy Kafka handle.
  *
  * @remark This is a blocking operation.

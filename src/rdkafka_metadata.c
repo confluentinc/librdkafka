@@ -1216,6 +1216,7 @@ rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
                                         "(admin request)");
 }
 
+typedef RD_MAP_TYPE(const char *, const char *) map_str_str_t;
 
 /**
  * @brief Add all topics in current cached full metadata
@@ -1226,7 +1227,7 @@ rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
  *                an available topic will be added to this list with
  *                the appropriate error set.
  *
- * @returns the number of topics matched and added to \p list
+ * @returns the number of topics matched and added to \p tinfos
  *
  * @locks none
  * @locality any
@@ -1236,13 +1237,16 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                               rd_list_t *tinfos,
                               const rd_kafka_topic_partition_list_t *match,
                               rd_kafka_topic_partition_list_t *errored) {
-        int ti, i;
+        int i;
         size_t cnt = 0;
         rd_kafka_topic_partition_list_t *unmatched;
-        rd_list_t cached_topics;
-        const char *topic;
+        const struct rd_kafka_metadata_cache_entry *rkmce;
+        map_str_str_t map;
 
         rd_kafka_rdlock(rk);
+        map = (map_str_str_t)RD_MAP_INITIALIZER(
+            rk->rk_metadata_cache.rkmc_cnt, rd_map_str_cmp, rd_map_str_hash,
+            NULL /* topic list element */, NULL /* topic list element */);
         /* To keep track of which patterns and topics in `match` that
          * did not match any topic (or matched an errored topic), we
          * create a set of all topics to match in `unmatched` and then
@@ -1253,15 +1257,24 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
 
         /* For each topic in the cluster, scan through the match list
          * to find matching topic. */
-        rd_list_init(&cached_topics, rk->rk_metadata_cache.rkmc_cnt, rd_free);
-        rd_kafka_metadata_cache_topics_to_list(rk, &cached_topics, rd_false);
-        RD_LIST_FOREACH(topic, &cached_topics, ti) {
+        TAILQ_FOREACH(rkmce, &rk->rk_metadata_cache.rkmc_expiry, rkmce_link) {
                 const rd_kafka_metadata_topic_internal_t *mdti;
-                const rd_kafka_metadata_topic_t *mdt =
-                    rd_kafka_metadata_cache_topic_get(rk, topic, &mdti,
-                                                      rd_true /* valid */);
-                if (!mdt)
+                const rd_kafka_metadata_topic_t *mdt;
+                const char *topic = rkmce->rkmce_mtopic.topic;
+                rd_bool_t matched = rd_false;
+
+                if (!RD_KAFKA_METADATA_CACHE_VALID(rkmce) || !topic ||
+                    RD_MAP_GET(&map, topic))
+                        /* We could have multiple cache entries
+                         * with different topic id and same topic name
+                         * in some cases */
                         continue;
+
+                RD_MAP_SET(&map, topic, topic);
+
+                mdt  = &rkmce->rkmce_mtopic;
+                mdti = &rkmce->rkmce_metadata_internal_topic;
+
 
                 /* Ignore topics in blacklist */
                 if (rk->rk_conf.topic_blacklist &&
@@ -1279,6 +1292,15 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                             unmatched, match->elems[i].topic,
                             RD_KAFKA_PARTITION_UA);
 
+                        if (matched)
+                                /*
+                                 * Just remove it from unmatched.
+                                 * Topic was already added to
+                                 * `tinfos` or `errored`.
+                                 */
+                                continue;
+                        matched = rd_true;
+
                         if (mdt->err) {
                                 rd_kafka_topic_partition_list_add(
                                     errored, topic, RD_KAFKA_PARTITION_UA)
@@ -1294,6 +1316,7 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                 }
         }
         rd_kafka_rdunlock(rk);
+        RD_MAP_DESTROY(&map);
 
         /* Any topics/patterns still in unmatched did not match any
          * existing topics, add them to `errored`. */
@@ -1306,7 +1329,6 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
         }
 
         rd_kafka_topic_partition_list_destroy(unmatched);
-        rd_list_destroy(&cached_topics);
 
         return cnt;
 }

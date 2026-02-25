@@ -58,6 +58,9 @@ typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
  *   - For inflight tracking: types_cnt == size (one type per offset)
  *   - For collated batches: types_cnt == 1 (single consolidated type)
  */
+/**
+ * TODO KIP-932: Check naming.
+ */
 typedef struct rd_kafka_share_ack_batch_entry_s {
         int64_t start_offset;   /**< First offset in range */
         int64_t end_offset;     /**< Last offset in range (inclusive) */
@@ -81,6 +84,9 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
  * The response_leader_id and response_leader_epoch are the leader info
  * at the time records were acquired. These may differ from the current
  * leader when sending acknowledgements.
+ */
+/**
+ * TODO KIP-932: Check naming.
  */
 typedef struct rd_kafka_share_ack_batches_s {
         rd_kafka_topic_partition_t

@@ -1354,6 +1354,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         rd_kafka_share_ack_batch_entry_t *entry =
                             rd_kafka_share_ack_batch_entry_new(
                                 FirstOffsets[i], LastOffsets[i], (int32_t)size);
+                        entry->delivery_count = DeliveryCounts[i];
 
                         /* Initialize all offsets to GAP; build_response_rko
                          * will set ACQUIRED/REJECT for offsets that have a

@@ -131,4 +131,44 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
 void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
                                                 rd_list_t *ack_batches_out);
 
+/**
+ * @brief Update ack type for delivered records.
+ *
+ * @param rkshare Share consumer handle
+ * @param topic Topic name
+ * @param partition Partition id
+ * @param offset Offset to acknowledge
+ * @param type New acknowledgement type (ACCEPT, REJECT, RELEASE)
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
+ * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
+ * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or error record
+ */
+rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_delivered(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_internal_acknowledgement_type type);
+
+/**
+ * @brief Update ack type for error records.
+ *
+ * @param rkshare Share consumer handle
+ * @param topic Topic name
+ * @param partition Partition id
+ * @param offset Offset to acknowledge
+ * @param type New acknowledgement type (ACCEPT, RELEASE, REJECT)
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
+ * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
+ * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or delivered record
+ */
+rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_error(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_internal_acknowledgement_type type);
+
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

@@ -41,7 +41,8 @@ rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
         entry->size           = end_offset - start_offset + 1;
         entry->types_cnt      = types_cnt;
         entry->delivery_count = 0;
-        entry->types = rd_calloc((size_t)types_cnt, sizeof(*entry->types));
+        entry->types    = rd_calloc((size_t)types_cnt, sizeof(*entry->types));
+        entry->is_error = rd_calloc((size_t)types_cnt, sizeof(*entry->is_error));
         return entry;
 }
 
@@ -50,6 +51,7 @@ void rd_kafka_share_ack_batch_entry_destroy(
         if (!entry)
                 return;
         rd_free(entry->types);
+        rd_free(entry->is_error);
         rd_free(entry);
 }
 
@@ -284,4 +286,98 @@ void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
 
                 rd_list_add(ack_batches_out, batch);
         }
+}
+
+rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_delivered(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_internal_acknowledgement_type type) {
+        rd_kafka_topic_partition_t lookup_key;
+        rd_kafka_share_ack_batches_t *batches;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+        int64_t idx;
+
+        /* Find partition in inflight_acks map */
+        lookup_key.topic     = (char *)topic;
+        lookup_key.partition = partition;
+
+        batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, &lookup_key);
+        if (!batches)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Find entry containing offset */
+        RD_LIST_FOREACH(entry, &batches->entries, i) {
+                if (offset >= entry->start_offset &&
+                    offset <= entry->end_offset) {
+                        /* Found the entry containing this offset */
+                        idx = offset - entry->start_offset;
+
+                        /* GAP records cannot be acknowledged */
+                        if (entry->types[idx] ==
+                            RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Error records must use offset-based API */
+                        if (entry->is_error && entry->is_error[idx])
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Update the type (allows re-acknowledgement) */
+                        entry->types[idx] = type;
+
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
+
+        /* Offset not found in any entry */
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+}
+
+rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_error(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_internal_acknowledgement_type type) {
+        rd_kafka_topic_partition_t lookup_key;
+        rd_kafka_share_ack_batches_t *batches;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+        int64_t idx;
+
+        /* Find partition in inflight_acks map */
+        lookup_key.topic     = (char *)topic;
+        lookup_key.partition = partition;
+
+        batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, &lookup_key);
+        if (!batches)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Find entry containing offset */
+        RD_LIST_FOREACH(entry, &batches->entries, i) {
+                if (offset >= entry->start_offset &&
+                    offset <= entry->end_offset) {
+                        /* Found the entry containing this offset */
+                        idx = offset - entry->start_offset;
+
+                        /* GAP records cannot be acknowledged */
+                        if (entry->types[idx] ==
+                            RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Only error records can use offset-based API */
+                        if (!entry->is_error || !entry->is_error[idx])
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Update the type (allows re-acknowledgement) */
+                        entry->types[idx] = type;
+
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
+
+        /* Offset not found in any entry */
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
 }

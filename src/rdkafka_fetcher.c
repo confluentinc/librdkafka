@@ -1095,6 +1095,13 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
 
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
+                        entry->is_error[offset - entry->start_offset] =
+                            (entry->types[offset - entry->start_offset] ==
+                                 (rd_kafka_share_internal_acknowledgement_type)
+                                     RD_KAFKA_SHARE_INTERNAL_ACK_REJECT ||
+                             entry->types[offset - entry->start_offset] ==
+                                 (rd_kafka_share_internal_acknowledgement_type)
+                                     RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE);
 
                         if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rd_list_add(
@@ -1166,6 +1173,9 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
     rd_list_t *filtered_msgs,
     rd_kafka_share_ack_batches_t *batches_out) {
 
+        /* TODO: KIP-932: Check rd_kafka_fetch_reply_handle_partition
+         * and modify as needed for ShareFetch.
+         */
         int32_t PartitionId;
         int16_t PartitionFetchErrorCode;
         rd_kafkap_str_t PartitionFetchErrorStr =
@@ -1284,7 +1294,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         rd_dassert(rktp->rktp_share_acknowledge_count == 0);
         rd_dassert(rktp->rktp_share_acknowledge == NULL);
 
-
         rd_kafka_topic_partition_private_t *parpriv;
         char *topic_str;
 
@@ -1353,6 +1362,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         for (int64_t j = 0; j < size; j++) {
                                 entry->types[j] =
                                     RD_KAFKA_SHARE_INTERNAL_ACK_GAP;
+                                if (entry->is_error)
+                                        entry->is_error[j] = rd_false;
                         }
 
                         rd_list_add(&batches_out->entries, entry);
@@ -1986,7 +1997,6 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
 
                         for (j = 0; j < rktp->rktp_share_acknowledge_count;
                              j++) {
-
                                 /* FirstOffset */
                                 rd_kafka_buf_write_i64(
                                     rkbuf, rktp->rktp_share_acknowledge[j]

@@ -41,7 +41,8 @@ rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
         entry->size           = end_offset - start_offset + 1;
         entry->types_cnt      = types_cnt;
         entry->delivery_count = 0;
-        entry->types = rd_calloc((size_t)types_cnt, sizeof(*entry->types));
+        entry->types    = rd_calloc((size_t)types_cnt, sizeof(*entry->types));
+        entry->is_error = rd_calloc((size_t)types_cnt, sizeof(*entry->is_error));
         return entry;
 }
 
@@ -50,6 +51,7 @@ void rd_kafka_share_ack_batch_entry_destroy(
         if (!entry)
                 return;
         rd_free(entry->types);
+        rd_free(entry->is_error);
         rd_free(entry);
 }
 

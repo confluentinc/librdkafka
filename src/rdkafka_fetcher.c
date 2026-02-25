@@ -1098,10 +1098,10 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         entry->is_error[offset - entry->start_offset] =
                             (entry->types[offset - entry->start_offset] ==
                                  (rd_kafka_share_internal_acknowledgement_type)
-                                     RD_KAFKA_INTERNAL_SHARE_ACK_REJECT ||
+                                     RD_KAFKA_SHARE_INTERNAL_ACK_REJECT ||
                              entry->types[offset - entry->start_offset] ==
                                  (rd_kafka_share_internal_acknowledgement_type)
-                                     RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE);
+                                     RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE);
 
                         if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rd_list_add(

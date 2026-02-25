@@ -57,6 +57,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_share_acknowledgement.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -3378,7 +3379,7 @@ static rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_delivered(
 
                         /* GAP records cannot be acknowledged */
                         if (entry->types[idx] ==
-                            RD_KAFKA_INTERNAL_SHARE_ACK_GAP)
+                            RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
                                 return RD_KAFKA_RESP_ERR__STATE;
 
                         /* Error records must use offset-based API */
@@ -3438,7 +3439,7 @@ static rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_error(
 
                         /* GAP records cannot be acknowledged */
                         if (entry->types[idx] ==
-                            RD_KAFKA_INTERNAL_SHARE_ACK_GAP)
+                            RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
                                 return RD_KAFKA_RESP_ERR__STATE;
 
                         /* Only error records can use offset-based API */

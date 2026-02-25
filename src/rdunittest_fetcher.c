@@ -212,10 +212,15 @@ static rd_kafka_share_ack_batch_entry_t *ut_create_entry(int64_t start_offset,
                                                types_cnt);
         va_list ap;
         va_start(ap, types_cnt);
-        for (int i = 0; i < types_cnt; i++)
+        for (int i = 0; i < types_cnt; i++) {
                 entry->types[i] =
                     (rd_kafka_share_internal_acknowledgement_type)va_arg(ap,
                                                                          int);
+                /* Set is_error based on type (RELEASE/REJECT = error record) */
+                entry->is_error[i] =
+                    (entry->types[i] == RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE ||
+                     entry->types[i] == RD_KAFKA_SHARE_INTERNAL_ACK_REJECT);
+        }
         va_end(ap);
         return entry;
 }
@@ -367,8 +372,8 @@ ut_make_share_fetch_response(rd_kafka_t *rk,
         /* Set is_error based on type (RELEASE/REJECT = error record) */
         for (int64_t k = 0; k < range_size; k++) {
                 entry->is_error[k] =
-                    (ack_types[k] == RD_KAFKA_INTERNAL_SHARE_ACK_RELEASE ||
-                     ack_types[k] == RD_KAFKA_INTERNAL_SHARE_ACK_REJECT);
+                    (ack_types[k] == RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE ||
+                     ack_types[k] == RD_KAFKA_SHARE_INTERNAL_ACK_REJECT);
         }
 
         rd_list_add(&batches->entries, entry);
@@ -933,7 +938,7 @@ static int ut_case_collate_all_same_type(rd_kafka_t *rk) {
         UT_ASSERT_COLLATED(collated, 1, 4, RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT);
         RD_UT_ASSERT(collated->size == 4, "size %" PRId64 " != 4",
                      collated->size);
-        RD_UT_ASSERT(collated->types[0] == RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT,
+        RD_UT_ASSERT(collated->types[0] == RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT,
                      "type %d != ACCEPT", collated->types[0]);
 
         rd_list_destroy(&ack_batches_out);

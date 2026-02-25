@@ -3094,7 +3094,7 @@ typedef enum rd_kafka_share_ack_type_s {
  * @brief Acknowledge a message with ACCEPT type.
  *
  * This is equivalent to calling rd_kafka_share_acknowledge_type() with
- * RD_KAFKA_INTERNAL_SHARE_ACK_ACCEPT.
+ * RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT.
  *
  * @param rkshare Share consumer handle.
  * @param rkmessage Message to acknowledge.

@@ -68,7 +68,9 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
         int32_t types_cnt;      /**< Number of elements in types array */
         int16_t delivery_count; /**< From AcquiredRecords DeliveryCount */
         rd_kafka_share_internal_acknowledgement_type
-            *types; /**< Array of ack types */
+            *types;        /**< Array of ack types */
+        rd_bool_t *is_error; /**< Array indicating if offset is an error record
+                              *   (RELEASE/REJECT = true) */
 } rd_kafka_share_ack_batch_entry_t;
 
 /**

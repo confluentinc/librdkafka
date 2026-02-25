@@ -108,6 +108,7 @@ class NugetPackage (Package):
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-arm64/native/alpine-librdkafka.so'),
+
         # Common Win runtime
         Mapping({'arch': 'x64',
                  'plat': 'win'},

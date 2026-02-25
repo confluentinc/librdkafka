@@ -6,7 +6,7 @@ librdkafka v2.13.1 is a maintenance release:
 * Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
   position on EOF or error messages (#5213).
 * Fix compilation without `getentropy` (@olegrok, @lpsinger, #5288).
-* Use a truly random seed for pseudo-random number generation (#5288).
+* Use a truly random seed for pseudo-random number generation whenever available (#5288).
 
 
 ## Fixes

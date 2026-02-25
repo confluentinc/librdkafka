@@ -2,6 +2,7 @@
 
 librdkafka v2.13.1 is a maintenance release:
 
+* The `librdkafka.redist` NuGet package now includes binary for alpine-arm64 ([#5237](https://github.com/confluentinc/librdkafka/pull/5237), [@mclayton7](https://github.com/mclayton7))
 * Remove CPU usage regression when a subscription matches no topics (#5324).
 * Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
   position on EOF or error messages (#5213).

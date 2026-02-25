@@ -16,12 +16,11 @@ librdkafka v2.13.1 is a maintenance release:
   The increased CPU usage (~30%) was seen in particular when there are many topics
   in the clusters and the given subscription regex doesn't match any.
   Happening since 2.10.0 (#5324).
-* Issues: #5213.
+* Issues: #4844.
   Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
   position when receiving EOF or error messages, causing the position to
-  move backward. Aligned the position update logic with
-  `rd_kafka_fetch_op_app_prepare` by filtering non-FETCH and error ops
-  and comparing positions with leader epoch awareness.
+  move forward and likely be stored and committed.
+  When storing the application offset the leader epoch is also considered for correct offset ordering in case of log truncation.
   Happening since 2.2.0 (#5213).
 
 

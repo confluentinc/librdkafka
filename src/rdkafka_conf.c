@@ -1129,7 +1129,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "sasl.oauthbearer.sub.claim.name configuration for consistent "
      "authentication. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
-     0, 0, 0,
      .sdef = "sub",
      _UNSUPPORTED_OIDC},
     {

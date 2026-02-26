@@ -730,7 +730,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        /* Use configured subject claim name, default to "sub" if not set */
+        /* Safety check to default to "sub" if not set */
         if (!sub_claim_name || !*sub_claim_name)
                 sub_claim_name = "sub";
 
@@ -744,9 +744,9 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
         }
 
         *sub = cJSON_GetStringValue(jwt_sub);
-        if (*sub == NULL || !**sub) {
+        if (*sub == NULL || **sub == '\0') {
                 /* Reset to NULL to prevent a dangling pointer to cJSON
-                 * internal memory after cJSON_Delete(payloads) at done: */
+                 * internal memory after cJSON_Delete(payloads) */
                 *sub = NULL;
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "

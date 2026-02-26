@@ -57,6 +57,9 @@ double-free errors (#5240).
 
 ### General fixes
 
+* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
+  is unavailable during consumer close. The error logging path dereferenced
+  a potentially NULL broker pointer. Happening since 1.x.
 * Issues: #4348.
   Strip trailing dot of hostname to fix SSL certificate verification issue.
   Happening since 1.x (#5253).

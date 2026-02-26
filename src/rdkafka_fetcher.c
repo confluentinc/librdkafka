@@ -1092,6 +1092,14 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                             rd_kafka_share_find_entry_for_offset(batches,
                                                                  offset);
 
+                        if (unlikely(!entry)) {
+                                rd_kafka_dbg(
+                                    rkb->rkb_rk, FETCH, "SHAREFETCH",
+                                    "No ack entry found for offset %" PRId64
+                                    " on [%" PRId32 "], skipping",
+                                    offset, batches->rktpar->partition);
+                                continue;
+                        }
 
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);

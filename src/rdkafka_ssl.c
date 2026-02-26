@@ -1947,6 +1947,20 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         SSL_CTX_set_default_passwd_cb_userdata(ctx, rk);
 
         /* Ciphers */
+        if (rk->rk_conf.ssl.tls13_ciphersuites) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Setting TLS1.3 ciphersuites: %s",
+                             rk->rk_conf.ssl.tls13_ciphersuites);
+                if (!SSL_CTX_set_ciphersuites(ctx,
+                                        rk->rk_conf.ssl.tls13_ciphersuites)) {
+                        /* Set a string that will prefix the
+                         * the OpenSSL error message (which is lousy)
+                         * to make it more meaningful. */
+                        rd_snprintf(errstr, errstr_size,
+                                    "ssl.tls13.ciphersuites failed: ");
+                        goto fail;
+                }
+        }
         if (rk->rk_conf.ssl.cipher_suites) {
                 rd_kafka_dbg(rk, SECURITY, "SSL", "Setting cipher list: %s",
                              rk->rk_conf.ssl.cipher_suites);

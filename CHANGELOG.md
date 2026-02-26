@@ -999,6 +999,8 @@ librdkafka v2.2.0 is a feature release:
    If those parameters have to be set too high to hold 1 s of data,
    this new parameter allows to back off the fetch earlier, reducing memory
    requirements.
+ * Added `ssl.tls13.ciphersuites` option, which enables setting cipher suites
+   compatible with TLSv1.3. (@morzelx)
 
 
 ## Fixes

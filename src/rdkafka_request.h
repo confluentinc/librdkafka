@@ -645,6 +645,16 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);
 
+rd_kafka_resp_err_t rd_kafka_DescribeLogDirsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics /*(rd_kafka_topic_partition_list_t*)*/,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque);
+
 rd_kafka_error_t *
 rd_kafka_ConsumerGroupDescribeRequest(rd_kafka_broker_t *rkb,
                                       char **groups,

@@ -655,4 +655,40 @@ typedef struct rd_kafka_ElectLeadersResult_s {
 
 /**@}*/
 
+/**
+ * @name DescribeLogDirs
+ * @{
+ */
+
+/**
+ * @struct DescribeLogDirs partition result
+ */
+struct rd_kafka_LogDirPartitionDescription_s {
+        int32_t partition;
+        int64_t size;
+        int64_t offset_lag;
+        rd_bool_t is_future;
+};
+
+/**
+ * @struct DescribeLogDirs topic result
+ */
+struct rd_kafka_LogDirTopicDescription_s {
+        char *topic;
+        rd_kafka_LogDirPartitionDescription_t **partitions;
+        int partition_cnt;
+};
+
+/**
+ * @struct DescribeLogDirs log dir result
+ */
+struct rd_kafka_LogDirDescription_s {
+        rd_kafka_resp_err_t error_code;
+        char *log_dir;
+        rd_kafka_LogDirTopicDescription_t **topics;
+        int topic_cnt;
+};
+
+/**@}*/
+
 #endif /* _RDKAFKA_ADMIN_H_ */

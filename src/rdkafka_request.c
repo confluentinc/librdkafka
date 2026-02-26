@@ -6120,6 +6120,70 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 }
 
 /**
+ * @brief Construct and send DescribeLogDirsRequest to \p rkb.
+ *
+ * @param topics list containing a single
+ *        rd_kafka_topic_partition_list_t* element (or empty for all topics).
+ */
+rd_kafka_resp_err_t rd_kafka_DescribeLogDirsRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_list_t *topics,
+    rd_kafka_AdminOptions_t *options,
+    char *errstr,
+    size_t errstr_size,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        const rd_kafka_topic_partition_list_t *partitions = NULL;
+        int rd_buf_size_estimate;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeLogDirs, 0, 4, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeLogDirs Admin API (KIP-113) not supported "
+                            "by broker, requires broker version >= 1.1.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        if (rd_list_cnt(topics) > 0)
+                partitions = rd_list_elem(topics, 0);
+
+        rd_buf_size_estimate = 4 /* #Topics array */;
+        if (partitions)
+                rd_buf_size_estimate +=
+                    (50 + 4) * partitions->cnt;
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeLogDirs, 1, rd_buf_size_estimate,
+            ApiVersion >= 2);
+
+        if (!partitions) {
+                /* Null array = describe all topics */
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        } else {
+                const rd_kafka_topic_partition_field_t fields[] = {
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_PARTITION,
+                    RD_KAFKA_TOPIC_PARTITION_FIELD_END};
+                rd_kafka_buf_write_topic_partitions(
+                    rkbuf, partitions,
+                    rd_false /*don't skip invalid offsets*/,
+                    rd_false /* any offset */,
+                    rd_false /* don't use topic_id */,
+                    rd_true /* use topic_names */, fields);
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
  * @brief Construct and send ConsumerGroupDescribe requests
  *        to \p rkb with the groups (const char *) in \p groups.
  *        Uses \p include_authorized_operations to get

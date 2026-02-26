@@ -9809,3 +9809,290 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
 }
 
 /**@}*/
+
+/**
+ * @name DescribeLogDirs
+ * @{
+ */
+
+static rd_kafka_LogDirPartitionDescription_t *
+rd_kafka_LogDirPartitionDescription_new(int32_t partition,
+                                        int64_t size,
+                                        int64_t offset_lag,
+                                        rd_bool_t is_future) {
+        rd_kafka_LogDirPartitionDescription_t *part;
+        part             = rd_calloc(1, sizeof(*part));
+        part->partition  = partition;
+        part->size       = size;
+        part->offset_lag = offset_lag;
+        part->is_future  = is_future;
+        return part;
+}
+
+static void
+rd_kafka_LogDirPartitionDescription_destroy(
+    rd_kafka_LogDirPartitionDescription_t *part) {
+        rd_free(part);
+}
+
+static rd_kafka_LogDirTopicDescription_t *
+rd_kafka_LogDirTopicDescription_new(const char *topic,
+                                    int partition_cnt) {
+        rd_kafka_LogDirTopicDescription_t *topic_desc;
+        topic_desc = rd_calloc(1, sizeof(*topic_desc));
+        topic_desc->topic = rd_strdup(topic);
+        topic_desc->partition_cnt = partition_cnt;
+        if (partition_cnt > 0)
+                topic_desc->partitions = rd_calloc(
+                    partition_cnt, sizeof(*topic_desc->partitions));
+        return topic_desc;
+}
+
+static void
+rd_kafka_LogDirTopicDescription_destroy(
+    rd_kafka_LogDirTopicDescription_t *topic_desc) {
+        int i;
+        for (i = 0; i < topic_desc->partition_cnt; i++)
+                rd_kafka_LogDirPartitionDescription_destroy(
+                    topic_desc->partitions[i]);
+        rd_free(topic_desc->partitions);
+        rd_free(topic_desc->topic);
+        rd_free(topic_desc);
+}
+
+static rd_kafka_LogDirDescription_t *
+rd_kafka_LogDirDescription_new(rd_kafka_resp_err_t error_code,
+                               const char *log_dir,
+                               int topic_cnt) {
+        rd_kafka_LogDirDescription_t *logdir;
+        logdir             = rd_calloc(1, sizeof(*logdir));
+        logdir->error_code = error_code;
+        logdir->log_dir    = rd_strdup(log_dir);
+        logdir->topic_cnt  = topic_cnt;
+        if (topic_cnt > 0)
+                logdir->topics =
+                    rd_calloc(topic_cnt, sizeof(*logdir->topics));
+        return logdir;
+}
+
+static void
+rd_kafka_LogDirDescription_destroy(rd_kafka_LogDirDescription_t *logdir) {
+        int i;
+        for (i = 0; i < logdir->topic_cnt; i++)
+                rd_kafka_LogDirTopicDescription_destroy(logdir->topics[i]);
+        rd_free(logdir->topics);
+        rd_free(logdir->log_dir);
+        rd_free(logdir);
+}
+
+static void rd_kafka_LogDirDescription_free(void *ptr) {
+        rd_kafka_LogDirDescription_destroy(ptr);
+}
+
+/* Public accessors */
+
+rd_kafka_resp_err_t
+rd_kafka_LogDirDescription_error_code(
+    const rd_kafka_LogDirDescription_t *logdir) {
+        return logdir->error_code;
+}
+
+const char *
+rd_kafka_LogDirDescription_log_dir(
+    const rd_kafka_LogDirDescription_t *logdir) {
+        return logdir->log_dir;
+}
+
+const rd_kafka_LogDirTopicDescription_t **
+rd_kafka_LogDirDescription_topics(
+    const rd_kafka_LogDirDescription_t *logdir,
+    size_t *cntp) {
+        *cntp = logdir->topic_cnt;
+        return (const rd_kafka_LogDirTopicDescription_t **)logdir->topics;
+}
+
+const char *
+rd_kafka_LogDirTopicDescription_topic(
+    const rd_kafka_LogDirTopicDescription_t *topic_desc) {
+        return topic_desc->topic;
+}
+
+const rd_kafka_LogDirPartitionDescription_t **
+rd_kafka_LogDirTopicDescription_partitions(
+    const rd_kafka_LogDirTopicDescription_t *topic_desc,
+    size_t *cntp) {
+        *cntp = topic_desc->partition_cnt;
+        return (const rd_kafka_LogDirPartitionDescription_t **)
+            topic_desc->partitions;
+}
+
+int32_t
+rd_kafka_LogDirPartitionDescription_partition(
+    const rd_kafka_LogDirPartitionDescription_t *partition_desc) {
+        return partition_desc->partition;
+}
+
+int64_t
+rd_kafka_LogDirPartitionDescription_size(
+    const rd_kafka_LogDirPartitionDescription_t *partition_desc) {
+        return partition_desc->size;
+}
+
+int64_t
+rd_kafka_LogDirPartitionDescription_offset_lag(
+    const rd_kafka_LogDirPartitionDescription_t *partition_desc) {
+        return partition_desc->offset_lag;
+}
+
+int
+rd_kafka_LogDirPartitionDescription_is_future(
+    const rd_kafka_LogDirPartitionDescription_t *partition_desc) {
+        return partition_desc->is_future ? 1 : 0;
+}
+
+const rd_kafka_LogDirDescription_t **
+rd_kafka_DescribeLogDirs_result_descriptions(
+    const rd_kafka_DescribeLogDirs_result_t *result,
+    size_t *cntp) {
+        *cntp = rd_list_cnt(&result->rko_u.admin_result.results);
+        return (const rd_kafka_LogDirDescription_t **)
+            result->rko_u.admin_result.results.rl_elems;
+}
+
+/**
+ * @brief Parse DescribeLogDirsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeLogDirsResponse_parse(rd_kafka_op_t *rko_req,
+                                       rd_kafka_op_t **rko_resultp,
+                                       rd_kafka_buf_t *reply,
+                                       char *errstr,
+                                       size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t LogDirArrayCnt;
+        int i;
+
+        rd_kafka_buf_read_throttle_time(reply);
+
+        /* #LogDirs */
+        rd_kafka_buf_read_arraycnt(reply, &LogDirArrayCnt, 10000);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results,
+                     LogDirArrayCnt, rd_kafka_LogDirDescription_free);
+
+        for (i = 0; i < LogDirArrayCnt; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t klogdir;
+                char *log_dir;
+                int32_t TopicArrayCnt;
+                rd_kafka_LogDirDescription_t *logdir_desc;
+                int j;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &klogdir);
+                RD_KAFKAP_STR_DUPA(&log_dir, &klogdir);
+
+                rd_kafka_buf_read_arraycnt(reply, &TopicArrayCnt,
+                                           RD_KAFKAP_TOPICS_MAX);
+
+                logdir_desc = rd_kafka_LogDirDescription_new(
+                    error_code, log_dir, TopicArrayCnt);
+
+                for (j = 0; j < TopicArrayCnt; j++) {
+                        rd_kafkap_str_t ktopic;
+                        char *topic;
+                        int32_t PartArrayCnt;
+                        rd_kafka_LogDirTopicDescription_t *topic_desc;
+                        int k;
+
+                        rd_kafka_buf_read_str(reply, &ktopic);
+                        RD_KAFKAP_STR_DUPA(&topic, &ktopic);
+
+                        rd_kafka_buf_read_arraycnt(reply, &PartArrayCnt,
+                                                   RD_KAFKAP_PARTITIONS_MAX);
+
+                        topic_desc = rd_kafka_LogDirTopicDescription_new(
+                            topic, PartArrayCnt);
+
+                        for (k = 0; k < PartArrayCnt; k++) {
+                                int32_t partition;
+                                int64_t size;
+                                int64_t offset_lag;
+                                rd_bool_t is_future;
+
+                                rd_kafka_buf_read_i32(reply, &partition);
+                                rd_kafka_buf_read_i64(reply, &size);
+                                rd_kafka_buf_read_i64(reply, &offset_lag);
+                                rd_kafka_buf_read_bool(reply, &is_future);
+
+                                rd_kafka_buf_skip_tags(reply);
+
+                                topic_desc->partitions[k] =
+                                    rd_kafka_LogDirPartitionDescription_new(
+                                        partition, size, offset_lag, is_future);
+                        }
+
+                        rd_kafka_buf_skip_tags(reply);
+
+                        logdir_desc->topics[j] = topic_desc;
+                }
+
+                rd_kafka_buf_skip_tags(reply);
+
+                rd_list_add(&rko_result->rko_u.admin_result.results,
+                            logdir_desc);
+        }
+
+        rd_kafka_buf_skip_tags(reply);
+
+        *rko_resultp = rko_result;
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeLogDirs response protocol parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+
+        return reply->rkbuf_err;
+}
+
+static void rd_kafka_DescribeLogDirs_topics_free(void *ptr) {
+        rd_kafka_topic_partition_list_destroy(ptr);
+}
+
+void rd_kafka_DescribeLogDirs(rd_kafka_t *rk,
+                              const rd_kafka_topic_partition_list_t *topics,
+                              const rd_kafka_AdminOptions_t *options,
+                              rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_DescribeLogDirsRequest,
+            rd_kafka_DescribeLogDirsResponse_parse,
+        };
+
+        rd_assert(rkqu);
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBELOGDIRS,
+            RD_KAFKA_EVENT_DESCRIBELOGDIRS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1,
+                     rd_kafka_DescribeLogDirs_topics_free);
+
+        if (topics) {
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_topic_partition_list_copy(topics));
+        }
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+/**@}*/

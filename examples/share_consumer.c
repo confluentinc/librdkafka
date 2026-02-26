@@ -199,7 +199,7 @@ int main(int argc, char **argv) {
          * since a rebalance may happen at any time.
          * Start polling for messages. */
 
-        rd_kafka_message_t *rkmessages[500];
+        rd_kafka_message_t *rkmessages[10001];
         while (run) {
                 rd_kafka_message_t *rkm = NULL;
                 size_t rcvd_msgs        = 0;
@@ -209,7 +209,7 @@ int main(int argc, char **argv) {
 
                 TIME_BLOCK_MS(__elapsed_ms,
                               error = rd_kafka_share_consume_batch(
-                                  rkshare, 500, rkmessages, &rcvd_msgs));
+                                  rkshare, 10001, rkmessages, &rcvd_msgs));
                 fprintf(stdout,
                         "%% rd_kafka_share_consume_batch() took %.3f ms\n",
                         __elapsed_ms);

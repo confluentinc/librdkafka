@@ -1,6 +1,6 @@
-# librdkafka v2.13.1
+# librdkafka v2.13.2
 
-librdkafka v2.13.1 is a maintenance release:
+librdkafka v2.13.2 is a maintenance release:
 
 * The `librdkafka.redist` NuGet package now includes binary for alpine-arm64 ([#5237](https://github.com/confluentinc/librdkafka/pull/5237), [@mclayton7](https://github.com/mclayton7))
 * Remove CPU usage regression when a subscription matches no topics (#5324).
@@ -8,6 +8,7 @@ librdkafka v2.13.1 is a maintenance release:
   position on EOF or error messages (#5213).
 * Fix compilation without `getentropy` (@olegrok, @lpsinger, #5288).
 * Use a truly random seed for pseudo-random number generation whenever available (#5288).
+* Fix rd_list destroy callback type mismatch by changing rd_kafka_assignor_destroy to take a void * argument, as expected by rd_list_init() destroy callbacks, and casting internally to rd_kafka_assignor_t * (#5195) (#5278).
 
 
 ## Fixes

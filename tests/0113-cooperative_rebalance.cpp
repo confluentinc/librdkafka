@@ -3346,7 +3346,7 @@ static void x_incremental_rebalances(void) {
   /* First consumer joins group */
   TEST_SAY("%s: joining\n", rd_kafka_name(c[0]));
   test_consumer_subscribe(c[0], topic);
-  test_consumer_wait_assignment(c[0], rd_true /*poll*/);
+  test_consumer_wait_assignment(c[0], rd_true /*poll*/, 1000);
   test_consumer_verify_assignment(c[0], rd_true /*fail immediately*/, topic, 0,
                                   topic, 1, topic, 2, topic, 3, topic, 4, topic,
                                   5, NULL);
@@ -3355,7 +3355,7 @@ static void x_incremental_rebalances(void) {
   /* Second consumer joins group */
   TEST_SAY("%s: joining\n", rd_kafka_name(c[1]));
   test_consumer_subscribe(c[1], topic);
-  test_consumer_wait_assignment(c[1], rd_true /*poll*/);
+  test_consumer_wait_assignment(c[1], rd_true /*poll*/, 1000);
   rd_sleep(3);
   if (test_consumer_group_protocol_classic()) {
     test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 3,
@@ -3372,7 +3372,7 @@ static void x_incremental_rebalances(void) {
   /* Third consumer joins group */
   TEST_SAY("%s: joining\n", rd_kafka_name(c[2]));
   test_consumer_subscribe(c[2], topic);
-  test_consumer_wait_assignment(c[2], rd_true /*poll*/);
+  test_consumer_wait_assignment(c[2], rd_true /*poll*/, 1000);
   rd_sleep(3);
   if (test_consumer_group_protocol_classic()) {
     test_consumer_verify_assignment(c[0], rd_false /*fail later*/, topic, 4,

@@ -146,7 +146,7 @@ static void do_test_consume_batch_with_seek(void) {
         consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
-        test_consumer_wait_assignment(consumer, rd_false);
+        test_consumer_wait_assignment(consumer, rd_false, 1000);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_get_consumer(consumer);
@@ -236,7 +236,7 @@ static void do_test_consume_batch_with_pause_and_resume_different_batch(void) {
         consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
-        test_consumer_wait_assignment(consumer, rd_false);
+        test_consumer_wait_assignment(consumer, rd_false, 1000);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_get_consumer(consumer);
@@ -341,7 +341,7 @@ static void do_test_consume_batch_with_pause_and_resume_same_batch(void) {
         consumer = test_create_consumer(topic, NULL, conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
-        test_consumer_wait_assignment(consumer, rd_false);
+        test_consumer_wait_assignment(consumer, rd_false, 1000);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_get_consumer(consumer);
@@ -439,7 +439,7 @@ static void do_test_consume_batch_store_offset(void) {
                 consumer = test_create_consumer(topic, NULL,
                                                 rd_kafka_conf_dup(conf), NULL);
                 test_consumer_subscribe(consumer, topic);
-                test_consumer_wait_assignment(consumer, rd_false);
+                test_consumer_wait_assignment(consumer, rd_false, 1000);
 
                 /* Create generic consume queue */
                 rkq = rd_kafka_queue_get_consumer(consumer);
@@ -544,7 +544,7 @@ static void do_test_consume_batch_control_msgs(void) {
         consumer = test_create_consumer(topic, NULL, c_conf, NULL);
 
         test_consumer_subscribe(consumer, topic);
-        test_consumer_wait_assignment(consumer, rd_false);
+        test_consumer_wait_assignment(consumer, rd_false, 1000);
 
         /* Create generic consume queue */
         rkq = rd_kafka_queue_get_consumer(consumer);

@@ -1323,15 +1323,7 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
         RD_UT_PASS();
 }
 
-
-/**
- * @brief Unit tests for sasl.oauthbearer.sub.claim.name (KIP-768 parity).
- *
- *        Verifies that rd_kafka_oidc_token_try_validate() correctly extracts
- *        the subject from the configured JWT claim name, falls back to "sub"
- *        when unconfigured, and rejects missing or empty claim values.
- *
- *        All JWTs use a fake signature since token_try_validate() only
+/**       All JWTs use a fake signature since token_try_validate() only
  *        decodes and inspects the payload; signature verification is done
  *        separately by the broker.
  *
@@ -1349,12 +1341,7 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
  *          JWT_MISSING_SUB:
  *            {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"}
  */
-/* JWT tokens for ut_sasl_oauthbearer_oidc_sub_claim_name().
- * All use a fake signature since rd_kafka_oidc_token_try_validate() only
- * decodes the payload; signature verification is done separately by the
- * broker.
- *
- * payload: {"exp":9999999999,"iat":1000000000,"sub":"subject"} */
+ /* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject"} */
 #define UT_JWT_SUB_ONLY                                                        \
         "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                         \
         "."                                                                    \
@@ -1387,6 +1374,10 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
         "."                                                                    \
         "fakesignature"
 
+/**
+ * @brief Verifies the extraction logic of the subject from the configured JWT claim name,
+ *        falls back to "sub" when unconfigured, and rejects missing or empty claim values.
+ */
 static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
 
         const struct {
@@ -1394,33 +1385,24 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
                 const char *jwt;
                 const char *sub_claim_name;
                 rd_bool_t expect_success;
-                const char *expected_sub; /* checked only when expect_success */
+                const char *expected_sub;
         } tests[] = {
-            /* NULL sub_claim_name: must default to "sub" */
             {"NULL sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, NULL,
              rd_true, "subject"},
-            /* Empty sub_claim_name: must default to "sub" */
             {"Empty sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, "",
              rd_true, "subject"},
-            /* Explicitly configured "sub" works same as default */
             {"Explicit 'sub' claim name", UT_JWT_SUB_ONLY, "sub", rd_true,
              "subject"},
-            /* Custom claim "client_id" extracted with distinct value */
             {"Custom 'client_id' claim", UT_JWT_MULTI_CLAIMS, "client_id",
              rd_true, "client_id_123"},
-            /* Custom claim "azp" extracted with distinct value */
             {"Custom 'azp' claim", UT_JWT_MULTI_CLAIMS, "azp", rd_true,
              "azp_123"},
-             /* "client_id" present, "sub" absent: succeeds when configured to use "client_id" */
-            {"Custom 'client_id' claim succeeds without sub", UT_JWT_MISSING_SUB, "client_id",
-             rd_true, "client_id_123"},
-            /* "sub" absent from token: must fail */
+            {"Custom 'client_id' claim succeeds without sub", UT_JWT_MISSING_SUB,
+             "client_id", rd_true, "client_id_123"},
             {"Missing 'sub' claim fails", UT_JWT_MISSING_SUB, "sub", rd_false,
              NULL},
-            /* "sub" present but empty: must fail */
             {"Empty 'sub' value fails", UT_JWT_EMPTY_SUB, "sub", rd_false,
              NULL},
-            /* Configured claim not present in token: must fail */
             {"Nonexistent claim name fails", UT_JWT_SUB_ONLY, "nonexistent",
              rd_false, NULL},
         };

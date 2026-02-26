@@ -1411,6 +1411,9 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
             /* Custom claim "azp" extracted with distinct value */
             {"Custom 'azp' claim", UT_JWT_MULTI_CLAIMS, "azp", rd_true,
              "azp_123"},
+             /* "client_id" present, "sub" absent: succeeds when configured to use "client_id" */
+            {"Custom 'client_id' claim succeeds without sub", UT_JWT_MISSING_SUB, "client_id",
+             rd_true, "client_id_123"},
             /* "sub" absent from token: must fail */
             {"Missing 'sub' claim fails", UT_JWT_MISSING_SUB, "sub", rd_false,
              NULL},

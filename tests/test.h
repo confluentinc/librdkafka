@@ -743,6 +743,19 @@ void test_any_conf_set(rd_kafka_conf_t *conf,
                        const char *name,
                        const char *val);
 
+void test_broker_conf_set(rd_kafka_ResourceType_t restype,
+                          const char *resname,
+                          const char *name,
+                          const char *val);
+
+void test_broker_conf_set_group_consumer_session_timeout_ms(
+    const char *group_id,
+    int timeout_ms);
+
+void test_broker_conf_set_group_consumer_heartbeat_interval_ms(
+    const char *group_id,
+    int timeout_ms);
+
 rd_kafka_topic_partition_list_t *test_topic_partitions(int cnt, ...);
 void test_print_partition_list(
     const rd_kafka_topic_partition_list_t *partitions);

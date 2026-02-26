@@ -503,6 +503,8 @@ typedef enum oidc_configuration_sub_claim_variation_t {
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
         /** Use custom claim name "azp" (authorized party). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_AZP,
+        /** Set empty string "" — should fall back to "sub". */
+        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING,
         /** Use a claim name that doesn't exist in the token (should fail). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM,
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT
@@ -519,6 +521,7 @@ static const char *oidc_configuration_sub_claim_variation_name(
                                       "explicit sub claim",
                                       "custom client_id claim",
                                       "custom azp claim",
+                                      "empty string (defaults to sub)",
                                       "missing claim (should fail)"};
         return names[variation];
 }
@@ -553,6 +556,10 @@ static rd_kafka_conf_t *oidc_configuration_sub_claim(
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_AZP:
                 /* Use azp (authorized party) as subject claim */
                 test_conf_set(conf, "sasl.oauthbearer.sub.claim.name", "azp");
+                break;
+        case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING:
+                /* Set empty string - should fall back to "sub" */
+                test_conf_set(conf, "sasl.oauthbearer.sub.claim.name", "");
                 break;
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM:
                 /* Use a claim that doesn't exist - should fail validation */

@@ -4200,8 +4200,8 @@ setupRackAwareAssignment0(rd_kafka_t *rk,
             rd_kafka_metadata_get_internal(*metadata));
 
         for (i = 0; initialize_members && i < member_cnt; i++) {
-                char member_id[10];
-                snprintf(member_id, 10, "consumer%d", (int)(i + 1));
+                char member_id[11];
+                rd_snprintf(member_id, 11, "consumer%d", (int)(i + 1));
                 ut_init_member_with_rack(
                     &members[i], member_id, ALL_RACKS[consumer_racks[i]],
                     subscriptions[i], subscriptions_count[i]);

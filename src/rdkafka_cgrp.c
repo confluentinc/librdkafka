@@ -2919,29 +2919,42 @@ rd_kafka_cgrp_consumer_assignment_with_metadata(
                 rd_kafka_Uuid_t request_topic_id =
                     rd_kafka_topic_partition_get_topic_id(
                         &assignment->elems[i]);
+                int partition             = assignment->elems[i].partition;
+                rd_bool_t partition_found = rd_false;
 
                 rd_kafka_rdlock(rk);
                 rkmce =
                     rd_kafka_metadata_cache_find_by_id(rk, request_topic_id, 1);
 
-                if (rkmce)
+                if (rkmce) {
                         topic_name = rd_strdup(rkmce->rkmce_mtopic.topic);
+                        // Check if partition exists in metadata
+                        int pcnt        = rkmce->rkmce_mtopic.partition_cnt;
+                        partition_found = (partition < pcnt);
+                }
                 rd_kafka_rdunlock(rk);
 
-                if (unlikely(!topic_name)) {
+                if (!topic_name) {
                         rktpar = rd_kafka_topic_partition_list_find_topic_by_id(
                             rkcg->rkcg_current_assignment, request_topic_id);
                         if (rktpar)
                                 topic_name = rd_strdup(rktpar->topic);
                 }
 
-                if (likely(topic_name != NULL)) {
+                // If topic name is found and partition exists in metadata
+                if (topic_name != NULL && partition_found) {
                         rd_kafka_topic_partition_list_add_with_topic_name_and_id(
                             assignment_with_metadata, request_topic_id,
                             topic_name, assignment->elems[i].partition);
                         rd_free(topic_name);
                         continue;
                 }
+
+                if (!partition_found && topic_name != NULL)
+                        rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "HEARTBEAT",
+                                     "Found new partition for topic \"%s\". "
+                                     "Updating metadata",
+                                     topic_name);
 
                 if (missing_topic_ids) {
                         if (unlikely(!*missing_topic_ids))

@@ -3270,10 +3270,9 @@ static void
 rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                         rd_list_t *ack_batches) {
         rd_kafka_share_ack_batches_t *batch;
-        int i;
         int batch_cnt = rd_list_cnt(ack_batches);
 
-        RD_LIST_FOREACH(batch, ack_batches, i) {
+        while ((batch = rd_list_pop(ack_batches))) {
                 rd_kafka_toppar_t *rktp;
                 rd_kafka_broker_t *leader_rkb;
                 rd_kafka_share_ack_batches_t *existing;
@@ -3284,6 +3283,7 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                      "Ack batch for leader %" PRId32
                                      " dropped: toppar or leader not available",
                                      batch->response_leader_id);
+                        rd_kafka_share_ack_batches_destroy(batch, rd_true);
                         continue;
                 }
                 leader_rkb = rktp->rktp_leader;
@@ -3309,9 +3309,7 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                         /* Destroy source without freeing moved elements
                          * (free_cb is NULL), destroy the rktpar, and
                          * free the batch shell */
-                        rd_list_destroy(&batch->entries);
-                        rd_kafka_topic_partition_destroy(batch->rktpar);
-                        rd_free(batch);
+                        rd_kafka_share_ack_batches_destroy(batch, rd_true);
                 } else {
                         rd_list_add(leader_rkb->rkb_share_async_ack_details,
                                     batch);

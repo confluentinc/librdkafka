@@ -5103,6 +5103,7 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
             TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_in_session));
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_add);
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_forget);
+        rd_assert(!rkb->rkb_share_async_ack_details);
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
             (rkb->rkb_rk->rk_conf.security_protocol ==
@@ -6505,13 +6506,38 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
                 return;
 
-        /**
-         * TODO KIP-932: Not leaving properly. Need to fix this. It will be
-         *               moved to consumer close instead of decommissioning.
-         */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
             rkb->rkb_source == RD_KAFKA_LEARNED) {
                 rd_kafka_op_t *rko_sf;
+
+                /* Clear pending ack details cached on this broker.
+                 * TODO KIP-932: Maybe move ack_details cleanup to clear
+                 *               through DESTROY err flow when main thread
+                 *               receives response from ongoing op. Problem
+                 *               with that approach is that broker_final
+                 *               might be called before reply for the op
+                 *               is processed. Check properly.
+                 * TODO KIP-932: Send SHARE_SESSION_NOT_FOUND error in
+                 *               acknowledgement callback (as done in
+                 *               Java client). */
+                if (rkb->rkb_share_async_ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
+                        int i;
+                        RD_LIST_FOREACH(batch,
+                                        rkb->rkb_share_async_ack_details, i) {
+                                rd_kafka_share_ack_batches_destroy(batch,
+                                                                   rd_false);
+                        }
+                        rd_list_destroy(rkb->rkb_share_async_ack_details);
+                        rd_free(rkb->rkb_share_async_ack_details);
+                        rkb->rkb_share_async_ack_details = NULL;
+                }
+
+                /**
+                 * TODO KIP-932: Not leaving properly. Need to fix this.
+                 *               It will be moved to consumer close
+                 *               instead of decommissioning.
+                 */
                 rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
                 rko_sf->rko_u.share_fetch.should_leave = rd_true;
                 rko_sf->rko_u.share_fetch.abs_timeout =

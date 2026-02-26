@@ -164,22 +164,6 @@ int main(int argc, char **argv) {
                       * by the rd_kafka_t instance. */
 
 
-        /*
-         * TODO KIP-932: Check if rd_kafka_poll_set_consumer(rk)
-         * can be skipped for the share consumer.
-         */
-        /*
-         * Redirect all messages from per-partition queues to
-         * the main queue so that messages can be consumed with one
-         * call from all assigned partitions.
-         *
-         * The alternative is to poll the main queue (for events)
-         * and each partition queue separately, which requires setting
-         * up a rebalance callback and keeping track of the assignment:
-         * but that is more complex and typically not recommended. */
-        rd_kafka_share_poll_set_consumer(rkshare);
-
-
         /* Convert the list of topics to a format suitable for librdkafka */
         subscription = rd_kafka_topic_partition_list_new(topic_cnt);
         for (i = 0; i < topic_cnt; i++)

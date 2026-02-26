@@ -108,7 +108,6 @@ static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
 
         consumer = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(consumer != NULL, "Failed to create share consumer");
-        rd_kafka_share_poll_set_consumer(consumer);
         return consumer;
 }
 

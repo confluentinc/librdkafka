@@ -3483,9 +3483,10 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
     size_t *rkmessages_size /* out */) {
         rd_kafka_t *rk = rkshare->rkshare_rk;
         rd_kafka_cgrp_t *rkcg;
-        rd_ts_t now             = rd_clock();
-        rd_ts_t abs_timeout     = rd_timeout_init0(now, timeout_ms);
         size_t max_poll_records = (size_t)rk->rk_conf.share.max_poll_records;
+        rd_bool_t has_records;
+        rd_bool_t has_pending_acks;
+        rd_kafka_error_t *error;
 
         if (!RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -3497,39 +3498,28 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                           "rd_kafka_share_consume_batch(): "
                                           "Consumer group not initialized");
 
-        /* If we have any pending items on the consumer queue, don't issue new
-         * requests, rather, deal with them first.
-         *
-         * TODO KIP-932:
-         * Above statement might be incorrect as we have to send all the pending
-         * acknowledgements irrespective of whether there are messages to be
-         * consumed or not.
-         */
-        if (likely(rd_kafka_q_len(rkcg->rkcg_q) == 0)) {
-                rd_kafka_dbg(rk, CGRP, "SHARE",
-                             "Issuing share fetch fanout to main thread with "
-                             "abs_timeout = %" PRId64,
-                             abs_timeout);
-                rd_kafka_share_fetch_fanout_with_backoff(
-                    rk, rd_true /* fetch_more_records */,
-                    0 /* no backoff */);
-        }
+        /* Drain rk_rep for all pending callbacks (non-blocking) */
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0,
+                         RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 
-        /*
-         * TODO KIP-932: Change this to send all the messages present in the
-         *               queue at once instead of sending only
-         *               max_poll_records. How many messages to be sent to the
-         *               user is driven by broker with AcquiredRecords field.
-         */
-        /* One op per call: CONSUMER_ERR returns that error;
-         * SHARE_FETCH_RESPONSE fills messages. Caller may need to call multiple
-         * times to drain CONSUMER_ERR ops before getting messages. */
-        rd_kafka_error_t *error = rd_kafka_q_serve_share_rkmessages(
+        has_records =
+            rd_kafka_q_len(rkcg->rkcg_q) > 0;
+        has_pending_acks =
+            RD_MAP_CNT(&rk->rk_rkshare->rkshare_inflight_acks) > 0;
+
+        if (!has_records || has_pending_acks)
+                rd_kafka_share_fetch_fanout_with_backoff(
+                    rk, !has_records /* fetch_more_records */, 0);
+
+        error = rd_kafka_q_serve_share_rkmessages(
             rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records,
             rkmessages_size);
-        if (error)
-                return error;
-        return NULL;
+
+        /* Drain rk_rep for callbacks again before returning */
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0,
+                         RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+
+        return error;
 }
 
 /**

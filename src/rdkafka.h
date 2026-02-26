@@ -68,6 +68,7 @@ typedef SSIZE_T ssize_t;
 #endif
 #define RD_UNUSED
 #define RD_INLINE     __inline
+#define RD_NOINLINE   __declspec(noinline)
 #define RD_DEPRECATED __declspec(deprecated)
 #define RD_FORMAT(...)
 #undef RD_EXPORT
@@ -87,8 +88,9 @@ typedef SSIZE_T ssize_t;
 #else
 #include <sys/socket.h> /* for sockaddr, .. */
 
-#define RD_UNUSED __attribute__((unused))
-#define RD_INLINE inline
+#define RD_UNUSED   __attribute__((unused))
+#define RD_INLINE   inline
+#define RD_NOINLINE __attribute__((noinline))
 #define RD_EXPORT
 #define RD_DEPRECATED __attribute__((deprecated))
 

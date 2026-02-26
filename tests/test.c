@@ -2217,8 +2217,7 @@ rd_kafka_t *test_create_handle(int mode, rd_kafka_conf_t *conf) {
                         test_socket_enable(conf);
 #endif
         } else {
-                if (!strcmp(test_conf_get(conf, "client.id"), "rdkafka"))
-                        test_conf_set(conf, "client.id", test_curr->name);
+                test_conf_set(conf, "client.id", test_curr->name);
         }
 
         if (mode == RD_KAFKA_CONSUMER && test_consumer_group_protocol_str) {

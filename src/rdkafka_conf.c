@@ -38,6 +38,7 @@
 #include "rdkafka_int.h"
 #include "rdkafka_feature.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_transport.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_assignor.h"
 #include "rdkafka_sasl_oauthbearer.h"
@@ -386,7 +387,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0x2000, "oidc", _UNSUPPORTED_OIDC},
              {0, NULL}}},
     {_RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
-     "Client identifier.", .sdef = "rdkafka"},
+     "Client identifier. Fallback default value is \"rdkafka\" "
+     "if current host name cannot be retrieved.",
+     .sdef = "rdkafka@{hostname}" /* placeholder value */},
     {_RK_GLOBAL | _RK_HIDDEN, "client.software.name", _RK_C_STR, _RK(sw_name),
      "Client software name as reported to broker version >= v2.4.0. "
      "Broker-side character restrictions apply, as of broker version "
@@ -2445,11 +2448,74 @@ static void rd_kafka_defaultconf_set(int scope, void *conf) {
         }
 }
 
+static const char *rd_kafka_client_id = NULL;
+
+static void rd_kafka_default_client_id_impl(void) {
+        const int stem_len = 8; /* strlen("rdkafka@") */
+        /* 256 = maximum hostname length among most platforms
+                 however, some platforms have lesser value;
+             8 = stem length, merely `strlen("rdkafka@")';
+             1 = space for NUL byte.
+        */
+        static char client_id_buf[256 + 8 + 1];
+        int res;
+
+        (void)memset(client_id_buf, 0, sizeof(client_id_buf));
+        /* strcpy(client_id_buf, "rdkafka@"); */
+        (void)memcpy(client_id_buf, "rdkafka@", stem_len);
+
+        /* required on Windows before calling gethostname();
+         * on other platforms it does nothing (for now). */
+        rd_kafka_transport_init();
+
+        res = gethostname(client_id_buf + stem_len,
+                          sizeof(client_id_buf) - stem_len - 1);
+        if (res != 0) {
+                /* if gethostname() is failed for whatever reason,
+                 * trim "client_id_buf": produces "rdkafka". */
+                client_id_buf[stem_len - 1] = 0;
+        }
+        rd_kafka_client_id = (const char *)client_id_buf;
+}
+
+#ifdef _WIN32
+static RD_NOINLINE
+BOOL CALLBACK rd_kafka_default_client_id_once(PINIT_ONCE init_once,
+                                              PVOID parameter,
+                                              PVOID *context) {
+        rd_kafka_default_client_id_impl();
+        return TRUE;
+}
+#else
+static RD_NOINLINE
+void rd_kafka_default_client_id_once(void) {
+        rd_kafka_default_client_id_impl();
+}
+#endif
+
+static RD_NOINLINE
+void rd_kafka_default_client_id(rd_kafka_conf_t *conf) {
+        const char *client_id;
+#ifdef _WIN32
+        static INIT_ONCE _once = INIT_ONCE_STATIC_INIT;
+        (void)InitOnceExecuteOnce(&_once, rd_kafka_default_client_id_once, NULL,
+                                  NULL);
+#else
+        static pthread_once_t _once = PTHREAD_ONCE_INIT;
+        (void)pthread_once(&_once, rd_kafka_default_client_id_once);
+#endif
+        client_id = rd_kafka_client_id;
+        if (!client_id)
+                return;
+        (void)rd_kafka_conf_set(conf, "client.id", client_id, NULL, 0);
+}
+
 rd_kafka_conf_t *rd_kafka_conf_new(void) {
         rd_kafka_conf_t *conf = rd_calloc(1, sizeof(*conf));
         rd_assert(RD_KAFKA_CONF_PROPS_IDX_MAX > sizeof(*conf) &&
                   *"Increase RD_KAFKA_CONF_PROPS_IDX_MAX");
         rd_kafka_defaultconf_set(_RK_GLOBAL, conf);
+        rd_kafka_default_client_id(conf);
         rd_kafka_anyconf_clear_all_is_modified(conf);
         return conf;
 }

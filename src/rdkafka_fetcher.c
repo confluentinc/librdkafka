@@ -1628,6 +1628,7 @@ static void rd_kafka_broker_session_update_toppars_list(
                                     removed_rktp); /* from partitions list */
                                 if (rd_list_empty(toppars_to_remove_from)) {
                                         rd_list_destroy(toppars_to_remove_from);
+                                        toppars_to_remove_from     = NULL;
                                         *toppars_to_remove_from_ptr = NULL;
                                 }
                         }

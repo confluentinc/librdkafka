@@ -533,7 +533,6 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                                                                    rd_false);
                         }
                         rd_list_destroy(rko->rko_u.share_fetch.ack_details);
-                        rd_free(rko->rko_u.share_fetch.ack_details);
                 }
                 break;
         }

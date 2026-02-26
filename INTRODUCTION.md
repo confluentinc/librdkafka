@@ -270,7 +270,7 @@ on the producer:
 
 See [STATISTICS.md](STATISTICS.md) for the full definition of metrics.
 A JSON schema for the statistics is available in
-[statistics-schema.json](src/statistics-schema.json).
+[statistics_schema.json](https://github.com/edenhill/librdkafka/blob/master/src/statistics_schema.json).
 
 
 <a name="compression"></a>
@@ -832,7 +832,7 @@ automatically.
 librdkafka supports Exactly One Semantics (EOS) as defined in [KIP-98](https://cwiki.apache.org/confluence/display/KAFKA/KIP-98+-+Exactly+Once+Delivery+and+Transactional+Messaging).
 For more on the use of transactions, see [Transactions in Apache Kafka](https://www.confluent.io/blog/transactions-apache-kafka/).
 
-See [examples/transactions.c](examples/transactions.c) for an example
+See [examples/transactions.c](https://github.com/edenhill/librdkafka/blob/master/examples/transactions.c) for an example
 transactional EOS application.
 
 **Warning**
@@ -849,7 +849,7 @@ See KIP-447 for more information.
 <a name="documentation"></a>
 ### Documentation
 
-The librdkafka API is documented in the [`rdkafka.h`](src/rdkafka.h)
+The librdkafka API is documented in the rdkafka.h
 header file, the configuration properties are documented in
 [`CONFIGURATION.md`](CONFIGURATION.md)
 
@@ -1159,7 +1159,7 @@ by setting `enable.ssl.certificate.verification=false`, but this is not
 recommended since it allows for rogue brokers and man-in-the-middle attacks,
 and should only be used for testing and troubleshooting purposes.
 
-CA location probe paths (see [rdkafka_ssl.c](src/rdkafka_ssl.c) for full list)
+CA location probe paths (see [rdkafka_ssl.c](https://github.com/edenhill/librdkafka/blob/master/src/rdkafka_ssl.c) for full list)
 used when OpenSSL is statically linked:
 
     "/etc/pki/tls/certs/ca-bundle.crt",

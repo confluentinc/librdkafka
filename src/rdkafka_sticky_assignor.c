@@ -1564,8 +1564,9 @@ static rd_bool_t areSubscriptionsIdentical(
         }
 
         RD_MAP_FOREACH(ignore, pcurr, consumer2AllPotentialPartitions) {
-                if (pprev && rd_kafka_topic_partition_list_cmp(
-                                 pcurr, pprev, rd_kafka_topic_partition_cmp))
+                if (pprev && rd_kafka_topic_partition_list_cmp_with_hash(
+                                 pcurr, pprev, rd_kafka_topic_partition_cmp,
+                                 rd_kafka_topic_partition_hash))
                         return rd_false;
                 pprev = pcurr;
         }
@@ -1921,7 +1922,6 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
         sortedPartitions = sortPartitions(
             rk, &currentAssignment, &prevAssignment, isFreshAssignment,
             &partition2AllPotentialConsumers, &consumer2AllPotentialPartitions);
-
 
         /* All partitions that need to be assigned (initially set to all
          * partitions but adjusted in the following loop) */

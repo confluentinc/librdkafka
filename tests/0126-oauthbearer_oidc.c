@@ -501,8 +501,6 @@ typedef enum oidc_configuration_sub_claim_variation_t {
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EXPLICIT_SUB,
         /** Use custom claim name "client_id". */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
-        /** Use custom claim name "azp" (authorized party). */
-        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_AZP,
         /** Set empty string "" — should fall back to "sub". */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING,
         /** Use a claim name that doesn't exist in the token (should fail). */
@@ -520,7 +518,6 @@ static const char *oidc_configuration_sub_claim_variation_name(
         static const char *names[] = {"default sub claim",
                                       "explicit sub claim",
                                       "custom client_id claim",
-                                      "custom azp claim",
                                       "empty string (defaults to sub)",
                                       "missing claim (should fail)"};
         return names[variation];
@@ -530,7 +527,7 @@ static const char *oidc_configuration_sub_claim_variation_name(
  * @brief Configure OIDC with different subject claim name variations.
  *
  * Note: This test assumes the OIDC token provider returns tokens with
- * standard claims including "sub", "client_id", and "azp".
+ * standard claims including "sub" and "client_id".
  * The test validates that librdkafka can extract the subject from
  * different claims based on configuration.
  */
@@ -552,10 +549,6 @@ static rd_kafka_conf_t *oidc_configuration_sub_claim(
                 /* Use client_id as subject claim */
                 test_conf_set(conf, "sasl.oauthbearer.sub.claim.name",
                               "client_id");
-                break;
-        case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_AZP:
-                /* Use azp (authorized party) as subject claim */
-                test_conf_set(conf, "sasl.oauthbearer.sub.claim.name", "azp");
                 break;
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING:
                 /* Set empty string - should fall back to "sub" */

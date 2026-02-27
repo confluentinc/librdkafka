@@ -1158,6 +1158,12 @@ librdkafka v2.0.2 is a maintenance release:
 * Fix OpenSSL version in Win32 nuget package (#4152).
 
 
+## Enhancements
+
+ * When building librdkafka, it is no longer necessary to enable
+   `-Wno-unused-variable` when `NDEBUG` is defined. (Chris Novakovic)
+
+
 
 # librdkafka v2.0.1
 

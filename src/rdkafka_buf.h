@@ -1265,6 +1265,29 @@ rd_kafka_buf_finalize_arraycnt(rd_kafka_buf_t *rkbuf, size_t of, size_t cnt) {
 
 
 /**
+ * @brief Write the null array count to the position returned from
+ *        rd_kafka_buf_write_arraycnt_pos().
+ *
+ * Update int32_t 0 in buffer at offset 'of' but serialize it as
+ * compact uvarint (that must take 1 byte storage)
+ */
+static RD_INLINE void
+rd_kafka_buf_finalize_null_arraycnt(rd_kafka_buf_t *rkbuf, size_t of) {
+        char buf[sizeof(int32_t)];
+        size_t sz, r;
+
+        sz = rd_uvarint_enc_u64(buf, sizeof(buf), (uint64_t)0);
+        rd_buf_write_update(&rkbuf->rkbuf_buf, of, buf, sz);
+        /* Varint occupies less space than the allotted 4 bytes, erase
+                * the remaining bytes. */
+        rd_assert(sz == 1);
+        r = rd_buf_erase(&rkbuf->rkbuf_buf, of + sz,
+                sizeof(int32_t) - sz);
+        rd_assert(r == sizeof(int32_t) - sz);
+}
+
+
+/**
  * Write int64_t to buffer.
  * The value will be endian-swapped before write.
  */

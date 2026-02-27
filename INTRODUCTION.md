@@ -907,17 +907,21 @@ The application does not need to free any config resources after a
 
     res = rd_kafka_conf_set(conf, "compression.codec", "snappy",
                             errstr, sizeof(errstr));
-    if (res != RD_KAFKA_CONF_OK)
+    if (res != RD_KAFKA_CONF_OK) {
+        rd_kafka_conf_destroy(conf);
         fail("%s\n", errstr);
+    }
 
     res = rd_kafka_conf_set(conf, "batch.num.messages", "100",
                             errstr, sizeof(errstr));
-    if (res != RD_KAFKA_CONF_OK)
+    if (res != RD_KAFKA_CONF_OK) {
+        rd_kafka_conf_destroy(conf);
         fail("%s\n", errstr);
+    }
 
     rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
     if (!rk) {
-        rd_kafka_conf_destroy(rk);
+        rd_kafka_conf_destroy(conf);
         fail("Failed to create producer: %s\n", errstr);
     }
 

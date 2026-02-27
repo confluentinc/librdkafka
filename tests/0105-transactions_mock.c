@@ -2504,7 +2504,7 @@ static void do_test_unstable_offset_commit(void) {
         offsets = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(offsets, topic, 0)->offset =
             offset_to_commit;
-        TEST_CALL_ERR__(rd_kafka_commit(c, offsets, 0 /*sync*/));
+        TEST_CALL_ERR__(rd_kafka_commit(c, offsets, 0 /*sync*/, -1 /*infinite*/));
         rd_kafka_topic_partition_list_destroy(offsets);
 
         /* Retrieve offsets by calling committed().

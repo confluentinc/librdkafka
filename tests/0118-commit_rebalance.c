@@ -72,7 +72,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                  * since it will have started to shut down after the assign
                  * call. */
                 TEST_SAY("%s: Committing\n", rd_kafka_name(rk));
-                commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/);
+                commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/, -1 /*infinite*/);
                 TEST_SAY("%s: Commit result: %s\n", rd_kafka_name(rk),
                          rd_kafka_err2name(commit_err));
 

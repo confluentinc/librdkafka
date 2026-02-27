@@ -1361,25 +1361,25 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
 
   Message *consume(int timeout_ms);
   ErrorCode commitSync() {
-    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0 /*sync*/));
+    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 0 /*sync*/, -1 /*infinite*/));
   }
   ErrorCode commitAsync() {
-    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 1 /*async*/));
+    return static_cast<ErrorCode>(rd_kafka_commit(rk_, NULL, 1 /*async*/, -1));
   }
   ErrorCode commitSync(Message *message) {
     MessageImpl *msgimpl = dynamic_cast<MessageImpl *>(message);
     return static_cast<ErrorCode>(
-        rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 0 /*sync*/));
+        rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 0 /*sync*/, -1 /*infinite*/));
   }
   ErrorCode commitAsync(Message *message) {
     MessageImpl *msgimpl = dynamic_cast<MessageImpl *>(message);
     return static_cast<ErrorCode>(
-        rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 1 /*async*/));
+        rd_kafka_commit_message(rk_, msgimpl->rkmessage_, 1 /*async*/, -1));
   }
 
   ErrorCode commitSync(std::vector<TopicPartition *> &offsets) {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
-    rd_kafka_resp_err_t err                  = rd_kafka_commit(rk_, c_parts, 0);
+    rd_kafka_resp_err_t err                  = rd_kafka_commit(rk_, c_parts, 0, -1);
     if (!err)
       update_partitions_from_c_parts(offsets, c_parts);
     rd_kafka_topic_partition_list_destroy(c_parts);
@@ -1388,7 +1388,7 @@ class KafkaConsumerImpl : virtual public KafkaConsumer,
 
   ErrorCode commitAsync(const std::vector<TopicPartition *> &offsets) {
     rd_kafka_topic_partition_list_t *c_parts = partitions_to_c_parts(offsets);
-    rd_kafka_resp_err_t err                  = rd_kafka_commit(rk_, c_parts, 1);
+    rd_kafka_resp_err_t err                  = rd_kafka_commit(rk_, c_parts, 1, -1);
     rd_kafka_topic_partition_list_destroy(c_parts);
     return static_cast<ErrorCode>(err);
   }

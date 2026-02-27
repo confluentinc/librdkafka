@@ -2059,7 +2059,7 @@ void rd_kafka_conf_set_consume_cb(
  *
  *          case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
  *             if (manual_commits) // Optional explicit manual commit
- *                 rd_kafka_commit(rk, partitions, 0); // sync commit
+ *                 rd_kafka_commit(rk, partitions, 0, -1); // sync commit
  *
  *             if (!strcmp(rd_kafka_rebalance_protocol(rk), "COOPERATIVE"))
  *                     rd_kafka_incremental_unassign(rk, partitions);
@@ -4429,7 +4429,10 @@ RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
  * If \p offsets is NULL the current partition assignment will be used instead.
  *
  * If \p async is false this operation will block until the broker offset commit
- * is done, returning the resulting success or error code.
+ * is done (or timed out), returning the resulting success or error code.
+ *
+ * \p timeout_ms only takes effect while async is false, while -1 means infinite
+ * wait.
  *
  * If a rd_kafka_conf_set_offset_commit_cb() offset commit callback has been
  * configured the callback will be enqueued for a future call to
@@ -4458,7 +4461,8 @@ RD_EXPORT int rd_kafka_assignment_lost(rd_kafka_t *rk);
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit(rd_kafka_t *rk,
                 const rd_kafka_topic_partition_list_t *offsets,
-                int async);
+                int async,
+                int timeout_ms);
 
 
 /**
@@ -4470,7 +4474,8 @@ rd_kafka_commit(rd_kafka_t *rk,
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_commit_message(rd_kafka_t *rk,
                         const rd_kafka_message_t *rkmessage,
-                        int async);
+                        int async,
+                        int timeout_ms);
 
 
 /**

@@ -177,13 +177,21 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
         rk->rk_init_wait_cnt++;
 
 #ifndef _WIN32
-        /* Block all signals in newly created threads.
-         * To avoid race condition we block all signals in the calling
+        /* Block all non-fatal signals in newly created threads.
+         * To avoid race condition we block the signals in the calling
          * thread, which the new thread will inherit its sigmask from,
          * and then restore the original sigmask of the calling thread when
-         * we're done creating the thread. */
+         * we're done creating the thread. By not blocking every signal we
+         * allow users to catch fatal thread-directed signals when needed. */
         sigemptyset(&oldset);
         sigfillset(&newset);
+        sigdelset(&newset, SIGABRT);
+        sigdelset(&newset, SIGBUS);
+        sigdelset(&newset, SIGFPE);
+        sigdelset(&newset, SIGILL);
+        sigdelset(&newset, SIGQUIT);
+        sigdelset(&newset, SIGSEGV);
+        sigdelset(&newset, SIGTRAP);
         if (rk->rk_conf.term_sig) {
                 struct sigaction sa_term = {.sa_handler =
                                                 rd_kafka_term_sig_handler};

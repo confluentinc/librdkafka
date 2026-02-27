@@ -4999,15 +4999,23 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rd_interval_init(&rkb->rkb_suppress.fail_error);
 
 #ifndef _WIN32
-        /* Block all signals in newly created thread.
-         * To avoid race condition we block all signals in the calling
+        /* Block all non-fatal signals in newly created thread.
+         * To avoid race condition we block the signals in the calling
          * thread, which the new thread will inherit its sigmask from,
          * and then restore the original sigmask of the calling thread when
-         * we're done creating the thread.
+         * we're done creating the thread. By not blocking every signal we
+         * allow users to catch fatal thread-directed signals when needed.
          * NOTE: term_sig remains unblocked since we use it on termination
          *       to quickly interrupt system calls. */
         sigemptyset(&oldset);
         sigfillset(&newset);
+        sigdelset(&newset, SIGABRT);
+        sigdelset(&newset, SIGBUS);
+        sigdelset(&newset, SIGFPE);
+        sigdelset(&newset, SIGILL);
+        sigdelset(&newset, SIGQUIT);
+        sigdelset(&newset, SIGSEGV);
+        sigdelset(&newset, SIGTRAP);
         if (rkb->rkb_rk->rk_conf.term_sig)
                 sigdelset(&newset, rkb->rkb_rk->rk_conf.term_sig);
         pthread_sigmask(SIG_SETMASK, &newset, &oldset);

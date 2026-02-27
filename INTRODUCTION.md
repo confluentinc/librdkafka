@@ -211,6 +211,7 @@ Setting `linger.ms` to 0 or 0.1 will make sure messages are sent as
 soon as possible.
 Lower buffering time leads to smaller batches and larger per-message overheads,
 increasing network, memory and CPU usage for producers, brokers and consumers.
+Also review socket settings - setting `socket.nagle.disable` can reduce RTT.
 
 See [How to decrease message latency](https://github.com/confluentinc/librdkafka/wiki/How-to-decrease-message-latency) for more info.
 

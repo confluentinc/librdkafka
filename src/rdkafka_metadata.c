@@ -2139,7 +2139,16 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                         rd_kafka_broker_t *rkb;
                         rd_kafka_metadata_partition_t *mdp =
                             &md->topics[i].partitions[j];
-                        ;
+                        /* Only when topic response has no errors. */
+                        if (mdp->err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+                            rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
+                                             "Partition %s(%s)[%" PRId32
+                                             "]: has err, skip.",
+                                             topic,
+                                             rd_kafka_Uuid_base64str(&topic_id),
+                                             j);
+                            continue;
+                        }
                         rd_kafka_metadata_partition_internal_t *mdpi =
                             &mdi->topics[i].partitions[j];
                         int32_t part = mdp->id, current_leader_epoch;

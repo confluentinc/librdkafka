@@ -5,7 +5,7 @@ OBJS	  = $(TESTSRCS_C:%.c=%.o) $(TESTSRCS_CXX:%.cpp=%.o)
 BIN	  = test-runner
 LIBS	 += -lrdkafka++ -lrdkafka
 OBJS	 += test.o rusage.o testcpp.o \
-		tinycthread.o tinycthread_extra.o rdlist.o sockem.o \
+		tinycthread.o tinycthread_extra.o rdallocator.o rdlist.o sockem.o \
 		sockem_ctrl.o
 CFLAGS += -I../src
 CXXFLAGS += -I../src -I../src-cpp
@@ -117,6 +117,9 @@ tinycthread.o: ../src/tinycthread.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 tinycthread_extra.o: ../src/tinycthread_extra.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
+
+rdallocator.o: ../src/rdallocator.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c $<
 
 rdlist.o: ../src/rdlist.c

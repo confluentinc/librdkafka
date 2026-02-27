@@ -224,6 +224,32 @@ typedef enum rd_kafka_timestamp_type_t {
 } rd_kafka_timestamp_type_t;
 
 
+/**
+ * @warning This function may only be called once and must be called before
+ * calling any other rdkafka functions.
+ *
+ * @brief Set external allocator for allocations made by librdkafka.
+ * This has to be set before calling any other rdkafka functions.
+ *
+ * @param f_malloc malloc function pointer
+ * @param f_calloc calloc function pointer
+ * @param f_realloc realloc function pointer
+ * @param f_strdup strdup function pointer
+ * @param f_strndup strndup function pointer
+ * @param f_free free function pointer
+ * @param opaque opaque value passed to allocator functions
+ *
+ * Affected methods include rd_kafka_produce() when calling with
+ * RD_KAFKA_MSG_F_FREE
+ */
+RD_EXPORT
+void rd_kafka_set_allocator(void *f_malloc,
+                            void *f_calloc,
+                            void *f_realloc,
+                            void *f_strdup,
+                            void *f_strndup,
+                            void *f_free,
+                            void *opaque);
 
 /**
  * @brief Retrieve supported debug contexts for use with the \c \"debug\"

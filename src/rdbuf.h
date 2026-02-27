@@ -308,6 +308,8 @@ size_t rd_slice_reader(rd_slice_t *slice, const void **p);
 size_t rd_slice_peeker(const rd_slice_t *slice, const void **p);
 
 size_t rd_slice_read(rd_slice_t *slice, void *dst, size_t size);
+size_t rd_slice_read_into_buf(rd_slice_t *slice, rd_buf_t *rbuf, size_t size);
+
 size_t
 rd_slice_peek(const rd_slice_t *slice, size_t offset, void *dst, size_t size);
 

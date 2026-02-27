@@ -147,7 +147,7 @@ else ifeq ($(HAS_GNU_AR),y)
 	rm $$_tmp)
 else
 	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
-		ar -r $@ $$_f ; \
+		$(AR) -r $@ $$_f ; \
 	done
 endif
 	cp $@ $(LIBNAME)-static-dbg.a

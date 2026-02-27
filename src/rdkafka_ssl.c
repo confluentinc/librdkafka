@@ -2111,8 +2111,8 @@ void rd_kafka_ssl_init(void) {
          * is required. Similarly it will also automatically
          * deinitialise as required."
          */
-        SSL_load_error_strings();
         SSL_library_init();
+        SSL_load_error_strings();
 
         ERR_load_BIO_strings();
         ERR_load_crypto_strings();

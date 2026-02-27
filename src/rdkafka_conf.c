@@ -1029,6 +1029,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_HIGH | _RK_SENSITIVE, "sasl.password", _RK_C_STR,
      _RK(sasl.password),
      "SASL password for use with the PLAIN and SASL-SCRAM-.. mechanism"},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.win32gssapi.username", _RK_C_STR,
+     _RK(sasl.win32gssapi.username),
+     "SASL username for use with the GSSAPI mechanism on Windows. "
+     "If empty will use default credentials."},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.win32gssapi.domain", _RK_C_STR,
+     _RK(sasl.win32gssapi.domain),
+     "SASL domain for use with the GSSAPI mechanism on Windows."},
+    {_RK_GLOBAL | _RK_SENSITIVE, "sasl.win32gssapi.password", _RK_C_STR,
+     _RK(sasl.win32gssapi.password),
+     "SASL password for use with the GSSAPI mechanism on Windows."},
     {_RK_GLOBAL | _RK_SENSITIVE, "sasl.oauthbearer.config", _RK_C_STR,
      _RK(sasl.oauthbearer_config),
      "SASL/OAUTHBEARER configuration. The format is "
@@ -4574,7 +4584,11 @@ static int rd_kafka_anyconf_warn_deprecated(rd_kafka_t *rk,
  * @locks none
  */
 int rd_kafka_conf_warn(rd_kafka_t *rk) {
-        int cnt = 0;
+        int cnt         = 0;
+        char is_windows = 0;
+#ifdef _WIN32
+        is_windows = 1;
+#endif
 
         cnt = rd_kafka_anyconf_warn_deprecated(rk, _RK_GLOBAL, &rk->rk_conf);
         if (rk->rk_conf.topic_conf)
@@ -4646,6 +4660,15 @@ int rd_kafka_conf_warn(rd_kafka_t *rk) {
                              "Configuration property `sasl.username` only "
                              "applies when `sasl.mechanism` is set to "
                              "PLAIN or SCRAM-SHA-..");
+
+        if (rd_kafka_conf_is_modified(&rk->rk_conf,
+                                      "sasl.win32gssapi.username") &&
+            (strcmp(rk->rk_conf.sasl.mechanisms, "GSSAPI") || !is_windows))
+                rd_kafka_log(
+                    rk, LOG_WARNING, "CONFWARN",
+                    "Configuration property `sasl.win32gssapi.username` only "
+                    "applies on Windows operating systems and when "
+                    "`sasl.mechanism` is set to GSSAPI");
 
         if (rd_kafka_conf_is_modified(&rk->rk_conf, "client.software.name") &&
             !rd_kafka_sw_str_is_safe(rk->rk_conf.sw_name))

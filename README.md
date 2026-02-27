@@ -174,6 +174,7 @@ Questions and discussions are welcome on the [Discussions](https://github.com/co
   * C++: [cppkafka](https://github.com/mfontanini/cppkafka)
   * C++: [modern-cpp-kafka](https://github.com/Morgan-Stanley/modern-cpp-kafka)
   * Common Lisp: [cl-rdkafka](https://github.com/SahilKang/cl-rdkafka)
+  * Crystal: [crafka](https://github.com/BT-OpenSource/crafka)
   * D (C-like): [librdkafka](https://github.com/DlangApache/librdkafka/)
   * D (C++-like): [librdkafkad](https://github.com/tamediadigital/librdkafka-d)
   * Erlang: [erlkaf](https://github.com/silviucpp/erlkaf)

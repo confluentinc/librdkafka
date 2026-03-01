@@ -134,6 +134,14 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        // if (rd_kafka_conf_set(conf, "debug",
+        //                       "consumer,cgrp,protocol,broker,fetch,msg",
+        //                       errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+        //         fprintf(stderr, "%s\n", errstr);
+        //         rd_kafka_conf_destroy(conf);
+        //         return 1;
+        // }
+
         /* Set the consumer group id.
          * All consumers sharing the same group id will join the same
          * group, and the subscribed topic' partitions will be assigned
@@ -209,24 +217,24 @@ int main(int argc, char **argv) {
 
                 TIME_BLOCK_MS(__elapsed_ms,
                               error = rd_kafka_share_consume_batch(
-                                  rkshare, 10001, rkmessages, &rcvd_msgs));
+                                  rkshare, 5000, rkmessages, &rcvd_msgs));
                 fprintf(stdout,
                         "%% rd_kafka_share_consume_batch() took %.3f ms\n",
                         __elapsed_ms);
 
                 if (error) {
-                        fprintf(stderr, "%% Consume error: %s\n",
+                        fprintf(stdout, "%% Consume error: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
-                fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
+                fprintf(stdout, "%% Received %zu messages\n", rcvd_msgs);
                 for (i = 0; i < (int)rcvd_msgs; i++) {
                         rkm = rkmessages[i];
 
                         if (rkm->err) {
-                                fprintf(stderr, "%% Consumer error: %d: %s\n",
+                                fprintf(stdout, "%% Consumer error: %d: %s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
                                 rd_kafka_message_destroy(rkm);
                                 continue;

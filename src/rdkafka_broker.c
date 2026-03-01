@@ -5240,6 +5240,8 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
         rkb->rkb_share_fetch_session.toppars_to_forget      = NULL;
         rkb->rkb_share_fetch_session.toppars_to_add         = NULL;
+        rkb->rkb_share_async_ack_details                    = NULL;
+        rkb->rkb_share_fetch_enqueued                       = rd_false;
         CIRCLEQ_INIT(&rkb->rkb_active_toppars);
         TAILQ_INIT(&rkb->rkb_monitors);
         rd_kafka_bufq_init(&rkb->rkb_outbufs);
@@ -6526,7 +6528,7 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                         RD_LIST_FOREACH(batch,
                                         rkb->rkb_share_async_ack_details, i) {
                                 rd_kafka_share_ack_batches_destroy(batch,
-                                                                   rd_false);
+                                                                   rd_true);
                         }
                         rd_list_destroy(rkb->rkb_share_async_ack_details);
                         rd_free(rkb->rkb_share_async_ack_details);

@@ -110,6 +110,10 @@ rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
 void rd_kafka_share_ack_batch_entry_destroy(
     rd_kafka_share_ack_batch_entry_t *entry);
 
+/** void* wrapper for rd_kafka_share_ack_batches_destroy with free_rktpar=true.
+ *  Suitable as RD_MAP value destructor. */
+void rd_kafka_share_ack_batches_destroy_free(void *ptr);
+
 /** Allocate and initialize a share ack batches (list of entries). */
 rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void);
 /** Destroy share ack batches. If \p free_rktpar is true, destroys rktpar too.
@@ -128,5 +132,20 @@ void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
  */
 void rd_kafka_share_build_ack_batches_for_fetch(rd_kafka_share_t *rkshare,
                                                 rd_list_t *ack_batches_out);
+
+/**
+ * @brief Implicit ack: convert all ACQUIRED types to ACCEPT in inflight map.
+ */
+void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
+ *
+ * Non-ACQUIRED offsets are collated into ack_details for sending.
+ * ACQUIRED offsets remain in the map. Empty entries are removed.
+ *
+ * @returns Allocated list or NULL if nothing to send. Caller must destroy.
+ */
+rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

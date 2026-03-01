@@ -530,7 +530,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                         RD_LIST_FOREACH(batch,
                                         rko->rko_u.share_fetch.ack_details, i) {
                                 rd_kafka_share_ack_batches_destroy(batch,
-                                                                   rd_false);
+                                                                   rd_true);
                         }
                         rd_list_destroy(rko->rko_u.share_fetch.ack_details);
                 }
@@ -538,12 +538,11 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         }
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* Destroy ack_batches list if not already transferred */
-                if (rko->rko_u.share_fetch_fanout.ack_batches) {
+                /* Destroy ack_batches list if not already transferred.
+                 * rd_list_destroy() frees the struct (RD_LIST_F_ALLOCATED). */
+                if (rko->rko_u.share_fetch_fanout.ack_batches)
                         rd_list_destroy(
                             rko->rko_u.share_fetch_fanout.ack_batches);
-                        rd_free(rko->rko_u.share_fetch_fanout.ack_batches);
-                }
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {

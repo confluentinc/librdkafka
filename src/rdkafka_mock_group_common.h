@@ -84,11 +84,11 @@
  * @param member_id Member ID string for logging.
  * @param ts_last_activity Pointer to the member's last activity timestamp.
  */
-static RD_INLINE RD_UNUSED void rd_kafka_mock_group_member_mark_active(
-    rd_kafka_t *rk,
-    const char *group_type,
-    const char *member_id,
-    rd_ts_t *ts_last_activity) {
+static RD_INLINE RD_UNUSED void
+rd_kafka_mock_group_member_mark_active(rd_kafka_t *rk,
+                                       const char *group_type,
+                                       const char *member_id,
+                                       rd_ts_t *ts_last_activity) {
         rd_kafka_dbg(rk, MOCK, "MOCK",
                      "Marking mock %s group member %s as active", group_type,
                      member_id);

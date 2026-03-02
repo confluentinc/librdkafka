@@ -562,7 +562,8 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         int32_t i;
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
-        // printf(" --------------------------------------- rd_kafka_buf_read_NodeEndpoints: NodeEndpointCnt=%d\n",
+        // printf(" ---------------------------------------
+        // rd_kafka_buf_read_NodeEndpoints: NodeEndpointCnt=%d\n",
         //        NodeEndpoints->NodeEndpointCnt);
         rd_dassert(!NodeEndpoints->NodeEndpoints);
         NodeEndpoints->NodeEndpoints =

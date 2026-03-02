@@ -521,13 +521,28 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                            rd_kafka_broker_destroy);
                 break;
 
-        case RD_KAFKA_OP_SHARE_FETCH:
+        case RD_KAFKA_OP_SHARE_FETCH: {
+                rd_kafka_share_ack_batches_t *batch;
+                int i;
                 RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
                            rd_kafka_broker_destroy);
+                if (rko->rko_u.share_fetch.ack_details) {
+                        RD_LIST_FOREACH(batch,
+                                        rko->rko_u.share_fetch.ack_details, i) {
+                                rd_kafka_share_ack_batches_destroy(batch,
+                                                                   rd_true);
+                        }
+                        rd_list_destroy(rko->rko_u.share_fetch.ack_details);
+                }
                 break;
+        }
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* No heap-allocated resources to clean up */
+                /* Destroy ack_batches list if not already transferred.
+                 * rd_list_destroy() frees the struct (RD_LIST_F_ALLOCATED). */
+                if (rko->rko_u.share_fetch_fanout.ack_batches)
+                        rd_list_destroy(
+                            rko->rko_u.share_fetch_fanout.ack_batches);
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {

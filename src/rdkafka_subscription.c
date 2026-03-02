@@ -108,7 +108,7 @@ rd_kafka_subscribe(rd_kafka_t *rk,
 
 rd_kafka_resp_err_t
 rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
-                   const rd_kafka_topic_partition_list_t *topics) {
+                         const rd_kafka_topic_partition_list_t *topics) {
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?

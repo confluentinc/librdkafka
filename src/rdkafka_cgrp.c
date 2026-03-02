@@ -1080,13 +1080,13 @@ err_parse:
         goto err;
 }
 
-static void rd_kafka_cgrp_handle_ShareGroupHeartbeat_leave(
-    rd_kafka_t *rk,
-    rd_kafka_broker_t *rkb,
-    rd_kafka_resp_err_t err,
-    rd_kafka_buf_t *rkbuf,
-    rd_kafka_buf_t *request,
-    void *opaque) {
+static void
+rd_kafka_cgrp_handle_ShareGroupHeartbeat_leave(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb,
+                                               rd_kafka_resp_err_t err,
+                                               rd_kafka_buf_t *rkbuf,
+                                               rd_kafka_buf_t *request,
+                                               void *opaque) {
         rd_kafka_cgrp_t *rkcg       = opaque;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode           = 0;
@@ -1102,15 +1102,15 @@ static void rd_kafka_cgrp_handle_ShareGroupHeartbeat_leave(
 err:
         if (ErrorCode)
                 rd_kafka_dbg(
-                        rkb->rkb_rk, CGRP, "LEAVEGROUP",
-                        "ShareGroupHeartbeat response error in state %s: %s",
-                        rd_kafka_cgrp_state_names[rkcg->rkcg_state],
-                        rd_kafka_err2str(ErrorCode));
+                    rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                    "ShareGroupHeartbeat response error in state %s: %s",
+                    rd_kafka_cgrp_state_names[rkcg->rkcg_state],
+                    rd_kafka_err2str(ErrorCode));
         else
                 rd_kafka_dbg(
-                        rkb->rkb_rk, CGRP, "LEAVEGROUP",
-                        "ShareGroupHeartbeat response received in state %s",
-                        rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
+                    rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                    "ShareGroupHeartbeat response received in state %s",
+                    rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
         rd_kafka_cgrp_consumer_reset(rkcg);
         if (ErrorCode != RD_KAFKA_RESP_ERR__DESTROY) {
                 rd_assert(thrd_is_current(rk->rk_thread));
@@ -1147,8 +1147,7 @@ static void rd_kafka_cgrp_share_consumer_leave(rd_kafka_cgrp_t *rkcg) {
                            "Share consumer: leaving group");
                 rd_kafka_ShareGroupHeartbeatRequest(
                     rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
-                    member_epoch,
-                    NULL /* no rack */,
+                    member_epoch, NULL /* no rack */,
                     NULL /* no subscription topics */,
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_cgrp_handle_ShareGroupHeartbeat_leave, rkcg);
@@ -3506,11 +3505,10 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
                     rkbuf, rd_true, rd_false /* Don't use Topic Name */, 0,
                     assignments_fields);
 
-                rd_kafka_dbg(
-                    rk, CGRP, "HEARTBEAT",
-                    "ShareGroupHeartbeat response received "
-                    "assigned_topic_partitions size %d",
-                    assigned_topic_partitions->cnt);
+                rd_kafka_dbg(rk, CGRP, "HEARTBEAT",
+                             "ShareGroupHeartbeat response received "
+                             "assigned_topic_partitions size %d",
+                             assigned_topic_partitions->cnt);
 
                 if (rd_kafka_is_dbg(rk, CGRP)) {
                         char assigned_topic_partitions_str[512] = "NULL";
@@ -3692,10 +3690,9 @@ err:
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_FATAL) {
-                rd_kafka_set_fatal_error(
-                    rkcg->rkcg_rk, err,
-                    "ShareGroupHeartbeat fatal error: %s",
-                    rd_kafka_err2str(err));
+                rd_kafka_set_fatal_error(rkcg->rkcg_rk, err,
+                                         "ShareGroupHeartbeat fatal error: %s",
+                                         rd_kafka_err2str(err));
                 rd_kafka_cgrp_revoke_all_rejoin_maybe(
                     rkcg, rd_true, /*assignments lost*/
                     rd_true,       /*initiating*/
@@ -3729,8 +3726,7 @@ err:
                         rd_kafka_cgrp_set_last_err(rkcg, err);
                         rd_kafka_consumer_err(
                             rkcg->rkcg_q, rd_kafka_broker_id(rkb), err, 0, NULL,
-                            NULL, err,
-                            "ShareGroupHeartbeat failed: %s%s%.*s",
+                            NULL, err, "ShareGroupHeartbeat failed: %s%s%.*s",
                             rd_kafka_err2str(err),
                             RD_KAFKAP_STR_LEN(&error_str) ? ": " : "",
                             RD_KAFKAP_STR_PR(&error_str));
@@ -4055,17 +4051,20 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
         rd_kafka_toppar_lock(rktp);
         rd_assert(!(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP));
         rktp->rktp_flags |= RD_KAFKA_TOPPAR_F_ON_CGRP;
-        if(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) && rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
                 rd_kafka_op_t *rko;
-                rko      = rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD);
-                rko->rko_rktp = rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPADD",
-                             "Group \"%s\": enqueue partition add for %s [%" PRId32 "] "
-                             "on broker %s",
-                             rkcg->rkcg_group_id->str,
-                             rktp->rktp_rkt->rkt_topic->str,
-                             rktp->rktp_partition,
-                             rd_kafka_broker_name(rktp->rktp_broker));
+                rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD);
+                rko->rko_rktp =
+                    rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPADD",
+                    "Group \"%s\": enqueue partition add for %s [%" PRId32
+                    "] "
+                    "on broker %s",
+                    rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
+                    rktp->rktp_partition,
+                    rd_kafka_broker_name(rktp->rktp_broker));
                 rd_kafka_q_enq(rktp->rktp_broker->rkb_ops, rko);
         }
         rd_kafka_toppar_unlock(rktp);
@@ -4090,20 +4089,24 @@ static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
         rd_assert(rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP);
         rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ON_CGRP;
 
-        if(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) && rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_RKB) {
                 rd_kafka_op_t *rko;
-                rko      = rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE);
-                rko->rko_rktp = rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
-                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPDEL",
-                             "Group \"%s\": enqueue partition remove for %s [%" PRId32 "] "
-                             "on broker %s",
-                             rkcg->rkcg_group_id->str,
-                             rktp->rktp_rkt->rkt_topic->str,
-                             rktp->rktp_partition,
-                             rd_kafka_broker_name(rktp->rktp_broker));
+                rko =
+                    rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE);
+                rko->rko_rktp =
+                    rd_kafka_toppar_keep(rktp); /* refcnt from _add op */
+                rd_kafka_dbg(
+                    rkcg->rkcg_rk, CGRP, "SHARESESSPARTCGRPDEL",
+                    "Group \"%s\": enqueue partition remove for %s [%" PRId32
+                    "] "
+                    "on broker %s",
+                    rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
+                    rktp->rktp_partition,
+                    rd_kafka_broker_name(rktp->rktp_broker));
                 rd_kafka_q_enq(rktp->rktp_broker->rkb_ops, rko);
         }
-        
+
         rd_kafka_toppar_purge_internal_fetch_queue_maybe(rktp);
 
         rd_kafka_toppar_unlock(rktp);
@@ -6555,9 +6558,11 @@ void rd_kafka_cgrp_consumer_group_heartbeat(rd_kafka_cgrp_t *rkcg,
         rkcg->rkcg_expedite_heartbeat_retries++;
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
-                rd_kafka_ShareGroupHeartbeatRequest(rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
-                member_epoch, rkcg_client_rack, rkcg_subscription_topics, RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
-                rd_kafka_cgrp_handle_ShareGroupHeartbeat, NULL);
+                rd_kafka_ShareGroupHeartbeatRequest(
+                    rkcg->rkcg_coord, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
+                    member_epoch, rkcg_client_rack, rkcg_subscription_topics,
+                    RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
+                    rd_kafka_cgrp_handle_ShareGroupHeartbeat, NULL);
                 return;
         }
 
@@ -6622,7 +6627,8 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
                                                 "member fenced - rejoining");
         }
 
-        /* There should be no fencing, hence no rejoining - these asserts are to test only, we don't actually need them. */
+        /* There should be no fencing, hence no rejoining - these asserts are to
+         * test only, we don't actually need them. */
         rd_dassert(!(RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
                      (rkcg->rkcg_consumer_flags &
                       RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN)));
@@ -6720,7 +6726,8 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
                 /* If member is leaving, new subscription
                  * will be applied after the leave
                  * ConsumerGroupHeartbeat */
-                /* MILIND: how is new subscription applied after heartbeat, check it. */
+                /* MILIND: how is new subscription applied after heartbeat,
+                 * check it. */
                 if (!rd_kafka_cgrp_will_leave(rkcg))
                         rd_kafka_cgrp_consumer_apply_next_subscribe(rkcg);
         } else {

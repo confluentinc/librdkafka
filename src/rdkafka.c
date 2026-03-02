@@ -5957,6 +5957,7 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
         rd_chariov_t in_base64;
         char *out_base64_str;
         char *uuid_bytes;
+        char *p;
         uint64_t input_uuid[2];
 
         input_uuid[0]  = htobe64(uuid->most_significant_bits);
@@ -5972,7 +5973,7 @@ const char *rd_kafka_Uuid_base64str(const rd_kafka_Uuid_t *uuid) {
                 return NULL;
 
         // Convert to URL-safe Base64
-        for (char *p = out_base64_str; *p; p++) {
+        for (p = out_base64_str; *p; p++) {
                 if (*p == '+')
                         *p = '-';
                 else if (*p == '/')

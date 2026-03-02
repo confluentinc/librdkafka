@@ -1207,7 +1207,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         rd_kafka_buf_read_str(
             rkbuf, &AcknowledgementErrorStr);  // AcknowledgementErrorString
 
-        if (AcknowledgementErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR)
+        if (AcknowledgementErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(
                     rkb->rkb_rk, CGRP, "SHAREACK",
                     "ShareFetch response for %.*s [%" PRId32
@@ -1215,6 +1215,12 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                     RD_KAFKAP_STR_PR(topic), PartitionId,
                     AcknowledgementErrorCode,
                     rd_kafka_err2str(AcknowledgementErrorCode));
+                printf("ShareFetch response for %.*s [%" PRId32
+                       "]: AcknowledgementError %" PRId16 " (%s)\n",
+                       RD_KAFKAP_STR_PR(topic), PartitionId,
+                       AcknowledgementErrorCode,
+                       rd_kafka_err2str(AcknowledgementErrorCode));
+        }
 
         rd_kafka_buf_read_CurrentLeader(rkbuf,
                                         &CurrentLeader);  // CurrentLeader

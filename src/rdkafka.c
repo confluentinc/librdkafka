@@ -3081,13 +3081,25 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
  * @locality main thread
  * @locks none
  */
+/**
+ * @brief Enqueue a SHARE_FETCH_FANOUT op and set the fetch guard flag
+ *        if the op requests more records.
+ */
+static void rd_kafka_share_fetch_fanout_enqueue(rd_kafka_t *rk,
+                                                 rd_kafka_op_t *rko) {
+        if (rko->rko_u.share_fetch_fanout.fetch_more_records)
+                rk->rk_rkshare->rkshare_fetch_more_records_requested =
+                    rd_true;
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
 static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
                                                  void *arg) {
         rd_kafka_op_t *rko = arg;
         rd_kafka_t *rk     = rkts->rkts_rk;
 
         rd_kafka_dbg(rk, CGRP, "SHARE", "Re-enqueing SHARE_FETCH_FANOUT");
-        rd_kafka_q_enq(rk->rk_ops, rko);
+        rd_kafka_share_fetch_fanout_enqueue(rk, rko);
 }
 
 /**
@@ -3115,7 +3127,7 @@ static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                     rd_true, backoff_ms * 1000,
                     rd_kafka_share_fetch_fanout_renqueue, rko);
         else
-                rd_kafka_q_enq(rk->rk_ops, rko);
+                rd_kafka_share_fetch_fanout_enqueue(rk, rko);
 }
 
 /**
@@ -3448,6 +3460,9 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
         rd_bool_t fetch_more_records =
             rko->rko_u.share_fetch_fanout.fetch_more_records;
+        rd_bool_t has_fanout_acks =
+            (rko->rko_u.share_fetch_fanout.ack_batches &&
+             rd_list_cnt(rko->rko_u.share_fetch_fanout.ack_batches) > 0);
 
         /*
          * Step 1: Segregate acks by partition leader.
@@ -3455,7 +3470,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
          * current leader from rktp->rktp_leader and merge the batch
          * into that broker's rkb_share_async_ack_details.
          */
-        if (rko->rko_u.share_fetch_fanout.ack_batches && rd_list_cnt(rko->rko_u.share_fetch_fanout.ack_batches) > 0) {
+        if (has_fanout_acks) {
                 rd_kafka_share_segregate_acks_by_leader(
                     rk, rko->rko_u.share_fetch_fanout.ack_batches);
 
@@ -3499,6 +3514,12 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                         //             rk, CGRP, "SHARE",
                         //             "No broker available for share fetch");
                 }
+        }
+
+        if (!fetch_more_records && !has_fanout_acks) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "No fetch or acks to fan out");
+                return RD_KAFKA_OP_RES_HANDLED;
         }
 
         /*
@@ -3581,10 +3602,14 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         has_records      = rd_kafka_q_len(rkcg->rkcg_q) > 0;
         has_pending_acks = ack_batches != NULL;
 
-        if (!has_records || has_pending_acks)
+        /* Only request fetch if no fetch FANOUT is already in flight */
+        rd_bool_t need_fetch_more_records =
+            !has_records &&
+            !rk->rk_rkshare->rkshare_fetch_more_records_requested;
+
+        if (need_fetch_more_records || has_pending_acks)
                 rd_kafka_share_fetch_fanout_with_backoff(
-                    rk, !has_records /* fetch_more_records */, 0,
-                    ack_batches);
+                    rk, need_fetch_more_records, 0, ack_batches);
 
         error = rd_kafka_q_serve_share_rkmessages(
             rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records,

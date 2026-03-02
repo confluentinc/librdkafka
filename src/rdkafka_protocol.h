@@ -124,7 +124,7 @@
 #define RD_KAFKAP_ShareGroupDescribe           77
 #define RD_KAFKAP_ShareFetch                   78
 #define RD_KAFKAP_ShareAcknowledge             79
-#define RD_KAFKAP__NUM 80
+#define RD_KAFKAP__NUM                         80
 
 #define RD_KAFKAP_RPC_VERSION_MAX INT16_MAX
 

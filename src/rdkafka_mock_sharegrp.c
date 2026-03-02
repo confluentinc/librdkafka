@@ -582,7 +582,7 @@ static void rd_kafka_mock_sharegroup_target_assignment_set(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_target_assignment_t *target_assignment) {
         rd_kafka_mock_sharegroup_member_t *member;
-        size_t i;
+        int i;
 
         for (i = 0; i < rd_list_cnt(&target_assignment->member_ids); i++) {
                 const char *member_id =

@@ -1044,7 +1044,7 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
         SUB_TEST_PASS();
 }
 
-int main_0156_kip932_sharefetch_mockbroker(int argc, char **argv) {
+int main_0156_share_group_fetch_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
         /* Positive scenarios */

@@ -53,15 +53,14 @@ static test_ctx_t test_ctx_new(void) {
 
         ctx.mcluster = test_mock_cluster_new(3, &ctx.bootstraps);
 
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(ctx.mcluster,
-                                                 RD_KAFKAP_ShareGroupHeartbeat,
-                                                 1, 1) ==
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to enable ShareGroupHeartbeat");
-        TEST_ASSERT(
-            rd_kafka_mock_set_apiversion(ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
-                                         1) == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "Failed to enable ShareFetch");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(ctx.mcluster,
+                                                 RD_KAFKAP_ShareFetch, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareFetch");
 
         /* Create a producer targeting the mock cluster */
         test_conf_init(&conf, NULL, 0);
@@ -83,18 +82,17 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         memset(ctx, 0, sizeof(*ctx));
 }
 
-static void produce_messages(rd_kafka_t *producer, const char *topic,
-                             int msgcnt) {
+static void
+produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
         for (int i = 0; i < msgcnt; i++) {
                 char payload[64];
                 snprintf(payload, sizeof(payload), "%s-%d", topic, i);
-                TEST_ASSERT(
-                    rd_kafka_producev(
-                        producer, RD_KAFKA_V_TOPIC(topic),
-                        RD_KAFKA_V_VALUE(payload, strlen(payload)),
-                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                        RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Produce failed");
+                TEST_ASSERT(rd_kafka_producev(
+                                producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce failed");
         }
         rd_kafka_flush(producer, 5000);
 }
@@ -114,21 +112,22 @@ static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
         return consumer;
 }
 
-static void subscribe_topics(rd_kafka_share_t *consumer, const char **topics,
+static void subscribe_topics(rd_kafka_share_t *consumer,
+                             const char **topics,
                              int topic_cnt) {
         rd_kafka_topic_partition_list_t *tpl =
             rd_kafka_topic_partition_list_new(topic_cnt);
         for (int i = 0; i < topic_cnt; i++) {
                 rd_kafka_topic_partition_list_add(tpl, topics[i],
-                                                 RD_KAFKA_PARTITION_UA);
+                                                  RD_KAFKA_PARTITION_UA);
         }
         TEST_ASSERT(!rd_kafka_share_subscribe(consumer, tpl),
                     "Subscribe failed");
         rd_kafka_topic_partition_list_destroy(tpl);
 }
 
-static int consume_n(rd_kafka_share_t *consumer, int expected,
-                     int max_attempts) {
+static int
+consume_n(rd_kafka_share_t *consumer, int expected, int max_attempts) {
         int consumed = 0;
         int attempts = 0;
 
@@ -138,7 +137,7 @@ static int consume_n(rd_kafka_share_t *consumer, int expected,
                 rd_kafka_error_t *error;
 
                 error = rd_kafka_share_consume_batch(consumer, 500, rkmessages,
-                                                    &rcvd_msgs);
+                                                     &rcvd_msgs);
                 attempts++;
 
                 if (error) {
@@ -326,8 +325,8 @@ static void do_test_implicit_ack_cross_consumer(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && extra == 0 && consumed_b == 0,
-                    "Expected A=%d extra=0 B=0, got A=%d extra=%d B=%d",
-                    msgcnt, consumed_a, extra, consumed_b);
+                    "Expected A=%d extra=0 B=0, got A=%d extra=%d B=%d", msgcnt,
+                    consumed_a, extra, consumed_b);
         SUB_TEST_PASS();
 }
 
@@ -407,8 +406,8 @@ static void do_test_implicit_ack_multiple_rounds(void) {
 
                 produce_messages(ctx.producer, topic, per_round);
 
-                consumer = new_share_consumer(ctx.bootstraps,
-                                              "sg-ack-multiround");
+                consumer =
+                    new_share_consumer(ctx.bootstraps, "sg-ack-multiround");
                 subscribe_topics(consumer, &topic, 1);
 
                 got = consume_n(consumer, per_round, 40);
@@ -421,9 +420,10 @@ static void do_test_implicit_ack_multiple_rounds(void) {
                 /* Trigger implicit ack. */
                 extra = consume_n(consumer, 1, 5);
                 if (extra != 0) {
-                        TEST_SAY("ack_multiple_rounds: round %d extra %d "
-                                 "(expected 0)\n",
-                                 r + 1, extra);
+                        TEST_SAY(
+                            "ack_multiple_rounds: round %d extra %d "
+                            "(expected 0)\n",
+                            r + 1, extra);
                         round_ok = 0;
                 }
 
@@ -581,8 +581,8 @@ static void do_test_implicit_ack_multi_topic(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 6 && extra == 0 && consumed_b == 0,
-                    "Expected consumed=6 extra=0 B=0, got %d %d %d",
-                    consumed, extra, consumed_b);
+                    "Expected consumed=6 extra=0 B=0, got %d %d %d", consumed,
+                    extra, consumed_b);
         SUB_TEST_PASS();
 }
 
@@ -614,13 +614,12 @@ static void do_test_implicit_ack_multi_msgset(void) {
         for (int i = 0; i < msgcnt; i++) {
                 char payload[64];
                 snprintf(payload, sizeof(payload), "msgset-%d", i);
-                TEST_ASSERT(
-                    rd_kafka_producev(
-                        ctx.producer, RD_KAFKA_V_TOPIC(topic),
-                        RD_KAFKA_V_VALUE(payload, strlen(payload)),
-                        RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                        RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Produce failed");
+                TEST_ASSERT(rd_kafka_producev(
+                                ctx.producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce failed");
                 rd_kafka_flush(ctx.producer, 5000);
         }
 
@@ -674,8 +673,7 @@ static void do_test_crash_before_ack_redelivery(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Consumer A: acquire records, then crash (no close, no ack). */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-crash-redeliver");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-crash-redeliver");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("crash_before_ack: A consumed %d/%d\n", consumed_a, msgcnt);
@@ -685,8 +683,7 @@ static void do_test_crash_before_ack_redelivery(void) {
         rd_usleep(1500 * 1000, NULL);
 
         /* Consumer B: should get the same records (re-delivered). */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-crash-redeliver");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-crash-redeliver");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 50);
         TEST_SAY("crash_before_ack: B consumed %d/%d (re-delivered)\n",
@@ -697,8 +694,8 @@ static void do_test_crash_before_ack_redelivery(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
-                    "Expected A=%d B=%d, got A=%d B=%d",
-                    msgcnt, msgcnt, consumed_a, consumed_b);
+                    "Expected A=%d B=%d, got A=%d B=%d", msgcnt, msgcnt,
+                    consumed_a, consumed_b);
         SUB_TEST_PASS();
 }
 
@@ -728,18 +725,16 @@ static void do_test_crash_then_ack_stops_redelivery(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Consumer A: acquire and crash. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-crash-then-ack");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-crash-then-ack");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
-        TEST_SAY("crash_then_ack: A consumed %d/%d (will crash)\n",
-                 consumed_a, msgcnt);
+        TEST_SAY("crash_then_ack: A consumed %d/%d (will crash)\n", consumed_a,
+                 msgcnt);
         rd_kafka_share_destroy(consumer);
         rd_usleep(1500 * 1000, NULL); /* wait for lock expiry */
 
         /* Consumer B: re-delivery, then ack via next poll. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-crash-then-ack");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-crash-then-ack");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 50);
         TEST_SAY("crash_then_ack: B consumed %d/%d (re-delivered)\n",
@@ -752,12 +747,10 @@ static void do_test_crash_then_ack_stops_redelivery(void) {
         rd_kafka_share_destroy(consumer);
 
         /* Consumer C: should see 0 — records were acked by B. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-crash-then-ack");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-crash-then-ack");
         subscribe_topics(consumer, &topic, 1);
         consumed_c = consume_n(consumer, 1, 15);
-        TEST_SAY("crash_then_ack: C consumed %d/0 (should be 0)\n",
-                 consumed_c);
+        TEST_SAY("crash_then_ack: C consumed %d/0 (should be 0)\n", consumed_c);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -798,8 +791,7 @@ static void do_test_session_expiry_invalidates_ack(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Consumer A: consume records (acquires them). */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-session-expire");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-session-expire");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("session_expiry: A consumed %d/%d\n", consumed_a, msgcnt);
@@ -836,8 +828,7 @@ static void do_test_session_expiry_invalidates_ack(void) {
 
         /* Consumer B: records should be re-delivered (locks released
          * when A's membership was evicted). */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-session-expire");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-session-expire");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 50);
         TEST_SAY("session_expiry: B consumed %d/%d (re-delivered)\n",
@@ -848,8 +839,8 @@ static void do_test_session_expiry_invalidates_ack(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
-                    "Expected A=%d B=%d, got A=%d B=%d",
-                    msgcnt, msgcnt, consumed_a, consumed_b);
+                    "Expected A=%d B=%d, got A=%d B=%d", msgcnt, msgcnt,
+                    consumed_a, consumed_b);
         SUB_TEST_PASS();
 }
 
@@ -880,8 +871,7 @@ static void do_test_max_delivery_without_ack(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Delivery 1: Consumer A acquires and crashes. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-maxdel-noack");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-maxdel-noack");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("max_delivery_no_ack: A consumed %d/%d (delivery 1)\n",
@@ -890,8 +880,7 @@ static void do_test_max_delivery_without_ack(void) {
         rd_usleep(1500 * 1000, NULL); /* wait for lock expiry */
 
         /* Delivery 2 = max: Consumer B acquires and crashes. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-maxdel-noack");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-maxdel-noack");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 50);
         TEST_SAY("max_delivery_no_ack: B consumed %d/%d (delivery 2)\n",
@@ -901,8 +890,7 @@ static void do_test_max_delivery_without_ack(void) {
 
         /* Delivery 3 attempt: records should be archived (delivery
          * count exhausted). Consumer C sees 0. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-maxdel-noack");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-maxdel-noack");
         subscribe_topics(consumer, &topic, 1);
         consumed_c = consume_n(consumer, 1, 10);
         TEST_SAY("max_delivery_no_ack: C consumed %d/0 (archived)\n",
@@ -914,8 +902,8 @@ static void do_test_max_delivery_without_ack(void) {
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt &&
                         consumed_c == 0,
-                    "Expected A=%d B=%d C=0, got A=%d B=%d C=%d",
-                    msgcnt, msgcnt, consumed_a, consumed_b, consumed_c);
+                    "Expected A=%d B=%d C=0, got A=%d B=%d C=%d", msgcnt,
+                    msgcnt, consumed_a, consumed_b, consumed_c);
         SUB_TEST_PASS();
 }
 
@@ -949,31 +937,24 @@ static void do_test_sharefetch_error_drops_ack(void) {
         consumer = new_share_consumer(ctx.bootstraps, "sg-ack-sf-error");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
-        TEST_SAY("sf_error_drops_ack: A consumed %d/%d\n",
-                 consumed_a, msgcnt);
+        TEST_SAY("sf_error_drops_ack: A consumed %d/%d\n", consumed_a, msgcnt);
 
         /* Inject ShareFetch transport errors — the next ShareFetch
          * (which would carry acks) will cause a disconnect. */
         rd_kafka_mock_push_request_errors(
             ctx.mcluster, RD_KAFKAP_ShareFetch, 10,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT,
-            RD_KAFKA_RESP_ERR__TRANSPORT);
+            RD_KAFKA_RESP_ERR__TRANSPORT, RD_KAFKA_RESP_ERR__TRANSPORT,
+            RD_KAFKA_RESP_ERR__TRANSPORT, RD_KAFKA_RESP_ERR__TRANSPORT,
+            RD_KAFKA_RESP_ERR__TRANSPORT, RD_KAFKA_RESP_ERR__TRANSPORT,
+            RD_KAFKA_RESP_ERR__TRANSPORT, RD_KAFKA_RESP_ERR__TRANSPORT,
+            RD_KAFKA_RESP_ERR__TRANSPORT, RD_KAFKA_RESP_ERR__TRANSPORT);
 
         /* Crash consumer A (ack never delivered). */
         rd_kafka_share_destroy(consumer);
         rd_usleep(1500 * 1000, NULL); /* wait for lock expiry */
 
         /* Clear any remaining errors. */
-        rd_kafka_mock_clear_request_errors(ctx.mcluster,
-                                           RD_KAFKAP_ShareFetch);
+        rd_kafka_mock_clear_request_errors(ctx.mcluster, RD_KAFKAP_ShareFetch);
 
         /* Consumer B should get re-delivered records. */
         consumer = new_share_consumer(ctx.bootstraps, "sg-ack-sf-error");
@@ -987,8 +968,8 @@ static void do_test_sharefetch_error_drops_ack(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
-                    "Expected A=%d B=%d, got A=%d B=%d",
-                    msgcnt, msgcnt, consumed_a, consumed_b);
+                    "Expected A=%d B=%d, got A=%d B=%d", msgcnt, msgcnt,
+                    consumed_a, consumed_b);
         SUB_TEST_PASS();
 }
 
@@ -1056,9 +1037,10 @@ static void do_test_forgotten_topic_releases_not_acks(void) {
         subscribe_topics(consumer, &topic_b, 1);
 
         consumed_b = consume_n(consumer, 2, 40);
-        TEST_SAY("forgotten_releases: C consumed %d/2 from topic_b "
-                 "(should be re-delivered)\n",
-                 consumed_b);
+        TEST_SAY(
+            "forgotten_releases: C consumed %d/2 from topic_b "
+            "(should be re-delivered)\n",
+            consumed_b);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -1099,8 +1081,7 @@ static void do_test_multi_consumer_cascade_crash(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Consumer A: acquire and crash. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-cascade-crash");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-cascade-crash");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("cascade_crash: A consumed %d/%d\n", consumed_a, msgcnt);
@@ -1108,8 +1089,7 @@ static void do_test_multi_consumer_cascade_crash(void) {
         rd_usleep(1500 * 1000, NULL);
 
         /* Consumer B: re-acquire and crash. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-cascade-crash");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-cascade-crash");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 50);
         TEST_SAY("cascade_crash: B consumed %d/%d\n", consumed_b, msgcnt);
@@ -1117,8 +1097,7 @@ static void do_test_multi_consumer_cascade_crash(void) {
         rd_usleep(1500 * 1000, NULL);
 
         /* Consumer C: re-acquire and crash. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-cascade-crash");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-cascade-crash");
         subscribe_topics(consumer, &topic, 1);
         consumed_c = consume_n(consumer, msgcnt, 50);
         TEST_SAY("cascade_crash: C consumed %d/%d\n", consumed_c, msgcnt);
@@ -1129,9 +1108,8 @@ static void do_test_multi_consumer_cascade_crash(void) {
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt &&
                         consumed_c == msgcnt,
-                    "Expected A=%d B=%d C=%d, got A=%d B=%d C=%d",
-                    msgcnt, msgcnt, msgcnt,
-                    consumed_a, consumed_b, consumed_c);
+                    "Expected A=%d B=%d C=%d, got A=%d B=%d C=%d", msgcnt,
+                    msgcnt, msgcnt, consumed_a, consumed_b, consumed_c);
         SUB_TEST_PASS();
 }
 
@@ -1165,12 +1143,11 @@ static void do_test_lock_expiry_before_ack(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Consumer A acquires records. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-lockexpire");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-lockexpire");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
-        TEST_SAY("lock_expiry_before_ack: A consumed %d/%d\n",
-                 consumed_a, msgcnt);
+        TEST_SAY("lock_expiry_before_ack: A consumed %d/%d\n", consumed_a,
+                 msgcnt);
 
         /* Inject high RTT on all brokers so the next ShareFetch
          * (carrying the ack) is delayed well past lock expiry. */
@@ -1189,20 +1166,19 @@ static void do_test_lock_expiry_before_ack(void) {
 
         /* Consumer B should get the records — locks expired before
          * A's ack could be delivered. */
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-lockexpire");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-lockexpire");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 50);
-        TEST_SAY("lock_expiry_before_ack: B consumed %d/%d\n",
-                 consumed_b, msgcnt);
+        TEST_SAY("lock_expiry_before_ack: B consumed %d/%d\n", consumed_b,
+                 msgcnt);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
-                    "Expected A=%d B=%d, got A=%d B=%d",
-                    msgcnt, msgcnt, consumed_a, consumed_b);
+                    "Expected A=%d B=%d, got A=%d B=%d", msgcnt, msgcnt,
+                    consumed_a, consumed_b);
         SUB_TEST_PASS();
 }
 
@@ -1229,8 +1205,7 @@ static void do_test_empty_topic_no_ack_side_effects(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
 
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-empty-topic");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-empty-topic");
         subscribe_topics(consumer, &topic, 1);
 
         /* Phase 1: Poll empty topic — no records, no acks. */
@@ -1245,8 +1220,7 @@ static void do_test_empty_topic_no_ack_side_effects(void) {
 
         produce_messages(ctx.producer, topic, msgcnt);
 
-        consumer =
-            new_share_consumer(ctx.bootstraps, "sg-ack-empty-topic");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-empty-topic");
         subscribe_topics(consumer, &topic, 1);
 
         consumed = consume_n(consumer, msgcnt, 50);
@@ -1294,8 +1268,7 @@ static void do_test_coordinator_failover_ack_recovery(void) {
         /* Phase 1: Consumer A consumes and acks normally. */
         produce_messages(ctx.producer, topic, msgcnt);
 
-        consumer = new_share_consumer(ctx.bootstraps,
-                                      "sg-ack-coord-failover");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-coord-failover");
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("coord_failover: A consumed %d/%d\n", consumed_a, msgcnt);
@@ -1328,8 +1301,7 @@ static void do_test_coordinator_failover_ack_recovery(void) {
 
         /* Phase 3: Errors drain, new consumer B joins and consumes
          * the newly produced records (A's records are already acked). */
-        consumer = new_share_consumer(ctx.bootstraps,
-                                      "sg-ack-coord-failover");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-coord-failover");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 60);
         TEST_SAY("coord_failover: B consumed %d/%d\n", consumed_b, msgcnt);
@@ -1342,12 +1314,10 @@ static void do_test_coordinator_failover_ack_recovery(void) {
         rd_kafka_share_destroy(consumer);
 
         /* Phase 4: Consumer C — everything is acked, should see 0. */
-        consumer = new_share_consumer(ctx.bootstraps,
-                                      "sg-ack-coord-failover");
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-coord-failover");
         subscribe_topics(consumer, &topic, 1);
         consumed_c = consume_n(consumer, 1, 15);
-        TEST_SAY("coord_failover: C consumed %d/0 (should be 0)\n",
-                 consumed_c);
+        TEST_SAY("coord_failover: C consumed %d/0 (should be 0)\n", consumed_c);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -1355,8 +1325,8 @@ static void do_test_coordinator_failover_ack_recovery(void) {
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt &&
                         consumed_c == 0,
-                    "Expected A=%d B=%d C=0, got A=%d B=%d C=%d",
-                    msgcnt, msgcnt, consumed_a, consumed_b, consumed_c);
+                    "Expected A=%d B=%d C=0, got A=%d B=%d C=%d", msgcnt,
+                    msgcnt, consumed_a, consumed_b, consumed_c);
         SUB_TEST_PASS();
 }
 
@@ -1366,7 +1336,8 @@ static void do_test_coordinator_failover_ack_recovery(void) {
 
 int main_0157_share_group_ack_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
-        /* increase from the default ~30s timeout to avoid the framework killing us early. */
+        /* increase from the default ~30s timeout to avoid the framework killing
+         * us early. */
         test_timeout_set(300);
 
         /* Positive scenarios */

@@ -50,17 +50,16 @@
 #include "rdkafka.h"
 
 
-#define TIME_BLOCK_MS(elapsed_var, expr)                                     \
-        do {                                                                 \
-                struct timespec __t0, __t1;                                  \
-                if (clock_gettime(CLOCK_MONOTONIC, &__t0) != 0)              \
-                        perror("clock_gettime");                             \
-                expr;                                                        \
-                if (clock_gettime(CLOCK_MONOTONIC, &__t1) != 0)              \
-                        perror("clock_gettime");                             \
-                (elapsed_var) =                                              \
-                        (__t1.tv_sec - __t0.tv_sec) * 1000.0 +               \
-                        (__t1.tv_nsec - __t0.tv_nsec) / 1e6;                 \
+#define TIME_BLOCK_MS(elapsed_var, expr)                                       \
+        do {                                                                   \
+                struct timespec __t0, __t1;                                    \
+                if (clock_gettime(CLOCK_MONOTONIC, &__t0) != 0)                \
+                        perror("clock_gettime");                               \
+                expr;                                                          \
+                if (clock_gettime(CLOCK_MONOTONIC, &__t1) != 0)                \
+                        perror("clock_gettime");                               \
+                (elapsed_var) = (__t1.tv_sec - __t0.tv_sec) * 1000.0 +         \
+                                (__t1.tv_nsec - __t0.tv_nsec) / 1e6;           \
         } while (0)
 
 
@@ -90,12 +89,12 @@ static int is_printable(const char *buf, size_t size) {
 
 
 int main(int argc, char **argv) {
-        rd_kafka_share_t *rkshare;          /* Consumer instance handle */
-        rd_kafka_conf_t *conf;   /* Temporary configuration object */
-        rd_kafka_resp_err_t err; /* librdkafka API error code */
-        char errstr[512];        /* librdkafka API error reporting buffer */
-        const char *brokers;     /* Argument: broker list */
-        const char *groupid;     /* Argument: Consumer group id */
+        rd_kafka_share_t *rkshare; /* Consumer instance handle */
+        rd_kafka_conf_t *conf;     /* Temporary configuration object */
+        rd_kafka_resp_err_t err;   /* librdkafka API error code */
+        char errstr[512];          /* librdkafka API error reporting buffer */
+        const char *brokers;       /* Argument: broker list */
+        const char *groupid;       /* Argument: Consumer group id */
         char **topics; /* Argument: list of topics to subscribe to */
         int topic_cnt; /* Number of topics to subscribe to */
         rd_kafka_topic_partition_list_t *subscription; /* Subscribed topics */
@@ -113,10 +112,10 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        brokers        = argv[1];
-        groupid        = argv[2];
-        topics         = &argv[3];
-        topic_cnt      = argc - 3;
+        brokers   = argv[1];
+        groupid   = argv[2];
+        topics    = &argv[3];
+        topic_cnt = argc - 3;
 
 
         /*
@@ -150,9 +149,9 @@ int main(int argc, char **argv) {
         /*
          * Create a new share consumer instance.
          *
-         * NOTE: rd_kafka_share_consumer_new() takes ownership of the conf object
-         *       and the application must not reference it again after
-         *       this call.
+         * NOTE: rd_kafka_share_consumer_new() takes ownership of the conf
+         * object and the application must not reference it again after this
+         * call.
          */
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rkshare) {
@@ -165,7 +164,7 @@ int main(int argc, char **argv) {
                       * by the rd_kafka_t instance. */
 
 
-        /* 
+        /*
          * TODO KIP-932: Check if rd_kafka_poll_set_consumer(rk)
          * can be skipped for the share consumer.
          */
@@ -224,8 +223,12 @@ int main(int argc, char **argv) {
                 rd_kafka_error_t *error;
                 double __elapsed_ms;
 
-                TIME_BLOCK_MS(__elapsed_ms, error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages, &rcvd_msgs));
-                fprintf(stdout, "%% rd_kafka_share_consume_batch() took %.3f ms\n", __elapsed_ms);
+                TIME_BLOCK_MS(__elapsed_ms,
+                              error = rd_kafka_share_consume_batch(
+                                  rkshare, 500, rkmessages, &rcvd_msgs));
+                fprintf(stdout,
+                        "%% rd_kafka_share_consume_batch() took %.3f ms\n",
+                        __elapsed_ms);
 
                 if (error) {
                         fprintf(stderr, "%% Consume error: %s\n",
@@ -246,22 +249,23 @@ int main(int argc, char **argv) {
                         }
 
                         /* Proper message. */
-                        printf("Message received on %s [%" PRId32 "] at offset %" PRId64,
-                        rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                        rkm->offset);
+                        printf("Message received on %s [%" PRId32
+                               "] at offset %" PRId64,
+                               rd_kafka_topic_name(rkm->rkt), rkm->partition,
+                               rkm->offset);
 
                         /* Print the message key. */
                         if (rkm->key && is_printable(rkm->key, rkm->key_len))
                                 printf(" Key: %.*s\n", (int)rkm->key_len,
-                                (const char *)rkm->key);
+                                       (const char *)rkm->key);
                         else if (rkm->key)
                                 printf(" Key: (%d bytes)\n", (int)rkm->key_len);
 
                         /* Print the message value/payload. */
                         if (rkm->payload &&
-                        is_printable(rkm->payload, rkm->len))
+                            is_printable(rkm->payload, rkm->len))
                                 printf(" - Value: %.*s\n", (int)rkm->len,
-                                (const char *)rkm->payload);
+                                       (const char *)rkm->payload);
                         else if (rkm->payload)
                                 printf(" - Value: (%d bytes)\n", (int)rkm->len);
 

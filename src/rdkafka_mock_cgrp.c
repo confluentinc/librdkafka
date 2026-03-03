@@ -1325,9 +1325,9 @@ rd_kafka_mock_cgrp_consumer_member_next_assignment(
 void rd_kafka_mock_cgrp_consumer_member_active(
     rd_kafka_mock_cgrp_consumer_t *mcgrp,
     rd_kafka_mock_cgrp_consumer_member_t *member) {
-        rd_kafka_mock_group_member_mark_active(
-            mcgrp->cluster->rk, "consumer", member->id,
-            &member->ts_last_activity);
+        rd_kafka_mock_group_member_mark_active(mcgrp->cluster->rk, "consumer",
+                                               member->id,
+                                               &member->ts_last_activity);
 }
 
 /**

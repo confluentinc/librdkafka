@@ -3058,15 +3058,41 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                          size_t errstr_size);
 
 
+/**
+ * @brief Creates a new share consumer instance.
+ *
+ * \p conf is an optional struct created with `rd_kafka_conf_new()` that will
+ * be used instead of the default configuration.
+ * The \p conf object is freed by this function on success and must not be used
+ * or destroyed by the application subsequently.
+ * See `rd_kafka_conf_set()` et.al for more information.
+ *
+ * \p errstr must be a pointer to memory of at least size \p errstr_size where
+ * `rd_kafka_share_consumer_new()` may write a human readable error message
+ * in case the creation of a new handle fails. In which case the function
+ * returns NULL.
+ *
+ * @param conf Configuration. The \p conf object is freed by this function
+ *             on success and must not be used or destroyed by the application
+ *             subsequently.
+ * @param errstr A human readable error string is written to this location
+ *               if the function fails.
+ * @param errstr_size The size of the \p errstr buffer.
+ *
+ * @returns The share consumer handle on success or NULL on error
+ *          (see \p errstr).
+ *
+ * @sa rd_kafka_share_destroy()
+ */
 RD_EXPORT
 rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
-                                        char *errstr,
-                                        size_t errstr_size);
+                                              char *errstr,
+                                              size_t errstr_size);
 
 /**
  * @brief Consume a batch of messages from the share consumer instance.
  *
- * @param rk         Share consumer instance.
+ * @param rkshare    Share consumer instance.
  * @param timeout_ms Maximum time to block waiting for messages.
  * @param rkmessages Output array of messages - this must be preallocated with
  * at least enough capacity for size max.poll.records.
@@ -3106,7 +3132,11 @@ void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags);
 
 
 /**
- * TODO KIP-932: Add proper documentation.
+ * @brief Destroy the share consumer instance.
+ *
+ * @remark This is a blocking operation.
+ *
+ * @sa rd_kafka_share_consumer_close()
  */
 RD_EXPORT
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
@@ -4749,8 +4779,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  *
  *
  */
-/**
- * TODO KIP-932:
+/* TODO KIP-932:
  * 1) Update descriptions of all the below APIs.
  * 2) Shall we guard these APIs with asserts for rkshare type and
  *    internal rkshare_rk to be present.
@@ -4786,7 +4815,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
-                   const rd_kafka_topic_partition_list_t *topics);
+                         const rd_kafka_topic_partition_list_t *topics);
 
 
 /**
@@ -4806,7 +4835,8 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare);
  *         rd_kafka_topic_partition_list_destroy on the returned list.
  */
 RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_share_subscription(rd_kafka_share_t *rkshare, rd_kafka_topic_partition_list_t **topics);
+rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
+                            rd_kafka_topic_partition_list_t **topics);
 
 
 

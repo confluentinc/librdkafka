@@ -31,39 +31,39 @@
 /**
  * @brief Maximum supported values for test configuration
  */
-#define MAX_CONSUMERS   16
-#define MAX_TOPICS      16
-#define MAX_PARTITIONS  32
-#define BATCH_SIZE      500
+#define MAX_CONSUMERS  16
+#define MAX_TOPICS     16
+#define MAX_PARTITIONS 32
+#define BATCH_SIZE     500
 
 /**
  * @brief Test configuration structure
- * 
+ *
  * This structure defines all parameters for a share consumer test scenario.
- * 
+ *
  * Example configurations:
- * 
+ *
  * 1. Multiple consumers, single topic, multiple partitions:
  *    { .consumer_cnt = 2, .topic_cnt = 1, .partitions = {3},
  *      .msgs_per_partition = 100, .group_name = "test-group" }
- * 
+ *
  * 2. Single consumer, multiple topics, single partition each:
  *    { .consumer_cnt = 1, .topic_cnt = 2, .partitions = {1, 1},
  *      .msgs_per_partition = 100, .group_name = "test-group" }
- * 
+ *
  * 3. Multiple consumers, multiple topics, multiple partitions:
  *    { .consumer_cnt = 3, .topic_cnt = 2, .partitions = {3, 2},
  *      .msgs_per_partition = 50, .group_name = "test-group" }
  */
 typedef struct {
-        int consumer_cnt;                    /**< Number of consumers to create */
-        int topic_cnt;                       /**< Number of topics to create */
-        int partitions[MAX_TOPICS];          /**< Partition count for each topic */
-        int msgs_per_partition;              /**< Messages to produce per partition */
-        const char *group_name;              /**< Share group name */
-        const char *test_name;               /**< Test description for logging */
-        int poll_timeout_ms;                 /**< Timeout for each poll (default: 3000) */
-        int max_attempts;                    /**< Max poll attempts (default: auto-calculated) */
+        int consumer_cnt;           /**< Number of consumers to create */
+        int topic_cnt;              /**< Number of topics to create */
+        int partitions[MAX_TOPICS]; /**< Partition count for each topic */
+        int msgs_per_partition;     /**< Messages to produce per partition */
+        const char *group_name;     /**< Share group name */
+        const char *test_name;      /**< Test description for logging */
+        int poll_timeout_ms; /**< Timeout for each poll (default: 3000) */
+        int max_attempts; /**< Max poll attempts (default: auto-calculated) */
 } share_test_config_t;
 
 /**
@@ -104,12 +104,12 @@ static void setup_topics_and_produce(share_test_config_t *config,
 
         for (t = 0; t < config->topic_cnt; t++) {
                 /* Generate unique topic name */
-                state->topic_names[t] = rd_strdup(
-                    test_mk_topic_name("0171-share-test", 1));
+                state->topic_names[t] =
+                    rd_strdup(test_mk_topic_name("0171-share-test", 1));
 
                 /* Create topic with specified partitions */
                 test_create_topic_wait_exists(NULL, state->topic_names[t],
-                                              config->partitions[t], -1, 
+                                              config->partitions[t], -1,
                                               60 * 1000);
 
                 /* Produce messages to each partition */
@@ -125,9 +125,10 @@ static void setup_topics_and_produce(share_test_config_t *config,
                          config->msgs_per_partition);
         }
 
-        TEST_SAY("Setup complete: %d topic(s), %d total partition(s), "
-                 "%d total messages\n",
-                 config->topic_cnt, total_partitions, state->total_expected);
+        TEST_SAY(
+            "Setup complete: %d topic(s), %d total partition(s), "
+            "%d total messages\n",
+            config->topic_cnt, total_partitions, state->total_expected);
 }
 
 /**
@@ -179,9 +180,9 @@ static void consume_messages(share_test_config_t *config,
         state->total_consumed = 0;
 
         /* Calculate defaults if not specified */
-        poll_timeout = config->poll_timeout_ms > 0 ? 
-                       config->poll_timeout_ms : 3000;
-        
+        poll_timeout =
+            config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
+
         /* Auto-calculate attempts based on expected messages and consumers */
         if (config->max_attempts > 0) {
                 attempts = config->max_attempts;
@@ -192,11 +193,13 @@ static void consume_messages(share_test_config_t *config,
                         attempts = 20;
         }
 
-        TEST_SAY("Starting consumption: expecting %d messages, "
-                 "max %d attempts, %dms timeout\n",
-                 state->total_expected, attempts, poll_timeout);
+        TEST_SAY(
+            "Starting consumption: expecting %d messages, "
+            "max %d attempts, %dms timeout\n",
+            state->total_expected, attempts, poll_timeout);
 
-        while (state->total_consumed < state->total_expected && attempts-- > 0) {
+        while (state->total_consumed < state->total_expected &&
+               attempts-- > 0) {
                 /* Round-robin poll across all consumers */
                 for (i = 0; i < config->consumer_cnt; i++) {
                         size_t rcvd = 0;
@@ -226,19 +229,21 @@ static void consume_messages(share_test_config_t *config,
 
                 /* Progress logging */
                 if (config->consumer_cnt == 1) {
-                        TEST_SAY("Progress: %d/%d\n",
-                                 state->total_consumed, state->total_expected);
+                        TEST_SAY("Progress: %d/%d\n", state->total_consumed,
+                                 state->total_expected);
                 } else {
                         /* Build distribution string for multiple consumers */
                         char dist[256] = {0};
-                        int pos = 0;
-                        for (i = 0; i < config->consumer_cnt && pos < 250; i++) {
-                                pos += rd_snprintf(dist + pos, sizeof(dist) - pos,
-                                                   "c%d=%d ", i, 
-                                                   state->per_consumer_count[i]);
+                        int pos        = 0;
+                        for (i = 0; i < config->consumer_cnt && pos < 250;
+                             i++) {
+                                pos += rd_snprintf(
+                                    dist + pos, sizeof(dist) - pos, "c%d=%d ",
+                                    i, state->per_consumer_count[i]);
                         }
                         TEST_SAY("Progress: %d/%d (%s)\n",
-                                 state->total_consumed, state->total_expected, dist);
+                                 state->total_consumed, state->total_expected,
+                                 dist);
                 }
         }
 }
@@ -275,14 +280,14 @@ static void cleanup_test(share_test_config_t *config,
 
 /**
  * @brief Test Runner function
- * 
+ *
  * This function handles:
  * 1. Create consumers
  * 2. Create topics and produce messages
  * 3. Subscribe consumers
  * 4. Consume and verify messages
  * 5. Cleanup
- * 
+ *
  * @param config Test configuration
  * @returns 0 on success, -1 on failure
  */
@@ -290,30 +295,31 @@ static int run_share_consumer_test(share_test_config_t *config) {
         share_test_state_t state = {0};
         int i;
         char dist_str[512] = {0};
-        int pos = 0;
+        int pos            = 0;
 
         /* Validate config */
-        TEST_ASSERT(config->consumer_cnt > 0 && 
-                    config->consumer_cnt <= MAX_CONSUMERS,
+        TEST_ASSERT(config->consumer_cnt > 0 &&
+                        config->consumer_cnt <= MAX_CONSUMERS,
                     "consumer_cnt must be 1-%d", MAX_CONSUMERS);
-        TEST_ASSERT(config->topic_cnt > 0 && 
-                    config->topic_cnt <= MAX_TOPICS,
+        TEST_ASSERT(config->topic_cnt > 0 && config->topic_cnt <= MAX_TOPICS,
                     "topic_cnt must be 1-%d", MAX_TOPICS);
-        TEST_ASSERT(config->group_name != NULL, 
-                    "group_name is required");
+        TEST_ASSERT(config->group_name != NULL, "group_name is required");
 
         /* Print test header */
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
-        TEST_SAY("=== %s ===\n", config->test_name ? config->test_name : "Share Consumer Test");
-        TEST_SAY("=== Consumers: %d, Topics: %d, Partitions: [", 
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY("=== %s ===\n",
+                 config->test_name ? config->test_name : "Share Consumer Test");
+        TEST_SAY("=== Consumers: %d, Topics: %d, Partitions: [",
                  config->consumer_cnt, config->topic_cnt);
         for (i = 0; i < config->topic_cnt; i++) {
-                TEST_SAY("%d%s", config->partitions[i], 
+                TEST_SAY("%d%s", config->partitions[i],
                          i < config->topic_cnt - 1 ? ", " : "");
         }
         TEST_SAY("], Msgs/Partition: %d ===\n", config->msgs_per_partition);
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         /* Execute test phases */
         create_share_consumers(config, &state);
@@ -323,8 +329,8 @@ static int run_share_consumer_test(share_test_config_t *config) {
 
         /* Verify results */
         TEST_ASSERT(state.total_consumed == state.total_expected,
-                    "Expected %d messages, consumed %d",
-                    state.total_expected, state.total_consumed);
+                    "Expected %d messages, consumed %d", state.total_expected,
+                    state.total_consumed);
 
         /* Build distribution string */
         for (i = 0; i < config->consumer_cnt && pos < 500; i++) {
@@ -347,13 +353,12 @@ static int run_share_consumer_test(share_test_config_t *config) {
  */
 static void test_single_consumer_single_topic_single_partition(void) {
         share_test_config_t config = {
-                .consumer_cnt = 1,
-                .topic_cnt = 1,
-                .partitions = {1},
-                .msgs_per_partition = 1000,
-                .group_name = "share-1c-1t-1p",
-                .test_name = "Single consumer, single topic, single partition"
-        };
+            .consumer_cnt       = 1,
+            .topic_cnt          = 1,
+            .partitions         = {1},
+            .msgs_per_partition = 1000,
+            .group_name         = "share-1c-1t-1p",
+            .test_name = "Single consumer, single topic, single partition"};
         run_share_consumer_test(&config);
 }
 
@@ -362,13 +367,12 @@ static void test_single_consumer_single_topic_single_partition(void) {
  */
 static void test_single_consumer_single_topic_multiple_partitions(void) {
         share_test_config_t config = {
-                .consumer_cnt = 1,
-                .topic_cnt = 1,
-                .partitions = {3},
-                .msgs_per_partition = 500,
-                .group_name = "share-1c-1t-3p",
-                .test_name = "Single consumer, single topic, 3 partitions"
-        };
+            .consumer_cnt       = 1,
+            .topic_cnt          = 1,
+            .partitions         = {3},
+            .msgs_per_partition = 500,
+            .group_name         = "share-1c-1t-3p",
+            .test_name = "Single consumer, single topic, 3 partitions"};
         run_share_consumer_test(&config);
 }
 
@@ -377,13 +381,12 @@ static void test_single_consumer_single_topic_multiple_partitions(void) {
  */
 static void test_single_consumer_multiple_topic_single_partition(void) {
         share_test_config_t config = {
-                .consumer_cnt = 1,
-                .topic_cnt = 2,
-                .partitions = {1, 1},
-                .msgs_per_partition = 500,
-                .group_name = "share-1c-2t-1p",
-                .test_name = "Single consumer, 2 topics, 1 partition each"
-        };
+            .consumer_cnt       = 1,
+            .topic_cnt          = 2,
+            .partitions         = {1, 1},
+            .msgs_per_partition = 500,
+            .group_name         = "share-1c-2t-1p",
+            .test_name = "Single consumer, 2 topics, 1 partition each"};
         run_share_consumer_test(&config);
 }
 
@@ -392,13 +395,12 @@ static void test_single_consumer_multiple_topic_single_partition(void) {
  */
 static void test_single_consumer_multiple_topic_multiple_partitions(void) {
         share_test_config_t config = {
-                .consumer_cnt = 1,
-                .topic_cnt = 3,
-                .partitions = {2, 2, 2},
-                .msgs_per_partition = 500,
-                .group_name = "share-1c-3t-2p",
-                .test_name = "Single consumer, 3 topics, 2 partitions each"
-        };
+            .consumer_cnt       = 1,
+            .topic_cnt          = 3,
+            .partitions         = {2, 2, 2},
+            .msgs_per_partition = 500,
+            .group_name         = "share-1c-3t-2p",
+            .test_name = "Single consumer, 3 topics, 2 partitions each"};
         run_share_consumer_test(&config);
 }
 
@@ -407,13 +409,12 @@ static void test_single_consumer_multiple_topic_multiple_partitions(void) {
  */
 static void test_multiple_consumers_single_topic_single_partition(void) {
         share_test_config_t config = {
-                .consumer_cnt = 2,
-                .topic_cnt = 1,
-                .partitions = {1},
-                .msgs_per_partition = 1000,
-                .group_name = "share-2c-1t-1p",
-                .test_name = "2 consumers, single topic, single partition"
-        };
+            .consumer_cnt       = 2,
+            .topic_cnt          = 1,
+            .partitions         = {1},
+            .msgs_per_partition = 1000,
+            .group_name         = "share-2c-1t-1p",
+            .test_name = "2 consumers, single topic, single partition"};
         run_share_consumer_test(&config);
 }
 
@@ -422,13 +423,12 @@ static void test_multiple_consumers_single_topic_single_partition(void) {
  */
 static void test_multiple_consumers_single_topic_multiple_partitions(void) {
         share_test_config_t config = {
-                .consumer_cnt = 2,
-                .topic_cnt = 1,
-                .partitions = {4},
-                .msgs_per_partition = 500,
-                .group_name = "share-2c-1t-4p",
-                .test_name = "2 consumers, single topic, 4 partitions"
-        };
+            .consumer_cnt       = 2,
+            .topic_cnt          = 1,
+            .partitions         = {4},
+            .msgs_per_partition = 500,
+            .group_name         = "share-2c-1t-4p",
+            .test_name          = "2 consumers, single topic, 4 partitions"};
         run_share_consumer_test(&config);
 }
 
@@ -437,29 +437,60 @@ static void test_multiple_consumers_single_topic_multiple_partitions(void) {
  */
 static void test_multiple_consumers_multiple_topics_multiple_partitions(void) {
         share_test_config_t config = {
-                .consumer_cnt = 3,
-                .topic_cnt = 2,
-                .partitions = {3, 3},
-                .msgs_per_partition = 500,
-                .group_name = "share-3c-2t-3p",
-                .test_name = "3 consumers, 2 topics, 3 partitions each"
-        };
+            .consumer_cnt       = 3,
+            .topic_cnt          = 2,
+            .partitions         = {3, 3},
+            .msgs_per_partition = 500,
+            .group_name         = "share-3c-2t-3p",
+            .test_name          = "3 consumers, 2 topics, 3 partitions each"};
         run_share_consumer_test(&config);
 }
 
 
 int main_0171_share_consumer_consume(int argc, char **argv) {
-        
+
         /* Single-consumer tests */
-        test_single_consumer_single_topic_single_partition();    /* Single consumer, single topic, single partition */
-        test_single_consumer_single_topic_multiple_partitions();    /* Single consumer, single topic, multi partitions */
-        test_single_consumer_multiple_topic_single_partition();    /* Single consumer, multi topic, single partition each */
-        test_single_consumer_multiple_topic_multiple_partitions();    /* Single consumer, multi topics, multi partitions each */
-        
+        test_single_consumer_single_topic_single_partition();      /* Single
+                                                                      consumer,
+                                                                      single topic,
+                                                                      single
+                                                                      partition */
+        test_single_consumer_single_topic_multiple_partitions();   /* Single
+                                                                      consumer,
+                                                                      single
+                                                                      topic, multi
+                                                                      partitions
+                                                                    */
+        test_single_consumer_multiple_topic_single_partition();    /* Single
+                                                                      consumer,
+                                                                      multi topic,
+                                                                      single
+                                                                      partition
+                                                                      each */
+        test_single_consumer_multiple_topic_multiple_partitions(); /* Single
+                                                                      consumer,
+                                                                      multi
+                                                                      topics,
+                                                                      multi
+                                                                      partitions
+                                                                      each */
+
         /* Multi-consumer tests */
-        test_multiple_consumers_single_topic_single_partition();    /* Multi consumer sharing single partition */
-        test_multiple_consumers_single_topic_multiple_partitions();    /* Multi consumer, multi partition */
-        test_multiple_consumers_multiple_topics_multiple_partitions();    /* Full matrix: multi everything */
+        test_multiple_consumers_single_topic_single_partition();       /* Multi
+                                                                          consumer
+                                                                          sharing
+                                                                          single
+                                                                          partition */
+        test_multiple_consumers_single_topic_multiple_partitions();    /* Multi
+                                                                          consumer,
+                                                                          multi
+                                                                          partition
+                                                                        */
+        test_multiple_consumers_multiple_topics_multiple_partitions(); /* Full
+                                                                          matrix:
+                                                                          multi
+                                                                          everything
+                                                                        */
 
         return 0;
 }

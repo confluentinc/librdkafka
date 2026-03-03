@@ -3241,10 +3241,8 @@ rd_kafka_mock_tplist_equal_by_id(rd_kafka_topic_partition_list_t *a,
         for (i = 0; i < a->cnt; i++) {
                 const rd_kafka_topic_partition_t *pa = &a->elems[i];
                 const rd_kafka_topic_partition_t *pb = &b->elems[i];
-                rd_kafka_Uuid_t ta =
-                    rd_kafka_topic_partition_get_topic_id(pa);
-                rd_kafka_Uuid_t tb =
-                    rd_kafka_topic_partition_get_topic_id(pb);
+                rd_kafka_Uuid_t ta = rd_kafka_topic_partition_get_topic_id(pa);
+                rd_kafka_Uuid_t tb = rd_kafka_topic_partition_get_topic_id(pb);
 
                 if (pa->partition != pb->partition)
                         return rd_false;
@@ -3294,8 +3292,8 @@ rd_kafka_mock_sgrp_partmeta_get(rd_kafka_mock_sharegroup_t *sgrp,
                 return pmeta;
         }
 
-        pmeta           = rd_calloc(1, sizeof(*pmeta));
-        pmeta->topic_id = topic_id;
+        pmeta            = rd_calloc(1, sizeof(*pmeta));
+        pmeta->topic_id  = topic_id;
         pmeta->partition = partition;
         pmeta->spso      = mpart->start_offset;
         if (mpart->end_offset > mpart->start_offset)
@@ -3356,8 +3354,7 @@ rd_kafka_mock_msgset_est_record_size(const rd_kafka_mock_msgset_t *mset) {
         return size;
 }
 
-static void
-rd_kafka_mock_sgrp_acquire_available_offsets(
+static void rd_kafka_mock_sgrp_acquire_available_offsets(
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     const rd_kafka_mock_partition_t *mpart,
     const rd_kafkap_str_t *member_id,
@@ -3370,59 +3367,59 @@ rd_kafka_mock_sgrp_acquire_available_offsets(
         int64_t offset;
 
         for (offset = pmeta->spso; offset <= pmeta->speo; offset++) {
-            const rd_kafka_mock_msgset_t *mset;
-            rd_kafka_mock_sgrp_record_state_t *state;
-            int32_t est_size;
+                const rd_kafka_mock_msgset_t *mset;
+                rd_kafka_mock_sgrp_record_state_t *state;
+                int32_t est_size;
 
-            if (remaining_records && *remaining_records == 0)
-                    break;
-            if (remaining_bytes && *remaining_bytes == 0)
-                    break;
+                if (remaining_records && *remaining_records == 0)
+                        break;
+                if (remaining_bytes && *remaining_bytes == 0)
+                        break;
 
-            state = rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
-            if (state &&
-                state->state != RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE)
-                    continue;
+                state = rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
+                if (state &&
+                    state->state != RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE)
+                        continue;
 
-            /* Check max delivery attempts: if the record has already
-             * been acquired (and released/expired) too many times,
-             * archive it instead of re-acquiring. */
-            if (max_delivery_attempts > 0 && state &&
-                state->delivery_count >= max_delivery_attempts) {
-                    state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
-                    RD_IF_FREE(state->owner_member_id, rd_free);
-                    state->owner_member_id = NULL;
-                    state->lock_expiry_ts  = 0;
-                    continue;
-            }
+                /* Check max delivery attempts: if the record has already
+                 * been acquired (and released/expired) too many times,
+                 * archive it instead of re-acquiring. */
+                if (max_delivery_attempts > 0 && state &&
+                    state->delivery_count >= max_delivery_attempts) {
+                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                        RD_IF_FREE(state->owner_member_id, rd_free);
+                        state->owner_member_id = NULL;
+                        state->lock_expiry_ts  = 0;
+                        continue;
+                }
 
-            mset = rd_kafka_mock_msgset_find(mpart, offset, rd_false);
-            if (!mset)
-                    continue;
+                mset = rd_kafka_mock_msgset_find(mpart, offset, rd_false);
+                if (!mset)
+                        continue;
 
-            est_size = rd_kafka_mock_msgset_est_record_size(mset);
-            if (remaining_bytes && *remaining_bytes > 0 &&
-                est_size > *remaining_bytes)
-                    break;
+                est_size = rd_kafka_mock_msgset_est_record_size(mset);
+                if (remaining_bytes && *remaining_bytes > 0 &&
+                    est_size > *remaining_bytes)
+                        break;
 
-            state = rd_kafka_mock_sgrp_record_state_get(pmeta, offset);
-            state->state = RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED;
-            state->lock_expiry_ts = lock_expiry_ts;
-            state->delivery_count++;
-            RD_IF_FREE(state->owner_member_id, rd_free);
-            state->owner_member_id = RD_KAFKAP_STR_DUP(member_id);
+                state = rd_kafka_mock_sgrp_record_state_get(pmeta, offset);
+                state->state          = RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED;
+                state->lock_expiry_ts = lock_expiry_ts;
+                state->delivery_count++;
+                RD_IF_FREE(state->owner_member_id, rd_free);
+                state->owner_member_id = RD_KAFKAP_STR_DUP(member_id);
 
-            (*acquired_cnt)++;
-            *acquired_bytes += est_size;
-            if (remaining_records && *remaining_records > 0)
-                    (*remaining_records)--;
-            if (remaining_bytes && *remaining_bytes > 0)
-                    (*remaining_bytes) -= est_size;
+                (*acquired_cnt)++;
+                *acquired_bytes += est_size;
+                if (remaining_records && *remaining_records > 0)
+                        (*remaining_records)--;
+                if (remaining_bytes && *remaining_bytes > 0)
+                        (*remaining_bytes) -= est_size;
         }
 }
 
-static void
-rd_kafka_mock_sgrp_partmeta_prune_archived(rd_kafka_mock_sgrp_partmeta_t *pmeta) {
+static void rd_kafka_mock_sgrp_partmeta_prune_archived(
+    rd_kafka_mock_sgrp_partmeta_t *pmeta) {
         rd_kafka_mock_sgrp_record_state_t *state, *tmp;
 
         TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
@@ -3445,8 +3442,7 @@ rd_kafka_mock_sgrp_partmeta_prune_archived(rd_kafka_mock_sgrp_partmeta_t *pmeta)
  *
  * @returns the total number of record data bytes written (0 if none).
  */
-static size_t
-rd_kafka_mock_sgrp_write_acquired_records(
+static size_t rd_kafka_mock_sgrp_write_acquired_records(
     rd_kafka_buf_t *resp,
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     const rd_kafka_mock_partition_t *mpart,
@@ -3503,8 +3499,7 @@ rd_kafka_mock_sgrp_write_acquired_records(
 
         /* Write each msgset's raw bytes back-to-back */
         for (i = 0; i < rd_list_cnt(&msgsets); i++) {
-                const rd_kafka_mock_msgset_t *mset =
-                    rd_list_elem(&msgsets, i);
+                const rd_kafka_mock_msgset_t *mset = rd_list_elem(&msgsets, i);
                 rd_kafka_buf_write(resp, mset->bytes.data,
                                    RD_KAFKAP_BYTES_LEN(&mset->bytes));
         }
@@ -3537,14 +3532,13 @@ struct rd_kafka_mock_sgrp_ack_entry {
  *
  * @locks mcluster->lock MUST be held.
  */
-static void
-rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
-                              rd_kafka_Uuid_t topic_id,
-                              int32_t partition,
-                              int64_t first_offset,
-                              int64_t last_offset,
-                              int8_t ack_type,
-                              const rd_kafkap_str_t *member_id) {
+static void rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
+                                         rd_kafka_Uuid_t topic_id,
+                                         int32_t partition,
+                                         int64_t first_offset,
+                                         int64_t last_offset,
+                                         int8_t ack_type,
+                                         const rd_kafkap_str_t *member_id) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
         int64_t offset;
 
@@ -3609,8 +3603,7 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
  *
  * @locks mcluster->lock MUST be held.
  */
-static void
-rd_kafka_mock_sgrp_write_acquired_records_meta(
+static void rd_kafka_mock_sgrp_write_acquired_records_meta(
     rd_kafka_buf_t *resp,
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     const rd_kafkap_str_t *member_id,
@@ -3640,8 +3633,7 @@ rd_kafka_mock_sgrp_write_acquired_records_meta(
 
                 /* Try to extend the current range */
                 if (rd_list_cnt(&ranges) > 0) {
-                        cur = rd_list_elem(&ranges,
-                                           rd_list_cnt(&ranges) - 1);
+                        cur = rd_list_elem(&ranges, rd_list_cnt(&ranges) - 1);
                         if (offset == cur->last_offset + 1 &&
                             (int16_t)state->delivery_count ==
                                 cur->delivery_count) {
@@ -3651,10 +3643,10 @@ rd_kafka_mock_sgrp_write_acquired_records_meta(
                 }
 
                 /* Start a new range */
-                cur = rd_calloc(1, sizeof(*cur));
-                cur->first_offset    = offset;
-                cur->last_offset     = offset;
-                cur->delivery_count  = (int16_t)state->delivery_count;
+                cur                 = rd_calloc(1, sizeof(*cur));
+                cur->first_offset   = offset;
+                cur->last_offset    = offset;
+                cur->delivery_count = (int16_t)state->delivery_count;
                 rd_list_add(&ranges, cur);
         }
 
@@ -3671,21 +3663,20 @@ rd_kafka_mock_sgrp_write_acquired_records_meta(
         rd_list_destroy(&ranges);
 }
 
-static int
-rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
-                                rd_kafka_buf_t *rkbuf) {
+static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
+                                           rd_kafka_buf_t *rkbuf) {
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
-        rd_kafka_buf_t *resp              = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafkap_str_t GroupId, MemberId;
-        int32_t SessionEpoch = -1, MaxWaitMs = 0, MinBytes = 0,
-                MaxBytes = 0, MaxRecords = 0, BatchSize = 0;
+        int32_t SessionEpoch = -1, MaxWaitMs = 0, MinBytes = 0, MaxBytes = 0,
+                MaxRecords = 0, BatchSize = 0;
         int32_t TopicsCnt;
         rd_kafka_topic_partition_list_t *requested_partitions = NULL;
         rd_kafka_topic_partition_list_t *forgotten_partitions = NULL;
-        rd_kafka_resp_err_t err                               = RD_KAFKA_RESP_ERR_NO_ERROR;
-        rd_kafka_mock_sharegroup_t *sgrp                            = NULL;
-        rd_kafka_mock_sgrp_fetch_session_t *session           = NULL;
+        rd_kafka_resp_err_t err          = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_mock_sharegroup_t *sgrp = NULL;
+        rd_kafka_mock_sgrp_fetch_session_t *session = NULL;
         rd_list_t ack_entries;
 
         (void)log_decode_errors;
@@ -3725,8 +3716,7 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 int32_t AckTypeCnt;
                                 int8_t AckType = -1;
                                 int64_t AckFirstOffset, AckLastOffset;
-                                rd_kafka_buf_read_i64(rkbuf,
-                                                      &AckFirstOffset);
+                                rd_kafka_buf_read_i64(rkbuf, &AckFirstOffset);
                                 rd_kafka_buf_read_i64(rkbuf, &AckLastOffset);
                                 rd_kafka_buf_read_arraycnt(rkbuf, &AckTypeCnt,
                                                            -1);
@@ -3736,8 +3726,9 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_skip_tags(rkbuf);
 
                                 if (AckType >= 0) {
-                                        struct rd_kafka_mock_sgrp_ack_entry *entry =
-                                            rd_calloc(1, sizeof(*entry));
+                                        struct rd_kafka_mock_sgrp_ack_entry
+                                            *entry =
+                                                rd_calloc(1, sizeof(*entry));
                                         entry->topic_id     = TopicId;
                                         entry->partition    = Partition;
                                         entry->first_offset = AckFirstOffset;
@@ -3806,24 +3797,22 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
                      "ShareFetch parsed: group %.*s member %.*s "
-                     "session_epoch %" PRId32
-                     " max_wait %" PRId32 " min_bytes %" PRId32
-                     " max_bytes %" PRId32 " max_records %" PRId32
-                     " batch_size %" PRId32,
+                     "session_epoch %" PRId32 " max_wait %" PRId32
+                     " min_bytes %" PRId32 " max_bytes %" PRId32
+                     " max_records %" PRId32 " batch_size %" PRId32,
                      RD_KAFKAP_STR_PR(&GroupId), RD_KAFKAP_STR_PR(&MemberId),
-                     SessionEpoch, MaxWaitMs, MinBytes, MaxBytes,
-                     MaxRecords, BatchSize);
+                     SessionEpoch, MaxWaitMs, MinBytes, MaxBytes, MaxRecords,
+                     BatchSize);
 
         err = rd_kafka_mock_next_request_error(mconn, resp);
 
         if (!err) {
                 int64_t remaining_records =
                     MaxRecords > 0 ? (int64_t)MaxRecords : -1;
-                int64_t remaining_bytes =
-                    MaxBytes > 0 ? (int64_t)MaxBytes : -1;
-                int acquired_cnt     = 0;
-                int64_t acquired_bytes = 0;
-                rd_ts_t now = rd_clock();
+                int64_t remaining_bytes = MaxBytes > 0 ? (int64_t)MaxBytes : -1;
+                int acquired_cnt        = 0;
+                int64_t acquired_bytes  = 0;
+                rd_ts_t now             = rd_clock();
 
                 /* KIP-932 session management.
                  * Sessions are keyed by (GroupId, MemberId).
@@ -3910,10 +3899,11 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     sgrp, ftid, ftp->partition);
                                 if (pmeta) {
                                         rd_kafka_mock_sgrp_record_state_t
-                                            *state, *tmp;
-                                        TAILQ_FOREACH_SAFE(
-                                            state, &pmeta->inflight, link,
-                                            tmp) {
+                                            *state,
+                                            *tmp;
+                                        TAILQ_FOREACH_SAFE(state,
+                                                           &pmeta->inflight,
+                                                           link, tmp) {
                                                 if (state->state !=
                                                     RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
                                                         continue;
@@ -3921,14 +3911,12 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                         continue;
                                                 if (rd_kafkap_str_cmp_str(
                                                         &MemberId,
-                                                        state
-                                                            ->owner_member_id))
+                                                        state->owner_member_id))
                                                         continue;
                                                 /* Release: mark AVAILABLE */
                                                 state->state =
                                                     RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                                                rd_free(
-                                                    state->owner_member_id);
+                                                rd_free(state->owner_member_id);
                                                 state->owner_member_id = NULL;
                                                 state->lock_expiry_ts  = 0;
                                         }
@@ -3942,12 +3930,11 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                  * delivered in the previous ShareFetch response. */
                 if (!err && sgrp && rd_list_cnt(&ack_entries) > 0) {
                         int k;
-                        rd_kafka_dbg(
-                            mconn->broker->cluster->rk, MOCK, "MOCK",
-                            "ShareFetch: applying %d acknowledgement "
-                            "batch(es) for member %.*s",
-                            rd_list_cnt(&ack_entries),
-                            RD_KAFKAP_STR_PR(&MemberId));
+                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
+                                     "ShareFetch: applying %d acknowledgement "
+                                     "batch(es) for member %.*s",
+                                     rd_list_cnt(&ack_entries),
+                                     RD_KAFKAP_STR_PR(&MemberId));
                         for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
                                 struct rd_kafka_mock_sgrp_ack_entry *entry =
                                     rd_list_elem(&ack_entries, k);
@@ -3990,13 +3977,11 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_mock_sgrp_partmeta_prune_archived(
                                     pmeta);
                                 rd_kafka_mock_sgrp_acquire_available_offsets(
-                                    pmeta, mpart,
-                                    &MemberId,
-                                    now +
-                                        ((sgrp->record_lock_duration_ms > 0
-                                              ? sgrp->record_lock_duration_ms
-                                              : sgrp->session_timeout_ms) *
-                                         1000),
+                                    pmeta, mpart, &MemberId,
+                                    now + ((sgrp->record_lock_duration_ms > 0
+                                                ? sgrp->record_lock_duration_ms
+                                                : sgrp->session_timeout_ms) *
+                                           1000),
                                     sgrp->max_delivery_attempts,
                                     MaxRecords > 0 ? &remaining_records : NULL,
                                     MaxBytes > 0 ? &remaining_bytes : NULL,
@@ -4019,14 +4004,15 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 else
                         rd_kafka_buf_write_str(resp, NULL, -1);
                 /* Response: AcquisitionLockTimeoutMs */
-                rd_kafka_buf_write_i32(resp, sgrp ? sgrp->session_timeout_ms : 0);
+                rd_kafka_buf_write_i32(resp,
+                                       sgrp ? sgrp->session_timeout_ms : 0);
 
                 rd_kafka_topic_partition_list_sort_by_topic_id(
                     requested_partitions);
 
                 {
-                        int i = 0;
-                        int topic_cnt = 0;
+                        int i                         = 0;
+                        int topic_cnt                 = 0;
                         rd_kafka_Uuid_t current_topic = RD_KAFKA_UUID_ZERO;
 
                         for (i = 0; i < requested_partitions->cnt; i++) {
@@ -4058,10 +4044,10 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                      j++) {
                                         rd_kafka_Uuid_t next_topic_id =
                                             rd_kafka_topic_partition_get_topic_id(
-                                                &requested_partitions->elems[j]);
-                                        if (rd_kafka_Uuid_cmp(topic_id,
-                                                              next_topic_id) !=
-                                            0)
+                                                &requested_partitions
+                                                     ->elems[j]);
+                                        if (rd_kafka_Uuid_cmp(
+                                                topic_id, next_topic_id) != 0)
                                                 break;
                                         part_cnt++;
                                 }
@@ -4078,10 +4064,10 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                             rd_kafka_mock_topic_find_by_id(
                                                 mcluster, topic_id);
                                         rd_kafka_mock_partition_t *mpart =
-                                            mtopic ? rd_kafka_mock_partition_find(
-                                                         mtopic,
-                                                         rktpar->partition)
-                                                   : NULL;
+                                            mtopic
+                                                ? rd_kafka_mock_partition_find(
+                                                      mtopic, rktpar->partition)
+                                                : NULL;
                                         rd_kafka_mock_sgrp_partmeta_t *pmeta =
                                             mpart
                                                 ? rd_kafka_mock_sgrp_partmeta_find(
@@ -4089,15 +4075,17 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                       rktpar->partition)
                                                 : NULL;
                                         rd_kafka_resp_err_t part_err =
-                                            mpart ? RD_KAFKA_RESP_ERR_NO_ERROR
-                                                  : RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+                                            mpart
+                                                ? RD_KAFKA_RESP_ERR_NO_ERROR
+                                                : RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
                                         /* Response: Partition */
                                         rd_kafka_buf_write_i32(
                                             resp, rktpar->partition);
                                         /* Response: PartitionFetchErrorCode */
                                         rd_kafka_buf_write_i16(resp, part_err);
-                                        /* Response: PartitionFetchErrorString */
+                                        /* Response: PartitionFetchErrorString
+                                         */
                                         if (part_err)
                                                 rd_kafka_buf_write_str(
                                                     resp,
@@ -4108,7 +4096,8 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                     resp, NULL, -1);
                                         /* Response: AcknowledgementErrorCode */
                                         rd_kafka_buf_write_i16(resp, 0);
-                                        /* Response: AcknowledgementErrorString */
+                                        /* Response: AcknowledgementErrorString
+                                         */
                                         rd_kafka_buf_write_str(resp, NULL, -1);
                                         /* Response: CurrentLeader */
                                         rd_kafka_buf_write_i32(resp, -1);
@@ -4121,8 +4110,8 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                     resp, pmeta, mpart,
                                                     &MemberId, now);
                                         else
-                                                rd_kafka_buf_write_uvarint(
-                                                    resp, 1);
+                                                rd_kafka_buf_write_uvarint(resp,
+                                                                           1);
                                         /* Response: AcquiredRecords */
                                         if (mpart && pmeta)
                                                 rd_kafka_mock_sgrp_write_acquired_records_meta(
@@ -4169,15 +4158,13 @@ rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_mock_connection_send_response0(mconn, resp, rd_true);
         rd_kafka_topic_partition_list_destroy(requested_partitions);
-        RD_IF_FREE(forgotten_partitions,
-                   rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(forgotten_partitions, rd_kafka_topic_partition_list_destroy);
         rd_list_destroy(&ack_entries);
         return 0;
 
 err_parse:
         RD_IF_FREE(requested_partitions, rd_kafka_topic_partition_list_destroy);
-        RD_IF_FREE(forgotten_partitions,
-                   rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(forgotten_partitions, rd_kafka_topic_partition_list_destroy);
         rd_list_destroy(&ack_entries);
         rd_kafka_buf_destroy(resp);
         return -1;
@@ -4201,7 +4188,7 @@ err_parse:
  */
 static int
 rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
-                                         rd_kafka_buf_t *rkbuf) {
+                                      rd_kafka_buf_t *rkbuf) {
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
@@ -4209,7 +4196,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
         int32_t SessionEpoch = -1;
         int32_t TopicsCnt;
         rd_kafka_topic_partition_list_t *ack_partitions = NULL;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_resp_err_t err          = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafka_mock_sharegroup_t *sgrp = NULL;
         rd_list_t ack_entries;
 
@@ -4255,8 +4242,9 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_skip_tags(rkbuf);
 
                                 if (AckType >= 0) {
-                                        struct rd_kafka_mock_sgrp_ack_entry *entry =
-                                            rd_calloc(1, sizeof(*entry));
+                                        struct rd_kafka_mock_sgrp_ack_entry
+                                            *entry =
+                                                rd_calloc(1, sizeof(*entry));
                                         entry->topic_id     = TopicId;
                                         entry->partition    = Partition;
                                         entry->first_offset = AckFirstOffset;
@@ -4282,9 +4270,8 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
                      "ShareAcknowledge parsed: group %.*s member %.*s "
                      "session_epoch %" PRId32 " ack_entries %d",
-                     RD_KAFKAP_STR_PR(&GroupId),
-                     RD_KAFKAP_STR_PR(&MemberId), SessionEpoch,
-                     rd_list_cnt(&ack_entries));
+                     RD_KAFKAP_STR_PR(&GroupId), RD_KAFKAP_STR_PR(&MemberId),
+                     SessionEpoch, rd_list_cnt(&ack_entries));
 
         /* ---- Inject errors if configured ---- */
         err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -4343,8 +4330,8 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_topic_partition_list_sort_by_topic_id(ack_partitions);
 
                 {
-                        int i         = 0;
-                        int topic_cnt = 0;
+                        int i                         = 0;
+                        int topic_cnt                 = 0;
                         rd_kafka_Uuid_t current_topic = RD_KAFKA_UUID_ZERO;
 
                         /* Count distinct topics */
@@ -4435,8 +4422,8 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
         }
 
         /* ---- Error response ---- */
-        rd_kafka_buf_write_i32(resp, 0);    /* ThrottleTimeMs */
-        rd_kafka_buf_write_i16(resp, err);  /* ErrorCode */
+        rd_kafka_buf_write_i32(resp, 0);   /* ThrottleTimeMs */
+        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
         rd_kafka_buf_write_str(resp, rd_kafka_err2str(err), -1); /* ErrorMsg */
         rd_kafka_buf_write_arraycnt(resp, 0); /* Responses (empty) */
         rd_kafka_buf_write_arraycnt(resp, 0); /* NodeEndpoints (empty) */
@@ -4492,9 +4479,9 @@ const struct rd_kafka_mock_api_handler
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
         [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
                                      rd_kafka_mock_handle_PushTelemetry},
-        [RD_KAFKAP_ShareFetch] = {1, 1, 1, rd_kafka_mock_handle_ShareFetch},
-        [RD_KAFKAP_ShareAcknowledge] =
-            {1, 1, 1, rd_kafka_mock_handle_ShareAcknowledge},
+        [RD_KAFKAP_ShareFetch]    = {1, 1, 1, rd_kafka_mock_handle_ShareFetch},
+        [RD_KAFKAP_ShareAcknowledge] = {1, 1, 1,
+                                        rd_kafka_mock_handle_ShareAcknowledge},
 };
 
 

@@ -45,6 +45,7 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 #include "rdkafka_int.h"
+#include "rdkafka_int.h"
 
 int test_level = 2;
 int test_seed  = 0;
@@ -101,7 +102,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
+        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
 
 
 /**

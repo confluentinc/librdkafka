@@ -1461,7 +1461,8 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
 
-        rd_kafka_buf_skip_tags(rkbuf);
+        if (rd_kafka_buf_read_remain(rkbuf) > 0)
+                rd_kafka_buf_skip_tags(rkbuf);
         rd_kafka_buf_write_tags_empty(resp);
 
         if (requested_topics)

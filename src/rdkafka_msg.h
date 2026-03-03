@@ -154,6 +154,11 @@ typedef struct rd_kafka_msg_s {
                                                     *   protocol msg */
                         int32_t leader_epoch;      /**< Leader epoch at the time
                                                     *   the message was fetched. */
+                        int8_t
+                            ack_type; /**< Share consumer: acknowledgement
+                                       *   type
+                                       * (rd_kafka_share_internal_acknowledgement_type).
+                                       *   Set during response processing. */
                 } consumer;
         } rkm_u;
 } rd_kafka_msg_t;
@@ -230,7 +235,7 @@ typedef struct rd_kafka_msgq_s {
 } rd_kafka_msgq_t;
 
 #define RD_KAFKA_MSGQ_INITIALIZER(rkmq)                                        \
-        { .rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs) }
+        {.rkmq_msgs = TAILQ_HEAD_INITIALIZER((rkmq).rkmq_msgs)}
 
 #define RD_KAFKA_MSGQ_FOREACH(elm, head)                                       \
         TAILQ_FOREACH(elm, &(head)->rkmq_msgs, rkm_link)

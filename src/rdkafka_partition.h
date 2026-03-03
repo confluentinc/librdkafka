@@ -151,12 +151,6 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         TAILQ_ENTRY(rd_kafka_toppar_s)
         rktp_rkb_session_link; /* rkb_share_fetch_session
                                 * toppars_in_session link */
-        rktp_txnlink;          /**< rd_kafka_t.rk_eos.
-                                *   txn_pend_rktps
-                                *   or txn_rktps */
-        TAILQ_ENTRY(rd_kafka_toppar_s)
-        rktp_rkb_session_link;      /* rkb_share_fetch_session
-                                     * toppars_in_session link */
         rd_kafka_topic_t *rktp_rkt; /**< This toppar's topic object */
         int32_t rktp_partition;
         // LOCK: toppar_lock() + topic_wrlock()

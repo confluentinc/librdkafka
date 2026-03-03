@@ -73,6 +73,10 @@ void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches) {
         rd_free(batches);
 }
 
+void rd_kafka_share_ack_batches_destroy_free(void *ptr) {
+        rd_kafka_share_ack_batches_destroy((rd_kafka_share_ack_batches_t *)ptr);
+}
+
 /**
  * @brief Transfer inflight acks from response RKO into rkshare's inflight map.
  *

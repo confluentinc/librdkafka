@@ -110,10 +110,6 @@ rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
 void rd_kafka_share_ack_batch_entry_destroy(
     rd_kafka_share_ack_batch_entry_t *entry);
 
-/** void* wrapper for rd_kafka_share_ack_batches_destroy with free_rktpar=true.
- *  Suitable as RD_MAP value destructor. */
-void rd_kafka_share_ack_batches_destroy_free(void *ptr);
-
 /** Allocate and initialize a share ack batches (list of entries). */
 rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void);
 

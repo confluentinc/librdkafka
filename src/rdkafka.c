@@ -3310,7 +3310,7 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                      "Ack batch for leader %" PRId32
                                      " dropped: toppar or leader not available",
                                      batch->response_leader_id);
-                        rd_kafka_share_ack_batches_destroy(batch, rd_true);
+                        rd_kafka_share_ack_batches_destroy(batch);
                         continue;
                 }
                 leader_rkb = rktp->rktp_leader;

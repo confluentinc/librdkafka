@@ -129,6 +129,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:SHARE_SESSION_PARTITION_ADD",
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
                 "REPLY:SHARE_SESSION_PARTITION_REMOVE",
+            [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] = "REPLY:SHARE_FETCH_RESPONSE",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -298,6 +299,8 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.share_fetch_fanout),
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD]    = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] = _RD_KAFKA_OP_EMPTY,
+            [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
+                sizeof(rko->rko_u.share_fetch_response),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -518,14 +521,21 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                            rd_kafka_broker_destroy);
                 break;
 
-        case RD_KAFKA_OP_SHARE_FETCH:
+        case RD_KAFKA_OP_SHARE_FETCH: {
                 RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
                            rd_kafka_broker_destroy);
+                RD_IF_FREE(rko->rko_u.share_fetch.ack_details, rd_list_destroy);
                 break;
+        }
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* No heap-allocated resources to clean up */
+                RD_IF_FREE(rko->rko_u.share_fetch_fanout.ack_batches, rd_list_destroy);
                 break;
+
+        case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {
+                RD_IF_FREE(rko->rko_u.share_fetch_response.inflight_acks, rd_list_destroy);
+                break;
+        }
 
         default:
                 break;

@@ -97,9 +97,6 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 #define RD_KAFKA_IS_SHARE_CONSUMER(rk)                                         \
         ((rk)->rk_type == RD_KAFKA_CONSUMER &&                                 \
          (rk)->rk_conf.share.is_share_consumer)
-#define RD_KAFKA_IS_SHARE_CONSUMER(rk)                                         \
-        ((rk)->rk_type == RD_KAFKA_CONSUMER &&                                 \
-         (rk)->rk_conf.share.is_share_consumer)
 
 /**
  * @struct Represents a fetch position:

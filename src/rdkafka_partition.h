@@ -149,11 +149,11 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                        *   txn_pend_rktps
                        *   or txn_rktps */
         TAILQ_ENTRY(rd_kafka_toppar_s)
-        rktp_rkb_session_link;      /* rkb_share_fetch_session
-                                     * toppars_in_session link */
-        rktp_txnlink; /**< rd_kafka_t.rk_eos.
-                       *   txn_pend_rktps
-                       *   or txn_rktps */
+        rktp_rkb_session_link; /* rkb_share_fetch_session
+                                * toppars_in_session link */
+        rktp_txnlink;          /**< rd_kafka_t.rk_eos.
+                                *   txn_pend_rktps
+                                *   or txn_rktps */
         TAILQ_ENTRY(rd_kafka_toppar_s)
         rktp_rkb_session_link;      /* rkb_share_fetch_session
                                      * toppars_in_session link */

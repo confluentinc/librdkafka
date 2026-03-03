@@ -231,8 +231,7 @@ static RD_INLINE RD_UNUSED const char *rd_getenv(const char *env,
 /**
  * Empty struct initializer
  */
-#define RD_ZERO_INIT                                                           \
-        { 0 }
+#define RD_ZERO_INIT {0}
 
 #ifndef __cplusplus
 /**

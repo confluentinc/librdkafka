@@ -151,14 +151,7 @@ static void ut_destroy_rkshare(rd_kafka_share_t *rkshare) {
         if (!rkshare)
                 return;
 
-        /* Destroy inflight map entries (batches own rktpar) */
-        const rd_kafka_topic_partition_t *tp_key;
-        rd_kafka_share_ack_batches_t *batches;
-
-        RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
-                if (batches)
-                        rd_kafka_share_ack_batches_destroy(batches);
-        }
+        /* Map value destructor handles cleanup of batches and rktpar */
         RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
 
         rd_free(rkshare);

@@ -513,13 +513,12 @@ typedef enum oidc_configuration_sub_claim_variation_t {
 
 static const char *oidc_configuration_sub_claim_variation_name(
     oidc_configuration_sub_claim_variation_t variation) {
-        rd_assert(variation >= OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB &&
+        rd_assert(variation >=
+                      OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB &&
                   variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT);
-        static const char *names[] = {"default sub claim",
-                                      "explicit sub claim",
-                                      "custom client_id claim",
-                                      "empty string (defaults to sub)",
-                                      "missing claim (should fail)"};
+        static const char *names[] = {
+            "default sub claim", "explicit sub claim", "custom client_id claim",
+            "empty string (defaults to sub)", "missing claim (should fail)"};
         return names[variation];
 }
 
@@ -583,8 +582,9 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
 
         /* Check if we should skip sub claim tests based on environment */
         if (!url) {
-                SUB_TEST_SKIP("VALID_OIDC_URL environment variable is not set, "
-                              "skipping sub claim tests\n");
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set, "
+                    "skipping sub claim tests\n");
                 return;
         }
 

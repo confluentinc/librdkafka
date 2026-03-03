@@ -981,12 +981,6 @@ static rd_bool_t rd_kafka_op_matches_partition(const rd_kafka_op_t *rko,
         return rd_kafka_op_get_partition(rko) == partition;
 }
 
-/** List destructor for inflight_acks: destroy batch and its rktpar. */
-static void rd_kafka_share_ack_batches_destroy_cb(void *ptr) {
-        rd_kafka_share_ack_batches_destroy((rd_kafka_share_ack_batches_t *)ptr,
-                                           rd_true);
-}
-
 /**
  * @brief Find the batch entry that contains the given offset.
  *
@@ -1432,7 +1426,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
         /* Initialize inflight_acks list (destructor frees rktpar) */
-        rd_list_init(&inflight_acks, 0, rd_kafka_share_ack_batches_destroy_cb);
+        rd_list_init(&inflight_acks, 0, rd_kafka_share_ack_batches_destroy_free);
 
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafkap_str_t topic    = RD_ZERO_INIT;
@@ -1455,15 +1449,13 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                         if (rd_kafka_share_fetch_reply_handle_partition(
                                 rkb, &topic, topic_id, rkt, rkbuf, request,
                                 &filtered_msgs, batches)) {
-                                rd_kafka_share_ack_batches_destroy(batches,
-                                                                   rd_true);
+                                rd_kafka_share_ack_batches_destroy(batches);
                                 goto err_parse;
                         }
 
                         /* Skip unknown topics - don't add to inflight_acks */
                         if (batches->rktpar == NULL) {
-                                rd_kafka_share_ack_batches_destroy(batches,
-                                                                   rd_true);
+                                rd_kafka_share_ack_batches_destroy(batches);
                                 continue;
                         }
 

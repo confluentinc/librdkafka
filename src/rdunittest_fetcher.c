@@ -142,7 +142,7 @@ static rd_kafka_share_t *ut_create_rkshare(rd_kafka_t *rk) {
                     rd_kafka_topic_partition_by_id_cmp,
                     rd_kafka_topic_partition_hash_by_id,
                     rd_kafka_topic_partition_destroy_free,
-                    NULL /* value destructor handled manually */);
+                    rd_kafka_share_ack_batches_destroy_free);
 
         return rkshare;
 }
@@ -157,7 +157,7 @@ static void ut_destroy_rkshare(rd_kafka_share_t *rkshare) {
 
         RD_MAP_FOREACH(tp_key, batches, &rkshare->rkshare_inflight_acks) {
                 if (batches)
-                        rd_kafka_share_ack_batches_destroy(batches, rd_true);
+                        rd_kafka_share_ack_batches_destroy(batches);
         }
         RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
 
@@ -392,7 +392,7 @@ static void ut_destroy_share_fetch_response(rd_kafka_op_t *rko) {
         if (rko->rko_u.share_fetch_response.inflight_acks) {
                 RD_LIST_FOREACH(
                     batches, rko->rko_u.share_fetch_response.inflight_acks, i) {
-                        rd_kafka_share_ack_batches_destroy(batches, rd_true);
+                        rd_kafka_share_ack_batches_destroy(batches);
                 }
                 rd_list_destroy_free(
                     rko->rko_u.share_fetch_response.inflight_acks);

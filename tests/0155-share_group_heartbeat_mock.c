@@ -1842,75 +1842,79 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
  * list in rdkafka_cgrp.c. It is treated as permanent non-fatal instead.
  * See sghb_test_discrepancies.txt #2.
  */
-static void do_test_group_id_not_found_while_stable_is_fatal(void) {
-        rd_kafka_mock_cluster_t *mcluster;
-        const char *bootstraps;
-        rd_kafka_topic_partition_list_t *subscription, *assignment;
-        rd_kafka_t *c;
-        rd_kafka_resp_err_t fatal_err;
-        char errstr[256];
-        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = "test-share-group-id-not-found-stable";
-
-        SUB_TEST_QUICK();
-
-        /* Setup */
-        mcluster = test_mock_cluster_new(1, &bootstraps);
-        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
-
-        c = create_share_consumer(bootstraps, group);
-
-        subscription = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subscription, topic,
-                                          RD_KAFKA_PARTITION_UA);
-
-        rd_kafka_mock_start_request_tracking(mcluster);
-        TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
-        rd_kafka_topic_partition_list_destroy(subscription);
-
-        /* Wait for initial join and assignment */
-        wait_share_heartbeats(mcluster, 1, 500);
-        rd_kafka_consumer_poll(c, 2000);
-
-        /* Verify initial assignment - member is in stable state */
-        TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
-        TEST_ASSERT(assignment->cnt == 3,
-                    "Expected 3 partitions initially, got %d", assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(assignment);
-
-        /* Inject GROUP_ID_NOT_FOUND for an active/stable member.
-         * This should be treated as fatal (group unexpectedly deleted). */
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
-            RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
-
-        /* Poll - should trigger fatal error */
-        rd_kafka_consumer_poll(c, 3000);
-
-        /* Check if consumer entered fatal state.
-         * KNOWN ISSUE: GROUP_ID_NOT_FOUND is not in the SGHB fatal error
-         * list in rdkafka_cgrp.c. It falls through to the default case
-         * and is treated as a permanent (non-fatal) error.
-         * See sghb_test_discrepancies.txt for details. */
-        fatal_err = rd_kafka_fatal_error(c, errstr, sizeof(errstr));
-        if (fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR)
-                TEST_SAY("Consumer entered fatal state: %s (%s)\n",
-                         rd_kafka_err2str(fatal_err), errstr);
-        else
-                TEST_SAY(
-                    "KNOWN ISSUE: GROUP_ID_NOT_FOUND while stable "
-                    "did not trigger fatal error "
-                    "(see sghb_test_discrepancies.txt)\n");
-
-        /* Cleanup */
-        rd_kafka_consumer_close(c);
-        rd_kafka_destroy(c);
-
-        rd_kafka_mock_stop_request_tracking(mcluster);
-        test_mock_cluster_destroy(mcluster);
-
-        SUB_TEST_PASS();
-}
+/* TODO KIP-932: Re-enable this test when GROUP_ID_NOT_FOUND is added to the
+ * SGHB fatal error list in rdkafka_cgrp.c. */
+// static void do_test_group_id_not_found_while_stable_is_fatal(void) {
+//         rd_kafka_mock_cluster_t *mcluster;
+//         const char *bootstraps;
+//         rd_kafka_topic_partition_list_t *subscription, *assignment;
+//         rd_kafka_t *c;
+//         rd_kafka_resp_err_t fatal_err;
+//         char errstr[256];
+//         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+//         const char *group = "test-share-group-id-not-found-stable";
+//
+//         SUB_TEST_QUICK();
+//
+//         /* Setup */
+//         mcluster = test_mock_cluster_new(1, &bootstraps);
+//         rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+//
+//         c = create_share_consumer(bootstraps, group);
+//
+//         subscription = rd_kafka_topic_partition_list_new(1);
+//         rd_kafka_topic_partition_list_add(subscription, topic,
+//                                           RD_KAFKA_PARTITION_UA);
+//
+//         rd_kafka_mock_start_request_tracking(mcluster);
+//         TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
+//         rd_kafka_topic_partition_list_destroy(subscription);
+//
+//         /* Wait for initial join and assignment */
+//         wait_share_heartbeats(mcluster, 1, 500);
+//         rd_kafka_consumer_poll(c, 2000);
+//
+//         /* Verify initial assignment - member is in stable state */
+//         TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
+//         TEST_ASSERT(assignment->cnt == 3,
+//                     "Expected 3 partitions initially, got %d",
+//                     assignment->cnt);
+//         rd_kafka_topic_partition_list_destroy(assignment);
+//
+//         /* Inject GROUP_ID_NOT_FOUND for an active/stable member.
+//          * This should be treated as fatal (group unexpectedly deleted).
+//          */
+//         rd_kafka_mock_broker_push_request_error_rtts(
+//             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
+//             RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
+//
+//         /* Poll - should trigger fatal error */
+//         rd_kafka_consumer_poll(c, 3000);
+//
+//         /* Check if consumer entered fatal state.
+//          * KNOWN ISSUE: GROUP_ID_NOT_FOUND is not in the SGHB fatal error
+//          * list in rdkafka_cgrp.c. It falls through to the default case
+//          * and is treated as a permanent (non-fatal) error.
+//          * See sghb_test_discrepancies.txt for details. */
+//         fatal_err = rd_kafka_fatal_error(c, errstr, sizeof(errstr));
+//         if (fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR)
+//                 TEST_SAY("Consumer entered fatal state: %s (%s)\n",
+//                          rd_kafka_err2str(fatal_err), errstr);
+//         else
+//                 TEST_SAY(
+//                     "KNOWN ISSUE: GROUP_ID_NOT_FOUND while stable "
+//                     "did not trigger fatal error "
+//                     "(see sghb_test_discrepancies.txt)\n");
+//
+//         /* Cleanup */
+//         rd_kafka_consumer_close(c);
+//         rd_kafka_destroy(c);
+//
+//         rd_kafka_mock_stop_request_tracking(mcluster);
+//         test_mock_cluster_destroy(mcluster);
+//
+//         SUB_TEST_PASS();
+// }
 
 /**
  * @brief INVALID_REQUEST error handling.
@@ -2527,7 +2531,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_empty_topic_list_subscription();
 
         do_test_group_id_not_found_while_unsubscribed();
-        /* NOT YET COMPATIBLE */
+        /* TODO KIP-932: Re-enable when GROUP_ID_NOT_FOUND is fatal */
         /* do_test_group_id_not_found_while_stable_is_fatal(); */
 
         return 0;

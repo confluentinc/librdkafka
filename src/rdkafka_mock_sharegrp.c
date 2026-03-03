@@ -582,7 +582,7 @@ static void rd_kafka_mock_sharegroup_target_assignment_set(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_target_assignment_t *target_assignment) {
         rd_kafka_mock_sharegroup_member_t *member;
-        size_t i;
+        int i;
 
         for (i = 0; i < rd_list_cnt(&target_assignment->member_ids); i++) {
                 const char *member_id =
@@ -719,7 +719,7 @@ void rd_kafka_mock_sharegroup_set_max_delivery_attempts(
         rd_kafka_mock_sharegroup_t *mshgrp;
         mtx_lock(&mcluster->lock);
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
-            mshgrp->max_delivery_attempts = max_attempts;
+        mshgrp->max_delivery_attempts                       = max_attempts;
         mcluster->defaults.sharegroup_max_delivery_attempts = max_attempts;
         mtx_unlock(&mcluster->lock);
 }
@@ -733,7 +733,7 @@ void rd_kafka_mock_sharegroup_set_record_lock_duration(
         rd_kafka_mock_sharegroup_t *mshgrp;
         mtx_lock(&mcluster->lock);
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
-            mshgrp->record_lock_duration_ms = lock_duration_ms;
+        mshgrp->record_lock_duration_ms = lock_duration_ms;
         mcluster->defaults.sharegroup_record_lock_duration_ms =
             lock_duration_ms;
         mtx_unlock(&mcluster->lock);
@@ -790,8 +790,8 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
         /* 1. Member validation: MemberId must be a registered member. */
         if (!rd_kafka_mock_sharegroup_member_find(sgrp, MemberId)) {
                 rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCK",
-                             "%s: unknown member %.*s in group %s",
-                             api_name, RD_KAFKAP_STR_PR(MemberId), sgrp->id);
+                             "%s: unknown member %.*s in group %s", api_name,
+                             RD_KAFKAP_STR_PR(MemberId), sgrp->id);
                 return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
         }
 
@@ -837,16 +837,14 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
  *
  * @locks mcluster->lock MUST be held.
  */
-void rd_kafka_mock_sgrp_release_member_locks(
-    rd_kafka_mock_sharegroup_t *mshgrp,
-    const char *member_id) {
+void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
+                                             const char *member_id) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
 
         TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
                 rd_kafka_mock_sgrp_record_state_t *state, *tmp;
                 TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
-                        if (state->state !=
-                            RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                        if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
                                 continue;
                         if (!state->owner_member_id)
                                 continue;
@@ -869,16 +867,14 @@ void rd_kafka_mock_sgrp_release_member_locks(
  *
  * @locks mcluster->lock MUST be held.
  */
-static void
-rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
-                                rd_ts_t now) {
+static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
+                                            rd_ts_t now) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
 
         TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
                 rd_kafka_mock_sgrp_record_state_t *state, *tmp;
                 TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
-                        if (state->state !=
-                            RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                        if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
                                 continue;
                         if (!state->lock_expiry_ts ||
                             state->lock_expiry_ts > now)
@@ -972,11 +968,11 @@ void rd_kafka_mock_sharegrps_connection_closed(
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND if sharegroup not found.
  */
-rd_kafka_resp_err_t rd_kafka_mock_sharegroup_get_member_ids(
-    rd_kafka_mock_cluster_t *mcluster,
-    const char *group_id,
-    char ***member_ids_out,
-    size_t *member_cnt_out) {
+rd_kafka_resp_err_t
+rd_kafka_mock_sharegroup_get_member_ids(rd_kafka_mock_cluster_t *mcluster,
+                                        const char *group_id,
+                                        char ***member_ids_out,
+                                        size_t *member_cnt_out) {
         rd_kafka_mock_sharegroup_t *mshgrp;
         rd_kafka_mock_sharegroup_member_t *member;
         rd_kafkap_str_t *group_id_str;

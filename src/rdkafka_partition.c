@@ -294,7 +294,7 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
                      rkt->rkt_topic->str, rktp->rktp_partition, rktp,
                      &rktp->rktp_refcnt, func, line);
 
-        rktp->rktp_share_acknowledge = NULL;
+        rktp->rktp_share_acknowledge       = NULL;
         rktp->rktp_share_acknowledge_count = 0;
 
         return rd_kafka_toppar_keep(rktp);
@@ -339,8 +339,10 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
         /* Clear queues */
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
                         rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_share_acknowledge == NULL);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk, rktp->rktp_share_acknowledge_count == 0);
+        rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
+                        rktp->rktp_share_acknowledge == NULL);
+        rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
+                        rktp->rktp_share_acknowledge_count == 0);
         rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
                          RD_KAFKA_RESP_ERR__DESTROY);
         rd_kafka_q_destroy_owner(rktp->rktp_fetchq);
@@ -2602,13 +2604,14 @@ void rd_kafka_toppar_leader_unavailable(rd_kafka_toppar_t *rktp,
 /**
  * @locality any
  */
-rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp, rd_bool_t do_lock) {
+rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp,
+                                     rd_bool_t do_lock) {
         rd_bool_t on_cgrp;
         if (do_lock) {
                 rd_kafka_toppar_lock(rktp);
         }
-        on_cgrp = (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP) ? rd_true
-                                                                 : rd_false;
+        on_cgrp =
+            (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP) ? rd_true : rd_false;
 
         if (do_lock) {
                 rd_kafka_toppar_unlock(rktp);
@@ -2620,11 +2623,13 @@ rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp, rd_bool_t do_lock)
 /**
  * @locality broker thread
  */
-static rd_bool_t rd_kafka_toppar_share_are_acknowledgements_present(rd_kafka_toppar_t *rktp) {
+static rd_bool_t
+rd_kafka_toppar_share_are_acknowledgements_present(rd_kafka_toppar_t *rktp) {
         return rktp->rktp_share_acknowledge_count > 0 ? rd_true : rd_false;
 }
 
-rd_bool_t rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp) {
+rd_bool_t
+rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp) {
         if (rd_kafka_toppar_share_are_acknowledgements_present(rktp)) {
                 return rd_true;
         }

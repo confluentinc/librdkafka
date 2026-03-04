@@ -1097,6 +1097,13 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
 
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
+                        entry->is_error[offset - entry->start_offset] =
+                            (entry->types[offset - entry->start_offset] ==
+                                 (rd_kafka_share_internal_acknowledgement_type)
+                                     RD_KAFKA_SHARE_INTERNAL_ACK_REJECT ||
+                             entry->types[offset - entry->start_offset] ==
+                                 (rd_kafka_share_internal_acknowledgement_type)
+                                     RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE);
 
                         if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rd_list_add(
@@ -1355,6 +1362,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         for (int64_t j = 0; j < size; j++) {
                                 entry->types[j] =
                                     RD_KAFKA_SHARE_INTERNAL_ACK_GAP;
+                                if (entry->is_error)
+                                        entry->is_error[j] = rd_false;
                         }
 
                         rd_list_add(&batches_out->entries, entry);

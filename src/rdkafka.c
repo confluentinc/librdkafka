@@ -57,6 +57,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_share_acknowledgement.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -3620,6 +3621,82 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                          RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
 
         return error;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
+                           const rd_kafka_message_t *rkmessage) {
+        if (!rkshare || !rkmessage)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Record-based API: only for delivered records */
+        return rd_kafka_share_inflight_ack_update_delivered(
+            rkshare, rkmessage->rkt->rkt_topic_id, rkmessage->partition,
+            rkmessage->offset,
+            (rd_kafka_share_internal_acknowledgement_type)
+                RD_KAFKA_SHARE_ACK_TYPE_ACCEPT);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
+                                const rd_kafka_message_t *rkmessage,
+                                rd_kafka_share_ack_type_t type) {
+        if (!rkshare || !rkmessage)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Validate type - only ACCEPT, REJECT, RELEASE allowed */
+        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
+            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Record-based API: only for delivered records */
+        return rd_kafka_share_inflight_ack_update_delivered(
+            rkshare, rkmessage->rkt->rkt_topic_id, rkmessage->partition,
+            rkmessage->offset,
+            (rd_kafka_share_internal_acknowledgement_type)type);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
+                                  const char *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  rd_kafka_share_ack_type_t type) {
+        rd_kafka_topic_t *rkt;
+        rd_kafka_Uuid_t topic_id;
+
+        if (!rkshare || !topic)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Validate type - ACCEPT, RELEASE, REJECT allowed */
+        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
+            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Find topic to get topic_id */
+        rkt = rd_kafka_topic_find(rkshare->rkshare_rk, topic, 1 /*lock*/);
+        if (!rkt)
+                return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+
+        topic_id = rkt->rkt_topic_id;
+        rd_kafka_topic_destroy0(rkt); /* Release reference from topic_find */
+
+        /* Offset-based API: only for error records (RELEASE/REJECT state) */
+        return rd_kafka_share_inflight_ack_update_error(
+            rkshare, topic_id, partition, offset,
+            (rd_kafka_share_internal_acknowledgement_type)type);
 }
 
 /**

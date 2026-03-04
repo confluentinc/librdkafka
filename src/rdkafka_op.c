@@ -533,7 +533,20 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {
-                RD_IF_FREE(rko->rko_u.share_fetch_response.inflight_acks, rd_list_destroy);
+                if (rko->rko_u.share_fetch_response.message_rkos) {
+                        /* Messages not handed to app, destroy them. */
+                        rd_kafka_op_t *msg_rko;
+                        int mi;
+                        RD_LIST_FOREACH(
+                            msg_rko,
+                            rko->rko_u.share_fetch_response.message_rkos, mi) {
+                                rd_kafka_op_destroy(msg_rko);
+                        }
+                        rd_list_destroy(
+                            rko->rko_u.share_fetch_response.message_rkos);
+                }
+                RD_IF_FREE(rko->rko_u.share_fetch_response.inflight_acks,
+                           rd_list_destroy);
                 break;
         }
 

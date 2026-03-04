@@ -907,6 +907,11 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
                 rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
         }
 
+        /* Messages handed to app; clear list so op destructor
+         * knows not to free the message ops individually. */
+        rd_list_destroy(rko->rko_u.share_fetch_response.message_rkos);
+        rko->rko_u.share_fetch_response.message_rkos = NULL;
+
         return cnt;
 }
 

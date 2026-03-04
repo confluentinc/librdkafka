@@ -1219,6 +1219,7 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          *               rkshare->rkshare_rk?
          */
         rd_kafka_destroy(rkshare->rkshare_rk);
+        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
         rd_free(rkshare);
 }
 
@@ -3319,7 +3320,8 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                  * as initial capacity hint */
                 if (!leader_rkb->rkb_share_async_ack_details)
                         leader_rkb->rkb_share_async_ack_details =
-                            rd_list_new(batch_cnt, NULL);
+                            rd_list_new(batch_cnt,
+                                        rd_kafka_share_ack_batches_destroy_free);
 
                 /* Check if there's already a batch for this topic-partition.
                  * If so, merge entries; otherwise add as new. */
@@ -3395,56 +3397,56 @@ static void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                      should_fetch ? "with" : "no",
                      rko_sf->rko_u.share_fetch.ack_details ? "with" : "no");
 
-        /* TODO KIP-932: Remove this debug printing */
-        {
-                static const char *ack_type_names[] = {
-                    [0] = "GAP",
-                    [1] = "ACCEPT",
-                    [2] = "RELEASE",
-                    [3] = "REJECT",
-                };
-                rd_list_t *ack_details =
-                    rko_sf->rko_u.share_fetch.ack_details;
+        // /* TODO KIP-932: Remove this debug printing */
+        // {
+        //         static const char *ack_type_names[] = {
+        //             [0] = "GAP",
+        //             [1] = "ACCEPT",
+        //             [2] = "RELEASE",
+        //             [3] = "REJECT",
+        //         };
+        //         rd_list_t *ack_details =
+        //             rko_sf->rko_u.share_fetch.ack_details;
 
-                printf("[SHARE_FETCH] broker=%s should_fetch=%d",
-                       rd_kafka_broker_name(rkb), should_fetch);
+        //         printf("[SHARE_FETCH] broker=%s should_fetch=%d",
+        //                rd_kafka_broker_name(rkb), should_fetch);
 
-                if (ack_details && rd_list_cnt(ack_details) > 0) {
-                        rd_kafka_share_ack_batches_t *batches;
-                        int k;
-                        printf(" ack_details=[");
-                        RD_LIST_FOREACH(batches, ack_details, k) {
-                                rd_kafka_share_ack_batch_entry_t *entry;
-                                int m;
-                                if (k > 0)
-                                        printf(", ");
-                                printf("%s[%" PRId32 "]:{",
-                                       batches->rktpar->topic,
-                                       batches->rktpar->partition);
-                                RD_LIST_FOREACH(entry, &batches->entries, m) {
-                                        int type_val =
-                                            (int)entry->types[0];
-                                        const char *type_str =
-                                            (type_val >= 0 && type_val <= 3)
-                                                ? ack_type_names[type_val]
-                                                : "UNKNOWN";
-                                        if (m > 0)
-                                                printf(", ");
-                                        printf("%" PRId64 "-%" PRId64
-                                               "(%s)",
-                                               entry->start_offset,
-                                               entry->end_offset,
-                                               type_str);
-                                }
-                                printf("}");
-                        }
-                        printf("]");
-                } else {
-                        printf(" ack_details=none");
-                }
-                printf("\n");
-                fflush(stdout);
-        }
+        //         if (ack_details && rd_list_cnt(ack_details) > 0) {
+        //                 rd_kafka_share_ack_batches_t *batches;
+        //                 int k;
+        //                 printf(" ack_details=[");
+        //                 RD_LIST_FOREACH(batches, ack_details, k) {
+        //                         rd_kafka_share_ack_batch_entry_t *entry;
+        //                         int m;
+        //                         if (k > 0)
+        //                                 printf(", ");
+        //                         printf("%s[%" PRId32 "]:{",
+        //                                batches->rktpar->topic,
+        //                                batches->rktpar->partition);
+        //                         RD_LIST_FOREACH(entry, &batches->entries, m) {
+        //                                 int type_val =
+        //                                     (int)entry->types[0];
+        //                                 const char *type_str =
+        //                                     (type_val >= 0 && type_val <= 3)
+        //                                         ? ack_type_names[type_val]
+        //                                         : "UNKNOWN";
+        //                                 if (m > 0)
+        //                                         printf(", ");
+        //                                 printf("%" PRId64 "-%" PRId64
+        //                                        "(%s)",
+        //                                        entry->start_offset,
+        //                                        entry->end_offset,
+        //                                        type_str);
+        //                         }
+        //                         printf("}");
+        //                 }
+        //                 printf("]");
+        //         } else {
+        //                 printf(" ack_details=none");
+        //         }
+        //         printf("\n");
+        //         fflush(stdout);
+        // }
 
         rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
 }

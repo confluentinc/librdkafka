@@ -105,21 +105,41 @@ typedef struct rd_kafka_share_ack_batches_s {
 rd_kafka_share_ack_batch_entry_t *
 rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
                                    int64_t end_offset,
-                                   int32_t types_cnt);
+                                   int32_t types_cnt,
+                                   int16_t delivery_count);
 /** Destroy a share ack batch entry (frees types array and entry). */
 void rd_kafka_share_ack_batch_entry_destroy(
     rd_kafka_share_ack_batch_entry_t *entry);
 
-/** Allocate and initialize a share ack batches (list of entries). */
-rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void);
+/** Deep copy a share ack batch entry. */
+rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_copy(
+    const rd_kafka_share_ack_batch_entry_t *src);
 
-/** void* wrapper for rd_kafka_share_ack_batches_destroy with free_rktpar=true.
- *  Suitable as RD_MAP value destructor. */
+/** Allocate and initialize a share ack batches.
+ *  Takes ownership of \p rktpar. */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
+                               int32_t response_leader_id,
+                               int32_t response_leader_epoch,
+                               int64_t response_msgs_count);
+
+/** Allocate an empty share ack batches (all fields zeroed). */
+rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new_empty(void);
+
+/** void* wrapper for rd_kafka_share_ack_batches_destroy.
+ *  Suitable as rd_list_t / rd_map_t value destructor. */
 void rd_kafka_share_ack_batches_destroy_free(void *ptr);
 
-/** Destroy share ack batches. If \p free_rktpar is true, destroys rktpar too.
- */
+/** Destroy share ack batches (frees entries, rktpar, and struct). */
 void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches);
+
+/** Deep copy a share ack batches (copies rktpar and all entries). */
+rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_copy(
+    const rd_kafka_share_ack_batches_t *src);
+
+/** void* wrapper for rd_kafka_share_ack_batches_copy.
+ *  Suitable as rd_list_copy_to callback. */
+void *rd_kafka_share_ack_batches_copy_void(const void *elem, void *opaque);
 
 /**
  * @brief Transfer inflight acks from response RKO into rkshare's inflight map.

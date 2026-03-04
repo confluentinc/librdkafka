@@ -32,16 +32,19 @@
 rd_kafka_share_ack_batch_entry_t *
 rd_kafka_share_ack_batch_entry_new(int64_t start_offset,
                                    int64_t end_offset,
-                                   int32_t types_cnt) {
+                                   int32_t types_cnt,
+                                   int16_t delivery_count) {
         rd_kafka_share_ack_batch_entry_t *entry;
 
-        entry                 = rd_calloc(1, sizeof(*entry));
-        entry->start_offset   = start_offset;
-        entry->end_offset     = end_offset;
-        entry->size           = end_offset - start_offset + 1;
-        entry->types_cnt      = types_cnt;
-        entry->delivery_count = 0;
-        entry->types = rd_calloc((size_t)types_cnt, sizeof(rd_kafka_share_internal_acknowledgement_type));
+        entry               = rd_calloc(1, sizeof(*entry));
+        entry->start_offset = start_offset;
+        entry->end_offset   = end_offset;
+        entry->size         = end_offset - start_offset + 1;
+        entry->types_cnt    = types_cnt;
+        entry->delivery_count = delivery_count;
+        entry->types          = rd_calloc(
+            (size_t)types_cnt,
+            sizeof(rd_kafka_share_internal_acknowledgement_type));
         return entry;
 }
 
@@ -54,19 +57,51 @@ void rd_kafka_share_ack_batch_entry_destroy(
 }
 
 static void rd_kafka_share_ack_batch_entry_destroy_free(void *ptr) {
-        rd_kafka_share_ack_batch_entry_destroy((rd_kafka_share_ack_batch_entry_t *)ptr);
+        rd_kafka_share_ack_batch_entry_destroy(
+            (rd_kafka_share_ack_batch_entry_t *)ptr);
 }
 
-rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void) {
+rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_copy(
+    const rd_kafka_share_ack_batch_entry_t *src) {
+        rd_kafka_share_ack_batch_entry_t *dst;
+
+        dst = rd_kafka_share_ack_batch_entry_new(
+            src->start_offset, src->end_offset, src->types_cnt,
+            src->delivery_count);
+        memcpy(dst->types, src->types,
+               (size_t)src->types_cnt *
+                   sizeof(rd_kafka_share_internal_acknowledgement_type));
+        return dst;
+}
+
+static void *rd_kafka_share_ack_batch_entry_copy_void(const void *elem,
+                                                       void *opaque) {
+        return rd_kafka_share_ack_batch_entry_copy(
+            (const rd_kafka_share_ack_batch_entry_t *)elem);
+}
+
+rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new_empty(void) {
+        return rd_kafka_share_ack_batches_new(NULL, 0, 0, 0);
+}
+
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
+                               int32_t response_leader_id,
+                               int32_t response_leader_epoch,
+                               int64_t response_msgs_count) {
         rd_kafka_share_ack_batches_t *batches;
 
-        batches = rd_calloc(1, sizeof(*batches));
-        rd_list_init(&batches->entries, 0, rd_kafka_share_ack_batch_entry_destroy_free);
+        batches                        = rd_calloc(1, sizeof(*batches));
+        batches->rktpar                = rktpar;
+        batches->response_leader_id    = response_leader_id;
+        batches->response_leader_epoch = response_leader_epoch;
+        batches->response_msgs_count   = response_msgs_count;
+        rd_list_init(&batches->entries, 0,
+                     rd_kafka_share_ack_batch_entry_destroy_free);
         return batches;
 }
 
 void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches) {
-
         rd_list_destroy(&batches->entries);
         if (batches->rktpar)
                 rd_kafka_topic_partition_destroy(batches->rktpar);
@@ -74,7 +109,28 @@ void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches) {
 }
 
 void rd_kafka_share_ack_batches_destroy_free(void *ptr) {
-        rd_kafka_share_ack_batches_destroy((rd_kafka_share_ack_batches_t *)ptr);
+        rd_kafka_share_ack_batches_destroy(
+            (rd_kafka_share_ack_batches_t *)ptr);
+}
+
+rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_copy(
+    const rd_kafka_share_ack_batches_t *src) {
+        rd_kafka_share_ack_batches_t *dst;
+
+        dst = rd_kafka_share_ack_batches_new(
+            src->rktpar ? rd_kafka_topic_partition_copy(src->rktpar) : NULL,
+            src->response_leader_id, src->response_leader_epoch,
+            src->response_msgs_count);
+
+        /* Deep copy all entries */
+        rd_list_copy_to(&dst->entries, &src->entries,
+                        rd_kafka_share_ack_batch_entry_copy_void, NULL);
+        return dst;
+}
+
+void *rd_kafka_share_ack_batches_copy_void(const void *elem, void *opaque) {
+        return rd_kafka_share_ack_batches_copy(
+            (const rd_kafka_share_ack_batches_t *)elem);
 }
 
 /**
@@ -136,9 +192,11 @@ static rd_kafka_share_ack_batch_entry_t *
 rd_kafka_share_ack_batch_entry_collated_new(
     int64_t start_offset,
     int64_t end_offset,
-    rd_kafka_share_internal_acknowledgement_type type) {
+    rd_kafka_share_internal_acknowledgement_type type,
+    int16_t delivery_count) {
         rd_kafka_share_ack_batch_entry_t *entry =
-            rd_kafka_share_ack_batch_entry_new(start_offset, end_offset, 1);
+            rd_kafka_share_ack_batch_entry_new(start_offset, end_offset, 1,
+                                               delivery_count);
         entry->types[0] = type;
         return entry;
 }
@@ -250,8 +308,8 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                         rd_kafka_share_ack_batch_entry_t
                                             *new_entry =
                                                 rd_kafka_share_ack_batch_entry_new(
-                                                    run_start, run_end,
-                                                    cnt);
+                                                    run_start, run_end, cnt,
+                                                    entry->delivery_count);
                                         int32_t m;
                                         for (m = 0; m < cnt; m++)
                                                 new_entry->types[m] =
@@ -265,19 +323,15 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                          */
                                         if (!ack_batch) {
                                                 ack_batch =
-                                                    rd_kafka_share_ack_batches_new();
-                                                ack_batch->rktpar =
-                                                    rd_kafka_topic_partition_copy(
+                                                    rd_kafka_share_ack_batches_new(
+                                                        rd_kafka_topic_partition_copy(
+                                                            inflight_batches
+                                                                ->rktpar),
                                                         inflight_batches
-                                                            ->rktpar);
-                                                ack_batch
-                                                    ->response_leader_id =
-                                                    inflight_batches
-                                                        ->response_leader_id;
-                                                ack_batch
-                                                    ->response_leader_epoch =
-                                                    inflight_batches
-                                                        ->response_leader_epoch;
+                                                            ->response_leader_id,
+                                                        inflight_batches
+                                                            ->response_leader_epoch,
+                                                        0);
                                         }
                                         /* Collated: 1 type for entire
                                          * range */
@@ -285,7 +339,8 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                             &ack_batch->entries,
                                             rd_kafka_share_ack_batch_entry_collated_new(
                                                 run_start, run_end,
-                                                run_type));
+                                                run_type,
+                                                entry->delivery_count));
                                 }
 
                                 j = k;

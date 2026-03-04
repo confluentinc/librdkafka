@@ -134,8 +134,8 @@ void rd_kafka_share_ack_batches_destroy_free(void *ptr);
 void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches);
 
 /** Deep copy a share ack batches (copies rktpar and all entries). */
-rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_copy(
-    const rd_kafka_share_ack_batches_t *src);
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_ack_batches_copy(const rd_kafka_share_ack_batches_t *src);
 
 /** void* wrapper for rd_kafka_share_ack_batches_copy.
  *  Suitable as rd_list_copy_to callback. */

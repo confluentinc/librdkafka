@@ -1200,13 +1200,12 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
             rkbuf, &AcknowledgementErrorStr);  // AcknowledgementErrorString
 
         if (AcknowledgementErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR) {
-                rd_kafka_dbg(
-                    rkb->rkb_rk, CGRP, "SHAREACK",
-                    "ShareFetch response for %.*s [%" PRId32
-                    "]: AcknowledgementError %" PRId16 " (%s)",
-                    RD_KAFKAP_STR_PR(topic), PartitionId,
-                    AcknowledgementErrorCode,
-                    rd_kafka_err2str(AcknowledgementErrorCode));
+                rd_kafka_dbg(rkb->rkb_rk, CGRP, "SHAREACK",
+                             "ShareFetch response for %.*s [%" PRId32
+                             "]: AcknowledgementError %" PRId16 " (%s)",
+                             RD_KAFKAP_STR_PR(topic), PartitionId,
+                             AcknowledgementErrorCode,
+                             rd_kafka_err2str(AcknowledgementErrorCode));
                 // printf("ShareFetch response for %.*s [%" PRId32
                 //        "]: AcknowledgementError %" PRId16 " (%s)\n",
                 //        RD_KAFKAP_STR_PR(topic), PartitionId,
@@ -1292,8 +1291,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt,
                                    -1);  // AcquiredRecordsArrayCnt
         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
-                   "%.*s [%" PRId32
-                   "] : AcquiredRecordsArrayCnt: %d",
+                   "%.*s [%" PRId32 "] : AcquiredRecordsArrayCnt: %d",
                    RD_KAFKAP_STR_PR(topic), PartitionId,
                    AcquiredRecordsArrayCnt);
 
@@ -1414,10 +1412,10 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafkap_str_t ErrorStr         = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         int32_t AcquisitionLockTimeoutMs = 0;
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        NodeEndpoints.NodeEndpoints   = NULL;
-        NodeEndpoints.NodeEndpointCnt = 0;
-        rd_list_t *filtered_msgs  = NULL;
-        rd_list_t *inflight_acks = NULL;
+        NodeEndpoints.NodeEndpoints    = NULL;
+        NodeEndpoints.NodeEndpointCnt  = 0;
+        rd_list_t *filtered_msgs       = NULL;
+        rd_list_t *inflight_acks       = NULL;
         rd_bool_t has_acquired_records = rd_false;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
@@ -1436,7 +1434,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
-        filtered_msgs  = rd_list_new(0, NULL);
+        filtered_msgs = rd_list_new(0, NULL);
         inflight_acks = rd_list_new(0, rd_kafka_share_ack_batches_destroy_free);
 
         for (i = 0; i < TopicArrayCnt; i++) {
@@ -1647,7 +1645,7 @@ static void rd_kafka_broker_session_update_toppars_list(
                                     removed_rktp); /* from partitions list */
                                 if (rd_list_empty(toppars_to_remove_from)) {
                                         rd_list_destroy(toppars_to_remove_from);
-                                        toppars_to_remove_from     = NULL;
+                                        toppars_to_remove_from      = NULL;
                                         *toppars_to_remove_from_ptr = NULL;
                                 }
                         }
@@ -2006,11 +2004,11 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                         /* Partition tags */
                         rd_kafka_buf_write_tags_empty(rkbuf);
 
-                        rd_rkb_dbg(
-                            rkb, FETCH, "SHAREFETCH",
-                            "Share Fetch adding topic %.*s [%" PRId32 "]",
-                            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                            rktp->rktp_partition);
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                   "Share Fetch adding topic %.*s [%" PRId32
+                                   "]",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition);
 
                         cnt++;
                 }
@@ -2047,9 +2045,8 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                         /* _private should always be present here as it was
                          * set when building the ack batches from the
                          * inflight map. */
-                        parpriv =
-                            (rd_kafka_topic_partition_private_t *)
-                                batches->rktpar->_private;
+                        parpriv = (rd_kafka_topic_partition_private_t *)
+                                      batches->rktpar->_private;
                         rd_dassert(parpriv != NULL);
 
                         if (topic_id_last == NULL ||
@@ -2080,7 +2077,7 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
 
                         /* Partition */
                         rd_kafka_buf_write_i32(rkbuf,
-                                              batches->rktpar->partition);
+                                               batches->rktpar->partition);
 
                         /* Write acknowledgement batches */
                         entries_cnt = rd_list_cnt(&batches->entries);
@@ -2095,8 +2092,8 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                                                        entry->end_offset);
                                 /* AcknowledgeTypes */
                                 rd_kafka_buf_write_arraycnt(rkbuf, 1);
-                                rd_kafka_buf_write_i8(
-                                    rkbuf, (int8_t)entry->types[0]);
+                                rd_kafka_buf_write_i8(rkbuf,
+                                                      (int8_t)entry->types[0]);
                                 /* Acknowledgement tags */
                                 rd_kafka_buf_write_tags_empty(rkbuf);
                         }
@@ -2136,8 +2133,7 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                  */
                 of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                             "Forgetting %d toppars",
-                             toppars_to_forget_cnt);
+                             "Forgetting %d toppars", toppars_to_forget_cnt);
                 RD_LIST_FOREACH(rktp, toppars_to_forget, i) {
                         /* TODO KIP-932: This condition will cause partitions of
                         same topics to be inside single instance of the topic as
@@ -2321,11 +2317,10 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
                                  rd_kafka_op_t *rko_orig,
                                  rd_ts_t now) {
 
-        rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
-        int32_t max_records   = 0;
-        rd_list_t *ack_details = rko_orig->rko_u.share_fetch.ack_details;
-        rd_bool_t has_ack_details =
-            ack_details && rd_list_cnt(ack_details) > 0;
+        rd_kafka_cgrp_t *rkcg     = rkb->rkb_rk->rk_cgrp;
+        int32_t max_records       = 0;
+        rd_list_t *ack_details    = rko_orig->rko_u.share_fetch.ack_details;
+        rd_bool_t has_ack_details = ack_details && rd_list_cnt(ack_details) > 0;
 
         if (!rkcg->rkcg_member_id) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
@@ -2370,10 +2365,10 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
             rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
             rkb->rkb_rk->rk_conf.fetch_min_bytes,
             rkb->rkb_rk->rk_conf.fetch_max_bytes, max_records,
-            max_records,     /* TODO KIP-932: Check if this is correct for batch
-                                size or not */
+            max_records, /* TODO KIP-932: Check if this is correct for batch
+                            size or not */
             rkb->rkb_share_fetch_session
-                .toppars_to_add,    /* toppars to add to session */
+                .toppars_to_add, /* toppars to add to session */
             rkb->rkb_share_fetch_session
                 .toppars_to_forget, /* forgetting toppars */
             rko_orig,               /* rko (carries ack_details) */

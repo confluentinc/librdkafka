@@ -111,7 +111,8 @@ int main(int argc, char **argv) {
          */
         if (argc < 3) {
                 fprintf(stderr,
-                        ANSI_RED "%% Usage: "
+                        ANSI_RED
+                        "%% Usage: "
                         "%s <broker> <group.id> <topic1> "
                         "<topic2>..\n" ANSI_RESET,
                         argv[0]);
@@ -170,7 +171,8 @@ int main(int argc, char **argv) {
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rkshare) {
                 fprintf(stderr,
-                        ANSI_RED "%% Failed to create new share consumer: "
+                        ANSI_RED
+                        "%% Failed to create new share consumer: "
                         "%s\n" ANSI_RESET,
                         errstr);
                 return 1;
@@ -192,7 +194,8 @@ int main(int argc, char **argv) {
         err = rd_kafka_share_subscribe(rkshare, subscription);
         if (err) {
                 fprintf(stderr,
-                        ANSI_RED "%% Failed to subscribe to %d topics: "
+                        ANSI_RED
+                        "%% Failed to subscribe to %d topics: "
                         "%s\n" ANSI_RESET,
                         subscription->cnt, rd_kafka_err2str(err));
                 rd_kafka_topic_partition_list_destroy(subscription);
@@ -201,7 +204,8 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr,
-                ANSI_YELLOW "%% Subscribed to %d topic(s), "
+                ANSI_YELLOW
+                "%% Subscribed to %d topic(s), "
                 "waiting for rebalance and messages...\n" ANSI_RESET,
                 subscription->cnt);
 
@@ -229,7 +233,8 @@ int main(int argc, char **argv) {
                               error = rd_kafka_share_consume_batch(
                                   rkshare, 3000, rkmessages, &rcvd_msgs));
                 fprintf(stdout,
-                        ANSI_GREEN "%% rd_kafka_share_consume_batch() took "
+                        ANSI_GREEN
+                        "%% rd_kafka_share_consume_batch() took "
                         "%.3f ms\n" ANSI_RESET,
                         __elapsed_ms);
 
@@ -249,7 +254,8 @@ int main(int argc, char **argv) {
 
                         if (rkm->err) {
                                 fprintf(stdout,
-                                        ANSI_RED "%% Consumer error: %d: "
+                                        ANSI_RED
+                                        "%% Consumer error: %d: "
                                         "%s\n" ANSI_RESET,
                                         rkm->err, rd_kafka_message_errstr(rkm));
                                 rd_kafka_message_destroy(rkm);
@@ -258,7 +264,7 @@ int main(int argc, char **argv) {
 
                         /* Proper message. */
                         printf(ANSI_CYAN "Message received on %s [%" PRId32
-                               "] at offset %" PRId64 ANSI_RESET,
+                                         "] at offset %" PRId64 ANSI_RESET,
                                rd_kafka_topic_name(rkm->rkt), rkm->partition,
                                rkm->offset);
 
@@ -268,7 +274,8 @@ int main(int argc, char **argv) {
                                        (int)rkm->key_len,
                                        (const char *)rkm->key);
                         else if (rkm->key)
-                                printf(ANSI_CYAN " Key: (%d bytes)\n" ANSI_RESET,
+                                printf(ANSI_CYAN
+                                       " Key: (%d bytes)\n" ANSI_RESET,
                                        (int)rkm->key_len);
 
                         /* Print the message value/payload. */
@@ -278,7 +285,8 @@ int main(int argc, char **argv) {
                                        (int)rkm->len,
                                        (const char *)rkm->payload);
                         else if (rkm->payload)
-                                printf(ANSI_CYAN " - Value: (%d bytes)\n" ANSI_RESET,
+                                printf(ANSI_CYAN
+                                       " - Value: (%d bytes)\n" ANSI_RESET,
                                        (int)rkm->len);
 
                         rd_kafka_message_destroy(rkm);

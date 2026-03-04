@@ -3334,20 +3334,17 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                     leader_rkb->rkb_share_async_ack_details, batch->rktpar);
 
                 if (existing) {
-                        /* Merge: move entries from new batch into existing */
+                        /* Merge: deep-copy entries from new batch into
+                         * existing, preserving order. The source batch
+                         * is then fully destroyed (freeing its entries). */
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int j;
                         RD_LIST_FOREACH(entry, &batch->entries, j) {
-                                rd_list_add(&existing->entries, entry);
+                                rd_list_add(
+                                    &existing->entries,
+                                    rd_kafka_share_ack_batch_entry_copy(entry));
                         }
-                        /* Entries have been moved to existing by pointer.
-                         * Destroy batch shell, list container, and rktpar
-                         * (each batch owns its own copy). */
-                        rd_list_destroy(&batch->entries);
-                        if (batch->rktpar)
-                                rd_kafka_topic_partition_destroy(
-                                    batch->rktpar);
-                        rd_free(batch);
+                        rd_kafka_share_ack_batches_destroy(batch);
                 } else {
                         rd_list_add(leader_rkb->rkb_share_async_ack_details,
                                     batch);

@@ -281,7 +281,8 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                 rd_list_t new_entries;
                 int ei;
 
-                rd_list_init(&new_entries, 0, NULL);
+                rd_list_init(&new_entries, 0,
+                             rd_kafka_share_ack_batch_entry_destroy_free);
 
                 RD_LIST_FOREACH(entry, &inflight_batches->entries, ei) {
                         int64_t j = 0;

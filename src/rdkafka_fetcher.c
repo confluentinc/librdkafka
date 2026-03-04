@@ -1316,7 +1316,12 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         batches_out->response_leader_id    = CurrentLeader.LeaderId;
         batches_out->response_leader_epoch = CurrentLeader.LeaderEpoch;
         batches_out->response_msgs_count   = 0;
-        rd_list_init(&batches_out->entries, AcquiredRecordsArrayCnt, NULL);
+        /* Pre-allocate capacity without re-initializing the list.
+         * batches_out->entries was already initialized by
+         * rd_kafka_share_ack_batches_new() with the proper
+         * entry destructor. */
+        if (AcquiredRecordsArrayCnt > 0)
+                rd_list_grow(&batches_out->entries, AcquiredRecordsArrayCnt);
 
         if (AcquiredRecordsArrayCnt > 0) {
                 FirstOffsets =

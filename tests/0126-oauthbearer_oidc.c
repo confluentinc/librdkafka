@@ -537,24 +537,18 @@ static rd_kafka_conf_t *oidc_configuration_sub_claim(
 
         switch (variation) {
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB:
-                /* Don't set sasl.oauthbearer.sub.claim.name,
-                 * should default to "sub" */
                 break;
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EXPLICIT_SUB:
-                /* Explicitly set to "sub" */
                 test_conf_set(conf, "sasl.oauthbearer.sub.claim.name", "sub");
                 break;
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID:
-                /* Use client_id as subject claim */
                 test_conf_set(conf, "sasl.oauthbearer.sub.claim.name",
                               "client_id");
                 break;
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING:
-                /* Set empty string - should fall back to "sub" */
                 test_conf_set(conf, "sasl.oauthbearer.sub.claim.name", "");
                 break;
         case OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM:
-                /* Use a claim that doesn't exist - should fail validation */
                 test_conf_set(conf, "sasl.oauthbearer.sub.claim.name",
                               "nonexistent_claim");
                 break;

@@ -1210,16 +1210,21 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
         rd_kafka_destroy_app(rk, 0);
 }
 
-/**
- * TODO KIP-932: Destroy inflight map entries should be done in consumer close.
- */
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        rd_kafka_destroy(rkshare->rkshare_rk);
+
+        /* Destroy inflight acks map before rd_kafka_destroy() to release
+         * toppar references held by topic_partition objects in the map.
+         * Otherwise rd_kafka_destroy() deadlocks: it joins broker threads,
+         * which wait for refcnt <= 1, but the toppar holds a broker ref
+         * via rktp_leader that is only released when the toppar is destroyed,
+         * which requires refcnt 0, which requires releasing the rktp ref
+         * held by the inflight_acks map entry. */
         RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
+        rd_kafka_destroy(rkshare->rkshare_rk);
         rd_free(rkshare);
 }
 

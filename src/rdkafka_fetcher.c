@@ -1381,9 +1381,11 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         goto done;
 
 err_parse:
-        return rkbuf->rkbuf_err;
+        err = rkbuf->rkbuf_err;
 
 done:
+        if (rktp)
+                rd_kafka_toppar_destroy(rktp); /* from toppar_get() */
         return err;
 }
 

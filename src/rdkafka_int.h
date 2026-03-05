@@ -813,6 +813,14 @@ struct rd_kafka_share_s {
          *  Reset when records are received in the consumer queue.
          *  Prevents duplicate fetch FANOUTs while one is in flight. */
         rd_bool_t rkshare_fetch_more_records_requested;
+
+        /**
+         * Set to true when the consumer is closing. Will be used to:
+         * * prevent any new API call from the app.
+         * * check if SHARE_FETCH_RESPONSE is received to poll_cb only
+         *   while closing
+         */
+        rd_bool_t rkshare_consumer_closing;
 };
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)

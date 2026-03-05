@@ -2992,9 +2992,10 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
-        rkshare                      = rd_calloc(1, sizeof(*rkshare));
-        rkshare->rkshare_rk          = rk;
-        rkshare->rkshare_unacked_cnt = 0;
+        rkshare                           = rd_calloc(1, sizeof(*rkshare));
+        rkshare->rkshare_rk               = rk;
+        rkshare->rkshare_unacked_cnt      = 0;
+        rkshare->rkshare_consumer_closing = rd_false;
 
         /* Set backpointer from rk to rkshare for access in retry handlers */
         rk->rk_rkshare = rkshare;
@@ -4251,12 +4252,6 @@ rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk) {
 }
 
 
-rd_kafka_resp_err_t
-rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare) {
-        return rd_kafka_poll_set_consumer(rkshare->rkshare_rk);
-}
-
-
 rd_kafka_message_t *rd_kafka_consumer_poll(rd_kafka_t *rk, int timeout_ms) {
         rd_kafka_cgrp_t *rkcg;
 
@@ -4304,6 +4299,11 @@ static rd_kafka_error_t *rd_kafka_consumer_close_q(rd_kafka_t *rk,
         rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
                      "Closing consumer");
 
+
+        /*
+         * TODO KIP-932: Need to check what to do for rk_rep queue as we are
+         * not forwarding rk_rep to the rkcg_q in Share Consumer.
+         */
         /* Redirect cgrp queue to the rebalance queue to make sure all posted
          * ops (e.g., rebalance callbacks) are served by
          * the application/caller. */
@@ -4390,6 +4390,11 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
 }
 
 rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
+        rkshare->rkshare_consumer_closing = rd_true;
+        /* TODO KIP-932: Need to check this behavior is correct while closing.
+         */
+        rd_kafka_q_fwd_set(rkshare->rkshare_rk->rk_rep,
+                           rkshare->rkshare_rk->rk_cgrp->rkcg_q);
         return rd_kafka_consumer_close(rkshare->rkshare_rk);
 }
 
@@ -5083,6 +5088,18 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
                 rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
                 res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
+                break;
+
+        case RD_KAFKA_OP_SHARE_FETCH_RESPONSE:
+                /* TODO KIP-932: RD_KAFKA_OP_SHARE_FETCH_RESPONSE should never
+                   be handled from this cb in Share Consumer except maybe in
+                   case of closing as this op we don't forward rk_rep queue to
+                   rkcg.q. This op is handled separately in
+                   rd_kafka_share_consume_batch() during normal working of Share
+                   Consumer. Check what is the correct way to handle this op
+                   while closing. */
+                rd_kafka_assert(rk, rk->rk_rkshare->rkshare_consumer_closing);
+                res = RD_KAFKA_OP_RES_PASS;
                 break;
 
         default:

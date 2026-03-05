@@ -49,13 +49,6 @@
 // #include <librdkafka/rdkafka.h>
 #include "rdkafka.h"
 
-/* ANSI color codes */
-#define ANSI_RED    "\033[31m"
-#define ANSI_GREEN  "\033[32m"
-#define ANSI_YELLOW "\033[33m"
-#define ANSI_CYAN   "\033[36m"
-#define ANSI_RESET  "\033[0m"
-
 #define TIME_BLOCK_MS(elapsed_var, expr)                                       \
         do {                                                                   \
                 struct timespec __t0, __t1;                                    \
@@ -111,10 +104,9 @@ int main(int argc, char **argv) {
          */
         if (argc < 3) {
                 fprintf(stderr,
-                        ANSI_RED
                         "%% Usage: "
                         "%s <broker> <group.id> <topic1> "
-                        "<topic2>..\n" ANSI_RESET,
+                        "<topic2>..\n",
                         argv[0]);
                 return 1;
         }
@@ -136,18 +128,17 @@ int main(int argc, char **argv) {
          * set of brokers from the cluster. */
         if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, ANSI_RED "%s\n" ANSI_RESET, errstr);
+                fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
 
-        // if (rd_kafka_conf_set(conf, "debug",
-        //                       "protocol",
-        //                       errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-        //         fprintf(stderr, ANSI_RED "%s\n" ANSI_RESET, errstr);
-        //         rd_kafka_conf_destroy(conf);
-        //         return 1;
-        // }
+        if (rd_kafka_conf_set(conf, "debug", "fetch,broker,topic,cgrp", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
 
         /* Set the consumer group id.
          * All consumers sharing the same group id will join the same
@@ -156,7 +147,7 @@ int main(int argc, char **argv) {
          * (consumer config property) to the consumers in the group. */
         if (rd_kafka_conf_set(conf, "group.id", groupid, errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, ANSI_RED "%s\n" ANSI_RESET, errstr);
+                fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
@@ -171,9 +162,8 @@ int main(int argc, char **argv) {
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rkshare) {
                 fprintf(stderr,
-                        ANSI_RED
                         "%% Failed to create new share consumer: "
-                        "%s\n" ANSI_RESET,
+                        "%s\n",
                         errstr);
                 return 1;
         }
@@ -194,9 +184,8 @@ int main(int argc, char **argv) {
         err = rd_kafka_share_subscribe(rkshare, subscription);
         if (err) {
                 fprintf(stderr,
-                        ANSI_RED
                         "%% Failed to subscribe to %d topics: "
-                        "%s\n" ANSI_RESET,
+                        "%s\n",
                         subscription->cnt, rd_kafka_err2str(err));
                 rd_kafka_topic_partition_list_destroy(subscription);
                 rd_kafka_share_destroy(rkshare);
@@ -204,9 +193,8 @@ int main(int argc, char **argv) {
         }
 
         fprintf(stderr,
-                ANSI_YELLOW
                 "%% Subscribed to %d topic(s), "
-                "waiting for rebalance and messages...\n" ANSI_RESET,
+                "waiting for rebalance and messages...\n",
                 subscription->cnt);
 
         rd_kafka_topic_partition_list_destroy(subscription);
@@ -233,61 +221,50 @@ int main(int argc, char **argv) {
                               error = rd_kafka_share_consume_batch(
                                   rkshare, 3000, rkmessages, &rcvd_msgs));
                 fprintf(stdout,
-                        ANSI_GREEN
                         "%% rd_kafka_share_consume_batch() took "
-                        "%.3f ms\n" ANSI_RESET,
+                        "%.3f ms\n",
                         __elapsed_ms);
 
                 if (error) {
-                        fprintf(stdout,
-                                ANSI_RED "%% Consume error: %s\n" ANSI_RESET,
+                        fprintf(stderr, "%% Consume error: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
-                fprintf(stdout,
-                        ANSI_GREEN "%% Received %zu messages\n" ANSI_RESET,
-                        rcvd_msgs);
+                fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
                 for (i = 0; i < (int)rcvd_msgs; i++) {
                         rkm = rkmessages[i];
 
                         if (rkm->err) {
-                                fprintf(stdout,
-                                        ANSI_RED
+                                fprintf(stderr,
                                         "%% Consumer error: %d: "
-                                        "%s\n" ANSI_RESET,
+                                        "%s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
                                 rd_kafka_message_destroy(rkm);
                                 continue;
                         }
 
                         /* Proper message. */
-                        printf(ANSI_CYAN "Message received on %s [%" PRId32
-                                         "] at offset %" PRId64 ANSI_RESET,
+                        printf("Message received on %s [%" PRId32
+                               "] at offset %" PRId64,
                                rd_kafka_topic_name(rkm->rkt), rkm->partition,
                                rkm->offset);
 
                         /* Print the message key. */
                         if (rkm->key && is_printable(rkm->key, rkm->key_len))
-                                printf(ANSI_CYAN " Key: %.*s\n" ANSI_RESET,
-                                       (int)rkm->key_len,
+                                printf(" Key: %.*s\n", (int)rkm->key_len,
                                        (const char *)rkm->key);
                         else if (rkm->key)
-                                printf(ANSI_CYAN
-                                       " Key: (%d bytes)\n" ANSI_RESET,
-                                       (int)rkm->key_len);
+                                printf(" Key: (%d bytes)\n", (int)rkm->key_len);
 
                         /* Print the message value/payload. */
                         if (rkm->payload &&
                             is_printable(rkm->payload, rkm->len))
-                                printf(ANSI_CYAN " - Value: %.*s\n" ANSI_RESET,
-                                       (int)rkm->len,
+                                printf(" - Value: %.*s\n", (int)rkm->len,
                                        (const char *)rkm->payload);
                         else if (rkm->payload)
-                                printf(ANSI_CYAN
-                                       " - Value: (%d bytes)\n" ANSI_RESET,
-                                       (int)rkm->len);
+                                printf(" - Value: (%d bytes)\n", (int)rkm->len);
 
                         rd_kafka_message_destroy(rkm);
                 }
@@ -295,7 +272,7 @@ int main(int argc, char **argv) {
 
 
         /* Close the consumer: commit final offsets and leave the group. */
-        fprintf(stderr, ANSI_YELLOW "%% Closing share consumer\n" ANSI_RESET);
+        fprintf(stderr, "%% Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
 
 

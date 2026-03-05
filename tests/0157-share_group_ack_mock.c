@@ -658,11 +658,12 @@ static void do_test_implicit_ack_multi_msgset(void) {
 static void do_test_crash_before_ack_redelivery(void) {
         const char *topic = "kip932_ack_crash_redeliver";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Short lock so the test doesn't wait too long. */
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
@@ -711,11 +712,12 @@ static void do_test_crash_before_ack_redelivery(void) {
 static void do_test_crash_then_ack_stops_redelivery(void) {
         const char *topic = "kip932_ack_crash_then_ack";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c, extra;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
 
@@ -776,11 +778,12 @@ static void do_test_crash_then_ack_stops_redelivery(void) {
 static void do_test_session_expiry_invalidates_ack(void) {
         const char *topic = "kip932_ack_session_expire";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Short session timeout so eviction happens quickly. */
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
@@ -856,11 +859,12 @@ static void do_test_session_expiry_invalidates_ack(void) {
 static void do_test_max_delivery_without_ack(void) {
         const char *topic = "kip932_ack_maxdel_noack";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         rd_kafka_mock_sharegroup_set_max_delivery_attempts(ctx.mcluster, 2);
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
@@ -920,11 +924,12 @@ static void do_test_max_delivery_without_ack(void) {
 static void do_test_sharefetch_error_drops_ack(void) {
         const char *topic = "kip932_ack_sf_error";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
 
@@ -987,11 +992,12 @@ static void do_test_forgotten_topic_releases_not_acks(void) {
         const char *topic_a = "kip932_ack_forget_a";
         const char *topic_b = "kip932_ack_forget_b";
         const char *both[]  = {topic_a, topic_b};
-        test_ctx_t ctx      = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_both, consumed_a, consumed_b, extra;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 2000);
         rd_kafka_mock_sharegroup_set_heartbeat_interval(ctx.mcluster, 500);
@@ -1065,11 +1071,12 @@ static void do_test_forgotten_topic_releases_not_acks(void) {
 static void do_test_multi_consumer_cascade_crash(void) {
         const char *topic = "kip932_ack_cascade_crash";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* High max delivery so records don't get archived. */
         rd_kafka_mock_sharegroup_set_max_delivery_attempts(ctx.mcluster, 10);
@@ -1127,11 +1134,12 @@ static void do_test_multi_consumer_cascade_crash(void) {
 static void do_test_lock_expiry_before_ack(void) {
         const char *topic = "kip932_ack_lock_expire";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Very short lock, long session timeout. */
         rd_kafka_mock_sharegroup_set_record_lock_duration(ctx.mcluster, 200);
@@ -1253,11 +1261,12 @@ static void do_test_empty_topic_no_ack_side_effects(void) {
 static void do_test_coordinator_failover_ack_recovery(void) {
         const char *topic = "kip932_ack_coord_failover";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c, extra;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
 
@@ -1336,9 +1345,11 @@ static void do_test_coordinator_failover_ack_recovery(void) {
 
 int main_0157_share_group_ack_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
-        /* increase from the default ~30s timeout to avoid the framework killing
-         * us early. */
-        test_timeout_set(300);
+        /* This test suite has many subtests; set a generous timeout.
+         * When running in parallel with other test suites (e.g., 0155, 0156)
+         * the mock broker and consumer threads compete for CPU, which can
+         * slow individual subtests by 5x or more. Use 1500s to be safe. */
+        test_timeout_set(1500);
 
         /* Positive scenarios */
         do_test_implicit_ack_no_redelivery();

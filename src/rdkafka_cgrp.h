@@ -383,12 +383,12 @@ typedef struct rd_kafka_cgrp_s {
                 rd_kafka_timer_t share_fetch_fanout_tmr; /**< Timer for
                                                           *   share fetch
                                                           *   fanout */
-                rd_bool_t fetch_more_records; /**< Global fetch-in-flight
-                                               *   guard. When rd_true, a
-                                               *   fetch is already in
-                                               *   progress and new FANOUT
-                                               *   ops should not send
-                                               *   another fetch request. */
+                rd_bool_t fetch_more_records;  /**< Global fetch-in-flight
+                                                *   guard. When rd_true, a
+                                                *   fetch is already in
+                                                *   progress and new FANOUT
+                                                *   ops should not send
+                                                *   another fetch request. */
                 int share_fetch_ops_in_flight; /**< Number of SHARE_FETCH
                                                 *   ops with should_fetch=true
                                                 *   currently in-flight.

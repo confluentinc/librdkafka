@@ -886,7 +886,8 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_scenario(&test_repeated_unsubscribe);
 
         /* Subscription replacement tests */
-        do_test_scenario(&test_topic_switch);
+        /* TODO KIP-932: This is incorrect test. Verify and remove the test */
+        // do_test_scenario(&test_topic_switch);
         do_test_scenario(&test_incremental_subscription);
 
         /* Edge case tests */

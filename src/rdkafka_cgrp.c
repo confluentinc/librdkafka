@@ -6627,13 +6627,6 @@ void rd_kafka_cgrp_consumer_serve(rd_kafka_cgrp_t *rkcg) {
                                                 "member fenced - rejoining");
         }
 
-        /*  Per KIP-932, share consumers have no fencing semantics and
-         * should never enter WAIT_REJOIN / WAIT_REJOIN_TO_COMPLETE.
-         *
-         * TODO: Test current and new behavior with share consumers
-         */
-
-
         switch (rkcg->rkcg_join_state) {
         case RD_KAFKA_CGRP_JOIN_STATE_INIT:
                 rkcg->rkcg_consumer_flags &=

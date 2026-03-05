@@ -2143,6 +2143,7 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
         rd_kafka_resp_err_t all_err;
         rd_kafkap_str_t TransactionalId;
         rd_kafka_pid_t pid;
+        rd_kafka_mock_txn_t *mtxn = NULL;
         int32_t TopicsCnt;
 
         /* Response: ThrottleTimeMs */
@@ -2171,6 +2172,15 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
         if (!all_err)
                 all_err =
                     rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
+
+        /* Track transaction state (KIP-932). */
+        if (!all_err) {
+                mtx_lock(&mcluster->lock);
+                mtxn        = rd_kafka_mock_txn_get(mcluster, &TransactionalId);
+                mtxn->pid   = pid;
+                mtxn->state = RD_KAFKA_MOCK_TXN_ONGOING;
+                mtx_unlock(&mcluster->lock);
+        }
 
         while (TopicsCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -2203,6 +2213,17 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
                                 err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
                         else if (mtopic && mtopic->err)
                                 err = mtopic->err;
+
+                        /* Track partition in transaction */
+                        if (!err && mtxn) {
+                                char tbuf[256];
+                                rd_snprintf(tbuf, sizeof(tbuf), "%.*s",
+                                            RD_KAFKAP_STR_PR(&Topic));
+                                mtx_lock(&mcluster->lock);
+                                rd_kafka_mock_txn_partition_add(mtxn, tbuf,
+                                                                Partition);
+                                mtx_unlock(&mcluster->lock);
+                        }
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
@@ -2440,6 +2461,67 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
         if (!err)
                 err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
+        /* Commit/abort the transaction (KIP-932). */
+        if (!err) {
+                rd_kafka_mock_txn_t *mtxn;
+                rd_kafka_mock_txn_partition_t *mtxnp;
+
+                mtx_lock(&mcluster->lock);
+                mtxn = rd_kafka_mock_txn_get(mcluster, &TransactionalId);
+
+                if (mtxn->state != RD_KAFKA_MOCK_TXN_ONGOING) {
+                        /* No active transaction — could be an idempotent
+                         * retry after the txn was already completed. */
+                        mtx_unlock(&mcluster->lock);
+                        goto write_response;
+                }
+
+                /* For each partition in the transaction, write a control
+                 * batch and (for abort) record the aborted range. */
+                TAILQ_FOREACH(mtxnp, &mtxn->partitions, link) {
+                        rd_kafka_mock_topic_t *mtopic =
+                            rd_kafka_mock_topic_find(mcluster,
+                                                     mtxnp->topic_name);
+                        rd_kafka_mock_partition_t *mpart;
+                        int64_t last_data_offset;
+
+                        if (!mtopic)
+                                continue;
+                        mpart = rd_kafka_mock_partition_find(mtopic,
+                                                             mtxnp->partition);
+                        if (!mpart)
+                                continue;
+
+                        /* Offset just before the control batch */
+                        last_data_offset = mpart->end_offset - 1;
+
+                        /* Write COMMIT or ABORT control record */
+                        rd_kafka_mock_partition_write_control_batch(mpart, pid,
+                                                                    committed);
+
+                        /* For abort: record the aborted range */
+                        if (!committed && mtxnp->first_offset >= 0) {
+                                rd_kafka_mock_aborted_txn_t *mabort =
+                                    rd_calloc(1, sizeof(*mabort));
+                                mabort->pid_id       = pid.id;
+                                mabort->first_offset = mtxnp->first_offset;
+                                mabort->last_offset  = last_data_offset;
+                                TAILQ_INSERT_TAIL(&mpart->aborted_txns, mabort,
+                                                  link);
+                        }
+
+                        /* Recalculate LSO (this txn is no longer open) */
+                        rd_kafka_mock_partition_update_lso(mpart, mcluster);
+                }
+
+                /* Clear transaction state */
+                rd_kafka_mock_txn_partitions_clear(mtxn);
+                mtxn->state = RD_KAFKA_MOCK_TXN_NONE;
+
+                mtx_unlock(&mcluster->lock);
+        }
+
+write_response:
         /* ErrorCode */
         rd_kafka_buf_write_i16(resp, err);
 
@@ -3354,6 +3436,26 @@ rd_kafka_mock_msgset_est_record_size(const rd_kafka_mock_msgset_t *mset) {
         return size;
 }
 
+/**
+ * @brief Check if an offset belongs to an aborted transaction on this
+ * partition.
+ *
+ * @locks mcluster->lock MUST be held (or single-threaded context).
+ */
+static rd_bool_t
+rd_kafka_mock_offset_is_aborted(const rd_kafka_mock_partition_t *mpart,
+                                int64_t offset,
+                                int64_t pid_id) {
+        rd_kafka_mock_aborted_txn_t *mabort;
+        TAILQ_FOREACH(mabort, &mpart->aborted_txns, link) {
+                if (mabort->pid_id == pid_id &&
+                    offset >= mabort->first_offset &&
+                    offset <= mabort->last_offset)
+                        return rd_true;
+        }
+        return rd_false;
+}
+
 static void rd_kafka_mock_sgrp_acquire_available_offsets(
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     const rd_kafka_mock_partition_t *mpart,
@@ -3363,10 +3465,16 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
     int64_t *remaining_records,
     int64_t *remaining_bytes,
     int *acquired_cnt,
-    int64_t *acquired_bytes) {
+    int64_t *acquired_bytes,
+    int isolation_level) {
         int64_t offset;
+        int64_t upper_bound = pmeta->speo;
 
-        for (offset = pmeta->spso; offset <= pmeta->speo; offset++) {
+        /* For read_committed, cap acquisition at LSO - 1. */
+        if (isolation_level == 1 && mpart->lso - 1 < upper_bound)
+                upper_bound = mpart->lso - 1;
+
+        for (offset = pmeta->spso; offset <= upper_bound; offset++) {
                 const rd_kafka_mock_msgset_t *mset;
                 rd_kafka_mock_sgrp_record_state_t *state;
                 int32_t est_size;
@@ -3396,6 +3504,41 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
                 mset = rd_kafka_mock_msgset_find(mpart, offset, rd_false);
                 if (!mset)
                         continue;
+
+                /* For read_committed: skip aborted transactional data batches
+                 * by archiving them immediately. */
+                if (isolation_level == 1) {
+                        int16_t attrs     = 0;
+                        int64_t batch_pid = 0;
+                        memcpy(&attrs,
+                               (const char *)mset->bytes.data +
+                                   RD_KAFKAP_MSGSET_V2_OF_Attributes,
+                               sizeof(attrs));
+                        attrs = be16toh(attrs);
+                        if (attrs & RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL) {
+                                memcpy(&batch_pid,
+                                       (const char *)mset->bytes.data +
+                                           RD_KAFKAP_MSGSET_V2_OF_ProducerId,
+                                       sizeof(batch_pid));
+                                batch_pid = be64toh(batch_pid);
+                                if (!(attrs &
+                                      RD_KAFKA_MSGSET_V2_ATTR_CONTROL) &&
+                                    rd_kafka_mock_offset_is_aborted(
+                                        mpart, offset, batch_pid)) {
+                                        /* Archive aborted data batch */
+                                        state =
+                                            rd_kafka_mock_sgrp_record_state_get(
+                                                pmeta, offset);
+                                        state->state =
+                                            RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                                        RD_IF_FREE(state->owner_member_id,
+                                                   rd_free);
+                                        state->owner_member_id = NULL;
+                                        state->lock_expiry_ts  = 0;
+                                        continue;
+                                }
+                        }
+                }
 
                 est_size = rd_kafka_mock_msgset_est_record_size(mset);
                 if (remaining_bytes && *remaining_bytes > 0 &&
@@ -3985,7 +4128,8 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     sgrp->max_delivery_attempts,
                                     MaxRecords > 0 ? &remaining_records : NULL,
                                     MaxBytes > 0 ? &remaining_bytes : NULL,
-                                    &acquired_cnt, &acquired_bytes);
+                                    &acquired_cnt, &acquired_bytes,
+                                    sgrp->isolation_level);
                         }
                 }
 

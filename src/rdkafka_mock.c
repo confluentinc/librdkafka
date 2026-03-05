@@ -185,6 +185,251 @@ rd_kafka_mock_msgset_find(const rd_kafka_mock_partition_t *mpart,
         return NULL;
 }
 
+/**
+ * @brief Find or create a transaction state for the given TransactionalId.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+rd_kafka_mock_txn_t *
+rd_kafka_mock_txn_get(rd_kafka_mock_cluster_t *mcluster,
+                      const rd_kafkap_str_t *TransactionalId) {
+        rd_kafka_mock_txn_t *mtxn;
+
+        TAILQ_FOREACH(mtxn, &mcluster->transactions, link) {
+                if (!rd_kafkap_str_cmp_str(TransactionalId,
+                                           mtxn->transactional_id))
+                        return mtxn;
+        }
+
+        /* Create new */
+        mtxn                   = rd_calloc(1, sizeof(*mtxn));
+        mtxn->transactional_id = rd_strndup(TransactionalId->str,
+                                            RD_KAFKAP_STR_LEN(TransactionalId));
+        mtxn->state            = RD_KAFKA_MOCK_TXN_NONE;
+        TAILQ_INIT(&mtxn->partitions);
+        mtxn->partition_cnt = 0;
+        TAILQ_INSERT_TAIL(&mcluster->transactions, mtxn, link);
+
+        return mtxn;
+}
+
+/**
+ * @brief Find a txn partition entry, or NULL.
+ */
+static rd_kafka_mock_txn_partition_t *
+rd_kafka_mock_txn_partition_find(rd_kafka_mock_txn_t *mtxn,
+                                 const char *topic,
+                                 int32_t partition) {
+        rd_kafka_mock_txn_partition_t *mtxnp;
+        TAILQ_FOREACH(mtxnp, &mtxn->partitions, link) {
+                if (mtxnp->partition == partition &&
+                    !strcmp(mtxnp->topic_name, topic))
+                        return mtxnp;
+        }
+        return NULL;
+}
+
+/**
+ * @brief Add a partition to the transaction if not already present.
+ */
+void rd_kafka_mock_txn_partition_add(rd_kafka_mock_txn_t *mtxn,
+                                     const char *topic,
+                                     int32_t partition) {
+        rd_kafka_mock_txn_partition_t *mtxnp;
+
+        mtxnp = rd_kafka_mock_txn_partition_find(mtxn, topic, partition);
+        if (mtxnp)
+                return;
+
+        mtxnp               = rd_calloc(1, sizeof(*mtxnp));
+        mtxnp->topic_name   = rd_strdup(topic);
+        mtxnp->partition    = partition;
+        mtxnp->first_offset = -1;
+        TAILQ_INSERT_TAIL(&mtxn->partitions, mtxnp, link);
+        mtxn->partition_cnt++;
+}
+
+/**
+ * @brief Clear all partitions from a transaction (after commit/abort).
+ */
+void rd_kafka_mock_txn_partitions_clear(rd_kafka_mock_txn_t *mtxn) {
+        rd_kafka_mock_txn_partition_t *mtxnp, *tmp;
+        TAILQ_FOREACH_SAFE(mtxnp, &mtxn->partitions, link, tmp) {
+                TAILQ_REMOVE(&mtxn->partitions, mtxnp, link);
+                rd_free(mtxnp->topic_name);
+                rd_free(mtxnp);
+        }
+        mtxn->partition_cnt = 0;
+}
+
+/**
+ * @brief Destroy a transaction state object and all its partitions.
+ *        Removes the txn from the cluster's transactions list.
+ */
+static void rd_kafka_mock_txn_destroy(rd_kafka_mock_cluster_t *mcluster,
+                                      rd_kafka_mock_txn_t *mtxn) {
+        TAILQ_REMOVE(&mcluster->transactions, mtxn, link);
+        rd_kafka_mock_txn_partitions_clear(mtxn);
+        rd_free(mtxn->transactional_id);
+        rd_free(mtxn);
+}
+
+/**
+ * @brief Recalculate LSO for a partition.
+ *
+ * LSO = min(first_offset of all open transactions on this partition).
+ * If no open transactions, LSO = end_offset.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_partition_update_lso(rd_kafka_mock_partition_t *mpart,
+                                        rd_kafka_mock_cluster_t *mcluster) {
+        rd_kafka_mock_txn_t *mtxn;
+        int64_t min_offset = mpart->end_offset;
+
+        TAILQ_FOREACH(mtxn, &mcluster->transactions, link) {
+                rd_kafka_mock_txn_partition_t *mtxnp;
+                if (mtxn->state != RD_KAFKA_MOCK_TXN_ONGOING)
+                        continue;
+                TAILQ_FOREACH(mtxnp, &mtxn->partitions, link) {
+                        if (mtxnp->first_offset >= 0 &&
+                            mtxnp->partition == mpart->id &&
+                            !strcmp(mtxnp->topic_name, mpart->topic->name) &&
+                            mtxnp->first_offset < min_offset)
+                                min_offset = mtxnp->first_offset;
+                }
+        }
+
+        mpart->lso = min_offset;
+}
+
+/**
+ * @brief Write a control record batch (COMMIT or ABORT) to a partition.
+ *
+ * Constructs a minimal valid MsgSet V2 with:
+ *   - Attributes bits 4 (transactional) + 5 (control) set
+ *   - ProducerId and ProducerEpoch from the transaction PID
+ *   - 1 record with key = 4 bytes: schema(2) + ControlType(2)
+ *     ControlType: 0=ABORT, 1=COMMIT
+ *
+ * The control batch occupies 1 offset in the partition log.
+ */
+void rd_kafka_mock_partition_write_control_batch(
+    rd_kafka_mock_partition_t *mpart,
+    rd_kafka_pid_t pid,
+    rd_bool_t committed) {
+        /*
+         * MsgSet V2 wire format (minimal, 1 record, no compression):
+         *
+         *  0: BaseOffset              (i64) - overwritten by msgset_new
+         *  8: Length                   (i32)
+         * 12: PartitionLeaderEpoch    (i32) - overwritten by msgset_new
+         * 16: MagicByte               (i8)  = 2
+         * 17: CRC                     (i32) = 0 (mock doesn't validate CRC)
+         * 21: Attributes              (i16) = 0x0030
+         * 23: LastOffsetDelta         (i32) = 0
+         * 27: BaseTimestamp           (i64) = 0
+         * 35: MaxTimestamp            (i64) = 0
+         * 43: ProducerId              (i64)
+         * 51: ProducerEpoch           (i16)
+         * 53: BaseSequence            (i32) = 0
+         * 57: RecordCount             (i32) = 1
+         *
+         * Record (varint-encoded):
+         * 61: Length          (varint) = 10 -> zigzag = 20
+         * 62: Attributes     (i8) = 0
+         * 63: TimestampDelta (varint) = 0
+         * 64: OffsetDelta    (varint) = 0
+         * 65: KeyLength      (varint) = 4 -> zigzag = 8
+         * 66: Key            = [schema(2), ControlType(2)]
+         * 70: ValueLength    (varint) = 6 -> zigzag = 12
+         * 71: Value          = 6 zero bytes (schema=0, coord_epoch=0)
+         * 77: HeadersCount   (varint) = 0
+         * Total: 78 bytes
+         */
+        uint8_t buf[78];
+        int64_t i64val;
+        int32_t i32val;
+        int16_t i16val;
+        rd_kafkap_bytes_t bytes;
+
+        memset(buf, 0, sizeof(buf));
+
+        /* BaseOffset (placeholder) */
+        i64val = htobe64(0);
+        memcpy(buf + 0, &i64val, 8);
+
+        /* Length = 78 - 8(BaseOffset) - 4(Length) = 66 */
+        i32val = htobe32(66);
+        memcpy(buf + 8, &i32val, 4);
+
+        /* PartitionLeaderEpoch (placeholder) */
+        i32val = htobe32(0);
+        memcpy(buf + 12, &i32val, 4);
+
+        /* MagicByte = 2 */
+        buf[16] = 2;
+
+        /* CRC = 0 (mock doesn't validate) */
+
+        /* Attributes = transactional(0x10) | control(0x20) = 0x0030 */
+        i16val = htobe16(0x0030);
+        memcpy(buf + 21, &i16val, 2);
+
+        /* LastOffsetDelta = 0 */
+        i32val = htobe32(0);
+        memcpy(buf + 23, &i32val, 4);
+
+        /* BaseTimestamp = 0, MaxTimestamp = 0 (already zeroed) */
+
+        /* ProducerId */
+        i64val = htobe64(pid.id);
+        memcpy(buf + 43, &i64val, 8);
+
+        /* ProducerEpoch */
+        i16val = htobe16(pid.epoch);
+        memcpy(buf + 51, &i16val, 2);
+
+        /* BaseSequence = 0 (already zeroed) */
+
+        /* RecordCount = 1 */
+        i32val = htobe32(1);
+        memcpy(buf + 57, &i32val, 4);
+
+        /* Record: Length=10 (varint zigzag(10)=20) */
+        buf[61] = 20;
+        /* Record: Attributes=0, TimestampDelta=0, OffsetDelta=0 */
+        /* (already zeroed at 62, 63, 64) */
+
+        /* Record: KeyLength=4 (varint zigzag(4)=8) */
+        buf[65] = 8;
+
+        /* Record: Key = [schema(0x0000), ControlType] */
+        buf[66] = 0;
+        buf[67] = 0;
+        buf[68] = 0;
+        buf[69] = committed ? 1 : 0;
+
+        /* Record: ValueLength=6 (varint zigzag(6)=12) */
+        buf[70] = 12;
+
+        /* Record: Value = 6 zero bytes (already zeroed at 71-76) */
+
+        /* Record: HeadersCount=0 (already zeroed at 77) */
+
+        bytes.len  = sizeof(buf);
+        bytes.data = buf;
+
+        /* msgset_new copies the bytes, assigns offsets, and appends. */
+        rd_kafka_mock_msgset_new(mpart, &bytes, 1);
+
+        rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCK",
+                     "Wrote %s control batch to %s [%" PRId32
+                     "] at offset %" PRId64,
+                     committed ? "COMMIT" : "ABORT", mpart->topic->name,
+                     mpart->id, mpart->end_offset - 1);
+}
+
 
 /**
  * @brief Looks up or creates a new pidstate for the given partition and PID.
@@ -362,6 +607,27 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
         mset = rd_kafka_mock_msgset_new(mpart, records, (size_t)RecordCount);
 
         *BaseOffset = mset->first_offset;
+
+        /* Track first offset for open transaction. */
+        if (TransactionalId && RD_KAFKAP_STR_LEN(TransactionalId) > 0 &&
+            (Attributes & RD_KAFKA_MSGSET_V2_ATTR_TRANSACTIONAL) &&
+            !(Attributes & RD_KAFKA_MSGSET_V2_ATTR_CONTROL)) {
+                rd_kafka_mock_txn_t *mtxn;
+                rd_kafka_mock_txn_partition_t *mtxnp;
+
+                mtx_lock(&mpart->topic->cluster->lock);
+                mtxn = rd_kafka_mock_txn_get(mpart->topic->cluster,
+                                             TransactionalId);
+                if (mtxn->state == RD_KAFKA_MOCK_TXN_ONGOING) {
+                        mtxnp = rd_kafka_mock_txn_partition_find(
+                            mtxn, mpart->topic->name, mpart->id);
+                        if (mtxnp && mtxnp->first_offset == -1)
+                                mtxnp->first_offset = mset->first_offset;
+                }
+                rd_kafka_mock_partition_update_lso(mpart,
+                                                   mpart->topic->cluster);
+                mtx_unlock(&mpart->topic->cluster->lock);
+        }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -589,6 +855,7 @@ static void rd_kafka_mock_partition_destroy(rd_kafka_mock_partition_t *mpart) {
         rd_kafka_mock_msgset_t *mset, *tmp;
         rd_kafka_mock_committed_offset_t *coff, *tmpcoff;
         rd_kafka_mock_partition_leader_t *mpart_leader, *tmp_mpart_leader;
+        rd_kafka_mock_aborted_txn_t *mabort, *tmp_mabort;
 
         TAILQ_FOREACH_SAFE(mset, &mpart->msgsets, link, tmp)
         rd_kafka_mock_msgset_destroy(mpart, mset);
@@ -601,6 +868,11 @@ static void rd_kafka_mock_partition_destroy(rd_kafka_mock_partition_t *mpart) {
         rd_kafka_mock_partition_leader_destroy(mpart, mpart_leader);
 
         rd_list_destroy(&mpart->pidstates);
+
+        TAILQ_FOREACH_SAFE(mabort, &mpart->aborted_txns, link, tmp_mabort) {
+                TAILQ_REMOVE(&mpart->aborted_txns, mabort, link);
+                rd_free(mabort);
+        }
 
         rd_free(mpart->replicas);
 }
@@ -629,6 +901,9 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
         TAILQ_INIT(&mpart->leader_responses);
 
         rd_list_init(&mpart->pidstates, 0, rd_free);
+
+        TAILQ_INIT(&mpart->aborted_txns);
+        mpart->lso = 0;
 
         rd_kafka_mock_partition_assign_replicas(mpart, replication_factor);
 }
@@ -2710,6 +2985,7 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
         rd_kafka_mock_cgrp_consumer_t *mcgrp_consumer;
         rd_kafka_mock_sharegroup_t *mshgrp;
         rd_kafka_mock_coord_t *mcoord;
+        rd_kafka_mock_txn_t *mtxn;
         rd_kafka_mock_error_stack_t *errstack;
         thrd_t dummy_rkb_thread;
         int ret;
@@ -2734,6 +3010,9 @@ static void rd_kafka_mock_cluster_destroy0(rd_kafka_mock_cluster_t *mcluster) {
                 rd_kafka_mock_coord_destroy(mcluster, mcoord);
 
         rd_list_destroy(&mcluster->pids);
+
+        while ((mtxn = TAILQ_FIRST(&mcluster->transactions)))
+                rd_kafka_mock_txn_destroy(mcluster, mtxn);
 
         while ((errstack = TAILQ_FIRST(&mcluster->errstacks))) {
                 TAILQ_REMOVE(&mcluster->errstacks, errstack, link);
@@ -2852,6 +3131,8 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
         TAILQ_INIT(&mcluster->coords);
 
         rd_list_init(&mcluster->pids, 16, rd_free);
+
+        TAILQ_INIT(&mcluster->transactions);
 
         TAILQ_INIT(&mcluster->errstacks);
 

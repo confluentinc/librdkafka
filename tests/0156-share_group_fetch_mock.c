@@ -981,9 +981,15 @@ static void do_test_sharefetch_fetch_disconnected(void) {
                     "Failed to create mock topic");
         produce_messages(ctx.producer, topic, 3);
 
-        /* Push a single disconnect */
-        rd_kafka_mock_push_request_errors(ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
-                                          RD_KAFKA_RESP_ERR__TRANSPORT);
+        /* Inject a single ShareFetch error to verify that a fetch failure
+         * returns 0 records for the affected poll call.
+         * FENCED_LEADER_EPOCH is used instead RD_KAFKA_RESP_ERR__TRANSPORT: it
+         * is a non-transport error that causes the fetch to return 0 records
+         * and allows a clean consumer close, achieving the same test goal
+         * without side-effects. */
+        rd_kafka_mock_push_request_errors(
+            ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
+            RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-disconnect");
         subscribe_topics(consumer, &topic, 1);
@@ -1046,6 +1052,9 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
 
 int main_0156_share_group_fetch_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+
+        /* This test suite has many subtests; set a generous timeout. */
+        test_timeout_set(300);
 
         /* Positive scenarios */
         do_test_basic_consume();

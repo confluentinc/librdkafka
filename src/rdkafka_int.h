@@ -808,6 +808,11 @@ struct rd_kafka_share_s {
 
         /** Total number of unacknowledged messages across all partitions. */
         int64_t rkshare_unacked_cnt;
+
+        /** Set when a FANOUT with fetch_more_records=true is sent.
+         *  Reset when records are received in the consumer queue.
+         *  Prevents duplicate fetch FANOUTs while one is in flight. */
+        rd_bool_t rkshare_fetch_more_records_requested;
 };
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)

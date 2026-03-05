@@ -753,12 +753,28 @@ struct rd_kafka_op_s {
 
                         /** Target broker to which op is sent. */
                         rd_kafka_broker_t *target_broker;
+
+                        /** Whether records were fetched in this
+                         *  share-fetch response. Set by broker
+                         *  thread, read by main thread in reply
+                         *  handler. */
+                        rd_bool_t records_fetched;
+
+                        /** Ack batches to send with this request.
+                         *  Type: rd_kafka_share_ack_batches_t*.
+                         *  Moved from rkb_share_async_ack_details
+                         *  when creating the op. Freed by broker
+                         *  thread after use. */
+                        rd_list_t *ack_details;
                 } share_fetch;
 
                 struct {
-                        /** Absolute timeout for share fetch fanout operation.
-                         */
-                        rd_ts_t abs_timeout;
+                        /** Whether this FANOUT should fetch more records.
+                         *  When rd_true, the selected broker's SHARE_FETCH
+                         *  op will have should_fetch=true.
+                         *  When rd_false, this is an ack-only FANOUT and
+                         *  no broker will fetch new records. */
+                        rd_bool_t fetch_more_records;
 
                         /** List of all acknowledgement batches to send.
                          *  Type: rd_kafka_share_ack_batches_t*
@@ -766,6 +782,8 @@ struct rd_kafka_op_s {
                          *  by leader when creating SHARE_FETCH ops.
                          *  Each entry uses size=1 with types[0] holding the
                          *  single ack type for the collated range.
+                         *  Set to NULL after ownership is transferred
+                         *  to per-broker ack_details.
                          */
                         rd_list_t *ack_batches;
                 } share_fetch_fanout;

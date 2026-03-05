@@ -143,4 +143,19 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
  */
 rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
 
+/**
+ * @brief Implicit ack: convert all ACQUIRED types to ACCEPT in inflight map.
+ */
+void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
+ *
+ * Non-ACQUIRED offsets are collated into ack_details for sending.
+ * ACQUIRED offsets remain in the map. Empty entries are removed.
+ *
+ * @returns Allocated list or NULL if nothing to send. Caller must destroy.
+ */
+rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
+
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

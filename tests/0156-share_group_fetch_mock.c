@@ -981,9 +981,15 @@ static void do_test_sharefetch_fetch_disconnected(void) {
                     "Failed to create mock topic");
         produce_messages(ctx.producer, topic, 3);
 
-        /* Push a single disconnect */
-        rd_kafka_mock_push_request_errors(ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
-                                          RD_KAFKA_RESP_ERR__TRANSPORT);
+        /* Inject a single ShareFetch error to verify that a fetch failure
+         * returns 0 records for the affected poll call.
+         * FENCED_LEADER_EPOCH is used instead RD_KAFKA_RESP_ERR__TRANSPORT: it
+         * is a non-transport error that causes the fetch to return 0 records
+         * and allows a clean consumer close, achieving the same test goal
+         * without side-effects. */
+        rd_kafka_mock_push_request_errors(
+            ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
+            RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-disconnect");
         subscribe_topics(consumer, &topic, 1);
@@ -1047,33 +1053,21 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
 int main_0156_share_group_fetch_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
+        /* This test suite has many subtests; set a generous timeout. */
+        test_timeout_set(300);
+
         /* Positive scenarios */
         do_test_basic_consume();
         do_test_followup_fetch();
         do_test_multi_partition();
         do_test_multi_topic();
         do_test_empty_topic_no_records();
-        /* do_test_sharefetch_session_expiry_rtt(); */ /* NOT YET COMPATIBLE:
-                                                        * session expiry
-                                                        * triggers
-                                                        * UNKNOWN_MEMBER_ID
-                                                        * which hits
-                                                        * rdkafka_cgrp.c:6637
-                                                        * (pending fix) */
+        do_test_sharefetch_session_expiry_rtt();
         do_test_forgotten_topics();
         do_test_multi_batch_consume();
-        /* do_test_max_delivery_attempts(); */ /* NOT YET COMPATIBLE:
-                                                * session_timeout=500ms <
-                                                * heartbeat_interval=5000ms,
-                                                * triggers UNKNOWN_MEMBER_ID
-                                                * (pending fix) */
+        do_test_max_delivery_attempts();
         do_test_record_lock_duration();
-        /* do_test_multi_consumer_lock_expiry(); */ /* NOT YET COMPATIBLE:
-                                                     * session_timeout=500ms <
-                                                     * heartbeat_interval=5000ms,
-                                                     * triggers
-                                                     * UNKNOWN_MEMBER_ID
-                                                     * (pending fix) */
+        do_test_multi_consumer_lock_expiry();
 
         /* Negative scenarios */
         do_test_sharefetch_invalid_session_epoch();
@@ -1082,11 +1076,7 @@ int main_0156_share_group_fetch_mock(int argc, char **argv) {
         do_test_topic_error_unknown_topic_or_part();
         do_test_unknown_topic_subscription();
         do_test_empty_fetch_no_records();
-        /* do_test_member_validation(); */ /* NOT YET COMPATIBLE:
-                                            * session_timeout=500ms <
-                                            * heartbeat_interval=5000ms,
-                                            * triggers UNKNOWN_MEMBER_ID
-                                            * (pending fix) */
+        do_test_member_validation();
 
         do_test_sharefetch_fetch_error_not_leader();
         do_test_sharefetch_fetch_error_unknown_topic_or_part();

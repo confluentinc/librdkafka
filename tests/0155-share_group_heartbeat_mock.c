@@ -2519,7 +2519,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_target_assignment();
         do_test_share_group_no_spurious_fencing();
 
-        /* do_test_unknown_member_id_error(); */
+        do_test_unknown_member_id_error();
 
         do_test_fenced_member_epoch_error();
         do_test_coordinator_not_available_error();
@@ -2530,7 +2530,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_unsupported_version_error();
         do_test_coordinator_load_in_progress_error();
 
-        /* do_test_member_rejoin_with_epoch_zero(); */
+        do_test_member_rejoin_with_epoch_zero();
         do_test_leaving_member_bumps_group_epoch();
 
         do_test_partition_assignment_with_multiple_topics();

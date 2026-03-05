@@ -1353,39 +1353,15 @@ int main_0157_share_group_ack_mock(int argc, char **argv) {
 
         /* Negative scenarios */
         do_test_crash_before_ack_redelivery();
-        /* do_test_crash_then_ack_stops_redelivery(); */ /* NOT YET COMPATIBLE:
-                                                          * session_timeout=500ms
-                                                          * triggers
-                                                          * UNKNOWN_MEMBER_ID
-                                                          * (pending fix) */
-        /* do_test_session_expiry_invalidates_ack(); */  /* NOT YET COMPATIBLE:
-                                                          * session_timeout=500ms
-                                                          * triggers
-                                                          * UNKNOWN_MEMBER_ID
-                                                          * (pending fix) */
-        /* do_test_max_delivery_without_ack(); */        /* NOT YET COMPATIBLE:
-                                                          * session_timeout=500ms
-                                                          * triggers UNKNOWN_MEMBER_ID
-                                                          * (pending fix) */
-        /* do_test_sharefetch_error_drops_ack(); */      /* NOT YET COMPATIBLE:
-                                                          * session_timeout=500ms
-                                                          * triggers
-                                                          * UNKNOWN_MEMBER_ID
-                                                          * (pending fix) */
+        do_test_crash_then_ack_stops_redelivery();
+        do_test_session_expiry_invalidates_ack();
+        do_test_max_delivery_without_ack();
+        do_test_sharefetch_error_drops_ack();
         do_test_forgotten_topic_releases_not_acks();
-        /* do_test_multi_consumer_cascade_crash(); */ /* NOT YET COMPATIBLE:
-                                                       * session_timeout=500ms
-                                                       * triggers
-                                                       * UNKNOWN_MEMBER_ID
-                                                       * (pending fix) */
+        do_test_multi_consumer_cascade_crash();
         do_test_lock_expiry_before_ack();
         do_test_empty_topic_no_ack_side_effects();
-        /* do_test_coordinator_failover_ack_recovery(); */ /* NOT YET
-                                                            * COMPATIBLE:
-                                                            * session_timeout=
-                                                            * 500ms triggers
-                                                            * UNKNOWN_MEMBER_ID
-                                                            * (pending fix) */
+        do_test_coordinator_failover_ack_recovery();
 
         return 0;
 }

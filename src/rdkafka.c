@@ -1210,14 +1210,20 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
         rd_kafka_destroy_app(rk, 0);
 }
 
-/**
- * TODO KIP-932: Destroy inflight map entries should be done in consumer close.
- */
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
+
+        /* Destroy inflight acks map before rd_kafka_destroy() to release
+         * toppar references held by topic_partition objects in the map.
+         * Otherwise rd_kafka_destroy() deadlocks: it joins broker threads,
+         * which wait for refcnt <= 1, but the toppar holds a broker ref
+         * via rktp_leader that is only released when the toppar is destroyed,
+         * which requires refcnt 0, which requires releasing the rktp ref
+         * held by the inflight_acks map entry. */
+        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
         rd_kafka_destroy(rkshare->rkshare_rk);
         rd_free(rkshare);
 }
@@ -2320,14 +2326,12 @@ static int rd_kafka_thread_main(void *arg) {
                  * be used instead. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk) && rk->rk_cgrp &&
                     rk->rk_cgrp->rkcg_share.fetch_more_records &&
-                    rk->rk_cgrp->rkcg_share.share_fetch_ops_in_flight ==
-                        0 &&
+                    rk->rk_cgrp->rkcg_share.share_fetch_ops_in_flight == 0 &&
                     rk->rk_cgrp->rkcg_current_assignment &&
                     rk->rk_cgrp->rkcg_current_assignment->cnt > 0) {
                         rd_kafka_broker_t *rkb_sel;
 
-                        rkb_sel = rd_kafka_share_select_broker(
-                            rk, rk->rk_cgrp);
+                        rkb_sel = rd_kafka_share_select_broker(rk, rk->rk_cgrp);
                         if (rkb_sel) {
                                 rd_kafka_dbg(rk, CONSUMER, "FETCHMORE",
                                              "Re-triggering fetch for "
@@ -3058,12 +3062,12 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                                 rd_kafka_broker_keep(rktp->rktp_leader);
                                 selected_rkb = rktp->rktp_leader;
                                 rd_kafka_dbg(
-                                        rk, CGRP, "SHARE",
-                                        "Selected broker %s (%p) for share fetch "
-                                        "for partition %s [%" PRId32 "]",
-                                        rd_kafka_broker_name(selected_rkb),
-                                        selected_rkb,
-                                        partition->topic, partition->partition);
+                                    rk, CGRP, "SHARE",
+                                    "Selected broker %s (%p) for share fetch "
+                                    "for partition %s [%" PRId32 "]",
+                                    rd_kafka_broker_name(selected_rkb),
+                                    selected_rkb, partition->topic,
+                                    partition->partition);
                         }
                         rd_kafka_broker_unlock(rktp->rktp_leader);
                 }
@@ -3086,10 +3090,9 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
  *        if the op requests more records.
  */
 static void rd_kafka_share_fetch_fanout_enqueue(rd_kafka_t *rk,
-                                                 rd_kafka_op_t *rko) {
+                                                rd_kafka_op_t *rko) {
         if (rko->rko_u.share_fetch_fanout.fetch_more_records)
-                rk->rk_rkshare->rkshare_fetch_more_records_requested =
-                    rd_true;
+                rk->rk_rkshare->rkshare_fetch_more_records_requested = rd_true;
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
@@ -3108,10 +3111,11 @@ static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
  * Else, it will be immediate.
  * @locality any thread
  */
-static void rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
-                                                     rd_bool_t fetch_more_records,
-                                                     int backoff_ms,
-                                                     rd_list_t *ack_batches) {
+static void
+rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
+                                         rd_bool_t fetch_more_records,
+                                         int backoff_ms,
+                                         rd_list_t *ack_batches) {
         rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
         rd_kafka_op_t *rko    = rd_kafka_op_new_cb(
             rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
@@ -3138,10 +3142,9 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                                                 rd_kafka_op_t *rko_orig) {
         rd_kafka_broker_t *reply_rkb =
             rko_orig->rko_u.share_fetch.target_broker;
-        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
-        rd_bool_t should_fetch = rko_orig->rko_u.share_fetch.should_fetch;
-        rd_bool_t records_fetched =
-            rko_orig->rko_u.share_fetch.records_fetched;
+        rd_kafka_cgrp_t *rkcg     = rd_kafka_cgrp_get(rk);
+        rd_bool_t should_fetch    = rko_orig->rko_u.share_fetch.should_fetch;
+        rd_bool_t records_fetched = rko_orig->rko_u.share_fetch.records_fetched;
 
         rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
@@ -3180,12 +3183,11 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
 
                 selected_rkb = rd_kafka_share_select_broker(rk, rkcg);
                 if (selected_rkb) {
-                        rd_kafka_dbg(
-                            rk, CGRP, "SHARE",
-                            "Re-selecting broker %s for share fetch "
-                            "(previous broker %s returned no records)",
-                            rd_kafka_broker_name(selected_rkb),
-                            rd_kafka_broker_name(reply_rkb));
+                        rd_kafka_dbg(rk, CGRP, "SHARE",
+                                     "Re-selecting broker %s for share fetch "
+                                     "(previous broker %s returned no records)",
+                                     rd_kafka_broker_name(selected_rkb),
+                                     rd_kafka_broker_name(reply_rkb));
 
                         rd_kafka_share_enqueue_fetch_op(rk, selected_rkb,
                                                         rd_true);
@@ -3243,8 +3245,7 @@ rd_kafka_share_fetch_fanout_reply_op(rd_kafka_t *rk, rd_kafka_op_t *rko_orig) {
         /* Some errors may be retried - with a constant backoff. */
         default:
                 rd_kafka_share_fetch_fanout_with_backoff(
-                    rk,
-                    rko_orig->rko_u.share_fetch_fanout.fetch_more_records,
+                    rk, rko_orig->rko_u.share_fetch_fanout.fetch_more_records,
                     /* TODO: KIP-932: Consider setting this to retry_backoff_ms
                        or to a constant.*/
                     rk->rk_conf.retry_backoff_max_ms,
@@ -3271,7 +3272,7 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
 
         RD_LIST_FOREACH(existing, ack_list, i) {
                 if (rd_kafka_topic_partition_by_id_cmp(existing->rktpar,
-                                                      rktpar) == 0)
+                                                       rktpar) == 0)
                         return existing;
         }
         return NULL;
@@ -3293,9 +3294,8 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
  *
  * @locality main thread
  */
-static void
-rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
-                                        rd_list_t *ack_batches) {
+static void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
+                                                    rd_list_t *ack_batches) {
         rd_kafka_share_ack_batches_t *batch;
         int batch_cnt = rd_list_cnt(ack_batches);
 
@@ -3318,8 +3318,8 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                 /* Allocate list on first use with incoming batch count
                  * as initial capacity hint */
                 if (!leader_rkb->rkb_share_async_ack_details)
-                        leader_rkb->rkb_share_async_ack_details =
-                            rd_list_new(batch_cnt, NULL);
+                        leader_rkb->rkb_share_async_ack_details = rd_list_new(
+                            batch_cnt, rd_kafka_share_ack_batches_destroy_free);
 
                 /* Check if there's already a batch for this topic-partition.
                  * If so, merge entries; otherwise add as new. */
@@ -3327,20 +3327,17 @@ rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                     leader_rkb->rkb_share_async_ack_details, batch->rktpar);
 
                 if (existing) {
-                        /* Merge: move entries from new batch into existing */
+                        /* Merge: deep-copy entries from new batch into
+                         * existing, preserving order. The source batch
+                         * is then fully destroyed (freeing its entries). */
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int j;
                         RD_LIST_FOREACH(entry, &batch->entries, j) {
-                                rd_list_add(&existing->entries, entry);
+                                rd_list_add(
+                                    &existing->entries,
+                                    rd_kafka_share_ack_batch_entry_copy(entry));
                         }
-                        /* Entries have been moved to existing by pointer.
-                         * Destroy batch shell, list container, and rktpar
-                         * (each batch owns its own copy). */
-                        rd_list_destroy(&batch->entries);
-                        if (batch->rktpar)
-                                rd_kafka_topic_partition_destroy(
-                                    batch->rktpar);
-                        rd_free(batch);
+                        rd_kafka_share_ack_batches_destroy(batch);
                 } else {
                         rd_list_add(leader_rkb->rkb_share_async_ack_details,
                                     batch);
@@ -3385,66 +3382,65 @@ static void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
         rkb->rkb_share_fetch_enqueued = rd_true;
 
         if (should_fetch)
-                rd_kafka_cgrp_get(rk)->rkcg_share
-                    .share_fetch_ops_in_flight++;
+                rd_kafka_cgrp_get(rk)->rkcg_share.share_fetch_ops_in_flight++;
 
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                      "Enqueuing share fetch op on broker %s "
                      "(%s fetch, %s acks)",
-                     rd_kafka_broker_name(rkb),
-                     should_fetch ? "with" : "no",
+                     rd_kafka_broker_name(rkb), should_fetch ? "with" : "no",
                      rko_sf->rko_u.share_fetch.ack_details ? "with" : "no");
 
-        /* TODO KIP-932: Remove this debug printing */
-        {
-                static const char *ack_type_names[] = {
-                    [0] = "GAP",
-                    [1] = "ACCEPT",
-                    [2] = "RELEASE",
-                    [3] = "REJECT",
-                };
-                rd_list_t *ack_details =
-                    rko_sf->rko_u.share_fetch.ack_details;
+        // /* TODO KIP-932: Remove this debug printing */
+        // {
+        //         static const char *ack_type_names[] = {
+        //             [0] = "GAP",
+        //             [1] = "ACCEPT",
+        //             [2] = "RELEASE",
+        //             [3] = "REJECT",
+        //         };
+        //         rd_list_t *ack_details =
+        //             rko_sf->rko_u.share_fetch.ack_details;
 
-                printf("[SHARE_FETCH] broker=%s should_fetch=%d",
-                       rd_kafka_broker_name(rkb), should_fetch);
+        //         printf("[SHARE_FETCH] broker=%s should_fetch=%d",
+        //                rd_kafka_broker_name(rkb), should_fetch);
 
-                if (ack_details && rd_list_cnt(ack_details) > 0) {
-                        rd_kafka_share_ack_batches_t *batches;
-                        int k;
-                        printf(" ack_details=[");
-                        RD_LIST_FOREACH(batches, ack_details, k) {
-                                rd_kafka_share_ack_batch_entry_t *entry;
-                                int m;
-                                if (k > 0)
-                                        printf(", ");
-                                printf("%s[%" PRId32 "]:{",
-                                       batches->rktpar->topic,
-                                       batches->rktpar->partition);
-                                RD_LIST_FOREACH(entry, &batches->entries, m) {
-                                        int type_val =
-                                            (int)entry->types[0];
-                                        const char *type_str =
-                                            (type_val >= 0 && type_val <= 3)
-                                                ? ack_type_names[type_val]
-                                                : "UNKNOWN";
-                                        if (m > 0)
-                                                printf(", ");
-                                        printf("%" PRId64 "-%" PRId64
-                                               "(%s)",
-                                               entry->start_offset,
-                                               entry->end_offset,
-                                               type_str);
-                                }
-                                printf("}");
-                        }
-                        printf("]");
-                } else {
-                        printf(" ack_details=none");
-                }
-                printf("\n");
-                fflush(stdout);
-        }
+        //         if (ack_details && rd_list_cnt(ack_details) > 0) {
+        //                 rd_kafka_share_ack_batches_t *batches;
+        //                 int k;
+        //                 printf(" ack_details=[");
+        //                 RD_LIST_FOREACH(batches, ack_details, k) {
+        //                         rd_kafka_share_ack_batch_entry_t *entry;
+        //                         int m;
+        //                         if (k > 0)
+        //                                 printf(", ");
+        //                         printf("%s[%" PRId32 "]:{",
+        //                                batches->rktpar->topic,
+        //                                batches->rktpar->partition);
+        //                         RD_LIST_FOREACH(entry, &batches->entries, m)
+        //                         {
+        //                                 int type_val =
+        //                                     (int)entry->types[0];
+        //                                 const char *type_str =
+        //                                     (type_val >= 0 && type_val <= 3)
+        //                                         ? ack_type_names[type_val]
+        //                                         : "UNKNOWN";
+        //                                 if (m > 0)
+        //                                         printf(", ");
+        //                                 printf("%" PRId64 "-%" PRId64
+        //                                        "(%s)",
+        //                                        entry->start_offset,
+        //                                        entry->end_offset,
+        //                                        type_str);
+        //                         }
+        //                         printf("}");
+        //                 }
+        //                 printf("]");
+        //         } else {
+        //                 printf(" ack_details=none");
+        //         }
+        //         printf("\n");
+        //         fflush(stdout);
+        // }
 
         rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
 }
@@ -3493,15 +3489,13 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
 
                 if (!rkcg->rkcg_share.fetch_more_records) {
                         rkcg->rkcg_share.fetch_more_records = rd_true;
-                        need_select = rd_true;
-                } else if (rkcg->rkcg_share.share_fetch_ops_in_flight ==
-                           0) {
+                        need_select                         = rd_true;
+                } else if (rkcg->rkcg_share.share_fetch_ops_in_flight == 0) {
                         need_select = rd_true;
                 }
 
                 if (need_select) {
-                        selected_rkb =
-                            rd_kafka_share_select_broker(rk, rkcg);
+                        selected_rkb = rd_kafka_share_select_broker(rk, rkcg);
 
                         if (selected_rkb)
                                 rd_kafka_dbg(
@@ -3517,8 +3511,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
         }
 
         if (!fetch_more_records && !has_fanout_acks) {
-                rd_kafka_dbg(rk, CGRP, "SHARE",
-                             "No fetch or acks to fan out");
+                rd_kafka_dbg(rk, CGRP, "SHARE", "No fetch or acks to fan out");
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
@@ -3529,8 +3522,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
          */
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                rd_bool_t has_acks =
-                    (rkb->rkb_share_async_ack_details != NULL);
+                rd_bool_t has_acks = (rkb->rkb_share_async_ack_details != NULL);
                 rd_bool_t is_fetch_broker = (rkb == selected_rkb);
 
                 if (rd_kafka_broker_or_instance_terminating(rkb) ||
@@ -3545,14 +3537,13 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                  * acks stay cached in rkb_share_async_ack_details
                  * and will be sent with the next request. */
                 if (rkb->rkb_share_fetch_enqueued) {
-                        rd_kafka_dbg(
-                            rk, CGRP, "SHARE",
-                            "Broker %s has in-flight request, "
-                            "with acks: %s, "
-                             "is fetch broker: %s",
-                            rd_kafka_broker_name(rkb),
-                            has_acks ? "yes" : "no",
-                            is_fetch_broker ? "yes" : "no");
+                        rd_kafka_dbg(rk, CGRP, "SHARE",
+                                     "Broker %s has in-flight request, "
+                                     "with acks: %s, "
+                                     "is fetch broker: %s",
+                                     rd_kafka_broker_name(rkb),
+                                     has_acks ? "yes" : "no",
+                                     is_fetch_broker ? "yes" : "no");
                         continue;
                 }
 
@@ -3591,13 +3582,14 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                           "Consumer group not initialized");
 
         /* Drain rk_rep for all pending callbacks (non-blocking) */
-        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0,
-                         RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
+                         rd_kafka_poll_cb, NULL);
 
         /* Implicit ack: acknowledge all ACQUIRED records from previous
          * poll as ACCEPT, then extract ack_details for sending. */
         rd_kafka_share_ack_all(rk->rk_rkshare);
-        rd_list_t *ack_batches = rd_kafka_share_build_ack_details(rk->rk_rkshare);
+        rd_list_t *ack_batches =
+            rd_kafka_share_build_ack_details(rk->rk_rkshare);
 
         has_records      = rd_kafka_q_len(rkcg->rkcg_q) > 0;
         has_pending_acks = ack_batches != NULL;
@@ -3611,13 +3603,13 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                 rd_kafka_share_fetch_fanout_with_backoff(
                     rk, need_fetch_more_records, 0, ack_batches);
 
-        error = rd_kafka_q_serve_share_rkmessages(
-            rkcg->rkcg_q, timeout_ms, rkmessages, max_poll_records,
-            rkmessages_size);
+        error = rd_kafka_q_serve_share_rkmessages(rkcg->rkcg_q, timeout_ms,
+                                                  rkmessages, max_poll_records,
+                                                  rkmessages_size);
 
         /* Drain rk_rep for callbacks again before returning */
-        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0,
-                         RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
+                         rd_kafka_poll_cb, NULL);
 
         return error;
 }
@@ -4862,7 +4854,8 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_PASS; /* Return as event */
         }
 
-        // rd_kafka_dbg(rk, CGRP, "CB", "Received cb_type %d op_type 0x%04x", cb_type,
+        // rd_kafka_dbg(rk, CGRP, "CB", "Received cb_type %d op_type 0x%04x",
+        // cb_type,
         //              rko->rko_type);
 
         switch ((int)rko->rko_type) {

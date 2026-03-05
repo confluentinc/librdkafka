@@ -1022,6 +1022,7 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 /* Return messages from this response */
                 cnt = rd_kafka_share_process_fetch_response(
                     rko, rkq->rkq_rk->rk_rkshare, rkmessages, cnt);
+                rkq->rkq_rk->rk_rkshare->rkshare_fetch_more_records_requested = rd_false;
                 rd_kafka_op_destroy(rko);
                 rd_kafka_app_polled(rk, rkq);
                 *rkmessages_size_out = cnt;

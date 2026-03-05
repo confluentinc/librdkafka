@@ -521,35 +521,19 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                            rd_kafka_broker_destroy);
                 break;
 
-        case RD_KAFKA_OP_SHARE_FETCH:
+        case RD_KAFKA_OP_SHARE_FETCH: {
                 RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
                            rd_kafka_broker_destroy);
+                RD_IF_FREE(rko->rko_u.share_fetch.ack_details, rd_list_destroy);
                 break;
+        }
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
-                /* No heap-allocated resources to clean up */
+                RD_IF_FREE(rko->rko_u.share_fetch_fanout.ack_batches, rd_list_destroy);
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {
-                rd_kafka_op_t *msg_rko;
-                int i;
-
-                /* Destroy all message ops in the list */
-                if (rko->rko_u.share_fetch_response.message_rkos) {
-                        RD_LIST_FOREACH(
-                            msg_rko,
-                            rko->rko_u.share_fetch_response.message_rkos, i) {
-                                rd_kafka_op_destroy(msg_rko);
-                        }
-                        rd_list_destroy_free(
-                            rko->rko_u.share_fetch_response.message_rkos);
-                }
-
-                /* inflight_acks batches were transferred to rkshare in
-                 * rd_kafka_share_build_ack_mapping(); only destroy the list. */
-                if (rko->rko_u.share_fetch_response.inflight_acks)
-                        rd_list_destroy_free(
-                            rko->rko_u.share_fetch_response.inflight_acks);
+                RD_IF_FREE(rko->rko_u.share_fetch_response.inflight_acks, rd_list_destroy);
                 break;
         }
 

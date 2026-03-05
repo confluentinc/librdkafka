@@ -196,7 +196,8 @@
 //  * @param ... Variadic types (rd_kafka_share_internal_acknowledgement_type)
 //  * @returns Allocated entry with types filled in
 //  */
-// static rd_kafka_share_ack_batch_entry_t *ut_create_entry(int64_t start_offset,
+// static rd_kafka_share_ack_batch_entry_t *ut_create_entry(int64_t
+// start_offset,
 //                                                          int64_t end_offset,
 //                                                          int32_t types_cnt,
 //                                                          ...) {
@@ -236,18 +237,18 @@
 //  * Use this macro to verify collated entries in test assertions.
 //  * The entry_ptr is cast to rd_kafka_share_ack_batch_entry_t* internally.
 //  */
-// #define UT_ASSERT_COLLATED(entry_ptr, exp_start, exp_end, exp_type)            \
-//         do {                                                                   \
-//                 rd_kafka_share_ack_batch_entry_t *_e =                         \
-//                     (rd_kafka_share_ack_batch_entry_t *)(entry_ptr);           \
-//                 RD_UT_ASSERT(                                                  \
-//                     _e->start_offset == (exp_start) &&                         \
-//                         _e->end_offset == (exp_end) &&                         \
-//                         _e->types[0] == (exp_type),                            \
-//                     "collated entry mismatch: %" PRId64 "-%" PRId64            \
-//                     " type=%d, expected %" PRId64 "-%" PRId64 " type=%d",      \
-//                     _e->start_offset, _e->end_offset, _e->types[0],            \
-//                     (int64_t)(exp_start), (int64_t)(exp_end), (exp_type));     \
+// #define UT_ASSERT_COLLATED(entry_ptr, exp_start, exp_end, exp_type) \
+//         do { \
+//                 rd_kafka_share_ack_batch_entry_t *_e = \
+//                     (rd_kafka_share_ack_batch_entry_t *)(entry_ptr); \
+//                 RD_UT_ASSERT( \
+//                     _e->start_offset == (exp_start) && \
+//                         _e->end_offset == (exp_end) && \
+//                         _e->types[0] == (exp_type), \
+//                     "collated entry mismatch: %" PRId64 "-%" PRId64 \
+//                     " type=%d, expected %" PRId64 "-%" PRId64 " type=%d", \
+//                     _e->start_offset, _e->end_offset, _e->types[0], \
+//                     (int64_t)(exp_start), (int64_t)(exp_end), (exp_type)); \
 //         } while (0)
 
 // static rd_kafka_op_t *ut_make_fetch_op(rd_kafka_toppar_t *rktp,
@@ -285,7 +286,8 @@
 //  * placeholders
 //  * - inflight_acks list contains per-offset type mapping (including GAPs)
 //  *
-//  * @param ack_types Array describing type at each offset from acquired_start to
+//  * @param ack_types Array describing type at each offset from acquired_start
+//  to
 //  * acquired_end GAP types mean no message at that offset
 //  */
 // static rd_kafka_op_t *
@@ -340,9 +342,9 @@
 //             rd_kafka_share_ack_batches_new();
 //         {
 //                 rd_kafka_topic_partition_private_t *parpriv;
-//                 batches->rktpar        = rd_calloc(1, sizeof(*batches->rktpar));
-//                 batches->rktpar->topic = rd_strdup(topic);
-//                 batches->rktpar->partition = partition;
+//                 batches->rktpar        = rd_calloc(1,
+//                 sizeof(*batches->rktpar)); batches->rktpar->topic =
+//                 rd_strdup(topic); batches->rktpar->partition = partition;
 //                 batches->rktpar->offset    = RD_KAFKA_OFFSET_INVALID;
 //                 parpriv           = rd_kafka_topic_partition_private_new();
 //                 parpriv->topic_id = topic_id;
@@ -368,12 +370,12 @@
 //         if (!rko)
 //                 return;
 
-//         /* Destroy message ops using ut_destroy_op to handle minimal toppars */
-//         rd_kafka_op_t *msg_rko;
-//         int i;
-//         if (rko->rko_u.share_fetch_response.message_rkos) {
+//         /* Destroy message ops using ut_destroy_op to handle minimal toppars
+//         */ rd_kafka_op_t *msg_rko; int i; if
+//         (rko->rko_u.share_fetch_response.message_rkos) {
 //                 RD_LIST_FOREACH(
-//                     msg_rko, rko->rko_u.share_fetch_response.message_rkos, i) {
+//                     msg_rko, rko->rko_u.share_fetch_response.message_rkos, i)
+//                     {
 //                         ut_destroy_op(msg_rko);
 //                 }
 //                 rd_list_destroy_free(
@@ -384,7 +386,8 @@
 //         rd_kafka_share_ack_batches_t *batches;
 //         if (rko->rko_u.share_fetch_response.inflight_acks) {
 //                 RD_LIST_FOREACH(
-//                     batches, rko->rko_u.share_fetch_response.inflight_acks, i) {
+//                     batches, rko->rko_u.share_fetch_response.inflight_acks,
+//                     i) {
 //                         rd_kafka_share_ack_batches_destroy(batches);
 //                 }
 //                 rd_list_destroy_free(
@@ -415,12 +418,14 @@
 //         int64_t first[] = {0};
 //         int64_t last[]  = {4};
 
-//         rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs,
+//         rd_kafka_share_filter_msg_from_acq_records(temp_fetchq,
+//         &filtered_msgs,
 //                                                    1, first, last);
 
 //         /* All 5 messages should be forwarded */
 //         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5,
-//                      "filtered_msgs len %d != 5", rd_list_cnt(&filtered_msgs));
+//                      "filtered_msgs len %d != 5",
+//                      rd_list_cnt(&filtered_msgs));
 
 //         /* Verify offsets and ack types */
 //         for (int64_t exp = 0; exp <= 4; exp++) {
@@ -462,12 +467,14 @@
 //         int64_t first[] = {2};
 //         int64_t last[]  = {5};
 
-//         rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs,
+//         rd_kafka_share_filter_msg_from_acq_records(temp_fetchq,
+//         &filtered_msgs,
 //                                                    1, first, last);
 
 //         /* Only 4 messages should be forwarded (offsets 2,3,4,5) */
 //         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 4,
-//                      "filtered_msgs len %d != 4", rd_list_cnt(&filtered_msgs));
+//                      "filtered_msgs len %d != 4",
+//                      rd_list_cnt(&filtered_msgs));
 
 //         /* Cleanup ops in the list */
 //         rd_kafka_op_t *rko;
@@ -501,12 +508,14 @@
 //         int64_t first[] = {1, 5, 9};
 //         int64_t last[]  = {2, 6, 9};
 
-//         rd_kafka_share_filter_msg_from_acq_records(temp_fetchq, &filtered_msgs,
+//         rd_kafka_share_filter_msg_from_acq_records(temp_fetchq,
+//         &filtered_msgs,
 //                                                    3, first, last);
 
 //         /* 5 messages should be forwarded (1,2,5,6,9) */
 //         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5,
-//                      "filtered_msgs len %d != 5", rd_list_cnt(&filtered_msgs));
+//                      "filtered_msgs len %d != 5",
+//                      rd_list_cnt(&filtered_msgs));
 
 //         /* Cleanup ops in the list */
 //         rd_kafka_op_t *rko;
@@ -650,7 +659,8 @@
 //         rd_kafka_op_t *msg_rko;
 //         int i, reject_cnt = 0;
 //         RD_LIST_FOREACH(
-//             msg_rko, response_rko->rko_u.share_fetch_response.message_rkos, i) {
+//             msg_rko, response_rko->rko_u.share_fetch_response.message_rkos,
+//             i) {
 //                 if (msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR)
 //                         reject_cnt++;
 //         }
@@ -725,7 +735,8 @@
 
 //         /* Lookup the merged batches (map keyed by topic_id + partition) */
 //         rd_kafka_topic_partition_t *lookup_key =
-//             rd_kafka_topic_partition_new_with_topic_id(RD_KAFKA_UUID_ZERO, 0);
+//             rd_kafka_topic_partition_new_with_topic_id(RD_KAFKA_UUID_ZERO,
+//             0);
 //         rd_kafka_share_ack_batches_t *merged =
 //             RD_MAP_GET(&rkshare->rkshare_inflight_acks, lookup_key);
 //         rd_kafka_topic_partition_destroy_free(lookup_key);
@@ -782,7 +793,8 @@
 //         rd_kafka_op_t *rko1 = ut_make_share_fetch_response(
 //             rk, rktp1, "T1", 0, RD_KAFKA_UUID_ZERO, types1, 1, 3);
 
-//         /* Second RKO from broker 2: T2-0 with ACQ, REJ, ACQ (distinct topic_id)
+//         /* Second RKO from broker 2: T2-0 with ACQ, REJ, ACQ (distinct
+//         topic_id)
 //          */
 //         static const rd_kafka_Uuid_t ut_topic_id_t2           = {0, 1, ""};
 //         rd_kafka_share_internal_acknowledgement_type types2[] = {
@@ -800,7 +812,8 @@
 //                      "map cnt %d != 1 after first merge",
 //                      (int)RD_MAP_CNT(&rkshare->rkshare_inflight_acks));
 //         RD_UT_ASSERT(rkshare->rkshare_unacked_cnt == 2,
-//                      "unacked %" PRId64 " != 2", rkshare->rkshare_unacked_cnt);
+//                      "unacked %" PRId64 " != 2",
+//                      rkshare->rkshare_unacked_cnt);
 
 //         /* Merge second RKO */
 //         rd_kafka_share_build_ack_mapping(rkshare, rko2);
@@ -810,16 +823,19 @@
 //                      "map cnt %d != 2 after second merge",
 //                      (int)RD_MAP_CNT(&rkshare->rkshare_inflight_acks));
 //         RD_UT_ASSERT(rkshare->rkshare_unacked_cnt == 4,
-//                      "unacked %" PRId64 " != 4", rkshare->rkshare_unacked_cnt);
+//                      "unacked %" PRId64 " != 4",
+//                      rkshare->rkshare_unacked_cnt);
 
 //         /* Verify T1-0 (map keyed by topic_id + partition) */
 //         rd_kafka_topic_partition_t *key1 =
-//             rd_kafka_topic_partition_new_with_topic_id(RD_KAFKA_UUID_ZERO, 0);
+//             rd_kafka_topic_partition_new_with_topic_id(RD_KAFKA_UUID_ZERO,
+//             0);
 //         rd_kafka_share_ack_batches_t *batches1 =
 //             RD_MAP_GET(&rkshare->rkshare_inflight_acks, key1);
 //         rd_kafka_topic_partition_destroy_free(key1);
 //         RD_UT_ASSERT(batches1 != NULL, "T1-0 not found");
-//         RD_UT_ASSERT(rd_list_cnt(&batches1->entries) == 1, "T1-0 entries cnt");
+//         RD_UT_ASSERT(rd_list_cnt(&batches1->entries) == 1, "T1-0 entries
+//         cnt");
 
 //         /* Verify T2-0 (different topic_id) */
 //         rd_kafka_topic_partition_t *key2 =
@@ -828,17 +844,20 @@
 //             RD_MAP_GET(&rkshare->rkshare_inflight_acks, key2);
 //         rd_kafka_topic_partition_destroy_free(key2);
 //         RD_UT_ASSERT(batches2 != NULL, "T2-0 not found");
-//         RD_UT_ASSERT(rd_list_cnt(&batches2->entries) == 1, "T2-0 entries cnt");
+//         RD_UT_ASSERT(rd_list_cnt(&batches2->entries) == 1, "T2-0 entries
+//         cnt");
 
 //         rd_kafka_share_ack_batch_entry_t *entry2 =
 //             rd_list_elem(&batches2->entries, 0);
 //         RD_UT_ASSERT(entry2->start_offset == 10 && entry2->end_offset == 12,
 //                      "T2-0 offset range mismatch");
-//         RD_UT_ASSERT(entry2->types[0] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
+//         RD_UT_ASSERT(entry2->types[0] ==
+//         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
 //                      "T2 type[0]");
 //         RD_UT_ASSERT(entry2->types[1] == RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
 //                      "T2 type[1]");
-//         RD_UT_ASSERT(entry2->types[2] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
+//         RD_UT_ASSERT(entry2->types[2] ==
+//         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
 //                      "T2 type[2]");
 
 //         ut_destroy_share_fetch_response(rko1);
@@ -875,21 +894,25 @@
 
 //         /* Call collate function */
 //         rd_list_t ack_batches_out;
-//         rd_kafka_share_build_ack_batches_for_fetch(rkshare, &ack_batches_out);
+//         rd_kafka_share_build_ack_batches_for_fetch(rkshare,
+//         &ack_batches_out);
 
 //         /* Should produce 1 batch with 1 entry (all ACCEPT) */
 //         RD_UT_ASSERT(rd_list_cnt(&ack_batches_out) == 1,
-//                      "ack_batches cnt %d != 1", rd_list_cnt(&ack_batches_out));
+//                      "ack_batches cnt %d != 1",
+//                      rd_list_cnt(&ack_batches_out));
 
 //         rd_kafka_share_ack_batches_t *out_batch =
 //             rd_list_elem(&ack_batches_out, 0);
 //         RD_UT_ASSERT(rd_list_cnt(&out_batch->entries) == 1,
-//                      "entries cnt %d != 1", rd_list_cnt(&out_batch->entries));
+//                      "entries cnt %d != 1",
+//                      rd_list_cnt(&out_batch->entries));
 
 //         rd_kafka_share_ack_batch_entry_t *collated =
 //             rd_list_elem(&out_batch->entries, 0);
-//         UT_ASSERT_COLLATED(collated, 1, 4, RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT);
-//         RD_UT_ASSERT(collated->size == 4, "size %" PRId64 " != 4",
+//         UT_ASSERT_COLLATED(collated, 1, 4,
+//         RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT); RD_UT_ASSERT(collated->size ==
+//         4, "size %" PRId64 " != 4",
 //                      collated->size);
 //         RD_UT_ASSERT(collated->types_cnt == 1, "types_cnt %d != 1",
 //                      collated->types_cnt);
@@ -925,16 +948,19 @@
 
 //         /* Call collate function */
 //         rd_list_t ack_batches_out;
-//         rd_kafka_share_build_ack_batches_for_fetch(rkshare, &ack_batches_out);
+//         rd_kafka_share_build_ack_batches_for_fetch(rkshare,
+//         &ack_batches_out);
 
 //         /* Should produce 1 batch with 5 entries */
 //         RD_UT_ASSERT(rd_list_cnt(&ack_batches_out) == 1,
-//                      "ack_batches cnt %d != 1", rd_list_cnt(&ack_batches_out));
+//                      "ack_batches cnt %d != 1",
+//                      rd_list_cnt(&ack_batches_out));
 
 //         rd_kafka_share_ack_batches_t *out_batch =
 //             rd_list_elem(&ack_batches_out, 0);
 //         RD_UT_ASSERT(rd_list_cnt(&out_batch->entries) == 5,
-//                      "entries cnt %d != 5", rd_list_cnt(&out_batch->entries));
+//                      "entries cnt %d != 5",
+//                      rd_list_cnt(&out_batch->entries));
 
 //         /* Verify entries: {1-2, ACCEPT}, {3-3, GAP}, {4-5, ACCEPT},
 //          *                 {6-7, REJECT}, {8-9, ACCEPT} */
@@ -964,11 +990,13 @@
 
 //         /* Call collate function */
 //         rd_list_t ack_batches_out;
-//         rd_kafka_share_build_ack_batches_for_fetch(rkshare, &ack_batches_out);
+//         rd_kafka_share_build_ack_batches_for_fetch(rkshare,
+//         &ack_batches_out);
 
 //         /* Should produce empty list */
 //         RD_UT_ASSERT(rd_list_cnt(&ack_batches_out) == 0,
-//                      "ack_batches cnt %d != 0", rd_list_cnt(&ack_batches_out));
+//                      "ack_batches cnt %d != 0",
+//                      rd_list_cnt(&ack_batches_out));
 
 //         rd_list_destroy(&ack_batches_out);
 //         ut_destroy_rkshare(rkshare);
@@ -1011,7 +1039,8 @@
 //         batches2->response_leader_id             = 2; /* Override default */
 //         rd_kafka_share_ack_batch_entry_t *entry2 = ut_create_entry(
 //             1, 8, 8, RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
-//             RD_KAFKA_SHARE_INTERNAL_ACK_REJECT, RD_KAFKA_SHARE_INTERNAL_ACK_GAP,
+//             RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+//             RD_KAFKA_SHARE_INTERNAL_ACK_GAP,
 //             RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
 //             RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
 //             RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
@@ -1022,11 +1051,13 @@
 
 //         /* Call collate function */
 //         rd_list_t ack_batches_out;
-//         rd_kafka_share_build_ack_batches_for_fetch(rkshare, &ack_batches_out);
+//         rd_kafka_share_build_ack_batches_for_fetch(rkshare,
+//         &ack_batches_out);
 
 //         /* Should produce 2 batches */
 //         RD_UT_ASSERT(rd_list_cnt(&ack_batches_out) == 2,
-//                      "ack_batches cnt %d != 2", rd_list_cnt(&ack_batches_out));
+//                      "ack_batches cnt %d != 2",
+//                      rd_list_cnt(&ack_batches_out));
 
 //         /* Find Tp1 and Tp2 batches */
 //         rd_kafka_share_ack_batches_t *tp1_batch = NULL;
@@ -1035,7 +1066,8 @@
 //         int i;
 
 //         RD_LIST_FOREACH(batch, &ack_batches_out, i) {
-//                 if (batch->rktpar && strcmp(batch->rktpar->topic, "Tp1") == 0)
+//                 if (batch->rktpar && strcmp(batch->rktpar->topic, "Tp1") ==
+//                 0)
 //                         tp1_batch = batch;
 //                 else if (batch->rktpar &&
 //                          strcmp(batch->rktpar->topic, "Tp2") == 0)
@@ -1115,9 +1147,11 @@ int unittest_fetcher_share_filter_forward(void) {
         //         return 1;
         // }
 
-        // // RD_UT_SAY("Testing rd_kafka_share_build_ack_batches_for_fetch()...");
+        // // RD_UT_SAY("Testing
+        // rd_kafka_share_build_ack_batches_for_fetch()...");
         // // if (ut_case_collate_all_same_type(rk) ||
-        // //     ut_case_collate_mixed_types(rk) || ut_case_collate_empty_map(rk)) {
+        // //     ut_case_collate_mixed_types(rk) ||
+        // ut_case_collate_empty_map(rk)) {
         // //         rd_kafka_destroy(rk);
         // //         return 1;
         // // }

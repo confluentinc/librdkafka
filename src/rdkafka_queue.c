@@ -907,6 +907,11 @@ rd_kafka_share_process_fetch_response(rd_kafka_op_t *rko,
                 rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
         }
 
+        /* Messages handed to app; clear list so op destructor
+         * knows not to free the message ops individually. */
+        rd_list_destroy(rko->rko_u.share_fetch_response.message_rkos);
+        rko->rko_u.share_fetch_response.message_rkos = NULL;
+
         return cnt;
 }
 
@@ -1022,7 +1027,8 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 /* Return messages from this response */
                 cnt = rd_kafka_share_process_fetch_response(
                     rko, rkq->rkq_rk->rk_rkshare, rkmessages, cnt);
-                rkq->rkq_rk->rk_rkshare->rkshare_fetch_more_records_requested = rd_false;
+                rkq->rkq_rk->rk_rkshare->rkshare_fetch_more_records_requested =
+                    rd_false;
                 rd_kafka_op_destroy(rko);
                 rd_kafka_app_polled(rk, rkq);
                 *rkmessages_size_out = cnt;

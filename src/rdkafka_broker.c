@@ -6523,14 +6523,7 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                  *               acknowledgement callback (as done in
                  *               Java client). */
                 if (rkb->rkb_share_async_ack_details) {
-                        rd_kafka_share_ack_batches_t *batch;
-                        int i;
-                        RD_LIST_FOREACH(batch,
-                                        rkb->rkb_share_async_ack_details, i) {
-                                rd_kafka_share_ack_batches_destroy(batch);
-                        }
                         rd_list_destroy(rkb->rkb_share_async_ack_details);
-                        rd_free(rkb->rkb_share_async_ack_details);
                         rkb->rkb_share_async_ack_details = NULL;
                 }
 

@@ -56,15 +56,6 @@ function install_source {
             $checksum || return 1
     fi
 
-    # curl's configure has a runtime check where a program is built
-    # with all libs linked and then executed, since mklove's destdir
-    # is outside the standard ld.so search path this runtime check will
-    # fail due to missing libraries.
-    # We patch curl's configure file to skip this check altogether.
-    if ! mkl_patch libcurl 0000 ; then
-        return 1
-    fi
-
     # Clear out LIBS to not interfer with lib detection process.
     LIBS="" ./configure \
 	--with-openssl \

@@ -608,7 +608,7 @@ static cJSON_bool print_number(const cJSON * const item, printbuffer * const out
     {
         length = sprintf((char*)number_buffer, "null");
     }
-    else if(d == (double)item->valueint)
+    else if(fabs(d - (double)item->valueint) < 1e-9)
     {
         length = sprintf((char*)number_buffer, "%d", item->valueint);
     }

@@ -1336,9 +1336,11 @@ static void do_test_coordinator_failover_ack_recovery(void) {
 
 int main_0157_share_group_ack_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
-        /* increase from the default ~30s timeout to avoid the framework killing
-         * us early. */
-        test_timeout_set(300);
+        /* This test suite has many subtests; set a generous timeout.
+         * When running in parallel with other test suites (e.g., 0155, 0156)
+         * the mock broker and consumer threads compete for CPU, which can
+         * slow individual subtests by 5x or more. Use 1500s to be safe. */
+        test_timeout_set(1500);
 
         /* Positive scenarios */
         do_test_implicit_ack_no_redelivery();

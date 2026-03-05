@@ -1343,6 +1343,11 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 4, 1);
 
+        /* Set heartbeat interval shorter than session timeout so both
+         * consumers can heartbeat frequently enough for the rebalance
+         * to complete before we check assignments. */
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 1000);
+
         c1 = create_share_consumer(bootstraps, group);
         c2 = create_share_consumer(bootstraps, group);
 
@@ -1356,10 +1361,14 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         TEST_CALL_ERR__(rd_kafka_subscribe(c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Wait for both to join */
-        wait_share_heartbeats(mcluster, 3, 500);
-        rd_kafka_consumer_poll(c1, 2000);
-        rd_kafka_consumer_poll(c2, 2000);
+        /* Wait for both to join and rebalance to complete. Poll both
+         * consumers in short alternating windows so both can heartbeat
+         * and process their updated assignments. */
+        wait_share_heartbeats(mcluster, 4, 500);
+        for (int i = 0; i < 5; i++) {
+                rd_kafka_consumer_poll(c1, 200);
+                rd_kafka_consumer_poll(c2, 200);
+        }
 
         /* Verify initial distribution */
         TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assign));

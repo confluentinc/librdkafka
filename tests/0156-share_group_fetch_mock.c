@@ -1053,8 +1053,11 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
 int main_0156_share_group_fetch_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        /* This test suite has many subtests; set a generous timeout. */
-        test_timeout_set(300);
+        /* This test suite has many subtests; set a generous timeout.
+         * When running in parallel with other test suites (e.g., 0155, 0157)
+         * the mock broker and consumer threads compete for CPU, which can
+         * slow individual subtests by 5x or more. Use 1500s to be safe. */
+        test_timeout_set(1500);
 
         /* Positive scenarios */
         do_test_basic_consume();

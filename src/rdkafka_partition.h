@@ -32,6 +32,8 @@
 #include "rdkafka_topic.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_broker.h"
+#include "rdkafka_share_acknowledgement.h"
+#include <stdint.h>
 
 extern const char *rd_kafka_fetch_states[];
 
@@ -131,6 +133,7 @@ rd_kafka_fetch_pos_make(int64_t offset,
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
                    rd_kafka_toppar_s) rd_kafka_toppar_tqhead_t;
 
+
 /**
  * Topic + Partition combination
  */
@@ -182,10 +185,12 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int rktp_fetch; /* On rkb_active_toppars list */
 
         /* Consumer */
-        rd_kafka_q_t *rktp_fetchq; /* Queue of fetched messages
-                                    * from broker.
-                                    * Broker thread -> App */
-        rd_kafka_q_t *rktp_ops;    /* * -> Main thread */
+        rd_kafka_q_t *rktp_fetchq;      /* Queue of fetched messages
+                                         * from broker.
+                                         * Broker thread -> App */
+        rd_kafka_q_t *rktp_temp_fetchq; /* Temporary fetch queue
+                                         * used to filter acquired records */
+        rd_kafka_q_t *rktp_ops;         /* * -> Main thread */
 
         rd_atomic32_t rktp_msgs_inflight; /**< Current number of
                                            *   messages in-flight to/from
@@ -481,22 +486,6 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                 rd_atomic64_t rx_ver_drops;      /**< Consumer: outdated message
                                                   *             drops. */
         } rktp_c;
-
-        /*
-         * TODO KIP-932: Change this according to need. Currently very basic.
-         * Not even handling GAP. Sends ACCEPT blindly with implicit
-         * acknowledgement.
-         */
-
-        /* Dynamic array of acknowledge entries: NULL until allocated. */
-        struct rd_kafka_toppar_share_ack_entry {
-                int64_t first_offset;
-                int64_t last_offset;
-                int16_t delivery_count;
-        } *rktp_share_acknowledge;           /* NULL = not initialized */
-        size_t rktp_share_acknowledge_count; /* number of entries in
-                                                rktp_share_acknowledge (0 when
-                                                NULL) */
 };
 
 /**
@@ -710,8 +699,6 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 
 rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp,
                                      rd_bool_t do_lock);
-rd_bool_t
-rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp);
 void *rd_kafka_toppar_list_copy(const void *elem, void *opaque);
 
 
@@ -804,6 +791,7 @@ int rd_kafka_topic_partition_match(rd_kafka_t *rk,
 int rd_kafka_topic_partition_cmp(const void *_a, const void *_b);
 int rd_kafka_topic_partition_by_id_cmp(const void *_a, const void *_b);
 unsigned int rd_kafka_topic_partition_hash(const void *a);
+unsigned int rd_kafka_topic_partition_hash_by_id(const void *a);
 
 int rd_kafka_topic_partition_list_find_idx(
     const rd_kafka_topic_partition_list_t *rktparlist,

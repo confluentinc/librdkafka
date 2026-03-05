@@ -5699,16 +5699,6 @@ RD_EXPORT
 rd_kafka_resp_err_t rd_kafka_poll_set_consumer(rd_kafka_t *rk);
 
 
-/**
- * @brief Redirect the main (rd_kafka_poll()) queue to the KafkaConsumer's
- *        queue (rd_kafka_consumer_poll()).
- *
- * @warning It is not permitted to call rd_kafka_poll() after directing the
- *          main queue with rd_kafka_share_poll_set_consumer().
- */
-RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare);
-
 /**@}*/
 
 /**

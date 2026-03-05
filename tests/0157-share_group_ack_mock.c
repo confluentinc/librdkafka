@@ -1358,20 +1358,20 @@ int main_0157_share_group_ack_mock(int argc, char **argv) {
                                                           * triggers
                                                           * UNKNOWN_MEMBER_ID
                                                           * (pending fix) */
-        /* do_test_session_expiry_invalidates_ack(); */ /* NOT YET COMPATIBLE:
-                                                         * session_timeout=500ms
-                                                         * triggers
-                                                         * UNKNOWN_MEMBER_ID
-                                                         * (pending fix) */
-        /* do_test_max_delivery_without_ack(); */ /* NOT YET COMPATIBLE:
-                                                   * session_timeout=500ms
-                                                   * triggers UNKNOWN_MEMBER_ID
-                                                   * (pending fix) */
-        /* do_test_sharefetch_error_drops_ack(); */ /* NOT YET COMPATIBLE:
-                                                     * session_timeout=500ms
-                                                     * triggers
-                                                     * UNKNOWN_MEMBER_ID
-                                                     * (pending fix) */
+        /* do_test_session_expiry_invalidates_ack(); */  /* NOT YET COMPATIBLE:
+                                                          * session_timeout=500ms
+                                                          * triggers
+                                                          * UNKNOWN_MEMBER_ID
+                                                          * (pending fix) */
+        /* do_test_max_delivery_without_ack(); */        /* NOT YET COMPATIBLE:
+                                                          * session_timeout=500ms
+                                                          * triggers UNKNOWN_MEMBER_ID
+                                                          * (pending fix) */
+        /* do_test_sharefetch_error_drops_ack(); */      /* NOT YET COMPATIBLE:
+                                                          * session_timeout=500ms
+                                                          * triggers
+                                                          * UNKNOWN_MEMBER_ID
+                                                          * (pending fix) */
         do_test_forgotten_topic_releases_not_acks();
         /* do_test_multi_consumer_cascade_crash(); */ /* NOT YET COMPATIBLE:
                                                        * session_timeout=500ms

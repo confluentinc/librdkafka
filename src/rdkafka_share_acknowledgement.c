@@ -54,7 +54,7 @@ void rd_kafka_share_ack_batch_entry_destroy(
 }
 
 static void rd_kafka_share_ack_batch_entry_destroy_free(void *ptr) {
-        rd_kafka_share_ack_batch_entry_destroy(ptr);
+        rd_kafka_share_ack_batch_entry_destroy((rd_kafka_share_ack_batch_entry_t *)ptr);
 }
 
 rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new(void) {
@@ -71,6 +71,10 @@ void rd_kafka_share_ack_batches_destroy(rd_kafka_share_ack_batches_t *batches) {
         if (batches->rktpar)
                 rd_kafka_topic_partition_destroy(batches->rktpar);
         rd_free(batches);
+}
+
+void rd_kafka_share_ack_batches_destroy_free(void *ptr) {
+        rd_kafka_share_ack_batches_destroy((rd_kafka_share_ack_batches_t *)ptr);
 }
 
 /**
@@ -178,6 +182,7 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare) {
  */
 static void rd_kafka_share_ack_details_batch_destroy(void *ptr) {
         rd_kafka_share_ack_batches_t *batch = ptr;
+        // TODO KIP-932: Check if this null check is needed
         if (!batch)
                 return;
         rd_kafka_share_ack_batches_destroy(batch);

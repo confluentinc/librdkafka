@@ -466,11 +466,12 @@ static void do_test_empty_fetch_no_records(void) {
 static void do_test_member_validation(void) {
         const char *topic = "kip932_member_validation";
         const int msgcnt  = 4;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_p1, consumed_p3;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Short session timeout so the member is evicted quickly once
          * heartbeats stop succeeding. */
@@ -536,11 +537,12 @@ static void do_test_member_validation(void) {
 
 static void do_test_sharefetch_session_expiry_rtt(void) {
         const char *topic = "kip932_rtt_expiry";
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Session timeout must be long enough for normal requests
          * to complete, but short enough to expire during high RTT. */
@@ -685,11 +687,12 @@ static void do_test_multi_batch_consume(void) {
 static void do_test_max_delivery_attempts(void) {
         const char *topic = "kip932_max_delivery";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Set max delivery attempts to 2 and a short session timeout
          * so locks expire quickly after consumer destruction. */
@@ -750,11 +753,12 @@ static void do_test_max_delivery_attempts(void) {
 static void do_test_record_lock_duration(void) {
         const char *topic = "kip932_lock_duration";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Long session timeout, short record lock duration. */
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 10000);
@@ -803,11 +807,12 @@ static void do_test_record_lock_duration(void) {
 static void do_test_multi_consumer_lock_expiry(void) {
         const char *topic = "kip932_multi_consumer_lock";
         const int msgcnt  = 3;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer_a, *consumer_b;
         int consumed_a, consumed_b;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         /* Use a short session/lock timeout so the test runs quickly. */
         rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
@@ -967,7 +972,7 @@ static void do_test_sharefetch_corrupt_message(void) {
  */
 static void do_test_sharefetch_fetch_disconnected(void) {
         const char *topic = "kip932_disconnect";
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *rkmessages[10];
         size_t rcvd  = 0;
@@ -975,6 +980,7 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         size_t i;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1022,11 +1028,12 @@ static void do_test_sharefetch_fetch_disconnected(void) {
 static void do_test_sharefetch_fetch_and_close_implicit(void) {
         const char *topic = "kip932_fetch_close";
         const int msgcnt  = 2;
-        test_ctx_t ctx    = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *consumer;
         int consumed;
 
         SUB_TEST();
+        ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,

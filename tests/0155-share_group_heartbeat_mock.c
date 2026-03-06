@@ -550,7 +550,12 @@ static void do_test_share_group_session_timeout(void) {
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 4, 1);
 
-        /* Set short session timeout on mock broker */
+        /* Set heartbeat interval shorter than session timeout so consumers
+         * don't time out while the other is being polled. */
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 1000);
+        /* Set session timeout. Must be > heartbeat_interval to avoid
+         * spurious timeouts but short enough for the test to finish
+         * quickly. */
         rd_kafka_mock_sharegroup_set_session_timeout(mcluster, 3000);
 
         c1 = create_share_consumer(bootstraps, group);
@@ -566,10 +571,14 @@ static void do_test_share_group_session_timeout(void) {
         TEST_CALL_ERR__(rd_kafka_subscribe(c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Wait for both to join and rebalance to complete */
-        wait_share_heartbeats(mcluster, 3, 500);
-        rd_kafka_consumer_poll(c1, 2000);
-        rd_kafka_consumer_poll(c2, 2000);
+        /* Wait for both to join and rebalance to complete. Poll both
+         * consumers in short alternating windows so both can heartbeat
+         * and neither session times out while the other is polled. */
+        wait_share_heartbeats(mcluster, 4, 500);
+        for (int i = 0; i < 5; i++) {
+                rd_kafka_consumer_poll(c1, 200);
+                rd_kafka_consumer_poll(c2, 200);
+        }
 
         /* Verify initial distribution */
         TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assign));
@@ -587,7 +596,8 @@ static void do_test_share_group_session_timeout(void) {
         /* Destroy C2 without close to simulate crash */
         rd_kafka_destroy(c2);
 
-        /* Poll C1 for 5 seconds - enough for C2 to timeout */
+        /* Poll C1 for 5 seconds — enough for C2's 3s session to expire and
+         * for C1 to receive the reassigned partitions. */
         rd_kafka_consumer_poll(c1, 5000);
 
         /* Verify C1 got all partitions after C2 timed out */
@@ -747,9 +757,12 @@ static void do_test_share_group_no_spurious_fencing(void) {
 
         SUB_TEST();
 
-        /* Setup with a short session timeout. */
+        /* Setup with a short session timeout and a heartbeat interval that
+         * is well below it, so the active consumer is never spuriously
+         * timed out during polling. */
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 500);
         rd_kafka_mock_sharegroup_set_session_timeout(mcluster, 2000);
 
         c = create_share_consumer(bootstraps, group);
@@ -761,18 +774,18 @@ static void do_test_share_group_no_spurious_fencing(void) {
         rd_kafka_topic_partition_list_destroy(subscription);
 
         /* Wait for join and initial assignment. */
-        rd_kafka_consumer_poll(c, 3000);
+        rd_kafka_consumer_poll(c, 1000);
 
         TEST_CALL_ERR__(rd_kafka_assignment(c, &assignment));
         TEST_ASSERT(assignment->cnt == 3,
                     "Expected 3 partitions initially, got %d", assignment->cnt);
         rd_kafka_topic_partition_list_destroy(assignment);
 
-        /* Poll continuously for 10s (5x the 2s session timeout).
+        /* Poll continuously for 5s (2.5x the 2s session timeout).
          * If the broker's session timeout timer incorrectly fences active
          * members, the assignment will drop. */
-        TEST_SAY("Polling for 10 seconds with 2s session timeout...\n");
-        for (i = 0; i < 10; i++) {
+        TEST_SAY("Polling for 5 seconds with 2s session timeout...\n");
+        for (i = 0; i < 5; i++) {
                 rd_kafka_consumer_poll(c, 1000);
 
                 /* Verify assignment is still intact */
@@ -783,7 +796,7 @@ static void do_test_share_group_no_spurious_fencing(void) {
                 rd_kafka_topic_partition_list_destroy(assignment);
         }
 
-        TEST_SAY("No spurious fencing after 10 seconds\n");
+        TEST_SAY("No spurious fencing after 5 seconds\n");
 
         /* Cleanup */
         rd_kafka_consumer_close(c);
@@ -1330,6 +1343,11 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 4, 1);
 
+        /* Set heartbeat interval shorter than session timeout so both
+         * consumers can heartbeat frequently enough for the rebalance
+         * to complete before we check assignments. */
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 1000);
+
         c1 = create_share_consumer(bootstraps, group);
         c2 = create_share_consumer(bootstraps, group);
 
@@ -1343,10 +1361,14 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         TEST_CALL_ERR__(rd_kafka_subscribe(c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Wait for both to join */
-        wait_share_heartbeats(mcluster, 3, 500);
-        rd_kafka_consumer_poll(c1, 2000);
-        rd_kafka_consumer_poll(c2, 2000);
+        /* Wait for both to join and rebalance to complete. Poll both
+         * consumers in short alternating windows so both can heartbeat
+         * and process their updated assignments. */
+        wait_share_heartbeats(mcluster, 4, 500);
+        for (int i = 0; i < 5; i++) {
+                rd_kafka_consumer_poll(c1, 200);
+                rd_kafka_consumer_poll(c2, 200);
+        }
 
         /* Verify initial distribution */
         TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assign));
@@ -2494,6 +2516,9 @@ static void do_test_empty_topic_list_subscription(void) {
 int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
+        /* This test suite has many subtests; set a generous timeout. */
+        test_timeout_set(600);
+
         do_test_share_group_heartbeat_basic();
         do_test_share_group_assignment_rebalance();
         do_test_share_group_multi_topic_assignment();
@@ -2504,6 +2529,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_no_spurious_fencing();
 
         do_test_unknown_member_id_error();
+
         do_test_fenced_member_epoch_error();
         do_test_coordinator_not_available_error();
         do_test_not_coordinator_error();

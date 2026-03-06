@@ -2,7 +2,7 @@
  * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2015-2022, Magnus Edenhill,
- *               2023, Confluent Inc.
+ *               2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -144,24 +144,9 @@ void *rd_kafka_share_ack_batches_copy_void(const void *elem, void *opaque);
 /**
  * @brief Transfer inflight acks from response RKO into rkshare's inflight map.
  */
-void rd_kafka_share_build_ack_mapping(rd_kafka_share_t *rkshare,
+void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
                                       rd_kafka_op_t *response_rko);
 
-
-/**
- * @brief Implicit ack: convert all ACQUIRED types to ACCEPT in inflight map.
- */
-void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
-
-/**
- * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
- *
- * Non-ACQUIRED offsets are collated into ack_details for sending.
- * ACQUIRED offsets remain in the map. Empty entries are removed.
- *
- * @returns Allocated list or NULL if nothing to send. Caller must destroy.
- */
-rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Implicit ack: convert all ACQUIRED types to ACCEPT in inflight map.

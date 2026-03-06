@@ -764,7 +764,9 @@ struct rd_kafka_op_s {
                          *  Type: rd_kafka_share_ack_batches_t*.
                          *  Moved from rkb_share_async_ack_details
                          *  when creating the op. Freed by broker
-                         *  thread after use. */
+                         *  thread after use. 
+                         *  TODO KIP-932: Change name.
+                         */
                         rd_list_t *ack_details;
                 } share_fetch;
 
@@ -784,6 +786,7 @@ struct rd_kafka_op_s {
                          *  single ack type for the collated range.
                          *  Set to NULL after ownership is transferred
                          *  to per-broker ack_details.
+                         * TODO KIP-932: Change name
                          */
                         rd_list_t *ack_batches;
                 } share_fetch_fanout;
@@ -911,6 +914,13 @@ void rd_kafka_op_print(FILE *fp, const char *prefix, rd_kafka_op_t *rko);
 
 void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko);
 
+int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko);
+
+unsigned int
+rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
+                                         rd_kafka_share_t *rkshare,
+                                         rd_kafka_message_t **rkmessages,
+                                         unsigned int cnt);
 
 #define rd_kafka_op_is_ctrl_msg(rko)                                           \
         ((rko)->rko_type == RD_KAFKA_OP_FETCH && !(rko)->rko_err &&            \

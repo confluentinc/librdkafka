@@ -36,6 +36,7 @@
 #include "rdkafka_proto.h"
 #include "rdkafka_offset.h"
 #include "rdkafka_error.h"
+#include "rdkafka_share_acknowledgement.h"
 
 /* Current number of rd_kafka_op_t */
 rd_atomic32_t rd_kafka_op_cnt;
@@ -1038,4 +1039,63 @@ void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko) {
         pos.leader_epoch = rko->rko_u.fetch.rkm.rkm_u.consumer.leader_epoch;
 
         rd_kafka_update_app_pos(rk, rktp, pos, RD_DO_LOCK);
+}
+
+/**
+ * @brief Get offset from an op (FETCH or CONSUMER_ERR).
+ *
+ * @param rko The op to get offset from.
+ * @returns The offset, or RD_KAFKA_OFFSET_INVALID if not applicable.
+ */
+int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko) {
+        if (!rko)
+                return RD_KAFKA_OFFSET_INVALID;
+        if (rko->rko_type == RD_KAFKA_OP_FETCH)
+                return rko->rko_u.fetch.rkm.rkm_rkmessage.offset;
+        if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR)
+                return rko->rko_u.err.offset;
+        return RD_KAFKA_OFFSET_INVALID;
+}
+
+/**
+ * @brief Process a share fetch response op and deliver messages.
+ *
+ * @param rko The share fetch response op
+ * @param rkshare The share consumer handle
+ * @param rkmessages Output array for messages
+ * @param cnt Current count of messages in array
+ *
+ * @returns Updated count of messages in array
+ */
+unsigned int
+rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
+                                         rd_kafka_share_t *rkshare,
+                                         rd_kafka_message_t **rkmessages,
+                                         unsigned int cnt) {
+        /*
+         *TODO KIP-932: send messages from the fetcher.c directly.  
+         */
+        rd_kafka_op_t *msg_rko;
+        int i;
+        int total_msgs =
+            rd_list_cnt(rko->rko_u.share_fetch_response.message_rkos);
+
+        /* Build acknowledgement mapping from inflight_acks */
+        rd_kafka_share_build_inflight_acks_map(rkshare, rko);
+
+        /* Process all messages from the list. */
+        for (i = 0; i < total_msgs; i++) {
+                msg_rko = rd_list_elem(
+                    rko->rko_u.share_fetch_response.message_rkos, i);
+
+                /* Return message to application */
+                rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
+        }
+
+        /* Messages handed to app; clear list so op destructor
+         * knows not to free the message ops individually. */
+        rd_list_destroy(rko->rko_u.share_fetch_response.message_rkos);
+        rko->rko_u.share_fetch_response.message_rkos = NULL;
+
+        return cnt;
 }

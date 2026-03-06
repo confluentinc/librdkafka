@@ -2317,7 +2317,7 @@ static int rd_kafka_thread_main(void *arg) {
                 if (rk->rk_cgrp) /* FIXME: move to timer-triggered */
                         rd_kafka_cgrp_serve(rk->rk_cgrp);
 
-                /* KIP-932: If fetch_more_records is set but no fetch
+                /* KIP-932: If share_fetch_more_records is set but no fetch
                  * op is in-flight and assignments exist, re-trigger
                  * the fetch flow by selecting a broker directly.
                  * TODO: KIP-932: Check if rkcg_current_assignment is
@@ -2325,8 +2325,8 @@ static int rd_kafka_thread_main(void *arg) {
                  * rkcg->rkcg_rk->rk_consumer.assignment.all should
                  * be used instead. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk) && rk->rk_cgrp &&
-                    rk->rk_cgrp->rkcg_share.fetch_more_records &&
-                    rk->rk_cgrp->rkcg_share.share_fetch_ops_in_flight == 0 &&
+                    rk->rk_cgrp->rkcg_share.share_fetch_more_records &&
+                    rk->rk_cgrp->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0 &&
                     rk->rk_cgrp->rkcg_current_assignment &&
                     rk->rk_cgrp->rkcg_current_assignment->cnt > 0) {
                         rd_kafka_broker_t *rkb_sel;
@@ -2335,7 +2335,7 @@ static int rd_kafka_thread_main(void *arg) {
                         if (rkb_sel) {
                                 rd_kafka_dbg(rk, CONSUMER, "FETCHMORE",
                                              "Re-triggering fetch for "
-                                             "fetch_more_records=true "
+                                             "share_fetch_more_records=true "
                                              "and no fetch in-flight");
                                 rd_kafka_share_enqueue_fetch_op(rk, rkb_sel,
                                                                 rd_true);
@@ -3158,14 +3158,14 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         reply_rkb->rkb_share_fetch_enqueued = rd_false;
 
         if (should_fetch)
-                rkcg->rkcg_share.share_fetch_ops_in_flight--;
+                rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt--;
 
         /*
          * Step 1: If records were fetched, reset the global fetch guard
          * so the next FANOUT can select a new fetch broker.
          */
         if (records_fetched)
-                rkcg->rkcg_share.fetch_more_records = rd_false;
+                rkcg->rkcg_share.share_fetch_more_records = rd_false;
 
         /*
          * Step 2: If this was the fetch broker but no records were received,
@@ -3179,7 +3179,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
          * assignments are empty) and reset fetch_more_records.
          */
         if (should_fetch && !records_fetched &&
-            rkcg->rkcg_share.fetch_more_records) {
+            rkcg->rkcg_share.share_fetch_more_records) {
                 rd_kafka_broker_t *selected_rkb;
 
                 selected_rkb = rd_kafka_share_select_broker(rk, rkcg);
@@ -3383,7 +3383,7 @@ static void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
         rkb->rkb_share_fetch_enqueued = rd_true;
 
         if (should_fetch)
-                rd_kafka_cgrp_get(rk)->rkcg_share.share_fetch_ops_in_flight++;
+                rd_kafka_cgrp_get(rk)->rkcg_share.share_should_fetch_ops_in_flight_cnt++;
 
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                      "Enqueuing share fetch op on broker %s "
@@ -3488,10 +3488,10 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
         if (fetch_more_records) {
                 rd_bool_t need_select = rd_false;
 
-                if (!rkcg->rkcg_share.fetch_more_records) {
-                        rkcg->rkcg_share.fetch_more_records = rd_true;
+                if (!rkcg->rkcg_share.share_fetch_more_records) {
+                        rkcg->rkcg_share.share_fetch_more_records = rd_true;
                         need_select                         = rd_true;
-                } else if (rkcg->rkcg_share.share_fetch_ops_in_flight == 0) {
+                } else if (rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0) {
                         need_select = rd_true;
                 }
 

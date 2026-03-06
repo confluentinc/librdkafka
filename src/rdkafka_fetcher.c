@@ -884,23 +884,11 @@ err_parse:
         return rkbuf->rkbuf_err;
 }
 
-
-int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko) {
-        if (!rko) {
-                return RD_KAFKA_OFFSET_INVALID;
-        }
-        if (rko->rko_type == RD_KAFKA_OP_FETCH)
-                return rko->rko_u.fetch.rkm.rkm_rkmessage.offset;
-        if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR)
-                return rko->rko_u.err.offset;
-        return RD_KAFKA_OFFSET_INVALID;
-}
-
-void rd_kafka_share_filter_msg_from_acq_records(rd_kafka_q_t *temp_fetchq,
+void rd_kafka_share_filter_acquired_records_and_update_ack_type(rd_kafka_q_t *temp_fetchq,
                                                 rd_list_t *filtered_msgs,
-                                                int32_t AcquiredRecordsArrayCnt,
                                                 const int64_t *FirstOffsets,
-                                                const int64_t *LastOffsets) {
+                                                const int64_t *LastOffsets,
+                                                int32_t AcquiredRecordsArrayCnt) {
 
         rd_kafka_op_t *rko;
 
@@ -926,6 +914,11 @@ void rd_kafka_share_filter_msg_from_acq_records(rd_kafka_q_t *temp_fetchq,
                 if (in_acquired_range) {
                         /* Set ack type based on op type */
                         rd_kafka_msg_t *rkm = NULL;
+                        /* TODO KIP-932: Check and update the handling
+                        * of control messages
+                        */
+                        if (unlikely(rd_kafka_op_is_ctrl_msg(rko)))
+                                        continue;
                         if (rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rkm = &rko->rko_u.fetch.rkm;
                                 rkm->rkm_u.consumer.ack_type =
@@ -1011,8 +1004,7 @@ rd_kafka_share_ack_type_from_msg_op(rd_kafka_op_t *msg_rko) {
                 rkm = &msg_rko->rko_u.fetch.rkm;
         else
                 rkm = &msg_rko->rko_u.err.rkm;
-        return (rd_kafka_share_internal_acknowledgement_type)
-            rkm->rkm_u.consumer.ack_type;
+        return rkm->rkm_u.consumer.ack_type;
 }
 
 /**
@@ -1303,7 +1295,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         batches_out->rktpar =
             rd_kafka_topic_partition_new(topic_str, PartitionId);
         rd_free(topic_str);
-        batches_out->rktpar->offset = RD_KAFKA_OFFSET_INVALID;
 
         /* Allocate and fill the private structure */
         parpriv                       = rd_kafka_topic_partition_private_new();
@@ -1329,6 +1320,12 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 DeliveryCounts = rd_malloc(sizeof(*DeliveryCounts) *
                                            AcquiredRecordsArrayCnt);
 
+                /**
+                 * TODO KIP-932: There could be an improvement where we segregate the records
+                 *               while reading the FirstOffsets and LastOffsets, so that
+                 *               we can avoid mallocs above and directly create the batches
+                 *               and fill the entries.
+                 */
                 for (i = 0; i < AcquiredRecordsArrayCnt; i++) {
                         rd_kafka_buf_read_i64(rkbuf, &FirstOffsets[i]);
                         rd_kafka_buf_read_i64(rkbuf, &LastOffsets[i]);
@@ -1363,9 +1360,9 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 }
 
                 /* Filter and forward messages in acquired ranges */
-                rd_kafka_share_filter_msg_from_acq_records(
-                    temp_fetchq, filtered_msgs, AcquiredRecordsArrayCnt,
-                    FirstOffsets, LastOffsets);
+                rd_kafka_share_filter_acquired_records_and_update_ack_type(
+                    temp_fetchq, filtered_msgs, FirstOffsets, LastOffsets,
+                    AcquiredRecordsArrayCnt);
 
                 rd_free(FirstOffsets);
                 rd_free(LastOffsets);
@@ -1468,10 +1465,12 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                 continue;
                         }
 
-                        if (rd_list_cnt(&batches->entries) > 0)
+                        if (rd_list_cnt(&batches->entries) > 0) {
                                 has_acquired_records = rd_true;
-
-                        rd_list_add(inflight_acks, batches);
+                                rd_list_add(inflight_acks, batches);
+                        } else {
+                                rd_kafka_share_ack_batches_destroy(batches);
+                        }
                 }
 
                 if (rkt) {

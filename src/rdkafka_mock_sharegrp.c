@@ -946,11 +946,16 @@ void rd_kafka_mock_sharegrps_connection_closed(
         rd_kafka_mock_sharegroup_t *mshgrp;
 
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
-                rd_kafka_mock_sharegroup_member_t *member, *tmp;
-                TAILQ_FOREACH_SAFE(member, &mshgrp->members, link, tmp) {
+                rd_kafka_mock_sharegroup_member_t *member;
+                TAILQ_FOREACH(member, &mshgrp->members, link) {
                         if (member->conn == mconn) {
-                                rd_kafka_mock_sharegroup_member_fenced(mshgrp,
-                                                                       member);
+                                /* Per KIP-932, share consumers have no
+                                 * fencing semantics. A connection close is
+                                 * transient — the consumer will reconnect
+                                 * and heartbeat again. Only the session
+                                 * timeout timer should remove members.
+                                 */
+                                member->conn = NULL;
                         }
                 }
         }

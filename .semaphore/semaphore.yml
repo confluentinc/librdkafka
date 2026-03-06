@@ -227,6 +227,36 @@ blocks:
             - packaging/tools/build-release-artifacts.sh --disable-gssapi alpine:3.16.9 artifacts/librdkafka.tgz
 
 
+  - name: 'Linux s390x: release artifact cross-compilation builds'
+    dependencies: []
+    run:
+      # TODO: Remove branch condition after testing - only keep tag condition for production
+      when: "tag =~ '^v[0-9]\\.' or branch = 'feat/s390x-cross-compilation'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-1
+      prologue:
+        commands:
+          # Setup QEMU for s390x emulation (for verification only)
+          - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          # Setup buildx for cross-compilation
+          - docker buildx create --name s390x-builder --use || docker buildx use s390x-builder
+          - docker buildx inspect --bootstrap
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      epilogue:
+        commands:
+          - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
+      jobs:
+        # TODO: For testing only - running single job. Add back both variants for production.
+        - name: 'Build: cross-compiled s390x (test)'
+          env_vars:
+            - name: ARTIFACT_KEY
+              value: p-librdkafka__plat-linux__dist-ubuntu__arch-s390x__lnk-all
+          commands:
+            - packaging/tools/build-s390x-cross.sh artifacts/librdkafka.tgz
+
+
   - name: 'Windows x64: MinGW-w64'
     dependencies: []
     run:
@@ -313,6 +343,7 @@ blocks:
       - 'OSX x64'
       - 'Linux x64: release artifact docker builds'
       - 'Linux arm64: release artifact docker builds'
+      - 'Linux s390x: release artifact cross-compilation builds'
       - 'Windows x64: MinGW-w64'
       - 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     run:

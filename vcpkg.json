@@ -4,7 +4,7 @@
     "dependencies": [
         {
             "name": "zstd",
-            "version>=": "1.5.6#0"
+            "version>=": "1.5.7#0"
         },
         {
             "name": "zlib",
@@ -12,11 +12,11 @@
         },
         {
             "name": "openssl",
-            "version>=": "3.3.2#1"
+            "version>=": "3.5.5#0"
         },
         {
             "name": "curl",
-            "version>=": "8.10.1#0"
+            "version>=": "8.15.0#0"
         }
     ],
     "builtin-baseline": "56765209ec0e92c58a5fd91aa09c46a16d660026"

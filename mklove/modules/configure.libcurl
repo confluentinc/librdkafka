@@ -45,8 +45,8 @@ void foo (void) {
 function install_source {
     local name=$1
     local destdir=$2
-    local ver=8.10.1
-    local checksum="d15ebab765d793e2e96db090f0e172d127859d78ca6f6391d7eafecfd894bbc0"
+    local ver=8.18.0
+    local checksum="e9274a5f8ab5271c0e0e6762d2fce194d5f98acc568e4ce816845b2dcc0cf88f"
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then
@@ -54,15 +54,6 @@ function install_source {
             "https://curl.se/download/curl-${ver}.tar.gz" \
             256 \
             $checksum || return 1
-    fi
-
-    # curl's configure has a runtime check where a program is built
-    # with all libs linked and then executed, since mklove's destdir
-    # is outside the standard ld.so search path this runtime check will
-    # fail due to missing libraries.
-    # We patch curl's configure file to skip this check altogether.
-    if ! mkl_patch libcurl 0000 ; then
-        return 1
     fi
 
     # Clear out LIBS to not interfer with lib detection process.

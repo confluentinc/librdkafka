@@ -2216,12 +2216,11 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
 
                         /* Track partition in transaction */
                         if (!err && mtxn) {
-                                char tbuf[256];
-                                rd_snprintf(tbuf, sizeof(tbuf), "%.*s",
-                                            RD_KAFKAP_STR_PR(&Topic));
+                                char *topic_name;
+                                RD_KAFKAP_STR_DUPA(&topic_name, &Topic);
                                 mtx_lock(&mcluster->lock);
-                                rd_kafka_mock_txn_partition_add(mtxn, tbuf,
-                                                                Partition);
+                                rd_kafka_mock_txn_partition_add(
+                                    mtxn, topic_name, Partition);
                                 mtx_unlock(&mcluster->lock);
                         }
 
@@ -2492,6 +2491,10 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
                         if (!mpart)
                                 continue;
 
+                        /* Skip partitions where no data was produced */
+                        if (mtxnp->first_offset < 0)
+                                continue;
+
                         /* Offset just before the control batch */
                         last_data_offset = mpart->end_offset - 1;
 
@@ -2500,7 +2503,7 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
                                                                     committed);
 
                         /* For abort: record the aborted range */
-                        if (!committed && mtxnp->first_offset >= 0) {
+                        if (!committed) {
                                 rd_kafka_mock_aborted_txn_t *mabort =
                                     rd_calloc(1, sizeof(*mabort));
                                 mabort->pid_id       = pid.id;
@@ -3470,7 +3473,10 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
         int64_t offset;
         int64_t upper_bound = pmeta->speo;
 
-        /* For read_committed, cap acquisition at LSO - 1. */
+        /* For read_committed, cap acquisition at LSO - 1.
+         * When lso == 0 (open txn starts at offset 0), upper_bound
+         * becomes -1, which makes the loop body unreachable —
+         * correct behavior: block all reads until the txn resolves. */
         if (isolation_level == 1 && mpart->lso - 1 < upper_bound)
                 upper_bound = mpart->lso - 1;
 

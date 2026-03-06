@@ -34,7 +34,7 @@
 #define MAX_CONSUMERS  16
 #define MAX_TOPICS     16
 #define MAX_PARTITIONS 32
-#define BATCH_SIZE     500
+#define BATCH_SIZE     10000
 
 /**
  * @brief Test configuration structure

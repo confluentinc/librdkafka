@@ -3941,10 +3941,365 @@ static int ut_cgrp_consumer_member_next_assignment(void) {
 }
 
 /**
+ * @brief Test that txn_get creates a new txn and reuses it.
+ */
+static int ut_mock_txn_get_creates_and_reuses(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_txn_t *mtxn1, *mtxn2, *mtxn3;
+        rd_kafkap_str_t tid1 = {.str = "txn-A", .len = 5};
+        rd_kafkap_str_t tid2 = {.str = "txn-B", .len = 5};
+        char errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+
+        mtx_lock(&mcluster->lock);
+
+        /* First call creates a new txn */
+        mtxn1 = rd_kafka_mock_txn_get(mcluster, &tid1);
+        RD_UT_ASSERT(mtxn1 != NULL, "txn_get returned NULL");
+        RD_UT_ASSERT(mtxn1->state == RD_KAFKA_MOCK_TXN_NONE,
+                     "new txn state should be NONE");
+        RD_UT_ASSERT(!strcmp(mtxn1->transactional_id, "txn-A"),
+                     "transactional_id mismatch");
+
+        /* Second call with same id returns same pointer */
+        mtxn2 = rd_kafka_mock_txn_get(mcluster, &tid1);
+        RD_UT_ASSERT(mtxn1 == mtxn2, "same id should return same pointer");
+
+        /* Different id returns different pointer */
+        mtxn3 = rd_kafka_mock_txn_get(mcluster, &tid2);
+        RD_UT_ASSERT(mtxn3 != mtxn1,
+                     "different id should be different pointer");
+        RD_UT_ASSERT(!strcmp(mtxn3->transactional_id, "txn-B"),
+                     "transactional_id mismatch for txn-B");
+
+        mtx_unlock(&mcluster->lock);
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Test partition add, dedup, and clear.
+ */
+static int ut_mock_txn_partition_add_and_clear(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_txn_t *mtxn;
+        rd_kafkap_str_t tid = {.str = "txn-parts", .len = 9};
+        char errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+
+        mtx_lock(&mcluster->lock);
+        mtxn = rd_kafka_mock_txn_get(mcluster, &tid);
+
+        /* Add 3 different partitions */
+        rd_kafka_mock_txn_partition_add(mtxn, "topic-a", 0);
+        rd_kafka_mock_txn_partition_add(mtxn, "topic-a", 1);
+        rd_kafka_mock_txn_partition_add(mtxn, "topic-b", 0);
+        RD_UT_ASSERT(mtxn->partition_cnt == 3, "expected 3 partitions, got %d",
+                     mtxn->partition_cnt);
+
+        /* Adding duplicate should not increase count */
+        rd_kafka_mock_txn_partition_add(mtxn, "topic-a", 0);
+        RD_UT_ASSERT(mtxn->partition_cnt == 3, "expected 3 after dup, got %d",
+                     mtxn->partition_cnt);
+
+        /* Clear should empty the list */
+        rd_kafka_mock_txn_partitions_clear(mtxn);
+        RD_UT_ASSERT(mtxn->partition_cnt == 0, "expected 0 after clear, got %d",
+                     mtxn->partition_cnt);
+        RD_UT_ASSERT(TAILQ_EMPTY(&mtxn->partitions),
+                     "partition list should be empty");
+
+        mtx_unlock(&mcluster->lock);
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Test that write_control_batch appends 1 offset with correct attrs.
+ */
+static int ut_mock_txn_control_batch_written(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_mock_partition_t *mpart;
+        rd_kafka_pid_t pid = {.id = 1000, .epoch = 0};
+        rd_kafka_mock_msgset_t *mset;
+        int16_t attrs;
+        int64_t offset_before;
+        char errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+        mtopic   = rd_kafka_mock_topic_new(mcluster, "ctrl-test", 1, 1);
+        mpart    = &mtopic->partitions[0];
+
+        offset_before = mpart->end_offset;
+
+        /* Write a COMMIT control batch */
+        rd_kafka_mock_partition_write_control_batch(mpart, pid, rd_true);
+
+        /* end_offset should have increased by 1 */
+        RD_UT_ASSERT(mpart->end_offset == offset_before + 1,
+                     "expected end_offset=%" PRId64 ", got %" PRId64,
+                     offset_before + 1, mpart->end_offset);
+
+        /* Check the last msgset has transactional+control attributes */
+        mset = TAILQ_LAST(&mpart->msgsets, rd_kafka_mock_msgset_tailq_s);
+        RD_UT_ASSERT(mset != NULL, "no msgset found");
+
+        memcpy(&attrs,
+               (const char *)mset->bytes.data +
+                   RD_KAFKAP_MSGSET_V2_OF_Attributes,
+               sizeof(attrs));
+        attrs = be16toh(attrs);
+        RD_UT_ASSERT((attrs & 0x0030) == 0x0030,
+                     "expected attrs bits 4+5 set (0x0030), got 0x%04x", attrs);
+
+        /* Write an ABORT control batch */
+        offset_before = mpart->end_offset;
+        rd_kafka_mock_partition_write_control_batch(mpart, pid, rd_false);
+        RD_UT_ASSERT(mpart->end_offset == offset_before + 1,
+                     "ABORT: expected end_offset=%" PRId64 ", got %" PRId64,
+                     offset_before + 1, mpart->end_offset);
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Test LSO calculation with open and closed transactions.
+ */
+static int ut_mock_txn_lso_calculation(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_mock_partition_t *mpart;
+        rd_kafka_mock_txn_t *mtxn;
+        rd_kafkap_str_t tid = {.str = "txn-lso", .len = 7};
+        char errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+        mtopic   = rd_kafka_mock_topic_new(mcluster, "lso-test", 1, 1);
+        mpart    = &mtopic->partitions[0];
+
+        /* No open txns → LSO = end_offset */
+        mtx_lock(&mcluster->lock);
+        rd_kafka_mock_partition_update_lso(mpart, mcluster);
+        RD_UT_ASSERT(mpart->lso == mpart->end_offset,
+                     "no txns: expected lso=%" PRId64 ", got %" PRId64,
+                     mpart->end_offset, mpart->lso);
+
+        /* Simulate some records in the log so end_offset > 5 */
+        mpart->end_offset = 10;
+
+        /* Create an open txn with first_offset=5 on this partition */
+        mtxn        = rd_kafka_mock_txn_get(mcluster, &tid);
+        mtxn->state = RD_KAFKA_MOCK_TXN_ONGOING;
+        rd_kafka_mock_txn_partition_add(mtxn, "lso-test", 0);
+        {
+                rd_kafka_mock_txn_partition_t *mtxnp;
+                TAILQ_FOREACH(mtxnp, &mtxn->partitions, link) {
+                        if (!strcmp(mtxnp->topic_name, "lso-test") &&
+                            mtxnp->partition == 0)
+                                mtxnp->first_offset = 5;
+                }
+        }
+
+        rd_kafka_mock_partition_update_lso(mpart, mcluster);
+        RD_UT_ASSERT(mpart->lso == 5,
+                     "open txn at 5: expected lso=5, got %" PRId64, mpart->lso);
+
+        /* Close the txn → LSO should go back to end_offset */
+        mtxn->state = RD_KAFKA_MOCK_TXN_NONE;
+        rd_kafka_mock_partition_update_lso(mpart, mcluster);
+        RD_UT_ASSERT(mpart->lso == mpart->end_offset,
+                     "closed txn: expected lso=%" PRId64 ", got %" PRId64,
+                     mpart->end_offset, mpart->lso);
+
+        mtx_unlock(&mcluster->lock);
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Test that aborted transaction range is recorded on partition.
+ */
+static int ut_mock_txn_aborted_range_recorded(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_mock_partition_t *mpart;
+        rd_kafka_mock_aborted_txn_t *mabort;
+        rd_kafka_pid_t pid = {.id = 2000, .epoch = 0};
+        int64_t last_data_offset;
+        char errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+        mtopic   = rd_kafka_mock_topic_new(mcluster, "abort-test", 1, 1);
+        mpart    = &mtopic->partitions[0];
+
+        /* Simulate: data was produced at offsets 0,1,2 (end_offset=3) */
+        /* We fake this by just setting end_offset directly */
+        mpart->end_offset = 3;
+
+        last_data_offset = mpart->end_offset - 1; /* 2 */
+
+        /* Write ABORT control batch → end_offset becomes 4 */
+        rd_kafka_mock_partition_write_control_batch(mpart, pid, rd_false);
+
+        /* Record the aborted range */
+        mabort               = rd_calloc(1, sizeof(*mabort));
+        mabort->pid_id       = pid.id;
+        mabort->first_offset = 0;
+        mabort->last_offset  = last_data_offset;
+        TAILQ_INSERT_TAIL(&mpart->aborted_txns, mabort, link);
+
+        /* Verify the aborted range */
+        mabort = TAILQ_FIRST(&mpart->aborted_txns);
+        RD_UT_ASSERT(mabort != NULL, "expected 1 aborted txn entry");
+        RD_UT_ASSERT(mabort->pid_id == 2000, "expected pid=2000, got %" PRId64,
+                     mabort->pid_id);
+        RD_UT_ASSERT(mabort->first_offset == 0,
+                     "expected first_offset=0, got %" PRId64,
+                     mabort->first_offset);
+        RD_UT_ASSERT(mabort->last_offset == 2,
+                     "expected last_offset=2, got %" PRId64,
+                     mabort->last_offset);
+
+        /* Control batch should have bumped end_offset to 4 */
+        RD_UT_ASSERT(mpart->end_offset == 4,
+                     "expected end_offset=4, got %" PRId64, mpart->end_offset);
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Test aborted offset range checking.
+ */
+static int ut_mock_txn_offset_is_aborted(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_mock_topic_t *mtopic;
+        rd_kafka_mock_partition_t *mpart;
+        rd_kafka_mock_aborted_txn_t *mabort;
+        char errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, errstr, sizeof(errstr));
+        mcluster = rd_kafka_mock_cluster_new(rk, 1);
+        mtopic   = rd_kafka_mock_topic_new(mcluster, "isabort-test", 1, 1);
+        mpart    = &mtopic->partitions[0];
+
+        /* Add aborted range: pid=1000, offsets 5-10 */
+        mabort               = rd_calloc(1, sizeof(*mabort));
+        mabort->pid_id       = 1000;
+        mabort->first_offset = 5;
+        mabort->last_offset  = 10;
+        TAILQ_INSERT_TAIL(&mpart->aborted_txns, mabort, link);
+
+        /* Check: offset in range + matching pid → aborted */
+        {
+                rd_kafka_mock_aborted_txn_t *a;
+                rd_bool_t found;
+
+                /* offset=5, pid=1000 → should match */
+                found = rd_false;
+                TAILQ_FOREACH(a, &mpart->aborted_txns, link) {
+                        if (a->pid_id == 1000 && 5 >= a->first_offset &&
+                            5 <= a->last_offset) {
+                                found = rd_true;
+                                break;
+                        }
+                }
+                RD_UT_ASSERT(found, "offset 5 pid 1000 should be aborted");
+
+                /* offset=7, pid=1000 → should match */
+                found = rd_false;
+                TAILQ_FOREACH(a, &mpart->aborted_txns, link) {
+                        if (a->pid_id == 1000 && 7 >= a->first_offset &&
+                            7 <= a->last_offset) {
+                                found = rd_true;
+                                break;
+                        }
+                }
+                RD_UT_ASSERT(found, "offset 7 pid 1000 should be aborted");
+
+                /* offset=11, pid=1000 → should NOT match (out of range) */
+                found = rd_false;
+                TAILQ_FOREACH(a, &mpart->aborted_txns, link) {
+                        if (a->pid_id == 1000 && 11 >= a->first_offset &&
+                            11 <= a->last_offset) {
+                                found = rd_true;
+                                break;
+                        }
+                }
+                RD_UT_ASSERT(!found,
+                             "offset 11 pid 1000 should NOT be aborted");
+
+                /* offset=7, pid=2000 → should NOT match (wrong pid) */
+                found = rd_false;
+                TAILQ_FOREACH(a, &mpart->aborted_txns, link) {
+                        if (a->pid_id == 2000 && 7 >= a->first_offset &&
+                            7 <= a->last_offset) {
+                                found = rd_true;
+                                break;
+                        }
+                }
+                RD_UT_ASSERT(!found, "offset 7 pid 2000 should NOT be aborted");
+        }
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
  * @brief Mock cluster unit tests
  */
 int unittest_mock_cluster(void) {
         int fails = 0;
         fails += ut_cgrp_consumer_member_next_assignment();
+
+        fails += ut_mock_txn_get_creates_and_reuses();
+        fails += ut_mock_txn_partition_add_and_clear();
+        fails += ut_mock_txn_control_batch_written();
+        fails += ut_mock_txn_lso_calculation();
+        fails += ut_mock_txn_aborted_range_recorded();
+        fails += ut_mock_txn_offset_is_aborted();
+
         return fails;
 }

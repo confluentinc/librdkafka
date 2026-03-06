@@ -674,6 +674,7 @@ static char *rd_kafka_oidc_assertion_read_from_file(const char *file_path) {
  */
 static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                                               const char *field,
+                                              const char *sub_claim_name,
                                               char **sub,
                                               double *exp,
                                               char *errstr,
@@ -729,19 +730,28 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        jwt_sub = cJSON_GetObjectItem(payloads, "sub");
+        /* Safety check to default to "sub" if not set */
+        if (!sub_claim_name || !*sub_claim_name)
+                sub_claim_name = "sub";
+
+        jwt_sub = cJSON_GetObjectItem(payloads, sub_claim_name);
         if (jwt_sub == NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
-                            "\"sub\" field");
+                            "\"%s\" field",
+                            sub_claim_name);
                 goto fail;
         }
 
         *sub = cJSON_GetStringValue(jwt_sub);
-        if (*sub == NULL) {
+        if (*sub == NULL || **sub == '\0') {
+                /* Reset to NULL to prevent a dangling pointer to cJSON
+                 * internal memory after cJSON_Delete(payloads) */
+                *sub = NULL;
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
-                            "valid \"sub\" field");
+                            "valid \"%s\" field (non-empty value required)",
+                            sub_claim_name);
                 goto fail;
         }
         *sub = rd_strdup(*sub);
@@ -857,13 +867,14 @@ void rd_kafka_oidc_token_jwt_bearer_refresh_cb(rd_kafka_t *rk,
          * This function will try to validate the `access_token` and then the
          * `id_token`.
          */
-        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
-                                                     &exp, validate_errstr,
-                                                     sizeof(validate_errstr));
+        jwt_token = rd_kafka_oidc_token_try_validate(
+            json, "access_token", rk->rk_conf.sasl.oauthbearer.sub_claim_name,
+            &sub, &exp, validate_errstr, sizeof(validate_errstr));
         if (!jwt_token)
                 jwt_token = rd_kafka_oidc_token_try_validate(
-                    json, "id_token", &sub, &exp, validate_errstr,
-                    sizeof(validate_errstr));
+                    json, "id_token",
+                    rk->rk_conf.sasl.oauthbearer.sub_claim_name, &sub, &exp,
+                    validate_errstr, sizeof(validate_errstr));
 
         if (!jwt_token) {
                 rd_kafka_oauthbearer_set_token_failure(rk, validate_errstr);
@@ -965,9 +976,9 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
                 goto done;
         }
 
-        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
-                                                     &exp, set_token_errstr,
-                                                     sizeof(set_token_errstr));
+        jwt_token = rd_kafka_oidc_token_try_validate(
+            json, "access_token", rk->rk_conf.sasl.oauthbearer.sub_claim_name,
+            &sub, &exp, set_token_errstr, sizeof(set_token_errstr));
         if (!jwt_token) {
                 rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
                 goto done;
@@ -1083,9 +1094,9 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
                 goto done;
         }
 
-        jwt_token = rd_kafka_oidc_token_try_validate(json, "access_token", &sub,
-                                                     &exp, set_token_errstr,
-                                                     sizeof(set_token_errstr));
+        jwt_token = rd_kafka_oidc_token_try_validate(
+            json, "access_token", rk->rk_conf.sasl.oauthbearer.sub_claim_name,
+            &sub, &exp, set_token_errstr, sizeof(set_token_errstr));
         if (!jwt_token) {
                 rd_kafka_oauthbearer_set_token_failure(rk, set_token_errstr);
                 goto done;
@@ -1312,6 +1323,136 @@ static int ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope(void) {
         RD_UT_PASS();
 }
 
+/**       All JWTs use a fake signature since token_try_validate() only
+ *        decodes and inspects the payload; signature verification is done
+ *        separately by the broker.
+ *
+ *        JWT payloads (decoded):
+ *          JWT_SUB_ONLY:
+ *            {"exp":9999999999,"iat":1000000000,"sub":"subject"}
+ *
+ *          JWT_MULTI_CLAIMS:
+ *            {"exp":9999999999,"iat":1000000000,"sub":"subject",
+ *             "client_id":"client_id_123","azp":"azp_123"}
+ *
+ *          JWT_EMPTY_SUB:
+ *            {"exp":9999999999,"iat":1000000000,"sub":""}
+ *
+ *          JWT_MISSING_SUB:
+ *            {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"}
+ */
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject"} */
+#define UT_JWT_SUB_ONLY                                                        \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic"                    \
+        "3ViIjoic3ViamVjdCJ9"                                                  \
+        "."                                                                    \
+        "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":"subject",
+ *           "client_id":"client_id_123","azp":"azp_123"} */
+#define UT_JWT_MULTI_CLAIMS                                                    \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoic3ViamVj"     \
+        "dCIsImNsaWVudF9pZCI6ImNsaWVudF9pZF8xMjMiLCJhenAiOiJhenBfMTIzIn0"      \
+        "."                                                                    \
+        "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"sub":""} */
+#define UT_JWT_EMPTY_SUB                                                       \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwic3ViIjoiIn0"          \
+        "."                                                                    \
+        "fakesignature"
+/* payload: {"exp":9999999999,"iat":1000000000,"client_id":"client_id_123"} */
+#define UT_JWT_MISSING_SUB                                                     \
+        "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFiY2RlZmcifQ"                           \
+        "."                                                                    \
+        "eyJleHAiOjk5OTk5OTk5OTksImlhdCI6MTAwMDAwMDAwMCwiY2xpZW50X2lkIjoi"     \
+        "Y2xpZW50X2lkXzEyMyJ9"                                                 \
+        "."                                                                    \
+        "fakesignature"
+
+/**
+ * @brief Verifies the extraction logic of the subject from the configured JWT
+ * claim name, falls back to "sub" when unconfigured, and rejects missing or
+ * empty claim values.
+ */
+static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
+
+        const struct {
+                const char *test_name;
+                const char *jwt;
+                const char *sub_claim_name;
+                rd_bool_t expect_success;
+                const char *expected_sub;
+        } tests[] = {
+            {"NULL sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, NULL,
+             rd_true, "subject"},
+            {"Empty sub_claim_name defaults to 'sub'", UT_JWT_SUB_ONLY, "",
+             rd_true, "subject"},
+            {"Explicit 'sub' claim name", UT_JWT_SUB_ONLY, "sub", rd_true,
+             "subject"},
+            {"Custom 'client_id' claim", UT_JWT_MULTI_CLAIMS, "client_id",
+             rd_true, "client_id_123"},
+            {"Custom 'azp' claim", UT_JWT_MULTI_CLAIMS, "azp", rd_true,
+             "azp_123"},
+            {"Custom 'client_id' claim succeeds without sub",
+             UT_JWT_MISSING_SUB, "client_id", rd_true, "client_id_123"},
+            {"Missing 'sub' claim fails", UT_JWT_MISSING_SUB, "sub", rd_false,
+             NULL},
+            {"Empty 'sub' value fails", UT_JWT_EMPTY_SUB, "sub", rd_false,
+             NULL},
+            {"Nonexistent claim name fails", UT_JWT_SUB_ONLY, "nonexistent",
+             rd_false, NULL},
+        };
+
+        unsigned int i;
+
+        RD_UT_BEGIN();
+
+        for (i = 0; i < RD_ARRAYSIZE(tests); i++) {
+                char *sub    = NULL;
+                double exp_v = 0;
+                char errstr[256];
+                char *result;
+                cJSON *json;
+                char access_token_json[2048];
+
+                rd_snprintf(access_token_json, sizeof(access_token_json),
+                            "{\"access_token\":\"%s\"}", tests[i].jwt);
+                json = cJSON_Parse(access_token_json);
+                RD_UT_ASSERT(json != NULL, "[%s] Failed to build test JSON",
+                             tests[i].test_name);
+
+                result = rd_kafka_oidc_token_try_validate(
+                    json, "access_token", tests[i].sub_claim_name, &sub, &exp_v,
+                    errstr, sizeof(errstr));
+
+                if (tests[i].expect_success) {
+                        RD_UT_ASSERT(result != NULL,
+                                     "[%s] Expected success but got error: %s",
+                                     tests[i].test_name, errstr);
+                        RD_UT_ASSERT(sub != NULL, "[%s] Expected non-NULL sub",
+                                     tests[i].test_name);
+                        RD_UT_ASSERT(!strcmp(sub, tests[i].expected_sub),
+                                     "[%s] Expected sub '%s', got '%s'",
+                                     tests[i].test_name, tests[i].expected_sub,
+                                     sub);
+                } else {
+                        RD_UT_ASSERT(result == NULL,
+                                     "[%s] Expected failure but got sub '%s'",
+                                     tests[i].test_name, sub ? sub : "(null)");
+                }
+
+                RD_IF_FREE(sub, rd_free);
+                cJSON_Delete(json);
+        }
+
+        RD_UT_PASS();
+}
+
 
 /**
  * @brief make sure the jwt is able to be extracted from HTTP(S) requests
@@ -1323,6 +1464,7 @@ int unittest_sasl_oauthbearer_oidc(void) {
         fails += ut_sasl_oauthbearer_oidc_with_empty_key();
         fails += ut_sasl_oauthbearer_oidc_post_fields();
         fails += ut_sasl_oauthbearer_oidc_post_fields_with_empty_scope();
+        fails += ut_sasl_oauthbearer_oidc_sub_claim_name();
         return fails;
 }
 

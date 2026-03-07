@@ -33,7 +33,6 @@
 #include "rdkafka_cgrp.h"
 #include "rdkafka_broker.h"
 #include "rdkafka_share_acknowledgement.h"
-#include <stdint.h>
 
 extern const char *rd_kafka_fetch_states[];
 
@@ -133,7 +132,6 @@ rd_kafka_fetch_pos_make(int64_t offset,
 typedef TAILQ_HEAD(rd_kafka_toppar_tqhead_s,
                    rd_kafka_toppar_s) rd_kafka_toppar_tqhead_t;
 
-
 /**
  * Topic + Partition combination
  */
@@ -185,12 +183,10 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         int rktp_fetch; /* On rkb_active_toppars list */
 
         /* Consumer */
-        rd_kafka_q_t *rktp_fetchq;      /* Queue of fetched messages
-                                         * from broker.
-                                         * Broker thread -> App */
-        rd_kafka_q_t *rktp_temp_fetchq; /* Temporary fetch queue
-                                         * used to filter acquired records */
-        rd_kafka_q_t *rktp_ops;         /* * -> Main thread */
+        rd_kafka_q_t *rktp_fetchq; /* Queue of fetched messages
+                                    * from broker.
+                                    * Broker thread -> App */
+        rd_kafka_q_t *rktp_ops;    /* * -> Main thread */
 
         rd_atomic32_t rktp_msgs_inflight; /**< Current number of
                                            *   messages in-flight to/from

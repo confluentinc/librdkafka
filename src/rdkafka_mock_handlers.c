@@ -3097,8 +3097,8 @@ rd_kafka_mock_handle_ShareGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
 
                         /* Check max group size before allowing join */
                         if (mshgrp->max_size > 0 &&
-                            !rd_kafka_mock_sharegroup_member_find(
-                                mshgrp, &MemberId) &&
+                            !rd_kafka_mock_sharegroup_member_find(mshgrp,
+                                                                  &MemberId) &&
                             mshgrp->member_cnt >= mshgrp->max_size) {
                                 err = RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED;
                                 mtx_unlock(&mcluster->lock);

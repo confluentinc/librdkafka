@@ -43,13 +43,13 @@
  * a subsequent fetch receives UNKNOWN_TOPIC_OR_PARTITION.
  */
 static void do_test_topic_delete(void) {
+        const char *topic = test_mk_topic_name("0009_topic_delete", 1);
         rd_kafka_mock_cluster_t *mcluster;
-        rd_kafka_t *rk;
+        rd_kafka_t *p, *c;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
         rd_kafka_resp_err_t err;
         const char *bootstraps;
-        const char *topic = test_mk_topic_name("0009_topic_delete", 1);
         rd_kafka_topic_partition_list_t *parts;
         rd_kafka_message_t *rkm;
 
@@ -61,17 +61,21 @@ static void do_test_topic_delete(void) {
          * after deletion. */
         TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic, 1, 1));
 
-        test_conf_init(&conf, NULL, 10);
+        test_conf_init(&conf, NULL, 30);
+
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "allow.auto.create.topics", "false");
 
-        /* Produce some messages */
+        /* Producer */
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-        rk = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
-        rkt = test_create_producer_topic(rk, topic, NULL);
-        test_produce_msgs(rk, rkt, 0, 0, 0, 10, NULL, 0);
+        p = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
+
+        rkt = test_create_producer_topic(p, topic, NULL);
+
+        /* Produce */
+        test_produce_msgs(p, rkt, 0, 0, 0, 10, NULL, 0);
         rd_kafka_topic_destroy(rkt);
-        rd_kafka_destroy(rk);
+        rd_kafka_destroy(p);
 
         /* Delete the topic */
         TEST_CALL_ERR__(rd_kafka_mock_topic_delete(mcluster, topic));
@@ -82,19 +86,18 @@ static void do_test_topic_delete(void) {
                     "Expected UNKNOWN_TOPIC_OR_PART, got %s",
                     rd_kafka_err2str(err));
 
-        /* Create a consumer and try to fetch from the deleted topic.
-         * Expect no messages. */
+        /* Consumer */
         test_conf_set(conf, "auto.offset.reset", "earliest");
-        rk = test_create_consumer(topic, NULL, conf, NULL);
+        c = test_create_consumer(topic, NULL, conf, NULL);
 
+        /* Assign */
         parts = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(parts, topic, 0);
-        test_consumer_assign("CONSUME_DELETED", rk, parts);
+        test_consumer_assign("CONSUME_DELETED", c, parts);
         rd_kafka_topic_partition_list_destroy(parts);
 
-        /* Poll briefly - should get no data messages since topic
-         * is deleted. We expect either no message or an error. */
-        rkm = rd_kafka_consumer_poll(rk, 5000);
+        /* Consume - expect no data messages since topic is deleted */
+        rkm = rd_kafka_consumer_poll(c, 5000);
         if (rkm) {
                 TEST_ASSERT(rkm->err != RD_KAFKA_RESP_ERR_NO_ERROR,
                             "Expected error or no message from deleted topic, "
@@ -103,7 +106,7 @@ static void do_test_topic_delete(void) {
                 rd_kafka_message_destroy(rkm);
         }
 
-        rd_kafka_destroy(rk);
+        rd_kafka_destroy(c);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();
@@ -118,14 +121,14 @@ static void do_test_topic_delete(void) {
  * 2. The API returns errors for invalid inputs.
  */
 static void do_test_partition_delete_records(void) {
+        const char *topic = test_mk_topic_name("0009_delete_records", 1);
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_t *p, *c;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_t *rkt;
         rd_kafka_resp_err_t err;
         const char *bootstraps;
-        const char *topic = test_mk_topic_name("0009_delete_records", 1);
-        const int msgcnt  = 100;
+        const int msgcnt            = 100;
         const int64_t delete_before = 50;
         rd_kafka_topic_partition_list_t *parts;
         rd_kafka_message_t *rkm;
@@ -137,21 +140,24 @@ static void do_test_partition_delete_records(void) {
         /* Create topic with 1 partition */
         TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic, 1, 1));
 
-        test_conf_init(&conf, NULL, 10);
+        test_conf_init(&conf, NULL, 30);
+
         test_conf_set(conf, "bootstrap.servers", bootstraps);
 
-        /* Produce messages (offsets 0..99) */
+        /* Producer */
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         p = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
+
         rkt = test_create_producer_topic(p, topic, NULL);
+
+        /* Produce */
         test_produce_msgs(p, rkt, 0, 0, 0, msgcnt, NULL, 0);
         rd_kafka_topic_destroy(rkt);
         rd_kafka_destroy(p);
 
         /* Delete records before offset 50 */
-        TEST_CALL_ERR__(
-            rd_kafka_mock_partition_delete_records(mcluster, topic, 0,
-                                                   delete_before));
+        TEST_CALL_ERR__(rd_kafka_mock_partition_delete_records(
+            mcluster, topic, 0, delete_before));
 
         /* Verify error for non-existent topic */
         err = rd_kafka_mock_partition_delete_records(mcluster, "no_such_topic",
@@ -173,21 +179,21 @@ static void do_test_partition_delete_records(void) {
                     "Expected OFFSET_OUT_OF_RANGE, got %s",
                     rd_kafka_err2str(err));
 
-        /* Consume from beginning - should start at offset 50 */
+        /* Consumer */
         test_conf_set(conf, "auto.offset.reset", "earliest");
         c = test_create_consumer(topic, NULL, conf, NULL);
 
+        /* Assign */
         parts = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(parts, topic, 0);
         test_consumer_assign("CONSUME_AFTER_DELETE", c, parts);
         rd_kafka_topic_partition_list_destroy(parts);
 
-        /* First message should be at offset >= delete_before */
+        /* Consume - first message should be at offset >= delete_before */
         rkm = rd_kafka_consumer_poll(c, 10000);
         TEST_ASSERT(rkm != NULL, "Expected message, got NULL");
         TEST_ASSERT(rkm->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Expected success, got %s",
-                    rd_kafka_err2str(rkm->err));
+                    "Expected success, got %s", rd_kafka_err2str(rkm->err));
         TEST_ASSERT(rkm->offset >= delete_before,
                     "Expected first message offset >= %" PRId64
                     ", got %" PRId64,

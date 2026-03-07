@@ -2555,10 +2555,10 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 rd_kafka_mock_msgset_t *mset, *tmp;
                 int64_t before_offset = rko->rko_u.mock.lo;
 
-                mtopic = rd_kafka_mock_topic_find(mcluster,
-                                                  rko->rko_u.mock.name);
-                mpart  = rd_kafka_mock_partition_find(
-                    mtopic, rko->rko_u.mock.partition);
+                mtopic =
+                    rd_kafka_mock_topic_find(mcluster, rko->rko_u.mock.name);
+                mpart = rd_kafka_mock_partition_find(mtopic,
+                                                     rko->rko_u.mock.partition);
                 if (!mpart)
                         return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
@@ -2577,13 +2577,12 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 if (mpart->update_follower_start_offset)
                         mpart->follower_start_offset = mpart->start_offset;
 
-                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
-                             "Delete records %s [%" PRId32
-                             "] before offset %" PRId64
-                             " (log now %" PRId64 "..%" PRId64 ")",
-                             rko->rko_u.mock.name,
-                             rko->rko_u.mock.partition, before_offset,
-                             mpart->start_offset, mpart->end_offset);
+                rd_kafka_dbg(
+                    mcluster->rk, MOCK, "MOCK",
+                    "Delete records %s [%" PRId32 "] before offset %" PRId64
+                    " (log now %" PRId64 "..%" PRId64 ")",
+                    rko->rko_u.mock.name, rko->rko_u.mock.partition,
+                    before_offset, mpart->start_offset, mpart->end_offset);
                 break;
         }
 

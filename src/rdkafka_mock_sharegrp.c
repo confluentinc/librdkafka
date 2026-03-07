@@ -749,7 +749,7 @@ void rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_sharegroup_t *mshgrp;
         mtx_lock(&mcluster->lock);
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
-            mshgrp->max_size = max_size;
+        mshgrp->max_size                       = max_size;
         mcluster->defaults.sharegroup_max_size = max_size;
         mtx_unlock(&mcluster->lock);
 }

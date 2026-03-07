@@ -49,6 +49,28 @@ static rd_kafka_t *create_share_consumer(const char *bootstraps,
 }
 
 /**
+ * @brief Create a share consumer connected to mock cluster using the
+ *        public share consumer API.
+ */
+static rd_kafka_share_t *create_mock_share_consumer(const char *bootstraps,
+                                                    const char *group_id) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group_id);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer: %s",
+                    errstr);
+        rd_kafka_share_poll_set_consumer(rkshare);
+
+        return rkshare;
+}
+
+/**
  * @brief Test basic ShareGroupHeartbeat flow:
  *        join, receive assignment, heartbeats, leave.
  */
@@ -816,8 +838,9 @@ static void do_test_share_group_max_size(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_topic_partition_list_t *c1_assignment, *c2_assignment;
-        rd_kafka_t *c1, *c2;
+        rd_kafka_topic_partition_list_t *share_c1_assignment,
+            *share_c2_assignment;
+        rd_kafka_share_t *share_c1, *share_c2;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-max-size";
 
@@ -836,45 +859,48 @@ static void do_test_share_group_max_size(void) {
         rd_kafka_mock_start_request_tracking(mcluster);
 
         /* C1 joins - should succeed and get all 3 partitions */
-        c1 = create_share_consumer(bootstraps, group);
-        TEST_CALL_ERR__(rd_kafka_subscribe(c1, subscription));
+        share_c1 = create_mock_share_consumer(bootstraps, group);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c1, subscription));
 
         wait_share_heartbeats(mcluster, 1, 500);
-        rd_kafka_consumer_poll(c1, 2000);
+        test_share_consume_msgs(share_c1, 1, 4, 500, NULL, 0);
 
-        TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assignment));
-        TEST_ASSERT(c1_assignment->cnt == 3,
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            test_share_consumer_get_rk(share_c1), &share_c1_assignment));
+        TEST_ASSERT(share_c1_assignment->cnt == 3,
                     "Expected C1 to have 3 partitions, got %d",
-                    c1_assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(c1_assignment);
+                    share_c1_assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(share_c1_assignment);
 
         /* C2 joins - should be rejected (GROUP_MAX_SIZE_REACHED) */
-        c2 = create_share_consumer(bootstraps, group);
-        TEST_CALL_ERR__(rd_kafka_subscribe(c2, subscription));
+        share_c2 = create_mock_share_consumer(bootstraps, group);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
         /* Give C2 time to attempt join and get rejected */
-        rd_kafka_consumer_poll(c2, 3000);
+        test_share_consume_msgs(share_c2, 1, 6, 500, NULL, 0);
 
         /* C2 should have no assignment since it was rejected */
-        TEST_CALL_ERR__(rd_kafka_assignment(c2, &c2_assignment));
-        TEST_ASSERT(c2_assignment->cnt == 0,
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            test_share_consumer_get_rk(share_c2), &share_c2_assignment));
+        TEST_ASSERT(share_c2_assignment->cnt == 0,
                     "Expected C2 to have 0 partitions (rejected), got %d",
-                    c2_assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(c2_assignment);
+                    share_c2_assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(share_c2_assignment);
 
         /* C1 should still have its assignment */
-        TEST_CALL_ERR__(rd_kafka_assignment(c1, &c1_assignment));
-        TEST_ASSERT(c1_assignment->cnt == 3,
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            test_share_consumer_get_rk(share_c1), &share_c1_assignment));
+        TEST_ASSERT(share_c1_assignment->cnt == 3,
                     "Expected C1 to still have 3 partitions, got %d",
-                    c1_assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(c1_assignment);
+                    share_c1_assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(share_c1_assignment);
 
         /* Cleanup */
-        rd_kafka_consumer_close(c1);
-        rd_kafka_consumer_close(c2);
-        rd_kafka_destroy(c1);
-        rd_kafka_destroy(c2);
+        rd_kafka_share_consumer_close(share_c1);
+        rd_kafka_share_consumer_close(share_c2);
+        rd_kafka_share_destroy(share_c1);
+        rd_kafka_share_destroy(share_c2);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);

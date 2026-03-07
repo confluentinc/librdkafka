@@ -963,12 +963,11 @@ int rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 rkmessages[cnt++] = rd_kafka_message_get(rko);
         }
 
-        /* NOTE: KIP-932:
+        /* TODO KIP-932:
          * For a share consumer, we are not using version barriers, and ideally,
          * tmpq should be empty. However, the discard code is retained as
-         * non-share-consumer might still be around. This assert exists to spot
-         * any issues as they arise during testing.*/
-        rd_dassert(TAILQ_EMPTY(&tmpq));
+         * outdated ops may still appear due to rd_kafka_share_subscribe
+         * reusing rd_kafka_subscribe which bumps the version. */
 
         /* Discard non-desired and already handled ops */
         next = TAILQ_FIRST(&tmpq);

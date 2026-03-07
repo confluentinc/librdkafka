@@ -624,10 +624,14 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
                         if (mtxnp && mtxnp->first_offset == -1)
                                 mtxnp->first_offset = mset->first_offset;
                 }
-                rd_kafka_mock_partition_update_lso(mpart,
-                                                   mpart->topic->cluster);
                 mtx_unlock(&mpart->topic->cluster->lock);
         }
+
+        /* Update LSO after every append — if no open transactions,
+         * LSO advances to end_offset. */
+        mtx_lock(&mpart->topic->cluster->lock);
+        rd_kafka_mock_partition_update_lso(mpart, mpart->topic->cluster);
+        mtx_unlock(&mpart->topic->cluster->lock);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 

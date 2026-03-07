@@ -219,6 +219,10 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare) {
                        &rkshare->rkshare_inflight_acks) {
                 rd_kafka_share_ack_batch_entry_t *entry;
                 int i;
+                rd_kafka_dbg(rkshare->rkshare_rk, CGRP, "SHAREACK",
+                             "Implicit ack: converting ACQUIRED to ACCEPT "
+                             "for %s [%" PRId32 "]",
+                             tp_key->topic, tp_key->partition);
                 RD_LIST_FOREACH(entry, &inflight_batches->entries, i) {
                         int k;
                         for (k = 0; k < entry->types_cnt; k++) {
@@ -280,6 +284,10 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                 rd_kafka_share_ack_batch_entry_t *entry;
                 rd_list_t new_entries;
                 int ei;
+
+                rd_kafka_dbg(rkshare->rkshare_rk, CGRP, "SHAREACK",
+                             "Building ack details for %s [%" PRId32 "]",
+                             tp_key->topic, tp_key->partition);
 
                 rd_list_init(&new_entries, 0,
                              rd_kafka_share_ack_batch_entry_destroy_free);

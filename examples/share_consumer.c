@@ -133,13 +133,6 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        if (rd_kafka_conf_set(conf, "debug", "fetch,broker,topic,cgrp", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-        }
-
         /* Set the consumer group id.
          * All consumers sharing the same group id will join the same
          * group, and the subscribed topic' partitions will be assigned

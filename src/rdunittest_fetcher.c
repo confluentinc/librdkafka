@@ -51,9 +51,11 @@
  * @{
  */
 
+static rd_kafka_t *ut_mock_rk;
+
 static rd_kafka_share_t *ut_create_mock_rkshare(void) {
         rd_kafka_share_t *rkshare    = rd_calloc(1, sizeof(*rkshare));
-        rkshare->rkshare_rk          = NULL;
+        rkshare->rkshare_rk          = ut_mock_rk;
         rkshare->rkshare_unacked_cnt = 0;
 
         RD_MAP_INIT(&rkshare->rkshare_inflight_acks, 16,
@@ -1175,12 +1177,17 @@ int unittest_fetcher_share_filter_forward(void) {
             {NULL}};
         int i;
 
+        ut_mock_rk = rd_calloc(1, sizeof(*ut_mock_rk));
+
         for (i = 0; tests[i].name; i++) {
                 int f = tests[i].call();
                 RD_UT_SAY("  %s: %s", tests[i].name,
                           f ? "\033[31mFAIL\033[0m" : "\033[32mPASS\033[0m");
                 fails += f;
         }
+
+        rd_free(ut_mock_rk);
+        ut_mock_rk = NULL;
 
         if (fails > 0) {
                 RD_UT_SAY("%d test(s) failed", fails);

@@ -718,14 +718,15 @@ static const test_scenario_t test_repeated_unsubscribe = {
 /**
  * Subscription replacement tests
  */
-static const test_scenario_t test_topic_switch = {
-    .name = "topic-switch",
-    .ops  = {SUBSCRIBE(2), PRODUCE(10), CONSUME_ANY(),
-             RESUBSCRIBE(2),            /* Switch to 2 new topics */
-             PRODUCE(10),               /* Produce to new topics */
-             PRODUCE_TO_OLD(5),         /* Produce to old topics */
-             CONSUME_VERIFY_NO_OLD(20), /* Should only get new topic msgs */
-             TEST_OPS_END()}};
+/* TODO KIP-932: test_topic_switch might be incorrect. Verify and remove. */
+// static const test_scenario_t test_topic_switch = {
+//     .name = "topic-switch",
+//     .ops  = {SUBSCRIBE(2), PRODUCE(10), CONSUME_ANY(),
+//              RESUBSCRIBE(2),            /* Switch to 2 new topics */
+//              PRODUCE(10),               /* Produce to new topics */
+//              PRODUCE_TO_OLD(5),         /* Produce to old topics */
+//              CONSUME_VERIFY_NO_OLD(20), /* Should only get new topic msgs */
+//              TEST_OPS_END()}};
 
 static const test_scenario_t test_incremental_subscription = {
     .name = "incremental-subscription",
@@ -989,7 +990,8 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_scenario(&test_repeated_unsubscribe);
 
         /* Subscription replacement tests */
-        /* TODO KIP-932: This is incorrect test. Verify and remove the test */
+        /* TODO KIP-932: test_topic_switch might be incorrect. Verify and
+         * remove. */
         // do_test_scenario(&test_topic_switch);
         do_test_scenario(&test_incremental_subscription);
 

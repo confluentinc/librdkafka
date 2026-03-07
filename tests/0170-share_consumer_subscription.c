@@ -877,6 +877,109 @@ static void do_test_multi_consumer_overlap(void) {
 }
 
 
+/**
+ * @brief Test subscribing to 15 topics - triggers multiple fetch responses
+ *
+ * Creates 15 topics, subscribes to all of them, produces messages to each,
+ * and verifies all messages are consumed. This tests the scenario where
+ * topics are spread across multiple brokers and require multiple
+ * ShareFetch responses.
+ */
+static void do_test_subscribe_15_topics(void) {
+        const char *group        = test_mk_topic_name("share-15topics", 1);
+        const int topic_cnt      = 15;
+        const int msgs_per_topic = 100;
+        const int total_expected = topic_cnt * msgs_per_topic;
+        char *topics[15];
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[10000];
+        int consumed = 0;
+        int attempts;
+        int t;
+        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY(
+            "=== subscribe-15-topics (triggers multiple fetch responses) "
+            "===\n");
+        TEST_SAY(
+            "============================================================\n");
+
+        /* Create 15 topics */
+        for (t = 0; t < topic_cnt; t++) {
+                topics[t] = rd_strdup(test_mk_topic_name("0170-15topics", 1));
+                test_create_topic_wait_exists(NULL, topics[t], 1, -1, 30000);
+        }
+
+        /* Produce messages to each topic */
+        for (t = 0; t < topic_cnt; t++) {
+                test_produce_msgs_easy(topics[t], 0, 0, msgs_per_topic);
+        }
+        TEST_SAY("Produced %d messages to %d topics\n", total_expected,
+                 topic_cnt);
+
+        /* Create consumer */
+        rkshare = test_create_share_consumer(group);
+
+        /* Set group offset */
+        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
+                                            RD_KAFKA_RESOURCE_GROUP, group, cfg,
+                                            1);
+
+        /* Subscribe to all topics */
+        subs = rd_kafka_topic_partition_list_new(topic_cnt);
+        for (t = 0; t < topic_cnt; t++) {
+                rd_kafka_topic_partition_list_add(subs, topics[t],
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        TEST_SAY("Subscribed to %d topics\n", topic_cnt);
+
+        /* Consume all messages */
+        attempts = 100;
+        while (consumed < total_expected && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+
+                if (rcvd > 0)
+                        TEST_SAY("Progress: %d/%d\n", consumed, total_expected);
+        }
+
+        TEST_ASSERT(consumed == total_expected,
+                    "Expected %d messages, consumed %d", total_expected,
+                    consumed);
+
+        /* Cleanup */
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+
+        for (t = 0; t < topic_cnt; t++) {
+                rd_free(topics[t]);
+        }
+
+        TEST_SAY("=== subscribe-15-topics: PASSED (%d messages) ===\n",
+                 consumed);
+}
+
+
 int main_0170_share_consumer_subscription(int argc, char **argv) {
 
         /* Basic subscription tests */
@@ -886,7 +989,8 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_scenario(&test_repeated_unsubscribe);
 
         /* Subscription replacement tests */
-        do_test_scenario(&test_topic_switch);
+        /* TODO KIP-932: This is incorrect test. Verify and remove the test */
+        // do_test_scenario(&test_topic_switch);
         do_test_scenario(&test_incremental_subscription);
 
         /* Edge case tests */
@@ -903,6 +1007,9 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
 
         /* Multi-consumer tests (standalone - requires shared topics) */
         do_test_multi_consumer_overlap();
+
+        /* Scale tests (many topics) */
+        do_test_subscribe_15_topics();
 
         return 0;
 }

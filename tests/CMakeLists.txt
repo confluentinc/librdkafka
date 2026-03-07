@@ -145,8 +145,9 @@ set(
     0152-rebootstrap.c
     0153-memberid.c
     0155-share_group_heartbeat_mock.c
-    0156-share_consumer_fetch_mock.c
-    0157-share_consumer_ack_mock.c
+    0156-share_group_fetch_mock.c
+    0157-share_group_ack_mock.c
+    0158-share_group_transactions_mock.c
     0170-share_consumer_subscription.c
     0171-share_consumer_consume.c
     0172-share_consumer_acknowledge.c

@@ -2512,14 +2512,29 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
                                 TAILQ_INSERT_TAIL(&mpart->aborted_txns, mabort,
                                                   link);
                         }
+                }
 
-                        /* Recalculate LSO (this txn is no longer open) */
+                /* Clear transaction state BEFORE recalculating LSO,
+                 * so update_lso no longer sees this txn as open. */
+                mtxn->state = RD_KAFKA_MOCK_TXN_NONE;
+
+                /* Recalculate LSO for all affected partitions now that
+                 * the txn is no longer ONGOING. */
+                TAILQ_FOREACH(mtxnp, &mtxn->partitions, link) {
+                        rd_kafka_mock_topic_t *mtopic =
+                            rd_kafka_mock_topic_find(mcluster,
+                                                     mtxnp->topic_name);
+                        rd_kafka_mock_partition_t *mpart;
+                        if (!mtopic)
+                                continue;
+                        mpart = rd_kafka_mock_partition_find(mtopic,
+                                                             mtxnp->partition);
+                        if (!mpart)
+                                continue;
                         rd_kafka_mock_partition_update_lso(mpart, mcluster);
                 }
 
-                /* Clear transaction state */
                 rd_kafka_mock_txn_partitions_clear(mtxn);
-                mtxn->state = RD_KAFKA_MOCK_TXN_NONE;
 
                 mtx_unlock(&mcluster->lock);
         }

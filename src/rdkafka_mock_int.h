@@ -254,6 +254,9 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int record_lock_duration_ms; /**< Per-record lock duration in ms.
                                       *   0 = use session_timeout_ms
                                       *   as fallback (default 0). */
+        int isolation_level;         /**< Share isolation level (KIP-932).
+                                      *   0 = read_uncommitted (default),
+                                      *   1 = read_committed. */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -288,6 +291,56 @@ typedef struct rd_kafka_mock_pid_s {
 
         char TransactionalId[1]; /**< Allocated after this structure */
 } rd_kafka_mock_pid_t;
+
+/**
+ * @brief Transaction state enum.
+ */
+typedef enum {
+        RD_KAFKA_MOCK_TXN_NONE,    /**< No active transaction */
+        RD_KAFKA_MOCK_TXN_ONGOING, /**< Transaction in progress */
+} rd_kafka_mock_txn_state_t;
+
+/**
+ * @brief A partition that is part of an active transaction.
+ *
+ * Linked from rd_kafka_mock_txn_t.partitions.
+ */
+typedef struct rd_kafka_mock_txn_partition_s {
+        TAILQ_ENTRY(rd_kafka_mock_txn_partition_s) link;
+        char *topic_name;
+        int32_t partition;
+        int64_t first_offset; /**< First offset produced in this txn,
+                               *   -1 if no data produced yet. */
+} rd_kafka_mock_txn_partition_t;
+
+/**
+ * @brief Active transaction state for a transactional producer.
+ *
+ * One per TransactionalId, stored in mcluster->transactions.
+ */
+typedef struct rd_kafka_mock_txn_s {
+        TAILQ_ENTRY(rd_kafka_mock_txn_s) link;
+        char *transactional_id;
+        rd_kafka_pid_t pid; /**< Current PID for this txn */
+        rd_kafka_mock_txn_state_t state;
+
+        /** Partitions registered via AddPartitionsToTxn */
+        TAILQ_HEAD(, rd_kafka_mock_txn_partition_s) partitions;
+        int partition_cnt;
+} rd_kafka_mock_txn_t;
+
+/**
+ * @brief A completed (aborted) transaction range on a partition.
+ *
+ * Stored in rd_kafka_mock_partition_t.aborted_txns.
+ * Used during read_committed ShareFetch to filter out aborted data.
+ */
+typedef struct rd_kafka_mock_aborted_txn_s {
+        TAILQ_ENTRY(rd_kafka_mock_aborted_txn_s) link;
+        int64_t pid_id;       /**< Producer ID */
+        int64_t first_offset; /**< First offset of aborted txn on this part */
+        int64_t last_offset;  /**< Last data offset (before control record) */
+} rd_kafka_mock_aborted_txn_t;
 
 /**
  * @brief rd_kafka_mock_pid_t.pid Pid (not epoch) comparator
@@ -442,6 +495,13 @@ typedef struct rd_kafka_mock_partition_s {
 
         rd_list_t pidstates; /**< PID states */
 
+        /** Aborted transaction ranges for read_committed filtering */
+        TAILQ_HEAD(, rd_kafka_mock_aborted_txn_s) aborted_txns;
+
+        /** Last Stable Offset: offset of first open transaction.
+         *  If no open transactions, lso == end_offset. */
+        int64_t lso;
+
         int32_t follower_id; /**< Preferred replica/follower */
 
         struct rd_kafka_mock_topic_s *topic;
@@ -532,6 +592,9 @@ struct rd_kafka_mock_cluster_s {
          *  Element type is a malloced rd_kafka_mock_pid_t*. */
         rd_list_t pids;
 
+        /** Active transactions by TransactionalId. */
+        TAILQ_HEAD(, rd_kafka_mock_txn_s) transactions;
+
         char *bootstraps; /**< bootstrap.servers */
 
         thrd_t thread; /**< Mock thread */
@@ -573,6 +636,9 @@ struct rd_kafka_mock_cluster_s {
                 /** Per-record lock duration in ms (KIP 932).
                  *  0 = use session_timeout_ms. */
                 int sharegroup_record_lock_duration_ms;
+                /** Share isolation level (KIP 932).
+                 *  0 = read_uncommitted, 1 = read_committed. */
+                int sharegroup_isolation_level;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */
@@ -692,6 +758,22 @@ rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,
 rd_kafka_resp_err_t rd_kafka_mock_partition_leader_epoch_check(
     const rd_kafka_mock_partition_t *mpart,
     int32_t leader_epoch);
+
+/* Transaction helpers (used across rdkafka_mock.c and
+ * rdkafka_mock_handlers.c) */
+rd_kafka_mock_txn_t *
+rd_kafka_mock_txn_get(rd_kafka_mock_cluster_t *mcluster,
+                      const rd_kafkap_str_t *TransactionalId);
+void rd_kafka_mock_txn_partition_add(rd_kafka_mock_txn_t *mtxn,
+                                     const char *topic,
+                                     int32_t partition);
+void rd_kafka_mock_txn_partitions_clear(rd_kafka_mock_txn_t *mtxn);
+void rd_kafka_mock_partition_update_lso(rd_kafka_mock_partition_t *mpart,
+                                        rd_kafka_mock_cluster_t *mcluster);
+void rd_kafka_mock_partition_write_control_batch(
+    rd_kafka_mock_partition_t *mpart,
+    rd_kafka_pid_t pid,
+    rd_bool_t committed);
 
 int64_t rd_kafka_mock_partition_offset_for_leader_epoch(
     const rd_kafka_mock_partition_t *mpart,

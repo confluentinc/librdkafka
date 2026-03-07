@@ -1408,7 +1408,8 @@ done:
 static rd_kafka_resp_err_t
 rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                   rd_kafka_buf_t *rkbuf,
-                                  rd_kafka_buf_t *request) {
+                                  rd_kafka_buf_t *request,
+                                  rd_kafka_op_t **response_rko_out) {
         int32_t TopicArrayCnt;
         int i;
         const int log_decode_errors      = LOG_ERR;
@@ -1422,6 +1423,8 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_list_t *filtered_msgs       = NULL;
         rd_list_t *inflight_acks       = NULL;
         rd_bool_t has_acquired_records = rd_false;
+        rd_kafka_op_t *rko_orig        = request->rkbuf_opaque;
+        rd_kafka_op_t *response_rko    = NULL;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1492,11 +1495,8 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_NodeEndpoints(rkbuf, &NodeEndpoints);
 
         /* Build response rko with messages and inflight_acks */
-        rd_kafka_op_t *response_rko = rd_kafka_share_build_response_rko(
-            rkb, filtered_msgs, inflight_acks);
-
-        if (response_rko)
-                rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q, response_rko);
+        response_rko = rd_kafka_share_build_response_rko(rkb, filtered_msgs,
+                                                         inflight_acks);
 
         rd_list_destroy(inflight_acks);
         rd_list_destroy(filtered_msgs);
@@ -1513,11 +1513,17 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 RD_NOTREACHED();
         }
 
-        /* Signal main thread whether records were acquired */
-        rd_kafka_op_t *rko_orig = request->rkbuf_opaque;
+        /* Return response_rko to the caller instead of enqueueing here.
+         * The caller enqueues it on rkcg_q AFTER sending the reply to
+         * rk_ops, ensuring the main thread processes the reply (and
+         * resets share_fetch_more_records) before the app thread can
+         * wake up, poll again, and enqueue a new FANOUT. */
+        *response_rko_out = response_rko;
+
+        /* Signal main thread whether records were fetched */
         if (rko_orig)
                 rko_orig->rko_u.share_fetch.records_fetched =
-                    has_acquired_records;
+                    response_rko ? rd_true : rd_false;
 
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
         RD_IF_FREE(rkt, rd_kafka_topic_destroy0);
@@ -1527,6 +1533,9 @@ err_parse:
         /* Free inflight_acks list on error (destructor handles cleanup) */
         rd_list_destroy(inflight_acks);
         rd_list_destroy(filtered_msgs);
+
+        RD_IF_FREE(response_rko, rd_kafka_op_destroy);
+        *response_rko_out = NULL;
 
         if (rkt)
                 rd_kafka_topic_destroy0(rkt);
@@ -1703,7 +1712,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                                               rd_kafka_buf_t *request,
                                               void *opaque) {
 
-        rd_kafka_op_t *rko_orig = opaque;
+        rd_kafka_op_t *rko_orig     = opaque;
+        rd_kafka_op_t *response_rko = NULL;
 
         /**
          * TODO KIP-932: Improve this handling with Error handling and leave
@@ -1720,7 +1730,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
         /* Parse and handle the messages (unless the request errored) */
         if (!err && reply)
-                err = rd_kafka_share_fetch_reply_handle(rkb, reply, request);
+                err = rd_kafka_share_fetch_reply_handle(rkb, reply, request,
+                                                        &response_rko);
 
         rd_kafka_broker_session_update(rkb);
 
@@ -1766,6 +1777,14 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
         if (rko_orig)
                 rd_kafka_op_reply(rko_orig, err);
+
+        /* Enqueue the response for the app thread AFTER sending the
+         * reply to the main thread.  This ensures the main thread
+         * processes the reply (resetting share_fetch_more_records)
+         * before the app thread wakes up and enqueues a new FANOUT. */
+        if (response_rko)
+                rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q, response_rko);
+
         rkb->rkb_fetching = 0;
 }
 

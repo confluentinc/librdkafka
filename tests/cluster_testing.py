@@ -92,13 +92,22 @@ class LibrdkafkaTestCluster(Cluster):
             # fetch-from-follower
             if version_as_list(version) >= [2, 4, 0]:
                 curr_conf = defconf_curr.get('conf', list())
+                extra_conf = [
+                    'broker.rack=RACK${appid}',
+                    'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector'  # noqa: E501
+                ]
+                # Share consumer support (KIP-932) requires
+                # share coordinator state topic settings for
+                # single-broker test clusters.
+                if version_as_list(version) >= [4, 2, 0]:
+                    extra_conf += [
+                        'share.coordinator.state.topic.replication.factor=%d' % min(num_brokers, 3),  # noqa: E501
+                        'share.coordinator.state.topic.min.isr=%d' % min(num_brokers, 2),  # noqa: E501
+                    ]
                 defconf_curr.update(
                     {
-                        'conf': [
-                            'broker.rack=RACK${appid}',
-                            'replica.selector.class=org.apache.kafka.common.replica.RackAwareReplicaSelector'  # noqa: E501
-                        ] + curr_conf
-                    })  # noqa: E501
+                        'conf': extra_conf + curr_conf
+                    })
             print('conf broker', str(n), ': ', defconf_curr)
             self.brokers.append(KafkaBrokerApp(self, defconf_curr))
 

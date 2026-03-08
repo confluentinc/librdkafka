@@ -34,7 +34,7 @@
 #define MAX_CONSUMERS  16
 #define MAX_TOPICS     16
 #define MAX_PARTITIONS 32
-#define BATCH_SIZE     500
+#define BATCH_SIZE     10000
 
 /**
  * @brief Test configuration structure
@@ -446,6 +446,312 @@ static void test_multiple_consumers_multiple_topics_multiple_partitions(void) {
         run_share_consumer_test(&config);
 }
 
+/***************************************************************************
+ * High Volume Tests
+ ***************************************************************************/
+
+/**
+ * @brief High volume test with 10k messages on single partition
+ */
+static void test_high_volume_10k_messages(void) {
+        share_test_config_t config = {
+            .consumer_cnt       = 1,
+            .topic_cnt          = 1,
+            .partitions         = {1},
+            .msgs_per_partition = 10000,
+            .group_name         = "share-highvol-10k",
+            .test_name          = "High volume: 10k messages, 1 partition",
+            .max_attempts       = 100};
+        run_share_consumer_test(&config);
+}
+
+/**
+ * @brief High volume test with 50k messages across 5 partitions
+ */
+static void test_high_volume_50k_multi_partition(void) {
+        share_test_config_t config = {
+            .consumer_cnt       = 1,
+            .topic_cnt          = 1,
+            .partitions         = {5},
+            .msgs_per_partition = 10000,
+            .group_name         = "share-highvol-50k",
+            .test_name          = "High volume: 50k messages, 5 partitions",
+            .max_attempts       = 150};
+        run_share_consumer_test(&config);
+}
+
+/***************************************************************************
+ * Multi-Topic Tests (Triggers Multiple Fetch Responses)
+ ***************************************************************************/
+
+/**
+ * @brief 15 topics to trigger multiple ShareFetch responses
+ */
+static void test_many_topics_15(void) {
+        share_test_config_t config = {
+            .consumer_cnt       = 1,
+            .topic_cnt          = 15,
+            .partitions         = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+            .msgs_per_partition = 100,
+            .group_name         = "share-15topics",
+            .test_name          = "15 topics, 1 partition each (1500 msgs)",
+            .max_attempts       = 100};
+        run_share_consumer_test(&config);
+}
+
+/**
+ * @brief 10 topics with 2 partitions each
+ */
+static void test_many_topics_10_multi_partition(void) {
+        share_test_config_t config = {
+            .consumer_cnt       = 1,
+            .topic_cnt          = 10,
+            .partitions         = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+            .msgs_per_partition = 100,
+            .group_name         = "share-10topics-2p",
+            .test_name          = "10 topics, 2 partitions each (2000 msgs)",
+            .max_attempts       = 100};
+        run_share_consumer_test(&config);
+}
+
+/***************************************************************************
+ * Rapid Produce/Consume Tests
+ ***************************************************************************/
+
+/**
+ * @brief Rapid produce/consume cycles - 20 rounds of 500 messages each
+ */
+static void test_rapid_produce_consume_cycles(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-rapid-cycles";
+        rd_kafka_topic_partition_list_t *subs;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        int round, total_consumed = 0;
+        const int rounds         = 20;
+        const int msgs_per_round = 500;
+        const int total_expected = rounds * msgs_per_round;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== Rapid produce/consume cycles: %d rounds x %d msgs ===\n",
+                 rounds, msgs_per_round);
+
+        /* Create consumer and topic */
+        consumer = test_create_share_consumer(group);
+        topic    = test_mk_topic_name("0171-rapid-cycles", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Configure group */
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
+            group, grp_conf, 1);
+
+        /* Subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Rapid cycles */
+        for (round = 0; round < rounds; round++) {
+                int round_consumed = 0;
+                int attempts       = 100;
+
+                /* Produce */
+                test_produce_msgs_easy(topic, 0, 0, msgs_per_round);
+
+                /* Consume */
+                while (round_consumed < msgs_per_round && attempts-- > 0) {
+                        size_t rcvd = 0;
+                        size_t m;
+                        rd_kafka_error_t *err;
+
+                        err = rd_kafka_share_consume_batch(consumer, 1000,
+                                                           batch, &rcvd);
+                        if (err) {
+                                rd_kafka_error_destroy(err);
+                                continue;
+                        }
+
+                        for (m = 0; m < rcvd; m++) {
+                                if (!batch[m]->err)
+                                        round_consumed++;
+                                rd_kafka_message_destroy(batch[m]);
+                        }
+                }
+
+                total_consumed += round_consumed;
+                TEST_SAY("Round %d: consumed %d/%d (total: %d/%d)\n", round + 1,
+                         round_consumed, msgs_per_round, total_consumed,
+                         (round + 1) * msgs_per_round);
+        }
+
+        TEST_ASSERT(total_consumed == total_expected,
+                    "Expected %d messages, consumed %d", total_expected,
+                    total_consumed);
+
+        TEST_SAY("SUCCESS: Rapid cycles completed - %d messages\n",
+                 total_consumed);
+
+        /* Cleanup */
+        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+}
+
+/**
+ * @brief Empty topic then produce - verify consumer handles transition
+ */
+static void test_empty_then_produce(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-empty-then-produce";
+        rd_kafka_topic_partition_list_t *subs;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        int consumed           = 0, attempts;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== Empty topic then produce test ===\n");
+
+        /* Create consumer and empty topic */
+        consumer = test_create_share_consumer(group);
+        topic    = test_mk_topic_name("0171-empty-then-produce", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Configure and subscribe */
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
+            group, grp_conf, 1);
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll empty topic - should return 0 */
+        TEST_SAY("Polling empty topic...\n");
+        for (attempts = 0; attempts < 5; attempts++) {
+                size_t rcvd = 0;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                TEST_SAY("Empty poll %d: received %zu\n", attempts + 1, rcvd);
+        }
+
+        /* Now produce messages */
+        TEST_SAY("Producing 100 messages...\n");
+        test_produce_msgs_easy(topic, 0, 0, 100);
+
+        /* Consume - should get messages now */
+        attempts = 100;
+        while (consumed < 100 && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_ASSERT(consumed == 100, "Expected 100 messages, consumed %d",
+                    consumed);
+        TEST_SAY("SUCCESS: Empty then produce - consumed %d messages\n",
+                 consumed);
+
+        /* Cleanup */
+        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+}
+
+/**
+ * @brief Sparse partitions - produce only to some partitions
+ */
+static void test_sparse_partitions(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-sparse-partitions";
+        rd_kafka_topic_partition_list_t *subs;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        int consumed           = 0, attempts;
+        const int msgs_per_partition = 100;
+        const int expected = 3 * msgs_per_partition; /* partitions 0,2,4 */
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "=== Sparse partitions test (5 partitions, produce to 0,2,4) "
+            "===\n");
+
+        /* Create consumer and topic with 5 partitions */
+        consumer = test_create_share_consumer(group);
+        topic    = test_mk_topic_name("0171-sparse-partitions", 1);
+        test_create_topic_wait_exists(NULL, topic, 5, -1, 60 * 1000);
+
+        /* Configure and subscribe */
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
+            group, grp_conf, 1);
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Produce only to partitions 0, 2, 4 (skip 1, 3) */
+        test_produce_msgs_easy(topic, 0, 0, msgs_per_partition);
+        test_produce_msgs_easy(topic, 0, 2, msgs_per_partition);
+        test_produce_msgs_easy(topic, 0, 4, msgs_per_partition);
+
+        TEST_SAY("Produced %d messages to partitions 0, 2, 4\n", expected);
+
+        /* Consume all */
+        attempts = 100;
+        while (consumed < expected && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+
+                TEST_SAY("Progress: %d/%d\n", consumed, expected);
+        }
+
+        TEST_ASSERT(consumed == expected, "Expected %d messages, consumed %d",
+                    expected, consumed);
+        TEST_SAY("SUCCESS: Sparse partitions - consumed %d messages\n",
+                 consumed);
+
+        /* Cleanup */
+        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+}
+
 
 int main_0171_share_consumer_consume(int argc, char **argv) {
 
@@ -475,7 +781,7 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
                                                                       partitions
                                                                       each */
 
-        /* Multi-consumer tests */
+        // /* Multi-consumer tests */
         test_multiple_consumers_single_topic_single_partition();       /* Multi
                                                                           consumer
                                                                           sharing
@@ -491,6 +797,21 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
                                                                           multi
                                                                           everything
                                                                         */
+
+        // /* High volume tests */
+        test_high_volume_10k_messages();
+        test_high_volume_50k_multi_partition();
+
+        // /* Multi-topic tests (triggers multiple fetch responses) */
+        test_many_topics_15();
+        test_many_topics_10_multi_partition();
+
+        /* Rapid produce/consume tests */
+        test_rapid_produce_consume_cycles();
+
+        /* Edge case tests */
+        test_empty_then_produce();
+        test_sparse_partitions();
 
         return 0;
 }

@@ -49,7 +49,6 @@
 // #include <librdkafka/rdkafka.h>
 #include "rdkafka.h"
 
-
 #define TIME_BLOCK_MS(elapsed_var, expr)                                       \
         do {                                                                   \
                 struct timespec __t0, __t1;                                    \
@@ -155,29 +154,15 @@ int main(int argc, char **argv) {
          */
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rkshare) {
-                fprintf(stderr, "%% Failed to create new share consumer: %s\n",
+                fprintf(stderr,
+                        "%% Failed to create new share consumer: "
+                        "%s\n",
                         errstr);
                 return 1;
         }
 
         conf = NULL; /* Configuration object is now owned, and freed,
                       * by the rd_kafka_t instance. */
-
-
-        /*
-         * TODO KIP-932: Check if rd_kafka_poll_set_consumer(rk)
-         * can be skipped for the share consumer.
-         */
-        /*
-         * Redirect all messages from per-partition queues to
-         * the main queue so that messages can be consumed with one
-         * call from all assigned partitions.
-         *
-         * The alternative is to poll the main queue (for events)
-         * and each partition queue separately, which requires setting
-         * up a rebalance callback and keeping track of the assignment:
-         * but that is more complex and typically not recommended. */
-        rd_kafka_share_poll_set_consumer(rkshare);
 
 
         /* Convert the list of topics to a format suitable for librdkafka */
@@ -191,7 +176,9 @@ int main(int argc, char **argv) {
         /* Subscribe to the list of topics */
         err = rd_kafka_share_subscribe(rkshare, subscription);
         if (err) {
-                fprintf(stderr, "%% Failed to subscribe to %d topics: %s\n",
+                fprintf(stderr,
+                        "%% Failed to subscribe to %d topics: "
+                        "%s\n",
                         subscription->cnt, rd_kafka_err2str(err));
                 rd_kafka_topic_partition_list_destroy(subscription);
                 rd_kafka_share_destroy(rkshare);
@@ -215,7 +202,7 @@ int main(int argc, char **argv) {
          * since a rebalance may happen at any time.
          * Start polling for messages. */
 
-        rd_kafka_message_t *rkmessages[500];
+        rd_kafka_message_t *rkmessages[10001];
         while (run) {
                 rd_kafka_message_t *rkm = NULL;
                 size_t rcvd_msgs        = 0;
@@ -225,10 +212,11 @@ int main(int argc, char **argv) {
 
                 TIME_BLOCK_MS(__elapsed_ms,
                               error = rd_kafka_share_consume_batch(
-                                  rkshare, 500, rkmessages, &rcvd_msgs));
-                fprintf(stdout,
-                        "%% rd_kafka_share_consume_batch() took %.3f ms\n",
-                        __elapsed_ms);
+                                  rkshare, 3000, rkmessages, &rcvd_msgs));
+                // fprintf(stdout,
+                //         "%% rd_kafka_share_consume_batch() took "
+                //         "%.3f ms\n",
+                //         __elapsed_ms);
 
                 if (error) {
                         fprintf(stderr, "%% Consume error: %s\n",
@@ -237,12 +225,14 @@ int main(int argc, char **argv) {
                         continue;
                 }
 
-                fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
+                // fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
                 for (i = 0; i < (int)rcvd_msgs; i++) {
                         rkm = rkmessages[i];
 
                         if (rkm->err) {
-                                fprintf(stderr, "%% Consumer error: %d: %s\n",
+                                fprintf(stderr,
+                                        "%% Consumer error: %d: "
+                                        "%s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
                                 rd_kafka_message_destroy(rkm);
                                 continue;

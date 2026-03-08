@@ -294,9 +294,6 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
                      rkt->rkt_topic->str, rktp->rktp_partition, rktp,
                      &rktp->rktp_refcnt, func, line);
 
-        rktp->rktp_share_acknowledge       = NULL;
-        rktp->rktp_share_acknowledge_count = 0;
-
         return rd_kafka_toppar_keep(rktp);
 }
 
@@ -339,10 +336,6 @@ void rd_kafka_toppar_destroy_final(rd_kafka_toppar_t *rktp) {
         /* Clear queues */
         rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
                         rd_kafka_msgq_len(&rktp->rktp_xmit_msgq) == 0);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
-                        rktp->rktp_share_acknowledge == NULL);
-        rd_kafka_assert(rktp->rktp_rkt->rkt_rk,
-                        rktp->rktp_share_acknowledge_count == 0);
         rd_kafka_dr_msgq(rktp->rktp_rkt, &rktp->rktp_msgq,
                          RD_KAFKA_RESP_ERR__DESTROY);
         rd_kafka_q_destroy_owner(rktp->rktp_fetchq);
@@ -2619,23 +2612,6 @@ rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp,
 
         return on_cgrp;
 }
-
-/**
- * @locality broker thread
- */
-static rd_bool_t
-rd_kafka_toppar_share_are_acknowledgements_present(rd_kafka_toppar_t *rktp) {
-        return rktp->rktp_share_acknowledge_count > 0 ? rd_true : rd_false;
-}
-
-rd_bool_t
-rd_kafka_toppar_share_is_valid_to_send_for_fetch(rd_kafka_toppar_t *rktp) {
-        if (rd_kafka_toppar_share_are_acknowledgements_present(rktp)) {
-                return rd_true;
-        }
-        return rd_kafka_toppar_is_on_cgrp(rktp, rd_true /*do_lock*/);
-}
-
 
 /**
  * @brief Toppar copier for rd_list_copy()

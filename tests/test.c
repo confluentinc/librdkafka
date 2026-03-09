@@ -44,7 +44,15 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
-#include "rdkafka_int.h"
+
+/**
+ * Local definition of rd_kafka_share_s to access rkshare_rk
+ * without pulling in rdkafka_int.h (which causes Windows link errors
+ * due to internal inline functions referencing unexported symbols).
+ */
+struct rd_kafka_share_s {
+        rd_kafka_t *rkshare_rk;
+};
 
 int test_level = 2;
 int test_seed  = 0;

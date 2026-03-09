@@ -187,7 +187,7 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
             "--partitions %d "
             "--replication-factor 1 "
             "--config cleanup.policy=compact "
-            "--config segment.ms=10000 "
+            "--config segment.ms=500 "
             "--config segment.bytes=1048576 "
             "--config min.cleanable.dirty.ratio=0.01 "
             "--config delete.retention.ms=86400 "

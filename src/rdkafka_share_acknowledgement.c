@@ -53,7 +53,6 @@ void rd_kafka_share_ack_batch_entry_destroy(
         if (!entry)
                 return;
         rd_free(entry->types);
-        rd_free(entry);
 }
 
 static void rd_kafka_share_ack_batch_entry_destroy_free(void *ptr) {
@@ -156,9 +155,11 @@ void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
 
                 rd_dassert(batches->rktpar != NULL);
 
-                key = rd_kafka_topic_partition_new_with_topic_id(
-                    rd_kafka_topic_partition_get_topic_id(batches->rktpar),
-                    batches->rktpar->partition);
+                key = rd_kafka_topic_partition_new(batches->rktpar->topic,
+                                                   batches->rktpar->partition);
+                rd_kafka_topic_partition_set_topic_id(
+                    key,
+                    rd_kafka_topic_partition_get_topic_id(batches->rktpar));
 
                 /* Each topic-partition is always a new entry (no overwrites).
                  */
@@ -357,10 +358,12 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                 /* If no ACQUIRED offsets remain, mark for removal */
                 if (rd_list_cnt(&inflight_batches->entries) == 0) {
                         rd_kafka_topic_partition_t *del_key =
-                            rd_kafka_topic_partition_new_with_topic_id(
-                                rd_kafka_topic_partition_get_topic_id(
-                                    inflight_batches->rktpar),
+                            rd_kafka_topic_partition_new(
+                                inflight_batches->rktpar->topic,
                                 inflight_batches->rktpar->partition);
+                        rd_kafka_topic_partition_set_topic_id(
+                            del_key, rd_kafka_topic_partition_get_topic_id(
+                                         inflight_batches->rktpar));
                         rd_list_add(&keys_to_delete, del_key);
                 }
 
@@ -385,4 +388,47 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                 RD_MAP_CLEAR(&rkshare->rkshare_inflight_acks);
 
         return ack_details;
+}
+
+rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update(
+    rd_kafka_share_t *rkshare,
+    const char *topic,
+    int32_t partition,
+    int64_t offset,
+    rd_kafka_share_internal_acknowledgement_type type) {
+        rd_kafka_topic_partition_t *lookup_key;
+        rd_kafka_share_ack_batches_t *batches;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int i;
+        int64_t idx;
+
+        /* Find partition in inflight_acks map */
+        lookup_key = rd_kafka_topic_partition_new(topic, partition);
+
+        batches = RD_MAP_GET(&rkshare->rkshare_inflight_acks, lookup_key);
+        rd_kafka_topic_partition_destroy(lookup_key);
+        if (!batches)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Find entry containing offset */
+        RD_LIST_FOREACH(entry, &batches->entries, i) {
+                if (offset >= entry->start_offset &&
+                    offset <= entry->end_offset) {
+                        /* Found the entry containing this offset */
+                        idx = offset - entry->start_offset;
+
+                        /* GAP records cannot be acknowledged */
+                        if (entry->types[idx] ==
+                            RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
+                                return RD_KAFKA_RESP_ERR__STATE;
+
+                        /* Update the type */
+                        entry->types[idx] = type;
+
+                        return RD_KAFKA_RESP_ERR_NO_ERROR;
+                }
+        }
+
+        /* Offset not found in any entry */
+        return RD_KAFKA_RESP_ERR__INVALID_ARG;
 }

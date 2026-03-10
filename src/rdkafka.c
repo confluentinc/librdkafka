@@ -3315,6 +3315,9 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
         int i;
 
         RD_LIST_FOREACH(existing, ack_list, i) {
+                /* TODO KIP-932: We might need to use leader id and epoch
+                 * as well to understand about the stale topic partition
+                 * information */
                 if (rd_kafka_topic_partition_by_id_cmp(existing->rktpar,
                                                        rktpar) == 0)
                         return existing;
@@ -3633,7 +3636,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
 
         /* Implicit ack: acknowledge all ACQUIRED records from previous
          * poll as ACCEPT, then extract ack_details for sending. */
-        rd_kafka_share_ack_all(rk->rk_rkshare);
+        rd_kafka_share_ack_all(rkshare);
         rd_list_t *ack_batches =
             rd_kafka_share_build_ack_details(rk->rk_rkshare);
 
@@ -3658,6 +3661,105 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                          rd_kafka_poll_cb, NULL);
 
         return error;
+}
+
+/**
+ * @brief Main thread handler for SHARE_COMMIT_ASYNC_FANOUT op.
+ *
+ * Segregates acks by partition leader and sends ack-only
+ * SHARE_FETCH ops to the respective brokers.
+ *
+ * @locality main thread
+ */
+rd_kafka_op_res_t rd_kafka_share_commit_async_fanout_op(rd_kafka_t *rk,
+                                                        rd_kafka_q_t *rkq,
+                                                        rd_kafka_op_t *rko) {
+        rd_kafka_broker_t *rkb;
+        rd_bool_t has_acks =
+            (rko->rko_u.share_commit_async_fanout.ack_batches &&
+             rd_list_cnt(rko->rko_u.share_commit_async_fanout.ack_batches) > 0);
+
+        if (!has_acks) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "No acks to commit in "
+                             "SHARE_COMMIT_ASYNC_FANOUT");
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /* Step 1: Segregate acks by partition leader. */
+        rd_kafka_share_segregate_acks_by_leader(
+            rk, rko->rko_u.share_commit_async_fanout.ack_batches);
+
+        rd_list_destroy(rko->rko_u.share_commit_async_fanout.ack_batches);
+        rko->rko_u.share_commit_async_fanout.ack_batches = NULL;
+
+        /* Step 2: Send ack-only SHARE_FETCH ops to brokers
+         * that have pending acks. */
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                    RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                        continue;
+
+                if (!rkb->rkb_share_async_ack_details)
+                        continue;
+
+                /* If a request is already in-flight on this broker,
+                 * acks stay cached in rkb_share_async_ack_details
+                 * and will be sent with the next request. */
+                if (rkb->rkb_share_fetch_enqueued)
+                        continue;
+
+                rd_kafka_share_enqueue_fetch_op(rk, rkb,
+                                                rd_false /* ack-only */);
+        }
+        rd_kafka_rdunlock(rk);
+
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+/**
+ * @brief Asynchronously commit all pending acknowledgements.
+ *
+ * Builds ack details from the inflight map and enqueues a
+ * SHARE_COMMIT_ASYNC_FANOUT op on the main thread to send
+ * them to brokers. Does not fetch new records.
+ *
+ * In implicit ack mode, all ACQUIRED records are first converted
+ * to ACCEPT before building the ack details.
+ *
+ * @param rkshare Share consumer instance.
+ * @returns NULL on success, or an rd_kafka_error_t* on failure.
+ *
+ * @locality app thread
+ */
+rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
+        rd_kafka_t *rk = rkshare->rkshare_rk;
+        rd_kafka_op_t *rko;
+        rd_list_t *ack_batches;
+
+        /* Drain rk_rep for all pending callbacks (non-blocking) */
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
+                         rd_kafka_poll_cb, NULL);
+
+        /* Implicit ack: convert all ACQUIRED records to ACCEPT,
+         * then extract ack_details for sending. */
+        rd_kafka_share_ack_all(rk->rk_rkshare);
+        ack_batches = rd_kafka_share_build_ack_details(rk->rk_rkshare);
+
+        if (!ack_batches) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "No pending acknowledgements to commit");
+                return NULL;
+        }
+
+        rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT,
+                                 rd_kafka_share_commit_async_fanout_op);
+        rko->rko_u.share_commit_async_fanout.ack_batches = ack_batches;
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+
+        return NULL;
 }
 
 /**

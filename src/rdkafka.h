@@ -3145,6 +3145,22 @@ rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
                              size_t *rkmessages_size /* out */);
 
 /**
+ * @brief Asynchronously commit all pending acknowledgements.
+ *
+ * Sends all pending acknowledgements (from rd_kafka_share_acknowledge*
+ * calls) to their respective brokers without fetching new records.
+ * This function returns immediately — the acknowledgements are sent
+ * asynchronously via the broker threads.
+ *
+ * @param rkshare Share consumer instance.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t* on failure.
+ *          The returned error must be freed with rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare);
+
+/**
  * @brief Destroy Kafka handle.
  *
  * @remark This is a blocking operation.

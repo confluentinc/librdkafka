@@ -43,13 +43,15 @@ blocks:
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - ./tests/run-all-tests.sh 
+            - unset TEST_SASL
+            - ./tests/run-all-tests.sh
         - name: "SSL cluster (x86_64)"
           env_vars:
             - name: TEST_SSL
               value: "True"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
+            - unset TEST_SASL
             - ./tests/run-all-tests.sh
   - name: "Run all tests (aarch64)"
     dependencies: []
@@ -67,6 +69,7 @@ blocks:
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
+            - unset TEST_SASL
             - ./tests/run-all-tests.sh
         - name: "SSL cluster (aarch64)"
           env_vars:
@@ -74,4 +77,53 @@ blocks:
               value: "True"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
+            - unset TEST_SASL
+            - ./tests/run-all-tests.sh
+  - name: "Run SASL tests (x86_64)"
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-1
+      prologue:
+        commands:
+          - if [[ -z "$TEST_SASL" || "$TEST_ARCHES" != *"x86_64"* ]]; then exit 0; fi
+      jobs:
+        - name: "SASL PLAINTEXT cluster (x86_64)"
+          env_vars:
+            - name: TEST_SSL
+              value: "False"
+          commands:
+            - if [[ -z "$TEST_SASL" || "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
+            - ./tests/run-all-tests.sh
+        - name: "SASL SSL cluster (x86_64)"
+          env_vars:
+            - name: TEST_SSL
+              value: "True"
+          commands:
+            - if [[ -z "$TEST_SASL" || "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
+            - ./tests/run-all-tests.sh
+  - name: "Run SASL tests (aarch64)"
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-arm64-1
+      prologue:
+        commands:
+          - if [[ -z "$TEST_SASL" || "$TEST_ARCHES" != *"aarch64"* ]]; then exit 0; fi
+      jobs:
+        - name: "SASL PLAINTEXT cluster (aarch64)"
+          env_vars:
+            - name: TEST_SSL
+              value: "False"
+          commands:
+            - if [[ -z "$TEST_SASL" || "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
+            - ./tests/run-all-tests.sh
+        - name: "SASL SSL cluster (aarch64)"
+          env_vars:
+            - name: TEST_SSL
+              value: "True"
+          commands:
+            - if [[ -z "$TEST_SASL" || "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
             - ./tests/run-all-tests.sh

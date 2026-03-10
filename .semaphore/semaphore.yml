@@ -378,6 +378,6 @@ promotions:
         - required: true
           name: TEST_PARALLEL
           default_value: "1"
-        - required: true
+        - required: false
           name: TEST_SASL
           default_value: ""

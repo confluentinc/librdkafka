@@ -85,8 +85,7 @@ semaphore:
           - "False"
 
       - name: TEST_SASL
-        required: true
-        default_value: ""
+        required: false
         description: "SASL mechanism to use."
         options:
           - ""

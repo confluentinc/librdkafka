@@ -146,27 +146,6 @@ ut_set_types(rd_kafka_share_ack_batch_entry_t *entry,
                 entry->types[i] = types[i];
 }
 
-/**
- * @brief Set all entry is_error flags to a single uniform value.
- */
-static RD_UNUSED void
-ut_set_is_error_uniform(rd_kafka_share_ack_batch_entry_t *entry,
-                        rd_bool_t is_error) {
-        int i;
-        for (i = 0; i < entry->types_cnt; i++)
-                entry->is_error[i] = is_error;
-}
-
-/**
- * @brief Set entry is_error flags from an array.
- */
-static RD_UNUSED void ut_set_is_error(rd_kafka_share_ack_batch_entry_t *entry,
-                                      const rd_bool_t *is_error,
-                                      int cnt) {
-        int i;
-        for (i = 0; i < cnt; i++)
-                entry->is_error[i] = is_error[i];
-}
 
 /**@}*/
 
@@ -513,9 +492,6 @@ static int unittest_ack_details_mixed_collation(void) {
             RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE,
             RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE,
             RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT};
-        const rd_bool_t is_error[] = {rd_false, rd_false, rd_true,  rd_true,
-                                      rd_true,  rd_false, rd_false, rd_true,
-                                      rd_true,  rd_false};
 
         rd_kafka_topic_partition_t *rktpar =
             ut_create_rktpar_with_id("test-topic", 0, topic_id);
@@ -525,7 +501,6 @@ static int unittest_ack_details_mixed_collation(void) {
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(100, 109, 10, 1);
         ut_set_types(entry, types, 10);
-        ut_set_is_error(entry, is_error, 10);
         rd_list_add(&batches->entries, entry);
 
         ut_add_batches_to_map(rkshare, batches);
@@ -592,8 +567,6 @@ static int unittest_ack_details_alternating(void) {
             RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT,
             RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
             RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT};
-        const rd_bool_t is_error[] = {rd_false, rd_true, rd_false, rd_true,
-                                      rd_false};
 
         rd_kafka_topic_partition_t *rktpar =
             ut_create_rktpar_with_id("test-topic", 0, topic_id);
@@ -603,7 +576,6 @@ static int unittest_ack_details_alternating(void) {
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(100, 104, 5, 1);
         ut_set_types(entry, types, 5);
-        ut_set_is_error(entry, is_error, 5);
         rd_list_add(&batches->entries, entry);
 
         ut_add_batches_to_map(rkshare, batches);
@@ -639,8 +611,6 @@ static int unittest_ack_details_multi_partition(void) {
             RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
             RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
             RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT};
-        const rd_bool_t is_error1[] = {rd_false, rd_true, rd_true, rd_false,
-                                       rd_false};
 
         rd_kafka_topic_partition_t *rktpar0 =
             ut_create_rktpar_with_id("test-topic", 0, topic_id0);
@@ -659,7 +629,6 @@ static int unittest_ack_details_multi_partition(void) {
         rd_kafka_share_ack_batch_entry_t *entry1 =
             rd_kafka_share_ack_batch_entry_new(200, 204, 5, 2);
         ut_set_types(entry1, types1, 5);
-        ut_set_is_error(entry1, is_error1, 5);
         rd_list_add(&batches1->entries, entry1);
         ut_add_batches_to_map(rkshare, batches1);
 
@@ -803,13 +772,11 @@ static int unittest_ack_details_multi_entry(void) {
         rd_kafka_share_ack_batch_entry_t *entry1 =
             rd_kafka_share_ack_batch_entry_new(100, 102, 3, 1);
         ut_set_types_uniform(entry1, RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT);
-        ut_set_is_error_uniform(entry1, rd_false);
         rd_list_add(&batches->entries, entry1);
 
         rd_kafka_share_ack_batch_entry_t *entry2 =
             rd_kafka_share_ack_batch_entry_new(200, 202, 3, 2);
         ut_set_types_uniform(entry2, RD_KAFKA_SHARE_INTERNAL_ACK_REJECT);
-        ut_set_is_error_uniform(entry2, rd_true);
         rd_list_add(&batches->entries, entry2);
 
         ut_add_batches_to_map(rkshare, batches);
@@ -867,9 +834,6 @@ static int unittest_ack_details_interleaved(void) {
             RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
             RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT,
             RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT};
-        const rd_bool_t is_error[] = {rd_false, rd_false, rd_true, rd_true,
-                                      rd_false, rd_true,  rd_true, rd_false,
-                                      rd_false, rd_false};
 
         rd_kafka_topic_partition_t *rktpar =
             ut_create_rktpar_with_id("test-topic", 0, topic_id);
@@ -879,7 +843,6 @@ static int unittest_ack_details_interleaved(void) {
         rd_kafka_share_ack_batch_entry_t *entry =
             rd_kafka_share_ack_batch_entry_new(100, 109, 10, 1);
         ut_set_types(entry, types, 10);
-        ut_set_is_error(entry, is_error, 10);
         rd_list_add(&batches->entries, entry);
 
         ut_add_batches_to_map(rkshare, batches);

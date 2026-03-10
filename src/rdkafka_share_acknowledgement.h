@@ -68,9 +68,7 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
         int32_t types_cnt;      /**< Number of elements in types array */
         int16_t delivery_count; /**< From AcquiredRecords DeliveryCount */
         rd_kafka_share_internal_acknowledgement_type
-            *types;          /**< Array of ack types */
-        rd_bool_t *is_error; /**< Array indicating if offset is an error record
-                              *   (RELEASE/REJECT = true) */
+            *types; /**< Array of ack types */
 } rd_kafka_share_ack_batch_entry_t;
 
 /**
@@ -166,7 +164,7 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
 rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
 
 /**
- * @brief Update ack type for delivered records.
+ * @brief Update ack type for any offset except GAP offsets.
  *
  * @param rkshare Share consumer handle
  * @param topic Topic name
@@ -176,29 +174,9 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
  * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
- * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or error record
+ * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP offset
  */
-rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_delivered(
-    rd_kafka_share_t *rkshare,
-    const char *topic,
-    int32_t partition,
-    int64_t offset,
-    rd_kafka_share_internal_acknowledgement_type type);
-
-/**
- * @brief Update ack type for error records.
- *
- * @param rkshare Share consumer handle
- * @param topic Topic name
- * @param partition Partition id
- * @param offset Offset to acknowledge
- * @param type New acknowledgement type (ACCEPT, RELEASE, REJECT)
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
- * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
- * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP or delivered record
- */
-rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update_error(
+rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update(
     rd_kafka_share_t *rkshare,
     const char *topic,
     int32_t partition,

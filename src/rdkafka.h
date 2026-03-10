@@ -3193,9 +3193,6 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
 /**
  * @brief Acknowledge an offset directly with specified acknowledgement type.
  *
- * This function is primarily for acknowledging error records that were not
- * delivered as proper messages.
- *
  * @param rkshare Share consumer handle.
  * @param topic Topic name.
  * @param partition Partition id.
@@ -3204,7 +3201,7 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid or type is
- * invalid, RD_KAFKA_RESP_ERR__STATE if offset is not in ACQUIRED state.
+ * invalid, RD_KAFKA_RESP_ERR__STATE if offset is a GAP offset.
  */
 RD_EXPORT
 rd_kafka_resp_err_t

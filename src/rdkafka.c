@@ -3683,8 +3683,7 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
             type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        /* Record-based API: only for delivered records */
-        return rd_kafka_share_inflight_ack_update_delivered(
+        return rd_kafka_share_inflight_ack_update(
             rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
             rkmessage->offset,
             (rd_kafka_share_internal_acknowledgement_type)type);
@@ -3708,8 +3707,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
             type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        /* Offset-based API: only for error records (RELEASE/REJECT state) */
-        return rd_kafka_share_inflight_ack_update_error(
+        return rd_kafka_share_inflight_ack_update(
             rkshare, topic, partition, offset,
             (rd_kafka_share_internal_acknowledgement_type)type);
 }

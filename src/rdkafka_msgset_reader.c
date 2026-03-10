@@ -653,6 +653,7 @@ rd_kafka_msgset_reader_msg_v0_1(rd_kafka_msgset_reader_t *msetr) {
          *       we cant perform this offset check here
          *       in that case. */
         if (!relative_offsets &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk) &&
             hdr.Offset < rktp->rktp_offsets.fetch_pos.offset)
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */
 
@@ -751,8 +752,11 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
          * epoch is different the fetch will fail (KIP-320) and if offset leader
          * epoch is different it'll return an empty fetch (KIP-595). If we
          * checked it, it's possible to have a loop when moving from a broker
-         * that supports leader epoch to one that doesn't. */
-        if (hdr.Offset < rktp->rktp_offsets.fetch_pos.offset) {
+         * that supports leader epoch to one that doesn't.
+         * Share consumers may receive re-delivered records at earlier offsets
+         * after RELEASE, so skip this check for them. */
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk) &&
+            hdr.Offset < rktp->rktp_offsets.fetch_pos.offset) {
                 rd_rkb_dbg(
                     msetr->msetr_rkb, MSG, "MSG",
                     "%s [%" PRId32
@@ -1125,8 +1129,11 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
                     hdr.BaseOffset, payload_size);
 
-        /* If entire MessageSet contains old outdated offsets, skip it. */
-        if (LastOffset < rktp->rktp_offsets.fetch_pos.offset) {
+        /* If entire MessageSet contains old outdated offsets, skip it.
+         * Share consumers may receive re-delivered records at earlier offsets
+         * after RELEASE, so skip this check for them. */
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk) &&
+            LastOffset < rktp->rktp_offsets.fetch_pos.offset) {
                 rd_kafka_buf_skip(rkbuf, payload_size);
                 goto done;
         }

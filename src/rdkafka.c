@@ -57,6 +57,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_share_acknowledgement.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -738,15 +739,51 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "the consumer group"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH,
               "Broker: The member epoch is stale"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_MISMATCHED_ENDPOINT_TYPE,
+              "Broker: The request was sent to an endpoint of the wrong type"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNSUPPORTED_ENDPOINT_TYPE,
+              "Broker: This endpoint type is not supported yet"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_CONTROLLER_ID,
+              "Broker: This controller ID is not known"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID,
               "Broker: Client sent a push telemetry request with an invalid or "
               "outdated subscription ID"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE,
               "Broker: Client sent a push telemetry request larger than the "
               "maximum size the broker will accept"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_REGISTRATION,
+              "Broker: The controller has considered the broker registration "
+              "to be invalid"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_TRANSACTION_ABORTABLE,
+              "Broker: The server encountered an error with the transaction"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE,
+              "Broker: The record state is invalid"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+              "Broker: The share session was not found"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
+              "Broker: The share session epoch is invalid"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_STATE_EPOCH,
+              "Broker: The share-group state epoch did not match"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_VOTER_KEY,
+              "Broker: The voter key doesn't match the receiving replica's "
+              "key"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_DUPLICATE_VOTER,
+              "Broker: The voter is already part of the set of voters"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_VOTER_NOT_FOUND,
+              "Broker: The voter is not part of the set of voters"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INVALID_REGULAR_EXPRESSION,
+              "Broker: The regular expression is not valid"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
               "Broker: Client metadata is stale, "
               "client should rebootstrap to obtain new metadata"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_STREAMS_INVALID_TOPOLOGY,
+              "Broker: The supplied topology is invalid"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_STREAMS_INVALID_TOPOLOGY_EPOCH,
+              "Broker: The supplied topology epoch is invalid"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_STREAMS_TOPOLOGY_FENCED,
+              "Broker: The supplied topology epoch is outdated"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED,
+              "Broker: The limit of share sessions has been reached"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__END, NULL)};
 
 
@@ -3001,10 +3038,9 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         /* Set backpointer from rk to rkshare for access in retry handlers */
         rk->rk_rkshare = rkshare;
 
-        /* Inflight acks map keyed by topic_id + partition */
+        /* Inflight acks map keyed by topic name + partition */
         RD_MAP_INIT(&rkshare->rkshare_inflight_acks, 16,
-                    rd_kafka_topic_partition_by_id_cmp,
-                    rd_kafka_topic_partition_hash_by_id,
+                    rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
                     rd_kafka_topic_partition_destroy_free,
                     rd_kafka_share_ack_batches_destroy_free);
 
@@ -3053,8 +3089,11 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
 
                 /* Criteria to choose a broker:
                  * 1. It should be the leader of a partition.
-                 * 2. A share-fetch op must not already be enqueued on it. */
-                if (rktp->rktp_leader) {
+                 * 2. A share-fetch op must not already be enqueued on it.
+                 * 3. The broker or instance must not be terminating. */
+                if (rktp->rktp_leader &&
+                    !rd_kafka_broker_or_instance_terminating(
+                        rktp->rktp_leader)) {
                         /* TODO: We're only going to access
                          * rkb_share_fetch_enqueued from the main thread, except
                          * when it's being calloc'd and destroyed. Is it safe to
@@ -3162,10 +3201,11 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                 rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt--;
 
         /*
-         * Step 1: If records were fetched, reset the global fetch guard
-         * so the next FANOUT can select a new fetch broker.
+         * Step 1: If records were fetched and broker is not terminating,
+         * reset the global fetch guard so the next FANOUT can select
+         * a new fetch broker.
          */
-        if (records_fetched)
+        if (records_fetched && rko_orig->rko_err != RD_KAFKA_RESP_ERR__DESTROY)
                 rkcg->rkcg_share.share_fetch_more_records = rd_false;
 
         /*
@@ -3180,7 +3220,8 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
          * assignments are empty) and reset fetch_more_records.
          */
         if (should_fetch && !records_fetched &&
-            rkcg->rkcg_share.share_fetch_more_records) {
+            rkcg->rkcg_share.share_fetch_more_records &&
+            !rd_kafka_terminating(rk)) {
                 rd_kafka_broker_t *selected_rkb;
 
                 selected_rkb = rd_kafka_share_select_broker(rk, rkcg);
@@ -3206,7 +3247,8 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
          * send an ack-only SHARE_FETCH op to it.
          */
         if (reply_rkb->rkb_share_async_ack_details &&
-            !reply_rkb->rkb_share_fetch_enqueued) {
+            !reply_rkb->rkb_share_fetch_enqueued &&
+            !rd_kafka_broker_or_instance_terminating(reply_rkb)) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
                              "Enqueuing ack-only SHARE_FETCH to broker %s "
                              "to flush pending acks",
@@ -3616,6 +3658,60 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                          rd_kafka_poll_cb, NULL);
 
         return error;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
+                           const rd_kafka_message_t *rkmessage) {
+        return rd_kafka_share_acknowledge_type(rkshare, rkmessage,
+                                               RD_KAFKA_SHARE_ACK_TYPE_ACCEPT);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
+                                const rd_kafka_message_t *rkmessage,
+                                rd_kafka_share_ack_type_t type) {
+        if (!rkshare || !rkmessage)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Validate type - only ACCEPT, REJECT, RELEASE allowed */
+        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
+            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Record-based API: only for delivered records */
+        return rd_kafka_share_inflight_ack_update_delivered(
+            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
+            rkmessage->offset,
+            (rd_kafka_share_internal_acknowledgement_type)type);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
+                                  const char *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  rd_kafka_share_ack_type_t type) {
+        if (!rkshare || !topic)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Explicit acknowledge APIs require explicit acknowledgement mode */
+        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Validate type - ACCEPT, RELEASE, REJECT allowed */
+        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
+            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        /* Offset-based API: only for error records (RELEASE/REJECT state) */
+        return rd_kafka_share_inflight_ack_update_error(
+            rkshare, topic, partition, offset,
+            (rd_kafka_share_internal_acknowledgement_type)type);
 }
 
 /**

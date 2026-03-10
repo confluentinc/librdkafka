@@ -1,8 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022, Magnus Edenhill
- *               2023, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -122,7 +121,7 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
 
         batches->rktpar = rd_kafka_topic_partition_new(topic, partition);
-        parpriv                   = rd_kafka_topic_partition_private_new();
+        parpriv         = rd_kafka_topic_partition_private_new();
         batches->rktpar->_private = parpriv;
 
         batches->response_leader_id    = 1;
@@ -136,9 +135,9 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
         rd_kafka_share_ack_batch_entry_t *entry = rd_calloc(1, sizeof(*entry));
         entry->start_offset                     = start_offset;
         entry->end_offset                       = end_offset;
-        entry->size      = size;
-        entry->types_cnt = (int32_t)size;
-        entry->types     = rd_calloc(size, sizeof(*entry->types));
+        entry->size                             = size;
+        entry->types_cnt                        = (int32_t)size;
+        entry->types = rd_calloc(size, sizeof(*entry->types));
 
         /* Initialize all offsets to ACQUIRED */
         for (int64_t i = 0; i < size; i++) {
@@ -244,7 +243,7 @@ static void ut_ack_destroy_message(rd_kafka_message_t *rkmessage) {
  * ACQUIRED to ACCEPT state, and that adjacent offsets remain unchanged.
  */
 static int ut_case_acknowledge_accept(rd_kafka_share_t *rkshare,
-                                       rd_kafka_topic_t *rkt) {
+                                      rd_kafka_topic_t *rkt) {
         const char *topic = rd_kafka_topic_name(rkt);
 
         /* Add partition with offsets 0-9 in ACQUIRED state */
@@ -290,7 +289,7 @@ static int ut_case_acknowledge_accept(rd_kafka_share_t *rkshare,
  * to the specified type (REJECT or RELEASE).
  */
 static int ut_case_acknowledge_type_reject(rd_kafka_share_t *rkshare,
-                                            rd_kafka_topic_t *rkt) {
+                                           rd_kafka_topic_t *rkt) {
         const char *topic = rd_kafka_topic_name(rkt);
 
         ut_ack_add_partition(rkshare, topic, 0, 0, 9);
@@ -319,7 +318,7 @@ static int ut_case_acknowledge_type_reject(rd_kafka_share_t *rkshare,
  * @brief Test rd_kafka_share_acknowledge_type() with RELEASE type.
  */
 static int ut_case_acknowledge_type_release(rd_kafka_share_t *rkshare,
-                                             rd_kafka_topic_t *rkt) {
+                                            rd_kafka_topic_t *rkt) {
         const char *topic = rd_kafka_topic_name(rkt);
 
         ut_ack_add_partition(rkshare, topic, 0, 0, 9);
@@ -351,7 +350,7 @@ static int ut_case_acknowledge_type_release(rd_kafka_share_t *rkshare,
  * succeeds and updates the type. This is allowed before commit.
  */
 static int ut_case_reacknowledge_delivered(rd_kafka_share_t *rkshare,
-                                            rd_kafka_topic_t *rkt) {
+                                           rd_kafka_topic_t *rkt) {
         const char *topic = rd_kafka_topic_name(rkt);
 
         ut_ack_add_partition(rkshare, topic, 0, 0, 9);
@@ -400,7 +399,7 @@ static int ut_case_reacknowledge_delivered(rd_kafka_share_t *rkshare,
  * Verifies that GAP records cannot be acknowledged by any API.
  */
 static int ut_case_error_gap_record(rd_kafka_share_t *rkshare,
-                                     rd_kafka_topic_t *rkt) {
+                                    rd_kafka_topic_t *rkt) {
         const char *topic = rd_kafka_topic_name(rkt);
 
         ut_ack_add_partition(rkshare, topic, 0, 0, 9);
@@ -434,7 +433,7 @@ static int ut_case_error_gap_record(rd_kafka_share_t *rkshare,
  * RD_KAFKA_RESP_ERR__INVALID_ARG error.
  */
 static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
-                                          rd_kafka_topic_t *rkt) {
+                                         rd_kafka_topic_t *rkt) {
         rd_kafka_message_t *msg = ut_ack_create_message(rkt, 0, 5);
 
         /* Test NULL rkshare */
@@ -470,7 +469,7 @@ static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
  * ACQUIRED state after the failed attempt.
  */
 static int ut_case_error_invalid_type(rd_kafka_share_t *rkshare,
-                                       rd_kafka_topic_t *rkt) {
+                                      rd_kafka_topic_t *rkt) {
         const char *topic = rd_kafka_topic_name(rkt);
 
         ut_ack_add_partition(rkshare, topic, 0, 0, 9);
@@ -510,8 +509,8 @@ static int ut_case_error_invalid_type(rd_kafka_share_t *rkshare,
  * are tracked independently.
  */
 static int ut_case_acknowledge_multiple_partitions(rd_kafka_share_t *rkshare,
-                                                    rd_kafka_topic_t *rkt_t1,
-                                                    rd_kafka_topic_t *rkt_t2) {
+                                                   rd_kafka_topic_t *rkt_t1,
+                                                   rd_kafka_topic_t *rkt_t2) {
         const char *topic1 = rd_kafka_topic_name(rkt_t1);
         const char *topic2 = rd_kafka_topic_name(rkt_t2);
 

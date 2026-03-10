@@ -1,8 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022, Magnus Edenhill
- *               2026, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -145,7 +144,6 @@ ut_set_types(rd_kafka_share_ack_batch_entry_t *entry,
         for (i = 0; i < cnt; i++)
                 entry->types[i] = types[i];
 }
-
 
 /**@}*/
 

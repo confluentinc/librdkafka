@@ -1,8 +1,7 @@
 /*
  * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2015-2022, Magnus Edenhill,
- *               2026, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

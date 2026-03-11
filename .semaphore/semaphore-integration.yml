@@ -22,7 +22,7 @@ global_job_config:
     - name: CI
       value: 'true'
     - name: KAFKA_VERSION
-      value: '4.0.0'
+      value: '4.2.0'
     - name: CP_VERSION
       value: '8.0.0'
     # Shows plain output from docker build (no progress bars)
@@ -220,7 +220,7 @@ promotions:
       env_vars:
         - required: true
           name: TEST_KAFKA_GIT_REF
-          default_value: 4.0.0
+          default_value: 4.2.0
         - required: true
           name: TEST_TYPE
           default_value: plaintext,ssl
@@ -234,3 +234,29 @@ promotions:
       - result: passed
         branch:
         - "master"
+  - name: Run all tests with SASL
+    pipeline_file: run-sasl-tests.yml
+    parameters:
+      env_vars:
+        - required: true
+          name: TEST_SASL
+          default_value: "PLAIN"
+          options:
+            - "PLAIN"
+            - "SCRAM-SHA-256"
+            - "SCRAM-SHA-512"
+            - "OAUTHBEARER"
+        - required: true
+          name: TEST_TYPE
+          default_value: "plaintext,ssl"
+          options:
+            - "plaintext,ssl"
+            - "plaintext"
+            - "ssl"
+        - required: true
+          name: TEST_ARCHES
+          default_value: "x86_64,aarch64"
+          options:
+            - "x86_64,aarch64"
+            - "x86_64"
+            - "aarch64"

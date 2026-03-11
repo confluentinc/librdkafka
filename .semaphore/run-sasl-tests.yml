@@ -1,5 +1,5 @@
 version: v1.0
-name: run-sasl-tests
+name: run-all-tests-with-sasl
 
 agent:
   machine:

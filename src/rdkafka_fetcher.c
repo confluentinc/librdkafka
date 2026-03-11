@@ -1825,8 +1825,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
-                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "Fetch reply: %s",
-                           rd_kafka_err2str(err));
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "ShareFetch reply error: %s", rd_kafka_err2str(err));
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:

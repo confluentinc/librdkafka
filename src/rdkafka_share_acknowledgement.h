@@ -162,24 +162,4 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
  */
 rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
 
-/**
- * @brief Update ack type for any offset except GAP offsets.
- *
- * @param rkshare Share consumer handle
- * @param topic Topic name
- * @param partition Partition id
- * @param offset Offset to acknowledge
- * @param type New acknowledgement type (ACCEPT, REJECT, RELEASE)
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success
- * @returns RD_KAFKA_RESP_ERR__INVALID_ARG if partition/offset not found
- * @returns RD_KAFKA_RESP_ERR__STATE if record is GAP offset
- */
-rd_kafka_resp_err_t rd_kafka_share_inflight_ack_update(
-    rd_kafka_share_t *rkshare,
-    const char *topic,
-    int32_t partition,
-    int64_t offset,
-    rd_kafka_share_internal_acknowledgement_type type);
-
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

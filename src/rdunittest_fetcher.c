@@ -89,6 +89,8 @@ static void ut_add_batches_to_map(rd_kafka_share_t *rkshare,
                                   rd_kafka_share_ack_batches_t *batches) {
         rd_kafka_topic_partition_t *key = rd_kafka_topic_partition_new(
             batches->rktpar->topic, batches->rktpar->partition);
+        /* Mark entries as sorted */
+        batches->entries.rl_flags |= RD_LIST_F_SORTED;
         RD_MAP_SET(&rkshare->rkshare_inflight_acks, key, batches);
 }
 

@@ -57,7 +57,6 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
-#include "rdkafka_share_acknowledgement.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -3631,9 +3630,20 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
 
-        /* Implicit ack: acknowledge all ACQUIRED records from previous
-         * poll as ACCEPT, then extract ack_details for sending. */
-        rd_kafka_share_ack_all(rk->rk_rkshare);
+         /* In implicit ack mode, convert all ACQUIRED records to ACCEPT
+         * before extracting ack details. In explicit mode, the app has
+         * already acknowledged records via the acknowledge APIs, so
+         * only extract what's been explicitly acknowledged. */
+        if (!RD_KAFKA_SHARE_IS_EXPLICIT_ACK(rk))
+                rd_kafka_share_ack_all(rkshare);
+        else if (rkshare->rkshare_unacked_cnt > 0)
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__STATE,
+                    "%" PRId64
+                    " records from previous poll have not "
+                    "been acknowledged",
+                    rkshare->rkshare_unacked_cnt);
+
         rd_list_t *ack_batches =
             rd_kafka_share_build_ack_details(rk->rk_rkshare);
 
@@ -3658,58 +3668,6 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                          rd_kafka_poll_cb, NULL);
 
         return error;
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
-                           const rd_kafka_message_t *rkmessage) {
-        return rd_kafka_share_acknowledge_type(rkshare, rkmessage,
-                                               RD_KAFKA_SHARE_ACK_TYPE_ACCEPT);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
-                                const rd_kafka_message_t *rkmessage,
-                                rd_kafka_share_ack_type_t type) {
-        if (!rkshare || !rkmessage)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        /* Explicit acknowledge APIs require explicit acknowledgement mode */
-        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        /* Validate type - only ACCEPT, REJECT, RELEASE allowed */
-        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
-            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        return rd_kafka_share_inflight_ack_update(
-            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
-            rkmessage->offset,
-            (rd_kafka_share_internal_acknowledgement_type)type);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
-                                  const char *topic,
-                                  int32_t partition,
-                                  int64_t offset,
-                                  rd_kafka_share_ack_type_t type) {
-        if (!rkshare || !topic)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        /* Explicit acknowledge APIs require explicit acknowledgement mode */
-        if (!rkshare->rkshare_rk->rk_conf.share.explicit_acks)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        /* Validate type - ACCEPT, RELEASE, REJECT allowed */
-        if (type < RD_KAFKA_SHARE_ACK_TYPE_ACCEPT ||
-            type > RD_KAFKA_SHARE_ACK_TYPE_REJECT)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        return rd_kafka_share_inflight_ack_update(
-            rkshare, topic, partition, offset,
-            (rd_kafka_share_internal_acknowledgement_type)type);
 }
 
 /**

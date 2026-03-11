@@ -1357,6 +1357,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         batches_out->response_msgs_count += (int32_t)size;
                 }
 
+                /* Entries are sorted by start_offset from ShareFetch response.
+                 * Mark as sorted to enable binary search in rd_list_find(). */
+                batches_out->entries.rl_flags |= RD_LIST_F_SORTED;
+
                 /* Filter and forward messages in acquired ranges */
                 rd_kafka_share_filter_acquired_records_and_update_ack_type(
                     temp_fetchq, filtered_msgs, FirstOffsets, LastOffsets,
@@ -1825,13 +1829,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
-<<<<<<< HEAD
                 rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                            "ShareFetch reply error: %s", rd_kafka_err2str(err));
-=======
-                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH", "Fetch reply: %s",
-                           rd_kafka_err2str(err));
->>>>>>> e3bf45db (KIP-932: Handle ShareFetch session errors and broker state check)
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:

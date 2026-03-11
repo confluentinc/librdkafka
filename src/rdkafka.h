@@ -3145,15 +3145,15 @@ rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
                              size_t *rkmessages_size /* out */);
 
 /**
- * @enum rd_kafka_share_ack_type_t
+ * @enum rd_kafka_share_AcknowledgeType_t
  * @brief Share consumer acknowledgement types (exposed to Public APIs).
  */
-typedef enum rd_kafka_share_ack_type_s {
-        RD_KAFKA_SHARE_ACK_TYPE_ACCEPT  = 1, /**< Accept the message */
-        RD_KAFKA_SHARE_ACK_TYPE_RELEASE = 2, /**< Release the message for
+typedef enum rd_kafka_share_AcknowledgeType_s {
+        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT  = 1, /**< Accept the message */
+        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE = 2, /**< Release the message for
                                               *   redelivery */
-        RD_KAFKA_SHARE_ACK_TYPE_REJECT = 3   /**< Reject the message */
-} rd_kafka_share_ack_type_t;
+        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT = 3   /**< Reject the message */
+} rd_kafka_share_AcknowledgeType_t;
 
 /**
  * @brief Acknowledge a message with ACCEPT type.
@@ -3188,7 +3188,7 @@ RD_EXPORT
 rd_kafka_resp_err_t
 rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
-                                rd_kafka_share_ack_type_t type);
+                                rd_kafka_share_AcknowledgeType_t type);
 
 /**
  * @brief Acknowledge an offset directly with specified acknowledgement type.
@@ -3209,7 +3209,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                                   const char *topic,
                                   int32_t partition,
                                   int64_t offset,
-                                  rd_kafka_share_ack_type_t type);
+                                  rd_kafka_share_AcknowledgeType_t type);
 
 /**
  * @brief Destroy Kafka handle.

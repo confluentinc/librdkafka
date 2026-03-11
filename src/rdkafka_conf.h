@@ -473,9 +473,8 @@ struct rd_kafka_conf_s {
         struct {
                 int is_share_consumer; /**< Is this a share consumer? */
                 int max_poll_records;  /**< Max records returned per poll */
-                int explicit_acks;     /**< Acknowledgement mode
-                                        * (share.acknowledgement.mode).     0 =
-                                        * "implicit" (default), 1 = "explicit" */
+                char *share_acknowledgement_mode; /**< "implicit" (default)
+                                                   *   or "explicit" */
         } share;
 
         /*

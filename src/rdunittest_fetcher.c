@@ -1,8 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2012-2022, Magnus Edenhill
- *               2026, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,15 +53,17 @@
 static rd_kafka_t *ut_mock_rk;
 
 static rd_kafka_share_t *ut_create_mock_rkshare(void) {
-        rd_kafka_share_t *rkshare    = rd_calloc(1, sizeof(*rkshare));
-        rkshare->rkshare_rk          = ut_mock_rk;
-        rkshare->rkshare_unacked_cnt = 0;
+        rd_kafka_conf_t *conf = rd_kafka_conf_new();
+        char errstr[128];
 
-        RD_MAP_INIT(&rkshare->rkshare_inflight_acks, 16,
-                    rd_kafka_topic_partition_by_id_cmp,
-                    rd_kafka_topic_partition_hash_by_id,
-                    rd_kafka_topic_partition_destroy_free,
-                    rd_kafka_share_ack_batches_destroy_free);
+        if (rd_kafka_conf_set(conf, "group.id", "ut-share-ack", errstr,
+                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                rd_kafka_conf_destroy(conf);
+                return NULL;
+        }
+
+        rd_kafka_share_t *rkshare =
+            rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
 
         return rkshare;
 }
@@ -70,8 +71,8 @@ static rd_kafka_share_t *ut_create_mock_rkshare(void) {
 static void ut_destroy_mock_rkshare(rd_kafka_share_t *rkshare) {
         if (!rkshare)
                 return;
-        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
-        rd_free(rkshare);
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
 }
 
 static rd_kafka_topic_partition_t *
@@ -86,10 +87,10 @@ ut_create_rktpar_with_id(const char *topic,
 
 static void ut_add_batches_to_map(rd_kafka_share_t *rkshare,
                                   rd_kafka_share_ack_batches_t *batches) {
-        rd_kafka_topic_partition_t *key =
-            rd_kafka_topic_partition_new_with_topic_id(
-                rd_kafka_topic_partition_get_topic_id(batches->rktpar),
-                batches->rktpar->partition);
+        rd_kafka_topic_partition_t *key = rd_kafka_topic_partition_new(
+            batches->rktpar->topic, batches->rktpar->partition);
+        /* Mark entries as sorted */
+        batches->entries.rl_flags |= RD_LIST_F_SORTED;
         RD_MAP_SET(&rkshare->rkshare_inflight_acks, key, batches);
 }
 

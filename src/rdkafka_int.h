@@ -99,6 +99,20 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
          (rk)->rk_conf.share.is_share_consumer)
 
 /**
+ * @brief Check if share consumer uses implicit acknowledgement mode.
+ */
+#define RD_KAFKA_SHARE_IS_IMPLICIT_ACK(rk)                                     \
+        ((rk)->rk_conf.share.share_acknowledgement_mode &&                     \
+         !strcmp((rk)->rk_conf.share.share_acknowledgement_mode, "implicit"))
+
+/**
+ * @brief Check if share consumer uses explicit acknowledgement mode.
+ */
+#define RD_KAFKA_SHARE_IS_EXPLICIT_ACK(rk)                                     \
+        ((rk)->rk_conf.share.share_acknowledgement_mode &&                     \
+         !strcmp((rk)->rk_conf.share.share_acknowledgement_mode, "explicit"))
+
+/**
  * @struct Represents a fetch position:
  *         an offset and an partition leader epoch (if known, else -1).
  */

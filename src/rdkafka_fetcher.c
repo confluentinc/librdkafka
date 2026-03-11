@@ -1422,8 +1422,14 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
         if (ErrorCode) {
                 rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
-                           "ShareFetch response error %d: '%.*s'", ErrorCode,
+                           "ShareFetch response error %s: '%.*s'",
+                           rd_kafka_err2name(ErrorCode),
                            RD_KAFKAP_STR_PR(&ErrorStr));
+                /* TODO KIP-932: Check if the response buffer still needs
+                 * to be parsed in some error cases. For example,
+                 * UNKNOWN_TOPIC_ID may require removing partitions from
+                 * the session, and acknowledgements for that topic id
+                 * should also be destroyed. */
                 return ErrorCode;
         }
 
@@ -1536,10 +1542,100 @@ err_parse:
 
 
 /**
- * TODO KIP-932: Implement.
+ * @brief Reset the share fetch session for a broker.
+ *
+ * Called when the broker returns SHARE_SESSION_NOT_FOUND,
+ * INVALID_SHARE_SESSION_EPOCH, or SHARE_SESSION_LIMIT_REACHED,
+ * indicating the session is lost or cannot be created.
+ * Resets the epoch to 0 and moves all toppars_in_session back
+ * to toppars_to_add so the next request re-establishes the
+ * full session.
+ *
+ * Any acknowledgements present in \p rko_orig are destroyed since
+ * the broker did not process them (session was invalid).
+ *
+ * @param rkb Broker whose session is being reset.
+ * @param rko_orig The SHARE_FETCH op whose ack_details need cleanup.
+ *
+ * @locality broker thread
  */
-// static void rd_kafak_broker_session_reset(rd_kafka_broker_t *rkb) {
-// }
+static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb,
+                                          rd_kafka_op_t *rko_orig) {
+        rd_kafka_toppar_t *rktp, *tmp_rktp;
+
+        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                   "Resetting share session: epoch %" PRId32
+                   " -> 0, "
+                   "moving %d toppars_in_session to toppars_to_add",
+                   rkb->rkb_share_fetch_session.epoch,
+                   rkb->rkb_share_fetch_session.toppars_in_session_cnt);
+
+        rkb->rkb_share_fetch_session.epoch = 0;
+
+        /* Remove toppars_to_forget from toppars_in_session — these
+         * were pending removal and should not be re-added to the
+         * new session. */
+        if (rkb->rkb_share_fetch_session.toppars_to_forget) {
+                rd_kafka_toppar_t *forget_rktp;
+                int i;
+
+                RD_LIST_FOREACH(forget_rktp,
+                                rkb->rkb_share_fetch_session.toppars_to_forget,
+                                i) {
+                        TAILQ_FOREACH_SAFE(
+                            rktp,
+                            &rkb->rkb_share_fetch_session.toppars_in_session,
+                            rktp_rkb_session_link, tmp_rktp) {
+                                if (rktp == forget_rktp) {
+                                        TAILQ_REMOVE(
+                                            &rkb->rkb_share_fetch_session
+                                                 .toppars_in_session,
+                                            rktp, rktp_rkb_session_link);
+                                        rkb->rkb_share_fetch_session
+                                            .toppars_in_session_cnt--;
+                                        rd_kafka_toppar_destroy(
+                                            rktp); /* from session list */
+                                        break;
+                                }
+                        }
+                }
+
+                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_forget);
+                rkb->rkb_share_fetch_session.toppars_to_forget = NULL;
+        }
+
+        /* Move remaining toppars_in_session to toppars_to_add so they
+         * get sent as new additions in the next request (epoch 0). */
+        TAILQ_FOREACH_SAFE(rktp,
+                           &rkb->rkb_share_fetch_session.toppars_in_session,
+                           rktp_rkb_session_link, tmp_rktp) {
+                TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session,
+                             rktp, rktp_rkb_session_link);
+                rkb->rkb_share_fetch_session.toppars_in_session_cnt--;
+
+                if (!rkb->rkb_share_fetch_session.toppars_to_add)
+                        rkb->rkb_share_fetch_session.toppars_to_add =
+                            rd_list_new(1, rd_kafka_toppar_destroy_free);
+
+                if (!rd_list_find(rkb->rkb_share_fetch_session.toppars_to_add,
+                                  rktp, rd_list_cmp_ptr))
+                        rd_list_add(rkb->rkb_share_fetch_session.toppars_to_add,
+                                    rktp); /* transfer ref */
+                else
+                        rd_kafka_toppar_destroy(rktp); /* from session list */
+        }
+
+        /* Destroy acknowledgements from the failed request — the broker
+         * did not process them because the session was invalid.
+         * TODO KIP-932: When acknowledgement callbacks are implemented,
+         * report these acks as failed to the application via the
+         * callback instead of silently dropping them. */
+        if (rko_orig->rko_u.share_fetch.ack_details) {
+                rd_list_destroy(rko_orig->rko_u.share_fetch.ack_details);
+                rko_orig->rko_u.share_fetch.ack_details = NULL;
+        }
+}
+
 static void rd_kafka_broker_session_update_epoch(rd_kafka_broker_t *rkb) {
         if (rkb->rkb_share_fetch_session.epoch == -1) {
                 rd_kafka_dbg(
@@ -1710,6 +1806,11 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         if (err == RD_KAFKA_RESP_ERR__DESTROY) {
                 /* TODO KIP-932: Check what is needed out of the below */
                 rd_kafka_broker_session_update(rkb);
+                if (rko_orig->rko_u.share_fetch.ack_details) {
+                        rd_list_destroy(
+                            rko_orig->rko_u.share_fetch.ack_details);
+                        rko_orig->rko_u.share_fetch.ack_details = NULL;
+                }
                 rd_kafka_op_reply(rko_orig, err);
                 return; /* Terminating */
         }
@@ -1723,44 +1824,55 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
         rd_kafka_broker_session_update(rkb);
 
-        /* TODO: Check if this error handling is required here or in the main
-         * thread. */
         if (unlikely(err)) {
-                char tmp[128];
-
-                rd_rkb_dbg(rkb, MSG, "FETCH", "Fetch reply: %s",
-                           rd_kafka_err2str(err));
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "ShareFetch reply error: %s", rd_kafka_err2str(err));
                 switch (err) {
+                case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
+                case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
+                case RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED:
+                case RD_KAFKA_RESP_ERR__TRANSPORT:
+                case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                        /* Session is invalid, lost, cannot be created,
+                         * or connection/request failed.
+                         * Reset session state so the next request
+                         * re-establishes a new session (epoch 0). */
+                        rd_kafka_broker_session_reset(rkb, rko_orig);
+                        break;
+
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
                 case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
-                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
+                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
+                        char tmp[128];
                         /* Request metadata information update */
                         rd_snprintf(tmp, sizeof(tmp), "FetchRequest failed: %s",
                                     rd_kafka_err2str(err));
                         rd_kafka_metadata_refresh_known_topics(
                             rkb->rkb_rk, NULL, rd_true /*force*/, tmp);
-                        /* FALLTHRU */
-
-                case RD_KAFKA_RESP_ERR__TRANSPORT:
-                case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
-                case RD_KAFKA_RESP_ERR__MSG_TIMED_OUT:
-                        /* The fetch is already intervalled from
-                         * consumer_serve() so dont retry. */
-                        break;
-
-                default:
                         break;
                 }
 
-                /*
-                 * TODO KIP-932: Check if this needed or not. If yes, check the
-                 * working.
-                 */
-                rd_kafka_broker_fetch_backoff(rkb, err);
-                /* FALLTHRU */
+                default:
+                        /* TODO KIP-932: Fatal error handling.
+                         * Propagate fatal errors to the application
+                         * and do not retry. */
+                        break;
+                }
+
+                /* There is no retry for ShareFetch RPC at the broker
+                 * thread level. */
+        }
+
+        /* Destroy ack_details before replying — on success the acks
+         * have been sent to the broker, on error they are unprocessable.
+         * TODO KIP-932: When acknowledgement callbacks are implemented,
+         * report failed acks to the application via the callback. */
+        if (rko_orig->rko_u.share_fetch.ack_details) {
+                rd_list_destroy(rko_orig->rko_u.share_fetch.ack_details);
+                rko_orig->rko_u.share_fetch.ack_details = NULL;
         }
 
         if (rko_orig)

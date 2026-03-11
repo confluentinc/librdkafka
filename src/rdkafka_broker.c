@@ -3593,6 +3593,18 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                      "Ignoring SHARE_FETCH op: "
                                      "instance or broker is terminating");
                         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__DESTROY);
+                } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
+                        /* TODO KIP-932: The main thread should check
+                         * broker state before enqueuing SHARE_FETCH
+                         * ops, or back off after receiving ERR__STATE
+                         * replies, to avoid flooding the broker thread
+                         * with ops that are immediately rejected. */
+                        rd_kafka_dbg(
+                            rkb->rkb_rk, BROKER, "SHAREFETCH",
+                            "Ignoring SHARE_FETCH op: "
+                            "broker not up (state %s)",
+                            rd_kafka_broker_state_names[rkb->rkb_state]);
+                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
                 } else if (rkb->rkb_fetching) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "

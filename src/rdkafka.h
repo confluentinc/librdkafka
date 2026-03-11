@@ -651,15 +651,54 @@ typedef enum {
         RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR = 112,
         /** The member epoch is stale */
         RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH = 113,
+        /** The request was sent to an endpoint of the wrong type. */
+        RD_KAFKA_RESP_ERR_MISMATCHED_ENDPOINT_TYPE = 114,
+        /** This endpoint type is not supported yet. */
+        RD_KAFKA_RESP_ERR_UNSUPPORTED_ENDPOINT_TYPE = 115,
+        /** This controller ID is not known. */
+        RD_KAFKA_RESP_ERR_UNKNOWN_CONTROLLER_ID = 116,
         /** Client sent a push telemetry request with an invalid or outdated
          *  subscription ID. */
         RD_KAFKA_RESP_ERR_UNKNOWN_SUBSCRIPTION_ID = 117,
         /** Client sent a push telemetry request larger than the maximum size
          *  the broker will accept. */
         RD_KAFKA_RESP_ERR_TELEMETRY_TOO_LARGE = 118,
+        /** The controller has considered the broker registration
+         *  to be invalid. */
+        RD_KAFKA_RESP_ERR_INVALID_REGISTRATION = 119,
+        /** The server encountered an error with the transaction.
+         *  The client can abort the transaction to continue using
+         *  this transactional ID. */
+        RD_KAFKA_RESP_ERR_TRANSACTION_ABORTABLE = 120,
+        /** The record state is invalid. The acknowledgement of delivery
+         *  could not be completed. */
+        RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE = 121,
+        /** The share session was not found. */
+        RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND = 122,
+        /** The share session epoch is invalid. */
+        RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH = 123,
+        /** The share coordinator rejected the request because the
+         *  share-group state epoch did not match. */
+        RD_KAFKA_RESP_ERR_FENCED_STATE_EPOCH = 124,
+        /** The voter key doesn't match the receiving replica's key. */
+        RD_KAFKA_RESP_ERR_INVALID_VOTER_KEY = 125,
+        /** The voter is already part of the set of voters. */
+        RD_KAFKA_RESP_ERR_DUPLICATE_VOTER = 126,
+        /** The voter is not part of the set of voters. */
+        RD_KAFKA_RESP_ERR_VOTER_NOT_FOUND = 127,
+        /** The regular expression is not valid. */
+        RD_KAFKA_RESP_ERR_INVALID_REGULAR_EXPRESSION = 128,
         /** Client metadata is stale,
          *  client should rebootstrap to obtain new metadata. */
         RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED = 129,
+        /** The supplied topology is invalid. */
+        RD_KAFKA_RESP_ERR_STREAMS_INVALID_TOPOLOGY = 130,
+        /** The supplied topology epoch is invalid. */
+        RD_KAFKA_RESP_ERR_STREAMS_INVALID_TOPOLOGY_EPOCH = 131,
+        /** The supplied topology epoch is outdated. */
+        RD_KAFKA_RESP_ERR_STREAMS_TOPOLOGY_FENCED = 132,
+        /** The limit of share sessions has been reached. */
+        RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED = 133,
         RD_KAFKA_RESP_ERR_END_ALL,
 } rd_kafka_resp_err_t;
 

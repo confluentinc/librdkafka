@@ -1357,6 +1357,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         batches_out->response_msgs_count += (int32_t)size;
                 }
 
+                /* Entries are sorted by start_offset from ShareFetch response.
+                 * Mark as sorted to enable binary search in rd_list_find(). */
+                batches_out->entries.rl_flags |= RD_LIST_F_SORTED;
+
                 /* Filter and forward messages in acquired ranges */
                 rd_kafka_share_filter_acquired_records_and_update_ack_type(
                     temp_fetchq, filtered_msgs, FirstOffsets, LastOffsets,

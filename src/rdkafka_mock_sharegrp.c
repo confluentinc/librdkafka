@@ -58,6 +58,7 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         mcluster->defaults.sharegroup_heartbeat_interval_ms   = 5000;
         mcluster->defaults.sharegroup_max_delivery_attempts   = 5;
         mcluster->defaults.sharegroup_record_lock_duration_ms = 0;
+        mcluster->defaults.sharegroup_isolation_level         = 0;
 }
 
 /**
@@ -107,6 +108,7 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
             mcluster->defaults.sharegroup_max_delivery_attempts;
         mshgrp->record_lock_duration_ms =
             mcluster->defaults.sharegroup_record_lock_duration_ms;
+        mshgrp->isolation_level = mcluster->defaults.sharegroup_isolation_level;
 
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,
@@ -736,6 +738,20 @@ void rd_kafka_mock_sharegroup_set_record_lock_duration(
         mshgrp->record_lock_duration_ms = lock_duration_ms;
         mcluster->defaults.sharegroup_record_lock_duration_ms =
             lock_duration_ms;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the share group isolation level for transactions.
+ */
+void rd_kafka_mock_sharegroup_set_isolation_level(
+    rd_kafka_mock_cluster_t *mcluster,
+    int level) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+        mshgrp->isolation_level                       = level;
+        mcluster->defaults.sharegroup_isolation_level = level;
         mtx_unlock(&mcluster->lock);
 }
 

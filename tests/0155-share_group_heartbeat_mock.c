@@ -2444,29 +2444,22 @@ static void do_test_consumer_leave_rebalance(void) {
         rd_kafka_share_consumer_close(share_c3);
         rd_kafka_share_destroy(share_c3);
 
-        /* Poll remaining consumers for rebalance */
-        wait_share_heartbeats(mcluster, 3, 500);
-        test_share_consume_msgs(share_c1, 1, 6, 500, NULL, 0);
-        test_share_consume_msgs(share_c2, 1, 6, 500, NULL, 0);
+        /* Wait for rebalance to propagate to remaining consumers */
+        rd_usleep(5000 * 1000, 0);
 
-        /* Get new assignments */
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c1), &share_c1_assign));
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c2), &share_c2_assign));
         final_total = share_c1_assign->cnt + share_c2_assign->cnt;
-        TEST_SAY(
-            "After share consumer 3 leave: share consumer 1=%d, share consumer "
-            "2=%d\n",
-            share_c1_assign->cnt, share_c2_assign->cnt);
-
-        /* Total should be >= 6 partitions among remaining consumers */
+        TEST_SAY("After share consumer 3 leave: share consumer 1=%d, "
+                 "share consumer 2=%d\n",
+                 share_c1_assign->cnt, share_c2_assign->cnt);
+        rd_kafka_topic_partition_list_destroy(share_c1_assign);
+        rd_kafka_topic_partition_list_destroy(share_c2_assign);
         TEST_ASSERT(final_total >= 6,
                     "Expected >= 6 partitions after rebalance, got %d",
                     final_total);
-
-        rd_kafka_topic_partition_list_destroy(share_c1_assign);
-        rd_kafka_topic_partition_list_destroy(share_c2_assign);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(share_c1);

@@ -199,6 +199,14 @@ int rd_list_remove_multi_cmp(rd_list_t *rl,
  */
 void rd_list_sort(rd_list_t *rl, int (*cmp)(const void *, const void *));
 
+/**
+ * @brief Check if list is sorted using comparator.
+ *
+ * @returns rd_true if the list is sorted in ascending order, rd_false otherwise.
+ */
+rd_bool_t rd_list_is_sorted(const rd_list_t *rl,
+                            int (*cmp)(const void *, const void *));
+
 
 /**
  * Empties the list and frees elements (if there is a free_cb).

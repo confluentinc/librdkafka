@@ -35,7 +35,6 @@
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
-#include "rdkafka_mock_group_common.h"
 
 /**
  * @brief Share group target assignment (manual)
@@ -66,8 +65,12 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
 rd_kafka_mock_sharegroup_t *
 rd_kafka_mock_sharegroup_find(rd_kafka_mock_cluster_t *mcluster,
                               const rd_kafkap_str_t *GroupId) {
-        return RD_KAFKA_MOCK_GROUP_FIND(&mcluster->sharegrps, GroupId,
-                                        rd_kafka_mock_sharegroup_t);
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
+                if (!rd_kafkap_str_cmp_str(GroupId, mshgrp->id))
+                        return mshgrp;
+        }
+        return NULL;
 }
 
 /**
@@ -169,8 +172,12 @@ void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
 rd_kafka_mock_sharegroup_member_t *
 rd_kafka_mock_sharegroup_member_find(rd_kafka_mock_sharegroup_t *mshgrp,
                                      const rd_kafkap_str_t *MemberId) {
-        return RD_KAFKA_MOCK_MEMBER_FIND(&mshgrp->members, MemberId,
-                                         rd_kafka_mock_sharegroup_member_t);
+        rd_kafka_mock_sharegroup_member_t *member;
+        TAILQ_FOREACH(member, &mshgrp->members, link) {
+                if (!rd_kafkap_str_cmp_str(MemberId, member->id))
+                        return member;
+        }
+        return NULL;
 }
 
 /**
@@ -195,9 +202,10 @@ void rd_kafka_mock_sharegroup_member_destroy(
 void rd_kafka_mock_sharegroup_member_active(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_member_t *member) {
-        rd_kafka_mock_group_member_mark_active(mshgrp->cluster->rk, "share",
-                                               member->id,
-                                               &member->ts_last_activity);
+        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
+                     "Marking mock share group member %s as active",
+                     member->id);
+        member->ts_last_activity = rd_clock();
 }
 
 /**
@@ -787,15 +795,11 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
 
         *sessionp = NULL;
 
-        /* 1. Member validation: MemberId must be a registered member. */
-        if (!rd_kafka_mock_sharegroup_member_find(sgrp, MemberId)) {
-                rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCK",
-                             "%s: unknown member %.*s in group %s", api_name,
-                             RD_KAFKAP_STR_PR(MemberId), sgrp->id);
-                return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
-        }
+        /* Per KIP-932, the real Kafka broker's partition leader does NOT
+         * validate group membership on ShareFetch — share sessions are
+         * managed independently of the group coordinator. */
 
-        /* 2. Look up existing session by MemberId. */
+        /* 1. Look up existing session by MemberId. */
         TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
                 if (!rd_kafkap_str_cmp_str(MemberId, session->member_id))
                         break;
@@ -816,10 +820,10 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                 /* 4. SessionEpoch > 0: validate epoch. */
                 if (!session) {
                         *sessionp = NULL;
-                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 } else if (SessionEpoch != session->session_epoch) {
                         *sessionp = session;
-                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 }
         }
 

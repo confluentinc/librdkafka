@@ -776,8 +776,8 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         rd_kafka_topic_partition_list_t *subs;
         const char *grp_conf_offset[] = {"share.auto.offset.reset", "SET",
                                          "earliest"};
-        const char *grp_conf_lock[]   = {"share.record.lock.duration.ms",
-                                         "SET", "15000"};
+        const char *grp_conf_lock[]   = {"share.record.lock.duration.ms", "SET",
+                                         "15000"};
         int consumed1 = 0, consumed2 = 0, attempts;
         const int msg_cnt          = 10;
         const int lock_duration_ms = 10000;
@@ -907,62 +907,62 @@ static void test_acquisition_lock_expiry_redelivery(void) {
 int main_0171_share_consumer_consume(int argc, char **argv) {
 
         /* Single-consumer tests */
-        // test_single_consumer_single_topic_single_partition();      /* Single
-        //                                                               consumer,
-        //                                                               single topic,
-        //                                                               single
-        //                                                               partition */
-        // test_single_consumer_single_topic_multiple_partitions();   /* Single
-        //                                                               consumer,
-        //                                                               single
-        //                                                               topic, multi
-        //                                                               partitions
-        //                                                             */
-        // test_single_consumer_multiple_topic_single_partition();    /* Single
-        //                                                               consumer,
-        //                                                               multi topic,
-        //                                                               single
-        //                                                               partition
-        //                                                               each */
-        // test_single_consumer_multiple_topic_multiple_partitions(); /* Single
-        //                                                               consumer,
-        //                                                               multi
-        //                                                               topics,
-        //                                                               multi
-        //                                                               partitions
-        //                                                               each */
+        test_single_consumer_single_topic_single_partition();      /* Single
+                                                                      consumer,
+                                                                      single topic,
+                                                                      single
+                                                                      partition */
+        test_single_consumer_single_topic_multiple_partitions();   /* Single
+                                                                      consumer,
+                                                                      single
+                                                                      topic, multi
+                                                                      partitions
+                                                                    */
+        test_single_consumer_multiple_topic_single_partition();    /* Single
+                                                                      consumer,
+                                                                      multi topic,
+                                                                      single
+                                                                      partition
+                                                                      each */
+        test_single_consumer_multiple_topic_multiple_partitions(); /* Single
+                                                                      consumer,
+                                                                      multi
+                                                                      topics,
+                                                                      multi
+                                                                      partitions
+                                                                      each */
 
-        // // /* Multi-consumer tests */
-        // test_multiple_consumers_single_topic_single_partition();       /* Multi
-        //                                                                   consumer
-        //                                                                   sharing
-        //                                                                   single
-        //                                                                   partition */
-        // test_multiple_consumers_single_topic_multiple_partitions();    /* Multi
-        //                                                                   consumer,
-        //                                                                   multi
-        //                                                                   partition
-        //                                                                 */
-        // test_multiple_consumers_multiple_topics_multiple_partitions(); /* Full
-        //                                                                   matrix:
-        //                                                                   multi
-        //                                                                   everything
-        //                                                                 */
+        /* Multi-consumer tests */
+        test_multiple_consumers_single_topic_single_partition();       /* Multi
+                                                                          consumer
+                                                                          sharing
+                                                                          single
+                                                                          partition */
+        test_multiple_consumers_single_topic_multiple_partitions();    /* Multi
+                                                                          consumer,
+                                                                          multi
+                                                                          partition
+                                                                        */
+        test_multiple_consumers_multiple_topics_multiple_partitions(); /* Full
+                                                                          matrix:
+                                                                          multi
+                                                                          everything
+                                                                        */
 
-        // // /* High volume tests */
-        // test_high_volume_10k_messages();
-        // test_high_volume_50k_multi_partition();
+        /* High volume tests */
+        test_high_volume_10k_messages();
+        test_high_volume_50k_multi_partition();
 
-        // // /* Multi-topic tests (triggers multiple fetch responses) */
-        // test_many_topics_15();
-        // test_many_topics_10_multi_partition();
+        /* Multi-topic tests (triggers multiple fetch responses) */
+        test_many_topics_15();
+        test_many_topics_10_multi_partition();
 
-        // /* Rapid produce/consume tests */
-        // test_rapid_produce_consume_cycles();
+        /* Rapid produce/consume tests */
+        test_rapid_produce_consume_cycles();
 
-        // /* Edge case tests */
-        // test_empty_then_produce();
-        // test_sparse_partitions();
+        /* Edge case tests */
+        test_empty_then_produce();
+        test_sparse_partitions();
 
         /* Acquisition lock tests */
         test_acquisition_lock_expiry_redelivery();

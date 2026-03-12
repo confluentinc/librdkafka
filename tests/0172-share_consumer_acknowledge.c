@@ -858,18 +858,18 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         test_reject_no_redelivery();
         test_accept_no_redelivery();
 
-        // /* Extended tests */
+        /* Extended tests */
         test_mixed_ack_types();
 
-        // /* Multi-partition tests */
+        /* Multi-partition tests */
         test_release_multiple_partitions();
         test_mixed_ack_across_partitions();
 
-        // /* Multi-topic tests */
+        /* Multi-topic tests */
         test_release_multiple_topics();
         test_mixed_ack_across_topics();
 
-        // /* Error handling tests */
+        /* Error handling tests */
         test_ack_null_message();
         test_ack_null_rkshare();
         test_ack_invalid_type();

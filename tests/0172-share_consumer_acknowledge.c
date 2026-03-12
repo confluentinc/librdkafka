@@ -34,18 +34,19 @@
  * Tests the acknowledge APIs (ACCEPT, REJECT, RELEASE) with real/mock broker.
  *
  * Expected Behavior:
- * - RELEASE: Records redelivered to the same or another consumer in the same group.
+ * - RELEASE: Records redelivered to the same or another consumer in the same
+ * group.
  * - REJECT:  NOT redelivered
  * - ACCEPT:  Records committed, NOT redelivered
  *
  * All tests use share.acknowledgement.mode = "explicit"
  */
 
-#define MAX_TOPICS         8
-#define MAX_PARTITIONS     8
-#define MAX_CONSUMERS      4
-#define MAX_MSGS_PER_PART  100
-#define BATCH_SIZE         10000
+#define MAX_TOPICS        8
+#define MAX_PARTITIONS    8
+#define MAX_CONSUMERS     4
+#define MAX_MSGS_PER_PART 100
+#define BATCH_SIZE        10000
 
 /**
  * @brief Test configuration structure
@@ -56,8 +57,8 @@ typedef struct {
         int partitions[MAX_TOPICS];
         int msgs_per_partition;
         int consumer_cnt;
-        rd_kafka_share_AcknowledgeType_t
-            actions[MAX_TOPICS][MAX_PARTITIONS][MAX_MSGS_PER_PART];
+        rd_kafka_share_AcknowledgeType_t actions[MAX_TOPICS][MAX_PARTITIONS]
+                                                [MAX_MSGS_PER_PART];
         int expected_redelivered;
         int poll_timeout_ms;
         int max_attempts;
@@ -193,7 +194,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
         int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
-        size_t total_consumed = 0;
+        size_t total_consumed                   = 0;
         int msg_idx[MAX_TOPICS][MAX_PARTITIONS] = {{0}};
 
         state->original_cnt  = 0;
@@ -228,8 +229,10 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                     p_idx < config->partitions[t_idx]) {
                                         m_idx = msg_idx[t_idx][p_idx]++;
                                         if (m_idx < MAX_MSGS_PER_PART)
-                                                ack_type = config->actions
-                                                    [t_idx][p_idx][m_idx];
+                                                ack_type =
+                                                    config
+                                                        ->actions[t_idx][p_idx]
+                                                                 [m_idx];
                                         else
                                                 ack_type =
                                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
@@ -406,18 +409,18 @@ static int run_ack_test(ack_test_config_t *config) {
  * @brief RELEASE causes redelivery
  */
 static void test_release_redelivery(void) {
-        ack_test_config_t config = {.test_name          = "release-redelivery",
-                                    .topic_cnt          = 1,
-                                    .partitions         = {1},
-                                    .msgs_per_partition = 5,
-                                    .consumer_cnt       = 1,
-                                    .actions = {{{
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
-                                    .expected_redelivered = 5};
+        ack_test_config_t config = {
+            .test_name            = "release-redelivery",
+            .topic_cnt            = 1,
+            .partitions           = {1},
+            .msgs_per_partition   = 5,
+            .consumer_cnt         = 1,
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
+            .expected_redelivered = 5};
         run_ack_test(&config);
 }
 
@@ -425,18 +428,18 @@ static void test_release_redelivery(void) {
  * @brief REJECT prevents redelivery (dead letter)
  */
 static void test_reject_no_redelivery(void) {
-        ack_test_config_t config = {.test_name  = "reject-no-redelivery",
-                                    .topic_cnt  = 1,
-                                    .partitions = {1},
-                                    .msgs_per_partition = 5,
-                                    .consumer_cnt       = 1,
-                                    .actions = {{{
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
-                                    .expected_redelivered = 0};
+        ack_test_config_t config = {
+            .test_name            = "reject-no-redelivery",
+            .topic_cnt            = 1,
+            .partitions           = {1},
+            .msgs_per_partition   = 5,
+            .consumer_cnt         = 1,
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
+            .expected_redelivered = 0};
         run_ack_test(&config);
 }
 
@@ -444,18 +447,18 @@ static void test_reject_no_redelivery(void) {
  * @brief ACCEPT prevents redelivery
  */
 static void test_accept_no_redelivery(void) {
-        ack_test_config_t config = {.test_name  = "accept-no-redelivery",
-                                    .topic_cnt  = 1,
-                                    .partitions = {1},
-                                    .msgs_per_partition = 5,
-                                    .consumer_cnt       = 1,
-                                    .actions = {{{
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}}},
-                                    .expected_redelivered = 0};
+        ack_test_config_t config = {
+            .test_name            = "accept-no-redelivery",
+            .topic_cnt            = 1,
+            .partitions           = {1},
+            .msgs_per_partition   = 5,
+            .consumer_cnt         = 1,
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}}},
+            .expected_redelivered = 0};
         run_ack_test(&config);
 }
 

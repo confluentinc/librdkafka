@@ -115,8 +115,9 @@ rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_copy(
     const rd_kafka_share_ack_batch_entry_t *src);
 
 /** Allocate and initialize a share ack batches.
- *  Takes ownership of \p rktpar. 
- *  TODO KIP-932: We should keep a copy of the rktpar instead of taking ownership. */
+ *  Takes ownership of \p rktpar.
+ *  TODO KIP-932: We should keep a copy of the rktpar instead of taking
+ * ownership. */
 rd_kafka_share_ack_batches_t *
 rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
                                int32_t response_leader_id,

@@ -3825,8 +3825,8 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* Common validation: member check, session lookup,
                  * epoch -1 close, epoch > 0 validation. */
                 err = rd_kafka_mock_sgrp_session_validate(
-                    sgrp, &MemberId, mconn->broker->id, SessionEpoch,
-                    &session, "ShareFetch");
+                    sgrp, &MemberId, mconn->broker->id, SessionEpoch, &session,
+                    "ShareFetch");
 
                 if (!err && SessionEpoch == 0) {
                         /* Open a new session (or reuse if one already exists
@@ -4287,8 +4287,8 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                 /* Common validation: member check, session lookup,
                  * epoch -1 close, epoch > 0 validation. */
                 err = rd_kafka_mock_sgrp_session_validate(
-                    sgrp, &MemberId, mconn->broker->id, SessionEpoch,
-                    &session, "ShareAcknowledge");
+                    sgrp, &MemberId, mconn->broker->id, SessionEpoch, &session,
+                    "ShareAcknowledge");
 
                 /* For all successful, non-close requests: update activity
                  * timestamp and increment epoch for next request. */

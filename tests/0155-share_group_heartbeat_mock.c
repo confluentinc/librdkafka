@@ -51,6 +51,53 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
         return rkshare;
 }
 
+/**
+ * @brief Poll-wait until the consumer's assignment has exactly \p expected_cnt
+ *        partitions, or \p timeout_ms elapses.
+ *
+ * @return The final partition count.
+ */
+static int wait_assignment_cnt(rd_kafka_share_t *share_c,
+                               int expected_cnt,
+                               int timeout_ms) {
+        int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
+        int cnt          = -1;
+
+        while (test_clock() < deadline) {
+                rd_kafka_topic_partition_list_t *assignment;
+                TEST_CALL_ERR__(rd_kafka_assignment(
+                    test_share_consumer_get_rk(share_c), &assignment));
+                cnt = assignment->cnt;
+                rd_kafka_topic_partition_list_destroy(assignment);
+                if (cnt == expected_cnt)
+                        return cnt;
+                rd_usleep(100 * 1000, 0);
+        }
+        return cnt;
+}
+
+/**
+ * @brief Poll-wait until rd_kafka_fatal_error() returns a non-NO_ERROR
+ *        value, or \p timeout_ms elapses.
+ *
+ * @return The fatal error code (NO_ERROR if timeout expired).
+ */
+static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
+                                            int timeout_ms) {
+        int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
+        char errstr[256];
+
+        while (test_clock() < deadline) {
+                rd_kafka_resp_err_t err = rd_kafka_fatal_error(
+                    test_share_consumer_get_rk(share_c), errstr,
+                    sizeof(errstr));
+                if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
+                        return err;
+                rd_usleep(100 * 1000, 0);
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 static int count_topic_partitions(rd_kafka_topic_partition_list_t *assignment,
                                   const char *topic) {
         int i, count = 0;
@@ -278,9 +325,9 @@ static void do_test_share_group_multi_topic_assignment(void) {
         test_share_consume_msgs(share_c1, 1, 4, 500, NULL, 0);
         test_share_consume_msgs(share_c2, 1, 4, 500, NULL, 0);
 
-        /* Allow time for assignment reconciliation to complete on all
-         * consumers before checking rd_kafka_assignment(). */
-        rd_usleep(2000 * 1000, 0);
+        /* Wait for C1's assignment to shrink from 6 to 4 (gave 2 orders
+         * to C2).  This polls rd_kafka_assignment() in a loop. */
+        wait_assignment_cnt(share_c1, 4, 10000);
 
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c1), &share_c1_assign));
@@ -310,8 +357,8 @@ static void do_test_share_group_multi_topic_assignment(void) {
         test_share_consume_msgs(share_c2, 1, 4, 500, NULL, 0);
         test_share_consume_msgs(share_c3, 1, 4, 500, NULL, 0);
 
-        /* Allow time for assignment reconciliation to complete. */
-        rd_usleep(2000 * 1000, 0);
+        /* Wait for C1 to shrink from 4 to 3 (gave 1 event to C3). */
+        wait_assignment_cnt(share_c1, 3, 10000);
 
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c1), &share_c1_assign));
@@ -345,8 +392,8 @@ static void do_test_share_group_multi_topic_assignment(void) {
         test_share_consume_msgs(share_c2, 1, 12, 500, NULL, 0);
         test_share_consume_msgs(share_c3, 1, 12, 500, NULL, 0);
 
-        /* Allow time for assignment reconciliation after C1 leaves. */
-        rd_usleep(2000 * 1000, 0);
+        /* Wait for C2 to get all 4 orders after C1 leaves. */
+        wait_assignment_cnt(share_c2, 4, 10000);
 
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c2), &share_c2_assign));
@@ -369,8 +416,8 @@ static void do_test_share_group_multi_topic_assignment(void) {
 
         test_share_consume_msgs(share_c3, 1, 12, 500, NULL, 0);
 
-        /* Allow time for assignment reconciliation after C2 leaves. */
-        rd_usleep(2000 * 1000, 0);
+        /* C3 keeps 2 events — wait for stable assignment. */
+        wait_assignment_cnt(share_c3, 2, 10000);
 
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c3), &share_c3_assign));
@@ -450,13 +497,8 @@ static void do_test_share_group_error_injection(void) {
         /* Poll - consumer should enter fatal state */
         test_share_consume_msgs(share_c, 1, 6, 500, NULL, 0);
 
-        /* Allow time for the fatal error to propagate from the
-         * heartbeat response handler to the consumer state. */
-        rd_usleep(1000 * 1000, 0);
-
-        /* Verify consumer entered fatal state */
-        fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-                                         errstr, sizeof(errstr));
+        /* Wait for the fatal error to propagate. */
+        fatal_err = wait_fatal_error(share_c, 5000);
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "INVALID_REQUEST error");
@@ -632,22 +674,15 @@ static void do_test_share_group_session_timeout(void) {
         /* Destroy C2 without close to simulate crash */
         rd_kafka_share_destroy(share_c2);
 
-        /* Wait for C2's session to expire (3s timeout + margin),
-         * then poll C1 to let it receive and reconcile the new
-         * assignment from the broker. */
-        rd_usleep(4000 * 1000, 0);
-        test_share_consume_msgs(share_c1, 1, 20, 500, NULL, 0);
-
-        /* Allow time for assignment reconciliation to complete. */
-        rd_usleep(2000 * 1000, 0);
-
-        /* Verify C1 got all partitions after C2 timed out */
-        TEST_CALL_ERR__(rd_kafka_assignment(
-            test_share_consumer_get_rk(share_c1), &share_c1_assign));
-        TEST_ASSERT(share_c1_assign->cnt == 4,
-                    "C1 should have all 4 partitions after C2 timeout, got %d",
-                    share_c1_assign->cnt);
-        rd_kafka_topic_partition_list_destroy(share_c1_assign);
+        /* Wait for C1 to get all 4 partitions after C2's session
+         * times out (3s) and the broker reassigns. */
+        {
+                int cnt = wait_assignment_cnt(share_c1, 4, 15000);
+                TEST_ASSERT(cnt == 4,
+                            "C1 should have all 4 partitions after C2 "
+                            "timeout, got %d",
+                            cnt);
+        }
 
         rd_kafka_share_consumer_close(share_c1);
         rd_kafka_share_destroy(share_c1);
@@ -747,8 +782,8 @@ static void do_test_share_group_target_assignment(void) {
         test_share_consume_msgs(share_c1, 1, 12, 500, NULL, 0);
         test_share_consume_msgs(share_c2, 1, 12, 500, NULL, 0);
 
-        /* Allow time for assignment reconciliation to complete. */
-        rd_usleep(2000 * 1000, 0);
+        /* Wait for C1 to get all 4 partitions (manual assignment). */
+        wait_assignment_cnt(share_c1, 4, 10000);
 
         /* Verify manual assignment was applied */
         TEST_CALL_ERR__(rd_kafka_assignment(
@@ -1211,12 +1246,8 @@ static void do_test_group_authorization_failed_error(void) {
         /* Poll - should trigger fatal error */
         test_share_consume_msgs(share_c, 1, 6, 500, NULL, 0);
 
-        /* Allow time for the fatal error to propagate. */
-        rd_usleep(1000 * 1000, 0);
-
-        /* Verify consumer entered fatal state */
-        fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-                                         errstr, sizeof(errstr));
+        /* Wait for the fatal error to propagate. */
+        fatal_err = wait_fatal_error(share_c, 5000);
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "GROUP_AUTHORIZATION_FAILED");
@@ -1292,12 +1323,8 @@ static void do_test_group_max_size_reached_error(void) {
         /* Poll share_c2 - should get fatal error */
         test_share_consume_msgs(share_c2, 1, 6, 500, NULL, 0);
 
-        /* Allow time for the fatal error to propagate. */
-        rd_usleep(1000 * 1000, 0);
-
-        /* Verify share_c2 entered fatal state */
-        fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c2),
-                                         errstr, sizeof(errstr));
+        /* Wait for the fatal error to propagate. */
+        fatal_err = wait_fatal_error(share_c2, 5000);
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected share_c2 to be in fatal state after "
                     "GROUP_MAX_SIZE_REACHED");
@@ -2057,12 +2084,8 @@ static void do_test_invalid_request_error(void) {
         /* Poll - should trigger fatal error */
         test_share_consume_msgs(share_c, 1, 6, 500, NULL, 0);
 
-        /* Allow time for the fatal error to propagate. */
-        rd_usleep(1000 * 1000, 0);
-
-        /* Verify consumer entered fatal state */
-        fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-                                         errstr, sizeof(errstr));
+        /* Wait for the fatal error to propagate. */
+        fatal_err = wait_fatal_error(share_c, 5000);
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "INVALID_REQUEST");
@@ -2123,12 +2146,8 @@ static void do_test_unsupported_version_error(void) {
         /* Poll - should trigger fatal error */
         test_share_consume_msgs(share_c, 1, 6, 500, NULL, 0);
 
-        /* Allow time for the fatal error to propagate. */
-        rd_usleep(1000 * 1000, 0);
-
-        /* Verify consumer entered fatal state */
-        fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-                                         errstr, sizeof(errstr));
+        /* Wait for the fatal error to propagate. */
+        fatal_err = wait_fatal_error(share_c, 5000);
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "UNSUPPORTED_VERSION");

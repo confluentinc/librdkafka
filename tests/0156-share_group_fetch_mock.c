@@ -326,7 +326,6 @@ static int do_test_negative_sharefetch_error(rd_kafka_resp_err_t err) {
 }
 
 static void do_test_sharefetch_invalid_session_epoch(void) {
-        int consumed;
         SUB_TEST_QUICK();
         do_test_negative_sharefetch_error(
             RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH);

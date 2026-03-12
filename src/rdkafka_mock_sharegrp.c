@@ -795,15 +795,11 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
 
         *sessionp = NULL;
 
-        /* 1. Member validation: MemberId must be a registered member. */
-        if (!rd_kafka_mock_sharegroup_member_find(sgrp, MemberId)) {
-                rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCK",
-                             "%s: unknown member %.*s in group %s", api_name,
-                             RD_KAFKAP_STR_PR(MemberId), sgrp->id);
-                return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
-        }
+        /* Per KIP-932, the real Kafka broker's partition leader does NOT
+         * validate group membership on ShareFetch — share sessions are
+         * managed independently of the group coordinator. */
 
-        /* 2. Look up existing session by MemberId. */
+        /* 1. Look up existing session by MemberId. */
         TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
                 if (!rd_kafkap_str_cmp_str(MemberId, session->member_id))
                         break;
@@ -824,10 +820,10 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                 /* 4. SessionEpoch > 0: validate epoch. */
                 if (!session) {
                         *sessionp = NULL;
-                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 } else if (SessionEpoch != session->session_epoch) {
                         *sessionp = session;
-                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 }
         }
 

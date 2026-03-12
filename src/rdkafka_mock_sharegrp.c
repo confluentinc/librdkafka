@@ -762,9 +762,9 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
  * @brief Common share-session validation for ShareFetch / ShareAcknowledge.
  *
  * Performs:
- *  1. Member validation (MemberId must be a registered group member).
- *  2. Session lookup by MemberId.
- *  3. SessionEpoch == -1 : close session and release member locks.
+ *  1. Session lookup by (MemberId, NodeId).
+ *  2. SessionEpoch == 0  : destroy old session if any (caller creates new).
+ *  3. SessionEpoch == -1 : keep session alive (FinalContext behaviour).
  *  4. SessionEpoch  > 0  : validate that session exists and epoch matches.
  *
  * On return, \p *sessionp is set to the looked-up session (or NULL if
@@ -777,6 +777,7 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
  *
  * @param sgrp          Share group.
  * @param MemberId      Member identifier from the request.
+ * @param NodeId        Node ID of the broker handling the request.
  * @param SessionEpoch  Session epoch from the request.
  * @param sessionp      [out] Session pointer.
  * @param api_name      API name for debug messages ("ShareFetch" etc.).
@@ -788,6 +789,7 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
 rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
     rd_kafka_mock_sharegroup_t *sgrp,
     const rd_kafkap_str_t *MemberId,
+    int32_t NodeId,
     int32_t SessionEpoch,
     rd_kafka_mock_sgrp_fetch_session_t **sessionp,
     const char *api_name) {
@@ -799,14 +801,21 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
          * validate group membership on ShareFetch — share sessions are
          * managed independently of the group coordinator. */
 
-        /* 1. Look up existing session by MemberId. */
+        /* 1. Look up existing session by (MemberId, NodeId).
+         *    In real Kafka, ShareSessionCache is per-broker, so each
+         *    broker maintains its own independent session for the same
+         *    member.  We emulate this by keying on both fields. */
         TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
-                if (!rd_kafkap_str_cmp_str(MemberId, session->member_id))
+                if (!rd_kafkap_str_cmp_str(MemberId, session->member_id) &&
+                    session->node_id == NodeId)
                         break;
         }
 
-        /* 3. SessionEpoch == -1: close session. */
-        if (SessionEpoch == -1) {
+        /* 2. SessionEpoch == 0: open a new session.
+         *    If an old session exists for this member (e.g. after a
+         *    LEAVE→rejoin cycle), destroy it so the caller creates a
+         *    fresh one. */
+        if (SessionEpoch == 0) {
                 if (session) {
                         rd_kafka_mock_sgrp_release_member_locks(
                             sgrp, session->member_id);
@@ -815,15 +824,28 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
                         session = NULL;
                 }
-                /* Closing a non-existent session is not an error. */
+        } else if (SessionEpoch == -1) {
+                /* 3. SessionEpoch == -1 (FINAL_EPOCH): the real Kafka broker
+                 *    does NOT destroy the session here — it creates a
+                 *    FinalContext but keeps the session alive until the
+                 *    TCP connection disconnects.  We mirror that by
+                 *    simply returning the existing session (or NULL). */
         } else if (SessionEpoch > 0) {
                 /* 4. SessionEpoch > 0: validate epoch. */
                 if (!session) {
                         *sessionp = NULL;
                         return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 } else if (SessionEpoch != session->session_epoch) {
-                        *sessionp = session;
-                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
+                        /* Epoch mismatch: destroy the stale session so the
+                         * caller creates a fresh one.  This prevents an
+                         * infinite error loop when the client's per-broker
+                         * epoch gets out of sync after a LEAVE→rejoin. */
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            sgrp, session->member_id);
+                        TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
+                        sgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
+                        session = NULL;
                 }
         }
 

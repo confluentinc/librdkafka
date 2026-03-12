@@ -1032,13 +1032,7 @@ static void do_test_fenced_member_epoch_error(void) {
             found_heartbeats);
 
         /* Verify consumer eventually gets assignment back */
-        test_share_consume_msgs(share_c, 1, 4, 500, NULL, 0);
-        TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
-                                            &assignment));
-        TEST_ASSERT(assignment->cnt == 3,
-                    "Expected 3 partitions after rejoin, got %d",
-                    assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(assignment);
+        wait_assignment_cnt(share_c, 3, 15000);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(share_c);

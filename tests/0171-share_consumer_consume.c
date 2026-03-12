@@ -27,6 +27,7 @@
  */
 
 #include "test.h"
+#include "testshared.h"
 
 /**
  * @brief Maximum supported values for test configuration
@@ -291,11 +292,14 @@ static void cleanup_test(share_test_config_t *config,
  * @param config Test configuration
  * @returns 0 on success, -1 on failure
  */
-static int run_share_consumer_test(share_test_config_t *config) {
+static void run_share_consumer_test(share_test_config_t *config) {
         share_test_state_t state = {0};
         int i;
         char dist_str[512] = {0};
         int pos            = 0;
+
+        SUB_TEST_QUICK("%s", config->test_name ? config->test_name
+                                               : "Share Consumer Test");
 
         /* Validate config */
         TEST_ASSERT(config->consumer_cnt > 0 &&
@@ -344,7 +348,7 @@ static int run_share_consumer_test(share_test_config_t *config) {
         /* Cleanup */
         cleanup_test(config, &state);
 
-        return 0;
+        SUB_TEST_PASS();
 }
 
 
@@ -533,6 +537,8 @@ static void test_rapid_produce_consume_cycles(void) {
         const int msgs_per_round = 500;
         const int total_expected = rounds * msgs_per_round;
 
+        SUB_TEST_QUICK();
+
         TEST_SAY("\n");
         TEST_SAY("=== Rapid produce/consume cycles: %d rounds x %d msgs ===\n",
                  rounds, msgs_per_round);
@@ -598,6 +604,8 @@ static void test_rapid_produce_consume_cycles(void) {
         test_delete_topic(test_share_consumer_get_rk(consumer), topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -611,6 +619,8 @@ static void test_empty_then_produce(void) {
         rd_kafka_topic_partition_list_t *subs;
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int consumed           = 0, attempts;
+
+        SUB_TEST_QUICK();
 
         TEST_SAY("\n");
         TEST_SAY("=== Empty topic then produce test ===\n");
@@ -676,6 +686,8 @@ static void test_empty_then_produce(void) {
         test_delete_topic(test_share_consumer_get_rk(consumer), topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -691,6 +703,8 @@ static void test_sparse_partitions(void) {
         int consumed           = 0, attempts;
         const int msgs_per_partition = 100;
         const int expected = 3 * msgs_per_partition; /* partitions 0,2,4 */
+
+        SUB_TEST_QUICK();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -750,6 +764,8 @@ static void test_sparse_partitions(void) {
         test_delete_topic(test_share_consumer_get_rk(consumer), topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 

@@ -532,7 +532,7 @@ static void do_test_share_group_rtt_injection(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-rtt";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -840,7 +840,7 @@ static void do_test_share_group_no_spurious_fencing(void) {
         const char *group = "test-share-group-no-fence";
         int i;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup with a short session timeout and a heartbeat interval that
          * is well below it, so the active consumer is never spuriously
@@ -1140,7 +1140,7 @@ static void do_test_not_coordinator_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-not-coord";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1812,7 +1812,7 @@ static void do_test_subscription_change(void) {
         const char *topicB = "test-sub-change-topic-B";
         const char *group  = "test-share-group-sub-change";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2318,7 +2318,7 @@ static void do_test_resubscribe_after_unsubscribe(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-resubscribe";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2400,7 +2400,7 @@ static void do_test_consumer_leave_rebalance(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-rebalance";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);

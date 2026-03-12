@@ -62,24 +62,28 @@ static void rd_kafka_share_ack_batch_entry_destroy_free(void *ptr) {
 
 rd_bool_t rd_kafka_share_acknowledgement_mode_is_implicit(rd_kafka_t *rk) {
         return rk->rk_conf.share.share_acknowledgement_mode &&
-               !strcmp(rk->rk_conf.share.share_acknowledgement_mode, "implicit");
+               !strcmp(rk->rk_conf.share.share_acknowledgement_mode,
+                       "implicit");
 }
 
 rd_bool_t rd_kafka_share_acknowledgement_mode_is_explicit(rd_kafka_t *rk) {
         return rk->rk_conf.share.share_acknowledgement_mode &&
-               !strcmp(rk->rk_conf.share.share_acknowledgement_mode, "explicit");
+               !strcmp(rk->rk_conf.share.share_acknowledgement_mode,
+                       "explicit");
 }
 
 void rd_kafka_share_acknowledge_all_if_implicit_acknowledgement(
     rd_kafka_share_t *rkshare) {
-        if (rd_kafka_share_acknowledgement_mode_is_implicit(rkshare->rkshare_rk))
+        if (rd_kafka_share_acknowledgement_mode_is_implicit(
+                rkshare->rkshare_rk))
                 rd_kafka_share_ack_all(rkshare);
 }
 
 rd_kafka_error_t *
 rd_kafka_ensure_all_acquired_acknowledged_if_explicit_acknowledgements(
     rd_kafka_share_t *rkshare) {
-        if (rd_kafka_share_acknowledgement_mode_is_explicit(rkshare->rkshare_rk) &&
+        if (rd_kafka_share_acknowledgement_mode_is_explicit(
+                rkshare->rkshare_rk) &&
             rkshare->rkshare_unacked_cnt > 0)
                 return rd_kafka_error_new(
                     RD_KAFKA_RESP_ERR__STATE,
@@ -456,7 +460,7 @@ int rd_kafka_share_ack_entry_cmp_start_offset_ptr(const void *_a,
  * @returns 0 if offset is within [start_offset, end_offset]
  */
 static int rd_kafka_share_ack_entry_cmp_offset_ptr(const void *_offset,
-                                               const void *_entry) {
+                                                   const void *_entry) {
         const int64_t *offset = (const int64_t *)_offset;
         const rd_kafka_share_ack_batch_entry_t *entry =
             (const rd_kafka_share_ack_batch_entry_t *)_entry;
@@ -502,7 +506,8 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         /* Explicit acknowledge APIs require explicit acknowledgement mode */
-        if (rd_kafka_share_acknowledgement_mode_is_implicit(rkshare->rkshare_rk))
+        if (rd_kafka_share_acknowledgement_mode_is_implicit(
+                rkshare->rkshare_rk))
                 return RD_KAFKA_RESP_ERR__STATE;
 
         /* Validate type - ACCEPT, RELEASE, REJECT allowed */

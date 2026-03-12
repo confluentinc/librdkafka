@@ -115,7 +115,8 @@ rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_copy(
     const rd_kafka_share_ack_batch_entry_t *src);
 
 /** Allocate and initialize a share ack batches.
- *  Takes ownership of \p rktpar. */
+ *  Takes ownership of \p rktpar. 
+ *  TODO KIP-932: We should keep a copy of the rktpar instead of taking ownership. */
 rd_kafka_share_ack_batches_t *
 rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
                                int32_t response_leader_id,
@@ -161,5 +162,37 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
  * @returns Allocated list or NULL if nothing to send. Caller must destroy.
  */
 rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Check if share consumer uses implicit acknowledgement mode.
+ */
+rd_bool_t rd_kafka_share_acknowledgement_mode_is_implicit(rd_kafka_t *rk);
+
+/**
+ * @brief Check if share consumer uses explicit acknowledgement mode.
+ */
+rd_bool_t rd_kafka_share_acknowledgement_mode_is_explicit(rd_kafka_t *rk);
+
+/**
+ * @brief In implicit mode, acknowledge all acquired records as ACCEPT.
+ */
+void rd_kafka_share_acknowledge_all_if_implicit_acknowledgement(
+    rd_kafka_share_t *rkshare);
+
+/**
+ * @brief In explicit mode, ensure all acquired records have been acknowledged.
+ * @returns Error if there are unacknowledged records, NULL otherwise.
+ */
+rd_kafka_error_t *
+rd_kafka_ensure_all_acquired_acknowledged_if_explicit_acknowledgements(
+    rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Comparator for sorting/checking entries by start_offset.
+ *
+ * Used with rd_list_sort() and rd_list_is_sorted().
+ */
+int rd_kafka_share_ack_entry_cmp_start_offset_ptr(const void *_a,
+                                                  const void *_b);
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

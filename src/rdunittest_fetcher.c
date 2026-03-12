@@ -79,10 +79,8 @@ static rd_kafka_topic_partition_t *
 ut_create_rktpar_with_id(const char *topic,
                          int32_t partition,
                          rd_kafka_Uuid_t topic_id) {
-        rd_kafka_topic_partition_t *rktpar =
-            rd_kafka_topic_partition_new(topic, partition);
-        rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);
-        return rktpar;
+        return rd_kafka_topic_partition_new_with_name_and_id(topic, partition,
+                                                             topic_id);
 }
 
 static void ut_add_batches_to_map(rd_kafka_share_t *rkshare,

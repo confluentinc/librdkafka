@@ -38,6 +38,7 @@
 #include "rdkafka_msgset.h"
 #include "rdkafka_fetcher.h"
 #include "rdkafka_request.h"
+#include "rdkafka_share_acknowledgement.h"
 
 
 /**
@@ -1357,9 +1358,12 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         batches_out->response_msgs_count += (int32_t)size;
                 }
 
-                /* Entries are sorted by start_offset from ShareFetch response.
-                 * Mark as sorted to enable binary search in rd_list_find(). */
-                batches_out->entries.rl_flags |= RD_LIST_F_SORTED;
+                /* Verify entries are sorted by start_offset before marking.
+                 * Enables binary search in rd_list_find(). */
+                if (rd_list_is_sorted(
+                        &batches_out->entries,
+                        rd_kafka_share_ack_entry_cmp_start_offset_ptr))
+                        batches_out->entries.rl_flags |= RD_LIST_F_SORTED;
 
                 /* Filter and forward messages in acquired ranges */
                 rd_kafka_share_filter_acquired_records_and_update_ack_type(

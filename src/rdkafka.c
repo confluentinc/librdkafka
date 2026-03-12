@@ -57,6 +57,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_share_acknowledgement.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -3634,15 +3635,12 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          * before extracting ack details. In explicit mode, the app has
          * already acknowledged records via the acknowledge APIs, so
          * only extract what's been explicitly acknowledged. */
-        if (!RD_KAFKA_SHARE_IS_EXPLICIT_ACK(rk))
-                rd_kafka_share_ack_all(rkshare);
-        else if (rkshare->rkshare_unacked_cnt > 0)
-                return rd_kafka_error_new(
-                    RD_KAFKA_RESP_ERR__STATE,
-                    "%" PRId64
-                    " records from previous poll have not "
-                    "been acknowledged",
-                    rkshare->rkshare_unacked_cnt);
+        rd_kafka_share_acknowledge_all_if_implicit_acknowledgement(rkshare);
+        error =
+            rd_kafka_ensure_all_acquired_acknowledged_if_explicit_acknowledgements(
+                rkshare);
+        if (error)
+                return error;
 
         rd_list_t *ack_batches =
             rd_kafka_share_build_ack_details(rk->rk_rkshare);

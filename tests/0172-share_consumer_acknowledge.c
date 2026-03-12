@@ -34,26 +34,18 @@
  * Tests the acknowledge APIs (ACCEPT, REJECT, RELEASE) with real/mock broker.
  *
  * Expected Behavior:
- * - RELEASE: Records redelivered on next poll
- * - REJECT:  Records dead-lettered, NOT redelivered
+ * - RELEASE: Records redelivered to the same or another consumer in the same group.
+ * - REJECT:  NOT redelivered
  * - ACCEPT:  Records committed, NOT redelivered
  *
  * All tests use share.acknowledgement.mode = "explicit"
  */
 
-#define MAX_TOPICS     8
-#define MAX_PARTITIONS 8
-#define MAX_CONSUMERS  4
-#define BATCH_SIZE     10000
-
-/**
- * @brief Acknowledge action for test configuration
- */
-typedef enum {
-        ACK_ACTION_ACCEPT,
-        ACK_ACTION_REJECT,
-        ACK_ACTION_RELEASE
-} ack_action_t;
+#define MAX_TOPICS         8
+#define MAX_PARTITIONS     8
+#define MAX_CONSUMERS      4
+#define MAX_MSGS_PER_PART  100
+#define BATCH_SIZE         10000
 
 /**
  * @brief Test configuration structure
@@ -64,7 +56,8 @@ typedef struct {
         int partitions[MAX_TOPICS];
         int msgs_per_partition;
         int consumer_cnt;
-        ack_action_t actions[MAX_TOPICS][MAX_PARTITIONS];
+        rd_kafka_share_AcknowledgeType_t
+            actions[MAX_TOPICS][MAX_PARTITIONS][MAX_MSGS_PER_PART];
         int expected_redelivered;
         int poll_timeout_ms;
         int max_attempts;
@@ -178,24 +171,6 @@ static void subscribe_consumers(ack_test_config_t *config,
 }
 
 /**
- * @brief Get acknowledge type enum from action
- */
-static rd_kafka_share_AcknowledgeType_t
-action_to_ack_type(ack_action_t action) {
-        switch (action) {
-        case ACK_ACTION_ACCEPT:
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
-        case ACK_ACTION_REJECT:
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT;
-        case ACK_ACTION_RELEASE:
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE;
-        default:
-                TEST_FAIL("Unknown action: %d", action);
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
-        }
-}
-
-/**
  * @brief Get topic index from topic name
  */
 static int get_topic_index(ack_test_config_t *config,
@@ -219,6 +194,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
         int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
         size_t total_consumed = 0;
+        int msg_idx[MAX_TOPICS][MAX_PARTITIONS] = {{0}};
 
         state->original_cnt  = 0;
         state->msgs_consumed = 0;
@@ -239,8 +215,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
 
                 for (m = 0; m < rcvd; m++) {
                         if (!batch[m]->err) {
-                                int t_idx, p_idx;
-                                ack_action_t action;
+                                int t_idx, p_idx, m_idx;
                                 rd_kafka_share_AcknowledgeType_t ack_type;
                                 rd_kafka_resp_err_t ack_err;
 
@@ -251,12 +226,17 @@ static void consume_and_acknowledge(ack_test_config_t *config,
 
                                 if (t_idx >= 0 &&
                                     p_idx < config->partitions[t_idx]) {
-                                        action = config->actions[t_idx][p_idx];
+                                        m_idx = msg_idx[t_idx][p_idx]++;
+                                        if (m_idx < MAX_MSGS_PER_PART)
+                                                ack_type = config->actions
+                                                    [t_idx][p_idx][m_idx];
+                                        else
+                                                ack_type =
+                                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
                                 } else {
-                                        action = ACK_ACTION_ACCEPT;
+                                        ack_type =
+                                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
                                 }
-
-                                ack_type = action_to_ack_type(action);
 
                                 ack_err = rd_kafka_share_acknowledge_type(
                                     state->consumers[0], batch[m], ack_type);
@@ -431,7 +411,12 @@ static void test_release_redelivery(void) {
                                     .partitions         = {1},
                                     .msgs_per_partition = 5,
                                     .consumer_cnt       = 1,
-                                    .actions = {{ACK_ACTION_RELEASE}},
+                                    .actions = {{{
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
                                     .expected_redelivered = 5};
         run_ack_test(&config);
 }
@@ -445,7 +430,12 @@ static void test_reject_no_redelivery(void) {
                                     .partitions = {1},
                                     .msgs_per_partition = 5,
                                     .consumer_cnt       = 1,
-                                    .actions            = {{ACK_ACTION_REJECT}},
+                                    .actions = {{{
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
                                     .expected_redelivered = 0};
         run_ack_test(&config);
 }
@@ -459,7 +449,12 @@ static void test_accept_no_redelivery(void) {
                                     .partitions = {1},
                                     .msgs_per_partition = 5,
                                     .consumer_cnt       = 1,
-                                    .actions            = {{ACK_ACTION_ACCEPT}},
+                                    .actions = {{{
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}}},
                                     .expected_redelivered = 0};
         run_ack_test(&config);
 }
@@ -484,8 +479,15 @@ static void test_mixed_ack_types(void) {
             .partitions           = {3},
             .msgs_per_partition   = 3,
             .consumer_cnt         = 1,
-            .actions              = {{ACK_ACTION_ACCEPT, ACK_ACTION_REJECT,
-                                      ACK_ACTION_RELEASE}},
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT},
+                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT},
+                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
             .expected_redelivered = 3 /* Only partition 2 */
         };
         run_ack_test(&config);
@@ -511,8 +513,21 @@ static void test_release_multiple_partitions(void) {
             .partitions           = {3},
             .msgs_per_partition   = 5,
             .consumer_cnt         = 1,
-            .actions              = {{ACK_ACTION_RELEASE, ACK_ACTION_ACCEPT,
-                                      ACK_ACTION_REJECT}},
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE},
+                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT},
+                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
             .expected_redelivered = 5 /* Only partition 0 */
         };
         run_ack_test(&config);
@@ -530,7 +545,16 @@ static void test_mixed_ack_across_partitions(void) {
             .partitions           = {2},
             .msgs_per_partition   = 5,
             .consumer_cnt         = 1,
-            .actions              = {{ACK_ACTION_RELEASE, ACK_ACTION_ACCEPT}},
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE},
+                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}}},
             .expected_redelivered = 5 /* Only partition 0 */
         };
         run_ack_test(&config);
@@ -555,7 +579,16 @@ static void test_release_multiple_topics(void) {
             .partitions           = {1, 1},
             .msgs_per_partition   = 5,
             .consumer_cnt         = 1,
-            .actions              = {{ACK_ACTION_ACCEPT}, {ACK_ACTION_RELEASE}},
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}},
+                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
             .expected_redelivered = 5 /* Only topic 1 */
         };
         run_ack_test(&config);
@@ -576,9 +609,15 @@ static void test_mixed_ack_across_topics(void) {
             .partitions           = {1, 1, 1},
             .msgs_per_partition   = 3,
             .consumer_cnt         = 1,
-            .actions              = {{ACK_ACTION_ACCEPT},
-                                     {ACK_ACTION_REJECT},
-                                     {ACK_ACTION_RELEASE}},
+            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}},
+                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}},
+                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
             .expected_redelivered = 3 /* Only topic 2 */
         };
         run_ack_test(&config);

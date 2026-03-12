@@ -3159,14 +3159,16 @@ typedef enum rd_kafka_share_AcknowledgeType_s {
  * @brief Acknowledge a message with ACCEPT type.
  *
  * This is equivalent to calling rd_kafka_share_acknowledge_type() with
- * RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT.
+ * RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT.
  *
  * @param rkshare Share consumer handle.
  * @param rkmessage Message to acknowledge.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid,
- *          RD_KAFKA_RESP_ERR__STATE if message is not in ACQUIRED state.
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if rkmessage is NULL or has no topic,
+ *          RD_KAFKA_RESP_ERR__STATE if not in explicit acknowledgement mode,
+ *              or partition/offset not found in inflight map,
+ *              or offset is a GAP record.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
@@ -3181,8 +3183,11 @@ rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
  * @param type Acknowledgement type (ACCEPT, RELEASE, or REJECT).
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid or type is
- * invalid, RD_KAFKA_RESP_ERR__STATE if message is not in ACQUIRED state.
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if rkmessage is NULL or has no topic,
+ *              or type is not ACCEPT/RELEASE/REJECT,
+ *          RD_KAFKA_RESP_ERR__STATE if not in explicit acknowledgement mode,
+ *              or partition/offset not found in inflight map,
+ *              or offset is a GAP record.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
@@ -3200,8 +3205,14 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
  * @param type Acknowledgement type (ACCEPT, RELEASE, or REJECT).
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if parameters are invalid or type is
- * invalid, RD_KAFKA_RESP_ERR__STATE if offset is a GAP offset.
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if rkshare is NULL, topic is NULL,
+ *              partition < 0, offset < 0, or type is not ACCEPT/RELEASE/REJECT,
+ *          RD_KAFKA_RESP_ERR__STATE if not in explicit acknowledgement mode,
+ *              or partition/offset not found in inflight map,
+ *              or offset is a GAP record.
+ *
+ * TODO KIP-932: Check if it should only be allowed for error cases
+ *               like Java.
  */
 RD_EXPORT
 rd_kafka_resp_err_t

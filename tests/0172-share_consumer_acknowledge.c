@@ -425,7 +425,7 @@ static void test_release_redelivery(void) {
 }
 
 /**
- * @brief REJECT prevents redelivery (dead letter)
+ * @brief REJECT prevents redelivery
  */
 static void test_reject_no_redelivery(void) {
         ack_test_config_t config = {

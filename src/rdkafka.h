@@ -3150,8 +3150,8 @@ rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
  */
 typedef enum rd_kafka_share_AcknowledgeType_s {
         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT  = 1, /**< Accept the message */
-        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE = 2, /**< Release the message for
-                                              *   redelivery */
+        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE = 2, /**< Release the message
+                                                      * for redelivery */
         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT = 3   /**< Reject the message */
 } rd_kafka_share_AcknowledgeType_t;
 

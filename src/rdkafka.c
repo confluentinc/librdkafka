@@ -3630,7 +3630,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
 
-         /* In implicit ack mode, convert all ACQUIRED records to ACCEPT
+        /* In implicit ack mode, convert all ACQUIRED records to ACCEPT
          * before extracting ack details. In explicit mode, the app has
          * already acknowledged records via the acknowledge APIs, so
          * only extract what's been explicitly acknowledged. */

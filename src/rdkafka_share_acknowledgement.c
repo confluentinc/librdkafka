@@ -423,8 +423,8 @@ static int rd_kafka_share_ack_entry_cmp_offset(const void *_offset,
 rd_kafka_resp_err_t
 rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
                            const rd_kafka_message_t *rkmessage) {
-        return rd_kafka_share_acknowledge_type(rkshare, rkmessage,
-                                               RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        return rd_kafka_share_acknowledge_type(
+            rkshare, rkmessage, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
 }
 
 rd_kafka_resp_err_t
@@ -488,8 +488,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                 rkshare->rkshare_unacked_cnt--;
 
         /* Update the type */
-        entry->types[idx] =
-            (rd_kafka_share_internal_acknowledgement_type)type;
+        entry->types[idx] = (rd_kafka_share_internal_acknowledgement_type)type;
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

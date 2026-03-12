@@ -516,7 +516,7 @@ static void do_test_member_validation(void) {
 
         /* Wait for the member to be evicted (500ms session timeout + margin).
          */
-        rd_usleep(1500 * 1000, 0);
+        rd_usleep(1000 * 1000, 0);
 
         /* Phase 3: SGHB errors will eventually drain. Once a SGHB
          * succeeds, the member re-joins and the remaining records
@@ -710,7 +710,7 @@ static void do_test_max_delivery_attempts(void) {
         TEST_SAY("max_delivery: A consumed %d/%d (delivery 1)\n", consumed_a,
                  msgcnt);
         rd_kafka_share_destroy(consumer);
-        rd_usleep(1500 * 1000, 0); /* wait for lock expiry */
+        rd_usleep(1000 * 1000, 0); /* wait for lock expiry */
 
         /* Delivery 2: Consumer B acquires same records again (delivery_count
          * reaches 2 = limit) and "crashes". */
@@ -720,7 +720,7 @@ static void do_test_max_delivery_attempts(void) {
         TEST_SAY("max_delivery: B consumed %d/%d (delivery 2)\n", consumed_b,
                  msgcnt);
         rd_kafka_share_destroy(consumer);
-        rd_usleep(1500 * 1000, 0); /* wait for lock expiry */
+        rd_usleep(1000 * 1000, 0); /* wait for lock expiry */
 
         /* Delivery 3 attempt: Consumer C should get 0 records because
          * all records have been archived (delivery_count >= max). */
@@ -779,7 +779,7 @@ static void do_test_record_lock_duration(void) {
          * rd_kafka_share_destroy sends SGHB LEAVE which releases
          * locks immediately, but we still need to wait for the
          * client's internal rejoin cycle to settle. */
-        rd_usleep(2000 * 1000, 0);
+        rd_usleep(1000 * 1000, 0);
 
         /* Consumer B should get the records because locks have expired
          * even though A's session is still technically alive.
@@ -838,7 +838,7 @@ static void do_test_multi_consumer_lock_expiry(void) {
         rd_kafka_share_destroy(consumer_a);
 
         /* Wait for locks to expire (session_timeout=500ms, add margin). */
-        rd_usleep(1500 * 1000, 0);
+        rd_usleep(1000 * 1000, 0);
 
         /* Consumer B: joins the same share group, should get the same
          * records once the locks have been released.

@@ -780,7 +780,7 @@ static void test_acquisition_lock_expiry_redelivery(void) {
                                          "15000"};
         int consumed1 = 0, consumed2 = 0, attempts;
         const int msg_cnt          = 10;
-        const int lock_duration_ms = 10000;
+        const int lock_duration_ms = 15000;
 
         TEST_SAY("\n");
         TEST_SAY("=== Acquisition lock expiry and redelivery test ===\n");

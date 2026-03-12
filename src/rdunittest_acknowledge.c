@@ -376,8 +376,8 @@ static int ut_case_reacknowledge_delivered(rd_kafka_share_t *rkshare,
                      "offset 5 should be ACCEPT");
 
         /* Re-acknowledge with REJECT - should succeed  */
-        err = rd_kafka_share_acknowledge_type(rkshare, msg,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "re-acknowledge should succeed, got %s",
                      rd_kafka_err2str(err));
@@ -388,8 +388,8 @@ static int ut_case_reacknowledge_delivered(rd_kafka_share_t *rkshare,
                      "offset 5 should be REJECT after re-acknowledge");
 
         /* Re-acknowledge again with RELEASE */
-        err = rd_kafka_share_acknowledge_type(rkshare, msg,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "second re-acknowledge should succeed");
         RD_UT_ASSERT(ut_ack_get_type(rkshare, topic, 0, 5) ==
@@ -458,8 +458,8 @@ static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
                      rd_kafka_err2str(err));
 
         /* Test NULL topic in acknowledge_offset */
-        err = rd_kafka_share_acknowledge_offset(rkshare, NULL, 0, 5,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, NULL, 0, 5, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                      "expected INVALID_ARG for NULL topic, got %s",
                      rd_kafka_err2str(err));
@@ -493,8 +493,8 @@ static int ut_case_error_invalid_type(rd_kafka_share_t *rkshare,
                      rd_kafka_err2str(err));
 
         /* Test type 0 (GAP - not allowed in public API) */
-        err = rd_kafka_share_acknowledge_type(rkshare, msg,
-                                              (rd_kafka_share_AcknowledgeType_t)0);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, msg, (rd_kafka_share_AcknowledgeType_t)0);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                      "expected INVALID_ARG for GAP type, got %s",
                      rd_kafka_err2str(err));
@@ -535,17 +535,17 @@ static int ut_case_acknowledge_multiple_partitions(rd_kafka_share_t *rkshare,
         rd_kafka_resp_err_t err;
 
         /* Acknowledge across partitions using record-based APIs */
-        err = rd_kafka_share_acknowledge_type(rkshare, msg1,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, msg1, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "T1-0 offset 5 failed");
 
-        err = rd_kafka_share_acknowledge_type(rkshare, msg2,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, msg2, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "T1-1 offset 105 failed");
 
-        err = rd_kafka_share_acknowledge_type(rkshare, msg3,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, msg3, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "T2-0 offset 55 failed");
 
@@ -601,7 +601,8 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         rd_list_init(&batches->entries, 4, NULL);
 
         /* Entry 1: offsets 0-9 */
-        rd_kafka_share_ack_batch_entry_t *entry1 = rd_calloc(1, sizeof(*entry1));
+        rd_kafka_share_ack_batch_entry_t *entry1 =
+            rd_calloc(1, sizeof(*entry1));
         entry1->start_offset = 0;
         entry1->end_offset   = 9;
         entry1->size         = 10;
@@ -612,7 +613,8 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         rd_list_add(&batches->entries, entry1);
 
         /* Entry 2: offsets 100-109 */
-        rd_kafka_share_ack_batch_entry_t *entry2 = rd_calloc(1, sizeof(*entry2));
+        rd_kafka_share_ack_batch_entry_t *entry2 =
+            rd_calloc(1, sizeof(*entry2));
         entry2->start_offset = 100;
         entry2->end_offset   = 109;
         entry2->size         = 10;
@@ -623,7 +625,8 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         rd_list_add(&batches->entries, entry2);
 
         /* Entry 3: offsets 200-209 */
-        rd_kafka_share_ack_batch_entry_t *entry3 = rd_calloc(1, sizeof(*entry3));
+        rd_kafka_share_ack_batch_entry_t *entry3 =
+            rd_calloc(1, sizeof(*entry3));
         entry3->start_offset = 200;
         entry3->end_offset   = 209;
         entry3->size         = 10;
@@ -634,7 +637,8 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         rd_list_add(&batches->entries, entry3);
 
         /* Entry 4: offsets 500-509 */
-        rd_kafka_share_ack_batch_entry_t *entry4 = rd_calloc(1, sizeof(*entry4));
+        rd_kafka_share_ack_batch_entry_t *entry4 =
+            rd_calloc(1, sizeof(*entry4));
         entry4->start_offset = 500;
         entry4->end_offset   = 509;
         entry4->size         = 10;
@@ -677,8 +681,8 @@ static int ut_case_bsearch_first_entry(rd_kafka_share_t *rkshare,
                      "offset 5 should be ACCEPT");
 
         /* Also test first offset of first entry */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 0,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "first entry offset 0 failed: %s", rd_kafka_err2str(err));
 
@@ -712,8 +716,8 @@ static int ut_case_bsearch_last_entry(rd_kafka_share_t *rkshare,
                      "offset 505 should be ACCEPT");
 
         /* Also test last offset of last entry */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 509,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 509, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "last entry offset 509 failed: %s", rd_kafka_err2str(err));
 
@@ -744,10 +748,11 @@ static int ut_case_bsearch_middle_entries(rd_kafka_share_t *rkshare,
                      rd_kafka_err2str(err));
 
         /* Acknowledge in third entry [200-209] */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 200,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 200, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                     "third entry offset 200 failed: %s", rd_kafka_err2str(err));
+                     "third entry offset 200 failed: %s",
+                     rd_kafka_err2str(err));
 
         RD_UT_ASSERT(ut_ack_get_type(rkshare, topic, 0, 105) ==
                          RD_KAFKA_SHARE_INTERNAL_ACK_ACCEPT,
@@ -829,15 +834,15 @@ static int ut_case_bsearch_not_found_gap(rd_kafka_share_t *rkshare,
                      rd_kafka_err2str(err));
 
         /* Try to acknowledge offset 150 (in gap between entry 2 and 3) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 150,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 150, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
                      "expected STATE error for offset 150 in gap, got %s",
                      rd_kafka_err2str(err));
 
         /* Try to acknowledge offset 300 (in gap between entry 3 and 4) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 300,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 300, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
                      "expected STATE error for offset 300 in gap, got %s",
                      rd_kafka_err2str(err));
@@ -859,9 +864,9 @@ static int ut_case_bsearch_empty_entries(rd_kafka_share_t *rkshare,
         rd_kafka_topic_partition_private_t *parpriv;
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
 
-        batches->rktpar           = rd_kafka_topic_partition_new(topic, 0);
-        parpriv                   = rd_kafka_topic_partition_private_new();
-        batches->rktpar->_private = parpriv;
+        batches->rktpar                = rd_kafka_topic_partition_new(topic, 0);
+        parpriv                        = rd_kafka_topic_partition_private_new();
+        batches->rktpar->_private      = parpriv;
         batches->response_leader_id    = 1;
         batches->response_leader_epoch = 1;
         batches->response_msgs_count   = 0;
@@ -900,39 +905,39 @@ static int ut_case_bsearch_boundary_offsets(rd_kafka_share_t *rkshare,
 
         /* Test boundary offsets for each entry */
         /* Entry 1: [0-9] - test 0 (start) and 9 (end) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 0,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 0 failed");
 
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 9,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 9, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 9 failed");
 
         /* Entry 2: [100-109] - test 100 (start) and 109 (end) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 100,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 100, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 100 failed");
 
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 109,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 109, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 109 failed");
 
         /* Entry 3: [200-209] - test 200 (start) and 209 (end) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 200,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 200, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 200 failed");
 
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 209,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 209, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 209 failed");
 
         /* Entry 4: [500-509] - test 500 (start) and 509 (end) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 500,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 500, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 500 failed");
 
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 509,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 509, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "offset 509 failed");
 
         /* Verify all boundary offsets are ACCEPT */
@@ -950,15 +955,15 @@ static int ut_case_bsearch_boundary_offsets(rd_kafka_share_t *rkshare,
                      "offset 109 type");
 
         /* Test that offset 10 (just after entry 1) is not found */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 10,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 10, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
                      "offset 10 should not be found, got %s",
                      rd_kafka_err2str(err));
 
         /* Test that offset 99 (just before entry 2) is not found */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 99,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 99, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
                      "offset 99 should not be found, got %s",
                      rd_kafka_err2str(err));
@@ -993,8 +998,8 @@ static int ut_case_unacked_count(rd_kafka_share_t *rkshare,
                      rkshare->rkshare_unacked_cnt);
 
         /* Acknowledge offset 5 - should decrement count */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 5,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 5, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "acknowledge offset 5 failed: %s", rd_kafka_err2str(err));
         RD_UT_ASSERT(rkshare->rkshare_unacked_cnt == 9,
@@ -1003,8 +1008,8 @@ static int ut_case_unacked_count(rd_kafka_share_t *rkshare,
                      rkshare->rkshare_unacked_cnt);
 
         /* Re-acknowledge same offset - should NOT decrement (already acked) */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 5,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 5, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                      "re-acknowledge offset 5 failed: %s",
                      rd_kafka_err2str(err));
@@ -1018,8 +1023,8 @@ static int ut_case_unacked_count(rd_kafka_share_t *rkshare,
 
         /* Try to acknowledge GAP - should fail and NOT change count */
         int64_t count_before = rkshare->rkshare_unacked_cnt;
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 3,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err                  = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 3, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
                      "GAP acknowledge should fail");
         RD_UT_ASSERT(rkshare->rkshare_unacked_cnt == count_before,
@@ -1028,14 +1033,14 @@ static int ut_case_unacked_count(rd_kafka_share_t *rkshare,
                      count_before, rkshare->rkshare_unacked_cnt);
 
         /* Acknowledge multiple offsets */
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 0,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "ack offset 0 failed");
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 1,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 1, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "ack offset 1 failed");
-        err = rd_kafka_share_acknowledge_offset(rkshare, topic, 0, 2,
-                                                RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 2, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "ack offset 2 failed");
 
         /* 9 - 3 = 6 remaining (offsets 4,6,7,8,9 are ACQUIRED, 3 is GAP) */

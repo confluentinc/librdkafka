@@ -41,10 +41,10 @@
  * All tests use share.acknowledgement.mode = "explicit"
  */
 
-#define MAX_TOPICS      8
-#define MAX_PARTITIONS  8
-#define MAX_CONSUMERS   4
-#define BATCH_SIZE      10000
+#define MAX_TOPICS     8
+#define MAX_PARTITIONS 8
+#define MAX_CONSUMERS  4
+#define BATCH_SIZE     10000
 
 /**
  * @brief Acknowledge action for test configuration
@@ -90,8 +90,7 @@ typedef struct {
 /**
  * @brief Create share consumer with explicit acknowledgement mode
  */
-static rd_kafka_share_t *
-create_explicit_ack_consumer(const char *group_id) {
+static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         char errstr[512];
@@ -218,8 +217,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         rd_kafka_message_t *batch[BATCH_SIZE];
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
-        int attempts =
-            config->max_attempts > 0 ? config->max_attempts : 50;
+        int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
         size_t total_consumed = 0;
 
         state->original_cnt  = 0;
@@ -253,8 +251,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
 
                                 if (t_idx >= 0 &&
                                     p_idx < config->partitions[t_idx]) {
-                                        action =
-                                            config->actions[t_idx][p_idx];
+                                        action = config->actions[t_idx][p_idx];
                                 } else {
                                         action = ACK_ACTION_ACCEPT;
                                 }
@@ -263,10 +260,10 @@ static void consume_and_acknowledge(ack_test_config_t *config,
 
                                 ack_err = rd_kafka_share_acknowledge_type(
                                     state->consumers[0], batch[m], ack_type);
-                                TEST_ASSERT(
-                                    ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                                    "Acknowledge failed: %s",
-                                    rd_kafka_err2str(ack_err));
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Acknowledge failed: %s",
+                                            rd_kafka_err2str(ack_err));
 
                                 if (state->original_cnt < 1000) {
                                         state->original_offsets
@@ -348,8 +345,7 @@ static void poll_for_redelivery(ack_test_config_t *config,
 /**
  * @brief Verify redelivery results
  */
-static void verify_results(ack_test_config_t *config,
-                           ack_test_state_t *state) {
+static void verify_results(ack_test_config_t *config, ack_test_state_t *state) {
         TEST_SAY("Verifying: consumed=%d, redelivered=%d (expected=%d)\n",
                  state->msgs_consumed, state->msgs_redelivered,
                  config->expected_redelivered);
@@ -394,11 +390,13 @@ static int run_ack_test(ack_test_config_t *config) {
         int i;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================"
-                 "\n");
+        TEST_SAY(
+            "============================================================"
+            "\n");
         TEST_SAY("=== %s ===\n", config->test_name);
-        TEST_SAY("============================================================"
-                 "\n");
+        TEST_SAY(
+            "============================================================"
+            "\n");
 
         rd_snprintf(state.group_name, sizeof(state.group_name), "share-%s",
                     config->test_name);
@@ -433,7 +431,7 @@ static void test_release_redelivery(void) {
                                     .partitions         = {1},
                                     .msgs_per_partition = 5,
                                     .consumer_cnt       = 1,
-                                    .actions     = {{ACK_ACTION_RELEASE}},
+                                    .actions = {{ACK_ACTION_RELEASE}},
                                     .expected_redelivered = 5};
         run_ack_test(&config);
 }
@@ -442,12 +440,12 @@ static void test_release_redelivery(void) {
  * @brief REJECT prevents redelivery (dead letter)
  */
 static void test_reject_no_redelivery(void) {
-        ack_test_config_t config = {.test_name          = "reject-no-redelivery",
-                                    .topic_cnt          = 1,
-                                    .partitions         = {1},
+        ack_test_config_t config = {.test_name  = "reject-no-redelivery",
+                                    .topic_cnt  = 1,
+                                    .partitions = {1},
                                     .msgs_per_partition = 5,
                                     .consumer_cnt       = 1,
-                                    .actions     = {{ACK_ACTION_REJECT}},
+                                    .actions            = {{ACK_ACTION_REJECT}},
                                     .expected_redelivered = 0};
         run_ack_test(&config);
 }
@@ -456,12 +454,12 @@ static void test_reject_no_redelivery(void) {
  * @brief ACCEPT prevents redelivery
  */
 static void test_accept_no_redelivery(void) {
-        ack_test_config_t config = {.test_name          = "accept-no-redelivery",
-                                    .topic_cnt          = 1,
-                                    .partitions         = {1},
+        ack_test_config_t config = {.test_name  = "accept-no-redelivery",
+                                    .topic_cnt  = 1,
+                                    .partitions = {1},
                                     .msgs_per_partition = 5,
                                     .consumer_cnt       = 1,
-                                    .actions     = {{ACK_ACTION_ACCEPT}},
+                                    .actions            = {{ACK_ACTION_ACCEPT}},
                                     .expected_redelivered = 0};
         run_ack_test(&config);
 }
@@ -481,13 +479,13 @@ static void test_accept_no_redelivery(void) {
  */
 static void test_mixed_ack_types(void) {
         ack_test_config_t config = {
-            .test_name          = "mixed-ack-types",
-            .topic_cnt          = 1,
-            .partitions         = {3},
-            .msgs_per_partition = 3,
-            .consumer_cnt       = 1,
-            .actions = {{ACK_ACTION_ACCEPT, ACK_ACTION_REJECT,
-                         ACK_ACTION_RELEASE}},
+            .test_name            = "mixed-ack-types",
+            .topic_cnt            = 1,
+            .partitions           = {3},
+            .msgs_per_partition   = 3,
+            .consumer_cnt         = 1,
+            .actions              = {{ACK_ACTION_ACCEPT, ACK_ACTION_REJECT,
+                                      ACK_ACTION_RELEASE}},
             .expected_redelivered = 3 /* Only partition 2 */
         };
         run_ack_test(&config);
@@ -508,13 +506,13 @@ static void test_mixed_ack_types(void) {
  */
 static void test_release_multiple_partitions(void) {
         ack_test_config_t config = {
-            .test_name          = "release-multiple-partitions",
-            .topic_cnt          = 1,
-            .partitions         = {3},
-            .msgs_per_partition = 5,
-            .consumer_cnt       = 1,
-            .actions = {{ACK_ACTION_RELEASE, ACK_ACTION_ACCEPT,
-                         ACK_ACTION_REJECT}},
+            .test_name            = "release-multiple-partitions",
+            .topic_cnt            = 1,
+            .partitions           = {3},
+            .msgs_per_partition   = 5,
+            .consumer_cnt         = 1,
+            .actions              = {{ACK_ACTION_RELEASE, ACK_ACTION_ACCEPT,
+                                      ACK_ACTION_REJECT}},
             .expected_redelivered = 5 /* Only partition 0 */
         };
         run_ack_test(&config);
@@ -527,12 +525,12 @@ static void test_release_multiple_partitions(void) {
  */
 static void test_mixed_ack_across_partitions(void) {
         ack_test_config_t config = {
-            .test_name          = "mixed-ack-across-partitions",
-            .topic_cnt          = 1,
-            .partitions         = {2},
-            .msgs_per_partition = 5,
-            .consumer_cnt       = 1,
-            .actions     = {{ACK_ACTION_RELEASE, ACK_ACTION_ACCEPT}},
+            .test_name            = "mixed-ack-across-partitions",
+            .topic_cnt            = 1,
+            .partitions           = {2},
+            .msgs_per_partition   = 5,
+            .consumer_cnt         = 1,
+            .actions              = {{ACK_ACTION_RELEASE, ACK_ACTION_ACCEPT}},
             .expected_redelivered = 5 /* Only partition 0 */
         };
         run_ack_test(&config);
@@ -551,14 +549,14 @@ static void test_mixed_ack_across_partitions(void) {
  * - Topic 1: RELEASE (redelivery)
  */
 static void test_release_multiple_topics(void) {
-        ack_test_config_t config = {.test_name          = "release-multiple-topics",
-                                    .topic_cnt          = 2,
-                                    .partitions         = {1, 1},
-                                    .msgs_per_partition = 5,
-                                    .consumer_cnt       = 1,
-                                    .actions = {{ACK_ACTION_ACCEPT},
-                                                {ACK_ACTION_RELEASE}},
-                                    .expected_redelivered = 5 /* Only topic 1 */
+        ack_test_config_t config = {
+            .test_name            = "release-multiple-topics",
+            .topic_cnt            = 2,
+            .partitions           = {1, 1},
+            .msgs_per_partition   = 5,
+            .consumer_cnt         = 1,
+            .actions              = {{ACK_ACTION_ACCEPT}, {ACK_ACTION_RELEASE}},
+            .expected_redelivered = 5 /* Only topic 1 */
         };
         run_ack_test(&config);
 }
@@ -573,14 +571,14 @@ static void test_release_multiple_topics(void) {
  */
 static void test_mixed_ack_across_topics(void) {
         ack_test_config_t config = {
-            .test_name          = "mixed-ack-across-topics",
-            .topic_cnt          = 3,
-            .partitions         = {1, 1, 1},
-            .msgs_per_partition = 3,
-            .consumer_cnt       = 1,
-            .actions            = {{ACK_ACTION_ACCEPT},
-                                   {ACK_ACTION_REJECT},
-                                   {ACK_ACTION_RELEASE}},
+            .test_name            = "mixed-ack-across-topics",
+            .topic_cnt            = 3,
+            .partitions           = {1, 1, 1},
+            .msgs_per_partition   = 3,
+            .consumer_cnt         = 1,
+            .actions              = {{ACK_ACTION_ACCEPT},
+                                     {ACK_ACTION_REJECT},
+                                     {ACK_ACTION_RELEASE}},
             .expected_redelivered = 3 /* Only topic 2 */
         };
         run_ack_test(&config);
@@ -608,8 +606,8 @@ static void test_ack_null_message(void) {
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
-        err = rd_kafka_share_acknowledge_type(rkshare, NULL,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_type(
+            rkshare, NULL, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
@@ -633,8 +631,8 @@ static void test_ack_null_rkshare(void) {
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
-        err = rd_kafka_share_acknowledge_type(NULL, &fake_msg,
-                                              RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        err = rd_kafka_share_acknowledge_type(
+            NULL, &fake_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
@@ -722,7 +720,7 @@ static void test_release_then_reject_no_redelivery(void) {
         size_t rcvd = 0;
         size_t m;
         int attempts;
-        int redelivered = 0;
+        int redelivered        = 0;
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         TEST_SAY("\n");
@@ -758,13 +756,13 @@ static void test_release_then_reject_no_redelivery(void) {
         /* First RELEASE offset 0, then override with REJECT */
         ack_err = rd_kafka_share_acknowledge_type(
             rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
-        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "RELEASE failed: %s", rd_kafka_err2str(ack_err));
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR, "RELEASE failed: %s",
+                    rd_kafka_err2str(ack_err));
 
         ack_err = rd_kafka_share_acknowledge_type(
             rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
-        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "REJECT failed: %s", rd_kafka_err2str(ack_err));
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR, "REJECT failed: %s",
+                    rd_kafka_err2str(ack_err));
 
         /* ACCEPT remaining messages */
         for (m = 1; m < rcvd; m++) {

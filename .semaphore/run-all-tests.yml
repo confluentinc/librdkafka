@@ -43,7 +43,6 @@ blocks:
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh
         - name: "SSL cluster (x86_64)"
           env_vars:
@@ -51,7 +50,6 @@ blocks:
               value: "True"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh
   - name: "Run all tests (aarch64)"
     dependencies: []
@@ -69,7 +67,6 @@ blocks:
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh
         - name: "SSL cluster (aarch64)"
           env_vars:
@@ -77,5 +74,4 @@ blocks:
               value: "True"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh

@@ -623,6 +623,8 @@ static void do_test_scenario(const test_scenario_t *scenario) {
         sub_test_state_t state;
         int op_idx;
 
+        SUB_TEST_QUICK("%s", scenario->name);
+
         TEST_SAY("\n");
         TEST_SAY(
             "============================================================\n");
@@ -687,6 +689,7 @@ static void do_test_scenario(const test_scenario_t *scenario) {
         state_cleanup(&state);
 
         TEST_SAY("=== %s: PASSED ===\n", scenario->name);
+        SUB_TEST_PASS();
 }
 
 
@@ -812,6 +815,8 @@ static void do_test_multi_consumer_overlap(void) {
         int attempts;
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
+        SUB_TEST_QUICK();
+
         TEST_SAY("\n");
         TEST_SAY(
             "============================================================\n");
@@ -875,6 +880,7 @@ static void do_test_multi_consumer_overlap(void) {
         rd_free(c1_only);
 
         TEST_SAY("=== multi-consumer-overlapping-subscriptions: PASSED ===\n");
+        SUB_TEST_PASS();
 }
 
 
@@ -899,6 +905,8 @@ static void do_test_subscribe_15_topics(void) {
         int attempts;
         int t;
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+
+        SUB_TEST_QUICK();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -978,6 +986,7 @@ static void do_test_subscribe_15_topics(void) {
 
         TEST_SAY("=== subscribe-15-topics: PASSED (%d messages) ===\n",
                  consumed);
+        SUB_TEST_PASS();
 }
 
 

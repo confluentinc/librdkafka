@@ -469,7 +469,7 @@ static void do_test_member_validation(void) {
         rd_kafka_share_t *consumer;
         int consumed_p1, consumed_p3;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         /* Short session timeout so the member is evicted quickly once
@@ -540,7 +540,7 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         /* Session timeout must be long enough for normal requests
@@ -690,7 +690,7 @@ static void do_test_max_delivery_attempts(void) {
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         /* Set max delivery attempts to 2 and a short session timeout
@@ -756,7 +756,7 @@ static void do_test_record_lock_duration(void) {
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         /* Long session timeout, short record lock duration. */
@@ -814,7 +814,7 @@ static void do_test_multi_consumer_lock_expiry(void) {
         rd_kafka_share_t *consumer_a, *consumer_b;
         int consumed_a, consumed_b;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         /* Use a short session/lock timeout so the test runs quickly. */
@@ -911,7 +911,7 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
  * @brief NOT_LEADER_OR_FOLLOWER in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_not_leader(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(
             RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
         SUB_TEST_PASS();
@@ -921,7 +921,7 @@ static void do_test_sharefetch_fetch_error_not_leader(void) {
  * @brief UNKNOWN_TOPIC_OR_PARTITION in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_unknown_topic_or_part(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
         SUB_TEST_PASS();
 }
@@ -930,7 +930,7 @@ static void do_test_sharefetch_fetch_error_unknown_topic_or_part(void) {
  * @brief UNKNOWN_TOPIC_ID in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_unknown_topic_id(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID);
         SUB_TEST_PASS();
 }
@@ -939,7 +939,7 @@ static void do_test_sharefetch_fetch_error_unknown_topic_id(void) {
  * @brief FENCED_LEADER_EPOCH in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_fenced_leader_epoch(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
         SUB_TEST_PASS();
 }
@@ -948,7 +948,7 @@ static void do_test_sharefetch_fetch_error_fenced_leader_epoch(void) {
  * @brief UNKNOWN_LEADER_EPOCH in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_unknown_leader_epoch(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH);
         SUB_TEST_PASS();
 }
@@ -957,7 +957,7 @@ static void do_test_sharefetch_fetch_error_unknown_leader_epoch(void) {
  * @brief TOPIC_AUTHORIZATION_FAILED in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_topic_authorization_failed(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
         SUB_TEST_PASS();
@@ -967,7 +967,7 @@ static void do_test_sharefetch_topic_authorization_failed(void) {
  * @brief CORRUPT_MESSAGE (INVALID_MSG) in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_corrupt_message(void) {
-        SUB_TEST();
+        SUB_TEST_QUICK();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_INVALID_MSG);
         SUB_TEST_PASS();
 }
@@ -984,7 +984,7 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         int consumed = 0;
         size_t i;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
@@ -1037,7 +1037,7 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
         ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==

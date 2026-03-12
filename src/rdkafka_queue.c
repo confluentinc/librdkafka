@@ -940,8 +940,28 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                 }
         }
 
-        /* Destroy other op types */
-        rd_kafka_op_destroy(rko);
+        /* TODO KIP-932:
+         * For a share consumer, we are not using version barriers, and ideally,
+         * tmpq should be empty. However, the discard code is retained as
+         * outdated ops may still appear due to rd_kafka_share_subscribe
+         * reusing rd_kafka_subscribe which bumps the version. */
+
+        /* Discard non-desired and already handled ops */
+        next = TAILQ_FIRST(&tmpq);
+        while (next) {
+                rko  = next;
+                next = TAILQ_NEXT(next, rko_link);
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Discard ctrl msgs */
+        next = TAILQ_FIRST(&ctrl_msg_q);
+        while (next) {
+                rko  = next;
+                next = TAILQ_NEXT(next, rko_link);
+                rd_kafka_op_destroy(rko);
+        }
+
         rd_kafka_app_polled(rk, rkq);
         *rkmessages_size_out = cnt;
         return error;

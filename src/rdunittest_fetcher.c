@@ -157,8 +157,9 @@ ut_set_types(rd_kafka_share_ack_batch_entry_t *entry,
 static int unittest_filter_all_acquired(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1] = {0};
-        int64_t LastOffsets[1]  = {4};
+        int64_t FirstOffsets[1]    = {0};
+        int64_t LastOffsets[1]     = {4};
+        int16_t DeliveryCounts[1]  = {1};
         int i;
 
         rd_list_init(&filtered_msgs, 0, ut_op_destroy_free);
@@ -169,7 +170,8 @@ static int unittest_filter_all_acquired(void) {
         }
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets, 1);
+            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets,
+            DeliveryCounts, 1);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5,
                      "Expected 5 messages, got %d",
@@ -181,6 +183,9 @@ static int unittest_filter_all_acquired(void) {
                 RD_UT_ASSERT(rkm->rkm_u.consumer.ack_type ==
                                  RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED,
                              "Message %d: expected ACQUIRED ack_type", i);
+                RD_UT_ASSERT(rkm->rkm_u.consumer.delivery_count == 1,
+                             "Message %d: expected delivery_count=1, got %d", i,
+                             rkm->rkm_u.consumer.delivery_count);
         }
 
         rd_list_destroy(&filtered_msgs);
@@ -193,8 +198,9 @@ static int unittest_filter_all_acquired(void) {
 static int unittest_filter_partial_range(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1] = {2};
-        int64_t LastOffsets[1]  = {5};
+        int64_t FirstOffsets[1]   = {2};
+        int64_t LastOffsets[1]    = {5};
+        int16_t DeliveryCounts[1] = {1};
         int i;
 
         rd_list_init(&filtered_msgs, 0, ut_op_destroy_free);
@@ -205,7 +211,8 @@ static int unittest_filter_partial_range(void) {
         }
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets, 1);
+            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets,
+            DeliveryCounts, 1);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 4,
                      "Expected 4 messages, got %d",
@@ -229,8 +236,9 @@ static int unittest_filter_partial_range(void) {
 static int unittest_filter_disjoint_ranges(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[3] = {1, 5, 9};
-        int64_t LastOffsets[3]  = {2, 6, 9};
+        int64_t FirstOffsets[3]   = {1, 5, 9};
+        int64_t LastOffsets[3]    = {2, 6, 9};
+        int16_t DeliveryCounts[3] = {1, 2, 3};
         int i;
         int64_t expected_offsets[] = {1, 2, 5, 6, 9};
 
@@ -242,7 +250,8 @@ static int unittest_filter_disjoint_ranges(void) {
         }
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets, 3);
+            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets,
+            DeliveryCounts, 3);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 5,
                      "Expected 5 messages, got %d",
@@ -267,13 +276,15 @@ static int unittest_filter_disjoint_ranges(void) {
 static int unittest_filter_empty_queue(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1] = {0};
-        int64_t LastOffsets[1]  = {10};
+        int64_t FirstOffsets[1]   = {0};
+        int64_t LastOffsets[1]    = {10};
+        int16_t DeliveryCounts[1] = {1};
 
         rd_list_init(&filtered_msgs, 0, ut_op_destroy_free);
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets, 1);
+            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets,
+            DeliveryCounts, 1);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 0,
                      "Expected 0 messages, got %d",
@@ -299,7 +310,7 @@ static int unittest_filter_no_ranges(void) {
         }
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, NULL, NULL, 0);
+            temp_fetchq, &filtered_msgs, NULL, NULL, NULL, 0);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 0,
                      "Expected 0 messages, got %d",
@@ -315,9 +326,10 @@ static int unittest_filter_no_ranges(void) {
 static int unittest_filter_sparse_offsets(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1]  = {5};
-        int64_t LastOffsets[1]   = {25};
-        int64_t sparse_offsets[] = {0, 10, 20, 30};
+        int64_t FirstOffsets[1]    = {5};
+        int64_t LastOffsets[1]     = {25};
+        int16_t DeliveryCounts[1]  = {1};
+        int64_t sparse_offsets[]   = {0, 10, 20, 30};
         int i;
         int64_t expected_offsets[] = {10, 20};
 
@@ -330,7 +342,8 @@ static int unittest_filter_sparse_offsets(void) {
         }
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets, 1);
+            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets,
+            DeliveryCounts, 1);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 2,
                      "Expected 2 messages, got %d",
@@ -355,8 +368,9 @@ static int unittest_filter_sparse_offsets(void) {
 static int unittest_filter_range_beyond_messages(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1] = {100};
-        int64_t LastOffsets[1]  = {200};
+        int64_t FirstOffsets[1]   = {100};
+        int64_t LastOffsets[1]    = {200};
+        int16_t DeliveryCounts[1] = {1};
         int i;
 
         rd_list_init(&filtered_msgs, 0, ut_op_destroy_free);
@@ -367,7 +381,8 @@ static int unittest_filter_range_beyond_messages(void) {
         }
 
         rd_kafka_share_filter_acquired_records_and_update_ack_type(
-            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets, 1);
+            temp_fetchq, &filtered_msgs, FirstOffsets, LastOffsets,
+            DeliveryCounts, 1);
 
         RD_UT_ASSERT(rd_list_cnt(&filtered_msgs) == 0,
                      "Expected 0 messages, got %d",

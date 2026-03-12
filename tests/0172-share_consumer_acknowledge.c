@@ -248,6 +248,14 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                             "Acknowledge failed: %s",
                                             rd_kafka_err2str(ack_err));
 
+                                /* Verify delivery_count = 1 on first delivery */
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(batch[m]) ==
+                                        1,
+                                    "Expected delivery_count=1 on first "
+                                    "delivery, got %d",
+                                    rd_kafka_message_delivery_count(batch[m]));
+
                                 if (state->original_cnt < 1000) {
                                         state->original_offsets
                                             [state->original_cnt++] =
@@ -299,6 +307,14 @@ static void poll_for_redelivery(ack_test_config_t *config,
 
                 for (m = 0; m < rcvd; m++) {
                         if (!batch[m]->err) {
+                                /* Verify delivery_count = 2 on redelivery */
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(batch[m]) ==
+                                        2,
+                                    "Expected delivery_count=2 on redelivery, "
+                                    "got %d",
+                                    rd_kafka_message_delivery_count(batch[m]));
+
                                 if (state->redelivered_cnt < 1000) {
                                         state->redelivered_offsets
                                             [state->redelivered_cnt++] =

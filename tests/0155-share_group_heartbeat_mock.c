@@ -2452,9 +2452,10 @@ static void do_test_consumer_leave_rebalance(void) {
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c2), &share_c2_assign));
         final_total = share_c1_assign->cnt + share_c2_assign->cnt;
-        TEST_SAY("After share consumer 3 leave: share consumer 1=%d, "
-                 "share consumer 2=%d\n",
-                 share_c1_assign->cnt, share_c2_assign->cnt);
+        TEST_SAY(
+            "After share consumer 3 leave: share consumer 1=%d, "
+            "share consumer 2=%d\n",
+            share_c1_assign->cnt, share_c2_assign->cnt);
         rd_kafka_topic_partition_list_destroy(share_c1_assign);
         rd_kafka_topic_partition_list_destroy(share_c2_assign);
         TEST_ASSERT(final_total >= 6,

@@ -1707,12 +1707,11 @@ rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage);
 
 /**
  * @brief Get the delivery count for a message.
- * 
+ *
  * @param rkmessage Message object.
- * 
+ *
  * @returns Delivery count (number of times this message has been delivered).
- *          Returns 0 if delivery count is not available and -1 if passing
- *          a NULL message object.
+ *          Returns 0 if delivery count is not available.
  */
 RD_EXPORT int16_t
 rd_kafka_message_delivery_count(const rd_kafka_message_t *rkmessage);

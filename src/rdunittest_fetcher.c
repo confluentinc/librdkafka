@@ -157,9 +157,9 @@ ut_set_types(rd_kafka_share_ack_batch_entry_t *entry,
 static int unittest_filter_all_acquired(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1]    = {0};
-        int64_t LastOffsets[1]     = {4};
-        int16_t DeliveryCounts[1]  = {1};
+        int64_t FirstOffsets[1]   = {0};
+        int64_t LastOffsets[1]    = {4};
+        int16_t DeliveryCounts[1] = {1};
         int i;
 
         rd_list_init(&filtered_msgs, 0, ut_op_destroy_free);
@@ -326,10 +326,10 @@ static int unittest_filter_no_ranges(void) {
 static int unittest_filter_sparse_offsets(void) {
         rd_kafka_q_t *temp_fetchq = ut_create_mock_queue();
         rd_list_t filtered_msgs;
-        int64_t FirstOffsets[1]    = {5};
-        int64_t LastOffsets[1]     = {25};
-        int16_t DeliveryCounts[1]  = {1};
-        int64_t sparse_offsets[]   = {0, 10, 20, 30};
+        int64_t FirstOffsets[1]   = {5};
+        int64_t LastOffsets[1]    = {25};
+        int16_t DeliveryCounts[1] = {1};
+        int64_t sparse_offsets[]  = {0, 10, 20, 30};
         int i;
         int64_t expected_offsets[] = {10, 20};
 

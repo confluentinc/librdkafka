@@ -964,7 +964,7 @@ static void test_release_then_reject_no_redelivery(void) {
  * @brief Release a record 5 times (max attempts), verify no 6th delivery
  *
  * Default share.record.lock.partition.limit is 5. After 5 RELEASE attempts,
- * the broker should automatically reject the record (no more redeliveries).
+ * the broker should not attempt any redelivery.
  */
 static void test_max_delivery_attempts(void) {
         rd_kafka_share_t *rkshare;
@@ -1233,7 +1233,7 @@ static void test_mixed_per_offset_full_matrix(void) {
 }
 
 /**
- * @brief Alternating pattern across all offsets - stress test
+ * @brief Alternating pattern across all offsets
  *
  * Single topic, single partition, 20 messages:
  * Even offsets: RELEASE (10 redeliveries)

@@ -762,10 +762,10 @@ static void test_sparse_partitions(void) {
  * 3. After lock expiry, records are redelivered to another consumer
  *
  * Steps:
- * 1. Set group.share.record.lock.duration.ms to 10 seconds
+ * 1. Set group.share.record.lock.duration.ms to 15 seconds
  * 2. Consumer 1 receives 10 messages but doesn't acknowledge
  * 3. Consumer 1 closes without acknowledging
- * 4. Wait for lock to expire (10+ seconds)
+ * 4. Wait for lock to expire (15+ seconds)
  * 5. Consumer 2 should receive the same 10 messages
  */
 static void test_acquisition_lock_expiry_redelivery(void) {
@@ -792,7 +792,7 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         topic     = test_mk_topic_name("0171-lock-expiry", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        /* Configure group: set lock duration to 10 seconds */
+        /* Configure group: set lock duration to 15 seconds */
         test_IncrementalAlterConfigs_simple(
             test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
             group, grp_conf_lock, 1);

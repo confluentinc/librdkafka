@@ -1592,6 +1592,19 @@ int32_t rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage) {
         return rkm->rkm_u.consumer.leader_epoch;
 }
 
+int16_t rd_kafka_message_delivery_count(const rd_kafka_message_t *rkmessage) {
+        rd_kafka_msg_t *rkm;
+
+        if (unlikely(!rkmessage || !rkmessage->rkt ||
+                     rd_kafka_rkt_is_lw(rkmessage->rkt) ||
+                     !rkmessage->rkt->rkt_rk ||
+                     rkmessage->rkt->rkt_rk->rk_type != RD_KAFKA_CONSUMER))
+                return 0;
+
+        rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+        return rkm->rkm_u.consumer.delivery_count;
+}
+
 
 void rd_kafka_msgq_dump(FILE *fp, const char *what, rd_kafka_msgq_t *rkmq) {
         rd_kafka_msg_t *rkm;

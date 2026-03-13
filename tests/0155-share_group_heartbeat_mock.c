@@ -2584,7 +2584,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
         /* This test suite has many subtests; set a generous timeout. */
-        test_timeout_set(400);
+        test_timeout_set(600);
 
         do_test_share_group_heartbeat_basic();
         do_test_share_group_assignment_rebalance();

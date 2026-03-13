@@ -353,6 +353,20 @@ rd_kafka_conf_validate_partitioner(const struct rd_kafka_property *prop,
                !strcmp(val, "fnv1a_random");
 }
 
+/**
+ * @brief Validate that a string is non-null, non-empty, and not
+ * whitespace-only.
+ */
+static rd_bool_t rd_kafka_conf_validate_str(const char *value) {
+        const char *p;
+        if (!value || !*value)
+                return rd_false;
+        for (p = value; *p; p++) {
+                if (!isspace((int)*p))
+                        return rd_true;
+        }
+        return rd_false;
+}
 
 /**
  * librdkafka configuration property definitions.
@@ -1121,6 +1135,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "OAuth/OIDC issuer token endpoint HTTP(S) URI used to retrieve token. "
      "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
      _UNSUPPORTED_OIDC},
+    {_RK_GLOBAL, "sasl.oauthbearer.sub.claim.name", _RK_C_STR,
+     _RK(sasl.oauthbearer.sub_claim_name),
+     "JWT claim name to use as the subject (principal) when validating "
+     "OIDC access tokens. Must be present in the JWT payload with a "
+     "non-empty value. Should match the broker's "
+     "`sasl.oauthbearer.sub.claim.name` configuration for consistent "
+     "authentication. "
+     "Only used when `sasl.oauthbearer.method` is set to \"oidc\".",
+     .sdef = "sub", _UNSUPPORTED_OIDC},
     {
         _RK_GLOBAL,
         "sasl.oauthbearer.grant.type",
@@ -4133,6 +4156,13 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
                 conf->enabled_events |= RD_KAFKA_EVENT_BACKGROUND;
                 conf->sasl.enable_callback_queue = 1;
         }
+
+        if (rd_kafka_conf_is_modified(conf,
+                                      "sasl.oauthbearer.sub.claim.name") &&
+            !rd_kafka_conf_validate_str(conf->sasl.oauthbearer.sub_claim_name))
+                return "`sasl.oauthbearer.sub.claim.name` must be "
+                       "non-empty and not contain only whitespace";
+
         return NULL;
 }
 
@@ -4878,6 +4908,19 @@ int unittest_conf(void) {
         RD_UT_SAY("Safified client.software.version=\"%s\"", readval);
 
         rd_kafka_conf_destroy(conf);
+
+        /* Verify rd_kafka_conf_validate_str */
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str(NULL), "NULL must be invalid");
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str(""),
+                     "empty string must be invalid");
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str("   "),
+                     "whitespace-only string must be invalid");
+        RD_UT_ASSERT(!rd_kafka_conf_validate_str("\t\n"),
+                     "tab/newline-only string must be invalid");
+        RD_UT_ASSERT(rd_kafka_conf_validate_str("sub"),
+                     "\"sub\" must be valid");
+        RD_UT_ASSERT(rd_kafka_conf_validate_str(" sub "),
+                     "\" sub \" must be valid");
 
         RD_UT_PASS();
 }

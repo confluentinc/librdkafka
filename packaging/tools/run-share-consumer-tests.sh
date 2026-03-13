@@ -16,4 +16,4 @@ make -j all
 make -j -C tests build
 (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft \
  --version ${KAFKA_VERSION} \
- --cpversion ${CP_VERSION} --cmd 'TESTS_SKIP_BEFORE=0170 make quick')
+ --cpversion ${CP_VERSION} --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')

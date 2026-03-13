@@ -216,6 +216,7 @@ typedef struct rd_kafka_mock_sgrp_partmeta_s {
 typedef struct rd_kafka_mock_sgrp_fetch_session_s {
         TAILQ_ENTRY(rd_kafka_mock_sgrp_fetch_session_s) link;
         char *member_id;
+        int32_t node_id; /**< Node ID of the broker owning this session */
         int32_t session_id;
         int32_t session_epoch;
         rd_ts_t ts_last_activity;
@@ -652,6 +653,7 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
 rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
     rd_kafka_mock_sharegroup_t *sgrp,
     const rd_kafkap_str_t *MemberId,
+    int32_t NodeId,
     int32_t SessionEpoch,
     rd_kafka_mock_sgrp_fetch_session_t **sessionp,
     const char *api_name);

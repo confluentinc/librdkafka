@@ -123,8 +123,8 @@ static int wait_assignment_count(rd_kafka_share_t *share_c,
 }
 
 /**
- * @brief Drive the share consumer event loop using rd_kafka_share_consume_batch.
- *        Any received messages are discarded.
+ * @brief Drive the share consumer event loop using
+ * rd_kafka_share_consume_batch. Any received messages are discarded.
  *
  * @return The number of valid (non-error) messages received.
  */
@@ -889,10 +889,8 @@ static void do_test_share_group_target_assignment(void) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c2), &share_c2_assign));
 
-                if ((share_c1_assign->cnt == 4 &&
-                     share_c2_assign->cnt == 0) ||
-                    (share_c1_assign->cnt == 0 &&
-                     share_c2_assign->cnt == 4)) {
+                if ((share_c1_assign->cnt == 4 && share_c2_assign->cnt == 0) ||
+                    (share_c1_assign->cnt == 0 && share_c2_assign->cnt == 4)) {
                         rd_kafka_topic_partition_list_destroy(share_c1_assign);
                         rd_kafka_topic_partition_list_destroy(share_c2_assign);
                         break;
@@ -1678,8 +1676,7 @@ static void do_test_multiple_members_partition_distribution(void) {
                     test_share_consumer_get_rk(share_c2), &share_c2_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c3), &share_c3_assign));
-                total_partitions = share_c1_assign->cnt +
-                                   share_c2_assign->cnt +
+                total_partitions = share_c1_assign->cnt + share_c2_assign->cnt +
                                    share_c3_assign->cnt;
                 if (share_c1_assign->cnt >= 1 && share_c2_assign->cnt >= 1 &&
                     share_c3_assign->cnt >= 1 && total_partitions >= 6) {
@@ -1918,7 +1915,8 @@ static void do_test_subscription_change(void) {
                 for (i = 0; i < assignment->cnt; i++) {
                         if (strcmp(assignment->elems[i].topic, topicA) == 0)
                                 found_topicA++;
-                        else if (strcmp(assignment->elems[i].topic, topicB) == 0)
+                        else if (strcmp(assignment->elems[i].topic, topicB) ==
+                                 0)
                                 found_topicB++;
                 }
                 rd_kafka_topic_partition_list_destroy(assignment);

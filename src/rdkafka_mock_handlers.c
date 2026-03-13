@@ -3877,14 +3877,11 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* KIP-932: epoch=-1 (final fetch / close session) must
                  * not add or forget topics. */
                 if (!err && SessionEpoch == -1 &&
-                    ((requested_partitions &&
-                      requested_partitions->cnt > 0) ||
-                     (forgotten_partitions &&
-                      forgotten_partitions->cnt > 0))) {
-                        rd_kafka_dbg(
-                            mconn->broker->cluster->rk, MOCK, "MOCK",
-                            "ShareFetch: rejecting epoch=-1 request "
-                            "with topic add/forget (INVALID_REQUEST)");
+                    ((requested_partitions && requested_partitions->cnt > 0) ||
+                     (forgotten_partitions && forgotten_partitions->cnt > 0))) {
+                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
+                                     "ShareFetch: rejecting epoch=-1 request "
+                                     "with topic add/forget (INVALID_REQUEST)");
                         err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
                 }
 
@@ -4033,11 +4030,10 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* Response: AcquisitionLockTimeoutMs — use the effective
                  * lock duration (same logic as the acquisition path). */
                 rd_kafka_buf_write_i32(
-                    resp,
-                    sgrp ? (sgrp->record_lock_duration_ms > 0
-                                ? sgrp->record_lock_duration_ms
-                                : sgrp->session_timeout_ms)
-                         : 0);
+                    resp, sgrp ? (sgrp->record_lock_duration_ms > 0
+                                      ? sgrp->record_lock_duration_ms
+                                      : sgrp->session_timeout_ms)
+                               : 0);
 
                 rd_kafka_topic_partition_list_sort_by_topic_id(
                     requested_partitions);
@@ -4323,8 +4319,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                 /* KIP-932: ShareAcknowledge must not use epoch=0
                  * (only ShareFetch can open sessions). */
                 if (!err && SessionEpoch == 0) {
-                        err =
-                            RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
+                        err = RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 }
 
                 /* For all successful, non-close requests: update activity

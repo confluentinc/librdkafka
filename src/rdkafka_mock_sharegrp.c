@@ -825,27 +825,36 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                         session = NULL;
                 }
         } else if (SessionEpoch == -1) {
-                /* 3. SessionEpoch == -1 (FINAL_EPOCH): the real Kafka broker
-                 *    does NOT destroy the session here — it creates a
-                 *    FinalContext but keeps the session alive until the
-                 *    TCP connection disconnects.  We mirror that by
-                 *    simply returning the existing session (or NULL). */
+                /* 3. SessionEpoch == -1 (FINAL_EPOCH): return the existing
+                 *    session so the caller can process final acks and
+                 *    then close it.  If no session exists, fail with
+                 *    SHARE_SESSION_NOT_FOUND per KIP-932. */
+                if (!session) {
+                        *sessionp = NULL;
+                        return RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;
+                }
         } else if (SessionEpoch > 0) {
                 /* 4. SessionEpoch > 0: validate epoch. */
                 if (!session) {
+                        /* KIP-932: session not in cache →
+                         * SHARE_SESSION_NOT_FOUND (distinct from epoch
+                         * mismatch which uses
+                         * INVALID_SHARE_SESSION_EPOCH). */
                         *sessionp = NULL;
-                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
+                        return RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;
                 } else if (SessionEpoch != session->session_epoch) {
-                        /* Epoch mismatch: destroy the stale session so the
-                         * caller creates a fresh one.  This prevents an
-                         * infinite error loop when the client's per-broker
-                         * epoch gets out of sync after a LEAVE→rejoin. */
+                        /* KIP-932: epoch mismatch → destroy the stale
+                         * session and return INVALID_SHARE_SESSION_EPOCH.
+                         * The client handles this by resetting its
+                         * per-broker epoch to 0 (opening a fresh session
+                         * on the next fetch). */
                         rd_kafka_mock_sgrp_release_member_locks(
                             sgrp, session->member_id);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
-                        session = NULL;
+                        *sessionp = NULL;
+                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 }
         }
 
@@ -877,7 +886,17 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         if (strcmp(state->owner_member_id, member_id) != 0)
                                 continue;
 
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        /* Per KIP-932: if delivery count has reached
+                         * the limit, archive instead of releasing. */
+                        if (mshgrp->max_delivery_attempts > 0 &&
+                            state->delivery_count >=
+                                mshgrp->max_delivery_attempts) {
+                                state->state =
+                                    RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                        } else {
+                                state->state =
+                                    RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        }
                         rd_free(state->owner_member_id);
                         state->owner_member_id = NULL;
                         state->lock_expiry_ts  = 0;
@@ -906,8 +925,18 @@ static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                             state->lock_expiry_ts > now)
                                 continue;
 
-                        /* Lock has expired — release back to AVAILABLE */
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        /* Lock has expired.  Per KIP-932: if delivery
+                         * count has reached the limit, archive the
+                         * record instead of making it available. */
+                        if (mshgrp->max_delivery_attempts > 0 &&
+                            state->delivery_count >=
+                                mshgrp->max_delivery_attempts) {
+                                state->state =
+                                    RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                        } else {
+                                state->state =
+                                    RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+                        }
                         RD_IF_FREE(state->owner_member_id, rd_free);
                         state->owner_member_id = NULL;
                         state->lock_expiry_ts  = 0;

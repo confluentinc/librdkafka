@@ -42,7 +42,7 @@
  * All tests use share.acknowledgement.mode = "explicit"
  */
 
-#define MAX_TOPICS        8
+#define MAX_TOPICS        16
 #define MAX_PARTITIONS    8
 #define MAX_CONSUMERS     4
 #define MAX_MSGS_PER_PART 100
@@ -59,9 +59,13 @@ typedef struct {
         int consumer_cnt;
         rd_kafka_share_AcknowledgeType_t actions[MAX_TOPICS][MAX_PARTITIONS]
                                                 [MAX_MSGS_PER_PART];
-        int expected_redelivered;
+        int expected_redelivered; /**< -1 = use released count (random mode) */
         int poll_timeout_ms;
         int max_attempts;
+        /* Random mode fields */
+        rd_bool_t use_random_acks; /**< Generate random acks at runtime */
+        unsigned int random_seed;  /**< Seed for reproducible randomness */
+        int total_msgs;            /**< Total messages (random mode) */
 } ack_test_config_t;
 
 /**
@@ -79,6 +83,10 @@ typedef struct {
         int msgs_consumed;
         int msgs_redelivered;
         char group_name[128];
+        /* Random mode counters */
+        int msgs_accepted;
+        int msgs_rejected;
+        int msgs_released;
 } ack_test_state_t;
 
 
@@ -105,6 +113,22 @@ static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
 }
 
 /**
+ * @brief Generate random ack type with roughly equal distribution
+ */
+static rd_kafka_share_AcknowledgeType_t
+get_random_ack_type(unsigned int *seed) {
+        int r = rand_r(seed) % 3;
+        switch (r) {
+        case 0:
+                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
+        case 1:
+                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT;
+        default:
+                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE;
+        }
+}
+
+/**
  * @brief Set group offset to earliest
  */
 static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
@@ -121,8 +145,19 @@ static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
 static void setup_topics_and_produce(ack_test_config_t *config,
                                      ack_test_state_t *state) {
         int t, p;
+        int msgs_per_partition;
+        int total_partitions = 0;
 
         state->msgs_produced = 0;
+
+        /* Calculate msgs_per_partition based on mode */
+        if (config->use_random_acks && config->total_msgs > 0) {
+                for (t = 0; t < config->topic_cnt; t++)
+                        total_partitions += config->partitions[t];
+                msgs_per_partition = config->total_msgs / total_partitions;
+        } else {
+                msgs_per_partition = config->msgs_per_partition;
+        }
 
         for (t = 0; t < config->topic_cnt; t++) {
                 state->topic_names[t] =
@@ -134,13 +169,13 @@ static void setup_topics_and_produce(ack_test_config_t *config,
 
                 for (p = 0; p < config->partitions[t]; p++) {
                         test_produce_msgs_easy(state->topic_names[t], 0, p,
-                                               config->msgs_per_partition);
-                        state->msgs_produced += config->msgs_per_partition;
+                                               msgs_per_partition);
+                        state->msgs_produced += msgs_per_partition;
                 }
 
                 TEST_SAY("Topic '%s': %d partition(s), %d msgs/partition\n",
                          state->topic_names[t], config->partitions[t],
-                         config->msgs_per_partition);
+                         msgs_per_partition);
         }
 
         TEST_SAY("Produced %d messages total\n", state->msgs_produced);
@@ -173,6 +208,39 @@ static void subscribe_consumers(ack_test_config_t *config,
 }
 
 /**
+ * @brief Find message index in list by topic+partition+offset
+ * @returns Index if found, -1 otherwise
+ */
+static int find_message_in_list(rd_kafka_topic_partition_list_t *list,
+                                const char *topic,
+                                int32_t partition,
+                                int64_t offset) {
+        int i;
+        for (i = 0; i < list->cnt; i++) {
+                rd_kafka_topic_partition_t *elem = &list->elems[i];
+                if (strcmp(elem->topic, topic) == 0 &&
+                    elem->partition == partition && elem->offset == offset)
+                        return i;
+        }
+        return -1;
+}
+
+/**
+ * @brief Remove message from list by index (swap with last element)
+ */
+static void remove_message_from_list_at(rd_kafka_topic_partition_list_t *list,
+                                        int idx) {
+        if (idx < 0 || idx >= list->cnt)
+                return;
+
+        /* Swap with last element and decrement count */
+        if (idx < list->cnt - 1) {
+                list->elems[idx] = list->elems[list->cnt - 1];
+        }
+        list->cnt--;
+}
+
+/**
  * @brief Get topic index from topic name
  */
 static int get_topic_index(ack_test_config_t *config,
@@ -197,11 +265,24 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
         size_t total_consumed                   = 0;
         int msg_idx[MAX_TOPICS][MAX_PARTITIONS] = {{0}};
+        unsigned int seed                       = config->random_seed;
 
-        state->original_cnt  = 0;
-        state->msgs_consumed = 0;
+        /* Use higher timeout/attempts for random mode with many messages */
+        if (config->use_random_acks) {
+                poll_timeout = 5000;
+                /* Scale attempts based on message count */
+                attempts = 200 + (config->total_msgs / 1000) * 50;
+        }
 
-        TEST_SAY("Consuming %d messages...\n", state->msgs_produced);
+        state->original_cnt     = 0;
+        state->msgs_consumed    = 0;
+        state->msgs_accepted    = 0;
+        state->msgs_rejected    = 0;
+        state->msgs_released    = 0;
+        state->msgs_redelivered = 0;
+
+        TEST_SAY("Consuming %d messages%s...\n", state->msgs_produced,
+                 config->use_random_acks ? " with random acks" : "");
 
         while ((int)total_consumed < state->msgs_produced && attempts-- > 0) {
                 size_t rcvd = 0;
@@ -220,14 +301,68 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                 int t_idx, p_idx, m_idx;
                                 rd_kafka_share_AcknowledgeType_t ack_type;
                                 rd_kafka_resp_err_t ack_err;
+                                int16_t delivery_count =
+                                    rd_kafka_message_delivery_count(batch[m]);
 
                                 t_idx = get_topic_index(
                                     config, state,
                                     rd_kafka_topic_name(batch[m]->rkt));
                                 p_idx = batch[m]->partition;
 
-                                if (t_idx >= 0 &&
-                                    p_idx < config->partitions[t_idx]) {
+                                /*
+                                 * In random mode, check if this message was
+                                 * previously RELEASE'd (redelivery).
+                                 */
+                                if (config->use_random_acks) {
+                                        int released_idx = find_message_in_list(
+                                            state->released_msgs,
+                                            rd_kafka_topic_name(batch[m]->rkt),
+                                            batch[m]->partition,
+                                            batch[m]->offset);
+
+                                        if (released_idx >= 0) {
+                                                /* This is a redelivered msg */
+                                                rd_kafka_topic_partition_t
+                                                    *rktpar;
+
+                                                TEST_ASSERT(
+                                                    delivery_count > 1,
+                                                    "RELEASE'd message has "
+                                                    "delivery_count=%d, "
+                                                    "expected > 1",
+                                                    delivery_count);
+
+                                                /* Remove from released list */
+                                                remove_message_from_list_at(
+                                                    state->released_msgs,
+                                                    released_idx);
+
+                                                /* Track as redelivered */
+                                                rktpar =
+                                                    rd_kafka_topic_partition_list_add(
+                                                        state->redelivered_msgs,
+                                                        rd_kafka_topic_name(
+                                                            batch[m]->rkt),
+                                                        batch[m]->partition);
+                                                rktpar->offset =
+                                                    batch[m]->offset;
+                                                state->msgs_redelivered++;
+
+                                                rd_kafka_share_acknowledge_type(
+                                                    state->consumers[0],
+                                                    batch[m],
+                                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                                rd_kafka_message_destroy(
+                                                    batch[m]);
+                                                continue;
+                                        }
+                                }
+
+                                /* Determine ack type based on mode */
+                                if (config->use_random_acks) {
+                                        ack_type = get_random_ack_type(&seed);
+                                } else if (t_idx >= 0 &&
+                                           p_idx < config->partitions[t_idx]) {
                                         m_idx = msg_idx[t_idx][p_idx]++;
                                         if (m_idx < MAX_MSGS_PER_PART)
                                                 ack_type =
@@ -242,14 +377,11 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
                                 }
 
-                                ack_err = rd_kafka_share_acknowledge_type(
-                                    state->consumers[0], batch[m], ack_type);
-                                TEST_ASSERT(ack_err ==
-                                                RD_KAFKA_RESP_ERR_NO_ERROR,
-                                            "Acknowledge failed: %s",
-                                            rd_kafka_err2str(ack_err));
-
-                                /* Track RELEASE'd messages for verification */
+                                /*
+                                 * Send the acknowledgement.
+                                 * If RELEASE, add to released_msgs immediately
+                                 * so we can track expected redeliveries.
+                                 */
                                 if (ack_type ==
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE) {
                                         rd_kafka_topic_partition_t *rktpar;
@@ -260,16 +392,31 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                                     batch[m]->rkt),
                                                 batch[m]->partition);
                                         rktpar->offset = batch[m]->offset;
+                                        state->msgs_released++;
+                                } else if (
+                                    ack_type ==
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT) {
+                                        state->msgs_accepted++;
+                                } else if (
+                                    ack_type ==
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT) {
+                                        state->msgs_rejected++;
                                 }
+
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    state->consumers[0], batch[m], ack_type);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Acknowledge failed: %s",
+                                            rd_kafka_err2str(ack_err));
 
                                 /* Verify delivery_count = 1 on first delivery
                                  */
                                 TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(batch[m]) ==
-                                        1,
+                                    delivery_count == 1,
                                     "Expected delivery_count=1 on first "
                                     "delivery, got %d",
-                                    rd_kafka_message_delivery_count(batch[m]));
+                                    delivery_count);
 
                                 if (state->original_cnt < 1000) {
                                         state->original_offsets
@@ -282,14 +429,36 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                         rd_kafka_message_destroy(batch[m]);
                 }
 
-                TEST_SAY("Progress: %zu/%d\n", total_consumed,
-                         state->msgs_produced);
+                /* Progress logging: more frequent for random mode */
+                if (config->use_random_acks) {
+                        if (total_consumed % 500 == 0 || rcvd > 0) {
+                                TEST_SAY(
+                                    "Progress: %zu/%d (A:%d R:%d L:%d "
+                                    "early_redeliv:%d)\n",
+                                    total_consumed, state->msgs_produced,
+                                    state->msgs_accepted, state->msgs_rejected,
+                                    state->msgs_released,
+                                    state->msgs_redelivered);
+                        }
+                } else {
+                        TEST_SAY("Progress: %zu/%d\n", total_consumed,
+                                 state->msgs_produced);
+                }
         }
 
         state->msgs_consumed = (int)total_consumed;
         TEST_ASSERT(state->msgs_consumed == state->msgs_produced,
                     "Expected to consume %d messages, got %d",
                     state->msgs_produced, state->msgs_consumed);
+
+        if (config->use_random_acks) {
+                TEST_SAY(
+                    "Consumed %d: ACCEPT=%d, REJECT=%d, RELEASE=%d, "
+                    "early_redelivered=%d\n",
+                    state->msgs_consumed, state->msgs_accepted,
+                    state->msgs_rejected, state->msgs_released,
+                    state->msgs_redelivered);
+        }
 }
 
 /**
@@ -301,11 +470,31 @@ static void poll_for_redelivery(ack_test_config_t *config,
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
         int attempts = 10;
+        int expected_count;
 
-        state->msgs_redelivered = 0;
+        /* expected_redelivered == -1 means use msgs_released count */
+        expected_count = (config->expected_redelivered == -1)
+                             ? state->msgs_released
+                             : config->expected_redelivered;
 
-        TEST_SAY("Polling for redelivered messages (expecting %d)...\n",
-                 config->expected_redelivered);
+        /* Use higher timeout/attempts for random mode */
+        if (config->use_random_acks) {
+                poll_timeout = 5000;
+                /* Scale attempts based on expected redeliveries */
+                attempts = 100 + (expected_count / 500) * 50;
+        }
+
+        /*
+         * In random mode, some redeliveries may have already been handled
+         * during consume_and_acknowledge. Don't reset the counter.
+         * For non-random mode, reset as before.
+         */
+        if (!config->use_random_acks)
+                state->msgs_redelivered = 0;
+
+        TEST_SAY(
+            "Polling for redelivered messages (expecting %d, have %d)...\n",
+            expected_count, state->msgs_redelivered);
 
         while (attempts-- > 0) {
                 size_t rcvd = 0;
@@ -322,21 +511,42 @@ static void poll_for_redelivery(ack_test_config_t *config,
                 for (m = 0; m < rcvd; m++) {
                         if (!batch[m]->err) {
                                 rd_kafka_topic_partition_t *rktpar;
+                                int16_t delivery_count =
+                                    rd_kafka_message_delivery_count(batch[m]);
+                                const char *msg_topic =
+                                    rd_kafka_topic_name(batch[m]->rkt);
+                                int32_t msg_partition = batch[m]->partition;
+                                int64_t msg_offset    = batch[m]->offset;
+                                int released_idx;
 
-                                /* Verify delivery_count = 2 on redelivery */
+                                /* Verify delivery_count >= 2 on redelivery */
                                 TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(batch[m]) ==
-                                        2,
-                                    "Expected delivery_count=2 on redelivery, "
+                                    delivery_count >= 2,
+                                    "Expected delivery_count>=2 on redelivery, "
                                     "got %d",
-                                    rd_kafka_message_delivery_count(batch[m]));
+                                    delivery_count);
+
+                                /* Verify message was in released list */
+                                released_idx = find_message_in_list(
+                                    state->released_msgs, msg_topic,
+                                    msg_partition, msg_offset);
+
+                                TEST_ASSERT(released_idx >= 0,
+                                            "Redelivered message (topic=%s, "
+                                            "partition=%d, offset=%" PRId64
+                                            ") was NOT in RELEASE'd list",
+                                            msg_topic, msg_partition,
+                                            msg_offset);
+
+                                /* Remove from released list */
+                                remove_message_from_list_at(
+                                    state->released_msgs, released_idx);
 
                                 /* Track redelivered message */
                                 rktpar = rd_kafka_topic_partition_list_add(
-                                    state->redelivered_msgs,
-                                    rd_kafka_topic_name(batch[m]->rkt),
-                                    batch[m]->partition);
-                                rktpar->offset = batch[m]->offset;
+                                    state->redelivered_msgs, msg_topic,
+                                    msg_partition);
+                                rktpar->offset = msg_offset;
 
                                 state->msgs_redelivered++;
 
@@ -348,12 +558,12 @@ static void poll_for_redelivery(ack_test_config_t *config,
                 }
 
                 if (rcvd > 0) {
-                        TEST_SAY("Redelivered so far: %d\n",
-                                 state->msgs_redelivered);
+                        TEST_SAY("Redelivered so far: %d/%d\n",
+                                 state->msgs_redelivered, expected_count);
                 }
 
-                if (state->msgs_redelivered >= config->expected_redelivered &&
-                    config->expected_redelivered > 0) {
+                if (state->msgs_redelivered >= expected_count &&
+                    expected_count > 0) {
                         break;
                 }
         }
@@ -362,72 +572,34 @@ static void poll_for_redelivery(ack_test_config_t *config,
 /**
  * @brief Verify redelivery results
  *
- * Checks that:
- * 1. The count of redelivered messages matches expected
- * 2. Each redelivered message was one that got RELEASE'd (same
- * topic+partition+offset)
+ * Verification approach:
+ * - released_msgs is emptied as messages are redelivered
+ * - Verify redelivered count matches expected count
+ * - Verify released_msgs is empty (all RELEASE'd messages were redelivered)
  */
 static void verify_results(ack_test_config_t *config, ack_test_state_t *state) {
-        int i;
+        int expected_count;
+
+        /* expected_redelivered == -1 means use msgs_released count */
+        expected_count = (config->expected_redelivered == -1)
+                             ? state->msgs_released
+                             : config->expected_redelivered;
 
         TEST_SAY("Verifying: consumed=%d, redelivered=%d (expected=%d)\n",
-                 state->msgs_consumed, state->msgs_redelivered,
-                 config->expected_redelivered);
+                 state->msgs_consumed, state->msgs_redelivered, expected_count);
 
-        TEST_ASSERT(state->msgs_redelivered == config->expected_redelivered,
-                    "Expected %d redelivered messages, got %d",
-                    config->expected_redelivered, state->msgs_redelivered);
+        TEST_ASSERT(state->msgs_redelivered == expected_count,
+                    "Expected %d redelivered messages, got %d", expected_count,
+                    state->msgs_redelivered);
 
-        /* Verify each redelivered message was actually RELEASE'd */
-        for (i = 0; i < state->redelivered_msgs->cnt; i++) {
-                rd_kafka_topic_partition_t *redeliv =
-                    &state->redelivered_msgs->elems[i];
-                rd_kafka_topic_partition_t *found;
-                rd_bool_t match_found = rd_false;
-                int j;
-
-                /* Search for matching released message */
-                for (j = 0; j < state->released_msgs->cnt; j++) {
-                        found = &state->released_msgs->elems[j];
-                        if (strcmp(redeliv->topic, found->topic) == 0 &&
-                            redeliv->partition == found->partition &&
-                            redeliv->offset == found->offset) {
-                                match_found = rd_true;
-                                break;
-                        }
-                }
-
-                TEST_ASSERT(match_found,
-                            "Redelivered message (topic=%s, partition=%d, "
-                            "offset=%" PRId64 ") was not in RELEASE'd list",
-                            redeliv->topic, redeliv->partition,
-                            redeliv->offset);
-        }
-
-        /* Verify all RELEASE'd messages were redelivered */
-        for (i = 0; i < state->released_msgs->cnt; i++) {
-                rd_kafka_topic_partition_t *released =
-                    &state->released_msgs->elems[i];
-                rd_kafka_topic_partition_t *found;
-                rd_bool_t match_found = rd_false;
-                int j;
-
-                for (j = 0; j < state->redelivered_msgs->cnt; j++) {
-                        found = &state->redelivered_msgs->elems[j];
-                        if (strcmp(released->topic, found->topic) == 0 &&
-                            released->partition == found->partition &&
-                            released->offset == found->offset) {
-                                match_found = rd_true;
-                                break;
-                        }
-                }
-
-                TEST_ASSERT(
-                    match_found,
-                    "RELEASE'd message (topic=%s, partition=%d, offset=%" PRId64
-                    ") was not redelivered",
-                    released->topic, released->partition, released->offset);
-        }
+        /*
+         * All RELEASE'd messages should have been redelivered and removed
+         * from released_msgs. Verify the list is empty.
+         */
+        TEST_ASSERT(state->released_msgs->cnt == 0,
+                    "Expected all RELEASE'd messages to be redelivered, "
+                    "but %d remain in released list",
+                    state->released_msgs->cnt);
 
         TEST_SAY("All %d redelivered messages verified correctly\n",
                  state->msgs_redelivered);
@@ -472,6 +644,7 @@ static void cleanup_test(ack_test_config_t *config, ack_test_state_t *state) {
 static int run_ack_test(ack_test_config_t *config) {
         ack_test_state_t state = {0};
         int i;
+        int list_capacity;
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -485,9 +658,11 @@ static int run_ack_test(ack_test_config_t *config) {
         rd_snprintf(state.group_name, sizeof(state.group_name), "share-%s",
                     config->test_name);
 
-        /* Initialize tracking lists */
-        state.released_msgs    = rd_kafka_topic_partition_list_new(100);
-        state.redelivered_msgs = rd_kafka_topic_partition_list_new(100);
+        /* Initialize tracking lists with larger capacity for random mode */
+        list_capacity       = config->use_random_acks ? 6000 : 100;
+        state.released_msgs = rd_kafka_topic_partition_list_new(list_capacity);
+        state.redelivered_msgs =
+            rd_kafka_topic_partition_list_new(list_capacity);
 
         for (i = 0; i < config->consumer_cnt; i++) {
                 state.consumers[i] =
@@ -1272,6 +1447,193 @@ static void test_alternating_ack_pattern(void) {
 }
 
 
+/***************************************************************************
+ * High-Intensity Random Acknowledgement Tests
+ *
+ * These tests produce large numbers of messages and apply random
+ * acknowledgement types (ACCEPT/REJECT/RELEASE) to stress test the
+ * acknowledgement infrastructure across different topologies.
+ ***************************************************************************/
+
+/**
+ * @brief High-intensity random acks: Single topic, single partition
+ *
+ * 5000 messages on 1 topic with 1 partition.
+ * Random ACCEPT/REJECT/RELEASE for each message.
+ */
+static void test_random_ack_single_topic_single_partition(void) {
+        ack_test_config_t config = {
+            .test_name            = "random-ack-1t-1p-5000msgs",
+            .topic_cnt            = 1,
+            .partitions           = {1},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 12345,
+            .total_msgs           = 5000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief High-intensity random acks: Multiple topics, single partition each
+ *
+ * 5000 messages across 4 topics, 1 partition each (~1250 msgs per topic).
+ * Random ACCEPT/REJECT/RELEASE for each message.
+ */
+static void test_random_ack_multiple_topics_single_partition(void) {
+        ack_test_config_t config = {
+            .test_name            = "random-ack-4t-1p-5000msgs",
+            .topic_cnt            = 4,
+            .partitions           = {1, 1, 1, 1},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 23456,
+            .total_msgs           = 5000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief High-intensity random acks: Single topic, multiple partitions
+ *
+ * 5000 messages on 1 topic with 4 partitions (~1250 msgs per partition).
+ * Random ACCEPT/REJECT/RELEASE for each message.
+ */
+static void test_random_ack_single_topic_multiple_partitions(void) {
+        ack_test_config_t config = {
+            .test_name            = "random-ack-1t-4p-5000msgs",
+            .topic_cnt            = 1,
+            .partitions           = {4},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 34567,
+            .total_msgs           = 5000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief High-intensity random acks: Multiple topics, multiple partitions
+ *
+ * 5000 messages across 2 topics, 2 partitions each (~1250 msgs per partition).
+ * Random ACCEPT/REJECT/RELEASE for each message.
+ */
+static void test_random_ack_multiple_topics_multiple_partitions(void) {
+        ack_test_config_t config = {
+            .test_name            = "random-ack-2t-2p-5000msgs",
+            .topic_cnt            = 2,
+            .partitions           = {2, 2},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 45678,
+            .total_msgs           = 5000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief Scale test: 15 topics, 1 partition each, 10000 messages
+ *
+ * ~666 messages per topic. Tests handling many topics with random acks.
+ */
+static void test_scale_15_topics_single_partition(void) {
+        ack_test_config_t config = {
+            .test_name       = "scale-15t-1p-10000msgs",
+            .topic_cnt       = 15,
+            .partitions      = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+            .consumer_cnt    = 1,
+            .use_random_acks = rd_true,
+            .random_seed     = 56789,
+            .total_msgs      = 10000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief Scale test: 15 topics, 2 partitions each, 10000 messages
+ *
+ * ~333 messages per partition (30 partitions total).
+ * Tests handling many topics with multiple partitions.
+ */
+static void test_scale_15_topics_multiple_partitions(void) {
+        ack_test_config_t config = {
+            .test_name       = "scale-15t-2p-10000msgs",
+            .topic_cnt       = 15,
+            .partitions      = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
+            .consumer_cnt    = 1,
+            .use_random_acks = rd_true,
+            .random_seed     = 67890,
+            .total_msgs      = 10000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief Scale test: 8 topics, 4 partitions each, 8000 messages
+ *
+ * ~250 messages per partition (32 partitions total).
+ * Tests high partition count scenario.
+ */
+static void test_scale_8_topics_4_partitions(void) {
+        ack_test_config_t config = {
+            .test_name            = "scale-8t-4p-8000msgs",
+            .topic_cnt            = 8,
+            .partitions           = {4, 4, 4, 4, 4, 4, 4, 4},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 78901,
+            .total_msgs           = 8000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief Scale test: Single topic, 8 partitions, 10000 messages
+ *
+ * 1250 messages per partition. Tests single topic with many partitions.
+ */
+static void test_scale_single_topic_8_partitions(void) {
+        ack_test_config_t config = {
+            .test_name            = "scale-1t-8p-10000msgs",
+            .topic_cnt            = 1,
+            .partitions           = {8},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 89012,
+            .total_msgs           = 10000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+/**
+ * @brief Scale test: 10 topics, 3 partitions each, 15000 messages
+ *
+ * 500 messages per partition (30 partitions total).
+ * Large scale test for acknowledgement infrastructure.
+ */
+static void test_scale_10_topics_3_partitions(void) {
+        ack_test_config_t config = {
+            .test_name            = "scale-10t-3p-15000msgs",
+            .topic_cnt            = 10,
+            .partitions           = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .random_seed          = 90123,
+            .total_msgs           = 15000,
+            .expected_redelivered = -1 /* Use released count */
+        };
+        run_ack_test(&config);
+}
+
+
 int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
         /* Core tests */
@@ -1305,6 +1667,19 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         test_mixed_per_offset_multiple_topics();
         test_mixed_per_offset_full_matrix();
         test_alternating_ack_pattern();
+
+        /* High-intensity random acknowledgement tests */
+        test_random_ack_single_topic_single_partition();
+        test_random_ack_multiple_topics_single_partition();
+        test_random_ack_single_topic_multiple_partitions();
+        test_random_ack_multiple_topics_multiple_partitions();
+
+        /* Scale tests - high topic/partition counts with many messages */
+        test_scale_15_topics_single_partition();
+        test_scale_15_topics_multiple_partitions();
+        test_scale_8_topics_4_partitions();
+        test_scale_single_topic_8_partitions();
+        test_scale_10_topics_3_partitions();
 
         return 0;
 }

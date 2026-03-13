@@ -700,6 +700,10 @@ void *rd_kafka_toppar_list_copy(const void *elem, void *opaque);
 
 rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,
                                                          int32_t partition);
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_with_name_and_id(const char *topic,
+                                              int32_t partition,
+                                              rd_kafka_Uuid_t topic_id);
 void rd_kafka_topic_partition_destroy_free(void *ptr);
 rd_kafka_topic_partition_t *
 rd_kafka_topic_partition_copy(const rd_kafka_topic_partition_t *src);

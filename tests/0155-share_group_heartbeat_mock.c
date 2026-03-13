@@ -706,7 +706,7 @@ static void do_test_share_group_session_timeout(void) {
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_topic_partition_list_t *share_c1_assign, *share_c2_assign;
         rd_kafka_share_t *share_c1, *share_c2;
-        int share_c1_initial, share_c2_initial;
+        int share_c1_initial = 0, share_c2_initial = 0;
         int64_t dl;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-timeout";

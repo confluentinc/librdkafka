@@ -826,8 +826,17 @@ static void test_acquisition_lock_expiry_redelivery(void) {
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        if (!batch[m]->err) {
+                                /* Verify delivery_count = 1 on first delivery
+                                 */
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(batch[m]) ==
+                                        1,
+                                    "Consumer 1: expected delivery_count=1, "
+                                    "got %d",
+                                    rd_kafka_message_delivery_count(batch[m]));
                                 consumed1++;
+                        }
                         rd_kafka_message_destroy(batch[m]);
                 }
         }
@@ -876,11 +885,20 @@ static void test_acquisition_lock_expiry_redelivery(void) {
 
                 for (m = 0; m < rcvd; m++) {
                         if (!batch[m]->err) {
+                                /* Verify delivery_count = 2 on redelivery */
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(batch[m]) ==
+                                        2,
+                                    "Consumer 2: expected delivery_count=2 on "
+                                    "redelivery, got %d",
+                                    rd_kafka_message_delivery_count(batch[m]));
                                 consumed2++;
                                 TEST_SAY(
                                     "Consumer 2: received redelivered "
-                                    "message at offset %" PRId64 "\n",
-                                    batch[m]->offset);
+                                    "message at offset %" PRId64
+                                    " (delivery_count=%d)\n",
+                                    batch[m]->offset,
+                                    rd_kafka_message_delivery_count(batch[m]));
                         }
                         rd_kafka_message_destroy(batch[m]);
                 }

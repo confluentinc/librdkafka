@@ -292,14 +292,11 @@ static void cleanup_test(share_test_config_t *config,
  * @param config Test configuration
  * @returns 0 on success, -1 on failure
  */
-static void run_share_consumer_test(share_test_config_t *config) {
+static int run_share_consumer_test(share_test_config_t *config) {
         share_test_state_t state = {0};
         int i;
         char dist_str[512] = {0};
         int pos            = 0;
-
-        SUB_TEST_QUICK("%s", config->test_name ? config->test_name
-                                               : "Share Consumer Test");
 
         /* Validate config */
         TEST_ASSERT(config->consumer_cnt > 0 &&
@@ -348,7 +345,7 @@ static void run_share_consumer_test(share_test_config_t *config) {
         /* Cleanup */
         cleanup_test(config, &state);
 
-        SUB_TEST_PASS();
+        return 0;
 }
 
 

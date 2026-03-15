@@ -233,7 +233,7 @@ static int inline rd_ctz(u32 x) {
 }
 
 static int inline rd_ctz64(u64 x) {
-#ifdef _M_X64
+#if defined(_M_X64) || defined(_M_ARM64)
 	int r = 0;
 	if (_BitScanReverse64(&r, x))
 		return r;

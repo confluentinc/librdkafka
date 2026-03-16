@@ -127,7 +127,7 @@ static void do_test_share_group_heartbeat_basic(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -196,7 +196,7 @@ static void do_test_share_group_assignment_rebalance(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-rebalance";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -297,7 +297,7 @@ static void do_test_share_group_multi_topic_assignment(void) {
         int total_orders, total_events, cnt;
         int64_t deadline;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup: orders (4 partitions), events (2 partitions) */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -515,7 +515,7 @@ static void do_test_share_group_error_injection(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-errors";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -580,7 +580,7 @@ static void do_test_share_group_rtt_injection(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-rtt";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -671,7 +671,7 @@ static void do_test_share_group_session_timeout(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-timeout";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -760,7 +760,7 @@ static void do_test_share_group_target_assignment(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-target";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -909,7 +909,7 @@ static void do_test_share_group_no_spurious_fencing(void) {
         const char *group = "test-share-group-no-fence";
         int i;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup with a short session timeout and a heartbeat interval that
          * is well below it, so the active consumer is never spuriously
@@ -977,7 +977,7 @@ static void do_test_unknown_member_id_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-unknown-member";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1042,7 +1042,7 @@ static void do_test_fenced_member_epoch_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-fenced";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1107,7 +1107,7 @@ static void do_test_coordinator_not_available_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-coord-unavail";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1172,7 +1172,7 @@ static void do_test_not_coordinator_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-not-coord";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1240,7 +1240,7 @@ static void do_test_group_authorization_failed_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-auth-failed";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1302,7 +1302,7 @@ static void do_test_group_max_size_reached_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-max-size";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1376,7 +1376,7 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-rejoin";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1447,7 +1447,7 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-epoch";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1523,7 +1523,7 @@ static void do_test_partition_assignment_with_multiple_topics(void) {
         const char *group  = "test-share-group-multi-topic-sub";
         int topic1_count = 0, topic2_count = 0, i;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup - create two topics */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1595,7 +1595,7 @@ static void do_test_multiple_members_partition_distribution(void) {
         int total_partitions;
         int64_t dl;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup - 6 partitions, 3 consumers */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1701,7 +1701,7 @@ static void do_test_leave_heartbeat_completes_successfully(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-success";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1753,7 +1753,7 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-error";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1815,7 +1815,7 @@ static void do_test_subscription_change(void) {
         const char *topicB = "test-sub-change-topic-B";
         const char *group  = "test-share-group-sub-change";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1907,7 +1907,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-id-not-found-unsub";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -1980,7 +1980,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
 //         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
 //         const char *group = "test-share-group-id-not-found-stable";
 
-//         SUB_TEST();
+//         SUB_TEST_QUICK();
 
 //         /* Setup */
 //         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2052,7 +2052,7 @@ static void do_test_invalid_request_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-invalid-request";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2114,7 +2114,7 @@ static void do_test_unsupported_version_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-unsupported-version";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2175,7 +2175,7 @@ static void do_test_coordinator_load_in_progress_error(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-coord-load";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2241,7 +2241,7 @@ static void do_test_graceful_shutdown_stable_state(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-graceful-shutdown";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2304,7 +2304,7 @@ static void do_test_resubscribe_after_unsubscribe(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-resubscribe";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2378,7 +2378,7 @@ static void do_test_consumer_leave_rebalance(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-rebalance";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         /* Setup */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -2475,7 +2475,7 @@ static void do_test_double_close(void) {
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_resp_err_t err;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
@@ -2522,7 +2522,7 @@ static void do_test_empty_topic_subscription(void) {
         rd_kafka_share_t *share_c;
         rd_kafka_topic_partition_list_t *subscription, *assignment;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
@@ -2573,7 +2573,7 @@ static void do_test_empty_topic_list_subscription(void) {
         rd_kafka_resp_err_t err;
         const char *group = "test-share-group-empty-topic-list";
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
 

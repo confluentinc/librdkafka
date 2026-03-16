@@ -1,5 +1,5 @@
 version: v1.0
-name: run-all-tests
+name: run-all-tests-with-sasl
 
 agent:
   machine:
@@ -27,7 +27,7 @@ global_job_config:
       - sem-version java 17
 
 blocks:
-  - name: "Run all tests (x86_64)"
+  - name: "Run SASL tests (x86_64)"
     dependencies: []
     task:
       agent:
@@ -37,23 +37,21 @@ blocks:
         commands:
           - if [[ "$TEST_ARCHES" != *"x86_64"* ]]; then exit 0; fi
       jobs:
-        - name: "PLAINTEXT cluster (x86_64)"
+        - name: "SASL PLAINTEXT cluster (x86_64)"
           env_vars:
             - name: TEST_SSL
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh
-        - name: "SSL cluster (x86_64)"
+        - name: "SASL SSL cluster (x86_64)"
           env_vars:
             - name: TEST_SSL
               value: "True"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh
-  - name: "Run all tests (aarch64)"
+  - name: "Run SASL tests (aarch64)"
     dependencies: []
     task:
       agent:
@@ -63,19 +61,17 @@ blocks:
         commands:
           - if [[ "$TEST_ARCHES" != *"aarch64"* ]]; then exit 0; fi
       jobs:
-        - name: "PLAINTEXT cluster (aarch64)"
+        - name: "SASL PLAINTEXT cluster (aarch64)"
           env_vars:
             - name: TEST_SSL
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh
-        - name: "SSL cluster (aarch64)"
+        - name: "SASL SSL cluster (aarch64)"
           env_vars:
             - name: TEST_SSL
               value: "True"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
-            - unset TEST_SASL
             - ./tests/run-all-tests.sh

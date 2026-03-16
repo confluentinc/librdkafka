@@ -1595,10 +1595,7 @@ int32_t rd_kafka_message_leader_epoch(const rd_kafka_message_t *rkmessage) {
 int16_t rd_kafka_message_delivery_count(const rd_kafka_message_t *rkmessage) {
         rd_kafka_msg_t *rkm;
 
-        if (unlikely(!rkmessage || !rkmessage->rkt ||
-                     rd_kafka_rkt_is_lw(rkmessage->rkt) ||
-                     !rkmessage->rkt->rkt_rk ||
-                     rkmessage->rkt->rkt_rk->rk_type != RD_KAFKA_CONSUMER))
+        if (unlikely(!rkmessage))
                 return 0;
 
         rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);

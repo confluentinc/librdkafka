@@ -57,6 +57,7 @@
 #include "rdkafka_interceptor.h"
 #include "rdkafka_idempotence.h"
 #include "rdkafka_sasl_oauthbearer.h"
+#include "rdkafka_share_acknowledgement.h"
 #if WITH_OAUTHBEARER_OIDC
 #include "rdkafka_sasl_oauthbearer_oidc.h"
 #endif
@@ -3037,10 +3038,9 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         /* Set backpointer from rk to rkshare for access in retry handlers */
         rk->rk_rkshare = rkshare;
 
-        /* Inflight acks map keyed by topic_id + partition */
+        /* Inflight acks map keyed by topic name + partition */
         RD_MAP_INIT(&rkshare->rkshare_inflight_acks, 16,
-                    rd_kafka_topic_partition_by_id_cmp,
-                    rd_kafka_topic_partition_hash_by_id,
+                    rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
                     rd_kafka_topic_partition_destroy_free,
                     rd_kafka_share_ack_batches_destroy_free);
 
@@ -3631,9 +3631,16 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
 
-        /* Implicit ack: acknowledge all ACQUIRED records from previous
-         * poll as ACCEPT, then extract ack_details for sending. */
-        rd_kafka_share_ack_all(rk->rk_rkshare);
+        /* In implicit ack mode, convert all ACQUIRED records to ACCEPT
+         * before extracting ack details. In explicit mode, the app has
+         * already acknowledged records via the acknowledge APIs, so
+         * only extract what's been explicitly acknowledged. */
+        rd_kafka_share_acknowledge_all_if_implicit(rkshare);
+
+        error = rd_kafka_share_ensure_all_acknowledged_if_explicit(rkshare);
+        if (error)
+                return error;
+
         rd_list_t *ack_batches =
             rd_kafka_share_build_ack_details(rk->rk_rkshare);
 

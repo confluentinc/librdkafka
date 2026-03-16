@@ -38,6 +38,7 @@
 #include "rdkafka_msgset.h"
 #include "rdkafka_fetcher.h"
 #include "rdkafka_request.h"
+#include "rdkafka_share_acknowledgement.h"
 
 
 /**
@@ -1176,6 +1177,11 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         int16_t *DeliveryCounts   = NULL;
         rd_kafka_q_t *temp_fetchq = rd_kafka_q_new(rkb->rkb_rk);
         int i;
+        rd_bool_t is_sorted     = rd_true;
+        int64_t prev_end_offset = -1, size, j;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        rd_kafka_topic_partition_private_t *parpriv;
+        char *topic_str;
 
         rd_kafka_buf_read_i32(rkbuf, &PartitionId);  // Partition
         rd_kafka_buf_read_i16(rkbuf,
@@ -1285,9 +1291,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                    RD_KAFKAP_STR_PR(topic), PartitionId,
                    AcquiredRecordsArrayCnt);
 
-        rd_kafka_topic_partition_private_t *parpriv;
-        char *topic_str;
-
         /* Allocate and initialize the topic partition */
         topic_str = RD_KAFKAP_STR_DUP(topic);
         batches_out->rktpar =
@@ -1330,7 +1333,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         rd_kafka_buf_read_i16(rkbuf, &DeliveryCounts[i]);
                         rd_kafka_buf_skip_tags(rkbuf);
 
-                        int64_t size = LastOffsets[i] - FirstOffsets[i] + 1;
+                        size = LastOffsets[i] - FirstOffsets[i] + 1;
 
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                                    "%.*s [%" PRId32
@@ -1340,15 +1343,20 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                                    FirstOffsets[i], LastOffsets[i],
                                    DeliveryCounts[i]);
 
-                        rd_kafka_share_ack_batch_entry_t *entry =
-                            rd_kafka_share_ack_batch_entry_new(
-                                FirstOffsets[i], LastOffsets[i], (int32_t)size,
-                                DeliveryCounts[i]);
+                        /* Track sortedness: entries must be non-overlapping
+                         * and in ascending order by start_offset. */
+                        if (is_sorted && FirstOffsets[i] <= prev_end_offset)
+                                is_sorted = rd_false;
+                        prev_end_offset = LastOffsets[i];
+
+                        entry = rd_kafka_share_ack_batch_entry_new(
+                            FirstOffsets[i], LastOffsets[i], (int32_t)size,
+                            DeliveryCounts[i]);
 
                         /* Initialize all offsets to GAP; build_response_rko
                          * will set ACQUIRED/REJECT for offsets that have a
                          * message. */
-                        for (int64_t j = 0; j < size; j++) {
+                        for (j = 0; j < size; j++) {
                                 entry->types[j] =
                                     RD_KAFKA_SHARE_INTERNAL_ACK_GAP;
                         }
@@ -1356,6 +1364,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         rd_list_add(&batches_out->entries, entry);
                         batches_out->response_msgs_count += (int32_t)size;
                 }
+
+                /* Mark as sorted to enable binary search in rd_list_find(). */
+                if (is_sorted)
+                        batches_out->entries.rl_flags |= RD_LIST_F_SORTED;
 
                 /* Filter and forward messages in acquired ranges */
                 rd_kafka_share_filter_acquired_records_and_update_ack_type(

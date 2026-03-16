@@ -753,6 +753,157 @@ static void test_sparse_partitions(void) {
 }
 
 
+/**
+ * @brief Test acquisition lock expiry and redelivery to another consumer
+ *
+ * This test verifies that:
+ * 1. Records acquired by a consumer are locked for the configured duration
+ * 2. When a consumer closes without acknowledging, the lock eventually expires
+ * 3. After lock expiry, records are redelivered to another consumer
+ *
+ * Steps:
+ * 1. Set group.share.record.lock.duration.ms to 10 seconds
+ * 2. Consumer 1 receives 10 messages but doesn't acknowledge
+ * 3. Consumer 1 closes without acknowledging
+ * 4. Wait for lock to expire (10+ seconds)
+ * 5. Consumer 2 should receive the same 10 messages
+ */
+static void test_acquisition_lock_expiry_redelivery(void) {
+        rd_kafka_share_t *consumer1, *consumer2;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-lock-expiry-test";
+        rd_kafka_topic_partition_list_t *subs;
+        const char *grp_conf_offset[] = {"share.auto.offset.reset", "SET",
+                                         "earliest"};
+        const char *grp_conf_lock[]   = {"share.record.lock.duration.ms", "SET",
+                                         "15000"};
+        int consumed1 = 0, consumed2 = 0, attempts;
+        const int msg_cnt          = 10;
+        const int lock_duration_ms = 15000;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== Acquisition lock expiry and redelivery test ===\n");
+        TEST_SAY("Lock duration: %d ms, Messages: %d\n", lock_duration_ms,
+                 msg_cnt);
+
+        /* Create first consumer */
+        consumer1 = test_create_share_consumer(group);
+        topic     = test_mk_topic_name("0171-lock-expiry", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Configure group: set lock duration to 10 seconds */
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
+            group, grp_conf_lock, 1);
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
+            group, grp_conf_offset, 1);
+
+        /* Produce messages */
+        TEST_SAY("Producing %d messages...\n", msg_cnt);
+        test_produce_msgs_easy(topic, 0, 0, msg_cnt);
+
+        /* Subscribe consumer 1 */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consumer 1: receive messages but DO NOT acknowledge */
+        TEST_SAY("Consumer 1: receiving messages without acknowledging...\n");
+        attempts = 50;
+        while (consumed1 < msg_cnt && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer1, 2000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed1++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_SAY("Consumer 1: received %d/%d messages (not acknowledged)\n",
+                 consumed1, msg_cnt);
+        TEST_ASSERT(consumed1 == msg_cnt,
+                    "Consumer 1 should receive all %d messages, got %d",
+                    msg_cnt, consumed1);
+
+        /* Close consumer 1 WITHOUT acknowledging - records should be released
+         * after lock expires */
+        TEST_SAY("Closing consumer 1 without acknowledging...\n");
+        rd_kafka_share_consumer_close(consumer1);
+        rd_kafka_share_destroy(consumer1);
+
+        /* Wait for lock to expire + buffer time */
+        TEST_SAY("Waiting %d ms for acquisition lock to expire...\n",
+                 lock_duration_ms + 2000);
+        rd_sleep(lock_duration_ms / 1000 + 2);
+
+        /* Create second consumer */
+        TEST_SAY("Creating consumer 2...\n");
+        consumer2 = test_create_share_consumer(group);
+
+        /* Subscribe consumer 2 */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer2, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consumer 2: should receive the same messages (redelivered) */
+        TEST_SAY("Consumer 2: receiving redelivered messages...\n");
+        attempts = 50;
+        while (consumed2 < msg_cnt && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer2, 2000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err) {
+                                consumed2++;
+                                TEST_SAY(
+                                    "Consumer 2: received redelivered "
+                                    "message at offset %" PRId64 "\n",
+                                    batch[m]->offset);
+                        }
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_SAY("Consumer 2: received %d/%d redelivered messages\n", consumed2,
+                 msg_cnt);
+        TEST_ASSERT(consumed2 == msg_cnt,
+                    "Consumer 2 should receive all %d redelivered messages, "
+                    "got %d",
+                    msg_cnt, consumed2);
+
+        TEST_SAY(
+            "SUCCESS: Acquisition lock expiry verified - %d messages "
+            "redelivered\n",
+            consumed2);
+
+        /* Cleanup */
+        test_delete_topic(test_share_consumer_get_rk(consumer2), topic);
+        rd_kafka_share_consumer_close(consumer2);
+        rd_kafka_share_destroy(consumer2);
+}
+
 int main_0171_share_consumer_consume(int argc, char **argv) {
 
         /* Single-consumer tests */
@@ -781,7 +932,7 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
                                                                       partitions
                                                                       each */
 
-        // /* Multi-consumer tests */
+        /* Multi-consumer tests */
         test_multiple_consumers_single_topic_single_partition();       /* Multi
                                                                           consumer
                                                                           sharing
@@ -798,11 +949,11 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
                                                                           everything
                                                                         */
 
-        // /* High volume tests */
+        /* High volume tests */
         test_high_volume_10k_messages();
         test_high_volume_50k_multi_partition();
 
-        // /* Multi-topic tests (triggers multiple fetch responses) */
+        /* Multi-topic tests (triggers multiple fetch responses) */
         test_many_topics_15();
         test_many_topics_10_multi_partition();
 
@@ -812,6 +963,9 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         /* Edge case tests */
         test_empty_then_produce();
         test_sparse_partitions();
+
+        /* Acquisition lock tests */
+        test_acquisition_lock_expiry_redelivery();
 
         return 0;
 }

@@ -99,10 +99,8 @@ static void do_test_topic_delete(void) {
         /* Consume - expect no data messages since topic is deleted */
         rkm = rd_kafka_consumer_poll(c, 5000);
         if (rkm) {
-                TEST_ASSERT(rkm->err != RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected error or no message from deleted topic, "
-                            "got message at offset %" PRId64,
-                            rkm->offset);
+                TEST_ASSERT(rkm != NULL && rkm->err != RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Expected error from deleted topic");
                 rd_kafka_message_destroy(rkm);
         }
 

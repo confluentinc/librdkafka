@@ -252,14 +252,14 @@ rd_kafka_mock_topic_create(rd_kafka_mock_cluster_t *mcluster,
 /**
  * @brief Deletes a topic and all its partitions.
  *
- * Subsequent requests referencing the topic will recieve
+ * Subsequent requests referencing the topic will receive
  * UNKNOWN_TOPIC_OR_PARTITION.
  *
  * @param mcluster The mock cluster instance.
  * @param topic The topic to delete.
  *
  * @return RD_KAFKA_RESP_ERR_NO_ERROR on success
- *         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PARTITION if the topic does not
+ *         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART if the topic does not
  * exist.
  */
 RD_EXPORT rd_kafka_resp_err_t

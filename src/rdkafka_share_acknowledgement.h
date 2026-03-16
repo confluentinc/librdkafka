@@ -167,31 +167,31 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare);
 /**
  * @brief Check if share consumer uses implicit acknowledgement mode.
  */
-rd_bool_t rd_kafka_share_acknowledgement_mode_is_implicit(rd_kafka_t *rk);
+rd_bool_t
+rd_kafka_share_acknowledgement_mode_is_implicit(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Check if share consumer uses explicit acknowledgement mode.
  */
-rd_bool_t rd_kafka_share_acknowledgement_mode_is_explicit(rd_kafka_t *rk);
+rd_bool_t
+rd_kafka_share_acknowledgement_mode_is_explicit(rd_kafka_share_t *rkshare);
 
 /**
  * @brief In implicit mode, acknowledge all acquired records as ACCEPT.
  */
-void rd_kafka_share_acknowledge_all_if_implicit_acknowledgement(
-    rd_kafka_share_t *rkshare);
+void rd_kafka_share_acknowledge_all_if_implicit(rd_kafka_share_t *rkshare);
 
 /**
  * @brief In explicit mode, ensure all acquired records have been acknowledged.
  * @returns Error if there are unacknowledged records, NULL otherwise.
  */
 rd_kafka_error_t *
-rd_kafka_ensure_all_acquired_acknowledged_if_explicit_acknowledgements(
-    rd_kafka_share_t *rkshare);
+rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Comparator for sorting/checking entries by start_offset.
  *
- * Used with rd_list_sort() and rd_list_is_sorted().
+ * Used with rd_list_sort().
  */
 int rd_kafka_share_ack_entry_cmp_start_offset_ptr(const void *_a,
                                                   const void *_b);

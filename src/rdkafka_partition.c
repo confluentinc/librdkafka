@@ -2712,9 +2712,9 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,
 }
 
 rd_kafka_topic_partition_t *
-rd_kafka_topic_partition_new_with_name_and_id(const char *topic,
-                                              int32_t partition,
-                                              rd_kafka_Uuid_t topic_id) {
+rd_kafka_topic_partition_new_with_id_and_name(rd_kafka_Uuid_t topic_id,
+                                              const char *topic,
+                                              int32_t partition) {
         rd_kafka_topic_partition_t *rktpar =
             rd_kafka_topic_partition_new(topic, partition);
         rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);

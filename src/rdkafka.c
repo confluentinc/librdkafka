@@ -3635,10 +3635,9 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          * before extracting ack details. In explicit mode, the app has
          * already acknowledged records via the acknowledge APIs, so
          * only extract what's been explicitly acknowledged. */
-        rd_kafka_share_acknowledge_all_if_implicit_acknowledgement(rkshare);
-        error =
-            rd_kafka_ensure_all_acquired_acknowledged_if_explicit_acknowledgements(
-                rkshare);
+        rd_kafka_share_acknowledge_all_if_implicit(rkshare);
+
+        error = rd_kafka_share_ensure_all_acknowledged_if_explicit(rkshare);
         if (error)
                 return error;
 

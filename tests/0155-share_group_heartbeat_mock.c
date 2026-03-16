@@ -51,6 +51,8 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
         return rkshare;
 }
 
+/* Forward declaration */
+static int poll_share_consumer(rd_kafka_share_t *share_c, int timeout_ms);
 
 /**
  * @brief Poll-wait until rd_kafka_fatal_error() returns a non-NO_ERROR
@@ -64,8 +66,13 @@ static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
         char errstr[256];
 
         while (test_clock() < deadline) {
-                rd_kafka_resp_err_t err =
-                    rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
+                rd_kafka_resp_err_t err;
+
+                /* Drive the event loop so the fatal error callback
+                 * is processed. */
+                poll_share_consumer(share_c, 100);
+
+                err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
                                          errstr, sizeof(errstr));
                 if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
                         return err;
@@ -102,12 +109,9 @@ static int wait_assignment_count(rd_kafka_share_t *share_c,
         while (test_clock() < deadline) {
                 rd_kafka_topic_partition_list_t *assignment;
 
-                /* Drive the event loop so heartbeat responses and
-                 * assignment changes are processed.  Use rd_kafka_poll()
-                 * instead of rd_kafka_share_consume_batch() because the
-                 * latter can block for much longer than its timeout_ms
-                 * during coordinator rediscovery. */
-                rd_kafka_poll(test_share_consumer_get_rk(share_c), 100);
+                /* Drive the share consumer event loop so heartbeat
+                 * responses and assignment changes are processed. */
+                poll_share_consumer(share_c, 100);
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c), &assignment));

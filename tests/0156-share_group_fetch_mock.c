@@ -172,6 +172,7 @@ static void do_test_basic_consume(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -188,6 +189,7 @@ static void do_test_basic_consume(void) {
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
                     consumed);
+        SUB_TEST_PASS();
 }
 
 static void do_test_followup_fetch(void) {
@@ -196,6 +198,7 @@ static void do_test_followup_fetch(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -212,6 +215,7 @@ static void do_test_followup_fetch(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 5, "Expected 5 consumed, got %d", consumed);
+        SUB_TEST_PASS();
 }
 
 static void do_test_multi_partition(void) {
@@ -221,6 +225,7 @@ static void do_test_multi_partition(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -237,6 +242,7 @@ static void do_test_multi_partition(void) {
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
                     consumed);
+        SUB_TEST_PASS();
 }
 
 static void do_test_multi_topic(void) {
@@ -247,6 +253,7 @@ static void do_test_multi_topic(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -266,6 +273,7 @@ static void do_test_multi_topic(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 4, "Expected 4 consumed, got %d", consumed);
+        SUB_TEST_PASS();
 }
 
 static void do_test_empty_topic_no_records(void) {
@@ -274,6 +282,7 @@ static void do_test_empty_topic_no_records(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -288,6 +297,7 @@ static void do_test_empty_topic_no_records(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
+        SUB_TEST_PASS();
 }
 
 static int do_test_negative_sharefetch_error(rd_kafka_resp_err_t err) {
@@ -316,13 +326,17 @@ static int do_test_negative_sharefetch_error(rd_kafka_resp_err_t err) {
 }
 
 static void do_test_sharefetch_invalid_session_epoch(void) {
+        SUB_TEST_QUICK();
         do_test_negative_sharefetch_error(
             RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH);
+        SUB_TEST_PASS();
 }
 
 static void do_test_sharefetch_unknown_topic_or_part(void) {
+        SUB_TEST_QUICK();
         do_test_negative_sharefetch_error(
             RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        SUB_TEST_PASS();
 }
 
 static void do_test_sghb_error(rd_kafka_resp_err_t err, int count) {
@@ -360,7 +374,9 @@ static void do_test_sghb_error(rd_kafka_resp_err_t err, int count) {
 }
 
 static void do_test_sghb_coord_unavailable(void) {
+        SUB_TEST_QUICK();
         do_test_sghb_error(RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE, 50);
+        SUB_TEST_PASS();
 }
 
 static void do_test_topic_error(rd_kafka_resp_err_t err) {
@@ -387,7 +403,9 @@ static void do_test_topic_error(rd_kafka_resp_err_t err) {
 }
 
 static void do_test_topic_error_unknown_topic_or_part(void) {
+        SUB_TEST_QUICK();
         do_test_topic_error(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        SUB_TEST_PASS();
 }
 
 static void do_test_unknown_topic_subscription(void) {
@@ -396,6 +414,7 @@ static void do_test_unknown_topic_subscription(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-unknown-topic");
         subscribe_topics(consumer, &topic, 1);
@@ -406,6 +425,7 @@ static void do_test_unknown_topic_subscription(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
+        SUB_TEST_PASS();
 }
 
 static void do_test_empty_fetch_no_records(void) {
@@ -414,6 +434,7 @@ static void do_test_empty_fetch_no_records(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -428,6 +449,7 @@ static void do_test_empty_fetch_no_records(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -447,6 +469,7 @@ static void do_test_member_validation(void) {
         rd_kafka_share_t *consumer;
         int consumed_p1, consumed_p3;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         /* Short session timeout so the member is evicted quickly once
@@ -493,7 +516,7 @@ static void do_test_member_validation(void) {
 
         /* Wait for the member to be evicted (500ms session timeout + margin).
          */
-        rd_usleep(1000 * 1000, 0);
+        rd_usleep(1500 * 1000, 0);
 
         /* Phase 3: SGHB errors will eventually drain. Once a SGHB
          * succeeds, the member re-joins and the remaining records
@@ -508,6 +531,7 @@ static void do_test_member_validation(void) {
         TEST_ASSERT(consumed_p1 >= 2 && (consumed_p1 + consumed_p3) >= msgcnt,
                     "Expected at least 2+2, got %d+%d", consumed_p1,
                     consumed_p3);
+        SUB_TEST_PASS();
 }
 
 static void do_test_sharefetch_session_expiry_rtt(void) {
@@ -516,6 +540,7 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         /* Session timeout must be long enough for normal requests
@@ -550,6 +575,7 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 2, "Expected 2 consumed, got %d", consumed);
+        SUB_TEST_PASS();
 }
 
 static void do_test_forgotten_topics(void) {
@@ -560,6 +586,7 @@ static void do_test_forgotten_topics(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -599,6 +626,7 @@ static void do_test_forgotten_topics(void) {
          * received all messages from the first round, so we accept >= 4. */
         TEST_ASSERT(consumed >= 4, "Expected at least 4 consumed, got %d",
                     consumed);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -614,6 +642,7 @@ static void do_test_multi_batch_consume(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -644,6 +673,7 @@ static void do_test_multi_batch_consume(void) {
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
                     consumed);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -660,6 +690,7 @@ static void do_test_max_delivery_attempts(void) {
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, consumed_c;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         /* Set max delivery attempts to 2 and a short session timeout
@@ -679,7 +710,7 @@ static void do_test_max_delivery_attempts(void) {
         TEST_SAY("max_delivery: A consumed %d/%d (delivery 1)\n", consumed_a,
                  msgcnt);
         rd_kafka_share_destroy(consumer);
-        rd_usleep(1000 * 1000, 0); /* wait for lock expiry */
+        rd_usleep(1500 * 1000, 0); /* wait for lock expiry */
 
         /* Delivery 2: Consumer B acquires same records again (delivery_count
          * reaches 2 = limit) and "crashes". */
@@ -689,7 +720,7 @@ static void do_test_max_delivery_attempts(void) {
         TEST_SAY("max_delivery: B consumed %d/%d (delivery 2)\n", consumed_b,
                  msgcnt);
         rd_kafka_share_destroy(consumer);
-        rd_usleep(1000 * 1000, 0); /* wait for lock expiry */
+        rd_usleep(1500 * 1000, 0); /* wait for lock expiry */
 
         /* Delivery 3 attempt: Consumer C should get 0 records because
          * all records have been archived (delivery_count >= max). */
@@ -707,6 +738,7 @@ static void do_test_max_delivery_attempts(void) {
                         consumed_c == 0,
                     "Expected A=%d B=%d C=0, got A=%d B=%d C=%d", msgcnt,
                     msgcnt, consumed_a, consumed_b, consumed_c);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -724,6 +756,7 @@ static void do_test_record_lock_duration(void) {
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         /* Long session timeout, short record lock duration. */
@@ -751,7 +784,7 @@ static void do_test_record_lock_duration(void) {
         /* Consumer B should get the records because locks have expired
          * even though A's session is still technically alive.
          * Use higher max_attempts to account for the mock broker's
-         * SGHB LEAVE→rejoin cycle delay. */
+         * SGHB LEAVE->rejoin cycle delay. */
         consumer = new_share_consumer(ctx.bootstraps, "sg-lock-duration");
         subscribe_topics(consumer, &topic, 1);
         consumed_b = consume_n(consumer, msgcnt, 100);
@@ -764,6 +797,7 @@ static void do_test_record_lock_duration(void) {
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
                     "Expected A=%d B=%d, got A=%d B=%d", msgcnt, msgcnt,
                     consumed_a, consumed_b);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -780,6 +814,7 @@ static void do_test_multi_consumer_lock_expiry(void) {
         rd_kafka_share_t *consumer_a, *consumer_b;
         int consumed_a, consumed_b;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         /* Use a short session/lock timeout so the test runs quickly. */
@@ -803,12 +838,12 @@ static void do_test_multi_consumer_lock_expiry(void) {
         rd_kafka_share_destroy(consumer_a);
 
         /* Wait for locks to expire (session_timeout=500ms, add margin). */
-        rd_usleep(1000 * 1000, 0);
+        rd_usleep(1500 * 1000, 0);
 
         /* Consumer B: joins the same share group, should get the same
          * records once the locks have been released.
          * Use higher max_attempts to account for the mock broker's
-         * SGHB LEAVE→rejoin cycle delay. */
+         * SGHB LEAVE->rejoin cycle delay. */
         consumer_b =
             new_share_consumer(ctx.bootstraps, "sg-multi-consumer-lock");
         subscribe_topics(consumer_b, &topic, 1);
@@ -822,6 +857,7 @@ static void do_test_multi_consumer_lock_expiry(void) {
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
                     "Expected A=%d B=%d, got A=%d B=%d", msgcnt, msgcnt,
                     consumed_a, consumed_b);
+        SUB_TEST_PASS();
 }
 
 
@@ -875,51 +911,65 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
  * @brief NOT_LEADER_OR_FOLLOWER in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_not_leader(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(
             RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
+        SUB_TEST_PASS();
 }
 
 /**
  * @brief UNKNOWN_TOPIC_OR_PARTITION in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_unknown_topic_or_part(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        SUB_TEST_PASS();
 }
 
 /**
  * @brief UNKNOWN_TOPIC_ID in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_unknown_topic_id(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID);
+        SUB_TEST_PASS();
 }
 
 /**
  * @brief FENCED_LEADER_EPOCH in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_fenced_leader_epoch(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
+        SUB_TEST_PASS();
 }
 
 /**
  * @brief UNKNOWN_LEADER_EPOCH in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_fetch_error_unknown_leader_epoch(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH);
+        SUB_TEST_PASS();
 }
 
 /**
  * @brief TOPIC_AUTHORIZATION_FAILED in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_topic_authorization_failed(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+        SUB_TEST_PASS();
 }
 
 /**
  * @brief CORRUPT_MESSAGE (INVALID_MSG) in ShareFetch -> no records returned.
  */
 static void do_test_sharefetch_corrupt_message(void) {
+        SUB_TEST();
         do_test_sharefetch_fetch_error(RD_KAFKA_RESP_ERR_INVALID_MSG);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -934,6 +984,7 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         int consumed = 0;
         size_t i;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
@@ -970,6 +1021,7 @@ static void do_test_sharefetch_fetch_disconnected(void) {
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed on disconnect, got %d",
                     consumed);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -985,6 +1037,7 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
         rd_kafka_share_t *consumer;
         int consumed;
 
+        SUB_TEST();
         ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
@@ -1006,6 +1059,7 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
                     consumed);
+        SUB_TEST_PASS();
 }
 
 int main_0156_share_group_fetch_mock(int argc, char **argv) {

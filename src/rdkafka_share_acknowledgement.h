@@ -191,9 +191,8 @@ rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
 /**
  * @brief Comparator for sorting/checking entries by start_offset.
  *
- * Used with rd_list_sort().
+ * Used with rd_list_is_sorted().
  */
-int rd_kafka_share_ack_entry_cmp_start_offset_ptr(const void *_a,
-                                                  const void *_b);
+int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

@@ -391,6 +391,10 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                 ack_batch->entries.rl_flags |= RD_LIST_F_SORTED;
                 }
 
+                if (rd_list_is_sorted(&new_entries,
+                                      rd_kafka_share_ack_entries_sort_cmp_ptr))
+                        new_entries.rl_flags |= RD_LIST_F_SORTED;
+
                 /* Replace inflight entries with ACQUIRED-only entries */
                 rd_list_destroy(&inflight_batches->entries);
                 inflight_batches->entries = new_entries;
@@ -430,12 +434,34 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
 }
 
 /**
+ * @brief Update acknowledgement type for a specific offset within an entry.
+ *
+ * Handles the transition from ACQUIRED state by decrementing the unacked count.
+ *
+ * @param rkshare Share consumer handle.
+ * @param entry The batch entry containing the offset.
+ * @param idx Index within the entry's types array.
+ * @param type New acknowledgement type.
+ */
+static void rd_kafka_share_update_acknowledgement_type(
+    rd_kafka_share_t *rkshare,
+    rd_kafka_share_ack_batch_entry_t *entry,
+    int64_t idx,
+    rd_kafka_share_AcknowledgeType_t type) {
+        /* Decrement unacked count when transitioning from ACQUIRED */
+        if (entry->types[idx] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED)
+                rkshare->rkshare_unacked_cnt--;
+
+        /* Update the type */
+        entry->types[idx] = (rd_kafka_share_internal_acknowledgement_type)type;
+}
+
+/**
  * @brief Comparator for sorting/checking entries by start_offset.
  *
- * Used with rd_list_sort().
+ * Used with rd_list_sort() and rd_list_is_sorted().
  */
-int rd_kafka_share_ack_entry_cmp_start_offset_ptr(const void *_a,
-                                                  const void *_b) {
+int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b) {
         const rd_kafka_share_ack_batch_entry_t *a =
             (const rd_kafka_share_ack_batch_entry_t *)_a;
         const rd_kafka_share_ack_batch_entry_t *b =
@@ -460,8 +486,8 @@ int rd_kafka_share_ack_entry_cmp_start_offset_ptr(const void *_a,
  * @returns positive if offset > entry->end_offset
  * @returns 0 if offset is within [start_offset, end_offset]
  */
-static int rd_kafka_share_ack_entry_cmp_offset_ptr(const void *_offset,
-                                                   const void *_entry) {
+static int rd_kafka_share_ack_entries_offset_find_cmp_ptr(const void *_offset,
+                                                          const void *_entry) {
         const int64_t *offset = (const int64_t *)_offset;
         const rd_kafka_share_ack_batch_entry_t *entry =
             (const rd_kafka_share_ack_batch_entry_t *)_entry;
@@ -510,7 +536,7 @@ rd_kafka_share_find_ack_entry(rd_kafka_share_t *rkshare,
         /* Find entry containing offset using binary search.
          * Entries are sorted by start_offset and don't overlap. */
         entry = rd_list_find(&batches->entries, &offset,
-                             rd_kafka_share_ack_entry_cmp_offset_ptr);
+                             rd_kafka_share_ack_entries_offset_find_cmp_ptr);
         if (!entry)
                 return RD_KAFKA_RESP_ERR__STATE;
 
@@ -531,8 +557,11 @@ rd_kafka_resp_err_t
 rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
                                 rd_kafka_share_AcknowledgeType_t type) {
-        if (!rkmessage || !rkmessage->rkt)
+        if (!rkmessage)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        if (!rkmessage->rkt)
+                return RD_KAFKA_RESP_ERR__STATE;
 
         return rd_kafka_share_acknowledge_offset(
             rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
@@ -571,12 +600,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         if (entry->types[idx] == RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
                 return RD_KAFKA_RESP_ERR__STATE;
 
-        /* Decrement unacked count when transitioning from ACQUIRED */
-        if (entry->types[idx] == RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED)
-                rkshare->rkshare_unacked_cnt--;
-
-        /* Update the type */
-        entry->types[idx] = (rd_kafka_share_internal_acknowledgement_type)type;
+        rd_kafka_share_update_acknowledgement_type(rkshare, entry, idx, type);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }

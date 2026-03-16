@@ -669,12 +669,19 @@ static void test_ack_null_rkshare(void) {
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_null_rkshare ===\n");
 
+        /* fake_msg has NULL rkt, so returns STATE before checking rkshare */
         err = rd_kafka_share_acknowledge(NULL, &fake_msg);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected STATE, got %s", rd_kafka_err2str(err));
 
         err = rd_kafka_share_acknowledge_type(
             NULL, &fake_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected STATE, got %s", rd_kafka_err2str(err));
+
+        /* Test NULL rkshare directly via acknowledge_offset */
+        err = rd_kafka_share_acknowledge_offset(
+            NULL, "topic", 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 

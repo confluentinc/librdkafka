@@ -66,9 +66,8 @@ static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
 
         errstr[0] = '\0';
         while (test_clock() < deadline) {
-                rd_kafka_resp_err_t err =
-                    rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-                                         errstr, errstr_size);
+                rd_kafka_resp_err_t err = rd_kafka_fatal_error(
+                    test_share_consumer_get_rk(share_c), errstr, errstr_size);
                 if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
                         return err;
                 rd_usleep(100 * 1000, 0);

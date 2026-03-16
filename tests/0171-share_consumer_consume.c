@@ -776,8 +776,9 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         rd_kafka_topic_partition_list_t *subs;
         const char *grp_conf_offset[] = {"share.auto.offset.reset", "SET",
                                          "earliest"};
-        const char *grp_conf_lock[]   = {"share.record.lock.duration.ms", "SET",
-                                         "15000"};
+        /* TODO KIP-932: Decrease this timeout */
+        const char *grp_conf_lock[] = {"share.record.lock.duration.ms", "SET",
+                                       "15000"};
         int consumed1 = 0, consumed2 = 0, attempts;
         const int msg_cnt          = 10;
         const int lock_duration_ms = 15000;

@@ -32,7 +32,7 @@
  * Tests the following public APIs:
  * 1. rd_kafka_share_acknowledge() - Acknowledge delivered record with ACCEPT
  * 2. rd_kafka_share_acknowledge_type() - Acknowledge delivered record with type
- * 3. rd_kafka_share_acknowledge_offset() - Acknowledge error record by offset
+ * 3. rd_kafka_share_acknowledge_offset() - Acknowledge record by offset
  */
 
 #include "rd.h"
@@ -356,7 +356,8 @@ static int ut_case_acknowledge_type_release(rd_kafka_share_t *rkshare,
  * @brief Test re-acknowledgement with record-based APIs.
  *
  * Verifies that re-acknowledging a delivered record with record-based APIs
- * succeeds and updates the type. This is allowed before commit.
+ * succeeds and updates the type. This is allowed before sending the
+ * acknowledgement to the broker.
  */
 static int ut_case_reacknowledge_delivered(rd_kafka_share_t *rkshare,
                                            rd_kafka_topic_t *rkt) {

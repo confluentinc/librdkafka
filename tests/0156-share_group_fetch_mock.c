@@ -550,7 +550,9 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 2);
+        /* Produce only 1 message so a single batch cannot over-consume
+         * past the requested count in consume_n(). */
+        produce_messages(ctx.producer, topic, 1);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-rtt-expiry");
         subscribe_topics(consumer, &topic, 1);
@@ -561,11 +563,14 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
 
         /* Phase 2: inject RTT >> session timeout to force session expiry.
          * All requests to broker 1 now take 3s, but the session
-         * expires after 1s of inactivity. */
+         * expires after 1s of inactivity.  The record from phase 1
+         * was acquired but not acked, so it becomes available again
+         * after the session expires. */
         rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 3000);
         rd_usleep(2000 * 1000, 0); /* wait for session to expire */
 
-        /* Phase 3: clear RTT and let the consumer recover. */
+        /* Phase 3: clear RTT and let the consumer recover.
+         * The same record should be re-delivered after session expiry. */
         rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 0);
         consumed += consume_n(consumer, 1, 30);
         TEST_SAY("rtt_expiry: phase3 consumed %d/2 total\n", consumed);

@@ -560,7 +560,7 @@ struct test tests[] = {
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
-    _TEST(0156_share_group_fetch_mock, TEST_F_MANUAL),
+    _TEST(0156_share_group_fetch_mock, TEST_F_LOCAL),
     _TEST(0157_share_group_ack_mock, TEST_F_MANUAL),
     _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 0, 0)),

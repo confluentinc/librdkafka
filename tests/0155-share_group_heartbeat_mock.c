@@ -47,25 +47,28 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer: %s",
                     errstr);
 
-
         return rkshare;
 }
 
 /**
- * @brief Poll-wait until rd_kafka_fatal_error() returns a non-NO_ERROR
+ * @brief Wait until rd_kafka_fatal_error() returns a non-NO_ERROR
  *        value, or \p timeout_ms elapses.
  *
+ * @param errstr Buffer to store the fatal error string (caller-provided).
+ * @param errstr_size Size of \p errstr buffer.
  * @return The fatal error code (NO_ERROR if timeout expired).
  */
 static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
-                                            int timeout_ms) {
+                                            int timeout_ms,
+                                            char *errstr,
+                                            size_t errstr_size) {
         int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
-        char errstr[256];
 
+        errstr[0] = '\0';
         while (test_clock() < deadline) {
                 rd_kafka_resp_err_t err =
                     rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-                                         errstr, sizeof(errstr));
+                                         errstr, errstr_size);
                 if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
                         return err;
                 rd_usleep(100 * 1000, 0);
@@ -84,11 +87,11 @@ static int count_topic_partitions(rd_kafka_topic_partition_list_t *assignment,
 }
 
 /**
- * @brief Poll-wait until rd_kafka_assignment() returns exactly
+ * @brief Wait until rd_kafka_assignment() returns exactly
  *        \p expected_cnt partitions, or \p timeout_ms elapses.
  *
- * Polls the consumer between checks to allow heartbeat responses
- * and assignment changes to propagate.
+ * The heartbeat thread updates assignments independently,
+ * so no polling is needed.
  *
  * @return The final assignment count.
  */
@@ -148,7 +151,7 @@ static void do_test_share_group_heartbeat_basic(void) {
         TEST_ASSERT(found_heartbeats >= 1,
                     "Expected at least 1 heartbeat, got %d", found_heartbeats);
 
-        /* Poll-wait until assignment propagates */
+        /* Wait until assignment propagates */
         cnt = wait_assignment_count(share_c, 3, 10000);
         TEST_ASSERT(cnt == 3, "Expected 3 partitions assigned, got %d", cnt);
 
@@ -211,7 +214,7 @@ static void do_test_share_group_assignment_rebalance(void) {
         rd_kafka_mock_start_request_tracking(mcluster);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c1, subscription));
 
-        /* C1 joins - poll-wait for all 3 partitions */
+        /* C1 joins - wait for all 3 partitions */
         cnt = wait_assignment_count(share_c1, 3, 10000);
         TEST_ASSERT(cnt == 3, "Expected C1 to have 3 partitions, got %d", cnt);
 
@@ -220,7 +223,7 @@ static void do_test_share_group_assignment_rebalance(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Poll-wait until both consumers have partitions and total == 3 */
+        /* Wait until both consumers have partitions and total == 3 */
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
 
@@ -327,7 +330,7 @@ static void do_test_share_group_multi_topic_assignment(void) {
         TEST_ASSERT(cnt == 6, "C1 should have all 6 partitions, got %d", cnt);
 
         /* C2 joins (orders only) - orders should split.
-         * Poll-wait until C2 has at least 1 orders partition and
+         * Wait until C2 has at least 1 orders partition and
          * total orders == 4, total events == 2. */
         share_c2 = create_share_consumer(bootstraps, group);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, sub_orders));
@@ -374,7 +377,7 @@ static void do_test_share_group_multi_topic_assignment(void) {
         rd_kafka_topic_partition_list_destroy(share_c2_assign);
 
         /* C3 joins (events only) - events should split.
-         * Poll-wait until C3 has at least 1 events partition. */
+         * Wait until C3 has at least 1 events partition. */
         share_c3 = create_share_consumer(bootstraps, group);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c3, sub_events));
 
@@ -432,7 +435,7 @@ static void do_test_share_group_multi_topic_assignment(void) {
         rd_kafka_topic_partition_list_destroy(share_c3_assign);
 
         /* C1 leaves - C2 should get all orders, C3 all events.
-         * Poll-wait until C2 has 4 orders and C3 has 2 events. */
+         * Wait until C2 has 4 orders and C3 has 2 events. */
         rd_kafka_share_consumer_close(share_c1);
         rd_kafka_share_destroy(share_c1);
 
@@ -472,7 +475,7 @@ static void do_test_share_group_multi_topic_assignment(void) {
         rd_kafka_share_consumer_close(share_c2);
         rd_kafka_share_destroy(share_c2);
 
-        /* Poll-wait for C3 to stabilize with 2 events, 0 orders */
+        /* Wait for C3 to stabilize with 2 events, 0 orders */
         cnt = wait_assignment_count(share_c3, 2, 15000);
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c3), &share_c3_assign));
@@ -542,11 +545,8 @@ static void do_test_share_group_error_injection(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
-        /* Poll - consumer should enter fatal state */
-        rd_usleep(500 * 1000, 0);
-
         /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000);
+        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "INVALID_REQUEST error");
@@ -622,7 +622,7 @@ static void do_test_share_group_rtt_injection(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_NO_ERROR, 5000);
 
-        /* Poll through the timeout period - consumer should recover */
+        /* Wait through the timeout period - consumer should recover */
         rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats resumed after timeout recovery */
@@ -631,7 +631,7 @@ static void do_test_share_group_rtt_injection(void) {
                     "Expected heartbeats to resume after timeout, got %d",
                     found_heartbeats);
 
-        /* Poll more to allow assignment to be restored */
+        /* Wait for assignment to be restored */
         rd_usleep(500 * 1000, 0);
 
         /* Verify consumer recovered and still has assignment */
@@ -678,7 +678,7 @@ static void do_test_share_group_session_timeout(void) {
         rd_kafka_mock_topic_create(mcluster, topic, 4, 1);
 
         /* Set heartbeat interval shorter than session timeout so consumers
-         * don't time out while the other is being polled. */
+         * don't time out while waiting for assignment updates. */
         rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 1000);
         /* Set session timeout. Must be > heartbeat_interval to avoid
          * spurious timeouts but short enough for the test to finish
@@ -698,7 +698,7 @@ static void do_test_share_group_session_timeout(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Poll-wait for both to join and rebalance to complete. */
+        /* Wait for both to join and rebalance to complete. */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -723,9 +723,10 @@ static void do_test_share_group_session_timeout(void) {
         /* Destroy C2 without close to simulate crash */
         rd_kafka_share_destroy(share_c2);
 
-        /* Wait for C2's session to time out (3s) and the broker
-         * to reassign.  Use 5s to be safe. */
-        rd_usleep(5000 * 1000, 0);
+        /* Wait for C2's session to time out (3s) and C1 to get
+         * all partitions back. */
+        TEST_ASSERT(wait_assignment_count(share_c1, 4, 10000) == 4,
+                    "C1 should have all 4 partitions after C2 timeout");
 
         rd_kafka_share_consumer_close(share_c1);
         rd_kafka_share_destroy(share_c1);
@@ -779,7 +780,7 @@ static void do_test_share_group_target_assignment(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Poll-wait for both to join and rebalance to complete */
+        /* Wait for both to join and rebalance to complete */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -834,7 +835,7 @@ static void do_test_share_group_target_assignment(void) {
         rd_kafka_topic_partition_list_destroy(target_c1);
         rd_kafka_topic_partition_list_destroy(target_c2);
 
-        /* Poll-wait until one consumer has all 4 and the other has 0. */
+        /* Wait until one consumer has all 4 and the other has 0. */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
 
@@ -895,7 +896,7 @@ static void do_test_share_group_target_assignment(void) {
  *        fenced by the mock broker's session timeout timer.
  *
  * This test sets a 2-second session timeout and then keeps the consumer
- * polling for 10 seconds. If the session timeout timer incorrectly fences
+ * active for 10 seconds. If the session timeout timer incorrectly fences
  * active members, the assignment would drop. This validates that the timer
  * only fences truly timed-out members (those that stopped heartbeating).
  * Related to KIP-932 session timeout logic.
@@ -913,7 +914,7 @@ static void do_test_share_group_no_spurious_fencing(void) {
 
         /* Setup with a short session timeout and a heartbeat interval that
          * is well below it, so the active consumer is never spuriously
-         * timed out during polling. */
+         * timed out. */
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
         rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 500);
@@ -1003,7 +1004,7 @@ static void do_test_unknown_member_id_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID, 0);
 
-        /* Poll - consumer should handle error and rejoin */
+        /* Wait for consumer to handle error and rejoin */
         rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue (rejoin happened) */
@@ -1068,7 +1069,7 @@ static void do_test_fenced_member_epoch_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH, 0);
 
-        /* Poll - consumer should handle error and rejoin */
+        /* Wait for consumer to handle error and rejoin */
         rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue (rejoin happened) */
@@ -1080,7 +1081,8 @@ static void do_test_fenced_member_epoch_error(void) {
             found_heartbeats);
 
         /* Verify consumer eventually gets assignment back */
-        rd_usleep(2000 * 1000, 0);
+        TEST_ASSERT(wait_assignment_count(share_c, 3, 10000) == 3,
+                    "Expected 3 partitions after rejoin");
 
         /* Cleanup */
         rd_kafka_share_consumer_close(share_c);
@@ -1133,7 +1135,7 @@ static void do_test_coordinator_not_available_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE, 0);
 
-        /* Poll - consumer should handle transient error and retry */
+        /* Wait for consumer to handle transient error and retry */
         rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue after transient error */
@@ -1198,7 +1200,7 @@ static void do_test_not_coordinator_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_NOT_COORDINATOR, 0);
 
-        /* Poll - consumer should find new coordinator and continue.
+        /* Wait for consumer to find new coordinator and continue.
          * NOT_COORDINATOR triggers coordinator rediscovery which may take
          * longer than COORDINATOR_NOT_AVAILABLE. */
         rd_usleep(500 * 1000, 0);
@@ -1265,11 +1267,8 @@ static void do_test_group_authorization_failed_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED, 0);
 
-        /* Poll - should trigger fatal error */
-        rd_usleep(500 * 1000, 0);
-
         /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000);
+        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "GROUP_AUTHORIZATION_FAILED");
@@ -1335,11 +1334,8 @@ static void do_test_group_max_size_reached_error(void) {
         share_c2 = create_share_consumer(bootstraps, group);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
 
-        /* Wait for share_c2 to get fatal error */
-        rd_usleep(500 * 1000, 0);
-
         /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c2, 5000);
+        fatal_err = wait_fatal_error(share_c2, 5000, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected share_c2 to be in fatal state after "
                     "GROUP_MAX_SIZE_REACHED");
@@ -1409,8 +1405,8 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID, 0);
 
-        /* Poll - consumer should rejoin with epoch=0 */
-        rd_usleep(500 * 1000, 0);
+        /* Wait for consumer to rejoin with epoch=0 */
+        rd_usleep(2000 * 1000, 0);
 
         /* Verify rejoin heartbeats */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -1471,7 +1467,7 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Poll-wait for both to join and rebalance to complete */
+        /* Wait for both to join and rebalance to complete */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -1493,7 +1489,7 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         rd_kafka_share_consumer_close(share_c2);
         rd_kafka_share_destroy(share_c2);
 
-        /* Poll-wait for C1 to get all partitions after C2 left */
+        /* Wait for C1 to get all partitions after C2 left */
         TEST_ASSERT(wait_assignment_count(share_c1, 4, 15000) == 4,
                     "C1 should have all 4 partitions after C2 left");
 
@@ -1616,7 +1612,7 @@ static void do_test_multiple_members_partition_distribution(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c3, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Poll-wait for all 3 consumers to get at least 1 partition each
+        /* Wait for all 3 consumers to get at least 1 partition each
          * and total >= 6. */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
@@ -1940,7 +1936,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 3,
             RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
 
-        /* Poll to process the error */
+        /* Wait for the error to be processed */
         rd_usleep(500 * 1000, 0);
 
         /* Verify consumer is NOT in fatal state - error should be benign */
@@ -2014,7 +2010,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
 //             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
 //             RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
 
-//         /* Poll - should trigger fatal error */
+//         /* Wait for fatal error to trigger */
 //         rd_usleep(500 * 1000, 0);
 
 //         /* Verify consumer entered fatal state */
@@ -2077,11 +2073,8 @@ static void do_test_invalid_request_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
-        /* Poll - should trigger fatal error */
-        rd_usleep(500 * 1000, 0);
-
         /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000);
+        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "INVALID_REQUEST");
@@ -2139,11 +2132,8 @@ static void do_test_unsupported_version_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION, 0);
 
-        /* Poll - should trigger fatal error */
-        rd_usleep(500 * 1000, 0);
-
         /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000);
+        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "UNSUPPORTED_VERSION");
@@ -2201,7 +2191,7 @@ static void do_test_coordinator_load_in_progress_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS, 0);
 
-        /* Poll - consumer should handle transient error and retry */
+        /* Wait for consumer to handle transient error and retry */
         rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue after transient error */
@@ -2421,7 +2411,7 @@ static void do_test_consumer_leave_rebalance(void) {
         rd_kafka_share_consumer_close(share_c3);
         rd_kafka_share_destroy(share_c3);
 
-        /* Poll-wait for rebalance to propagate to remaining consumers */
+        /* Wait for rebalance to propagate to remaining consumers */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
 

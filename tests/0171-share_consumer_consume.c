@@ -762,10 +762,10 @@ static void test_sparse_partitions(void) {
  * 3. After lock expiry, records are redelivered to another consumer
  *
  * Steps:
- * 1. Set group.share.record.lock.duration.ms to 10 seconds
+ * 1. Set group.share.record.lock.duration.ms to 15 seconds
  * 2. Consumer 1 receives 10 messages but doesn't acknowledge
  * 3. Consumer 1 closes without acknowledging
- * 4. Wait for lock to expire (10+ seconds)
+ * 4. Wait for lock to expire (15+ seconds)
  * 5. Consumer 2 should receive the same 10 messages
  */
 static void test_acquisition_lock_expiry_redelivery(void) {
@@ -776,8 +776,9 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         rd_kafka_topic_partition_list_t *subs;
         const char *grp_conf_offset[] = {"share.auto.offset.reset", "SET",
                                          "earliest"};
-        const char *grp_conf_lock[]   = {"share.record.lock.duration.ms", "SET",
-                                         "15000"};
+        /* TODO KIP-932: Decrease this timeout */
+        const char *grp_conf_lock[] = {"share.record.lock.duration.ms", "SET",
+                                       "15000"};
         int consumed1 = 0, consumed2 = 0, attempts;
         const int msg_cnt          = 10;
         const int lock_duration_ms = 15000;
@@ -792,7 +793,7 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         topic     = test_mk_topic_name("0171-lock-expiry", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        /* Configure group: set lock duration to 10 seconds */
+        /* Configure group: set lock duration to 15 seconds */
         test_IncrementalAlterConfigs_simple(
             test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
             group, grp_conf_lock, 1);
@@ -826,8 +827,17 @@ static void test_acquisition_lock_expiry_redelivery(void) {
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        if (!batch[m]->err) {
+                                /* Verify delivery_count = 1 on first delivery
+                                 */
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(batch[m]) ==
+                                        1,
+                                    "Consumer 1: expected delivery_count=1, "
+                                    "got %d",
+                                    rd_kafka_message_delivery_count(batch[m]));
                                 consumed1++;
+                        }
                         rd_kafka_message_destroy(batch[m]);
                 }
         }
@@ -876,11 +886,20 @@ static void test_acquisition_lock_expiry_redelivery(void) {
 
                 for (m = 0; m < rcvd; m++) {
                         if (!batch[m]->err) {
+                                /* Verify delivery_count = 2 on redelivery */
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(batch[m]) ==
+                                        2,
+                                    "Consumer 2: expected delivery_count=2 on "
+                                    "redelivery, got %d",
+                                    rd_kafka_message_delivery_count(batch[m]));
                                 consumed2++;
                                 TEST_SAY(
                                     "Consumer 2: received redelivered "
-                                    "message at offset %" PRId64 "\n",
-                                    batch[m]->offset);
+                                    "message at offset %" PRId64
+                                    " (delivery_count=%d)\n",
+                                    batch[m]->offset,
+                                    rd_kafka_message_delivery_count(batch[m]));
                         }
                         rd_kafka_message_destroy(batch[m]);
                 }

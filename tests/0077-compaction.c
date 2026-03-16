@@ -214,10 +214,6 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
          * segment.bytes (1MB min in Kafka 4.1+) and force segment rolls. */
         produce_compactable_msgs(topic, 0, partition, fillcnt, 60000);
 
-        /* Wait for segment.ms to roll the segment so that the fill data
-         * is in a closed segment before we produce keyed messages. */
-        rd_sleep(1);
-
         /* Populate a correct msgver for later comparison after compact. */
         test_msgver_init(&mv_correct, testid);
 
@@ -295,10 +291,6 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
 
         msgcounter = cnt;
         test_wait_delivery(rk, &msgcounter);
-
-        /* Wait for segment.ms to roll so keyed messages are in a
-         * closed segment before we produce more fill data. */
-        rd_sleep(1);
 
         /* Trigger compaction by filling up segments with dummy messages,
          * do it in chunks to avoid too good compression which then won't

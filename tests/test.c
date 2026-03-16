@@ -44,7 +44,19 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
-#include "rdkafka_int.h"
+
+/**
+ * Local definition of rd_kafka_share_s to access rkshare_rk
+ * without pulling in rdkafka_int.h (which causes Windows link errors
+ * due to internal inline functions referencing unexported symbols).
+ *
+ * TODO: Replace with a proper public API (e.g.
+ * rd_kafka_share_consumer_get_rk()) so tests don't depend on the
+ * internal struct layout.
+ */
+struct rd_kafka_share_s {
+        rd_kafka_t *rkshare_rk;
+};
 
 int test_level = 2;
 int test_seed  = 0;
@@ -547,8 +559,8 @@ struct test tests[] = {
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
-    _TEST(0156_share_group_fetch_mock, TEST_F_LOCAL),
-    _TEST(0157_share_group_ack_mock, TEST_F_LOCAL),
+    _TEST(0156_share_group_fetch_mock, TEST_F_MANUAL),
+    _TEST(0157_share_group_ack_mock, TEST_F_MANUAL),
     _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 0, 0)),

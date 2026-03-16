@@ -4166,6 +4166,16 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
                 mtx_unlock(&mcluster->lock);
 
+                /* Emulate real broker MaxWaitMs behaviour: when no
+                 * records were acquired, delay the response to avoid
+                 * a tight fetch loop that starves the client's
+                 * shutdown path. Cap the delay at 100ms so tests
+                 * remain fast. */
+                if (acquired_cnt == 0 && MaxWaitMs > 0) {
+                        int32_t delay_ms    = MaxWaitMs < 100 ? MaxWaitMs : 100;
+                        resp->rkbuf_ts_sent = (rd_ts_t)delay_ms * 1000; /* us */
+                }
+
                 rd_kafka_mock_connection_send_response0(mconn, resp, rd_true);
 
                 rd_kafka_topic_partition_list_destroy(requested_partitions);

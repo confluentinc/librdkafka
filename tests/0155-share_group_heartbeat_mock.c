@@ -51,9 +51,6 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
         return rkshare;
 }
 
-/* Forward declaration */
-static int poll_share_consumer(rd_kafka_share_t *share_c, int timeout_ms);
-
 /**
  * @brief Poll-wait until rd_kafka_fatal_error() returns a non-NO_ERROR
  *        value, or \p timeout_ms elapses.
@@ -66,13 +63,8 @@ static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
         char errstr[256];
 
         while (test_clock() < deadline) {
-                rd_kafka_resp_err_t err;
-
-                /* Drive the event loop so the fatal error callback
-                 * is processed. */
-                poll_share_consumer(share_c, 100);
-
-                err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
+                rd_kafka_resp_err_t err =
+                    rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
                                          errstr, sizeof(errstr));
                 if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
                         return err;
@@ -109,10 +101,6 @@ static int wait_assignment_count(rd_kafka_share_t *share_c,
         while (test_clock() < deadline) {
                 rd_kafka_topic_partition_list_t *assignment;
 
-                /* Drive the share consumer event loop so heartbeat
-                 * responses and assignment changes are processed. */
-                poll_share_consumer(share_c, 100);
-
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c), &assignment));
                 cnt = assignment->cnt;
@@ -122,27 +110,6 @@ static int wait_assignment_count(rd_kafka_share_t *share_c,
                         return cnt;
 
                 rd_usleep(500 * 1000, 0);
-        }
-        return cnt;
-}
-
-/**
- * @brief Drive the share consumer event loop using
- * rd_kafka_share_consume_batch. Any received messages are discarded.
- *
- * @return The number of valid (non-error) messages received.
- */
-static int poll_share_consumer(rd_kafka_share_t *share_c, int timeout_ms) {
-        rd_kafka_message_t *rkmessages[100];
-        size_t rcvd = 0;
-        size_t i;
-        int cnt = 0;
-
-        rd_kafka_share_consume_batch(share_c, timeout_ms, rkmessages, &rcvd);
-        for (i = 0; i < rcvd; i++) {
-                if (!rkmessages[i]->err)
-                        cnt++;
-                rd_kafka_message_destroy(rkmessages[i]);
         }
         return cnt;
 }
@@ -256,8 +223,6 @@ static void do_test_share_group_assignment_rebalance(void) {
         /* Poll-wait until both consumers have partitions and total == 3 */
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
 
                 TEST_CALL_ERR__(
                     rd_kafka_assignment(test_share_consumer_get_rk(share_c1),
@@ -369,9 +334,6 @@ static void do_test_share_group_multi_topic_assignment(void) {
 
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
-
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -418,9 +380,6 @@ static void do_test_share_group_multi_topic_assignment(void) {
 
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
-                poll_share_consumer(share_c3, 200);
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
@@ -479,9 +438,6 @@ static void do_test_share_group_multi_topic_assignment(void) {
 
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
-                poll_share_consumer(share_c2, 200);
-                poll_share_consumer(share_c3, 200);
-
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c2), &share_c2_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -587,7 +543,7 @@ static void do_test_share_group_error_injection(void) {
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
         /* Poll - consumer should enter fatal state */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Wait for the fatal error to propagate. */
         fatal_err = wait_fatal_error(share_c, 5000);
@@ -651,7 +607,7 @@ static void do_test_share_group_rtt_injection(void) {
 
         /* Wait for initial join and assignment */
         wait_share_heartbeats(mcluster, 1, 500);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify initial assignment */
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
@@ -667,7 +623,7 @@ static void do_test_share_group_rtt_injection(void) {
             RD_KAFKA_RESP_ERR_NO_ERROR, 5000);
 
         /* Poll through the timeout period - consumer should recover */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats resumed after timeout recovery */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -676,7 +632,7 @@ static void do_test_share_group_rtt_injection(void) {
                     found_heartbeats);
 
         /* Poll more to allow assignment to be restored */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify consumer recovered and still has assignment */
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
@@ -745,8 +701,6 @@ static void do_test_share_group_session_timeout(void) {
         /* Poll-wait for both to join and rebalance to complete. */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -828,8 +782,6 @@ static void do_test_share_group_target_assignment(void) {
         /* Poll-wait for both to join and rebalance to complete */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -885,8 +837,6 @@ static void do_test_share_group_target_assignment(void) {
         /* Poll-wait until one consumer has all 4 and the other has 0. */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
@@ -981,12 +931,13 @@ static void do_test_share_group_no_spurious_fencing(void) {
         TEST_ASSERT(wait_assignment_count(share_c, 3, 10000) == 3,
                     "Expected 3 partitions initially");
 
-        /* Poll continuously for 5s (2.5x the 2s session timeout).
+        /* Wait for 5s (2.5x the 2s session timeout) and verify
+         * the assignment is not dropped.
          * If the broker's session timeout timer incorrectly fences active
          * members, the assignment will drop. */
-        TEST_SAY("Polling for 5 seconds with 2s session timeout...\n");
+        TEST_SAY("Waiting for 5 seconds with 2s session timeout...\n");
         for (i = 0; i < 5; i++) {
-                poll_share_consumer(share_c, 500);
+                rd_usleep(1000 * 1000, 0);
 
                 /* Verify assignment is still intact */
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -1053,7 +1004,7 @@ static void do_test_unknown_member_id_error(void) {
             RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID, 0);
 
         /* Poll - consumer should handle error and rejoin */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue (rejoin happened) */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -1118,7 +1069,7 @@ static void do_test_fenced_member_epoch_error(void) {
             RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH, 0);
 
         /* Poll - consumer should handle error and rejoin */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue (rejoin happened) */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -1183,7 +1134,7 @@ static void do_test_coordinator_not_available_error(void) {
             RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE, 0);
 
         /* Poll - consumer should handle transient error and retry */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue after transient error */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -1250,7 +1201,7 @@ static void do_test_not_coordinator_error(void) {
         /* Poll - consumer should find new coordinator and continue.
          * NOT_COORDINATOR triggers coordinator rediscovery which may take
          * longer than COORDINATOR_NOT_AVAILABLE. */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue after finding coordinator */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -1307,7 +1258,7 @@ static void do_test_group_authorization_failed_error(void) {
 
         /* Wait for initial join */
         wait_share_heartbeats(mcluster, 1, 1000);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Inject GROUP_AUTHORIZATION_FAILED error (fatal) */
         rd_kafka_mock_broker_push_request_error_rtts(
@@ -1315,7 +1266,7 @@ static void do_test_group_authorization_failed_error(void) {
             RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED, 0);
 
         /* Poll - should trigger fatal error */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Wait for the fatal error to propagate. */
         fatal_err = wait_fatal_error(share_c, 5000);
@@ -1384,8 +1335,8 @@ static void do_test_group_max_size_reached_error(void) {
         share_c2 = create_share_consumer(bootstraps, group);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
 
-        /* Poll share_c2 - should get fatal error */
-        poll_share_consumer(share_c2, 500);
+        /* Wait for share_c2 to get fatal error */
+        rd_usleep(500 * 1000, 0);
 
         /* Wait for the fatal error to propagate. */
         fatal_err = wait_fatal_error(share_c2, 5000);
@@ -1443,7 +1394,7 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
 
         /* Wait for initial join and assignment */
         wait_share_heartbeats(mcluster, 1, 1000);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify initial assignment (member is now in stable state) */
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
@@ -1459,7 +1410,7 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
             RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID, 0);
 
         /* Poll - consumer should rejoin with epoch=0 */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify rejoin heartbeats */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -1523,8 +1474,6 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         /* Poll-wait for both to join and rebalance to complete */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -1671,9 +1620,6 @@ static void do_test_multiple_members_partition_distribution(void) {
          * and total >= 6. */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
-                poll_share_consumer(share_c3, 200);
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
@@ -1908,10 +1854,9 @@ static void do_test_subscription_change(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Poll-wait for assignment to switch to topic B (3 partitions) */
+        /* Wait for assignment to switch to topic B (3 partitions) */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c, 200);
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c), &assignment));
                 found_topicA = 0;
@@ -1987,7 +1932,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
          * The Java test has member in UNSUBSCRIBED state when the
          * error arrives. */
         TEST_CALL_ERR__(rd_kafka_share_unsubscribe(share_c));
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Now inject GROUP_ID_NOT_FOUND.
          * Since the member is unsubscribed, this should be benign. */
@@ -1996,7 +1941,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
             RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
 
         /* Poll to process the error */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify consumer is NOT in fatal state - error should be benign */
         fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
@@ -2053,7 +1998,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
 
 //         /* Wait for initial join and assignment */
 //         wait_share_heartbeats(mcluster, 1, 1000);
-//         poll_share_consumer(share_c, 500);
+//         rd_usleep(500 * 1000, 0);
 
 //         /* Verify initial assignment - member is in stable state */
 //         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
@@ -2070,7 +2015,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
 //             RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
 
 //         /* Poll - should trigger fatal error */
-//         poll_share_consumer(share_c, 500);
+//         rd_usleep(500 * 1000, 0);
 
 //         /* Verify consumer entered fatal state */
 //         fatal_err = rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
@@ -2125,7 +2070,7 @@ static void do_test_invalid_request_error(void) {
 
         /* Wait for initial join */
         wait_share_heartbeats(mcluster, 1, 1000);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Inject INVALID_REQUEST error (fatal) */
         rd_kafka_mock_broker_push_request_error_rtts(
@@ -2133,7 +2078,7 @@ static void do_test_invalid_request_error(void) {
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
         /* Poll - should trigger fatal error */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Wait for the fatal error to propagate. */
         fatal_err = wait_fatal_error(share_c, 5000);
@@ -2187,7 +2132,7 @@ static void do_test_unsupported_version_error(void) {
 
         /* Wait for initial join */
         wait_share_heartbeats(mcluster, 1, 1000);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Inject UNSUPPORTED_VERSION error (fatal) */
         rd_kafka_mock_broker_push_request_error_rtts(
@@ -2195,7 +2140,7 @@ static void do_test_unsupported_version_error(void) {
             RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION, 0);
 
         /* Poll - should trigger fatal error */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Wait for the fatal error to propagate. */
         fatal_err = wait_fatal_error(share_c, 5000);
@@ -2257,7 +2202,7 @@ static void do_test_coordinator_load_in_progress_error(void) {
             RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS, 0);
 
         /* Poll - consumer should handle transient error and retry */
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify heartbeats continue after transient error */
         found_heartbeats = wait_share_heartbeats(mcluster, 2, 1000);
@@ -2314,7 +2259,7 @@ static void do_test_graceful_shutdown_stable_state(void) {
 
         /* Wait for initial join and assignment */
         wait_share_heartbeats(mcluster, 1, 1000);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify initial assignment - member is in stable state */
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
@@ -2376,7 +2321,7 @@ static void do_test_resubscribe_after_unsubscribe(void) {
         /* First subscribe */
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c, subscription));
         wait_share_heartbeats(mcluster, 1, 1000);
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
                                             &assignment));
@@ -2388,7 +2333,7 @@ static void do_test_resubscribe_after_unsubscribe(void) {
         /* Unsubscribe */
         TEST_SAY("Unsubscribing...\n");
         TEST_CALL_ERR__(rd_kafka_share_unsubscribe(share_c));
-        poll_share_consumer(share_c, 500);
+        rd_usleep(500 * 1000, 0);
 
         /* Verify no assignment after unsubscribe */
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
@@ -2457,14 +2402,7 @@ static void do_test_consumer_leave_rebalance(void) {
 
         /* Wait for initial balance */
         wait_share_heartbeats(mcluster, 4, 1000);
-        poll_share_consumer(share_c1, 500);
-        poll_share_consumer(share_c2, 500);
-        poll_share_consumer(share_c3, 500);
-
         wait_share_heartbeats(mcluster, 3, 1000);
-        poll_share_consumer(share_c1, 500);
-        poll_share_consumer(share_c2, 500);
-        poll_share_consumer(share_c3, 500);
 
         /* Get initial assignments */
         TEST_CALL_ERR__(rd_kafka_assignment(
@@ -2486,8 +2424,6 @@ static void do_test_consumer_leave_rebalance(void) {
         /* Poll-wait for rebalance to propagate to remaining consumers */
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
-                poll_share_consumer(share_c1, 200);
-                poll_share_consumer(share_c2, 200);
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
@@ -2585,7 +2521,6 @@ static void do_test_empty_topic_subscription(void) {
         const char *group_id = topic;
         rd_kafka_share_t *share_c;
         rd_kafka_topic_partition_list_t *subscription, *assignment;
-        int msg_count;
 
         SUB_TEST();
 
@@ -2602,13 +2537,12 @@ static void do_test_empty_topic_subscription(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c, subscription));
         wait_share_heartbeats(mcluster, 3, 1000);
 
-        /* Poll empty topic - should get assignment but no messages */
-        msg_count = poll_share_consumer(share_c, 500);
+        /* Wait for assignment on empty topic */
+        rd_usleep(500 * 1000, 0);
 
         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
                                             &assignment));
-        TEST_SAY("Empty topic: %d partitions, %d messages\n", assignment->cnt,
-                 msg_count);
+        TEST_SAY("Empty topic: %d partitions\n", assignment->cnt);
         TEST_ASSERT(assignment->cnt == 3, "Expected 3 partitions, got %d",
                     assignment->cnt);
 

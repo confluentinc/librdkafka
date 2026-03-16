@@ -1599,6 +1599,10 @@ int16_t rd_kafka_message_delivery_count(const rd_kafka_message_t *rkmessage) {
                 return 0;
 
         rkm = rd_kafka_message2msg((rd_kafka_message_t *)rkmessage);
+
+        if (unlikely(!rkm))
+                return 0;
+
         return rkm->rkm_u.consumer.delivery_count;
 }
 

@@ -117,15 +117,7 @@ static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
  */
 static rd_kafka_share_AcknowledgeType_t
 get_random_ack_type(unsigned int *seed) {
-        int r = rand_r(seed) % 3;
-        switch (r) {
-        case 0:
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
-        case 1:
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT;
-        default:
-                return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE;
-        }
+        return (rd_kafka_share_AcknowledgeType_t)((rand_r(seed) % 3) + 1);
 }
 
 /**
@@ -255,6 +247,79 @@ static int get_topic_index(ack_test_config_t *config,
 }
 
 /**
+ * @brief Handle a redelivered message (previously RELEASE'd).
+ * @returns rd_true if message was redelivered and handled, rd_false otherwise.
+ */
+static rd_bool_t handle_redelivered_message(ack_test_state_t *state,
+                                            rd_kafka_message_t *msg) {
+        int released_idx;
+        rd_kafka_topic_partition_t *rktpar;
+        int16_t delivery_count = rd_kafka_message_delivery_count(msg);
+
+        released_idx = find_message_in_list(state->released_msgs,
+                                            rd_kafka_topic_name(msg->rkt),
+                                            msg->partition, msg->offset);
+        if (released_idx < 0)
+                return rd_false;
+
+        TEST_ASSERT(delivery_count == 2,
+                    "RELEASE'd message has delivery_count=%d, expected 2",
+                    delivery_count);
+
+        remove_message_from_list_at(state->released_msgs, released_idx);
+
+        rktpar = rd_kafka_topic_partition_list_add(
+            state->redelivered_msgs, rd_kafka_topic_name(msg->rkt),
+            msg->partition);
+        rktpar->offset = msg->offset;
+        state->msgs_redelivered++;
+
+        rd_kafka_share_acknowledge_type(state->consumers[0], msg,
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+
+        return rd_true;
+}
+
+/**
+ * @brief Determine ack type based on config and message indices.
+ */
+static rd_kafka_share_AcknowledgeType_t
+determine_ack_type(ack_test_config_t *config,
+                   int t_idx,
+                   int p_idx,
+                   int m_idx,
+                   unsigned int *seed) {
+        if (config->use_random_acks)
+                return get_random_ack_type(seed);
+
+        if (t_idx >= 0 && p_idx < config->partitions[t_idx] &&
+            m_idx < MAX_MSGS_PER_PART)
+                return config->actions[t_idx][p_idx][m_idx];
+
+        return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
+}
+
+/**
+ * @brief Track ack type in state and add to released list if RELEASE.
+ */
+static void track_ack_type(ack_test_state_t *state,
+                           rd_kafka_message_t *msg,
+                           rd_kafka_share_AcknowledgeType_t ack_type) {
+        if (ack_type == RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE) {
+                rd_kafka_topic_partition_t *rktpar;
+                rktpar = rd_kafka_topic_partition_list_add(
+                    state->released_msgs, rd_kafka_topic_name(msg->rkt),
+                    msg->partition);
+                rktpar->offset = msg->offset;
+                state->msgs_released++;
+        } else if (ack_type == RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT) {
+                state->msgs_accepted++;
+        } else {
+                state->msgs_rejected++;
+        }
+}
+
+/**
  * @brief Consume messages and apply acknowledgements based on config
  */
 static void consume_and_acknowledge(ack_test_config_t *config,
@@ -267,11 +332,9 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         int msg_idx[MAX_TOPICS][MAX_PARTITIONS] = {{0}};
         unsigned int seed                       = config->random_seed;
 
-        /* Use higher timeout/attempts for random mode with many messages */
         if (config->use_random_acks) {
                 poll_timeout = 5000;
-                /* Scale attempts based on message count */
-                attempts = 200 + (config->total_msgs / 1000) * 50;
+                attempts     = 200 + (config->total_msgs / 1000) * 50;
         }
 
         state->original_cnt     = 0;
@@ -297,141 +360,51 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err) {
-                                int t_idx, p_idx, m_idx;
-                                rd_kafka_share_AcknowledgeType_t ack_type;
-                                rd_kafka_resp_err_t ack_err;
-                                int16_t delivery_count =
-                                    rd_kafka_message_delivery_count(batch[m]);
-
-                                t_idx = get_topic_index(
-                                    config, state,
-                                    rd_kafka_topic_name(batch[m]->rkt));
-                                p_idx = batch[m]->partition;
-
-                                /*
-                                 * In random mode, check if this message was
-                                 * previously RELEASE'd (redelivery).
-                                 */
-                                if (config->use_random_acks) {
-                                        int released_idx = find_message_in_list(
-                                            state->released_msgs,
-                                            rd_kafka_topic_name(batch[m]->rkt),
-                                            batch[m]->partition,
-                                            batch[m]->offset);
-
-                                        if (released_idx >= 0) {
-                                                /* This is a redelivered msg */
-                                                rd_kafka_topic_partition_t
-                                                    *rktpar;
-
-                                                TEST_ASSERT(
-                                                    delivery_count > 1,
-                                                    "RELEASE'd message has "
-                                                    "delivery_count=%d, "
-                                                    "expected > 1",
-                                                    delivery_count);
-
-                                                /* Remove from released list */
-                                                remove_message_from_list_at(
-                                                    state->released_msgs,
-                                                    released_idx);
-
-                                                /* Track as redelivered */
-                                                rktpar =
-                                                    rd_kafka_topic_partition_list_add(
-                                                        state->redelivered_msgs,
-                                                        rd_kafka_topic_name(
-                                                            batch[m]->rkt),
-                                                        batch[m]->partition);
-                                                rktpar->offset =
-                                                    batch[m]->offset;
-                                                state->msgs_redelivered++;
-
-                                                rd_kafka_share_acknowledge_type(
-                                                    state->consumers[0],
-                                                    batch[m],
-                                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-                                                rd_kafka_message_destroy(
-                                                    batch[m]);
-                                                continue;
-                                        }
-                                }
-
-                                /* Determine ack type based on mode */
-                                if (config->use_random_acks) {
-                                        ack_type = get_random_ack_type(&seed);
-                                } else if (t_idx >= 0 &&
-                                           p_idx < config->partitions[t_idx]) {
-                                        m_idx = msg_idx[t_idx][p_idx]++;
-                                        if (m_idx < MAX_MSGS_PER_PART)
-                                                ack_type =
-                                                    config
-                                                        ->actions[t_idx][p_idx]
-                                                                 [m_idx];
-                                        else
-                                                ack_type =
-                                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
-                                } else {
-                                        ack_type =
-                                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
-                                }
-
-                                /*
-                                 * Send the acknowledgement.
-                                 * If RELEASE, add to released_msgs immediately
-                                 * so we can track expected redeliveries.
-                                 */
-                                if (ack_type ==
-                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE) {
-                                        rd_kafka_topic_partition_t *rktpar;
-                                        rktpar =
-                                            rd_kafka_topic_partition_list_add(
-                                                state->released_msgs,
-                                                rd_kafka_topic_name(
-                                                    batch[m]->rkt),
-                                                batch[m]->partition);
-                                        rktpar->offset = batch[m]->offset;
-                                        state->msgs_released++;
-                                } else if (
-                                    ack_type ==
-                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT) {
-                                        state->msgs_accepted++;
-                                } else if (
-                                    ack_type ==
-                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT) {
-                                        state->msgs_rejected++;
-                                }
-
-                                ack_err = rd_kafka_share_acknowledge_type(
-                                    state->consumers[0], batch[m], ack_type);
-                                TEST_ASSERT(ack_err ==
-                                                RD_KAFKA_RESP_ERR_NO_ERROR,
-                                            "Acknowledge failed: %s",
-                                            rd_kafka_err2str(ack_err));
-
-                                /* Verify delivery_count = 1 on first delivery
-                                 */
-                                TEST_ASSERT(
-                                    delivery_count == 1,
-                                    "Expected delivery_count=1 on first "
-                                    "delivery, got %d",
-                                    delivery_count);
-
-                                if (state->original_cnt < 1000) {
-                                        state->original_offsets
-                                            [state->original_cnt++] =
-                                            batch[m]->offset;
-                                }
-
-                                total_consumed++;
+                        if (batch[m]->err) {
+                                rd_kafka_message_destroy(batch[m]);
+                                continue;
                         }
+
+                        if (config->use_random_acks &&
+                            handle_redelivered_message(state, batch[m])) {
+                                rd_kafka_message_destroy(batch[m]);
+                                continue;
+                        }
+
+                        int t_idx = get_topic_index(
+                            config, state, rd_kafka_topic_name(batch[m]->rkt));
+                        int p_idx = batch[m]->partition;
+                        int m_idx = (t_idx >= 0) ? msg_idx[t_idx][p_idx]++ : 0;
+
+                        rd_kafka_share_AcknowledgeType_t ack_type =
+                            determine_ack_type(config, t_idx, p_idx, m_idx,
+                                               &seed);
+
+                        track_ack_type(state, batch[m], ack_type);
+
+                        rd_kafka_resp_err_t ack_err =
+                            rd_kafka_share_acknowledge_type(state->consumers[0],
+                                                            batch[m], ack_type);
+                        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "Acknowledge failed: %s",
+                                    rd_kafka_err2str(ack_err));
+
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(batch[m]) == 1,
+                            "Expected delivery_count=1 on first delivery, "
+                            "got %d",
+                            rd_kafka_message_delivery_count(batch[m]));
+
+                        if (state->original_cnt < 1000)
+                                state->original_offsets[state->original_cnt++] =
+                                    batch[m]->offset;
+
+                        total_consumed++;
                         rd_kafka_message_destroy(batch[m]);
                 }
 
-                /* Progress logging: more frequent for random mode */
                 if (config->use_random_acks) {
-                        if (total_consumed % 500 == 0 || rcvd > 0) {
+                        if (total_consumed % 500 == 0 || rcvd > 0)
                                 TEST_SAY(
                                     "Progress: %zu/%d (A:%d R:%d L:%d "
                                     "early_redeliv:%d)\n",
@@ -439,7 +412,6 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                     state->msgs_accepted, state->msgs_rejected,
                                     state->msgs_released,
                                     state->msgs_redelivered);
-                        }
                 } else {
                         TEST_SAY("Progress: %zu/%d\n", total_consumed,
                                  state->msgs_produced);
@@ -451,14 +423,13 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                     "Expected to consume %d messages, got %d",
                     state->msgs_produced, state->msgs_consumed);
 
-        if (config->use_random_acks) {
+        if (config->use_random_acks)
                 TEST_SAY(
                     "Consumed %d: ACCEPT=%d, REJECT=%d, RELEASE=%d, "
                     "early_redelivered=%d\n",
                     state->msgs_consumed, state->msgs_accepted,
                     state->msgs_rejected, state->msgs_released,
                     state->msgs_redelivered);
-        }
 }
 
 /**

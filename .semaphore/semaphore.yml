@@ -173,8 +173,7 @@ blocks:
             - brew install java
             - sudo ln -sfn $(brew --prefix java)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
             - export JAVA_HOME=$(/usr/libexec/java_home)
-            - python3 -m pip install trivup
-            - python3 -m pip install -r tests/requirements.txt
+            - python3 -m pip install trivup jsoncomment
             - ./configure --install-deps --source-deps-only --enable-devel
             - make -j all
             - make -j -C tests build

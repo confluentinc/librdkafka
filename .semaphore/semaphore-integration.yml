@@ -269,9 +269,6 @@ promotions:
           name: TEST_KAFKA_VERSION
           default_value: "4.2.0"
         - required: true
-          name: TEST_CP_VERSION
-          default_value: "8.2.0"
-        - required: true
           name: TEST_TYPE
           default_value: "plaintext,ssl"
           options:

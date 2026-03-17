@@ -170,9 +170,9 @@ blocks:
       jobs:
         - name: 'Build and run share consumer tests (0170+)'
           commands:
-            - brew install java
-            - sudo ln -sfn $(brew --prefix java)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
-            - export JAVA_HOME=$(/usr/libexec/java_home)
+            - brew install openjdk@21
+            - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+            - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
             - python3 -m pip install trivup jsoncomment
             - cache restore trivup-kafka-osx-${KAFKA_VERSION}-${CACHE_TAG}
             - >-

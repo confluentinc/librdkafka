@@ -173,7 +173,7 @@ blocks:
             - brew install openjdk@21
             - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
             - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
-            - python3 -m pip install trivup jsoncomment
+            - python3 -m pip install tests/trivup/trivup-0.14.0.tar.gz jsoncomment
             - cache restore trivup-kafka-osx-${KAFKA_VERSION}-${CACHE_TAG}
             - >-
               if [ ! -d tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION} ]; then
@@ -184,11 +184,11 @@ blocks:
             - ./configure --install-deps --source-deps-only --enable-devel
             - make -j all
             - make -j -C tests build
-            - java -version
             - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft
               --version ${KAFKA_VERSION}
               --cpversion ${CP_VERSION} --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
-              || (echo "=== Broker logs ===" && find tests/tmp-KafkaCluster -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; && sleep 7200)
+              || sleep 7200
+            - cache store trivup-kafka-osx-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
   - name: 'Linux Ubuntu aarch64: share consumer tests'
     dependencies: []

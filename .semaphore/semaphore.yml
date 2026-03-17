@@ -184,10 +184,11 @@ blocks:
             - ./configure --install-deps --source-deps-only --enable-devel
             - make -j all
             - make -j -C tests build
+            - java -version
             - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft
               --version ${KAFKA_VERSION}
               --cpversion ${CP_VERSION} --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
-            - cache store trivup-kafka-osx-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+              || (echo "=== Broker logs ===" && find tests/tmp-KafkaCluster -name "*.log" -exec echo "--- {} ---" \; -exec cat {} \; && sleep 7200)
 
   - name: 'Linux Ubuntu aarch64: share consumer tests'
     dependencies: []

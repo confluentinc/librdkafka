@@ -10,8 +10,13 @@ fi
 KAFKA_VERSION=$1
 CP_VERSION=$2
 
-source /home/user/venv/bin/activate
-./configure --install-deps --enable-werror --enable-devel
+if [[ "$(uname)" == "Darwin" ]]; then
+    CONFIGURE_ARGS="--install-deps --source-deps-only"
+else
+    source /home/user/venv/bin/activate
+    CONFIGURE_ARGS="--install-deps --enable-werror"
+fi
+./configure ${CONFIGURE_ARGS}
 make -j all
 make -j -C tests build
 (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft \

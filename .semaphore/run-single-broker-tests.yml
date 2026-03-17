@@ -9,6 +9,9 @@ execution_time_limit:
   hours: 3
 
 global_job_config:
+  env_vars:
+    - name: TEST_CP_VERSION
+      value: "8.2.0"
   prologue:
     commands:
       - checkout

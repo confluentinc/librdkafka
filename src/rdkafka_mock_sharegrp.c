@@ -836,14 +836,14 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
         } else if (SessionEpoch > 0) {
                 /* 4. SessionEpoch > 0: validate epoch. */
                 if (!session) {
-                        /* KIP-932: session not in cache →
+                        /* Session not in cache →
                          * SHARE_SESSION_NOT_FOUND (distinct from epoch
                          * mismatch which uses
                          * INVALID_SHARE_SESSION_EPOCH). */
                         *sessionp = NULL;
                         return RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;
                 } else if (SessionEpoch != session->session_epoch) {
-                        /* KIP-932: epoch mismatch → destroy the stale
+                        /* Epoch mismatch → destroy the stale
                          * session and return INVALID_SHARE_SESSION_EPOCH.
                          * The client handles this by resetting its
                          * per-broker epoch to 0 (opening a fresh session
@@ -886,7 +886,7 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         if (strcmp(state->owner_member_id, member_id) != 0)
                                 continue;
 
-                        /* Per KIP-932: if delivery count has reached
+                        /* If delivery count has reached
                          * the limit, archive instead of releasing. */
                         if (mshgrp->max_delivery_attempts > 0 &&
                             state->delivery_count >=
@@ -925,7 +925,7 @@ static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                             state->lock_expiry_ts > now)
                                 continue;
 
-                        /* Lock has expired.  Per KIP-932: if delivery
+                        /* Lock has expired. If delivery
                          * count has reached the limit, archive the
                          * record instead of making it available. */
                         if (mshgrp->max_delivery_attempts > 0 &&

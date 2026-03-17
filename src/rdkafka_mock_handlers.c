@@ -3685,7 +3685,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
         rd_kafka_buf_read_str(rkbuf, &MemberId);
-        /* KIP-932: ShareFetch has ShareSessionEpoch only, no SessionId.
+        /* ShareFetch has ShareSessionEpoch only, no SessionId.
          * Sessions are keyed by (GroupId, MemberId). */
         rd_kafka_buf_read_i32(rkbuf, &SessionEpoch);
         rd_kafka_buf_read_i32(rkbuf, &MaxWaitMs);
@@ -3874,7 +3874,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         session->session_epoch++;
                 }
 
-                /* KIP-932: epoch=-1 (final fetch / close session) must
+                /* epoch=-1 (final fetch / close session) must
                  * not add or forget topics. */
                 if (!err && SessionEpoch == -1 &&
                     ((requested_partitions && requested_partitions->cnt > 0) ||
@@ -3937,7 +3937,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         }
                 }
 
-                /* KIP-932: epoch=0 (full fetch / new session) must not
+                /* epoch=0 (full fetch / new session) must not
                  * contain acknowledgements. */
                 if (!err && SessionEpoch == 0 &&
                     rd_list_cnt(&ack_entries) > 0) {
@@ -4326,7 +4326,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                     sgrp, &MemberId, mconn->broker->id, SessionEpoch, &session,
                     "ShareAcknowledge");
 
-                /* KIP-932: ShareAcknowledge must not use epoch=0
+                /* ShareAcknowledge must not use epoch=0
                  * (only ShareFetch can open sessions). */
                 if (!err && SessionEpoch == 0) {
                         err = RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
@@ -4359,7 +4359,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                         }
                 }
 
-                /* KIP-932: epoch=-1 (final ack) → release remaining
+                /* epoch=-1 (final ack) → release remaining
                  * acquired records and close the session. */
                 if (!err && session && SessionEpoch == -1) {
                         rd_kafka_mock_sgrp_release_member_locks(

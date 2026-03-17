@@ -43,7 +43,7 @@ blocks:
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - ./tests/run-all-tests.sh
+            - ./tests/run-all-tests.sh 
         - name: "SSL cluster (x86_64)"
           env_vars:
             - name: TEST_SSL

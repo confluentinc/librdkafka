@@ -267,7 +267,7 @@ static void do_test_share_group_assignment_rebalance(void) {
         rd_kafka_share_consumer_close(share_c2);
         rd_kafka_share_destroy(share_c2);
 
-        cnt = wait_assignment_count(share_c1, 3, 15000);
+        cnt = wait_assignment_count(share_c1, 3, 10000);
         TEST_ASSERT(cnt == 3,
                     "Expected C1 to have 3 partitions after C2 left, got %d",
                     cnt);
@@ -475,7 +475,7 @@ static void do_test_share_group_multi_topic_assignment(void) {
         rd_kafka_share_destroy(share_c2);
 
         /* Wait for C3 to stabilize with 2 events, 0 orders */
-        cnt = wait_assignment_count(share_c3, 2, 15000);
+        cnt = wait_assignment_count(share_c3, 2, 10000);
         TEST_CALL_ERR__(rd_kafka_assignment(
             test_share_consumer_get_rk(share_c3), &share_c3_assign));
         TEST_ASSERT(count_topic_partitions(share_c3_assign, topic_events) == 2,
@@ -1489,7 +1489,7 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         rd_kafka_share_destroy(share_c2);
 
         /* Wait for C1 to get all partitions after C2 left */
-        TEST_ASSERT(wait_assignment_count(share_c1, 4, 15000) == 4,
+        TEST_ASSERT(wait_assignment_count(share_c1, 4, 10000) == 4,
                     "C1 should have all 4 partitions after C2 left");
 
         /* Cleanup */

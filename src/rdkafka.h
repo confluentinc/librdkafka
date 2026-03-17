@@ -3179,9 +3179,10 @@ typedef enum rd_kafka_share_AcknowledgeType_s {
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if there is discrepancy with the
- * input parameters like rkmessage is NULL, RD_KAFKA_RESP_ERR__STATE if there is
- * some internal discrepancy like we are not in explicit acknowledgement mode or
- * offset is a GAP record.
+ *          input parameters like rkmessage is NULL,
+ *          RD_KAFKA_RESP_ERR__STATE if there is some internal discrepancy
+ *          like we are not in explicit acknowledgement mode or
+ *          offset is a GAP record.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
@@ -3197,9 +3198,10 @@ rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if there is discrepancy with the
- * input parameters like rkmessage is NULL, RD_KAFKA_RESP_ERR__STATE if there is
- * some internal discrepancy like we are not in explicit acknowledgement mode or
- * offset is a GAP record.
+ *          input parameters like rkmessage is NULL,
+ *          RD_KAFKA_RESP_ERR__STATE if there is some internal discrepancy
+ *          like we are not in explicit acknowledgement mode or
+ *          offset is a GAP record.
  */
 RD_EXPORT
 rd_kafka_resp_err_t
@@ -3218,9 +3220,10 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
  *          RD_KAFKA_RESP_ERR__INVALID_ARG if there is discrepancy with the
- * input parameters like rkmessage is NULL, RD_KAFKA_RESP_ERR__STATE if there is
- * some internal discrepancy like we are not in explicit acknowledgement mode or
- * offset is a GAP record.
+ *          input parameters like rkmessage is NULL,
+ *          RD_KAFKA_RESP_ERR__STATE if there is some internal discrepancy
+ *          like we are not in explicit acknowledgement mode or
+ *          offset is a GAP record.
  *
  * TODO KIP-932: Check if it should only be allowed for error cases
  *               like Java.

@@ -1052,7 +1052,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
          * where we have a message. */
         RD_LIST_FOREACH(batches, inflight_acks, pi) {
 
-                total_offsets += batches->response_msgs_count;
+                total_offsets += batches->response_acquired_offsets_count;
 
                 rd_kafka_topic_partition_private_t *parpriv =
                     (rd_kafka_topic_partition_private_t *)
@@ -1310,7 +1310,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
         batches_out->response_leader_id    = CurrentLeader.LeaderId;
         batches_out->response_leader_epoch = CurrentLeader.LeaderEpoch;
-        batches_out->response_msgs_count   = 0;
+        batches_out->response_acquired_offsets_count = 0;
         /* Pre-allocate capacity without re-initializing the list.
          * batches_out->entries was already initialized by
          * rd_kafka_share_ack_batches_new() with the proper
@@ -1367,7 +1367,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         }
 
                         rd_list_add(&batches_out->entries, entry);
-                        batches_out->response_msgs_count += (int32_t)size;
+                        batches_out->response_acquired_offsets_count +=
+                            (int32_t)size;
                 }
 
                 /* Mark as sorted to enable binary search in rd_list_find(). */

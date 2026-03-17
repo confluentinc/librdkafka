@@ -94,9 +94,9 @@ typedef struct rd_kafka_share_ack_batches_s {
                                         *   were acquired */
         int32_t response_leader_epoch; /**< Leader epoch when records
                                         *   were acquired */
-        int64_t response_msgs_count;   /**< Total acquired messages */
-        rd_list_t entries;             /**< rd_kafka_share_ack_batch_entry_t*,
-                                        *   sorted by start_offset */
+        int64_t response_acquired_offsets_count; /**< Total acquired messages */
+        rd_list_t entries; /**< rd_kafka_share_ack_batch_entry_t*,
+                            *   sorted by start_offset */
 } rd_kafka_share_ack_batches_t;
 
 /** Allocate and initialize a share ack batch entry (offset range + types
@@ -122,7 +122,7 @@ rd_kafka_share_ack_batches_t *
 rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
                                int32_t response_leader_id,
                                int32_t response_leader_epoch,
-                               int64_t response_msgs_count);
+                               int64_t response_acquired_offsets_count);
 
 /** Allocate an empty share ack batches (all fields zeroed). */
 rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new_empty(void);

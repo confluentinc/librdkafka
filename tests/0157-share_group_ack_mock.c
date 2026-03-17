@@ -185,7 +185,7 @@ static void do_test_implicit_ack_no_redelivery(void) {
         rd_kafka_share_t *consumer;
         int consumed, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -230,7 +230,7 @@ static void do_test_implicit_ack_with_new_records(void) {
         rd_kafka_share_t *consumer;
         int consumed_a, consumed_b, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -290,7 +290,7 @@ static void do_test_implicit_ack_cross_consumer(void) {
         rd_kafka_share_t *consumer_a, *consumer_b;
         int consumed_a, consumed_b, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -345,7 +345,7 @@ static void do_test_implicit_ack_multi_partition(void) {
         rd_kafka_share_t *consumer;
         int consumed, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -393,7 +393,7 @@ static void do_test_implicit_ack_multiple_rounds(void) {
         int total_consumed  = 0;
         int round_ok        = 1;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -454,7 +454,7 @@ static void do_test_implicit_ack_single_record(void) {
         rd_kafka_share_t *consumer;
         int consumed, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -496,7 +496,7 @@ static void do_test_implicit_ack_large_batch(void) {
         rd_kafka_share_t *consumer;
         int consumed, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -541,7 +541,7 @@ static void do_test_implicit_ack_multi_topic(void) {
         rd_kafka_share_t *consumer;
         int consumed, extra, consumed_b;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -602,7 +602,7 @@ static void do_test_implicit_ack_multi_msgset(void) {
         rd_kafka_share_t *consumer;
         int consumed, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1206,7 +1206,7 @@ static void do_test_empty_topic_no_ack_side_effects(void) {
         rd_kafka_share_t *consumer;
         int consumed_empty, consumed, extra;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,

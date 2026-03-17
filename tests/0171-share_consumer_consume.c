@@ -932,7 +932,7 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
                                                                       partitions
                                                                       each */
 
-        // /* Multi-consumer tests */
+        /* Multi-consumer tests */
         test_multiple_consumers_single_topic_single_partition();       /* Multi
                                                                           consumer
                                                                           sharing

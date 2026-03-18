@@ -1342,7 +1342,7 @@ static void do_test_coordinator_failover_ack_recovery(void) {
  *  Test runner
  * =================================================================== */
 
-int main_0157_share_group_ack_mock(int argc, char **argv) {
+int main_0157_share_consumer_ack_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         /* This test suite has many subtests; set a generous timeout.
          * When running in parallel with other test suites (e.g., 0155, 0156)

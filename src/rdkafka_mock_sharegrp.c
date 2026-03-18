@@ -35,7 +35,6 @@
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
-#include "rdkafka_mock_group_common.h"
 
 /**
  * @brief Share group target assignment (manual)
@@ -66,8 +65,12 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
 rd_kafka_mock_sharegroup_t *
 rd_kafka_mock_sharegroup_find(rd_kafka_mock_cluster_t *mcluster,
                               const rd_kafkap_str_t *GroupId) {
-        return RD_KAFKA_MOCK_GROUP_FIND(&mcluster->sharegrps, GroupId,
-                                        rd_kafka_mock_sharegroup_t);
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
+                if (!rd_kafkap_str_cmp_str(GroupId, mshgrp->id))
+                        return mshgrp;
+        }
+        return NULL;
 }
 
 /**
@@ -169,8 +172,12 @@ void rd_kafka_mock_sharegroup_destroy(rd_kafka_mock_sharegroup_t *mshgrp) {
 rd_kafka_mock_sharegroup_member_t *
 rd_kafka_mock_sharegroup_member_find(rd_kafka_mock_sharegroup_t *mshgrp,
                                      const rd_kafkap_str_t *MemberId) {
-        return RD_KAFKA_MOCK_MEMBER_FIND(&mshgrp->members, MemberId,
-                                         rd_kafka_mock_sharegroup_member_t);
+        rd_kafka_mock_sharegroup_member_t *member;
+        TAILQ_FOREACH(member, &mshgrp->members, link) {
+                if (!rd_kafkap_str_cmp_str(MemberId, member->id))
+                        return member;
+        }
+        return NULL;
 }
 
 /**
@@ -195,9 +202,10 @@ void rd_kafka_mock_sharegroup_member_destroy(
 void rd_kafka_mock_sharegroup_member_active(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sharegroup_member_t *member) {
-        rd_kafka_mock_group_member_mark_active(mshgrp->cluster->rk, "share",
-                                               member->id,
-                                               &member->ts_last_activity);
+        rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCK",
+                     "Marking mock share group member %s as active",
+                     member->id);
+        member->ts_last_activity = rd_clock();
 }
 
 /**
@@ -754,9 +762,9 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
  * @brief Common share-session validation for ShareFetch / ShareAcknowledge.
  *
  * Performs:
- *  1. Member validation (MemberId must be a registered group member).
- *  2. Session lookup by MemberId.
- *  3. SessionEpoch == -1 : close session and release member locks.
+ *  1. Session lookup by (MemberId, NodeId).
+ *  2. SessionEpoch == 0  : destroy old session if any (caller creates new).
+ *  3. SessionEpoch == -1 : keep session alive (FinalContext behaviour).
  *  4. SessionEpoch  > 0  : validate that session exists and epoch matches.
  *
  * On return, \p *sessionp is set to the looked-up session (or NULL if
@@ -769,6 +777,7 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
  *
  * @param sgrp          Share group.
  * @param MemberId      Member identifier from the request.
+ * @param NodeId        Node ID of the broker handling the request.
  * @param SessionEpoch  Session epoch from the request.
  * @param sessionp      [out] Session pointer.
  * @param api_name      API name for debug messages ("ShareFetch" etc.).
@@ -780,6 +789,7 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
 rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
     rd_kafka_mock_sharegroup_t *sgrp,
     const rd_kafkap_str_t *MemberId,
+    int32_t NodeId,
     int32_t SessionEpoch,
     rd_kafka_mock_sgrp_fetch_session_t **sessionp,
     const char *api_name) {
@@ -787,22 +797,25 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
 
         *sessionp = NULL;
 
-        /* 1. Member validation: MemberId must be a registered member. */
-        if (!rd_kafka_mock_sharegroup_member_find(sgrp, MemberId)) {
-                rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCK",
-                             "%s: unknown member %.*s in group %s", api_name,
-                             RD_KAFKAP_STR_PR(MemberId), sgrp->id);
-                return RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
-        }
+        /* Per KIP-932, the real Kafka broker's partition leader does NOT
+         * validate group membership on ShareFetch — share sessions are
+         * managed independently of the group coordinator. */
 
-        /* 2. Look up existing session by MemberId. */
+        /* 1. Look up existing session by (MemberId, NodeId).
+         *    In real Kafka, ShareSessionCache is per-broker, so each
+         *    broker maintains its own independent session for the same
+         *    member.  We emulate this by keying on both fields. */
         TAILQ_FOREACH(session, &sgrp->fetch_sessions, link) {
-                if (!rd_kafkap_str_cmp_str(MemberId, session->member_id))
+                if (!rd_kafkap_str_cmp_str(MemberId, session->member_id) &&
+                    session->node_id == NodeId)
                         break;
         }
 
-        /* 3. SessionEpoch == -1: close session. */
-        if (SessionEpoch == -1) {
+        /* 2. SessionEpoch == 0: open a new session.
+         *    If an old session exists for this member (e.g. after a
+         *    LEAVE→rejoin cycle), destroy it so the caller creates a
+         *    fresh one. */
+        if (SessionEpoch == 0) {
                 if (session) {
                         rd_kafka_mock_sgrp_release_member_locks(
                             sgrp, session->member_id);
@@ -811,15 +824,37 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
                         session = NULL;
                 }
-                /* Closing a non-existent session is not an error. */
+        } else if (SessionEpoch == -1) {
+                /* 3. SessionEpoch == -1 (FINAL_EPOCH): return the existing
+                 *    session so the caller can process final acks and
+                 *    then close it.  If no session exists, fail with
+                 *    SHARE_SESSION_NOT_FOUND per KIP-932. */
+                if (!session) {
+                        *sessionp = NULL;
+                        return RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;
+                }
         } else if (SessionEpoch > 0) {
                 /* 4. SessionEpoch > 0: validate epoch. */
                 if (!session) {
+                        /* Session not in cache →
+                         * SHARE_SESSION_NOT_FOUND (distinct from epoch
+                         * mismatch which uses
+                         * INVALID_SHARE_SESSION_EPOCH). */
                         *sessionp = NULL;
-                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        return RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;
                 } else if (SessionEpoch != session->session_epoch) {
-                        *sessionp = session;
-                        return RD_KAFKA_RESP_ERR_INVALID_FETCH_SESSION_EPOCH;
+                        /* Epoch mismatch → destroy the stale
+                         * session and return INVALID_SHARE_SESSION_EPOCH.
+                         * The client handles this by resetting its
+                         * per-broker epoch to 0 (opening a fresh session
+                         * on the next fetch). */
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            sgrp, session->member_id);
+                        TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
+                        sgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
+                        *sessionp = NULL;
+                        return RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
                 }
         }
 
@@ -827,6 +862,29 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+/**
+ * @brief Release a single ACQUIRED record state back to AVAILABLE or ARCHIVED.
+ *
+ * If \p mshgrp has a max_delivery_attempts limit and the record's
+ * delivery_count has reached it, the record is archived instead of
+ * made available again.  Clears owner_member_id and lock_expiry_ts.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_sgrp_record_release(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_record_state_t *state) {
+        if (mshgrp->max_delivery_attempts > 0 &&
+            state->delivery_count >= mshgrp->max_delivery_attempts) {
+                state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+        } else {
+                state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
+        }
+        rd_free(state->owner_member_id);
+        state->owner_member_id = NULL;
+        state->lock_expiry_ts  = 0;
+}
 
 /**
  * @brief Release all ACQUIRED records owned by \p member_id across all
@@ -851,10 +909,7 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         if (strcmp(state->owner_member_id, member_id) != 0)
                                 continue;
 
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                        rd_free(state->owner_member_id);
-                        state->owner_member_id = NULL;
-                        state->lock_expiry_ts  = 0;
+                        rd_kafka_mock_sgrp_record_release(mshgrp, state);
                 }
         }
 }
@@ -880,11 +935,10 @@ static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                             state->lock_expiry_ts > now)
                                 continue;
 
-                        /* Lock has expired — release back to AVAILABLE */
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                        RD_IF_FREE(state->owner_member_id, rd_free);
-                        state->owner_member_id = NULL;
-                        state->lock_expiry_ts  = 0;
+                        /* Lock has expired. If delivery
+                         * count has reached the limit, archive the
+                         * record instead of making it available. */
+                        rd_kafka_mock_sgrp_record_release(mshgrp, state);
                 }
         }
 }
@@ -947,16 +1001,40 @@ void rd_kafka_mock_sharegrps_connection_closed(
 
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
                 rd_kafka_mock_sharegroup_member_t *member;
+                /* Clear heartbeat connection for any member on this conn. */
                 TAILQ_FOREACH(member, &mshgrp->members, link) {
-                        if (member->conn == mconn) {
-                                /* Per KIP-932, share consumers have no
-                                 * fencing semantics. A connection close is
-                                 * transient — the consumer will reconnect
-                                 * and heartbeat again. Only the session
-                                 * timeout timer should remove members.
-                                 */
+                        if (member->conn == mconn)
                                 member->conn = NULL;
-                        }
+                }
+        }
+}
+
+/**
+ * @brief Close all share fetch sessions on \p node_id.
+ *
+ * Called from rd_kafka_mock_connection_close() where mconn->broker is
+ * guaranteed to be valid.  Must NOT be called with a fake connection pointer.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_sharegrps_node_connection_closed(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t node_id) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
+                rd_kafka_mock_sgrp_fetch_session_t *session, *tmp;
+                /* When a connection is disconnected, any share session
+                 * on that broker is automatically closed. */
+                TAILQ_FOREACH_SAFE(session, &mshgrp->fetch_sessions, link,
+                                   tmp) {
+                        if (session->node_id != node_id)
+                                continue;
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            mshgrp, session->member_id);
+                        TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
+                        mshgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
                 }
         }
 }

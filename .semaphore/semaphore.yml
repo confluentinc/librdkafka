@@ -22,7 +22,7 @@ global_job_config:
     - name: CI
       value: 'true'
     - name: KAFKA_VERSION
-      value: '4.0.0'
+      value: '4.2.0'
     - name: CP_VERSION
       value: '8.0.0'
     # Shows plain output from docker build (no progress bars)
@@ -138,6 +138,66 @@ blocks:
           commands:
             - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG} ./packaging/tools/build-configurations-checks.sh
 
+
+  - name: 'Linux Ubuntu amd64: share consumer tests'
+    dependencies: []
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: 'Build and run share consumer tests'
+          commands:
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG}
+              ./packaging/tools/run-share-consumer-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION}
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+
+  - name: 'OSX arm64/m1: share consumer tests'
+    dependencies: []
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-macos-15-arm64-8
+      jobs:
+        - name: 'Build and run share consumer tests'
+          commands:
+            - brew install openjdk@21
+            - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+            - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+            - python3 -m pip install tests/trivup/trivup-0.14.0.tar.gz jsoncomment
+            - cache restore trivup-kafka-osx-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/run-share-consumer-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION}
+            - cache store trivup-kafka-osx-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+
+  - name: 'Linux Ubuntu aarch64: share consumer tests'
+    dependencies: []
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-arm64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
+        - name: 'Build and run share consumer tests'
+          commands:
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG}
+              ./packaging/tools/run-share-consumer-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION}
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []

@@ -3686,7 +3686,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &GroupId);
         rd_kafka_buf_read_str(rkbuf, &MemberId);
         /* ShareFetch has ShareSessionEpoch only, no SessionId.
-         * Sessions are keyed by (GroupId, MemberId). */
+         * Sessions are keyed by (GroupId, MemberId, NodeId). */
         rd_kafka_buf_read_i32(rkbuf, &SessionEpoch);
         rd_kafka_buf_read_i32(rkbuf, &MaxWaitMs);
         rd_kafka_buf_read_i32(rkbuf, &MinBytes);
@@ -3869,7 +3869,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
                 /* For all successful, non-close requests: update activity
                  * timestamp and increment epoch for next request. */
-                if (!err && session) {
+                if (!err && session && SessionEpoch != -1) {
                         session->ts_last_activity = rd_clock();
                         session->session_epoch++;
                 }
@@ -3926,12 +3926,8 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                         &MemberId,
                                                         state->owner_member_id))
                                                         continue;
-                                                /* Release: mark AVAILABLE */
-                                                state->state =
-                                                    RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                                                rd_free(state->owner_member_id);
-                                                state->owner_member_id = NULL;
-                                                state->lock_expiry_ts  = 0;
+                                                rd_kafka_mock_sgrp_record_release(
+                                                    sgrp, state);
                                         }
                                 }
                         }
@@ -4163,6 +4159,17 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_arraycnt(resp, 0);
                 /* Response: Top-level tags */
                 rd_kafka_buf_write_tags_empty(resp);
+
+                /* epoch=-1 (final fetch) → release remaining acquired
+                 * records and close the session. */
+                if (!err && session && SessionEpoch == -1) {
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            sgrp, session->member_id);
+                        TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
+                        sgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
+                        session = NULL;
+                }
 
                 mtx_unlock(&mcluster->lock);
 

@@ -1,14 +1,11 @@
 #!/bin/bash
 set -e
 
-if [ "$#" -lt 2 ]; then
-    echo "Usage: $0 <kafka-version> <cp-version>"
-    echo "Example: $0 4.2.0 8.0.0"
-    exit 1
-fi
-
-KAFKA_VERSION=$1
-CP_VERSION=$2
+# Use env vars matching run-all-tests.sh convention,
+# with fallback to positional args for backward compatibility.
+export TEST_KAFKA_GIT_REF="${TEST_KAFKA_GIT_REF:-${1:-4.2.0}}"
+export TEST_CP_VERSION="${TEST_CP_VERSION:-${2:-8.2.0}}"
+TEST_CONFIGURATION="${TEST_CONFIGURATION:---kraft}"
 
 if [[ "$(uname)" == "Darwin" ]]; then
     CONFIGURE_ARGS="--install-deps --source-deps-only"
@@ -19,6 +16,9 @@ fi
 ./configure ${CONFIGURE_ARGS}
 make -j all
 make -j -C tests build
-(cd tests && python3 -m trivup.clusters.KafkaCluster --kraft \
- --version ${KAFKA_VERSION} \
- --cpversion ${CP_VERSION} --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
+
+echo "arguments: $TEST_ARGS"
+(cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
+ --version "$TEST_KAFKA_GIT_REF" \
+ --cpversion "$TEST_CP_VERSION" \
+ --cmd "TESTS_SKIP_BEFORE=0170 python run-test-batches.py $TEST_ARGS")

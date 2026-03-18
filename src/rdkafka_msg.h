@@ -160,6 +160,8 @@ typedef struct rd_kafka_msg_s {
                                        *   type
                                        * (rd_kafka_share_internal_acknowledgement_type).
                                        *   Set during response processing. */
+                        int16_t delivery_count; /**< Share consumer: delivery
+                                                 *   count. */
                 } consumer;
         } rkm_u;
 } rd_kafka_msg_t;

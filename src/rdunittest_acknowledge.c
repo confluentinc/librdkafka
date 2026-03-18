@@ -32,7 +32,7 @@
  * Tests the following public APIs:
  * 1. rd_kafka_share_acknowledge() - Acknowledge delivered record with ACCEPT
  * 2. rd_kafka_share_acknowledge_type() - Acknowledge delivered record with type
- * 3. rd_kafka_share_acknowledge_offset() - Acknowledge error record by offset
+ * 3. rd_kafka_share_acknowledge_offset() - Acknowledge record by offset
  */
 
 #include "rd.h"
@@ -130,8 +130,8 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
         batches->response_leader_id    = 1;
         batches->response_leader_epoch = 1;
 
-        int64_t size                 = end_offset - start_offset + 1;
-        batches->response_msgs_count = (int32_t)size;
+        int64_t size = end_offset - start_offset + 1;
+        batches->response_acquired_offsets_count = (int32_t)size;
 
         rd_list_init(&batches->entries, 1, NULL);
 
@@ -356,7 +356,8 @@ static int ut_case_acknowledge_type_release(rd_kafka_share_t *rkshare,
  * @brief Test re-acknowledgement with record-based APIs.
  *
  * Verifies that re-acknowledging a delivered record with record-based APIs
- * succeeds and updates the type. This is allowed before commit.
+ * succeeds and updates the type. This is allowed before sending the
+ * acknowledgement to the broker.
  */
 static int ut_case_reacknowledge_delivered(rd_kafka_share_t *rkshare,
                                            rd_kafka_topic_t *rkt) {
@@ -594,9 +595,9 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         parpriv         = rd_kafka_topic_partition_private_new();
         batches->rktpar->_private = parpriv;
 
-        batches->response_leader_id    = 1;
-        batches->response_leader_epoch = 1;
-        batches->response_msgs_count   = 40;
+        batches->response_leader_id              = 1;
+        batches->response_leader_epoch           = 1;
+        batches->response_acquired_offsets_count = 40;
 
         rd_list_init(&batches->entries, 4, NULL);
 
@@ -869,7 +870,7 @@ static int ut_case_bsearch_empty_entries(rd_kafka_share_t *rkshare,
         batches->rktpar->_private      = parpriv;
         batches->response_leader_id    = 1;
         batches->response_leader_epoch = 1;
-        batches->response_msgs_count   = 0;
+        batches->response_acquired_offsets_count = 0;
 
         rd_list_init(&batches->entries, 0, NULL);
         batches->entries.rl_flags |= RD_LIST_F_SORTED;

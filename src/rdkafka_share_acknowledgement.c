@@ -121,14 +121,15 @@ rd_kafka_share_ack_batches_t *
 rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
                                int32_t response_leader_id,
                                int32_t response_leader_epoch,
-                               int64_t response_msgs_count) {
+                               int64_t response_acquired_offsets_count) {
         rd_kafka_share_ack_batches_t *batches;
 
         batches                        = rd_calloc(1, sizeof(*batches));
         batches->rktpar                = rktpar;
         batches->response_leader_id    = response_leader_id;
         batches->response_leader_epoch = response_leader_epoch;
-        batches->response_msgs_count   = response_msgs_count;
+        batches->response_acquired_offsets_count =
+            response_acquired_offsets_count;
         rd_list_init(&batches->entries, 0,
                      rd_kafka_share_ack_batch_entry_destroy_free);
         return batches;
@@ -152,7 +153,7 @@ rd_kafka_share_ack_batches_copy(const rd_kafka_share_ack_batches_t *src) {
         dst = rd_kafka_share_ack_batches_new(
             src->rktpar ? rd_kafka_topic_partition_copy(src->rktpar) : NULL,
             src->response_leader_id, src->response_leader_epoch,
-            src->response_msgs_count);
+            src->response_acquired_offsets_count);
 
         /* Deep copy all entries and preserve flags (e.g., RD_LIST_F_SORTED) */
         rd_list_copy_to(&dst->entries, &src->entries,
@@ -382,13 +383,6 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
 
                                 j = k;
                         }
-                }
-
-                /* Propagate sorted flag from source - order is preserved */
-                if (inflight_batches->entries.rl_flags & RD_LIST_F_SORTED) {
-                        new_entries.rl_flags |= RD_LIST_F_SORTED;
-                        if (ack_batch)
-                                ack_batch->entries.rl_flags |= RD_LIST_F_SORTED;
                 }
 
                 if (rd_list_is_sorted(&new_entries,

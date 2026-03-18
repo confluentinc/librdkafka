@@ -51,6 +51,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
     rd_list_t *filtered_msgs,
     const int64_t *FirstOffsets,
     const int64_t *LastOffsets,
+    const int16_t *DeliveryCounts,
     int32_t AcquiredRecordsArrayCnt);
 
 

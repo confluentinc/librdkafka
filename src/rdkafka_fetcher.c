@@ -890,6 +890,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
     rd_list_t *filtered_msgs,
     const int64_t *FirstOffsets,
     const int64_t *LastOffsets,
+    const int16_t *DeliveryCounts,
     int32_t AcquiredRecordsArrayCnt) {
 
         rd_kafka_op_t *rko;
@@ -900,6 +901,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
         while ((rko = rd_kafka_q_pop(temp_fetchq, RD_POLL_NOWAIT, 0)) != NULL) {
                 int64_t rko_offset          = rd_kafka_op_get_offset(rko);
                 rd_bool_t in_acquired_range = rd_false;
+                int16_t delivery_count;
                 int32_t range_idx;
 
                 /* Check if this message's offset is within any acquired range
@@ -909,6 +911,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                         if (rko_offset >= FirstOffsets[range_idx] &&
                             rko_offset <= LastOffsets[range_idx]) {
                                 in_acquired_range = rd_true;
+                                delivery_count    = DeliveryCounts[range_idx];
                                 break;
                         }
                 }
@@ -925,6 +928,8 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                                 rkm = &rko->rko_u.fetch.rkm;
                                 rkm->rkm_u.consumer.ack_type =
                                     RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED;
+                                rkm->rkm_u.consumer.delivery_count =
+                                    delivery_count;
                         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rkm = &rko->rko_u.err.rkm;
                                 rkm->rkm_u.consumer.ack_type =
@@ -1047,7 +1052,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
          * where we have a message. */
         RD_LIST_FOREACH(batches, inflight_acks, pi) {
 
-                total_offsets += batches->response_msgs_count;
+                total_offsets += batches->response_acquired_offsets_count;
 
                 rd_kafka_topic_partition_private_t *parpriv =
                     (rd_kafka_topic_partition_private_t *)
@@ -1305,7 +1310,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
         batches_out->response_leader_id    = CurrentLeader.LeaderId;
         batches_out->response_leader_epoch = CurrentLeader.LeaderEpoch;
-        batches_out->response_msgs_count   = 0;
+        batches_out->response_acquired_offsets_count = 0;
         /* Pre-allocate capacity without re-initializing the list.
          * batches_out->entries was already initialized by
          * rd_kafka_share_ack_batches_new() with the proper
@@ -1362,7 +1367,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         }
 
                         rd_list_add(&batches_out->entries, entry);
-                        batches_out->response_msgs_count += (int32_t)size;
+                        batches_out->response_acquired_offsets_count +=
+                            (int32_t)size;
                 }
 
                 /* Mark as sorted to enable binary search in rd_list_find(). */
@@ -1372,7 +1378,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 /* Filter and forward messages in acquired ranges */
                 rd_kafka_share_filter_acquired_records_and_update_ack_type(
                     temp_fetchq, filtered_msgs, FirstOffsets, LastOffsets,
-                    AcquiredRecordsArrayCnt);
+                    DeliveryCounts, AcquiredRecordsArrayCnt);
 
                 rd_free(FirstOffsets);
                 rd_free(LastOffsets);

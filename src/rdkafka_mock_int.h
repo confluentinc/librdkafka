@@ -216,6 +216,7 @@ typedef struct rd_kafka_mock_sgrp_partmeta_s {
 typedef struct rd_kafka_mock_sgrp_fetch_session_s {
         TAILQ_ENTRY(rd_kafka_mock_sgrp_fetch_session_s) link;
         char *member_id;
+        int32_t node_id; /**< Node ID of the broker owning this session */
         int32_t session_id;
         int32_t session_epoch;
         rd_ts_t ts_last_activity;
@@ -652,9 +653,13 @@ void rd_kafka_mock_sgrp_fetch_session_destroy(
 rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
     rd_kafka_mock_sharegroup_t *sgrp,
     const rd_kafkap_str_t *MemberId,
+    int32_t NodeId,
     int32_t SessionEpoch,
     rd_kafka_mock_sgrp_fetch_session_t **sessionp,
     const char *api_name);
+void rd_kafka_mock_sgrp_record_release(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_record_state_t *state);
 void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                                              const char *member_id);
 void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
@@ -863,6 +868,9 @@ void rd_kafka_mock_sharegroup_assignment_recalculate(
 void rd_kafka_mock_sharegrps_connection_closed(
     rd_kafka_mock_cluster_t *mcluster,
     rd_kafka_mock_connection_t *mconn);
+void rd_kafka_mock_sharegrps_node_connection_closed(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t node_id);
 
 /**
  *@}

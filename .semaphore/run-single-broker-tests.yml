@@ -10,6 +10,8 @@ execution_time_limit:
 
 global_job_config:
   env_vars:
+    - name: TEST_KAFKA_VERSION
+      value: "4.2.0"
     - name: TEST_CP_VERSION
       value: "8.2.0"
   prologue:

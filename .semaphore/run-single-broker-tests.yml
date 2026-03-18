@@ -9,13 +9,10 @@ execution_time_limit:
   hours: 3
 
 global_job_config:
-  env_vars:
-    - name: TEST_KAFKA_VERSION
-      value: "4.2.0"
-    - name: TEST_CP_VERSION
-      value: "8.2.0"
   prologue:
     commands:
+      - 'export TEST_KAFKA_VERSION="${TEST_KAFKA_VERSION:-4.2.0}"'
+      - 'export TEST_CP_VERSION="${TEST_CP_VERSION:-8.2.0}"'
       - checkout
       - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
       - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb

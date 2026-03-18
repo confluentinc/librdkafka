@@ -225,9 +225,14 @@ static void remove_message_from_list_at(rd_kafka_topic_partition_list_t *list,
         if (idx < 0 || idx >= list->cnt)
                 return;
 
+        /* Free the topic string being removed */
+        rd_free(list->elems[idx].topic);
+
         /* Swap with last element and decrement count */
         if (idx < list->cnt - 1) {
                 list->elems[idx] = list->elems[list->cnt - 1];
+                /* Null out the moved element to prevent double-free */
+                list->elems[list->cnt - 1].topic = NULL;
         }
         list->cnt--;
 }

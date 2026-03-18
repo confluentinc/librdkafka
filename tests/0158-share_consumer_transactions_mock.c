@@ -144,19 +144,19 @@ static void produce_txn_messages(rd_kafka_t *txn_producer,
                     rd_kafka_abort_transaction(txn_producer, 10000));
 }
 
-static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
-                                            const char *group_id) {
+static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
+                                               const char *group_id) {
         rd_kafka_conf_t *conf;
-        rd_kafka_share_t *share_c;
+        rd_kafka_share_t *rkshare;
+        char errstr[512];
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
-
-        share_c = rd_kafka_share_consumer_new(conf, NULL, 0);
-        TEST_ASSERT(share_c != NULL, "Failed to create share consumer");
-        rd_kafka_share_poll_set_consumer(share_c);
-        return share_c;
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer: %s",
+                    errstr);
+        return rkshare;
 }
 
 static void subscribe_topics(rd_kafka_share_t *share_c,
@@ -173,12 +173,51 @@ static void subscribe_topics(rd_kafka_share_t *share_c,
         rd_kafka_topic_partition_list_destroy(tpl);
 }
 
+/**
+ * @brief Consume up to \p expected messages, retrying up to \p max_attempts.
+ *        Uses the same pattern as 0156's consume_n.
+ */
+static int
+consume_n(rd_kafka_share_t *consumer, int expected, int max_attempts) {
+        int consumed = 0;
+        int attempts = 0;
+
+        while (consumed < expected && attempts < max_attempts) {
+                rd_kafka_message_t *rkmessages[100];
+                size_t rcvd_msgs = 0;
+                rd_kafka_error_t *error;
+                size_t i;
+
+                error = rd_kafka_share_consume_batch(consumer, 500, rkmessages,
+                                                     &rcvd_msgs);
+                attempts++;
+
+                if (error) {
+                        TEST_SAY("consume error: %s\n",
+                                 rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (i = 0; i < rcvd_msgs; i++) {
+                        rd_kafka_message_t *rkmsg = rkmessages[i];
+                        if (rkmsg->err) {
+                                rd_kafka_message_destroy(rkmsg);
+                                continue;
+                        }
+                        consumed++;
+                        rd_kafka_message_destroy(rkmsg);
+                }
+        }
+
+        return consumed;
+}
 
 /**
  * @brief Committed txn data is delivered in read_uncommitted mode.
  */
 static void do_test_txn_committed_read_uncommitted(void) {
-        const char *topic = "kip932_txn_committed_ru";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -190,16 +229,14 @@ static void do_test_txn_committed_read_uncommitted(void) {
 
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-committed-ru");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-committed-ru");
         subscribe_topics(share_c, &topic, 1);
-
-        consumed = test_share_consume_msgs(share_c, 3, 50, 500, &topic, 1);
-
+        consumed = consume_n(share_c, 3, 50);
+        TEST_ASSERT(consumed == 3, "Expected 3 consumed, got %d", consumed);
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
-        TEST_ASSERT(consumed == 3, "Expected 3 consumed, got %d", consumed);
         SUB_TEST_PASS();
 }
 
@@ -209,7 +246,7 @@ static void do_test_txn_committed_read_uncommitted(void) {
  * In read_uncommitted, the broker does NOT filter aborted data.
  */
 static void do_test_txn_aborted_read_uncommitted(void) {
-        const char *topic = "kip932_txn_aborted_ru";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -221,10 +258,10 @@ static void do_test_txn_aborted_read_uncommitted(void) {
 
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_false);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-aborted-ru");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-aborted-ru");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 3, 50, 500, &topic, 1);
+        consumed = consume_n(share_c, 3, 50);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
@@ -241,7 +278,7 @@ static void do_test_txn_aborted_read_uncommitted(void) {
  * @brief Mixed non-txn + committed txn data in read_uncommitted.
  */
 static void do_test_txn_mixed_read_uncommitted(void) {
-        const char *topic = "kip932_txn_mixed_ru";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -254,10 +291,10 @@ static void do_test_txn_mixed_read_uncommitted(void) {
         produce_messages(ctx.producer, topic, 2);
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-mixed-ru");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-mixed-ru");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 5, 50, 500, &topic, 1);
+        consumed = consume_n(share_c, 5, 50);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
@@ -271,7 +308,7 @@ static void do_test_txn_mixed_read_uncommitted(void) {
  * @brief Committed txn data is delivered in read_committed mode.
  */
 static void do_test_txn_committed_read_committed(void) {
-        const char *topic = "kip932_txn_committed_rc";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -285,10 +322,10 @@ static void do_test_txn_committed_read_committed(void) {
 
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-committed-rc");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-committed-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 3, 50, 500, &topic, 1);
+        consumed = consume_n(share_c, 3, 50);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
@@ -304,7 +341,7 @@ static void do_test_txn_committed_read_committed(void) {
  * Share share_c should receive 0 records.
  */
 static void do_test_txn_aborted_read_committed(void) {
-        const char *topic = "kip932_txn_aborted_rc";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -318,10 +355,10 @@ static void do_test_txn_aborted_read_committed(void) {
 
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_false);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-aborted-rc");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-aborted-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 0, 15, 500, &topic, 1);
+        consumed = consume_n(share_c, 0, 15);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
@@ -337,15 +374,12 @@ static void do_test_txn_aborted_read_committed(void) {
  * @brief Mixed committed + aborted + non-txn in read_committed mode.
  *
  * 2 non-txn + 3 committed + 3 aborted + 2 non-txn.
- * Expected: 5 (2 non-txn + 3 committed data) before the COMMIT control
- * batch blocks progress. The remaining 2 non-txn records after the abort
- * are unreachable because the client does not send GAP(0) for control
- * records yet.
- *
- * TODO: Change expected to 7 once GAP(0) ack is implemented.
+ * Expected: 7 (2 non-txn + 3 committed data + 2 trailing non-txn).
+ * Aborted data is filtered/archived, control records are skipped via
+ * GAP(0) ack, so the trailing non-txn records are now reachable.
  */
 static void do_test_txn_mixed_read_committed(void) {
-        const char *topic = "kip932_txn_mixed_rc";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -362,18 +396,18 @@ static void do_test_txn_mixed_read_committed(void) {
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_false);
         produce_messages(ctx.producer, topic, 2);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-mixed-rc");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-mixed-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 5, 60, 500, &topic, 1);
+        consumed = consume_n(share_c, 7, 60);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
-        TEST_ASSERT(consumed == 5,
-                    "Expected 5 consumed (limited by missing GAP ack), "
-                    "got %d",
+        TEST_ASSERT(consumed == 7,
+                    "Expected 7 consumed (2 non-txn + 3 committed + "
+                    "2 trailing non-txn), got %d",
                     consumed);
         SUB_TEST_PASS();
 }
@@ -384,7 +418,7 @@ static void do_test_txn_mixed_read_committed(void) {
  * No transactions involved — LSO = end_offset, no filtering.
  */
 static void do_test_txn_nontxn_read_committed(void) {
-        const char *topic = "kip932_txn_nontxn_rc";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -398,10 +432,10 @@ static void do_test_txn_nontxn_read_committed(void) {
 
         produce_messages(ctx.producer, topic, 5);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-nontxn-rc");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-nontxn-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 5, 50, 500, &topic, 1);
+        consumed = consume_n(share_c, 5, 50);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
@@ -416,17 +450,15 @@ static void do_test_txn_nontxn_read_committed(void) {
  *
  * Log layout:
  *   offset 0-2: aborted data -> ARCHIVED by broker
- *   offset 3:   ABORT control -> ACQUIRED (client drops, no GAP)
- *   offset 4-6: committed data
- *   offset 7:   COMMIT control
+ *   offset 3:   ABORT control -> skipped via GAP(0) ack
+ *   offset 4-6: committed data -> delivered
+ *   offset 7:   COMMIT control -> skipped via GAP(0) ack
  *
- * Consumer gets stuck at offset 3 (ABORT control) because the client
- * doesn't send GAP(0). No data records are delivered.
- *
- * TODO: Change expected to 3 once GAP(0) ack is implemented.
+ * Consumer skips control records via GAP(0) ack and receives the
+ * 3 committed data records.
  */
 static void do_test_txn_abort_then_commit_read_committed(void) {
-        const char *topic = "kip932_txn_abort_commit_rc";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         test_ctx_t ctx;
         rd_kafka_share_t *share_c;
         int consumed;
@@ -441,25 +473,27 @@ static void do_test_txn_abort_then_commit_read_committed(void) {
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_false);
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
 
-        share_c = new_share_consumer(ctx.bootstraps, "sg-txn-abort-commit-rc");
+        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-abort-commit-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = test_share_consume_msgs(share_c, 0, 15, 500, &topic, 1);
+        consumed = consume_n(share_c, 3, 50);
 
         rd_kafka_share_consumer_close(share_c);
         rd_kafka_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
-        TEST_ASSERT(consumed == 0,
-                    "Expected 0 consumed (blocked by missing GAP ack), "
+        TEST_ASSERT(consumed == 3,
+                    "Expected 3 consumed (committed data after abort), "
                     "got %d",
                     consumed);
         SUB_TEST_PASS();
 }
 
 
-int main_0158_share_group_transactions_mock(int argc, char **argv) {
+int main_0158_share_consumer_transactions_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+
+        test_timeout_set(1500);
 
         do_test_txn_committed_read_uncommitted();
 

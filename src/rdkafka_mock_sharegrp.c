@@ -113,7 +113,7 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
         mshgrp->record_lock_duration_ms =
             mcluster->defaults.sharegroup_record_lock_duration_ms;
         mshgrp->isolation_level = mcluster->defaults.sharegroup_isolation_level;
-        mshgrp->max_size = mcluster->defaults.sharegroup_max_size;
+        mshgrp->max_size        = mcluster->defaults.sharegroup_max_size;
 
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,

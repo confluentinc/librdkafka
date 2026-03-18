@@ -336,7 +336,7 @@ void rd_kafka_mock_partition_write_control_batch(
          * 57: RecordCount             (i32) = 1
          *
          * Record (varint-encoded):
-         * 61: Length          (varint) = 10 -> zigzag = 20
+         * 61: Length          (varint) = 16 -> zigzag = 32
          * 62: Attributes     (i8) = 0
          * 63: TimestampDelta (varint) = 0
          * 64: OffsetDelta    (varint) = 0
@@ -396,8 +396,8 @@ void rd_kafka_mock_partition_write_control_batch(
         i32val = htobe32(1);
         memcpy(buf + 57, &i32val, 4);
 
-        /* Record: Length=10 (varint zigzag(10)=20) */
-        buf[61] = 20;
+        /* Record: Length=16 (varint zigzag(16)=32) */
+        buf[61] = 32;
         /* Record: Attributes=0, TimestampDelta=0, OffsetDelta=0 */
         /* (already zeroed at 62, 63, 64) */
 
@@ -2838,6 +2838,8 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
 
                 mtopic =
                     rd_kafka_mock_topic_find(mcluster, rko->rko_u.mock.name);
+                if (!mtopic)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
                 mpart = rd_kafka_mock_partition_find(mtopic,
                                                      rko->rko_u.mock.partition);
                 if (!mpart)

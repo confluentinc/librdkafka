@@ -3985,7 +3985,15 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                  * Sessions are keyed by (GroupId, MemberId).
                  * SessionEpoch: 0 = open new session,
                  *              -1 = close session,
-                 *              >0 = continue (must match expected epoch). */
+                 *              >0 = continue (must match expected epoch).
+                 *
+                 * session->partitions is the source of truth for the
+                 * full partition set.  For epoch=0, it is set from the
+                 * request.  For epoch>0, the request only carries
+                 * additions; an empty list means "no changes".
+                 * Forgotten partitions are removed below.
+                 * Acquisition and response writing always use
+                 * session->partitions. */
                 mtx_lock(&mcluster->lock);
                 sgrp = rd_kafka_mock_sharegroup_get(mcluster, &GroupId);
 
@@ -4022,15 +4030,32 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         requested_partitions);
                         }
                 } else if (!err && session && SessionEpoch > 0) {
-                        /* Update partition list if changed. */
-                        if (!rd_kafka_mock_tplist_equal_by_id(
-                                requested_partitions, session->partitions)) {
-                                RD_IF_FREE(
-                                    session->partitions,
-                                    rd_kafka_topic_partition_list_destroy);
-                                session->partitions =
-                                    rd_kafka_topic_partition_list_copy(
-                                        requested_partitions);
+                        /* Session continuation: merge additions from the
+                         * request into session->partitions.  An empty
+                         * request list means "no changes". */
+                        if (requested_partitions &&
+                            requested_partitions->cnt > 0) {
+                                rd_kafka_topic_partition_t *rp;
+                                if (!session->partitions)
+                                        session->partitions =
+                                            rd_kafka_topic_partition_list_new(
+                                                requested_partitions->cnt);
+                                RD_KAFKA_TPLIST_FOREACH(rp,
+                                                        requested_partitions) {
+                                        rd_kafka_Uuid_t tid =
+                                            rd_kafka_topic_partition_get_topic_id(
+                                                rp);
+                                        if (rd_kafka_topic_partition_list_find_idx_by_id(
+                                                session->partitions, tid,
+                                                rp->partition) < 0) {
+                                                rd_kafka_topic_partition_t *np =
+                                                    rd_kafka_topic_partition_list_add(
+                                                        session->partitions, "",
+                                                        rp->partition);
+                                                rd_kafka_topic_partition_set_topic_id(
+                                                    np, tid);
+                                        }
+                                }
                         }
                 }
 
@@ -4132,9 +4157,9 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         }
                 }
 
-                if (!err && sgrp) {
+                if (!err && sgrp && session && session->partitions) {
                         rd_kafka_topic_partition_t *rktpar;
-                        RD_KAFKA_TPLIST_FOREACH(rktpar, requested_partitions) {
+                        RD_KAFKA_TPLIST_FOREACH(rktpar, session->partitions) {
                                 rd_kafka_Uuid_t topic_id =
                                     rd_kafka_topic_partition_get_topic_id(
                                         rktpar);
@@ -4199,17 +4224,20 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                       : sgrp->session_timeout_ms)
                                : 0);
 
-                rd_kafka_topic_partition_list_sort_by_topic_id(
-                    requested_partitions);
+                if (session && session->partitions)
+                        rd_kafka_topic_partition_list_sort_by_topic_id(
+                            session->partitions);
 
                 {
                         int i                         = 0;
                         int topic_cnt                 = 0;
                         rd_kafka_Uuid_t current_topic = RD_KAFKA_UUID_ZERO;
 
-                        for (i = 0; i < requested_partitions->cnt; i++) {
+                        for (i = 0; session && session->partitions &&
+                                    i < session->partitions->cnt;
+                             i++) {
                                 rd_kafka_topic_partition_t *rktpar =
-                                    &requested_partitions->elems[i];
+                                    &session->partitions->elems[i];
                                 rd_kafka_Uuid_t topic_id =
                                     rd_kafka_topic_partition_get_topic_id(
                                         rktpar);
@@ -4225,19 +4253,18 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_arraycnt(resp, topic_cnt);
 
                         i = 0;
-                        while (i < requested_partitions->cnt) {
+                        while (session && session->partitions &&
+                               i < session->partitions->cnt) {
                                 int j;
                                 rd_kafka_Uuid_t topic_id =
                                     rd_kafka_topic_partition_get_topic_id(
-                                        &requested_partitions->elems[i]);
+                                        &session->partitions->elems[i]);
                                 int part_cnt = 0;
 
-                                for (j = i; j < requested_partitions->cnt;
-                                     j++) {
+                                for (j = i; j < session->partitions->cnt; j++) {
                                         rd_kafka_Uuid_t next_topic_id =
                                             rd_kafka_topic_partition_get_topic_id(
-                                                &requested_partitions
-                                                     ->elems[j]);
+                                                &session->partitions->elems[j]);
                                         if (rd_kafka_Uuid_cmp(
                                                 topic_id, next_topic_id) != 0)
                                                 break;
@@ -4251,7 +4278,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
                                 for (j = i; j < i + part_cnt; j++) {
                                         rd_kafka_topic_partition_t *rktpar =
-                                            &requested_partitions->elems[j];
+                                            &session->partitions->elems[j];
                                         rd_kafka_mock_topic_t *mtopic =
                                             rd_kafka_mock_topic_find_by_id(
                                                 mcluster, topic_id);

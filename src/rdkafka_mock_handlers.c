@@ -3331,39 +3331,6 @@ err_parse:
         return -1;
 }
 
-/**
- * @brief Handle ShareFetch (KIP-932) - request parsing only.
- */
-static rd_bool_t
-rd_kafka_mock_tplist_equal_by_id(rd_kafka_topic_partition_list_t *a,
-                                 rd_kafka_topic_partition_list_t *b) {
-        int i;
-
-        if (!a && !b)
-                return rd_true;
-        if (!a || !b)
-                return rd_false;
-        if (a->cnt != b->cnt)
-                return rd_false;
-
-        rd_kafka_topic_partition_list_sort_by_topic_id(a);
-        rd_kafka_topic_partition_list_sort_by_topic_id(b);
-
-        for (i = 0; i < a->cnt; i++) {
-                const rd_kafka_topic_partition_t *pa = &a->elems[i];
-                const rd_kafka_topic_partition_t *pb = &b->elems[i];
-                rd_kafka_Uuid_t ta = rd_kafka_topic_partition_get_topic_id(pa);
-                rd_kafka_Uuid_t tb = rd_kafka_topic_partition_get_topic_id(pb);
-
-                if (pa->partition != pb->partition)
-                        return rd_false;
-                if (rd_kafka_Uuid_cmp(ta, tb) != 0)
-                        return rd_false;
-        }
-
-        return rd_true;
-}
-
 static rd_kafka_mock_sgrp_partmeta_t *
 rd_kafka_mock_sgrp_partmeta_find(rd_kafka_mock_sharegroup_t *sgrp,
                                  rd_kafka_Uuid_t topic_id,

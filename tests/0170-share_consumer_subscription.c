@@ -599,10 +599,12 @@ static void state_cleanup(sub_test_state_t *state) {
 
         /* Delete all created topics (skip already deleted ones) */
         for (i = 0; i < state->all_topic_cnt; i++) {
-                if (state->all_topics[i] && !state->topic_deleted[i]) {
-                        test_delete_topic(
-                            test_share_consumer_get_rk(state->consumers[0]),
-                            state->all_topics[i]);
+                if (state->all_topics[i]) {
+                        if (!state->topic_deleted[i]) {
+                                test_delete_topic(test_share_consumer_get_rk(
+                                                      state->consumers[0]),
+                                                  state->all_topics[i]);
+                        }
                         rd_free(state->all_topics[i]);
                 }
         }

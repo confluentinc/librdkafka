@@ -385,6 +385,12 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                         }
                 }
 
+                /**
+                 * TODO KIP-932: Check if it can be optimized as these are
+                 *               internal thread operations and they should
+                 *               be as fast as possible as this will be called
+                 *               again and again.
+                 */
                 if (rd_list_is_sorted(&new_entries,
                                       rd_kafka_share_ack_entries_sort_cmp_ptr))
                         new_entries.rl_flags |= RD_LIST_F_SORTED;

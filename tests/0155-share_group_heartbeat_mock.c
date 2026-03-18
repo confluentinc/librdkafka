@@ -116,6 +116,7 @@ static int wait_assignment_count(rd_kafka_share_t *share_c,
         return cnt;
 }
 
+
 /**
  * @brief Test basic ShareGroupHeartbeat flow:
  *        join, receive assignment, heartbeats, leave.
@@ -957,6 +958,9 @@ static void do_test_share_group_no_spurious_fencing(void) {
 
         SUB_TEST_PASS();
 }
+
+/* TODO: Add do_test_share_group_max_size() once
+ *        0155 fix PR is merged*/
 
 /**
  * @brief UNKNOWN_MEMBER_ID error handling.
@@ -2599,7 +2603,6 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_share_group_session_timeout();
         do_test_share_group_target_assignment();
         do_test_share_group_no_spurious_fencing();
-
         do_test_unknown_member_id_error();
 
         do_test_fenced_member_epoch_error();

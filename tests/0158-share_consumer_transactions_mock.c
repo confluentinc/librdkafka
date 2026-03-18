@@ -473,7 +473,8 @@ static void do_test_txn_abort_then_commit_read_committed(void) {
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_false);
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
 
-        share_c = create_share_consumer(ctx.bootstraps, "sg-txn-abort-commit-rc");
+        share_c =
+            create_share_consumer(ctx.bootstraps, "sg-txn-abort-commit-rc");
         subscribe_topics(share_c, &topic, 1);
 
         consumed = consume_n(share_c, 3, 50);

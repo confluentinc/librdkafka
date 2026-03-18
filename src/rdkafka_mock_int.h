@@ -868,6 +868,9 @@ void rd_kafka_mock_sharegroup_assignment_recalculate(
 void rd_kafka_mock_sharegrps_connection_closed(
     rd_kafka_mock_cluster_t *mcluster,
     rd_kafka_mock_connection_t *mconn);
+void rd_kafka_mock_sharegrps_node_connection_closed(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t node_id);
 
 /**
  *@}

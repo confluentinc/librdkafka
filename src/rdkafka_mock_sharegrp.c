@@ -998,18 +998,32 @@ void rd_kafka_mock_sharegrps_connection_closed(
     rd_kafka_mock_cluster_t *mcluster,
     rd_kafka_mock_connection_t *mconn) {
         rd_kafka_mock_sharegroup_t *mshgrp;
-        int32_t node_id = mconn->broker->id;
 
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
                 rd_kafka_mock_sharegroup_member_t *member;
-                rd_kafka_mock_sgrp_fetch_session_t *session, *tmp;
-
                 /* Clear heartbeat connection for any member on this conn. */
                 TAILQ_FOREACH(member, &mshgrp->members, link) {
                         if (member->conn == mconn)
                                 member->conn = NULL;
                 }
+        }
+}
 
+/**
+ * @brief Close all share fetch sessions on \p node_id.
+ *
+ * Called from rd_kafka_mock_connection_close() where mconn->broker is
+ * guaranteed to be valid.  Must NOT be called with a fake connection pointer.
+ *
+ * @locks mcluster->lock MUST be held.
+ */
+void rd_kafka_mock_sharegrps_node_connection_closed(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t node_id) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
+                rd_kafka_mock_sgrp_fetch_session_t *session, *tmp;
                 /* When a connection is disconnected, any share session
                  * on that broker is automatically closed. */
                 TAILQ_FOREACH_SAFE(session, &mshgrp->fetch_sessions, link,

@@ -11,9 +11,10 @@
 #   alpine:3.16
 #   quay.io/pypa/manylinux_2_28_aarch64 (centos8)
 #   quay.io/pypa/manylinux_2_28_x86_64  (centos8)
+#   quay.io/pypa/manylinux_2_28_s390x   (centos8, requires QEMU binfmt)
 #
 # Usage:
-# packaging/tools/build-release-artifacts.sh [--disable-gssapi] <docker-image> <relative-output-tarball-path.tgz>
+# packaging/tools/build-release-artifacts.sh [--disable-gssapi] [--platform <docker-platform>] <docker-image> <relative-output-tarball-path.tgz>
 #
 # The output path must be a relative path and inside the librdkafka directory
 # structure.
@@ -42,6 +43,12 @@ else
     disable_gssapi=""
 fi
 
+docker_platform=""
+if [ "$1" = "--platform" ]; then
+    docker_platform="--platform=$2"
+    shift 2
+fi
+
 # Check if we're running on the host or the (docker) build target.
 if [ "$1" = "--in-docker" -a $# -eq 2 ]; then
     output="$2"
@@ -49,13 +56,13 @@ elif [ $# -eq 2 ]; then
     docker_image="$1"
     output="$2"
 else
-    echo "Usage: $0 [--disable-gssapi] <manylinux-docker-image> <output-path.tgz>"
+    echo "Usage: $0 [--disable-gssapi] [--platform <docker-platform>] <manylinux-docker-image> <output-path.tgz>"
     exit 1
 fi
 
 if [ -n "$docker_image" ]; then
     # Running on the host, spin up the docker builder.
-    exec docker run -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
+    exec docker run $docker_platform -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
     # Only reached on exec error
     exit $?
 fi

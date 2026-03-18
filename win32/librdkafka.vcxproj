@@ -252,6 +252,7 @@
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />
+    <ClCompile Include="..\src\rdunittest_acknowledge.c" />
     <ClCompile Include="..\src\rdunittest_fetcher.c" />
     <ClCompile Include="..\src\rdvarint.c" />
     <ClCompile Include="..\src\rdmap.c" />

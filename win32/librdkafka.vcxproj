@@ -119,6 +119,7 @@
     <ClInclude Include="..\src\rdkafka_lz4.h" />
     <ClInclude Include="..\src\rdkafka_mock.h" />
     <ClInclude Include="..\src\rdkafka_mock_int.h" />
+    <ClInclude Include="..\src\rdkafka_share_acknowledgement.h" />
     <ClInclude Include="..\src\rdkafka_error.h" />
     <ClInclude Include="..\src\rdkafka_msgset.h" />
     <ClInclude Include="..\src\rdkafka_op.h" />
@@ -238,6 +239,7 @@
     <ClCompile Include="..\src\rdkafka_mock_handlers.c" />
     <ClCompile Include="..\src\rdkafka_mock_cgrp.c" />
     <ClCompile Include="..\src\rdkafka_mock_sharegrp.c" />
+    <ClCompile Include="..\src\rdkafka_share_acknowledgement.c" />
     <ClCompile Include="..\src\rdkafka_error.c" />
     <ClCompile Include="..\src\rdkafka_fetcher.c" />
     <ClCompile Include="..\src\rdkafka_telemetry.c" />
@@ -250,6 +252,8 @@
     <ClCompile Include="..\src\rdrand.c" />
     <ClCompile Include="..\src\rdregex.c" />
     <ClCompile Include="..\src\rdunittest.c" />
+    <ClCompile Include="..\src\rdunittest_acknowledge.c" />
+    <ClCompile Include="..\src\rdunittest_fetcher.c" />
     <ClCompile Include="..\src\rdvarint.c" />
     <ClCompile Include="..\src\rdmap.c" />
     <ClCompile Include="..\src\snappy.c" />

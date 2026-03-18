@@ -72,6 +72,8 @@ set(
     rdregex.c
     rdstring.c
     rdunittest.c
+    rdunittest_acknowledge.c
+    rdunittest_fetcher.c
     rdvarint.c
     rdmap.c
     snappy.c

@@ -14,7 +14,7 @@ set -e
 # - no assertions
 # - following AK and CP versions
 
-export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-4.0.0}
+export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-4.2.0}
 export TEST_CP_VERSION=${TEST_CP_VERSION:-8.0.0}
 
 TEST_SSL_ARG=""

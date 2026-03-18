@@ -3570,10 +3570,7 @@ static void rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                         state->lock_expiry_ts  = 0;
                         break;
                 case 2: /* RELEASE */
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                        rd_free(state->owner_member_id);
-                        state->owner_member_id = NULL;
-                        state->lock_expiry_ts  = 0;
+                        rd_kafka_mock_sgrp_record_release(sgrp, state);
                         break;
                 default:
                         break;
@@ -3672,6 +3669,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
         int32_t SessionEpoch = -1, MaxWaitMs = 0, MinBytes = 0, MaxBytes = 0,
                 MaxRecords = 0, BatchSize = 0;
         int32_t TopicsCnt;
+        int32_t ForgottenTopicsCnt;
         rd_kafka_topic_partition_list_t *requested_partitions = NULL;
         rd_kafka_topic_partition_list_t *forgotten_partitions = NULL;
         rd_kafka_resp_err_t err          = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3685,8 +3683,8 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
         rd_kafka_buf_read_str(rkbuf, &MemberId);
-        /* KIP-932: ShareFetch has ShareSessionEpoch only, no SessionId.
-         * Sessions are keyed by (GroupId, MemberId). */
+        /* ShareFetch has ShareSessionEpoch only, no SessionId.
+         * Sessions are keyed by (GroupId, MemberId, NodeId). */
         rd_kafka_buf_read_i32(rkbuf, &SessionEpoch);
         rd_kafka_buf_read_i32(rkbuf, &MaxWaitMs);
         rd_kafka_buf_read_i32(rkbuf, &MinBytes);
@@ -3748,48 +3746,42 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
-        /* ForgottenTopicsData */
-        {
-                int32_t ForgottenTopicsCnt;
-                rd_kafka_buf_read_arraycnt(rkbuf, &ForgottenTopicsCnt,
-                                           RD_KAFKAP_TOPICS_MAX);
-                if (ForgottenTopicsCnt > 0)
-                        forgotten_partitions =
-                            rd_kafka_topic_partition_list_new(
-                                ForgottenTopicsCnt);
-                while (ForgottenTopicsCnt-- > 0) {
-                        rd_kafka_Uuid_t ForgTopicId = RD_KAFKA_UUID_ZERO;
-                        int32_t ForgPartCnt;
-                        rd_kafka_buf_read_uuid(rkbuf, &ForgTopicId);
-                        rd_kafka_buf_read_arraycnt(rkbuf, &ForgPartCnt,
-                                                   RD_KAFKAP_PARTITIONS_MAX);
-                        while (ForgPartCnt-- > 0) {
-                                int32_t ForgPartition;
-                                rd_kafka_topic_partition_t *ftp;
-                                rd_kafka_buf_read_i32(rkbuf, &ForgPartition);
+        rd_kafka_buf_read_arraycnt(rkbuf, &ForgottenTopicsCnt,
+                                   RD_KAFKAP_TOPICS_MAX);
+        if (ForgottenTopicsCnt > 0)
+                forgotten_partitions =
+                    rd_kafka_topic_partition_list_new(ForgottenTopicsCnt);
+        while (ForgottenTopicsCnt-- > 0) {
+                rd_kafka_Uuid_t ForgTopicId = RD_KAFKA_UUID_ZERO;
+                int32_t ForgPartCnt;
+                rd_kafka_buf_read_uuid(rkbuf, &ForgTopicId);
+                rd_kafka_buf_read_arraycnt(rkbuf, &ForgPartCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
+                while (ForgPartCnt-- > 0) {
+                        int32_t ForgPartition;
+                        rd_kafka_topic_partition_t *ftp;
+                        rd_kafka_buf_read_i32(rkbuf, &ForgPartition);
 
-                                /* Record in forgotten list for session
-                                 * removal and inflight release. */
-                                ftp = rd_kafka_topic_partition_list_add(
-                                    forgotten_partitions, "", ForgPartition);
-                                rd_kafka_topic_partition_set_topic_id(
-                                    ftp, ForgTopicId);
+                        /* Record in forgotten list for session
+                         * removal and inflight release. */
+                        ftp = rd_kafka_topic_partition_list_add(
+                            forgotten_partitions, "", ForgPartition);
+                        rd_kafka_topic_partition_set_topic_id(ftp, ForgTopicId);
 
-                                /* Remove from requested_partitions so they
-                                 * are not fetched in this request. */
-                                if (requested_partitions) {
-                                        int idx =
-                                            rd_kafka_topic_partition_list_find_idx_by_id(
-                                                requested_partitions,
-                                                ForgTopicId, ForgPartition);
-                                        if (idx >= 0)
-                                                rd_kafka_topic_partition_list_del_by_idx(
-                                                    requested_partitions, idx);
-                                }
+                        /* Remove from requested_partitions so they
+                         * are not fetched in this request. */
+                        if (requested_partitions) {
+                                int idx =
+                                    rd_kafka_topic_partition_list_find_idx_by_id(
+                                        requested_partitions, ForgTopicId,
+                                        ForgPartition);
+                                if (idx >= 0)
+                                        rd_kafka_topic_partition_list_del_by_idx(
+                                            requested_partitions, idx);
                         }
-                        /* ForgottenTopic tags */
-                        rd_kafka_buf_skip_tags(rkbuf);
                 }
+                /* ForgottenTopic tags */
+                rd_kafka_buf_skip_tags(rkbuf);
         }
 
         /* Top-level tags */
@@ -3825,15 +3817,17 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* Common validation: member check, session lookup,
                  * epoch -1 close, epoch > 0 validation. */
                 err = rd_kafka_mock_sgrp_session_validate(
-                    sgrp, &MemberId, SessionEpoch, &session, "ShareFetch");
+                    sgrp, &MemberId, mconn->broker->id, SessionEpoch, &session,
+                    "ShareFetch");
 
                 if (!err && SessionEpoch == 0) {
                         /* Open a new session (or reuse if one already exists
-                         * for this member). */
+                         * for this member on this broker). */
                         if (!session) {
                                 session = rd_calloc(1, sizeof(*session));
                                 session->member_id =
                                     RD_KAFKAP_STR_DUP(&MemberId);
+                                session->node_id       = mconn->broker->id;
                                 session->session_epoch = 0;
                                 session->partitions =
                                     rd_kafka_topic_partition_list_copy(
@@ -3867,9 +3861,20 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
                 /* For all successful, non-close requests: update activity
                  * timestamp and increment epoch for next request. */
-                if (!err && session) {
+                if (!err && session && SessionEpoch != -1) {
                         session->ts_last_activity = rd_clock();
                         session->session_epoch++;
+                }
+
+                /* epoch=-1 (final fetch / close session) must
+                 * not add or forget topics. */
+                if (!err && SessionEpoch == -1 &&
+                    ((requested_partitions && requested_partitions->cnt > 0) ||
+                     (forgotten_partitions && forgotten_partitions->cnt > 0))) {
+                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
+                                     "ShareFetch: rejecting epoch=-1 request "
+                                     "with topic add/forget (INVALID_REQUEST)");
+                        err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
                 }
 
                 /* Remove forgotten partitions from session and release
@@ -3913,15 +3918,22 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                         &MemberId,
                                                         state->owner_member_id))
                                                         continue;
-                                                /* Release: mark AVAILABLE */
-                                                state->state =
-                                                    RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                                                rd_free(state->owner_member_id);
-                                                state->owner_member_id = NULL;
-                                                state->lock_expiry_ts  = 0;
+                                                rd_kafka_mock_sgrp_record_release(
+                                                    sgrp, state);
                                         }
                                 }
                         }
+                }
+
+                /* epoch=0 (full fetch / new session) must not
+                 * contain acknowledgements. */
+                if (!err && SessionEpoch == 0 &&
+                    rd_list_cnt(&ack_entries) > 0) {
+                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
+                                     "ShareFetch: rejecting epoch=0 request "
+                                     "with %d ack(s) (INVALID_REQUEST)",
+                                     rd_list_cnt(&ack_entries));
+                        err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
                 }
 
                 /* Apply piggy-backed acknowledgements (implicit ack)
@@ -4003,9 +4015,13 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_str(resp, rd_kafka_err2str(err), -1);
                 else
                         rd_kafka_buf_write_str(resp, NULL, -1);
-                /* Response: AcquisitionLockTimeoutMs */
-                rd_kafka_buf_write_i32(resp,
-                                       sgrp ? sgrp->session_timeout_ms : 0);
+                /* Response: AcquisitionLockTimeoutMs — use the effective
+                 * lock duration (same logic as the acquisition path). */
+                rd_kafka_buf_write_i32(
+                    resp, sgrp ? (sgrp->record_lock_duration_ms > 0
+                                      ? sgrp->record_lock_duration_ms
+                                      : sgrp->session_timeout_ms)
+                               : 0);
 
                 rd_kafka_topic_partition_list_sort_by_topic_id(
                     requested_partitions);
@@ -4136,7 +4152,28 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* Response: Top-level tags */
                 rd_kafka_buf_write_tags_empty(resp);
 
+                /* epoch=-1 (final fetch) → release remaining acquired
+                 * records and close the session. */
+                if (!err && session && SessionEpoch == -1) {
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            sgrp, session->member_id);
+                        TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
+                        sgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
+                        session = NULL;
+                }
+
                 mtx_unlock(&mcluster->lock);
+
+                /* Emulate real broker MaxWaitMs behaviour: when no
+                 * records were acquired, delay the response to avoid
+                 * a tight fetch loop that starves the client's
+                 * shutdown path. Cap the delay at 100ms so tests
+                 * remain fast. */
+                if (acquired_cnt == 0 && MaxWaitMs > 0) {
+                        int32_t delay_ms    = MaxWaitMs < 100 ? MaxWaitMs : 100;
+                        resp->rkbuf_ts_sent = (rd_ts_t)delay_ms * 1000; /* us */
+                }
 
                 rd_kafka_mock_connection_send_response0(mconn, resp, rd_true);
 
@@ -4285,12 +4322,19 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                 /* Common validation: member check, session lookup,
                  * epoch -1 close, epoch > 0 validation. */
                 err = rd_kafka_mock_sgrp_session_validate(
-                    sgrp, &MemberId, SessionEpoch, &session,
+                    sgrp, &MemberId, mconn->broker->id, SessionEpoch, &session,
                     "ShareAcknowledge");
 
+                /* ShareAcknowledge must not use epoch=0
+                 * (only ShareFetch can open sessions). */
+                if (!err && SessionEpoch == 0) {
+                        err = RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
+                }
+
                 /* For all successful, non-close requests: update activity
-                 * timestamp and increment epoch for next request. */
-                if (!err && session) {
+                 * timestamp and increment epoch for next request.
+                 * Skip for epoch=-1 (final/close). */
+                if (!err && session && SessionEpoch != -1) {
                         session->ts_last_activity = rd_clock();
                         session->session_epoch++;
                 }
@@ -4312,6 +4356,17 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                     entry->first_offset, entry->last_offset,
                                     entry->ack_type, &MemberId);
                         }
+                }
+
+                /* epoch=-1 (final ack) → release remaining
+                 * acquired records and close the session. */
+                if (!err && session && SessionEpoch == -1) {
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            sgrp, session->member_id);
+                        TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
+                        sgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
+                        session = NULL;
                 }
 
                 /* ---- Write success response ---- */

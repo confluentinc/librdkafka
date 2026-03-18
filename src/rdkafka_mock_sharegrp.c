@@ -872,9 +872,9 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
  *
  * @locks mcluster->lock MUST be held.
  */
-void
-rd_kafka_mock_sgrp_record_release(rd_kafka_mock_sharegroup_t *mshgrp,
-                                   rd_kafka_mock_sgrp_record_state_t *state) {
+void rd_kafka_mock_sgrp_record_release(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_record_state_t *state) {
         if (mshgrp->max_delivery_attempts > 0 &&
             state->delivery_count >= mshgrp->max_delivery_attempts) {
                 state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;

@@ -3570,10 +3570,7 @@ static void rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                         state->lock_expiry_ts  = 0;
                         break;
                 case 2: /* RELEASE */
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE;
-                        rd_free(state->owner_member_id);
-                        state->owner_member_id = NULL;
-                        state->lock_expiry_ts  = 0;
+                        rd_kafka_mock_sgrp_record_release(sgrp, state);
                         break;
                 default:
                         break;
@@ -3672,6 +3669,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
         int32_t SessionEpoch = -1, MaxWaitMs = 0, MinBytes = 0, MaxBytes = 0,
                 MaxRecords = 0, BatchSize = 0;
         int32_t TopicsCnt;
+        int32_t ForgottenTopicsCnt;
         rd_kafka_topic_partition_list_t *requested_partitions = NULL;
         rd_kafka_topic_partition_list_t *forgotten_partitions = NULL;
         rd_kafka_resp_err_t err          = RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3748,48 +3746,42 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_skip_tags(rkbuf);
         }
 
-        /* ForgottenTopicsData */
-        {
-                int32_t ForgottenTopicsCnt;
-                rd_kafka_buf_read_arraycnt(rkbuf, &ForgottenTopicsCnt,
-                                           RD_KAFKAP_TOPICS_MAX);
-                if (ForgottenTopicsCnt > 0)
-                        forgotten_partitions =
-                            rd_kafka_topic_partition_list_new(
-                                ForgottenTopicsCnt);
-                while (ForgottenTopicsCnt-- > 0) {
-                        rd_kafka_Uuid_t ForgTopicId = RD_KAFKA_UUID_ZERO;
-                        int32_t ForgPartCnt;
-                        rd_kafka_buf_read_uuid(rkbuf, &ForgTopicId);
-                        rd_kafka_buf_read_arraycnt(rkbuf, &ForgPartCnt,
-                                                   RD_KAFKAP_PARTITIONS_MAX);
-                        while (ForgPartCnt-- > 0) {
-                                int32_t ForgPartition;
-                                rd_kafka_topic_partition_t *ftp;
-                                rd_kafka_buf_read_i32(rkbuf, &ForgPartition);
+        rd_kafka_buf_read_arraycnt(rkbuf, &ForgottenTopicsCnt,
+                                   RD_KAFKAP_TOPICS_MAX);
+        if (ForgottenTopicsCnt > 0)
+                forgotten_partitions =
+                    rd_kafka_topic_partition_list_new(ForgottenTopicsCnt);
+        while (ForgottenTopicsCnt-- > 0) {
+                rd_kafka_Uuid_t ForgTopicId = RD_KAFKA_UUID_ZERO;
+                int32_t ForgPartCnt;
+                rd_kafka_buf_read_uuid(rkbuf, &ForgTopicId);
+                rd_kafka_buf_read_arraycnt(rkbuf, &ForgPartCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
+                while (ForgPartCnt-- > 0) {
+                        int32_t ForgPartition;
+                        rd_kafka_topic_partition_t *ftp;
+                        rd_kafka_buf_read_i32(rkbuf, &ForgPartition);
 
-                                /* Record in forgotten list for session
-                                 * removal and inflight release. */
-                                ftp = rd_kafka_topic_partition_list_add(
-                                    forgotten_partitions, "", ForgPartition);
-                                rd_kafka_topic_partition_set_topic_id(
-                                    ftp, ForgTopicId);
+                        /* Record in forgotten list for session
+                         * removal and inflight release. */
+                        ftp = rd_kafka_topic_partition_list_add(
+                            forgotten_partitions, "", ForgPartition);
+                        rd_kafka_topic_partition_set_topic_id(ftp, ForgTopicId);
 
-                                /* Remove from requested_partitions so they
-                                 * are not fetched in this request. */
-                                if (requested_partitions) {
-                                        int idx =
-                                            rd_kafka_topic_partition_list_find_idx_by_id(
-                                                requested_partitions,
-                                                ForgTopicId, ForgPartition);
-                                        if (idx >= 0)
-                                                rd_kafka_topic_partition_list_del_by_idx(
-                                                    requested_partitions, idx);
-                                }
+                        /* Remove from requested_partitions so they
+                         * are not fetched in this request. */
+                        if (requested_partitions) {
+                                int idx =
+                                    rd_kafka_topic_partition_list_find_idx_by_id(
+                                        requested_partitions, ForgTopicId,
+                                        ForgPartition);
+                                if (idx >= 0)
+                                        rd_kafka_topic_partition_list_del_by_idx(
+                                            requested_partitions, idx);
                         }
-                        /* ForgottenTopic tags */
-                        rd_kafka_buf_skip_tags(rkbuf);
                 }
+                /* ForgottenTopic tags */
+                rd_kafka_buf_skip_tags(rkbuf);
         }
 
         /* Top-level tags */

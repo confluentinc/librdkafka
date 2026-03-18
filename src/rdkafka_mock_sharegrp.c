@@ -998,19 +998,29 @@ void rd_kafka_mock_sharegrps_connection_closed(
     rd_kafka_mock_cluster_t *mcluster,
     rd_kafka_mock_connection_t *mconn) {
         rd_kafka_mock_sharegroup_t *mshgrp;
+        int32_t node_id = mconn->broker->id;
 
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link) {
                 rd_kafka_mock_sharegroup_member_t *member;
+                rd_kafka_mock_sgrp_fetch_session_t *session, *tmp;
+
+                /* Clear heartbeat connection for any member on this conn. */
                 TAILQ_FOREACH(member, &mshgrp->members, link) {
-                        if (member->conn == mconn) {
-                                /* Per KIP-932, share consumers have no
-                                 * fencing semantics. A connection close is
-                                 * transient — the consumer will reconnect
-                                 * and heartbeat again. Only the session
-                                 * timeout timer should remove members.
-                                 */
+                        if (member->conn == mconn)
                                 member->conn = NULL;
-                        }
+                }
+
+                /* When a connection is disconnected, any share session
+                 * on that broker is automatically closed. */
+                TAILQ_FOREACH_SAFE(session, &mshgrp->fetch_sessions, link,
+                                   tmp) {
+                        if (session->node_id != node_id)
+                                continue;
+                        rd_kafka_mock_sgrp_release_member_locks(
+                            mshgrp, session->member_id);
+                        TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
+                        mshgrp->fetch_session_cnt--;
+                        rd_kafka_mock_sgrp_fetch_session_destroy(session);
                 }
         }
 }

@@ -644,13 +644,13 @@ static void test_release_redelivery(void) {
  * @brief REJECT prevents redelivery
  */
 static void test_reject_no_redelivery(void) {
-        ack_test_config_t config = {.test_name  = "reject-no-redelivery",
-                                    .topic_cnt  = 1,
-                                    .partitions = {1},
-                                    .msgs_per_partition = 5,
-                                    .consumer_cnt       = 1,
-                                    .single_ack_type =
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT};
+        ack_test_config_t config = {
+            .test_name          = "reject-no-redelivery",
+            .topic_cnt          = 1,
+            .partitions         = {1},
+            .msgs_per_partition = 5,
+            .consumer_cnt       = 1,
+            .single_ack_type    = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT};
         run_ack_test(&config);
 }
 
@@ -658,13 +658,13 @@ static void test_reject_no_redelivery(void) {
  * @brief ACCEPT prevents redelivery
  */
 static void test_accept_no_redelivery(void) {
-        ack_test_config_t config = {.test_name  = "accept-no-redelivery",
-                                    .topic_cnt  = 1,
-                                    .partitions = {1},
-                                    .msgs_per_partition = 5,
-                                    .consumer_cnt       = 1,
-                                    .single_ack_type =
-                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT};
+        ack_test_config_t config = {
+            .test_name          = "accept-no-redelivery",
+            .topic_cnt          = 1,
+            .partitions         = {1},
+            .msgs_per_partition = 5,
+            .consumer_cnt       = 1,
+            .single_ack_type    = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT};
         run_ack_test(&config);
 }
 
@@ -1033,12 +1033,13 @@ static void test_max_delivery_attempts(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_single_topic_single_partition(void) {
-        ack_test_config_t config = {.test_name    = "random-ack-1t-1p-5000msgs",
-                                    .topic_cnt    = 1,
-                                    .partitions   = {1},
-                                    .consumer_cnt = 1,
-                                    .use_random_acks = rd_true,
-                                    .total_msgs      = 5000};
+        ack_test_config_t config = {
+            .test_name            = "random-ack-1t-1p-5000msgs",
+            .topic_cnt            = 1,
+            .partitions           = {1},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 5000        };
         run_ack_test(&config);
 }
 
@@ -1049,12 +1050,13 @@ static void test_random_ack_single_topic_single_partition(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_multiple_topics_single_partition(void) {
-        ack_test_config_t config = {.test_name    = "random-ack-4t-1p-5000msgs",
-                                    .topic_cnt    = 4,
-                                    .partitions   = {1, 1, 1, 1},
-                                    .consumer_cnt = 1,
-                                    .use_random_acks = rd_true,
-                                    .total_msgs      = 5000};
+        ack_test_config_t config = {
+            .test_name            = "random-ack-4t-1p-5000msgs",
+            .topic_cnt            = 4,
+            .partitions           = {1, 1, 1, 1},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 5000        };
         run_ack_test(&config);
 }
 
@@ -1065,12 +1067,13 @@ static void test_random_ack_multiple_topics_single_partition(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_single_topic_multiple_partitions(void) {
-        ack_test_config_t config = {.test_name    = "random-ack-1t-4p-5000msgs",
-                                    .topic_cnt    = 1,
-                                    .partitions   = {4},
-                                    .consumer_cnt = 1,
-                                    .use_random_acks = rd_true,
-                                    .total_msgs      = 5000};
+        ack_test_config_t config = {
+            .test_name            = "random-ack-1t-4p-5000msgs",
+            .topic_cnt            = 1,
+            .partitions           = {4},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 5000        };
         run_ack_test(&config);
 }
 
@@ -1081,12 +1084,13 @@ static void test_random_ack_single_topic_multiple_partitions(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_multiple_topics_multiple_partitions(void) {
-        ack_test_config_t config = {.test_name    = "random-ack-2t-2p-5000msgs",
-                                    .topic_cnt    = 2,
-                                    .partitions   = {2, 2},
-                                    .consumer_cnt = 1,
-                                    .use_random_acks = rd_true,
-                                    .total_msgs      = 5000};
+        ack_test_config_t config = {
+            .test_name            = "random-ack-2t-2p-5000msgs",
+            .topic_cnt            = 2,
+            .partitions           = {2, 2},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 5000        };
         run_ack_test(&config);
 }
 
@@ -1102,7 +1106,7 @@ static void test_scale_15_topics_single_partition(void) {
             .partitions      = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
-            .total_msgs      = 10000};
+            .total_msgs      = 10000        };
         run_ack_test(&config);
 }
 
@@ -1119,7 +1123,7 @@ static void test_scale_15_topics_multiple_partitions(void) {
             .partitions      = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
-            .total_msgs      = 10000};
+            .total_msgs      = 10000        };
         run_ack_test(&config);
 }
 
@@ -1130,12 +1134,13 @@ static void test_scale_15_topics_multiple_partitions(void) {
  * Tests high partition count scenario.
  */
 static void test_scale_8_topics_4_partitions(void) {
-        ack_test_config_t config = {.test_name       = "scale-8t-4p-8000msgs",
-                                    .topic_cnt       = 8,
-                                    .partitions      = {4, 4, 4, 4, 4, 4, 4, 4},
-                                    .consumer_cnt    = 1,
-                                    .use_random_acks = rd_true,
-                                    .total_msgs      = 8000};
+        ack_test_config_t config = {
+            .test_name            = "scale-8t-4p-8000msgs",
+            .topic_cnt            = 8,
+            .partitions           = {4, 4, 4, 4, 4, 4, 4, 4},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 8000        };
         run_ack_test(&config);
 }
 
@@ -1145,12 +1150,13 @@ static void test_scale_8_topics_4_partitions(void) {
  * 1250 messages per partition. Tests single topic with many partitions.
  */
 static void test_scale_single_topic_8_partitions(void) {
-        ack_test_config_t config = {.test_name       = "scale-1t-8p-10000msgs",
-                                    .topic_cnt       = 1,
-                                    .partitions      = {8},
-                                    .consumer_cnt    = 1,
-                                    .use_random_acks = rd_true,
-                                    .total_msgs      = 10000};
+        ack_test_config_t config = {
+            .test_name            = "scale-1t-8p-10000msgs",
+            .topic_cnt            = 1,
+            .partitions           = {8},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 10000        };
         run_ack_test(&config);
 }
 
@@ -1162,12 +1168,12 @@ static void test_scale_single_topic_8_partitions(void) {
  */
 static void test_scale_10_topics_3_partitions(void) {
         ack_test_config_t config = {
-            .test_name       = "scale-10t-3p-15000msgs",
-            .topic_cnt       = 10,
-            .partitions      = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
-            .consumer_cnt    = 1,
-            .use_random_acks = rd_true,
-            .total_msgs      = 15000};
+            .test_name            = "scale-10t-3p-15000msgs",
+            .topic_cnt            = 10,
+            .partitions           = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
+            .consumer_cnt         = 1,
+            .use_random_acks      = rd_true,
+            .total_msgs           = 15000        };
         run_ack_test(&config);
 }
 

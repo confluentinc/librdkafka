@@ -65,8 +65,19 @@ function install_source {
         return 1
     fi
 
+    # When running under QEMU user-mode emulation on Alpine (musl),
+    # curl's configure has runtime checks (e.g., getifaddrs) that hang
+    # indefinitely. Setting cross_compiling=yes tells autoconf to skip
+    # all runtime checks and use safe defaults instead.
+    local qemu_conf_args=""
+    if grep -qa qemu /proc/1/cmdline 2>/dev/null && \
+       grep -q alpine /etc/os-release 2>/dev/null; then
+        qemu_conf_args="cross_compiling=yes"
+    fi
+
     # Clear out LIBS to not interfer with lib detection process.
     LIBS="" ./configure \
+	$qemu_conf_args \
 	--with-openssl \
 	--enable-static \
 	--disable-shared \

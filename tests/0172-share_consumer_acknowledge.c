@@ -1174,6 +1174,8 @@ static void test_scale_10_topics_3_partitions(void) {
 
 int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
+        test_timeout_set(600); /* 10 minutes for all tests */
+
         /* Core tests */
         test_release_redelivery();
         test_reject_no_redelivery();

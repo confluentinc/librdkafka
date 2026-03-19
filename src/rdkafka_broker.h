@@ -469,6 +469,9 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                            *   NULL. Freed by broker
                                            *   thread after use.
                                            *   @locality main thread */
+
+        rd_bool_t rkb_share_session_closed;  // TODO: think of a better name as session might not always close
+
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

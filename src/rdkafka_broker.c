@@ -5254,6 +5254,7 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         rkb->rkb_share_fetch_session.toppars_to_add         = NULL;
         rkb->rkb_share_async_ack_details                    = NULL;
         rkb->rkb_share_fetch_enqueued                       = rd_false;
+        rkb->rkb_share_session_closed                       = rd_false;
         CIRCLEQ_INIT(&rkb->rkb_active_toppars);
         TAILQ_INIT(&rkb->rkb_monitors);
         rd_kafka_bufq_init(&rkb->rkb_outbufs);

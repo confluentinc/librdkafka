@@ -3901,6 +3901,10 @@ static void rd_kafka_cgrp_heartbeat(rd_kafka_cgrp_t *rkcg) {
             NULL);
 }
 
+// Forward decelaration
+static rd_bool_t rd_kafka_share_are_sessions_closed(rd_kafka_t *rk);
+
+
 /**
  * Cgrp is now terminated: decommission it and signal back to application.
  */
@@ -3911,10 +3915,18 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_cgrp_group_assignment_set(rkcg, NULL);
 
-        rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
-        rd_kafka_assert(NULL, !rkcg->rkcg_group_assignment);
-        rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
         rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
+        rd_kafka_assert(NULL, !rkcg->rkcg_group_assignment);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
+        {
+                rd_kafka_assert(NULL, rd_kafka_share_are_sessions_closed(rkcg->rkcg_rk));
+                rd_kafka_assert(NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
+                // TODO: check if more asserts are required
+
+        } else {
+                rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
+                rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
+        }
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1 /*lock*/);
@@ -3969,6 +3981,10 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
                 return 1;
 
         if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
+                return 0;
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)
+        && !rd_kafka_share_are_sessions_closed(rkcg->rkcg_rk))
                 return 0;
 
         /* Check if wait-coord queue has timed out.
@@ -6092,6 +6108,58 @@ rd_kafka_cgrp_subscribe(rd_kafka_cgrp_t *rkcg,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+// Enqueues a fetch leave op to the given broker's ops queue
+// TODO: see what would be the best place to keep this function
+void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk, rd_kafka_broker_t *rkb)
+{
+        rd_kafka_op_t *rko_sf = NULL;
+        rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+        rko_sf->rko_u.share_fetch.should_leave = rd_true;
+        rko_sf->rko_u.share_fetch.abs_timeout = rd_timeout_init(rk->rk_conf.socket_timeout_ms);
+        rko_sf->rko_u.share_fetch.should_fetch = rd_false;
+        // TODO: Add ack details. Refer: rd_kafka_share_enqueue_fetch_op
+        rd_kafka_broker_keep(rkb);
+        rko_sf->rko_u.share_fetch.target_broker = rkb;
+        rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+        rd_kafka_dbg(rk, BROKER, "SHAREFETCH",
+                     "Enqueuing leave share fetch op on broker %s",
+                     rd_kafka_broker_name(rkb));
+        rkb->rkb_share_fetch_enqueued = rd_true;
+        rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
+}
+
+// Go through all the brokers to see if all share sessions have been closed
+// This function is expected to be called only after close() API is called
+// TODO: see what would be the best place to keep this function
+static rd_bool_t rd_kafka_share_are_sessions_closed(rd_kafka_t *rk)
+{
+        rd_kafka_broker_t *rkb = NULL;
+        rd_bool_t all_closed = rd_true;
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                    RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                        continue;
+
+                if (!rkb->rkb_share_session_closed) {
+                        // Only if consumer has been "closed", we will think about sending leave op
+                        if (rkb->rkb_share_fetch_enqueued) {
+                                rd_kafka_dbg(rk, CGRP, "CLOSE",
+                                             "Broker %s has in-flight request, ",
+                                             rd_kafka_broker_name(rkb));
+                        }
+                        else {
+                                rd_kafka_share_enqueue_fetch_leave_op(rk, rkb);
+                        }
+                        all_closed = rd_false;
+                        break;
+                }
+        }
+        rd_kafka_rdunlock(rk);
+        return all_closed;
+}
+
+
 
 
 /**
@@ -6136,6 +6204,29 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         /* Mark for stopping, the actual state transition
          * is performed when all toppars have left. */
         rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_TERMINATE;
+
+        /* For share groups, we have to additionally close
+         * sessions with all the brokers */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_broker_t *rkb = NULL;
+                rd_kafka_rdlock(rkcg->rkcg_rk);
+                TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
+                        if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                            RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                                continue;
+
+                        if (rkb->rkb_share_fetch_enqueued) {
+                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CLOSE",
+                                             "Broker %s has in-flight request, ",
+                                             rd_kafka_broker_name(rkb));
+                                continue;
+                        }
+
+                        rd_kafka_share_enqueue_fetch_leave_op(rkcg->rkcg_rk, rkb);
+                }
+                rd_kafka_rdunlock(rkcg->rkcg_rk);
+        }
+
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
                 rkcg->rkcg_consumer_flags &=
                     ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN &

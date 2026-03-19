@@ -257,19 +257,19 @@ blocks:
           commands:
             - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2024.07.01-1 artifacts/librdkafka.tgz
 
-        - name: 'Build: alpine musl +gssapi'
-          env_vars:
-            - name: ARTIFACT_KEY
-              value: p-librdkafka__plat-linux__dist-alpine__arch-s390x__lnk-all__extra-gssapi
-          commands:
-            - packaging/tools/build-release-artifacts.sh --platform linux/s390x alpine:3.16.9 artifacts/librdkafka.tgz
+        # - name: 'Build: alpine musl +gssapi'
+        #   env_vars:
+        #     - name: ARTIFACT_KEY
+        #       value: p-librdkafka__plat-linux__dist-alpine__arch-s390x__lnk-all__extra-gssapi
+        #   commands:
+        #     - packaging/tools/build-release-artifacts.sh --platform linux/s390x alpine:3.16.9 artifacts/librdkafka.tgz
 
-        - name: 'Build: alpine musl'
-          env_vars:
-            - name: ARTIFACT_KEY
-              value: p-librdkafka__plat-linux__dist-alpine__arch-s390x__lnk-all
-          commands:
-            - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x alpine:3.16.9 artifacts/librdkafka.tgz
+        # - name: 'Build: alpine musl'
+        #   env_vars:
+        #     - name: ARTIFACT_KEY
+        #       value: p-librdkafka__plat-linux__dist-alpine__arch-s390x__lnk-all
+        #   commands:
+        #     - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x alpine:3.16.9 artifacts/librdkafka.tgz
 
 
   - name: 'Windows x64: MinGW-w64'

@@ -64,7 +64,6 @@ typedef struct {
         int max_attempts;
         /* Random mode fields */
         rd_bool_t use_random_acks; /**< Generate random acks at runtime */
-        unsigned int random_seed;  /**< Seed for reproducible randomness */
         int total_msgs;            /**< Total messages (random mode) */
 } ack_test_config_t;
 
@@ -115,9 +114,8 @@ static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
 /**
  * @brief Generate random ack type with roughly equal distribution
  */
-static rd_kafka_share_AcknowledgeType_t
-get_random_ack_type(unsigned int *seed) {
-        return (rd_kafka_share_AcknowledgeType_t)((rand_r(seed) % 3) + 1);
+static rd_kafka_share_AcknowledgeType_t get_random_ack_type(void) {
+        return (rd_kafka_share_AcknowledgeType_t)jitter(1, 3);
 }
 
 /**
@@ -289,13 +287,9 @@ static rd_bool_t handle_redelivered_message(ack_test_state_t *state,
  * @brief Determine ack type based on config and message indices.
  */
 static rd_kafka_share_AcknowledgeType_t
-determine_ack_type(ack_test_config_t *config,
-                   int t_idx,
-                   int p_idx,
-                   int m_idx,
-                   unsigned int *seed) {
+determine_ack_type(ack_test_config_t *config, int t_idx, int p_idx, int m_idx) {
         if (config->use_random_acks)
-                return get_random_ack_type(seed);
+                return get_random_ack_type();
 
         if (t_idx >= 0 && p_idx < config->partitions[t_idx] &&
             m_idx < MAX_MSGS_PER_PART)
@@ -335,7 +329,6 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
         size_t total_consumed                   = 0;
         int msg_idx[MAX_TOPICS][MAX_PARTITIONS] = {{0}};
-        unsigned int seed                       = config->random_seed;
 
         if (config->use_random_acks) {
                 poll_timeout = 5000;
@@ -382,8 +375,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                         int m_idx = (t_idx >= 0) ? msg_idx[t_idx][p_idx]++ : 0;
 
                         rd_kafka_share_AcknowledgeType_t ack_type =
-                            determine_ack_type(config, t_idx, p_idx, m_idx,
-                                               &seed);
+                            determine_ack_type(config, t_idx, p_idx, m_idx);
 
                         track_ack_type(state, batch[m], ack_type);
 
@@ -1451,7 +1443,6 @@ static void test_random_ack_single_topic_single_partition(void) {
             .partitions           = {1},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 12345,
             .total_msgs           = 5000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1471,7 +1462,6 @@ static void test_random_ack_multiple_topics_single_partition(void) {
             .partitions           = {1, 1, 1, 1},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 23456,
             .total_msgs           = 5000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1491,7 +1481,6 @@ static void test_random_ack_single_topic_multiple_partitions(void) {
             .partitions           = {4},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 34567,
             .total_msgs           = 5000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1511,7 +1500,6 @@ static void test_random_ack_multiple_topics_multiple_partitions(void) {
             .partitions           = {2, 2},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 45678,
             .total_msgs           = 5000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1530,7 +1518,6 @@ static void test_scale_15_topics_single_partition(void) {
             .partitions      = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
-            .random_seed     = 56789,
             .total_msgs      = 10000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1550,7 +1537,6 @@ static void test_scale_15_topics_multiple_partitions(void) {
             .partitions      = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
-            .random_seed     = 67890,
             .total_msgs      = 10000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1570,7 +1556,6 @@ static void test_scale_8_topics_4_partitions(void) {
             .partitions           = {4, 4, 4, 4, 4, 4, 4, 4},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 78901,
             .total_msgs           = 8000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1589,7 +1574,6 @@ static void test_scale_single_topic_8_partitions(void) {
             .partitions           = {8},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 89012,
             .total_msgs           = 10000,
             .expected_redelivered = -1 /* Use released count */
         };
@@ -1609,7 +1593,6 @@ static void test_scale_10_topics_3_partitions(void) {
             .partitions           = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
             .consumer_cnt         = 1,
             .use_random_acks      = rd_true,
-            .random_seed          = 90123,
             .total_msgs           = 15000,
             .expected_redelivered = -1 /* Use released count */
         };

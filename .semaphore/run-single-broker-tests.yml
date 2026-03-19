@@ -46,7 +46,7 @@ blocks:
               --version ${TEST_KAFKA_VERSION} --cpversion ${TEST_CP_VERSION}
               --brokers 1
               --conf '["share.coordinator.state.topic.replication.factor=1", "share.coordinator.state.topic.min.isr=1"]'
-              --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
+              --cmd 'TESTS_SKIP_BEFORE=0170 python3 run-test-batches.py')
         - name: "SSL single broker (x86_64)"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
@@ -54,7 +54,7 @@ blocks:
               --version ${TEST_KAFKA_VERSION} --cpversion ${TEST_CP_VERSION}
               --brokers 1
               --conf '["share.coordinator.state.topic.replication.factor=1", "share.coordinator.state.topic.min.isr=1"]'
-              --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
+              --cmd 'TESTS_SKIP_BEFORE=0170 python3 run-test-batches.py')
   - name: "Single broker tests (aarch64)"
     dependencies: []
     task:
@@ -72,7 +72,7 @@ blocks:
               --version ${TEST_KAFKA_VERSION} --cpversion ${TEST_CP_VERSION}
               --brokers 1
               --conf '["share.coordinator.state.topic.replication.factor=1", "share.coordinator.state.topic.min.isr=1"]'
-              --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
+              --cmd 'TESTS_SKIP_BEFORE=0170 python3 run-test-batches.py')
         - name: "SSL single broker (aarch64)"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
@@ -80,4 +80,4 @@ blocks:
               --version ${TEST_KAFKA_VERSION} --cpversion ${TEST_CP_VERSION}
               --brokers 1
               --conf '["share.coordinator.state.topic.replication.factor=1", "share.coordinator.state.topic.min.isr=1"]'
-              --cmd 'TESTS_SKIP_BEFORE=0170 ./run-test.sh')
+              --cmd 'TESTS_SKIP_BEFORE=0170 python3 run-test-batches.py')

@@ -16,6 +16,8 @@ global_job_config:
       - checkout
       - mkdir artifacts
       - mkdir dest
+      - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+      - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
   env_vars:
     - name: CACHE_TAG
       value: '7'

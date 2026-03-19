@@ -689,7 +689,7 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_record_lock_duration(
     int lock_duration_ms);
 
 /**
- * @brief Set the share group isolation level for transactions (KIP-932).
+ * @brief Set the share group isolation level for transactions.
  *
  * Controls how the share group handles transactional records:
  *   0 = read_uncommitted (default) — reads up to HWM, no filtering

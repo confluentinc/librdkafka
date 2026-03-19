@@ -2173,7 +2173,7 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
                 all_err =
                     rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
-        /* Track transaction state (KIP-932). */
+        /* Track transaction state. */
         if (!all_err) {
                 mtx_lock(&mcluster->lock);
                 mtxn        = rd_kafka_mock_txn_get(mcluster, &TransactionalId);
@@ -2460,7 +2460,7 @@ static int rd_kafka_mock_handle_EndTxn(rd_kafka_mock_connection_t *mconn,
         if (!err)
                 err = rd_kafka_mock_pid_check(mcluster, &TransactionalId, pid);
 
-        /* Commit/abort the transaction (KIP-932). */
+        /* Commit/abort the transaction. */
         if (!err) {
                 rd_kafka_mock_txn_t *mtxn;
                 rd_kafka_mock_txn_partition_t *mtxnp;

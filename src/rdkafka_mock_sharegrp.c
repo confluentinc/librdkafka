@@ -828,7 +828,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
 
         *sessionp = NULL;
 
-        /* Per KIP-932, the real Kafka broker's partition leader does NOT
+        /* The real Kafka broker's partition leader does NOT
          * validate group membership on ShareFetch — share sessions are
          * managed independently of the group coordinator. */
 
@@ -859,7 +859,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                 /* 3. SessionEpoch == -1 (FINAL_EPOCH): return the existing
                  *    session so the caller can process final acks and
                  *    then close it.  If no session exists, fail with
-                 *    SHARE_SESSION_NOT_FOUND per KIP-932. */
+                 *    SHARE_SESSION_NOT_FOUND per the protocol. */
                 if (!session) {
                         *sessionp = NULL;
                         return RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;

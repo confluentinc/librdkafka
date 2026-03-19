@@ -382,9 +382,15 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                         rd_kafka_resp_err_t ack_err =
                             rd_kafka_share_acknowledge_type(state->consumers[0],
                                                             batch[m], ack_type);
-                        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                                    "Acknowledge failed: %s",
-                                    rd_kafka_err2str(ack_err));
+                        TEST_ASSERT(
+                            ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Acknowledge failed: %s (topic=%s, partition=%d, "
+                            "offset=%" PRId64 ", type=%d)",
+                            rd_kafka_err2str(ack_err),
+                            rd_kafka_topic_name(batch[m]->rkt)
+                                ? rd_kafka_topic_name(batch[m]->rkt)
+                                : "NULL",
+                            batch[m]->partition, batch[m]->offset, ack_type);
 
                         TEST_ASSERT(
                             rd_kafka_message_delivery_count(batch[m]) == 1,

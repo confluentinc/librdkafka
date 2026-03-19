@@ -207,7 +207,8 @@ int main(int argc, char **argv) {
                                " -> %s",
                                rd_kafka_topic_name(rkm->rkt), rkm->partition,
                                rkm->offset,
-                               ack_type == RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT
+                               ack_type ==
+                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT
                                    ? "ACCEPT"
                                    : "RELEASE");
 

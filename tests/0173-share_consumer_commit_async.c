@@ -82,8 +82,8 @@ static void set_group_offset_earliest(const char *group_name) {
         admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
 
-        test_IncrementalAlterConfigs_simple(
-            admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
+        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
+                                            group_name, cfg, 1);
 
         rd_kafka_destroy(admin);
 }
@@ -161,9 +161,9 @@ static void do_test_implicit_second_consumer(void) {
 
         /* Wait for first batch of records */
         while (consumed1 == 0 && attempts++ < 30) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -199,9 +199,9 @@ static void do_test_implicit_second_consumer(void) {
 
         attempts = 0;
         while (attempts++ < 5) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -235,9 +235,10 @@ static void do_test_implicit_second_consumer(void) {
                 }
         }
 
-        TEST_SAY("Consumer 2 got %d remaining messages, "
-                 "none overlapped with consumer 1's %d\n",
-                 consumed2, consumed1);
+        TEST_SAY(
+            "Consumer 2 got %d remaining messages, "
+            "none overlapped with consumer 1's %d\n",
+            consumed2, consumed1);
 
         rd_free(c1_offsets);
 
@@ -281,9 +282,9 @@ static void do_test_explicit_second_consumer(void) {
 
         /* Wait for first batch of records */
         while (consumed1 == 0 && attempts++ < 30) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -327,9 +328,9 @@ static void do_test_explicit_second_consumer(void) {
 
         attempts = 0;
         while (attempts++ < 5) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -363,9 +364,10 @@ static void do_test_explicit_second_consumer(void) {
                 }
         }
 
-        TEST_SAY("Consumer 2 got %d remaining messages, "
-                 "none overlapped with consumer 1's %d\n",
-                 consumed2, consumed1);
+        TEST_SAY(
+            "Consumer 2 got %d remaining messages, "
+            "none overlapped with consumer 1's %d\n",
+            consumed2, consumed1);
 
         rd_free(c1_offsets);
 
@@ -413,9 +415,9 @@ static void do_test_mixed_acks_second_consumer(void) {
         /* Consume all records and handle redeliveries in the same loop */
         while ((consumed < MAX_MSGS || redelivered < released_cnt) &&
                attempts++ < 100) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -521,7 +523,8 @@ static void do_test_multi_topic_partition(void) {
         SUB_TEST();
 
         for (t = 0; t < topic_cnt; t++) {
-                topics[t] = rd_strdup(test_mk_topic_name("0173-ca-multi-tp", 1));
+                topics[t] =
+                    rd_strdup(test_mk_topic_name("0173-ca-multi-tp", 1));
                 test_create_topic_wait_exists(NULL, topics[t], part_cnt, -1,
                                               60 * 1000);
         }
@@ -545,8 +548,8 @@ static void do_test_multi_topic_partition(void) {
                         size_t rcvd = 0;
                         size_t j;
 
-                        error = rd_kafka_share_consume_batch(
-                            rkshare, 5000, rkmessages, &rcvd);
+                        error = rd_kafka_share_consume_batch(rkshare, 5000,
+                                                             rkmessages, &rcvd);
                         if (error) {
                                 rd_kafka_error_destroy(error);
                                 continue;
@@ -625,8 +628,8 @@ static void do_test_produce_consume_loop(void) {
                         size_t rcvd = 0;
                         size_t j;
 
-                        error = rd_kafka_share_consume_batch(
-                            rkshare, 5000, rkmessages, &rcvd);
+                        error = rd_kafka_share_consume_batch(rkshare, 5000,
+                                                             rkmessages, &rcvd);
                         if (error) {
                                 rd_kafka_error_destroy(error);
                                 continue;
@@ -652,8 +655,9 @@ static void do_test_produce_consume_loop(void) {
                                     error ? rd_kafka_error_string(error) : "");
                         TEST_SAY("Round %d: used commit_async\n", round);
                 } else {
-                        TEST_SAY("Round %d: letting consume_batch handle acks\n",
-                                 round);
+                        TEST_SAY(
+                            "Round %d: letting consume_batch handle acks\n",
+                            round);
                 }
 
                 total_consumed += consumed;
@@ -708,14 +712,15 @@ static void do_test_multi_round_mixed_second_consumer(void) {
 
                 /* Consume msgs_per_round new records, handling redeliveries
                  * from previous rounds/batches inline */
-                while ((consumed < msgs_per_round || redelivered < released_cnt)
-                       && attempts++ < 100) {
+                while (
+                    (consumed < msgs_per_round || redelivered < released_cnt) &&
+                    attempts++ < 100) {
                         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
                         size_t rcvd = 0;
                         size_t j;
 
-                        error = rd_kafka_share_consume_batch(
-                            rkshare, 5000, rkmessages, &rcvd);
+                        error = rd_kafka_share_consume_batch(rkshare, 5000,
+                                                             rkmessages, &rcvd);
                         if (error) {
                                 rd_kafka_error_destroy(error);
                                 continue;
@@ -754,15 +759,16 @@ static void do_test_multi_round_mixed_second_consumer(void) {
                         }
 
                         error = rd_kafka_share_commit_async(rkshare);
-                        TEST_ASSERT(!error,
-                                    "Round %d: commit_async failed: %s", round,
+                        TEST_ASSERT(!error, "Round %d: commit_async failed: %s",
+                                    round,
                                     error ? rd_kafka_error_string(error) : "");
                 }
 
-                TEST_SAY("Round %d: consumed %d/%d, released %d, "
-                         "redelivered %d/%d\n",
-                         round, consumed, msgs_per_round, released_cnt,
-                         redelivered, released_cnt);
+                TEST_SAY(
+                    "Round %d: consumed %d/%d, released %d, "
+                    "redelivered %d/%d\n",
+                    round, consumed, msgs_per_round, released_cnt, redelivered,
+                    released_cnt);
                 TEST_ASSERT(consumed == msgs_per_round,
                             "Round %d: expected %d consumed, got %d", round,
                             msgs_per_round, consumed);
@@ -800,8 +806,7 @@ static void do_test_no_pending_acks(void) {
         error = rd_kafka_share_commit_async(rkshare);
         TEST_SAY("commit_async with no acks: error=%s\n",
                  error ? rd_kafka_error_string(error) : "NULL");
-        TEST_ASSERT(!error,
-                    "Expected NULL when no pending acks, got error: %s",
+        TEST_ASSERT(!error, "Expected NULL when no pending acks, got error: %s",
                     error ? rd_kafka_error_string(error) : "");
 
         rd_kafka_share_consumer_close(rkshare);
@@ -844,8 +849,8 @@ static void do_test_multiple_commit_async_calls(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -879,8 +884,8 @@ static void do_test_multiple_commit_async_calls(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -938,9 +943,9 @@ static void do_test_commit_between_produces(void) {
         test_produce_msgs_easy(topic, 0, 0, half);
 
         while (consumed1 == 0 && attempts++ < 30) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -954,8 +959,8 @@ static void do_test_commit_between_produces(void) {
         }
 
         TEST_SAY("First half: consumed %d messages\n", consumed1);
-        TEST_ASSERT(consumed1 == half,
-                    "First half: expected %d, got %d", half, consumed1);
+        TEST_ASSERT(consumed1 == half, "First half: expected %d, got %d", half,
+                    consumed1);
 
         error = rd_kafka_share_commit_async(rkshare);
         TEST_ASSERT(!error, "commit_async failed: %s",
@@ -971,9 +976,9 @@ static void do_test_commit_between_produces(void) {
 
         attempts = 0;
         while (consumed2 == 0 && attempts++ < 30) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -987,8 +992,8 @@ static void do_test_commit_between_produces(void) {
         }
 
         TEST_SAY("Second half: consumed %d messages\n", consumed2);
-        TEST_ASSERT(consumed2 == half,
-                    "Second half: expected %d, got %d", half, consumed2);
+        TEST_ASSERT(consumed2 == half, "Second half: expected %d, got %d", half,
+                    consumed2);
 
         error = rd_kafka_share_commit_async(rkshare);
         TEST_ASSERT(!error, "commit_async failed: %s",
@@ -1007,9 +1012,9 @@ static void do_test_commit_between_produces(void) {
 
         attempts = 0;
         while (attempts++ < 5) {
-                rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1078,8 +1083,8 @@ static void do_test_all_release_second_consumer(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1111,8 +1116,8 @@ static void do_test_all_release_second_consumer(void) {
                  redelivered, consumed);
         TEST_ASSERT(consumed == MAX_MSGS, "Expected %d consumed, got %d",
                     MAX_MSGS, consumed);
-        TEST_ASSERT(redelivered == consumed,
-                    "Expected %d redelivered, got %d", consumed, redelivered);
+        TEST_ASSERT(redelivered == consumed, "Expected %d redelivered, got %d",
+                    consumed, redelivered);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1151,8 +1156,8 @@ static void do_test_all_reject_second_consumer(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1200,8 +1205,8 @@ static void do_test_all_reject_second_consumer(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1267,8 +1272,8 @@ static void do_test_per_record_commit_async(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1282,8 +1287,7 @@ static void do_test_per_record_commit_async(void) {
 
                                 error = rd_kafka_share_commit_async(rkshare);
                                 TEST_ASSERT(
-                                    !error,
-                                    "commit_async at msg %d failed: %s",
+                                    !error, "commit_async at msg %d failed: %s",
                                     consumed,
                                     error ? rd_kafka_error_string(error) : "");
                         }
@@ -1322,8 +1326,8 @@ static void do_test_per_record_commit_async(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1377,13 +1381,13 @@ static test_ctx_t test_ctx_new(void) {
         ctx.mcluster = test_mock_cluster_new(3, &ctx.bootstraps);
 
         TEST_ASSERT(rd_kafka_mock_set_apiversion(
-                         ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
-                         RD_KAFKA_RESP_ERR_NO_ERROR,
-                     "Failed to enable ShareGroupHeartbeat");
+                        ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareGroupHeartbeat");
         TEST_ASSERT(rd_kafka_mock_set_apiversion(ctx.mcluster,
-                                                  RD_KAFKAP_ShareFetch, 1, 1) ==
-                         RD_KAFKA_RESP_ERR_NO_ERROR,
-                     "Failed to enable ShareFetch");
+                                                 RD_KAFKAP_ShareFetch, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareFetch");
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
@@ -1476,8 +1480,8 @@ static void do_test_mock_inflight_caching(void) {
         SUB_TEST();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
-                         RD_KAFKA_RESP_ERR_NO_ERROR,
-                     "Failed to create mock topic");
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
 
         produce_messages(ctx.producer, topic, msgcnt);
 
@@ -1504,8 +1508,8 @@ static void do_test_mock_inflight_caching(void) {
                 size_t rcvd = 0;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
                 i++;
                 if (error) {
                         rd_kafka_error_destroy(error);
@@ -1520,8 +1524,7 @@ static void do_test_mock_inflight_caching(void) {
 
                                 error = rd_kafka_share_commit_async(rkshare);
                                 TEST_ASSERT(
-                                    !error,
-                                    "commit_async at msg %d failed: %s",
+                                    !error, "commit_async at msg %d failed: %s",
                                     consumed,
                                     error ? rd_kafka_error_string(error) : "");
                                 commit_cnt++;

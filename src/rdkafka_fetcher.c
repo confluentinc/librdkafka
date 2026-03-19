@@ -2355,8 +2355,6 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *tmp_rktp;
 
-        rkb->rkb_share_fetch_session.epoch = -1;
-
         /* Clear toppars in session */
         TAILQ_FOREACH_SAFE(rktp,
                            &rkb->rkb_share_fetch_session.toppars_in_session,
@@ -2423,6 +2421,7 @@ void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
                                        rd_kafka_op_t *rko_orig,
                                        rd_ts_t now) {
         rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
+        rkb->rkb_share_fetch_session.epoch = -1;
         rd_kafka_ShareFetchRequest(
             rkb, rkcg->rkcg_group_id,           /* group_id */
             rkcg->rkcg_member_id,               /* member_id */

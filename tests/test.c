@@ -1553,8 +1553,10 @@ static void run_tests(int argc, char **argv) {
                 } else if (tests_to_skip && strstr(tests_to_skip, testnum))
                         skip_reason = "included in TESTS_SKIP list";
                 else if (skip_tests_till) {
-                        if (!strcmp(skip_tests_till, testnum))
+                        if (!strcmp(skip_tests_till, testnum)) {
+                                rd_free(skip_tests_till);
                                 skip_tests_till = NULL;
+                        }
                         else
                                 skip_reason =
                                     "ignoring test before TESTS_SKIP_BEFORE";

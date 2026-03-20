@@ -3494,80 +3494,42 @@ static void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
 }
 
 /**
- * Op callback for RD_KAFKA_OP_SHARE_FETCH_FANOUT.
+ * @brief Segregate ack batches by partition leader and dispatch
+ * SHARE_FETCH ops to brokers that have pending acks or are the
+ * selected fetch broker.
+ *
+ * Common logic shared by both SHARE_FETCH_FANOUT and
+ * SHARE_COMMIT_ASYNC_FANOUT handlers.
+ *
+ * @param rk Client instance.
+ * @param ack_batches List of ack batches to segregate and dispatch.
+ *                    Ownership is transferred: the list is destroyed
+ *                    after segregation. May be NULL if no acks.
+ * @param selected_rkb The broker selected for fetching, or NULL for
+ *                     ack-only dispatch. If non-NULL, that broker's
+ *                     op will have should_fetch=true.
+ *
  * @locality main thread
  */
-rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
-                                                 rd_kafka_q_t *rkq,
-                                                 rd_kafka_op_t *rko) {
-        rd_kafka_broker_t *rkb, *selected_rkb = NULL;
-        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
-        rd_bool_t fetch_more_records =
-            rko->rko_u.share_fetch_fanout.fetch_more_records;
-        rd_bool_t has_fanout_acks =
-            (rko->rko_u.share_fetch_fanout.ack_batches &&
-             rd_list_cnt(rko->rko_u.share_fetch_fanout.ack_batches) > 0);
+static void
+rd_kafka_share_segregate_and_dispatch_acks(rd_kafka_t *rk,
+                                           rd_list_t *ack_batches,
+                                           rd_kafka_broker_t *selected_rkb) {
+        rd_kafka_broker_t *rkb;
 
-        /*
-         * Step 1: Segregate acks by partition leader.
-         * Each ack batch has a rktpar with an rktp reference; get the
-         * current leader from rktp->rktp_leader and merge the batch
-         * into that broker's rkb_share_async_ack_details.
-         */
-        if (has_fanout_acks) {
-                rd_kafka_share_segregate_acks_by_leader(
-                    rk, rko->rko_u.share_fetch_fanout.ack_batches);
+        if (ack_batches) {
+                rd_kafka_share_segregate_acks_by_leader(rk, ack_batches);
 
                 /* Ownership of elements transferred to broker ack_details.
-                 * Destroy the container (rd_list_new sets F_ALLOCATED,
-                 * so rd_list_destroy frees the struct) and set to NULL. */
-                rd_list_destroy(rko->rko_u.share_fetch_fanout.ack_batches);
-                rko->rko_u.share_fetch_fanout.ack_batches = NULL;
+                 * Destroy the container. */
+                rd_list_destroy(ack_batches);
         }
 
-        /*
-         * Step 2: Global fetch guard.
-         * Select a fetch broker if:
-         * (a) fetch requested and no fetch is already in progress, OR
-         * (b) fetch_more_records is already set but no broker actually
-         *     has a fetch enqueued (stuck state from failed re-selection).
-         */
-        if (fetch_more_records) {
-                rd_bool_t need_select = rd_false;
-
-                if (!rkcg->rkcg_share.share_fetch_more_records) {
-                        rkcg->rkcg_share.share_fetch_more_records = rd_true;
-                        need_select                               = rd_true;
-                } else if (rkcg->rkcg_share
-                               .share_should_fetch_ops_in_flight_cnt == 0) {
-                        need_select = rd_true;
-                }
-
-                if (need_select) {
-                        selected_rkb = rd_kafka_share_select_broker(rk, rkcg);
-
-                        if (selected_rkb)
-                                rd_kafka_dbg(
-                                    rk, CGRP, "SHARE",
-                                    "Selected broker %s for fetching "
-                                    "messages",
-                                    rd_kafka_broker_name(selected_rkb));
-                        // else
-                        //         rd_kafka_dbg(
-                        //             rk, CGRP, "SHARE",
-                        //             "No broker available for share fetch");
-                }
-        }
-
-        if (!fetch_more_records && !has_fanout_acks) {
-                rd_kafka_dbg(rk, CGRP, "SHARE", "No fetch or acks to fan out");
-                return RD_KAFKA_OP_RES_HANDLED;
-        }
-
-        /*
-         * Step 3: Send SHARE_FETCH ops to brokers that have pending acks
-         * or are the selected fetch broker. Cache acks for brokers with
-         * in-flight requests.
+        /**
+         * TODO KIP-932: Instead of iterating through all brokers every time,
+         * we could keep track of which brokers have pending acks or is
+         * selected for fetch in a separate list, and only iterate through
+         * that list here.
          */
         rd_kafka_rdlock(rk);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
@@ -3599,6 +3561,72 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                 rd_kafka_share_enqueue_fetch_op(rk, rkb, is_fetch_broker);
         }
         rd_kafka_rdunlock(rk);
+}
+
+/**
+ * Op callback for RD_KAFKA_OP_SHARE_FETCH_FANOUT.
+ * @locality main thread
+ */
+rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
+                                                 rd_kafka_q_t *rkq,
+                                                 rd_kafka_op_t *rko) {
+        rd_kafka_broker_t *selected_rkb = NULL;
+        rd_kafka_cgrp_t *rkcg           = rd_kafka_cgrp_get(rk);
+        rd_bool_t fetch_more_records =
+            rko->rko_u.share_fetch_fanout.fetch_more_records;
+        rd_bool_t has_fanout_acks =
+            (rko->rko_u.share_fetch_fanout.ack_batches &&
+             rd_list_cnt(rko->rko_u.share_fetch_fanout.ack_batches) > 0);
+
+        /*
+         * Step 1: Global fetch guard — select a fetch broker.
+         * Select if:
+         * (a) fetch requested and no fetch is already in progress, OR
+         * (b) fetch_more_records is already set but no broker actually
+         *     has a fetch enqueued (stuck state from failed re-selection).
+         */
+        if (fetch_more_records) {
+                rd_bool_t need_select = rd_false;
+
+                if (!rkcg->rkcg_share.share_fetch_more_records) {
+                        rkcg->rkcg_share.share_fetch_more_records = rd_true;
+                        need_select                               = rd_true;
+                } else if (rkcg->rkcg_share
+                               .share_should_fetch_ops_in_flight_cnt == 0) {
+                        need_select = rd_true;
+                }
+
+                if (need_select) {
+                        selected_rkb = rd_kafka_share_select_broker(rk, rkcg);
+
+                        if (selected_rkb)
+                                rd_kafka_dbg(
+                                    rk, CGRP, "SHARE",
+                                    "Selected broker %s for fetching "
+                                    "messages",
+                                    rd_kafka_broker_name(selected_rkb));
+                        else
+                                rd_kafka_dbg(
+                                    rk, CGRP, "SHARE",
+                                    "No broker available for share fetch");
+                }
+        }
+
+        if (!selected_rkb && !has_fanout_acks) {
+                rd_kafka_dbg(rk, CGRP, "SHARE", "No fetch or acks to fan out");
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /*
+         * Step 2: Segregate acks by partition leader and dispatch
+         * SHARE_FETCH ops to brokers with pending acks or the selected
+         * fetch broker.
+         */
+        rd_kafka_share_segregate_and_dispatch_acks(
+            rk,
+            has_fanout_acks ? rko->rko_u.share_fetch_fanout.ack_batches : NULL,
+            selected_rkb);
+        rko->rko_u.share_fetch_fanout.ack_batches = NULL;
 
         RD_IF_FREE(selected_rkb, rd_kafka_broker_destroy);
 
@@ -3681,7 +3709,6 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
 rd_kafka_op_res_t rd_kafka_share_commit_async_fanout_op(rd_kafka_t *rk,
                                                         rd_kafka_q_t *rkq,
                                                         rd_kafka_op_t *rko) {
-        rd_kafka_broker_t *rkb;
         rd_bool_t has_acks =
             (rko->rko_u.share_commit_async_fanout.ack_batches &&
              rd_list_cnt(rko->rko_u.share_commit_async_fanout.ack_batches) > 0);
@@ -3693,34 +3720,10 @@ rd_kafka_op_res_t rd_kafka_share_commit_async_fanout_op(rd_kafka_t *rk,
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
-        /* Step 1: Segregate acks by partition leader. */
-        rd_kafka_share_segregate_acks_by_leader(
-            rk, rko->rko_u.share_commit_async_fanout.ack_batches);
-
-        rd_list_destroy(rko->rko_u.share_commit_async_fanout.ack_batches);
+        rd_kafka_share_segregate_and_dispatch_acks(
+            rk, rko->rko_u.share_commit_async_fanout.ack_batches,
+            NULL /* ack-only, no fetch */);
         rko->rko_u.share_commit_async_fanout.ack_batches = NULL;
-
-        /* Step 2: Send ack-only SHARE_FETCH ops to brokers
-         * that have pending acks. */
-        rd_kafka_rdlock(rk);
-        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rd_kafka_broker_or_instance_terminating(rkb) ||
-                    RD_KAFKA_BROKER_IS_LOGICAL(rkb))
-                        continue;
-
-                if (!rkb->rkb_share_async_ack_details)
-                        continue;
-
-                /* If a request is already in-flight on this broker,
-                 * acks stay cached in rkb_share_async_ack_details
-                 * and will be sent with the next request. */
-                if (rkb->rkb_share_fetch_enqueued)
-                        continue;
-
-                rd_kafka_share_enqueue_fetch_op(rk, rkb,
-                                                rd_false /* ack-only */);
-        }
-        rd_kafka_rdunlock(rk);
 
         return RD_KAFKA_OP_RES_HANDLED;
 }

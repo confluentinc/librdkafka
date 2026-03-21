@@ -109,6 +109,23 @@ class NugetPackage (Package):
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-arm64/native/alpine-librdkafka.so'),
 
+        # Linux glibc centos8 s390x without GSSAPI (no external deps)
+        Mapping({'arch': 's390x',
+                 'plat': 'linux',
+                 'dist': 'centos8',
+                 'lnk': 'all'},
+                'librdkafka.tgz',
+                './usr/local/lib/librdkafka.so.1',
+                'runtimes/linux-s390x/native/librdkafka.so'),
+        # Linux musl alpine s390x without GSSAPI (no external deps)
+        # Mapping({'arch': 's390x',
+        #          'plat': 'linux',
+        #          'dist': 'alpine',
+        #          'lnk': 'all'},
+        #         'librdkafka.tgz',
+        #         './usr/local/lib/librdkafka.so.1',
+        #         'runtimes/linux-s390x/native/alpine-librdkafka.so'),
+
         # Common Win runtime
         Mapping({'arch': 'x64',
                  'plat': 'win'},
@@ -236,6 +253,10 @@ class NugetPackage (Package):
     def __init__(self, version, arts):
         if version.startswith('v'):
             version = version[1:]  # Strip v prefix
+        # PR-only workaround: if version doesn't start with a digit,
+        # turn it into a prerelease of 0.0.0 so NuGet accepts it.
+        if not version[0].isdigit():
+            version = f"0.0.0-{version}"
         super(NugetPackage, self).__init__(version, arts)
 
     def cleanup(self):

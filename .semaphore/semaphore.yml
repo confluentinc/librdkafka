@@ -289,6 +289,8 @@ blocks:
           value: UCRT64
       prologue:
         commands:
+          - 'if (-not $Env:SEMAPHORE_GIT_TAG_NAME) { $Env:SEMAPHORE_GIT_TAG_NAME = "$Env:SEMAPHORE_WORKFLOW_ID-s390x" }'
+          - 'Write-Host "SEMAPHORE_GIT_TAG_NAME=$Env:SEMAPHORE_GIT_TAG_NAME"'
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
       epilogue:
@@ -323,6 +325,8 @@ blocks:
           value: 'yes'
       prologue:
         commands:
+          - 'if (-not $Env:SEMAPHORE_GIT_TAG_NAME) { $Env:SEMAPHORE_GIT_TAG_NAME = "$Env:SEMAPHORE_WORKFLOW_ID-s390x" }'
+          - 'Write-Host "SEMAPHORE_GIT_TAG_NAME=$Env:SEMAPHORE_GIT_TAG_NAME"'
           # install vcpkg in the parent directory.
           - cd ..
           # Setup vcpkg

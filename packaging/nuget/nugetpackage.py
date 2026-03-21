@@ -7,7 +7,11 @@ import os
 import tempfile
 import shutil
 import subprocess
+import re
+
 from packaging import Package, Mapping
+
+SEMVER_PREFIX = re.compile(r"^\d+.\d+.\d+")
 
 
 class NugetPackage (Package):
@@ -253,9 +257,9 @@ class NugetPackage (Package):
     def __init__(self, version, arts):
         if version.startswith('v'):
             version = version[1:]  # Strip v prefix
-        # PR-only workaround: if version doesn't start with a digit,
-        # turn it into a prerelease of 0.0.0 so NuGet accepts it.
-        if not version[0].isdigit():
+        # PR-only workaround: if it's not a normal semver like 1.2.3...,
+        # wrap it as 0.0.0-<tag>
+        if not SEMVER_PREFIX.match(version):
             version = f"0.0.0-{version}"
         super(NugetPackage, self).__init__(version, arts)
 

@@ -16,8 +16,6 @@ global_job_config:
       - checkout
       - mkdir artifacts
       - mkdir dest
-      - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
-      - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
   env_vars:
     - name: CACHE_TAG
       value: '7'
@@ -42,6 +40,10 @@ blocks:
       agent:
         machine:
           type: s1-macos-15-arm64-8
+      prologue:
+        commands:
+        - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+        - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
@@ -73,6 +75,10 @@ blocks:
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -134,6 +140,8 @@ blocks:
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       jobs:
         - name: 'Build configuration checks'
@@ -151,6 +159,8 @@ blocks:
           type: s1-prod-ubuntu24-04-amd64-1
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       epilogue:
         commands:
@@ -195,6 +205,8 @@ blocks:
           type: s1-prod-ubuntu24-04-arm64-1
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       epilogue:
         commands:
@@ -239,6 +251,8 @@ blocks:
           type: s1-prod-ubuntu24-04-amd64-1
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
           - docker run --privileged --rm tonistiigi/binfmt --install s390x
       epilogue:
@@ -289,6 +303,8 @@ blocks:
           value: UCRT64
       prologue:
         commands:
+          - 'if (-not $Env:SEMAPHORE_GIT_TAG_NAME) { $Env:SEMAPHORE_GIT_TAG_NAME = "$Env:SEMAPHORE_WORKFLOW_ID-s390x" }'
+          - 'Write-Host "SEMAPHORE_GIT_TAG_NAME=$Env:SEMAPHORE_GIT_TAG_NAME"'
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
       epilogue:
@@ -323,6 +339,8 @@ blocks:
           value: 'yes'
       prologue:
         commands:
+          - 'if (-not $Env:SEMAPHORE_GIT_TAG_NAME) { $Env:SEMAPHORE_GIT_TAG_NAME = "$Env:SEMAPHORE_WORKFLOW_ID-s390x" }'
+          - 'Write-Host "SEMAPHORE_GIT_TAG_NAME=$Env:SEMAPHORE_GIT_TAG_NAME"'
           # install vcpkg in the parent directory.
           - cd ..
           # Setup vcpkg
@@ -369,6 +387,10 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-amd64-2
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       jobs:
         - name: 'Build NuGet and static packages'
           commands:

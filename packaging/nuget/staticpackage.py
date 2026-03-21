@@ -172,20 +172,20 @@ class StaticPackage (Package):
                 './usr/local/lib/pkgconfig/rdkafka-static.pc',
                 'librdkafka_darwin_arm64.pc'),
 
-        # win static lib and pkg-config file (mingw)
-        Mapping({'arch': 'x64',
-                 'plat': 'win',
-                 'dist': 'mingw',
-                 'lnk': 'static'},
-                'librdkafka.tgz',
-                './lib/librdkafka-static.a', 'librdkafka_windows.a'),
-        Mapping({'arch': 'x64',
-                 'plat': 'win',
-                 'dist': 'mingw',
-                 'lnk': 'static'},
-                'librdkafka.tgz',
-                './lib/pkgconfig/rdkafka-static.pc',
-                'librdkafka_windows.pc'),
+        # # win static lib and pkg-config file (mingw)
+        # Mapping({'arch': 'x64',
+        #          'plat': 'win',
+        #          'dist': 'mingw',
+        #          'lnk': 'static'},
+        #         'librdkafka.tgz',
+        #         './lib/librdkafka-static.a', 'librdkafka_windows.a'),
+        # Mapping({'arch': 'x64',
+        #          'plat': 'win',
+        #          'dist': 'mingw',
+        #          'lnk': 'static'},
+        #         'librdkafka.tgz',
+        #         './lib/pkgconfig/rdkafka-static.pc',
+        #         'librdkafka_windows.pc'),
     ]
 
     def __init__(self, version, arts):

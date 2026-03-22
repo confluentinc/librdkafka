@@ -117,6 +117,10 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-arm64-1
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       jobs:
         - name: 'Generate documentation'
           commands:

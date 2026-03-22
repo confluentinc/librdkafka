@@ -34,12 +34,16 @@ global_job_config:
 blocks:
   - name: 'OSX arm64/m1'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
           type: s1-macos-15-arm64-8
+      prologue:
+        commands:
+        - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+        - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
@@ -62,8 +66,8 @@ blocks:
 
   - name: 'OSX x64'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -71,6 +75,10 @@ blocks:
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -109,6 +117,10 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-arm64-1
+        prologue:
+          commands:
+           - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+           - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       jobs:
         - name: 'Generate documentation'
           commands:
@@ -132,6 +144,8 @@ blocks:
           value: -std=gnu90 # Test minimum C standard, default in CentOS 7
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       jobs:
         - name: 'Build configuration checks'
@@ -141,14 +155,16 @@ blocks:
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-amd64-1
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       epilogue:
         commands:
@@ -185,14 +201,16 @@ blocks:
 
   - name: 'Linux arm64: release artifact docker builds'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-arm64-1
       prologue:
         commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       epilogue:
         commands:
@@ -227,10 +245,57 @@ blocks:
             - packaging/tools/build-release-artifacts.sh --disable-gssapi alpine:3.16.9 artifacts/librdkafka.tgz
 
 
+  - name: 'Linux s390x: release artifact docker builds'
+    dependencies: []
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-1
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          - docker run --privileged --rm tonistiigi/binfmt --install s390x
+      epilogue:
+        commands:
+          - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
+      jobs:
+        - name: 'Build: centos8 glibc +gssapi'
+          env_vars:
+            - name: ARTIFACT_KEY
+              value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-std__extra-gssapi
+          commands:
+            - packaging/tools/build-release-artifacts.sh --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2024.07.01-1 artifacts/librdkafka.tgz
+
+        - name: 'Build: centos8 glibc'
+          env_vars:
+            - name: ARTIFACT_KEY
+              value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-all
+          commands:
+            - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2024.07.01-1 artifacts/librdkafka.tgz
+
+        # - name: 'Build: alpine musl +gssapi'
+        #   env_vars:
+        #     - name: ARTIFACT_KEY
+        #       value: p-librdkafka__plat-linux__dist-alpine__arch-s390x__lnk-all__extra-gssapi
+        #   commands:
+        #     - packaging/tools/build-release-artifacts.sh --platform linux/s390x alpine:3.16.9 artifacts/librdkafka.tgz
+
+        # - name: 'Build: alpine musl'
+        #   env_vars:
+        #     - name: ARTIFACT_KEY
+        #       value: p-librdkafka__plat-linux__dist-alpine__arch-s390x__lnk-all
+        #   commands:
+        #     - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x alpine:3.16.9 artifacts/librdkafka.tgz
+
+
   - name: 'Windows x64: MinGW-w64'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -242,6 +307,8 @@ blocks:
           value: UCRT64
       prologue:
         commands:
+          - 'if (-not $Env:SEMAPHORE_GIT_TAG_NAME) { $Env:SEMAPHORE_GIT_TAG_NAME = "$Env:SEMAPHORE_WORKFLOW_ID-s390x" }'
+          - 'Write-Host "SEMAPHORE_GIT_TAG_NAME=$Env:SEMAPHORE_GIT_TAG_NAME"'
           # Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
       epilogue:
@@ -264,8 +331,8 @@ blocks:
 
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -276,6 +343,8 @@ blocks:
           value: 'yes'
       prologue:
         commands:
+          - 'if (-not $Env:SEMAPHORE_GIT_TAG_NAME) { $Env:SEMAPHORE_GIT_TAG_NAME = "$Env:SEMAPHORE_WORKFLOW_ID-s390x" }'
+          - 'Write-Host "SEMAPHORE_GIT_TAG_NAME=$Env:SEMAPHORE_GIT_TAG_NAME"'
           # install vcpkg in the parent directory.
           - cd ..
           # Setup vcpkg
@@ -313,14 +382,19 @@ blocks:
       - 'OSX x64'
       - 'Linux x64: release artifact docker builds'
       - 'Linux arm64: release artifact docker builds'
+      - 'Linux s390x: release artifact docker builds'
       - 'Windows x64: MinGW-w64'
       - 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+#      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-amd64-2
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-s390x}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       jobs:
         - name: 'Build NuGet and static packages'
           commands:

@@ -292,6 +292,8 @@ _TEST_DECL(0170_share_consumer_subscription);
 _TEST_DECL(0171_share_consumer_consume);
 _TEST_DECL(0172_share_consumer_acknowledge);
 _TEST_DECL(0173_share_consumer_commit_async);
+_TEST_DECL(0174_share_consumer_concurrency);
+_TEST_DECL(0175_share_consumer_groups);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -568,6 +570,8 @@ struct test tests[] = {
     _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0174_share_consumer_concurrency, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0175_share_consumer_groups, 0, TEST_BRKVER(0, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

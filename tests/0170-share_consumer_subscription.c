@@ -967,12 +967,213 @@ static void do_test_subscribe_15_topics(void) {
 }
 
 
+/**
+ * @brief Test share.auto.offset.reset = earliest
+ *
+ * Verifies that with share.auto.offset.reset = earliest, consumer receives
+ * all messages including those produced before subscription.
+ */
+static void test_auto_offset_reset_earliest(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-offset-earliest-test";
+        rd_kafka_topic_partition_list_t *subs;
+        int consumed = 0;
+        int attempts;
+        const int msg_cnt = 100;
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY("=== share.auto.offset.reset = earliest ===\n");
+        TEST_SAY(
+            "============================================================\n");
+
+        /* Create topic */
+        topic = test_mk_topic_name("0170-offset-earliest", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Produce messages BEFORE consumer subscribes */
+        TEST_SAY("Producing %d messages BEFORE subscription...\n", msg_cnt);
+        test_produce_msgs_easy(topic, 0, 0, msg_cnt);
+
+        /* Create consumer */
+        consumer = test_create_share_consumer(group, NULL);
+
+        /* Configure group with earliest offset */
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        /* Subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume - should get all 100 messages */
+        TEST_SAY("Consuming with earliest offset...\n");
+        attempts = 50;
+        while (consumed < msg_cnt && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+
+                if (rcvd > 0)
+                        TEST_SAY("Progress: %d/%d\n", consumed, msg_cnt);
+        }
+
+        TEST_ASSERT(consumed == msg_cnt, "Expected %d messages, got %d",
+                    msg_cnt, consumed);
+
+        TEST_SAY("SUCCESS: earliest offset - consumed all %d messages\n",
+                 consumed);
+
+        /* Cleanup */
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+}
+
+/**
+ * @brief Test share.auto.offset.reset default value (latest)
+ *
+ * Verifies that with default (latest) offset, consumer only receives
+ * messages produced after subscription, not pre-existing messages.
+ */
+static void test_auto_offset_reset_default_latest(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-offset-default-test";
+        rd_kafka_topic_partition_list_t *subs;
+        int consumed_before = 0, consumed_after = 0;
+        int attempts;
+        const int initial_msgs = 100;
+        const int later_msgs   = 50;
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY("=== share.auto.offset.reset default (latest) ===\n");
+        TEST_SAY(
+            "============================================================\n");
+
+        /* Create topic */
+        topic = test_mk_topic_name("0170-offset-default", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Produce messages BEFORE consumer subscribes */
+        TEST_SAY("Producing %d messages BEFORE subscription...\n",
+                 initial_msgs);
+        test_produce_msgs_easy(topic, 0, 0, initial_msgs);
+
+        /* Create consumer - NO offset reset config (uses default "latest") */
+        consumer = test_create_share_consumer(group, NULL);
+
+        /* Subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Allow consumer to establish position */
+        rd_sleep(3);
+
+        /* Try to consume - should get 0 messages (default is latest) */
+        TEST_SAY("Trying to consume with default (latest) offset...\n");
+        attempts = 10;
+        while (attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed_before++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_SAY(
+            "Consumed %d messages from before subscription (expected: 0)\n",
+            consumed_before);
+        TEST_ASSERT(consumed_before == 0,
+                    "With default (latest) offset, should not receive "
+                    "pre-existing messages, got %d",
+                    consumed_before);
+
+        /* Now produce more messages */
+        TEST_SAY("Producing %d more messages AFTER subscription...\n",
+                 later_msgs);
+        test_produce_msgs_easy(topic, 0, 0, later_msgs);
+
+        /* Consume - should get the new 50 messages */
+        TEST_SAY("Consuming messages produced after subscription...\n");
+        attempts = 30;
+        while (consumed_after < later_msgs && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed_after++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages after subscription (expected: %d)\n",
+                 consumed_after, later_msgs);
+        TEST_ASSERT(consumed_after == later_msgs,
+                    "Expected %d messages after subscription, got %d",
+                    later_msgs, consumed_after);
+
+        TEST_SAY(
+            "SUCCESS: default (latest) offset verified - before=%d, "
+            "after=%d\n",
+            consumed_before, consumed_after);
+
+        /* Cleanup */
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+}
+
 int main_0170_share_consumer_subscription(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();
         common_admin    = test_create_producer();
 
         test_timeout_set(200);
+
+        /* Auto offset reset tests */
+        test_auto_offset_reset_earliest();
+        test_auto_offset_reset_default_latest();
 
         /* Basic subscription tests */
         do_test_scenario(&test_single_subscribe);

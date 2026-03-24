@@ -1001,9 +1001,11 @@ static void test_auto_offset_reset_earliest(void) {
         const int msg_cnt = 100;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== share.auto.offset.reset = earliest ===\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         /* Create topic */
         topic = test_mk_topic_name("0170-offset-earliest", 1);
@@ -1017,9 +1019,9 @@ static void test_auto_offset_reset_earliest(void) {
         consumer = test_create_share_consumer(group);
 
         /* Configure group with earliest offset */
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(consumer),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        test_IncrementalAlterConfigs_simple(
+            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
+            group, grp_conf, 1);
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -1035,7 +1037,8 @@ static void test_auto_offset_reset_earliest(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
@@ -1081,16 +1084,19 @@ static void test_auto_offset_reset_default_latest(void) {
         const int later_msgs   = 50;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== share.auto.offset.reset default (latest) ===\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         /* Create topic */
         topic = test_mk_topic_name("0170-offset-default", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Produce messages BEFORE consumer subscribes */
-        TEST_SAY("Producing %d messages BEFORE subscription...\n", initial_msgs);
+        TEST_SAY("Producing %d messages BEFORE subscription...\n",
+                 initial_msgs);
         test_produce_msgs_easy(topic, 0, 0, initial_msgs);
 
         /* Create consumer - NO offset reset config (uses default "latest") */
@@ -1113,7 +1119,8 @@ static void test_auto_offset_reset_default_latest(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
@@ -1126,8 +1133,9 @@ static void test_auto_offset_reset_default_latest(void) {
                 }
         }
 
-        TEST_SAY("Consumed %d messages from before subscription (expected: 0)\n",
-                 consumed_before);
+        TEST_SAY(
+            "Consumed %d messages from before subscription (expected: 0)\n",
+            consumed_before);
         TEST_ASSERT(consumed_before == 0,
                     "With default (latest) offset, should not receive "
                     "pre-existing messages, got %d",
@@ -1146,7 +1154,8 @@ static void test_auto_offset_reset_default_latest(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
@@ -1165,9 +1174,10 @@ static void test_auto_offset_reset_default_latest(void) {
                     "Expected %d messages after subscription, got %d",
                     later_msgs, consumed_after);
 
-        TEST_SAY("SUCCESS: default (latest) offset verified - before=%d, "
-                 "after=%d\n",
-                 consumed_before, consumed_after);
+        TEST_SAY(
+            "SUCCESS: default (latest) offset verified - before=%d, "
+            "after=%d\n",
+            consumed_before, consumed_after);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);

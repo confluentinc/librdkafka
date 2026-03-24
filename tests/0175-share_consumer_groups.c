@@ -45,16 +45,16 @@
  * @brief Configuration for a multi-group share consumer test
  */
 typedef struct {
-        int group_cnt;                            /**< Number of share groups */
-        int consumers_per_group[MAX_GROUPS];      /**< Consumers per group */
-        const char *group_names[MAX_GROUPS];      /**< Group names */
-        rd_bool_t use_earliest[MAX_GROUPS];       /**< Use earliest offset */
-        int partitions;                           /**< Number of partitions */
-        int msgs_per_partition;                   /**< Messages per partition */
-        const char *test_name;                    /**< Test description */
-        int max_attempts;                         /**< Max poll attempts */
-        rd_bool_t produce_before_subscribe;       /**< Produce before subscribe */
-        int produce_after_subscribe;              /**< Messages after subscribe */
+        int group_cnt;                       /**< Number of share groups */
+        int consumers_per_group[MAX_GROUPS]; /**< Consumers per group */
+        const char *group_names[MAX_GROUPS]; /**< Group names */
+        rd_bool_t use_earliest[MAX_GROUPS];  /**< Use earliest offset */
+        int partitions;                      /**< Number of partitions */
+        int msgs_per_partition;              /**< Messages per partition */
+        const char *test_name;               /**< Test description */
+        int max_attempts;                    /**< Max poll attempts */
+        rd_bool_t produce_before_subscribe;  /**< Produce before subscribe */
+        int produce_after_subscribe;         /**< Messages after subscribe */
 } groups_test_config_t;
 
 /**
@@ -201,8 +201,8 @@ static void consume_from_all_groups(groups_test_config_t *config,
                                      g++) {
                                         pos += rd_snprintf(
                                             progress + pos,
-                                            sizeof(progress) - pos, "G%d=%d/%d ",
-                                            g, state->consumed[g],
+                                            sizeof(progress) - pos,
+                                            "G%d=%d/%d ", g, state->consumed[g],
                                             state->expected_per_group);
                                 }
                                 TEST_SAY("Progress: %s\n", progress);
@@ -249,9 +249,11 @@ static void run_groups_test(groups_test_config_t *config) {
         int pos          = 0;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== %s ===\n", config->test_name);
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         /* Calculate expected messages */
         total_msgs = config->partitions * config->msgs_per_partition;
@@ -281,7 +283,8 @@ static void run_groups_test(groups_test_config_t *config) {
                 int per_partition =
                     config->produce_after_subscribe / config->partitions;
                 for (p = 0; p < config->partitions; p++) {
-                        test_produce_msgs_easy(state.topic, 0, p, per_partition);
+                        test_produce_msgs_easy(state.topic, 0, p,
+                                               per_partition);
                 }
                 TEST_SAY("Produced %d messages after subscribe\n",
                          config->produce_after_subscribe);
@@ -329,13 +332,13 @@ static void run_groups_test(groups_test_config_t *config) {
  */
 static void test_two_groups_same_topic(void) {
         groups_test_config_t config = {
-            .group_cnt              = 2,
-            .consumers_per_group    = {1, 1},
-            .group_names            = {"share-2grp-A", "share-2grp-B"},
-            .use_earliest           = {rd_true, rd_true},
-            .partitions             = 1,
-            .msgs_per_partition     = 100,
-            .test_name              = "Two groups consuming same topic",
+            .group_cnt                = 2,
+            .consumers_per_group      = {1, 1},
+            .group_names              = {"share-2grp-A", "share-2grp-B"},
+            .use_earliest             = {rd_true, rd_true},
+            .partitions               = 1,
+            .msgs_per_partition       = 100,
+            .test_name                = "Two groups consuming same topic",
             .produce_before_subscribe = rd_true,
         };
         run_groups_test(&config);
@@ -348,13 +351,13 @@ static void test_three_groups_concurrent(void) {
         groups_test_config_t config = {
             .group_cnt           = 3,
             .consumers_per_group = {2, 2, 2},
-            .group_names = {"share-3grp-A", "share-3grp-B", "share-3grp-C"},
-            .use_earliest           = {rd_true, rd_true, rd_true},
-            .partitions             = 3,
-            .msgs_per_partition     = 334,
-            .test_name              = "Three groups with 2 consumers each",
+            .group_names  = {"share-3grp-A", "share-3grp-B", "share-3grp-C"},
+            .use_earliest = {rd_true, rd_true, rd_true},
+            .partitions   = 3,
+            .msgs_per_partition       = 334,
+            .test_name                = "Three groups with 2 consumers each",
             .produce_before_subscribe = rd_true,
-            .max_attempts           = 150,
+            .max_attempts             = 150,
         };
         run_groups_test(&config);
 }
@@ -366,15 +369,14 @@ static void test_five_groups_same_topic(void) {
         groups_test_config_t config = {
             .group_cnt           = 5,
             .consumers_per_group = {1, 1, 1, 1, 1},
-            .group_names         = {"share-5grp-A", "share-5grp-B",
-                                    "share-5grp-C", "share-5grp-D",
-                                    "share-5grp-E"},
+            .group_names  = {"share-5grp-A", "share-5grp-B", "share-5grp-C",
+                             "share-5grp-D", "share-5grp-E"},
             .use_earliest = {rd_true, rd_true, rd_true, rd_true, rd_true},
-            .partitions             = 2,
-            .msgs_per_partition     = 250,
-            .test_name              = "Five groups consuming same topic",
+            .partitions   = 2,
+            .msgs_per_partition       = 250,
+            .test_name                = "Five groups consuming same topic",
             .produce_before_subscribe = rd_true,
-            .max_attempts           = 150,
+            .max_attempts             = 150,
         };
         run_groups_test(&config);
 }
@@ -387,17 +389,19 @@ static void test_groups_staggered_join(void) {
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_message_t *batch[BATCH_SIZE];
         const char *topic;
-        const char *group_a = "share-stagger-A";
-        const char *group_b = "share-stagger-B";
+        const char *group_a    = "share-stagger-A";
+        const char *group_b    = "share-stagger-B";
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        const int msg_cnt = 100;
+        const int msg_cnt      = 100;
         int consumed_a = 0, consumed_b = 0;
         int attempts;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== Groups joining at staggered times ===\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
 
         /* Create topic */
         topic = test_mk_topic_name("0175-staggered", 1);
@@ -450,7 +454,8 @@ static void test_groups_staggered_join(void) {
 
         /* Both finish consuming */
         attempts = 50;
-        while ((consumed_a < msg_cnt || consumed_b < msg_cnt) && attempts-- > 0) {
+        while ((consumed_a < msg_cnt || consumed_b < msg_cnt) &&
+               attempts-- > 0) {
                 size_t rcvd = 0;
                 size_t m;
                 rd_kafka_error_t *err;

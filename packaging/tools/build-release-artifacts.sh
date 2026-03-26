@@ -76,7 +76,8 @@ if grep -q alpine /etc/os-release 2>/dev/null ; then
 
 else
     # CentOS
-    yum install -y libstdc++-devel gcc gcc-c++ python3 git perl-IPC-Cmd perl-Pod-Html $extra_pkgs_rpm
+    yum install -y libstdc++-devel gcc gcc-c++ python3 git perl-IPC-Cmd \
+        perl-Pod-Html perl-Time-Piece $extra_pkgs_rpm
 fi
 
 

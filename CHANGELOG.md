@@ -9,7 +9,7 @@ librdkafka v2.14.0 is a feature release:
 ### General fixes
 
 * Fix data race on `idx` in `rd_kafka_fetch_pos2str()` when fetching
-  from multiple partitions concurrently.
+  from multiple partitions concurrently (#5367).
 
 # librdkafka v2.13.2
 

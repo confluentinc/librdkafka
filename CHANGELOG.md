@@ -4,6 +4,13 @@ librdkafka v2.14.0 is a feature release:
 
 * [KIP-768](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=186877575#KIP768:ExtendSASL/OAUTHBEARERwithSupportforOIDC-ClientConfiguration) Extend SASL/OAUTHBEARER to support OIDC claim mapping beyond the default `sub` claim (#5336).
 
+## Fixes
+
+### General fixes
+
+* Fix data race on `idx` in `rd_kafka_fetch_pos2str()` when fetching
+  from multiple partitions concurrently.
+
 # librdkafka v2.13.2
 
 librdkafka v2.13.2 is a maintenance release:

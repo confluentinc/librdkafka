@@ -286,6 +286,7 @@ _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
+_TEST_DECL(0154_admin_quota_ut);
 _TEST_DECL(0155_share_group_heartbeat_mock);
 _TEST_DECL(0156_share_consumer_fetch_mock);
 _TEST_DECL(0157_share_consumer_ack_mock);
@@ -582,6 +583,7 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
+    _TEST(0154_admin_quota_ut, TEST_F_LOCAL),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
     _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
     _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),

@@ -8240,8 +8240,8 @@ err_parse:
                 error      = rd_kafka_error_new(
                     error_code,
                     "Broker [%d"
-                    "] "
-                    "ListConsumerGroups response protocol parse failure: %s",
+                         "] "
+                         "ListConsumerGroups response protocol parse failure: %s",
                     rd_kafka_broker_id(rkb), rd_kafka_err2str(error_code));
                 rd_list_add(&errors, error);
         }

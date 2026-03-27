@@ -7152,13 +7152,13 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS,
         /** AlterUserScramCredentials */
         RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
-        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
-        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
-        RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
-        RD_KAFKA_ADMIN_OP_ELECTLEADERS,      /**< ElectLeaders */
-        RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS,   /**< AlterClientQuotas */
+        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,       /**< DescribeTopics */
+        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER,      /**< DescribeCluster */
+        RD_KAFKA_ADMIN_OP_LISTOFFSETS,          /**< ListOffsets */
+        RD_KAFKA_ADMIN_OP_ELECTLEADERS,         /**< ElectLeaders */
+        RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS,    /**< AlterClientQuotas */
         RD_KAFKA_ADMIN_OP_DESCRIBECLIENTQUOTAS, /**< DescribeClientQuotas */
-        RD_KAFKA_ADMIN_OP__CNT                 /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP__CNT                  /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -10116,14 +10116,16 @@ rd_kafka_ClientQuotaEntity_name(const rd_kafka_ClientQuotaEntity_t *entity);
  * @brief Client Quota Operation
  *
  * This structure is used to define operations on client quotas, such as
- * setting producer_byte_rate or removing request_percentage a quota for a specific entity.
+ * setting producer_byte_rate or removing request_percentage a quota for a
+ * specific entity.
  */
 typedef struct rd_kafka_ClientQuotaOperation_s rd_kafka_ClientQuotaOperation_t;
 
 /**
  * @brief Client Quota Entry
  *
- * This structure is used to combine the entities and the quota operations to enforce on them.
+ * This structure is used to combine the entities and the quota operations to
+ * enforce on them.
  */
 typedef struct rd_kafka_ClientQuotaEntry_s rd_kafka_ClientQuotaEntry_t;
 
@@ -10239,10 +10241,10 @@ rd_kafka_AlterClientQuotas_result_entries(
  */
 RD_EXPORT void
 rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
-                            rd_kafka_ClientQuotaEntry_t **entries,
-                            size_t entry_cnt,
-                            const rd_kafka_AdminOptions_t *options,
-                            rd_kafka_queue_t *rkqu);
+                           rd_kafka_ClientQuotaEntry_t **entries,
+                           size_t entry_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
 
 /**@}*/
 
@@ -10259,9 +10261,10 @@ rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
  * @brief Match type for DescribeClientQuotas filter components.
  */
 typedef enum {
-        RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT   = 0, /**< Exact name match */
-        RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT = 1, /**< Default (nameless) entity */
-        RD_KAFKA_CLIENT_QUOTA_MATCH_ANY     = 2, /**< Any entity of this type */
+        RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT = 0, /**< Exact name match */
+        RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT =
+            1,                               /**< Default (nameless) entity */
+        RD_KAFKA_CLIENT_QUOTA_MATCH_ANY = 2, /**< Any entity of this type */
 } rd_kafka_ClientQuotaMatchType_t;
 
 /**
@@ -10320,14 +10323,13 @@ rd_kafka_ClientQuotaFilter_destroy(rd_kafka_ClientQuotaFilter_t *filter);
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code.
  */
-RD_EXPORT rd_kafka_resp_err_t
-rd_kafka_ClientQuotaFilter_add_component(rd_kafka_ClientQuotaFilter_t *filter,
-                                         const char *entity_type,
-                                         rd_kafka_ClientQuotaMatchType_t
-                                             match_type,
-                                         const char *match,
-                                         char *errstr,
-                                         size_t errstr_size);
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_ClientQuotaFilter_add_component(
+    rd_kafka_ClientQuotaFilter_t *filter,
+    const char *entity_type,
+    rd_kafka_ClientQuotaMatchType_t match_type,
+    const char *match,
+    char *errstr,
+    size_t errstr_size);
 
 /**
  * @brief Get the configuration key from a quota value.

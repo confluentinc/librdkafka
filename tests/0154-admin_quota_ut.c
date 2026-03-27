@@ -81,8 +81,8 @@ static void do_test_ClientQuotaFilter(void) {
 
         /* EXACT match with a name */
         err = rd_kafka_ClientQuotaFilter_add_component(
-            filter, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, "alice",
-            errstr, sizeof(errstr));
+            filter, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, "alice", errstr,
+            sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "expected NO_ERROR for EXACT component, got %s",
                     rd_kafka_err2str(err));
@@ -97,8 +97,8 @@ static void do_test_ClientQuotaFilter(void) {
 
         /* ANY match (NULL name) */
         err = rd_kafka_ClientQuotaFilter_add_component(
-            filter, "client-id", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, NULL,
-            errstr, sizeof(errstr));
+            filter, "client-id", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, NULL, errstr,
+            sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "expected NO_ERROR for ANY component, got %s",
                     rd_kafka_err2str(err));
@@ -134,8 +134,8 @@ static void do_test_ClientQuotaEntry(void) {
 
         /* NULL entity type must be rejected */
         *errstr = '\0';
-        err = rd_kafka_ClientQuotaEntry_add_entity(entry, NULL, "user1",
-                                                   errstr, sizeof(errstr));
+        err = rd_kafka_ClientQuotaEntry_add_entity(entry, NULL, "user1", errstr,
+                                                   sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "expected INVALID_ARG for NULL entity type, got %s",
                     rd_kafka_err2str(err));
@@ -239,8 +239,7 @@ static void do_test_DescribeClientQuotas(const char *what,
         TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
         TEST_SAY("DescribeClientQuotas: got %s in %.3fs\n",
-                 rd_kafka_event_name(rkev),
-                 TIMING_DURATION(&timing) / 1000.0f);
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
 
         /* Verify event type */
         res = rd_kafka_event_DescribeClientQuotas_result(rkev);
@@ -293,8 +292,8 @@ static void do_test_AlterClientQuotas(const char *what,
 
         /* First entry: set producer_byte_rate for user "alice" */
         entries[0] = rd_kafka_ClientQuotaEntry_new();
-        err        = rd_kafka_ClientQuotaEntry_add_entity(
-            entries[0], "user", "alice", errstr, sizeof(errstr));
+        err = rd_kafka_ClientQuotaEntry_add_entity(entries[0], "user", "alice",
+                                                   errstr, sizeof(errstr));
         TEST_ASSERT(!err, "add_entity: %s", errstr);
         err = rd_kafka_ClientQuotaEntry_add_operation(
             entries[0], "producer_byte_rate", 1024.0, 0 /*remove*/, errstr,
@@ -335,8 +334,7 @@ static void do_test_AlterClientQuotas(const char *what,
         TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
         TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
         TEST_SAY("AlterClientQuotas: got %s in %.3fs\n",
-                 rd_kafka_event_name(rkev),
-                 TIMING_DURATION(&timing) / 1000.0f);
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
 
         /* Verify event type */
         res = rd_kafka_event_AlterClientQuotas_result(rkev);

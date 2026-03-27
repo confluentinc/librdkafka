@@ -133,8 +133,7 @@ static void conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
 /**
  * @brief Print the result entries from a DescribeClientQuotas response.
  */
-static void
-print_result(const rd_kafka_DescribeClientQuotas_result_t *result) {
+static void print_result(const rd_kafka_DescribeClientQuotas_result_t *result) {
         const rd_kafka_DescribeClientQuotas_result_entry_t **entries;
         size_t entry_cnt, i;
 
@@ -172,10 +171,10 @@ print_result(const rd_kafka_DescribeClientQuotas_result_t *result) {
                         printf("    (no quota values)\n");
                 } else {
                         for (j = 0; j < value_cnt; j++) {
-                                printf("    %-32s = %f\n",
-                                       rd_kafka_ClientQuotaValue_key(values[j]),
-                                       rd_kafka_ClientQuotaValue_value(
-                                           values[j]));
+                                printf(
+                                    "    %-32s = %f\n",
+                                    rd_kafka_ClientQuotaValue_key(values[j]),
+                                    rd_kafka_ClientQuotaValue_value(values[j]));
                         }
                 }
         }

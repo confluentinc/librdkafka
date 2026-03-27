@@ -1291,7 +1291,10 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
 #define rd_kafka_buf_read_float64(rkbuf, dstptr)                               \
         do {                                                                   \
                 uint64_t _v;                                                   \
-                union { uint64_t u; double d; } _u;                            \
+                union {                                                        \
+                        uint64_t u;                                            \
+                        double d;                                              \
+                } _u;                                                          \
                 double *_vp = dstptr;                                          \
                 rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));                     \
                 _u.u = be64toh(_v);                                            \
@@ -1302,7 +1305,8 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
  * Write float64 to buffer.
  * The value will be endian-swapped before write.
  */
-static RD_INLINE size_t rd_kafka_buf_write_float64(rd_kafka_buf_t *rkbuf, double v) {
+static RD_INLINE size_t rd_kafka_buf_write_float64(rd_kafka_buf_t *rkbuf,
+                                                   double v) {
         union {
                 double d;
                 uint64_t u;

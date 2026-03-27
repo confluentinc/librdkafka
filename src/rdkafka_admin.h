@@ -455,16 +455,19 @@ struct rd_kafka_ClientQuotaEntity_s {
  * @brief Client Quota Operation - Used in AlterClientQuotas.
  *
  * This structure is used to define operations on client quotas, such as
- * setting producer_byte_rate or removing request_percentage a quota for a specific entity.
+ * setting producer_byte_rate or removing request_percentage a quota for a
+ * specific entity.
  */
 struct rd_kafka_ClientQuotaOperation_s {
-        /** The configuration name, e.g., "producer_byte_rate", "request_percentage" */
+        /** The configuration name, e.g., "producer_byte_rate",
+         * "request_percentage" */
         char *name;
 
         /** The quota value (IEEE 754 double, 64-bit). */
         double value;
 
-        /** True if this is a delete operation. If this is set, the value field will be ignored */
+        /** True if this is a delete operation. If this is set, the value field
+         * will be ignored */
         rd_bool_t remove;
 };
 

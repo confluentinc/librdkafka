@@ -605,8 +605,7 @@ rd_kafka_DeleteRecordsRequest(rd_kafka_broker_t *rkb,
                               rd_kafka_resp_cb_t *resp_cb,
                               void *opaque);
 
-rd_kafka_resp_err_t
-rd_kafka_AlterClientQuotasRequest(
+rd_kafka_resp_err_t rd_kafka_AlterClientQuotasRequest(
     rd_kafka_broker_t *rkb,
     const rd_list_t *entries /*(ClientQuotaEntry_t*)*/,
     rd_kafka_AdminOptions_t *options,
@@ -616,8 +615,7 @@ rd_kafka_AlterClientQuotasRequest(
     rd_kafka_resp_cb_t *resp_cb,
     void *opaque);
 
-rd_kafka_resp_err_t
-rd_kafka_DescribeClientQuotasRequest(
+rd_kafka_resp_err_t rd_kafka_DescribeClientQuotasRequest(
     rd_kafka_broker_t *rkb,
     const rd_list_t *filters /*(rd_kafka_ClientQuotaFilter_t*)*/,
     rd_kafka_AdminOptions_t *options,

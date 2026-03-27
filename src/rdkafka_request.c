@@ -6029,6 +6029,193 @@ rd_kafka_DeleteAclsRequest(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+/**
+ * @brief Send AlterClientQuotasRequest.
+ *
+ * @param rkb The broker to send the request to.
+ * @param entries list of rd_kafka_ClientQuotaEntry_t* to alter.
+ * @param replyq Reply queue for the response.
+ * @param resp_cb Response callback.
+ * @param opaque User-defined opaque pointer.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code.
+ */
+rd_kafka_resp_err_t
+rd_kafka_AlterClientQuotasRequest(rd_kafka_broker_t *rkb,
+                                  const rd_list_t *entries,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr,
+                                  size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        rd_kafka_ClientQuotaEntry_t *entry;
+        rd_kafka_ClientQuotaEntity_t *entity;
+        rd_kafka_ClientQuotaOperation_t *operation;
+        int op_timeout;
+        int i;
+        int j;
+        /* Buffer grows automatically; use a modest base size. */
+        size_t estimated_len = 4 + 1 + (rd_list_cnt(entries) * 64);
+
+        if (rd_list_cnt(entries) == 0) {
+                rd_snprintf(errstr, errstr_size, "No quota entries to send");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_AlterClientQuotas, 0, 1, NULL);
+
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Configurable Quota Management (KIP-257) not "
+                            "supported by broker, requires "
+                            "broker version >= 2.0.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_AlterClientQuotas, ApiVersion, estimated_len,
+            ApiVersion >= 1 /*flexver*/);
+
+        /* Entries array */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(entries));
+        RD_LIST_FOREACH(entry, entries, i) {
+                /* Entity array */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&entry->entities));
+                RD_LIST_FOREACH(entity, &entry->entities, j) {
+                        rd_kafka_buf_write_str(rkbuf, entity->type, -1);
+                        /* NULL name = default entity */
+                        rd_kafka_buf_write_str(rkbuf, entity->name, -1);
+                        if (ApiVersion >= 1)
+                                rd_kafka_buf_write_tags_empty(rkbuf);
+                }
+
+                /* Operations array */
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&entry->operations));
+                RD_LIST_FOREACH(operation, &entry->operations, j) {
+                        rd_kafka_buf_write_str(rkbuf, operation->name, -1);
+                        rd_kafka_buf_write_float64(rkbuf, operation->value);
+                        rd_kafka_buf_write_bool(rkbuf, operation->remove);
+                        if (ApiVersion >= 1)
+                                rd_kafka_buf_write_tags_empty(rkbuf);
+                }
+
+                if (ApiVersion >= 1)
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+        }
+
+        /* ValidateOnly */
+        rd_kafka_buf_write_bool(
+            rkbuf, rd_kafka_confval_get_int(&options->validate_only));
+
+        if (ApiVersion >= 1)
+                rd_kafka_buf_write_tags_empty(rkbuf);
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Construct and send DescribeClientQuotasRequest to \p rkb
+ *        with the filter (rd_kafka_ClientQuotaFilter_t*) in \p filters,
+ *        using \p options.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DescribeClientQuotasRequest(rd_kafka_broker_t *rkb,
+                                     const rd_list_t *filters,
+                                     rd_kafka_AdminOptions_t *options,
+                                     char *errstr,
+                                     size_t errstr_size,
+                                     rd_kafka_replyq_t replyq,
+                                     rd_kafka_resp_cb_t *resp_cb,
+                                     void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        const rd_kafka_ClientQuotaFilter_t *filter;
+        const rd_kafka_ClientQuotaFilterComponent_t *comp;
+        int op_timeout;
+        int i;
+        /* Buffer grows automatically; use a modest base size. */
+        size_t estimated_len;
+
+        if (rd_list_cnt(filters) != 1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Exactly one ClientQuotaFilter must be provided");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        filter = rd_list_elem(filters, 0);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeClientQuotas, 0, 1, NULL);
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "Configurable Quota Management (KIP-257) not "
+                            "supported by broker, requires "
+                            "broker version >= 2.0.0");
+                rd_kafka_replyq_destroy(&replyq);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        estimated_len = 4 + 1 + (rd_list_cnt(&filter->components) * 48);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeClientQuotas, ApiVersion, estimated_len,
+            ApiVersion >= 1 /*flexver*/);
+
+        /* [components] */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(&filter->components));
+        RD_LIST_FOREACH(comp, &filter->components, i) {
+                rd_kafka_buf_write_str(rkbuf, comp->entity_type, -1);
+                rd_kafka_buf_write_i8(rkbuf, comp->match_type);
+                /* match: NULL for DEFAULT/ANY */
+                rd_kafka_buf_write_str(rkbuf, comp->match, -1);
+                if (ApiVersion >= 1)
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+        }
+
+        /* strict */
+        rd_kafka_buf_write_bool(rkbuf, filter->strict);
+
+        if (ApiVersion >= 1)
+                rd_kafka_buf_write_tags_empty(rkbuf);
+
+        /* timeout */
+        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
+        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
+                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 /**
  * @brief Construct and send ElectLeadersRequest to \p rkb
  *        with the partitions (ElectLeaders_t*) in \p elect_leaders, using

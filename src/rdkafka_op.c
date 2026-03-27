@@ -92,6 +92,9 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DELETEGROUPS]    = "REPLY:DELETEGROUPS",
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
                 "REPLY:DELETECONSUMERGROUPOFFSETS",
+            [RD_KAFKA_OP_ALTERCLIENTQUOTAS]   = "REPLY:ALTERCLIENTQUOTAS",
+            [RD_KAFKA_OP_DESCRIBECLIENTQUOTAS] =
+                "REPLY:DESCRIBECLIENTQUOTAS",
             [RD_KAFKA_OP_CREATEACLS]   = "REPLY:CREATEACLS",
             [RD_KAFKA_OP_DESCRIBEACLS] = "REPLY:DESCRIBEACLS",
             [RD_KAFKA_OP_DELETEACLS]   = "REPLY:DELETEACLS",
@@ -256,6 +259,10 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_DESCRIBECLUSTER] = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETEGROUPS]    = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS] =
+                sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_ALTERCLIENTQUOTAS] =
+                sizeof(rko->rko_u.admin_request),
+            [RD_KAFKA_OP_DESCRIBECLIENTQUOTAS] =
                 sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_CREATEACLS]   = sizeof(rko->rko_u.admin_request),
             [RD_KAFKA_OP_DESCRIBEACLS] = sizeof(rko->rko_u.admin_request),
@@ -430,6 +437,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_DESCRIBECONSUMERGROUPS:
         case RD_KAFKA_OP_DELETEGROUPS:
         case RD_KAFKA_OP_DELETECONSUMERGROUPOFFSETS:
+        case RD_KAFKA_OP_ALTERCLIENTQUOTAS:
+        case RD_KAFKA_OP_DESCRIBECLIENTQUOTAS:
         case RD_KAFKA_OP_CREATEACLS:
         case RD_KAFKA_OP_DESCRIBEACLS:
         case RD_KAFKA_OP_DELETEACLS:

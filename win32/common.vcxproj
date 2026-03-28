@@ -47,10 +47,14 @@
   <PropertyGroup Condition="'$(VisualStudioVersion)' == '16.0'">
     <PlatformToolset>v142</PlatformToolset>
   </PropertyGroup>
+  <!-- Visual Studio 2022 (17.0) -->
+  <PropertyGroup Condition="'$(VisualStudioVersion)' == '17.0'">
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
   <!-- Visual Studio 2026 (18.0) -->
   <PropertyGroup Condition="'$(VisualStudioVersion)' == '18.0'">
     <PlatformToolset>v145</PlatformToolset>
-  </PropertyGroup>  
+  </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>
   </PropertyGroup>

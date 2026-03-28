@@ -153,7 +153,7 @@ class NugetPackage (Package):
                 'runtimes/win-x64/native/zstd.dll'),
         Mapping({'arch': 'x64',
                  'plat': 'win'},
-     v145       'librdkafka.redist*',
+                'librdkafka.redist*',
                 'build/native/bin/v145/x64/Release/libcurl.dll',
                 'runtimes/win-x64/native/libcurl.dll'),
         # matches x64 librdkafka.redist.zip, lib files

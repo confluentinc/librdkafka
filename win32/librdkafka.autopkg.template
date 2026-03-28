@@ -38,7 +38,7 @@ nuget {
 	};
 	docs: { ${TOPDIR}README.md, ${TOPDIR}CONFIGURATION.md, ${TOPDIR}LICENSES.txt };
 
-        ("v120,v140,v142,v145", "Win32,x64", "Release,Debug") => {
+        ("v120,v140,v142,v145", "Win32,x64,ARM64", "Release,Debug") => {
            [${0},${1},${2}] {
 		lib: { outdir\${0}\${1}\${2}\librdkafka*.lib };
 		symbols: { outdir\${0}\${1}\${2}\librdkafka*.pdb };

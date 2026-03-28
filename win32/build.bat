@@ -1,6 +1,6 @@
 @echo off
 
-SET TOOLCHAIN=v140
+SET TOOLCHAIN=v145
 
 FOR %%C IN (Debug,Release) DO (
   FOR %%P IN (Win32,x64,ARM64) DO (

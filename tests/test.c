@@ -1556,8 +1556,7 @@ static void run_tests(int argc, char **argv) {
                         if (!strcmp(skip_tests_till, testnum)) {
                                 rd_free(skip_tests_till);
                                 skip_tests_till = NULL;
-                        }
-                        else
+                        } else
                                 skip_reason =
                                     "ignoring test before TESTS_SKIP_BEFORE";
                 }

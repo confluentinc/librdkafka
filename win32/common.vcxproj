@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="18.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
@@ -46,6 +46,10 @@
   <!-- Visual Studio 2019 (16.0) -->
   <PropertyGroup Condition="'$(VisualStudioVersion)' == '16.0'">
     <PlatformToolset>v142</PlatformToolset>
+  </PropertyGroup>
+  <!-- Visual Studio 2026 (18.0) -->
+  <PropertyGroup Condition="'$(VisualStudioVersion)' == '18.0'">
+    <PlatformToolset>v145</PlatformToolset>
   </PropertyGroup>  
   <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>

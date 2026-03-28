@@ -17,7 +17,7 @@
 param(
     [string]$config='Release',
     [string]$platform='x64',
-    [string]$toolset='v142',
+    [string]$toolset='v145',
     [string]$version='0.0.0'
 )
 

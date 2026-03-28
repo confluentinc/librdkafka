@@ -78,7 +78,14 @@
     <WholeProgramOptimization>true</WholeProgramOptimization>
   </PropertyGroup>
 
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalOptions>/FS %(AdditionalOptions)</AdditionalOptions>
+      <ProgramDataBaseFileName>$(IntDir)$(TargetName)_$(Platform).pdb</ProgramDataBaseFileName>
+    </ClCompile>
+  </ItemDefinitionGroup>
   <PropertyGroup>
+
     <OutDir>$(BuildOutputDir)</OutDir>
     <IntDir>$(BuildIntDir)</IntDir>
   </PropertyGroup>

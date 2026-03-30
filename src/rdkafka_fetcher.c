@@ -1804,22 +1804,35 @@ static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
  * @brief Parse a ShareAcknowledge response.
  *
  * ShareAcknowledge response contains per-partition error codes for
- * acknowledgement results. Returns the top-level error code.
+ * acknowledgement results. Returns the top-level error code and
+ * populates \p ack_resultsp with per-partition error results.
  *
+ * @param rkb Broker handle.
+ * @param rkbuf Response buffer.
+ * @param request Original request buffer.
+ * @param ack_resultsp [out] Per-partition error results. Caller must
+ *                     destroy. Set to NULL on top-level error or
+ *                     parse error.
+ *
+ * @returns Top-level error code.
  * @locality broker thread
  */
-static rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
-                                        rd_kafka_buf_t *rkbuf,
-                                        rd_kafka_buf_t *request) {
+static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_buf_t *rkbuf,
+    rd_kafka_buf_t *request,
+    rd_kafka_topic_partition_list_t **ack_resultsp) {
         int32_t TopicArrayCnt;
         int i;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode           = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafkap_str_t ErrorStr    = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        NodeEndpoints.NodeEndpoints   = NULL;
-        NodeEndpoints.NodeEndpointCnt = 0;
+        rd_kafka_topic_partition_list_t *ack_results = NULL;
+        NodeEndpoints.NodeEndpoints                  = NULL;
+        NodeEndpoints.NodeEndpointCnt                = 0;
+
+        *ack_resultsp = NULL;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1836,12 +1849,17 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
+        ack_results = rd_kafka_topic_partition_list_new(TopicArrayCnt);
+
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafka_Uuid_t topic_id = RD_KAFKA_UUID_ZERO;
+                rd_kafka_topic_t *rkt;
                 int32_t PartitionArrayCnt;
                 int j;
 
                 rd_kafka_buf_read_uuid(rkbuf, &topic_id);
+                rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk, topic_id);
+
                 rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
 
@@ -1850,6 +1868,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         int16_t PartErrorCode;
                         rd_kafkap_str_t PartErrorStr;
                         rd_kafkap_CurrentLeader_t CurrentLeader;
+                        rd_kafka_topic_partition_t *rktpar;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
                         rd_kafka_buf_read_i16(rkbuf, &PartErrorCode);
@@ -1858,6 +1877,12 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         /* CurrentLeader */
                         rd_kafka_buf_read_CurrentLeader(rkbuf, &CurrentLeader);
 
+                        rktpar =
+                            rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                                ack_results, topic_id,
+                                rkt ? rkt->rkt_topic->str : NULL, Partition);
+                        rktpar->err = PartErrorCode;
+
                         if (PartErrorCode) {
                                 rd_rkb_dbg(rkb, FETCH, "SHAREACK",
                                            "ShareAcknowledge partition %" PRId32
@@ -1865,13 +1890,14 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                                            Partition,
                                            rd_kafka_err2name(PartErrorCode),
                                            RD_KAFKAP_STR_PR(&PartErrorStr));
-                                /* TODO KIP-932: Report partition-level ack
-                                 * errors via acknowledgement callback. */
                         }
 
                         /* Partition tags */
                         rd_kafka_buf_skip_tags(rkbuf);
                 }
+
+                if (rkt)
+                        rd_kafka_topic_destroy0(rkt);
 
                 /* Topic tags */
                 rd_kafka_buf_skip_tags(rkbuf);
@@ -1883,10 +1909,12 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_skip_tags(rkbuf);
 
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
+        *ack_resultsp = ack_results;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
+        RD_IF_FREE(ack_results, rd_kafka_topic_partition_list_destroy);
         rd_rkb_dbg(rkb, MSG, "BADMSG",
                    "Bad ShareAcknowledge response (v%d): parse error",
                    (int)request->rkbuf_reqhdr.ApiVersion);
@@ -1919,9 +1947,12 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
         }
 
         /* Parse and handle the response (unless the request errored) */
-        if (!err && reply)
-                err = rd_kafka_share_acknowledge_reply_handle(rkb, reply,
-                                                              request);
+        if (!err && reply) {
+                rd_kafka_topic_partition_list_t *ack_results = NULL;
+                err = rd_kafka_share_acknowledge_reply_handle(
+                    rkb, reply, request, &ack_results);
+                rko_orig->rko_u.share_fetch.ack_results = ack_results;
+        }
 
         rd_kafka_broker_session_update(rkb);
 
@@ -2703,7 +2734,12 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         /* Update TopicArrayCnt */
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
-        /* Use configured timeout */
+        /* TODO KIP-932: Check if commit_sync requests should use
+         * rko_orig->rko_u.share_fetch.abs_timeout instead of
+         * socket.timeout.ms. Currently the transport timeout is
+         * independent of the commit_sync timeout, so the broker
+         * request may outlive a timed-out commit_sync or time out
+         * at the transport level before the commit_sync timer fires. */
         rd_kafka_buf_set_timeout(rkbuf, rkb->rkb_rk->rk_conf.socket_timeout_ms,
                                  now);
 

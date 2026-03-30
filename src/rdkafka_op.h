@@ -40,6 +40,7 @@ typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
+typedef struct rd_kafka_share_ack_result_s rd_kafka_share_ack_result_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -211,6 +212,8 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
+        RD_KAFKA_OP_SHARE_ACK_REPLY,      /**< Share acknowledgement callback
+                                           *   reply: broker -> app */
 
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
@@ -878,6 +881,23 @@ struct rd_kafka_op_s {
                          */
                         rd_list_t *inflight_acks;
                 } share_fetch_response;
+
+                /**
+                 * Share acknowledgement callback reply.
+                 * Contains results to deliver to share_acknowledgement_commit_cb.
+                 */
+                struct {
+                        /** List of partition offsets. */
+                        rd_kafka_share_partition_offsets_list_t *partitions;
+                        /** Callback function pointer. */
+                        void (*cb)(rd_kafka_share_t *rkshare,
+                                   rd_kafka_share_partition_offsets_list_t
+                                       *partitions,
+                                   rd_kafka_resp_err_t err,
+                                   void *opaque);
+                        /** Application opaque. */
+                        void *opaque;
+                } share_ack_reply;
 
         } rko_u;
 };

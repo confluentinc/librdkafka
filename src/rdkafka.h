@@ -2168,6 +2168,117 @@ void rd_kafka_conf_set_offset_commit_cb(
 
 
 /**
+ * @struct rd_kafka_share_partition_offsets_t
+ * @brief Share consumer partition offsets for a single offset range.
+ *
+ * Contains information about an acknowledged offset range including
+ * topic, partition, offset range, and any error.
+ */
+typedef struct rd_kafka_share_partition_offsets_s
+    rd_kafka_share_partition_offsets_t;
+
+/**
+ * @struct rd_kafka_share_partition_offsets_list_t
+ * @brief List of share consumer partition offsets.
+ *
+ * Contains multiple partition offset entries.
+ */
+typedef struct rd_kafka_share_partition_offsets_list_s
+    rd_kafka_share_partition_offsets_list_t;
+
+/**
+ * @brief Get the number of partitions in the offsets list.
+ * @param list Partition offsets list.
+ * @returns The number of partitions in the list.
+ */
+RD_EXPORT size_t rd_kafka_share_partition_offsets_list_count(
+    const rd_kafka_share_partition_offsets_list_t *list);
+
+/**
+ * @brief Get a partition offsets entry at the specified index.
+ * @param list Partition offsets list.
+ * @param index Zero-based index of the partition to retrieve.
+ * @returns Pointer to the partition offsets entry, or NULL if index is out of
+ *          bounds.
+ */
+RD_EXPORT const rd_kafka_share_partition_offsets_t *
+rd_kafka_share_partition_offsets_list_get(
+    const rd_kafka_share_partition_offsets_list_t *list,
+    size_t index);
+
+/**
+ * @brief Destroy the partition offsets list.
+ * @param list Partition offsets list to destroy.
+ *
+ * @remark Only call this if you have ownership of the list.
+ *         The list passed to the callback is owned by librdkafka
+ *         and will be destroyed automatically after the callback returns.
+ */
+RD_EXPORT void rd_kafka_share_partition_offsets_list_destroy(
+    rd_kafka_share_partition_offsets_list_t *list);
+
+/**
+ * @brief Get the topic partition from a partition offsets entry.
+ * @param partition_offsets The partition offsets entry.
+ * @returns Pointer to the topic partition (valid for the lifetime of the list).
+ */
+RD_EXPORT const rd_kafka_topic_partition_t *
+rd_kafka_share_partition_offsets_partition(
+    const rd_kafka_share_partition_offsets_t *partition_offsets);
+
+/**
+ * @brief Get the offsets array from a partition offsets entry.
+ * @param partition_offsets The partition offsets entry.
+ * @returns Array of acknowledged offsets (valid for the lifetime of the list).
+ */
+RD_EXPORT const int64_t *rd_kafka_share_partition_offsets_offsets(
+    const rd_kafka_share_partition_offsets_t *partition_offsets);
+
+/**
+ * @brief Get the number of offsets in a partition offsets entry.
+ * @param partition_offsets The partition offsets entry.
+ * @returns The number of offsets in the array.
+ */
+RD_EXPORT int rd_kafka_share_partition_offsets_offsets_cnt(
+    const rd_kafka_share_partition_offsets_t *partition_offsets);
+
+/**
+ * @brief Set share acknowledgement commit callback.
+ *
+ * The share acknowledgement commit callback is called when share consumer
+ * acknowledgements (from rd_kafka_share_acknowledge* calls followed by
+ * rd_kafka_share_commit_async() or rd_kafka_share_consume_batch()) complete.
+ *
+ * The callback is called from rd_kafka_share_consume_batch() or
+ * rd_kafka_poll() context.
+ *
+ * @param conf Configuration object.
+ * @param share_acknowledgement_commit_cb Callback to set.
+ *
+ * The callback parameters are:
+ *   - \p rkshare: Share consumer handle.
+ *   - \p partitions: List of partitions with their acknowledged offsets.
+ *   - \p err: Overall error code (RD_KAFKA_RESP_ERR_NO_ERROR on success).
+ *   - \p opaque: Application opaque set with rd_kafka_conf_set_opaque().
+ *
+ * The \p partitions list contains one entry per partition, each with an
+ * array of acknowledged offsets accessible via
+ * rd_kafka_share_partition_offsets_offsets().
+ *
+ * @remark The \p partitions list and its contents are only valid for the
+ *         duration of the callback.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_share_acknowledgement_commit_cb(
+    rd_kafka_conf_t *conf,
+    void (*share_acknowledgement_commit_cb)(
+        rd_kafka_share_t *rkshare,
+        rd_kafka_share_partition_offsets_list_t *partitions,
+        rd_kafka_resp_err_t err,
+        void *opaque));
+
+
+/**
  * @brief Set error callback in provided conf object.
  *
  * The error callback is used by librdkafka to signal warnings and errors

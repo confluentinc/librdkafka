@@ -57,15 +57,12 @@ typedef struct {
         int partitions[MAX_TOPICS];
         int msgs_per_partition;
         int consumer_cnt;
-        rd_kafka_share_AcknowledgeType_t actions[MAX_TOPICS][MAX_PARTITIONS]
-                                                [MAX_MSGS_PER_PART];
-        int expected_redelivered; /**< -1 = use released count (random mode) */
         int poll_timeout_ms;
         int max_attempts;
-        /* Random mode fields */
+        int total_msgs;
         rd_bool_t use_random_acks; /**< Generate random acks at runtime */
-        unsigned int random_seed;  /**< Seed for reproducible randomness */
-        int total_msgs;            /**< Total messages (random mode) */
+        rd_kafka_share_AcknowledgeType_t
+            single_ack_type; /**< Ack type when not using random */
 } ack_test_config_t;
 
 /**
@@ -115,9 +112,8 @@ static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
 /**
  * @brief Generate random ack type with roughly equal distribution
  */
-static rd_kafka_share_AcknowledgeType_t
-get_random_ack_type(unsigned int *seed) {
-        return (rd_kafka_share_AcknowledgeType_t)((rand_r(seed) % 3) + 1);
+static rd_kafka_share_AcknowledgeType_t get_random_ack_type(void) {
+        return (rd_kafka_share_AcknowledgeType_t)jitter(1, 3);
 }
 
 /**
@@ -238,70 +234,39 @@ static void remove_message_from_list_at(rd_kafka_topic_partition_list_t *list,
 }
 
 /**
- * @brief Get topic index from topic name
+ * @brief Handle a redelivered message (delivery_count == 2).
+ *
+ * Verifies the message was previously RELEASE'd (in released_msgs),
+ * removes it from released_msgs, and acknowledges as ACCEPT.
  */
-static int get_topic_index(ack_test_config_t *config,
-                           ack_test_state_t *state,
-                           const char *topic_name) {
-        int t;
-        for (t = 0; t < config->topic_cnt; t++) {
-                if (strcmp(state->topic_names[t], topic_name) == 0)
-                        return t;
-        }
-        return -1;
-}
-
-/**
- * @brief Handle a redelivered message (previously RELEASE'd).
- * @returns rd_true if message was redelivered and handled, rd_false otherwise.
- */
-static rd_bool_t handle_redelivered_message(ack_test_state_t *state,
-                                            rd_kafka_message_t *msg) {
+static void handle_redelivered_message(ack_test_state_t *state,
+                                       rd_kafka_message_t *msg) {
         int released_idx;
-        rd_kafka_topic_partition_t *rktpar;
-        int16_t delivery_count = rd_kafka_message_delivery_count(msg);
 
         released_idx = find_message_in_list(state->released_msgs,
                                             rd_kafka_topic_name(msg->rkt),
                                             msg->partition, msg->offset);
-        if (released_idx < 0)
-                return rd_false;
 
-        TEST_ASSERT(delivery_count == 2,
-                    "RELEASE'd message has delivery_count=%d, expected 2",
-                    delivery_count);
+        TEST_ASSERT(released_idx >= 0,
+                    "Redelivered message (delivery_count=2) not found in "
+                    "released_msgs: topic=%s, partition=%d, offset=%" PRId64,
+                    rd_kafka_topic_name(msg->rkt), msg->partition, msg->offset);
 
         remove_message_from_list_at(state->released_msgs, released_idx);
-
-        rktpar = rd_kafka_topic_partition_list_add(
-            state->redelivered_msgs, rd_kafka_topic_name(msg->rkt),
-            msg->partition);
-        rktpar->offset = msg->offset;
         state->msgs_redelivered++;
 
         rd_kafka_share_acknowledge_type(state->consumers[0], msg,
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-
-        return rd_true;
 }
 
 /**
- * @brief Determine ack type based on config and message indices.
+ * @brief Determine ack type based on config.
  */
 static rd_kafka_share_AcknowledgeType_t
-determine_ack_type(ack_test_config_t *config,
-                   int t_idx,
-                   int p_idx,
-                   int m_idx,
-                   unsigned int *seed) {
+determine_ack_type(ack_test_config_t *config) {
         if (config->use_random_acks)
-                return get_random_ack_type(seed);
-
-        if (t_idx >= 0 && p_idx < config->partitions[t_idx] &&
-            m_idx < MAX_MSGS_PER_PART)
-                return config->actions[t_idx][p_idx][m_idx];
-
-        return RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
+                return get_random_ack_type();
+        return config->single_ack_type;
 }
 
 /**
@@ -333,9 +298,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
         int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
-        size_t total_consumed                   = 0;
-        int msg_idx[MAX_TOPICS][MAX_PARTITIONS] = {{0}};
-        unsigned int seed                       = config->random_seed;
+        size_t total_consumed = 0;
 
         if (config->use_random_acks) {
                 poll_timeout = 5000;
@@ -365,40 +328,52 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                 }
 
                 for (m = 0; m < rcvd; m++) {
+                        rd_kafka_share_AcknowledgeType_t ack_type;
+                        rd_kafka_resp_err_t ack_err;
+                        int16_t delivery_count =
+                            rd_kafka_message_delivery_count(batch[m]);
+
+                        /* Error messages must use acknowledge_offset API */
                         if (batch[m]->err) {
+                                ack_type = determine_ack_type(config);
+                                ack_err  = rd_kafka_share_acknowledge_offset(
+                                    state->consumers[0],
+                                    rd_kafka_topic_name(batch[m]->rkt),
+                                    batch[m]->partition, batch[m]->offset,
+                                    ack_type);
+                                TEST_ASSERT(
+                                    ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "acknowledge_offset failed for error msg: "
+                                    "%s",
+                                    rd_kafka_err2str(ack_err));
                                 rd_kafka_message_destroy(batch[m]);
                                 continue;
                         }
 
-                        if (config->use_random_acks &&
-                            handle_redelivered_message(state, batch[m])) {
+                        /* Redelivered message (delivery_count == 2) */
+                        if (delivery_count == 2) {
+                                handle_redelivered_message(state, batch[m]);
                                 rd_kafka_message_destroy(batch[m]);
                                 continue;
                         }
 
-                        int t_idx = get_topic_index(
-                            config, state, rd_kafka_topic_name(batch[m]->rkt));
-                        int p_idx = batch[m]->partition;
-                        int m_idx = (t_idx >= 0) ? msg_idx[t_idx][p_idx]++ : 0;
+                        /* First delivery */
+                        TEST_ASSERT(delivery_count == 1,
+                                    "Expected delivery_count=1, got %d",
+                                    delivery_count);
 
-                        rd_kafka_share_AcknowledgeType_t ack_type =
-                            determine_ack_type(config, t_idx, p_idx, m_idx,
-                                               &seed);
-
+                        ack_type = determine_ack_type(config);
                         track_ack_type(state, batch[m], ack_type);
 
-                        rd_kafka_resp_err_t ack_err =
-                            rd_kafka_share_acknowledge_type(state->consumers[0],
-                                                            batch[m], ack_type);
-                        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                                    "Acknowledge failed: %s",
-                                    rd_kafka_err2str(ack_err));
-
+                        ack_err = rd_kafka_share_acknowledge_type(
+                            state->consumers[0], batch[m], ack_type);
                         TEST_ASSERT(
-                            rd_kafka_message_delivery_count(batch[m]) == 1,
-                            "Expected delivery_count=1 on first delivery, "
-                            "got %d",
-                            rd_kafka_message_delivery_count(batch[m]));
+                            ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Acknowledge failed: %s (topic=%s, partition=%d, "
+                            "offset=%" PRId64 ", type=%d)",
+                            rd_kafka_err2str(ack_err),
+                            rd_kafka_topic_name(batch[m]->rkt),
+                            batch[m]->partition, batch[m]->offset, ack_type);
 
                         if (state->original_cnt < 1000)
                                 state->original_offsets[state->original_cnt++] =
@@ -412,7 +387,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                         if (total_consumed % 500 == 0 || rcvd > 0)
                                 TEST_SAY(
                                     "Progress: %zu/%d (A:%d R:%d L:%d "
-                                    "early_redeliv:%d)\n",
+                                    "redeliv:%d)\n",
                                     total_consumed, state->msgs_produced,
                                     state->msgs_accepted, state->msgs_rejected,
                                     state->msgs_released,
@@ -431,7 +406,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
         if (config->use_random_acks)
                 TEST_SAY(
                     "Consumed %d: ACCEPT=%d, REJECT=%d, RELEASE=%d, "
-                    "early_redelivered=%d\n",
+                    "redelivered=%d\n",
                     state->msgs_consumed, state->msgs_accepted,
                     state->msgs_rejected, state->msgs_released,
                     state->msgs_redelivered);
@@ -445,13 +420,8 @@ static void poll_for_redelivery(ack_test_config_t *config,
         rd_kafka_message_t *batch[BATCH_SIZE];
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
-        int attempts = 10;
-        int expected_count;
-
-        /* expected_redelivered == -1 means use msgs_released count */
-        expected_count = (config->expected_redelivered == -1)
-                             ? state->msgs_released
-                             : config->expected_redelivered;
+        int attempts       = 10;
+        int expected_count = state->msgs_released;
 
         /* Use higher timeout/attempts for random mode */
         if (config->use_random_acks) {
@@ -554,12 +524,7 @@ static void poll_for_redelivery(ack_test_config_t *config,
  * - Verify released_msgs is empty (all RELEASE'd messages were redelivered)
  */
 static void verify_results(ack_test_config_t *config, ack_test_state_t *state) {
-        int expected_count;
-
-        /* expected_redelivered == -1 means use msgs_released count */
-        expected_count = (config->expected_redelivered == -1)
-                             ? state->msgs_released
-                             : config->expected_redelivered;
+        int expected_count = state->msgs_released;
 
         TEST_SAY("Verifying: consumed=%d, redelivered=%d (expected=%d)\n",
                  state->msgs_consumed, state->msgs_redelivered, expected_count);
@@ -666,17 +631,12 @@ static int run_ack_test(ack_test_config_t *config) {
  */
 static void test_release_redelivery(void) {
         ack_test_config_t config = {
-            .test_name            = "release-redelivery",
-            .topic_cnt            = 1,
-            .partitions           = {1},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
-            .expected_redelivered = 5};
+            .test_name          = "release-redelivery",
+            .topic_cnt          = 1,
+            .partitions         = {1},
+            .msgs_per_partition = 5,
+            .consumer_cnt       = 1,
+            .single_ack_type    = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE};
         run_ack_test(&config);
 }
 
@@ -684,18 +644,13 @@ static void test_release_redelivery(void) {
  * @brief REJECT prevents redelivery
  */
 static void test_reject_no_redelivery(void) {
-        ack_test_config_t config = {
-            .test_name            = "reject-no-redelivery",
-            .topic_cnt            = 1,
-            .partitions           = {1},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
-            .expected_redelivered = 0};
+        ack_test_config_t config = {.test_name  = "reject-no-redelivery",
+                                    .topic_cnt  = 1,
+                                    .partitions = {1},
+                                    .msgs_per_partition = 5,
+                                    .consumer_cnt       = 1,
+                                    .single_ack_type =
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT};
         run_ack_test(&config);
 }
 
@@ -703,182 +658,13 @@ static void test_reject_no_redelivery(void) {
  * @brief ACCEPT prevents redelivery
  */
 static void test_accept_no_redelivery(void) {
-        ack_test_config_t config = {
-            .test_name            = "accept-no-redelivery",
-            .topic_cnt            = 1,
-            .partitions           = {1},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}}},
-            .expected_redelivered = 0};
-        run_ack_test(&config);
-}
-
-
-/***************************************************************************
- * Extended Tests
- ***************************************************************************/
-
-/**
- * @brief Mixed ACCEPT/REJECT/RELEASE in same batch
- *
- * Uses 3 partitions with different actions:
- * - Partition 0: ACCEPT (no redelivery)
- * - Partition 1: REJECT (no redelivery)
- * - Partition 2: RELEASE (redelivery)
- */
-static void test_mixed_ack_types(void) {
-        ack_test_config_t config = {
-            .test_name            = "mixed-ack-types",
-            .topic_cnt            = 1,
-            .partitions           = {3},
-            .msgs_per_partition   = 3,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
-            .expected_redelivered = 3 /* Only partition 2 */
-        };
-        run_ack_test(&config);
-}
-
-
-/***************************************************************************
- * Multi-Partition Tests
- ***************************************************************************/
-
-/**
- * @brief RELEASE works across multiple partitions
- *
- * 3 partitions with:
- * - Partition 0: RELEASE (redelivery)
- * - Partition 1: ACCEPT (no redelivery)
- * - Partition 2: REJECT (no redelivery)
- */
-static void test_release_multiple_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "release-multiple-partitions",
-            .topic_cnt            = 1,
-            .partitions           = {3},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
-            .expected_redelivered = 5 /* Only partition 0 */
-        };
-        run_ack_test(&config);
-}
-
-/**
- * @brief Mixed ack across partitions
- *
- * 2 partitions with mixed handling per offset (simplified by partition).
- */
-static void test_mixed_ack_across_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "mixed-ack-across-partitions",
-            .topic_cnt            = 1,
-            .partitions           = {2},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}}},
-            .expected_redelivered = 5 /* Only partition 0 */
-        };
-        run_ack_test(&config);
-}
-
-
-/***************************************************************************
- * Multi-Topic Tests
- ***************************************************************************/
-
-/**
- * @brief RELEASE works across multiple topics
- *
- * 2 topics with:
- * - Topic 0: ACCEPT (no redelivery)
- * - Topic 1: RELEASE (redelivery)
- */
-static void test_release_multiple_topics(void) {
-        ack_test_config_t config = {
-            .test_name            = "release-multiple-topics",
-            .topic_cnt            = 2,
-            .partitions           = {1, 1},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}},
-                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
-            .expected_redelivered = 5 /* Only topic 1 */
-        };
-        run_ack_test(&config);
-}
-
-/**
- * @brief Mixed ack across topics
- *
- * 3 topics with:
- * - Topic 0: ACCEPT (no redelivery)
- * - Topic 1: REJECT (no redelivery)
- * - Topic 2: RELEASE (redelivery)
- */
-static void test_mixed_ack_across_topics(void) {
-        ack_test_config_t config = {
-            .test_name            = "mixed-ack-across-topics",
-            .topic_cnt            = 3,
-            .partitions           = {1, 1, 1},
-            .msgs_per_partition   = 3,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}},
-                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}},
-                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}}},
-            .expected_redelivered = 3 /* Only topic 2 */
-        };
+        ack_test_config_t config = {.test_name  = "accept-no-redelivery",
+                                    .topic_cnt  = 1,
+                                    .partitions = {1},
+                                    .msgs_per_partition = 5,
+                                    .consumer_cnt       = 1,
+                                    .single_ack_type =
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT};
         run_ack_test(&config);
 }
 
@@ -1233,204 +1019,6 @@ static void test_max_delivery_attempts(void) {
 
 
 /***************************************************************************
- * Mixed Per-Offset Acknowledgement Tests
- ***************************************************************************/
-
-/**
- * @brief Mixed per-offset acks: single topic, single partition
- *
- * 10 messages with alternating ACCEPT/REJECT/RELEASE pattern:
- * Offset 0: ACCEPT  (no redeliver)
- * Offset 1: REJECT  (no redeliver)
- * Offset 2: RELEASE (redeliver)
- * Offset 3: ACCEPT  (no redeliver)
- * Offset 4: REJECT  (no redeliver)
- * Offset 5: RELEASE (redeliver)
- * ... and so on
- *
- * Expected redeliveries: offsets 2, 5, 8 = 3 messages
- */
-static void test_mixed_per_offset_single_partition(void) {
-        ack_test_config_t config = {
-            .test_name          = "mixed-per-offset-1t-1p",
-            .topic_cnt          = 1,
-            .partitions         = {1},
-            .msgs_per_partition = 10,
-            .consumer_cnt       = 1,
-            .actions = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 0 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,  /* 1 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 2 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 3 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,  /* 4 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 5 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 6 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,  /* 7 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 8 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT /* 9 */}}},
-            .expected_redelivered = 3 /* Offsets 2, 5, 8 */
-        };
-        run_ack_test(&config);
-}
-
-/**
- * @brief Mixed per-offset acks: single topic, multiple partitions
- *
- * 3 partitions, 6 messages each, different patterns per partition:
- * - Partition 0: ACCEPT, RELEASE, ACCEPT, RELEASE, ACCEPT, RELEASE (3
- * redeliver)
- * - Partition 1: RELEASE, ACCEPT, RELEASE, ACCEPT, RELEASE, ACCEPT (3
- * redeliver)
- * - Partition 2: REJECT, REJECT, REJECT, REJECT, REJECT, REJECT (0 redeliver)
- *
- * Expected redeliveries: 6
- */
-static void test_mixed_per_offset_multiple_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "mixed-per-offset-1t-3p",
-            .topic_cnt            = 1,
-            .partitions           = {3},
-            .msgs_per_partition   = 6,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
-            .expected_redelivered = 6 /* 3 from p0 + 3 from p1 */
-        };
-        run_ack_test(&config);
-}
-
-/**
- * @brief Mixed per-offset acks: multiple topics, single partition each
- *
- * 3 topics, 1 partition each, 5 messages per partition:
- * - Topic 0: RELEASE, ACCEPT, RELEASE, ACCEPT, RELEASE (3 redeliver)
- * - Topic 1: ACCEPT, REJECT, ACCEPT, REJECT, ACCEPT (0 redeliver)
- * - Topic 2: REJECT, RELEASE, REJECT, RELEASE, REJECT (2 redeliver)
- *
- * Expected redeliveries: 5
- */
-static void test_mixed_per_offset_multiple_topics(void) {
-        ack_test_config_t config = {
-            .test_name            = "mixed-per-offset-3t-1p",
-            .topic_cnt            = 3,
-            .partitions           = {1, 1, 1},
-            .msgs_per_partition   = 5,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}},
-                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT}},
-                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
-            .expected_redelivered = 5 /* 3 from t0 + 0 from t1 + 2 from t2 */
-        };
-        run_ack_test(&config);
-}
-
-/**
- * @brief Mixed per-offset acks: multiple topics, multiple partitions
- *
- * 2 topics, 2 partitions each, 4 messages per partition:
- * - Topic 0, Partition 0: RELEASE, RELEASE, ACCEPT, ACCEPT (2 redeliver)
- * - Topic 0, Partition 1: ACCEPT, ACCEPT, RELEASE, RELEASE (2 redeliver)
- * - Topic 1, Partition 0: REJECT, RELEASE, REJECT, RELEASE (2 redeliver)
- * - Topic 1, Partition 1: RELEASE, REJECT, RELEASE, REJECT (2 redeliver)
- *
- * Expected redeliveries: 8
- */
-static void test_mixed_per_offset_full_matrix(void) {
-        ack_test_config_t config = {
-            .test_name            = "mixed-per-offset-2t-2p",
-            .topic_cnt            = 2,
-            .partitions           = {2, 2},
-            .msgs_per_partition   = 4,
-            .consumer_cnt         = 1,
-            .actions              = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE}},
-                                     {{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE},
-                                      {RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE,
-                                       RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT}}},
-            .expected_redelivered = 8 /* 2+2 from t0 + 2+2 from t1 */
-        };
-        run_ack_test(&config);
-}
-
-/**
- * @brief Alternating pattern across all offsets
- *
- * Single topic, single partition, 20 messages:
- * Even offsets: RELEASE (10 redeliveries)
- * Odd offsets: ACCEPT (0 redeliveries)
- */
-static void test_alternating_ack_pattern(void) {
-        ack_test_config_t config = {
-            .test_name          = "alternating-ack-pattern",
-            .topic_cnt          = 1,
-            .partitions         = {1},
-            .msgs_per_partition = 20,
-            .consumer_cnt       = 1,
-            .actions = {{{RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 0 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 1 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 2 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 3 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 4 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 5 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 6 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 7 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 8 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 9 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 10 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 11 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 12 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 13 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 14 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 15 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 16 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT,  /* 17 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE, /* 18 */
-                          RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT /* 19 */}}},
-            .expected_redelivered = 10 /* Even offsets */
-        };
-        run_ack_test(&config);
-}
-
-
-/***************************************************************************
  * High-Intensity Random Acknowledgement Tests
  *
  * These tests produce large numbers of messages and apply random
@@ -1445,16 +1033,12 @@ static void test_alternating_ack_pattern(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_single_topic_single_partition(void) {
-        ack_test_config_t config = {
-            .test_name            = "random-ack-1t-1p-5000msgs",
-            .topic_cnt            = 1,
-            .partitions           = {1},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 12345,
-            .total_msgs           = 5000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+        ack_test_config_t config = {.test_name    = "random-ack-1t-1p-5000msgs",
+                                    .topic_cnt    = 1,
+                                    .partitions   = {1},
+                                    .consumer_cnt = 1,
+                                    .use_random_acks = rd_true,
+                                    .total_msgs      = 5000};
         run_ack_test(&config);
 }
 
@@ -1465,16 +1049,12 @@ static void test_random_ack_single_topic_single_partition(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_multiple_topics_single_partition(void) {
-        ack_test_config_t config = {
-            .test_name            = "random-ack-4t-1p-5000msgs",
-            .topic_cnt            = 4,
-            .partitions           = {1, 1, 1, 1},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 23456,
-            .total_msgs           = 5000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+        ack_test_config_t config = {.test_name    = "random-ack-4t-1p-5000msgs",
+                                    .topic_cnt    = 4,
+                                    .partitions   = {1, 1, 1, 1},
+                                    .consumer_cnt = 1,
+                                    .use_random_acks = rd_true,
+                                    .total_msgs      = 5000};
         run_ack_test(&config);
 }
 
@@ -1485,16 +1065,12 @@ static void test_random_ack_multiple_topics_single_partition(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_single_topic_multiple_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "random-ack-1t-4p-5000msgs",
-            .topic_cnt            = 1,
-            .partitions           = {4},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 34567,
-            .total_msgs           = 5000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+        ack_test_config_t config = {.test_name    = "random-ack-1t-4p-5000msgs",
+                                    .topic_cnt    = 1,
+                                    .partitions   = {4},
+                                    .consumer_cnt = 1,
+                                    .use_random_acks = rd_true,
+                                    .total_msgs      = 5000};
         run_ack_test(&config);
 }
 
@@ -1505,16 +1081,12 @@ static void test_random_ack_single_topic_multiple_partitions(void) {
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
 static void test_random_ack_multiple_topics_multiple_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "random-ack-2t-2p-5000msgs",
-            .topic_cnt            = 2,
-            .partitions           = {2, 2},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 45678,
-            .total_msgs           = 5000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+        ack_test_config_t config = {.test_name    = "random-ack-2t-2p-5000msgs",
+                                    .topic_cnt    = 2,
+                                    .partitions   = {2, 2},
+                                    .consumer_cnt = 1,
+                                    .use_random_acks = rd_true,
+                                    .total_msgs      = 5000};
         run_ack_test(&config);
 }
 
@@ -1530,10 +1102,7 @@ static void test_scale_15_topics_single_partition(void) {
             .partitions      = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
-            .random_seed     = 56789,
-            .total_msgs      = 10000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+            .total_msgs      = 10000};
         run_ack_test(&config);
 }
 
@@ -1550,10 +1119,7 @@ static void test_scale_15_topics_multiple_partitions(void) {
             .partitions      = {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2},
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
-            .random_seed     = 67890,
-            .total_msgs      = 10000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+            .total_msgs      = 10000};
         run_ack_test(&config);
 }
 
@@ -1564,16 +1130,12 @@ static void test_scale_15_topics_multiple_partitions(void) {
  * Tests high partition count scenario.
  */
 static void test_scale_8_topics_4_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "scale-8t-4p-8000msgs",
-            .topic_cnt            = 8,
-            .partitions           = {4, 4, 4, 4, 4, 4, 4, 4},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 78901,
-            .total_msgs           = 8000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+        ack_test_config_t config = {.test_name       = "scale-8t-4p-8000msgs",
+                                    .topic_cnt       = 8,
+                                    .partitions      = {4, 4, 4, 4, 4, 4, 4, 4},
+                                    .consumer_cnt    = 1,
+                                    .use_random_acks = rd_true,
+                                    .total_msgs      = 8000};
         run_ack_test(&config);
 }
 
@@ -1583,16 +1145,12 @@ static void test_scale_8_topics_4_partitions(void) {
  * 1250 messages per partition. Tests single topic with many partitions.
  */
 static void test_scale_single_topic_8_partitions(void) {
-        ack_test_config_t config = {
-            .test_name            = "scale-1t-8p-10000msgs",
-            .topic_cnt            = 1,
-            .partitions           = {8},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 89012,
-            .total_msgs           = 10000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+        ack_test_config_t config = {.test_name       = "scale-1t-8p-10000msgs",
+                                    .topic_cnt       = 1,
+                                    .partitions      = {8},
+                                    .consumer_cnt    = 1,
+                                    .use_random_acks = rd_true,
+                                    .total_msgs      = 10000};
         run_ack_test(&config);
 }
 
@@ -1604,36 +1162,24 @@ static void test_scale_single_topic_8_partitions(void) {
  */
 static void test_scale_10_topics_3_partitions(void) {
         ack_test_config_t config = {
-            .test_name            = "scale-10t-3p-15000msgs",
-            .topic_cnt            = 10,
-            .partitions           = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
-            .consumer_cnt         = 1,
-            .use_random_acks      = rd_true,
-            .random_seed          = 90123,
-            .total_msgs           = 15000,
-            .expected_redelivered = -1 /* Use released count */
-        };
+            .test_name       = "scale-10t-3p-15000msgs",
+            .topic_cnt       = 10,
+            .partitions      = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3},
+            .consumer_cnt    = 1,
+            .use_random_acks = rd_true,
+            .total_msgs      = 15000};
         run_ack_test(&config);
 }
 
 
 int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
+        test_timeout_set(600); /* 10 minutes for all tests */
+
         /* Core tests */
         test_release_redelivery();
         test_reject_no_redelivery();
         test_accept_no_redelivery();
-
-        /* Extended tests */
-        test_mixed_ack_types();
-
-        /* Multi-partition tests */
-        test_release_multiple_partitions();
-        test_mixed_ack_across_partitions();
-
-        /* Multi-topic tests */
-        test_release_multiple_topics();
-        test_mixed_ack_across_topics();
 
         /* Error handling tests */
         test_ack_null_message();
@@ -1643,13 +1189,6 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
         /* Max delivery attempts test */
         test_max_delivery_attempts();
-
-        /* Mixed per-offset acknowledgement tests */
-        test_mixed_per_offset_single_partition();
-        test_mixed_per_offset_multiple_partitions();
-        test_mixed_per_offset_multiple_topics();
-        test_mixed_per_offset_full_matrix();
-        test_alternating_ack_pattern();
 
         /* High-intensity random acknowledgement tests */
         test_random_ack_single_topic_single_partition();

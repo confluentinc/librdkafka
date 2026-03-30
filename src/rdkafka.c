@@ -3175,6 +3175,12 @@ rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                 rd_kafka_share_fetch_fanout_enqueue(rk, rko);
 }
 
+/* Forward declarations for commit_sync helpers used in reply handler */
+static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
+                                                      rd_kafka_cgrp_t *rkcg);
+static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb);
+
 /**
  * Handles RD_KAFKA_OP_SHARE_FETCH | RD_KAFKA_OP_REPLY.
  * @locality main thread
@@ -3209,7 +3215,65 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                 rkcg->rkcg_share.share_fetch_more_records = rd_false;
 
         /*
-         * Step 2: If this was the fetch broker but no records were received,
+         * Step 2: Handle commit_sync reply if this op belongs to
+         * the current commit_sync request.
+         */
+        if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
+            rko_orig->rko_u.share_fetch.commit_sync_request_id ==
+                rkcg->rkcg_commit_sync_request.id) {
+                rd_kafka_topic_partition_list_t *ack_results =
+                    rko_orig->rko_u.share_fetch.ack_results;
+
+                if (ack_results) {
+                        int k;
+                        for (k = 0; k < ack_results->cnt; k++) {
+                                rd_kafka_topic_partition_t *src =
+                                    &ack_results->elems[k];
+                                rd_kafka_topic_partition_t *dst =
+                                    rd_kafka_topic_partition_list_find(
+                                        rkcg->rkcg_commit_sync_request.results,
+                                        src->topic, src->partition);
+                                if (dst)
+                                        dst->err = src->err;
+                        }
+                }
+
+                /* TODO KIP-932: When broker reply has a top-level error
+                 * (e.g. SHARE_SESSION_NOT_FOUND, __TRANSPORT, __DESTROY)
+                 * ack_results is NULL but partitions handled by this
+                 * broker remain as _IN_PROGRESS sentinel. Should map
+                 * rko_orig->rko_err to all partitions that were sent
+                 * to this broker so they don't leak _IN_PROGRESS to
+                 * the caller. */
+
+                rkcg->rkcg_commit_sync_request.wait_broker_result_count--;
+
+                rd_kafka_dbg(
+                    rk, CGRP, "SHARE",
+                    "Commit sync reply from broker %s: %s, "
+                    "remaining brokers: %d",
+                    rd_kafka_broker_name(reply_rkb),
+                    rd_kafka_err2str(rko_orig->rko_err),
+                    rkcg->rkcg_commit_sync_request.wait_broker_result_count);
+
+                rd_kafka_share_commit_sync_maybe_complete(rk, rkcg);
+        }
+
+        /*
+         * Step 3: Dispatch pending commit_sync to the replying broker
+         * (highest priority). Acks must always be sent.
+         */
+        if (!reply_rkb->rkb_share_fetch_enqueued &&
+            !rd_kafka_broker_or_instance_terminating(reply_rkb) &&
+            reply_rkb->rkb_pending_commit_sync.sync_ack_details) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "Dispatching pending sync acks to broker %s",
+                             rd_kafka_broker_name(reply_rkb));
+                rd_kafka_share_enqueue_sync_ack_op(rk, reply_rkb);
+        }
+
+        /*
+         * Step 4: If this was the fetch broker but no records were received,
          * try to select another broker to fetch from.
          *
          * TODO: KIP-932: Handle the case where all assignments are removed
@@ -3243,7 +3307,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 3: If the replying broker has cached ack details,
+         * Step 5: If the replying broker has cached async ack details,
          * send an ack-only SHARE_FETCH op to it.
          */
         if (reply_rkb->rkb_share_async_ack_details &&
@@ -3724,6 +3788,411 @@ rd_kafka_op_res_t rd_kafka_share_commit_async_fanout_op(rd_kafka_t *rk,
 }
 
 /**
+ * @brief Merge ack batches from \p src_list into \p dst_list.
+ *
+ * For each batch in src_list, finds a matching topic-partition in
+ * dst_list. If found, deep-copies entries from src into existing
+ * batch and re-sorts by start_offset. If not found, moves the
+ * batch as-is.
+ *
+ * @param dst_list Destination list (rd_kafka_share_ack_batches_t*).
+ * @param src_list Source list (rd_kafka_share_ack_batches_t*).
+ *                 Elements are moved or destroyed; list is emptied.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_merge_ack_lists(rd_list_t *dst_list,
+                                           rd_list_t *src_list) {
+        rd_kafka_share_ack_batches_t *batch;
+
+        while ((batch = rd_list_pop(src_list))) {
+                rd_kafka_share_ack_batches_t *existing;
+
+                existing =
+                    rd_kafka_share_find_ack_batch(dst_list, batch->rktpar);
+                if (existing) {
+                        rd_kafka_share_ack_batch_entry_t *entry;
+                        int j;
+                        RD_LIST_FOREACH(entry, &batch->entries, j) {
+                                rd_list_add(
+                                    &existing->entries,
+                                    rd_kafka_share_ack_batch_entry_copy(entry));
+                        }
+                        rd_list_sort(&existing->entries,
+                                     rd_kafka_share_ack_entries_sort_cmp_ptr);
+                        rd_kafka_share_ack_batches_destroy(batch);
+                } else {
+                        rd_list_add(dst_list, batch);
+                }
+        }
+}
+
+/**
+ * @brief Send commit_sync response to the app thread and clear state.
+ *
+ * Creates a SHARE_COMMIT_SYNC_FANOUT reply op with the per-partition
+ * results and enqueues it on the app thread's temp queue. Clears the
+ * commit_sync request state.
+ *
+ * @param rkcg Consumer group handle.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_op_t *rko_reply;
+
+        rko_reply = rd_kafka_op_new(RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY);
+        rko_reply->rko_u.share_commit_sync_fanout_reply.results =
+            rkcg->rkcg_commit_sync_request.results;
+
+        rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
+
+        rkcg->rkcg_commit_sync_request.id                       = 0;
+        rkcg->rkcg_commit_sync_request.results                  = NULL;
+        rkcg->rkcg_commit_sync_request.replyq                   = NULL;
+        rkcg->rkcg_commit_sync_request.abs_timeout              = 0;
+        rkcg->rkcg_commit_sync_request.wait_broker_result_count = 0;
+}
+
+/**
+ * @brief Check if all broker results are in and send response if done.
+ *
+ * Called after each broker reply arrives. If wait_broker_result_count
+ * reaches zero, stops the timeout timer and sends the response op
+ * to the app thread's temp queue.
+ *
+ * @param rk Client instance.
+ * @param rkcg Consumer group handle.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
+                                                      rd_kafka_cgrp_t *rkcg) {
+        if (rkcg->rkcg_commit_sync_request.wait_broker_result_count > 0)
+                return;
+
+        rd_kafka_timer_stop(&rk->rk_timers, &rkcg->rkcg_commit_sync_request.tmr,
+                            1);
+
+        rd_kafka_share_commit_sync_send_response(rkcg);
+}
+
+/**
+ * @brief Timeout callback for commit_sync.
+ *
+ * Fires when the commit_sync timeout expires. For each broker with
+ * pending_commit_sync, merges those acks into async_ack_details so
+ * they are sent asynchronously later. Fills all partitions still
+ * marked as IN_PROGRESS with REQUEST_TIMED_OUT. Sends the response.
+ *
+ * @locality main thread (timer thread -> main thread)
+ */
+static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
+                                                  void *arg) {
+        rd_kafka_t *rk        = rkts->rkts_rk;
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+        rd_kafka_broker_t *rkb;
+        rd_kafka_topic_partition_list_t *results;
+        int i;
+
+        rd_kafka_dbg(rk, CGRP, "SHARE",
+                     "Commit sync timeout fired, "
+                     "pending brokers: %d",
+                     rkcg->rkcg_commit_sync_request.wait_broker_result_count);
+
+        /* Move pending_commit_sync acks to async_ack_details */
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (!rkb->rkb_pending_commit_sync.sync_ack_details)
+                        continue;
+
+                if (!rkb->rkb_share_async_ack_details)
+                        rkb->rkb_share_async_ack_details = rd_list_new(
+                            rd_list_cnt(
+                                rkb->rkb_pending_commit_sync.sync_ack_details),
+                            rd_kafka_share_ack_batches_destroy_free);
+
+                rd_kafka_share_merge_ack_lists(
+                    rkb->rkb_share_async_ack_details,
+                    rkb->rkb_pending_commit_sync.sync_ack_details);
+
+                rd_list_destroy(rkb->rkb_pending_commit_sync.sync_ack_details);
+                rkb->rkb_pending_commit_sync.sync_ack_details       = NULL;
+                rkb->rkb_pending_commit_sync.abs_timeout            = 0;
+                rkb->rkb_pending_commit_sync.commit_sync_request_id = 0;
+        }
+        rd_kafka_rdunlock(rk);
+
+        /* Fill partitions still IN_PROGRESS with REQUEST_TIMED_OUT */
+        results = rkcg->rkcg_commit_sync_request.results;
+        for (i = 0; i < results->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &results->elems[i];
+                if (rktpar->err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                        rktpar->err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        }
+
+        rd_kafka_share_commit_sync_send_response(rkcg);
+}
+
+/**
+ * @brief Create and enqueue a sync ack-only SHARE_FETCH op on a broker.
+ *
+ * Moves ack details, abs_timeout, and commit_sync_request_id from
+ * rkb_pending_commit_sync into the op.
+ *
+ * @param rk Client instance.
+ * @param rkb Broker to enqueue on. Must have pending_commit_sync data.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb) {
+        rd_kafka_op_t *rko_sf;
+
+        rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
+        rko_sf->rko_u.share_fetch.should_leave = rd_false;
+        rko_sf->rko_u.share_fetch.abs_timeout =
+            rkb->rkb_pending_commit_sync.abs_timeout;
+        rko_sf->rko_u.share_fetch.should_fetch = rd_false;
+        rko_sf->rko_u.share_fetch.commit_sync_request_id =
+            rkb->rkb_pending_commit_sync.commit_sync_request_id;
+
+        /* Move ack details from pending_commit_sync to op */
+        rko_sf->rko_u.share_fetch.ack_details =
+            rkb->rkb_pending_commit_sync.sync_ack_details;
+        rkb->rkb_pending_commit_sync.sync_ack_details       = NULL;
+        rkb->rkb_pending_commit_sync.abs_timeout            = 0;
+        rkb->rkb_pending_commit_sync.commit_sync_request_id = 0;
+
+        rd_kafka_broker_keep(rkb);
+        rko_sf->rko_u.share_fetch.target_broker = rkb;
+        rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+
+        rkb->rkb_share_fetch_enqueued = rd_true;
+
+        rd_kafka_dbg(
+            rk, CGRP, "SHARE",
+            "Enqueuing sync ack op on broker %s "
+            "(abs_timeout %" PRId64 ", commit_sync_request_id %" PRId64 ")",
+            rd_kafka_broker_name(rkb), rko_sf->rko_u.share_fetch.abs_timeout,
+            rko_sf->rko_u.share_fetch.commit_sync_request_id);
+
+        rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
+}
+
+/**
+ * @brief Segregate sync ack batches by partition leader into
+ *        each broker's pending_commit_sync list.
+ *
+ * Phase 1 of sync dispatch: puts ALL acks into rkb_pending_commit_sync
+ * regardless of whether the broker is free or busy. Updates the
+ * commit_sync results for partitions with no available leader.
+ *
+ * @param rk Client instance.
+ * @param rkcg Consumer group handle.
+ * @param ack_batches List of ack batches from the SYNC_FANOUT op.
+ *                    Elements are moved to broker lists; container destroyed.
+ * @param abs_timeout Absolute timeout for the commit_sync request.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
+                                                         rd_kafka_cgrp_t *rkcg,
+                                                         rd_list_t *ack_batches,
+                                                         rd_ts_t abs_timeout) {
+        rd_kafka_share_ack_batches_t *batch;
+        int batch_cnt = rd_list_cnt(ack_batches);
+
+        while ((batch = rd_list_pop(ack_batches))) {
+                rd_kafka_toppar_t *rktp;
+                rd_kafka_broker_t *leader_rkb;
+                rd_kafka_share_ack_batches_t *existing;
+                rd_kafka_topic_partition_t *result_rktpar;
+
+                rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
+                if (!rktp || !rktp->rktp_leader) {
+                        result_rktpar = rd_kafka_topic_partition_list_find(
+                            rkcg->rkcg_commit_sync_request.results,
+                            batch->rktpar->topic, batch->rktpar->partition);
+                        if (result_rktpar)
+                                result_rktpar->err =
+                                    RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+
+                        rd_kafka_dbg(rk, CGRP, "SHARE",
+                                     "Sync ack batch for %s [%" PRId32
+                                     "] dropped: "
+                                     "toppar or leader not available",
+                                     batch->rktpar->topic,
+                                     batch->rktpar->partition);
+                        rd_kafka_share_ack_batches_destroy(batch);
+                        continue;
+                }
+                leader_rkb = rktp->rktp_leader;
+
+                /* Put all acks into pending_commit_sync */
+                if (!leader_rkb->rkb_pending_commit_sync.sync_ack_details)
+                        leader_rkb->rkb_pending_commit_sync.sync_ack_details =
+                            rd_list_new(
+                                batch_cnt,
+                                rd_kafka_share_ack_batches_destroy_free);
+
+                existing = rd_kafka_share_find_ack_batch(
+                    leader_rkb->rkb_pending_commit_sync.sync_ack_details,
+                    batch->rktpar);
+                if (existing) {
+                        rd_kafka_share_ack_batch_entry_t *entry;
+                        int j;
+                        RD_LIST_FOREACH(entry, &batch->entries, j) {
+                                rd_list_add(
+                                    &existing->entries,
+                                    rd_kafka_share_ack_batch_entry_copy(entry));
+                        }
+                        rd_list_sort(&existing->entries,
+                                     rd_kafka_share_ack_entries_sort_cmp_ptr);
+                        rd_kafka_share_ack_batches_destroy(batch);
+                } else {
+                        rd_list_add(leader_rkb->rkb_pending_commit_sync
+                                        .sync_ack_details,
+                                    batch);
+                }
+
+                leader_rkb->rkb_pending_commit_sync.abs_timeout = abs_timeout;
+                leader_rkb->rkb_pending_commit_sync.commit_sync_request_id =
+                    rkcg->rkcg_commit_sync_request.id;
+        }
+
+        rd_list_destroy(ack_batches);
+}
+
+/**
+ * @brief Dispatch pending sync ack requests to free brokers.
+ *
+ * Phase 2 of sync dispatch: iterates all brokers. For each broker
+ * that has pending_commit_sync, increments wait_broker_result_count.
+ * If the broker is free (no inflight request), dispatches the
+ * pending sync acks immediately.
+ *
+ * @param rk Client instance.
+ * @param rkcg Consumer group handle.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_dispatch_pending_sync_acks(rd_kafka_t *rk,
+                                                      rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_broker_t *rkb;
+
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (!rkb->rkb_pending_commit_sync.sync_ack_details)
+                        continue;
+
+                rkcg->rkcg_commit_sync_request.wait_broker_result_count++;
+
+                if (rkb->rkb_share_fetch_enqueued ||
+                    rd_kafka_broker_or_instance_terminating(rkb)) {
+                        rd_kafka_dbg(rk, CGRP, "SHARE",
+                                     "Broker %s has in-flight request, "
+                                     "sync acks stored in pending_commit_sync",
+                                     rd_kafka_broker_name(rkb));
+                        continue;
+                }
+
+                /* Broker is free — dispatch pending sync acks */
+                rd_kafka_share_enqueue_sync_ack_op(rk, rkb);
+        }
+        rd_kafka_rdunlock(rk);
+}
+
+/**
+ * @brief Main thread handler for SHARE_COMMIT_SYNC_FANOUT op.
+ *
+ * Stores the commit_sync request state, segregates acks by leader
+ * into pending_commit_sync, then dispatches to free brokers and
+ * starts the timeout timer.
+ *
+ * @locality main thread
+ */
+rd_kafka_op_res_t rd_kafka_share_commit_sync_fanout_op(rd_kafka_t *rk,
+                                                       rd_kafka_q_t *rkq,
+                                                       rd_kafka_op_t *rko) {
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+        rd_list_t *ack_batches =
+            rko->rko_u.share_commit_sync_fanout.ack_batches;
+        rd_ts_t abs_timeout = rko->rko_u.share_commit_sync_fanout.abs_timeout;
+        rd_kafka_topic_partition_list_t *results =
+            rko->rko_u.share_commit_sync_fanout.results;
+        int i;
+        int64_t timeout_us;
+
+        /* Take ownership from op */
+        rko->rko_u.share_commit_sync_fanout.ack_batches = NULL;
+        rko->rko_u.share_commit_sync_fanout.results     = NULL;
+
+        /* Initialize commit_sync request state */
+        rkcg->rkcg_share.commit_sync_id_counter++;
+        if (rkcg->rkcg_share.commit_sync_id_counter == INT64_MAX)
+                rkcg->rkcg_share.commit_sync_id_counter = 1;
+        rkcg->rkcg_commit_sync_request.id =
+            rkcg->rkcg_share.commit_sync_id_counter;
+        rkcg->rkcg_commit_sync_request.abs_timeout = abs_timeout;
+        rkcg->rkcg_commit_sync_request.replyq      = rko->rko_replyq.q;
+        rko->rko_replyq.q = NULL; /* Take ownership of replyq */
+        rkcg->rkcg_commit_sync_request.results                  = results;
+        rkcg->rkcg_commit_sync_request.wait_broker_result_count = 0;
+
+        /* Initialize all partition errors to IN_PROGRESS sentinel */
+        for (i = 0; i < results->cnt; i++)
+                results->elems[i].err = RD_KAFKA_RESP_ERR__IN_PROGRESS;
+
+        if (!ack_batches || rd_list_cnt(ack_batches) == 0) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "No acks to commit in "
+                             "SHARE_COMMIT_SYNC_FANOUT, "
+                             "sending immediate response");
+
+                for (i = 0; i < results->cnt; i++)
+                        results->elems[i].err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                rd_kafka_share_commit_sync_send_response(rkcg);
+                RD_IF_FREE(ack_batches, rd_list_destroy);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /* Phase 1: Segregate all acks into rkb_pending_commit_sync */
+        rd_kafka_share_segregate_sync_acks_by_leader(rk, rkcg, ack_batches,
+                                                     abs_timeout);
+
+        /* Phase 2: Dispatch pending sync acks to free brokers */
+        rd_kafka_share_dispatch_pending_sync_acks(rk, rkcg);
+
+        if (rkcg->rkcg_commit_sync_request.wait_broker_result_count == 0) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "No brokers available for commit sync, "
+                             "sending immediate response");
+                rd_kafka_share_commit_sync_send_response(rkcg);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /* Start timeout timer */
+        timeout_us = abs_timeout - rd_clock();
+        if (timeout_us <= 0)
+                timeout_us = 1;
+
+        rd_kafka_timer_start_oneshot(
+            &rk->rk_timers, &rkcg->rkcg_commit_sync_request.tmr,
+            rd_true /*restart*/, timeout_us,
+            rd_kafka_share_commit_sync_timeout_cb, NULL);
+
+        rd_kafka_dbg(rk, CGRP, "SHARE",
+                     "Commit sync fanout: waiting for %d broker results, "
+                     "timeout in %" PRId64 " ms",
+                     rkcg->rkcg_commit_sync_request.wait_broker_result_count,
+                     timeout_us / 1000);
+
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+/**
  * @brief Asynchronously commit all pending acknowledgements.
  *
  * Builds ack details from the inflight map and enqueues a
@@ -3762,6 +4231,103 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
         rko->rko_u.share_commit_async_fanout.ack_batches = ack_batches;
 
         rd_kafka_q_enq(rk->rk_ops, rko);
+
+        return NULL;
+}
+
+/**
+ * @brief Synchronously commit all pending acknowledgements.
+ *
+ * Builds ack details from the inflight map and enqueues a
+ * SHARE_COMMIT_SYNC_FANOUT op on the main thread. Blocks the
+ * app thread on a temp queue until the main thread sends a
+ * response (or timeout fires).
+ *
+ * In implicit ack mode, all ACQUIRED records are first converted
+ * to ACCEPT before building the ack details.
+ *
+ * @param rkshare Share consumer instance.
+ * @param timeout_ms Timeout in milliseconds.
+ * @param partitions [out] Per-partition results. Each partition's err
+ *                   field contains the result. The caller must destroy
+ *                   the returned list with
+ *                   rd_kafka_topic_partition_list_destroy().
+ *                   Set to NULL if no acks were pending.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t* on failure.
+ *          The returned error must be freed with rd_kafka_error_destroy().
+ *
+ * @locality app thread
+ */
+rd_kafka_error_t *
+rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
+                           int timeout_ms,
+                           rd_kafka_topic_partition_list_t **partitions) {
+        rd_kafka_t *rk = rkshare->rkshare_rk;
+        rd_kafka_op_t *rko;
+        rd_kafka_op_t *rko_reply;
+        rd_list_t *ack_batches;
+        rd_kafka_q_t *tmpq;
+        rd_ts_t abs_timeout;
+        rd_kafka_topic_partition_list_t *results;
+        int i;
+
+        *partitions = NULL;
+
+        /* Drain rk_rep for all pending callbacks (non-blocking) */
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
+                         rd_kafka_poll_cb, NULL);
+
+        rd_kafka_share_acknowledge_all_if_implicit(rkshare);
+
+        ack_batches = rd_kafka_share_build_ack_details(rk->rk_rkshare);
+
+        if (!ack_batches) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "No pending acknowledgements to commit sync");
+                return NULL;
+        }
+
+        abs_timeout = rd_timeout_init(timeout_ms);
+
+        /* Build per-partition results list from ack batches */
+        results = rd_kafka_topic_partition_list_new(rd_list_cnt(ack_batches));
+        for (i = 0; i < rd_list_cnt(ack_batches); i++) {
+                rd_kafka_share_ack_batches_t *batch =
+                    rd_list_elem(ack_batches, i);
+                rd_kafka_topic_partition_list_add_copy(results, batch->rktpar);
+        }
+
+        /* Create temp queue for blocking */
+        tmpq = rd_kafka_q_new(rk);
+
+        /* Create SYNC_FANOUT op */
+        rko = rd_kafka_op_new_cb(rk, RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT,
+                                 rd_kafka_share_commit_sync_fanout_op);
+        rko->rko_u.share_commit_sync_fanout.ack_batches = ack_batches;
+        rko->rko_u.share_commit_sync_fanout.abs_timeout = abs_timeout;
+        rko->rko_u.share_commit_sync_fanout.results     = results;
+        rko->rko_replyq = RD_KAFKA_REPLYQ(tmpq, 0);
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+
+        /* Block on temp queue — main thread always sends a response
+         * (either from broker replies or timeout callback) */
+        rko_reply = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
+
+        rd_kafka_q_destroy_owner(tmpq);
+
+        /* Extract per-partition results from reply */
+        rd_dassert(rko_reply->rko_type ==
+                   RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY);
+        *partitions = rko_reply->rko_u.share_commit_sync_fanout_reply.results;
+        rko_reply->rko_u.share_commit_sync_fanout_reply.results = NULL;
+
+        rd_kafka_op_destroy(rko_reply);
+
+        /* Drain rk_rep for callbacks again before returning */
+        rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
+                         rd_kafka_poll_cb, NULL);
 
         return NULL;
 }

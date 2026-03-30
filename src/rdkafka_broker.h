@@ -469,6 +469,25 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                            *   NULL. Freed by broker
                                            *   thread after use.
                                            *   @locality main thread */
+
+        /**
+         * Pending commit_sync ack details for this broker.
+         * Stored when a commit_sync request arrives but the broker
+         * already has an inflight request. Takes priority over
+         * rkb_share_async_ack_details when dispatching.
+         * @locality main thread
+         */
+        struct {
+                rd_list_t *sync_ack_details;    /**< Ack batches waiting to be
+                                                 *   sent. Type:
+                                                 *   rd_kafka_share_ack_batches_t*.
+                                                 */
+                rd_ts_t abs_timeout;            /**< Absolute timeout from
+                                                 *   the commit_sync request. */
+                int64_t commit_sync_request_id; /**< Request ID this
+                                                 *   pending data
+                                                 *   belongs to. */
+        } rkb_pending_commit_sync;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

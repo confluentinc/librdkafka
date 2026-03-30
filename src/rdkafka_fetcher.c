@@ -1255,7 +1255,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 }
                 /* Initialize batches_out with NULL rktpar for unknown topic */
                 batches_out->rktpar = NULL;
-                rd_kafka_q_destroy(temp_fetchq);
                 rd_kafka_buf_skip_tags(rkbuf);
                 goto done;
         }
@@ -1390,8 +1389,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                         rd_kafka_op_destroy(rko);
         }
 
-        rd_kafka_q_destroy_owner(temp_fetchq);
-
         rd_kafka_buf_skip_tags(rkbuf);  // Partition tags
 
         goto done;
@@ -1400,6 +1397,7 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 done:
+        RD_IF_FREE(temp_fetchq, rd_kafka_q_destroy_owner);
         if (rktp)
                 rd_kafka_toppar_destroy(rktp); /* from toppar_get() */
         return err;
@@ -2465,6 +2463,16 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
         int32_t max_records       = 0;
         rd_list_t *ack_details    = rko_orig->rko_u.share_fetch.ack_details;
         rd_bool_t has_ack_details = ack_details && rd_list_cnt(ack_details) > 0;
+        rd_list_t *toppars_to_add = NULL;
+        rd_list_t *toppars_to_forget = NULL;
+
+        if (!rko_orig->rko_u.share_fetch.should_fetch && !has_ack_details) {
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                             "Not sending Share Fetch Request: "
+                             "no fetch requested and no acknowledgements");
+                rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__NOOP);
+                return;
+        }
 
         if (!rkcg->rkcg_member_id) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
@@ -2474,33 +2482,20 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
         }
 
         if (rko_orig->rko_u.share_fetch.should_fetch) {
-                max_records = rkb->rkb_rk->rk_conf.share.max_poll_records;
+                max_records    = rkb->rkb_rk->rk_conf.share.max_poll_records;
+                toppars_to_add = rkb->rkb_share_fetch_session.toppars_to_add;
+                toppars_to_forget =
+                    rkb->rkb_share_fetch_session.toppars_to_forget;
         }
 
-        if (rkb->rkb_share_fetch_session.toppars_to_add ||
-            rkb->rkb_share_fetch_session.toppars_to_forget ||
-            rko_orig->rko_u.share_fetch.should_fetch || has_ack_details) {
-                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                             "Sending Share Fetch Request with%s%s%s%s",
-                             has_ack_details ? " acknowledgements," : "",
-                             rkb->rkb_share_fetch_session.toppars_to_add
-                                 ? " new topics,"
-                                 : "",
-                             rkb->rkb_share_fetch_session.toppars_to_forget
-                                 ? " forgotten toppars,"
-                                 : "",
-                             rko_orig->rko_u.share_fetch.should_fetch
-                                 ? " fetching messages"
-                                 : "");
-        } else {
-                rd_kafka_dbg(
-                    rkb->rkb_rk, FETCH, "SHAREFETCH",
-                    "Not sending Share Fetch Request since there are no "
-                    "new topics to add, acknowledgements, forgotten toppars"
-                    " or messages to fetch");
-                rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__NOOP);
-                return;
-        }
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                     "Sending Share Fetch Request with%s%s%s%s",
+                     has_ack_details ? " acknowledgements," : "",
+                     toppars_to_add ? " new topics," : "",
+                     toppars_to_forget ? " forgotten toppars," : "",
+                     rko_orig->rko_u.share_fetch.should_fetch
+                         ? " fetching messages"
+                         : "");
 
         rd_kafka_ShareFetchRequest(
             rkb, rkcg->rkcg_group_id,           /* group_id */
@@ -2509,13 +2504,11 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
             rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
             rkb->rkb_rk->rk_conf.fetch_min_bytes,
             rkb->rkb_rk->rk_conf.fetch_max_bytes, max_records,
-            max_records, /* TODO KIP-932: Check if this is correct for batch
-                            size or not */
-            rkb->rkb_share_fetch_session
-                .toppars_to_add, /* toppars to add to session */
-            rkb->rkb_share_fetch_session
-                .toppars_to_forget, /* forgetting toppars */
-            rko_orig,               /* rko (carries ack_details) */
+            max_records,    /* TODO KIP-932: Check if this is correct for batch
+                               size or not */
+            toppars_to_add, /* toppars to add to session */
+            toppars_to_forget, /* forgetting toppars */
+            rko_orig,          /* rko (carries ack_details) */
             now);
 }
 

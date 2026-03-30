@@ -151,6 +151,8 @@ set(
     0171-share_consumer_consume.c
     0172-share_consumer_acknowledge.c
     0173-share_consumer_commit_async.c
+    0174-share_consumer_concurrency.c
+    0175-share_consumer_groups.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

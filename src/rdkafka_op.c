@@ -131,6 +131,8 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
                 "REPLY:SHARE_SESSION_PARTITION_REMOVE",
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] = "REPLY:SHARE_FETCH_RESPONSE",
+            [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
+                "REPLY:SHARE_COMMIT_ASYNC_FANOUT",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -302,6 +304,8 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
                 sizeof(rko->rko_u.share_fetch_response),
+            [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
+                sizeof(rko->rko_u.share_commit_async_fanout),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -531,6 +535,11 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
                 RD_IF_FREE(rko->rko_u.share_fetch_fanout.ack_batches,
+                           rd_list_destroy);
+                break;
+
+        case RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT:
+                RD_IF_FREE(rko->rko_u.share_commit_async_fanout.ack_batches,
                            rd_list_destroy);
                 break;
 

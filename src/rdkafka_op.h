@@ -192,8 +192,11 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
                                     applicable. */
         RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
-        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD,    /**< share session:
-                                                     * add partition */
+        RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT,   /**< fanout share commit async
+                                                  *   operation (ack-only,
+                                                  *   no fetch) */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD, /**< share session:
+                                                  * add partition */
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
                                                      * remove partition */
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
@@ -794,6 +797,16 @@ struct rd_kafka_op_s {
                          */
                         rd_list_t *ack_batches;
                 } share_fetch_fanout;
+
+                struct {
+                        /** List of all acknowledgement batches to commit.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Built from inflight ack map, will be segregated
+                         *  by leader and sent to respective brokers.
+                         *  Set to NULL after ownership is transferred
+                         *  to per-broker ack_details. */
+                        rd_list_t *ack_batches;
+                } share_commit_async_fanout;
 
                 /**
                  * Share fetch response - single rko containing all messages

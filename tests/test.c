@@ -291,6 +291,7 @@ _TEST_DECL(0157_share_consumer_ack_mock);
 _TEST_DECL(0170_share_consumer_subscription);
 _TEST_DECL(0171_share_consumer_consume);
 _TEST_DECL(0172_share_consumer_acknowledge);
+_TEST_DECL(0173_share_consumer_commit_async);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -566,6 +567,7 @@ struct test tests[] = {
     _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -1551,9 +1553,10 @@ static void run_tests(int argc, char **argv) {
                 } else if (tests_to_skip && strstr(tests_to_skip, testnum))
                         skip_reason = "included in TESTS_SKIP list";
                 else if (skip_tests_till) {
-                        if (!strcmp(skip_tests_till, testnum))
+                        if (!strcmp(skip_tests_till, testnum)) {
+                                rd_free(skip_tests_till);
                                 skip_tests_till = NULL;
-                        else
+                        } else
                                 skip_reason =
                                     "ignoring test before TESTS_SKIP_BEFORE";
                 }

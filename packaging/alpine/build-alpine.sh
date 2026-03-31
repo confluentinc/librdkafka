@@ -14,7 +14,7 @@ if [ "$1" = "--in-docker" ]; then
     git clone /v /librdkafka
 
     cd /librdkafka
-    ./configure --install-deps --disable-gssapi --disable-lz4-ext --enable-static $*
+    ./configure --install-deps --disable-lz4-ext --enable-static $*
     make -j
     examples/rdkafka_example -X builtin.features
     CI=true make -C tests run_local_quick

@@ -67,6 +67,8 @@ extern const struct rd_kafka_sasl_provider rd_kafka_sasl_win32_provider;
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_cyrus_provider;
 void rd_kafka_sasl_cyrus_global_term(void);
 int rd_kafka_sasl_cyrus_global_init(void);
+int rd_kafka_sasl_cyrus_is_library_loaded(void);
+char *rd_kafka_sasl_cyrus_get_library_loading_error(void);
 #endif
 
 extern const struct rd_kafka_sasl_provider rd_kafka_sasl_plain_provider;

@@ -32,6 +32,7 @@
 #include "rdkafka_transport_int.h"
 #include "rdkafka_sasl.h"
 #include "rdkafka_sasl_int.h"
+#include "rddl.h"
 #include "rdstring.h"
 
 #if defined(__FreeBSD__) || defined(__OpenBSD__)
@@ -39,12 +40,224 @@
 #endif
 
 #ifdef __APPLE__
-/* Apple has deprecated most of the SASL API for unknown reason,
- * silence those warnings. */
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+const char *const rd_kafka_sasl_cyrus_library_names[] = {"libsasl2.2.dylib"};
+#else
+const char *const rd_kafka_sasl_cyrus_library_names[] = {"libsasl2.so.2",
+                                                         "libsasl2.so.3"};
 #endif
 
-#include <sasl/sasl.h>
+/**
+ * Handle for the loaded Cyrus SASL library
+ */
+static rd_dl_hnd_t *rd_kafka_sasl_cyrus_library_handle = NULL;
+
+/**
+ * Global loading error string
+ */
+static char rd_kafka_sasl_cyrus_library_errstr[1024];
+
+
+/**
+ * Cyrus SASL API
+ * Copied from sasl/sasl.h.
+ * These are only the symbols we use, not the full API.
+ */
+#define SASL_CONTINUE 1
+#define SASL_OK       0
+#define SASL_FAIL     -1
+#define SASL_INTERACT 2
+
+#define SASL_CB_LIST_END     0
+#define SASL_CB_LOG          2
+#define SASL_CB_USER         0x4001
+#define SASL_CB_AUTHNAME     0x4002
+#define SASL_CB_PASS         0x4004
+#define SASL_CB_ECHOPROMPT   0x4005
+#define SASL_CB_NOECHOPROMPT 0x4006
+#define SASL_CB_GETREALM     (0x4008)
+#define SASL_CB_CANON_USER   (0x8007)
+
+#define SASL_USERNAME   0
+#define SASL_AUTHSOURCE 14
+#define SASL_MECHNAME   15
+
+typedef struct sasl_conn sasl_conn_t;
+
+typedef struct sasl_secret {
+        unsigned long len;
+        unsigned char data[1];
+} sasl_secret_t;
+
+typedef struct sasl_callback {
+        unsigned long id;
+        int (*proc)(void);
+        void *context;
+} sasl_callback_t;
+
+typedef struct sasl_interact {
+        unsigned long id;
+        const char *challenge;
+        const char *prompt;
+        const char *defresult;
+        const void *result;
+        unsigned len;
+} sasl_interact_t;
+
+
+/**
+ * Function pointers for the Cyrus SASL API
+ */
+static int (*sasl_client_init_p)(const sasl_callback_t *)    = NULL;
+static int (*sasl_client_new_p)(const char *service,
+                                const char *serverFQDN,
+                                const char *iplocalport,
+                                const char *ipremoteport,
+                                const sasl_callback_t *prompt_supp,
+                                unsigned flags,
+                                sasl_conn_t **pconn)         = NULL;
+static int (*sasl_client_start_p)(sasl_conn_t *conn,
+                                  const char *mechlist,
+                                  sasl_interact_t **prompt_need,
+                                  const char **clientout,
+                                  unsigned *clientoutlen,
+                                  const char **mech)         = NULL;
+static int (*sasl_client_step_p)(sasl_conn_t *conn,
+                                 const char *serverin,
+                                 unsigned serverinlen,
+                                 sasl_interact_t **prompt_need,
+                                 const char **clientout,
+                                 unsigned *clientoutlen)     = NULL;
+static void (*sasl_dispose_p)(sasl_conn_t **pconn)           = NULL;
+static const char *(*sasl_errdetail_p)(sasl_conn_t *conn)    = NULL;
+static const char *(*sasl_errstring_p)(int saslerr,
+                                       const char *langlist,
+                                       const char **outlang) = NULL;
+static int (*sasl_getprop_p)(sasl_conn_t *conn,
+                             int propnum,
+                             const void **pvalue)            = NULL;
+static int (*sasl_listmech_p)(sasl_conn_t *conn,
+                              const char *user,
+                              const char *prefix,
+                              const char *sep,
+                              const char *suffix,
+                              const char **result,
+                              unsigned *plen,
+                              int *pcount)                   = NULL;
+
+
+/**
+ * Resolve a symbol from the Cyrus SASL library
+ */
+#define RESOLVE_SYM(handle, sym)                                               \
+        do {                                                                   \
+                sym##_p = rd_dl_sym(                                           \
+                    (handle), #sym, rd_kafka_sasl_cyrus_library_errstr,        \
+                    sizeof(rd_kafka_sasl_cyrus_library_errstr));               \
+                if (!(sym##_p)) {                                              \
+                        rd_dl_close(handle);                                   \
+                        (handle) = NULL;                                       \
+                        return -1;                                             \
+                }                                                              \
+        } while (0)
+
+
+/**
+ * @brief Load the Cyrus SASL library and resolve the symbols we use.
+ *        This function is called once per runtime.
+ *
+ * @returns 0 on success, -1 on error.
+ */
+int rd_kafka_sasl_cyrus_load_library(void) {
+        size_t count = sizeof(rd_kafka_sasl_cyrus_library_names) /
+                       sizeof(rd_kafka_sasl_cyrus_library_names[0]);
+        char *errstrs[count];
+
+        size_t i;
+        for (i = 0; i < count; i++) {
+                char errstr[512];
+                rd_kafka_sasl_cyrus_library_handle =
+                    rd_dl_open(rd_kafka_sasl_cyrus_library_names[i], errstr,
+                               sizeof(errstr));
+                if (rd_kafka_sasl_cyrus_library_handle)
+                        break;
+                errstrs[i] = rd_strdup(errstr);
+        }
+
+        if (!rd_kafka_sasl_cyrus_library_handle) {
+                size_t offset = 0;
+                size_t maxlen = sizeof(rd_kafka_sasl_cyrus_library_errstr);
+                for (i = 0; i < count; i++) {
+                        if (offset < maxlen - 1) {
+                                int written = rd_snprintf(
+                                    rd_kafka_sasl_cyrus_library_errstr + offset,
+                                    maxlen - offset, "%s%s", errstrs[i],
+                                    (i < count - 1) ? "; " : "");
+                                if (written < 0)
+                                        offset = maxlen;
+                                else
+                                        offset += written;
+                        }
+                        rd_free(errstrs[i]);
+                }
+                return -1;
+        }
+
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_client_init);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_client_new);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_client_start);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_client_step);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_dispose);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_errdetail);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_errstring);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_getprop);
+        RESOLVE_SYM(rd_kafka_sasl_cyrus_library_handle, sasl_listmech);
+
+        rd_kafka_sasl_cyrus_library_errstr[0] = '\0';
+
+        return 0;
+}
+
+
+/**
+ * @brief Unload the Cyrus SASL library.
+ */
+void rd_kafka_sasl_cyrus_unload_library(void) {
+        if (rd_kafka_sasl_cyrus_library_handle != NULL) {
+                rd_dl_close(rd_kafka_sasl_cyrus_library_handle);
+                rd_kafka_sasl_cyrus_library_handle    = NULL;
+                rd_kafka_sasl_cyrus_library_errstr[0] = '\0';
+                sasl_client_init_p                    = NULL;
+                sasl_client_new_p                     = NULL;
+                sasl_client_start_p                   = NULL;
+                sasl_client_step_p                    = NULL;
+                sasl_dispose_p                        = NULL;
+                sasl_errdetail_p                      = NULL;
+                sasl_errstring_p                      = NULL;
+                sasl_getprop_p                        = NULL;
+                sasl_listmech_p                       = NULL;
+        }
+}
+
+
+/**
+ * @brief Check if the Cyrus SASL library is loaded.
+ *
+ * @returns 1 if the library is loaded, 0 otherwise.
+ */
+int rd_kafka_sasl_cyrus_is_library_loaded(void) {
+        return rd_kafka_sasl_cyrus_library_handle != NULL;
+}
+
+
+/**
+ * @brief Get the error string from the last library loading attempt.
+ *
+ * @returns The error string.
+ */
+char *rd_kafka_sasl_cyrus_get_library_loading_error(void) {
+        return rd_kafka_sasl_cyrus_library_errstr;
+}
+
 
 /**
  * @brief Process-global lock to avoid simultaneous invocation of
@@ -93,8 +306,8 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
                 unsigned int outlen;
 
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
-                r = sasl_client_step(state->conn, size > 0 ? buf : NULL, size,
-                                     &interact, &out, &outlen);
+                r = sasl_client_step_p(state->conn, size > 0 ? buf : NULL, size,
+                                       &interact, &out, &outlen);
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (r >= 0) {
@@ -119,7 +332,7 @@ static int rd_kafka_sasl_cyrus_recv(struct rd_kafka_transport_s *rktrans,
         else if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size,
                             "SASL handshake failed (step): %s",
-                            sasl_errdetail(state->conn));
+                            sasl_errdetail_p(state->conn));
                 return -1;
         }
 
@@ -152,17 +365,17 @@ auth_successful:
                 const char *user, *mech, *authsrc;
 
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
-                if (sasl_getprop(state->conn, SASL_USERNAME,
-                                 (const void **)&user) != SASL_OK)
+                if (sasl_getprop_p(state->conn, SASL_USERNAME,
+                                   (const void **)&user) != SASL_OK)
                         user = "(unknown)";
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
-                if (sasl_getprop(state->conn, SASL_MECHNAME,
-                                 (const void **)&mech) != SASL_OK)
+                if (sasl_getprop_p(state->conn, SASL_MECHNAME,
+                                   (const void **)&mech) != SASL_OK)
                         mech = "(unknown)";
 
-                if (sasl_getprop(state->conn, SASL_AUTHSOURCE,
-                                 (const void **)&authsrc) != SASL_OK)
+                if (sasl_getprop_p(state->conn, SASL_AUTHSOURCE,
+                                   (const void **)&authsrc) != SASL_OK)
                         authsrc = "(unknown)";
 
                 rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "SASL",
@@ -486,7 +699,7 @@ static void rd_kafka_sasl_cyrus_close(struct rd_kafka_transport_s *rktrans) {
 
         if (state->conn) {
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
-                sasl_dispose(&state->conn);
+                sasl_dispose_p(&state->conn);
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
         }
         rd_free(state);
@@ -545,20 +758,20 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
         mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
-        r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
-                            NULL, /* no local & remote IP checks */
-                            state->callbacks, 0, &state->conn);
+        r = sasl_client_new_p(rk->rk_conf.sasl.service_name, hostname, NULL,
+                              NULL, /* no local & remote IP checks */
+                              state->callbacks, 0, &state->conn);
         mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
         if (r != SASL_OK) {
                 rd_snprintf(errstr, errstr_size, "%s",
-                            sasl_errstring(r, NULL, NULL));
+                            sasl_errstring_p(r, NULL, NULL));
                 return -1;
         }
 
         if (rk->rk_conf.debug & RD_KAFKA_DBG_SECURITY) {
                 const char *avail_mechs;
-                sasl_listmech(state->conn, NULL, NULL, " ", NULL, &avail_mechs,
-                              NULL, NULL);
+                sasl_listmech_p(state->conn, NULL, NULL, " ", NULL,
+                                &avail_mechs, NULL, NULL);
                 rd_rkb_dbg(rkb, SECURITY, "SASL",
                            "My supported SASL mechanisms: %s", avail_mechs);
         }
@@ -569,8 +782,9 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
                 const char *mech = NULL;
 
                 mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
-                r = sasl_client_start(state->conn, rk->rk_conf.sasl.mechanisms,
-                                      NULL, &out, &outlen, &mech);
+                r = sasl_client_start_p(state->conn,
+                                        rk->rk_conf.sasl.mechanisms, NULL, &out,
+                                        &outlen, &mech);
                 mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
 
                 if (r >= 0)
@@ -589,7 +803,7 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
         } else if (r != SASL_CONTINUE) {
                 rd_snprintf(errstr, errstr_size,
                             "SASL handshake failed (start (%d)): %s", r,
-                            sasl_errdetail(state->conn));
+                            sasl_errdetail_p(state->conn));
                 return -1;
         }
 
@@ -688,6 +902,7 @@ void rd_kafka_sasl_cyrus_global_term(void) {
         /* NOTE: Should not be called since the application may be using SASL
          * too*/
         /* sasl_done(); */
+        rd_kafka_sasl_cyrus_unload_library();
         mtx_destroy(&rd_kafka_sasl_cyrus_kinit_lock);
 }
 
@@ -700,10 +915,14 @@ int rd_kafka_sasl_cyrus_global_init(void) {
 
         mtx_init(&rd_kafka_sasl_cyrus_kinit_lock, mtx_plain);
 
-        r = sasl_client_init(NULL);
+        if (rd_kafka_sasl_cyrus_load_library() < 0) {
+                return -1;
+        }
+
+        r = sasl_client_init_p(NULL);
         if (r != SASL_OK) {
                 fprintf(stderr, "librdkafka: sasl_client_init() failed: %s\n",
-                        sasl_errstring(r, NULL, NULL));
+                        sasl_errstring_p(r, NULL, NULL));
                 return -1;
         }
 

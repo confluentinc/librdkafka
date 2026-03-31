@@ -91,7 +91,6 @@ def magic_mismatch(path, a):
 #  bid     - builder's build-id
 #  bldtype - Release, Debug (appveyor)
 #  lnk     - Linkage ("std", "static", "all" (both std and static))
-#  extra   - Extra build options, typically "gssapi" (for cyrus-sasl linking).
 
 #
 # Example:

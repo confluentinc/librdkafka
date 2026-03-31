@@ -255,11 +255,6 @@ endif()
 find_package(Threads REQUIRED)
 target_link_libraries(rdkafka PUBLIC Threads::Threads)
 
-if(WITH_SASL_CYRUS)
-  target_include_directories(rdkafka PRIVATE ${SASL_INCLUDE_DIRS})
-  target_link_libraries(rdkafka PUBLIC ${SASL_LIBRARIES})
-endif()
-
 if(WITH_LIBDL)
   target_link_libraries(rdkafka PUBLIC ${CMAKE_DL_LIBS})
 endif()
@@ -315,10 +310,6 @@ if(NOT RDKAFKA_BUILD_STATIC)
 
   if(WITH_SSL)
     string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libcrypto libssl ")
-  endif()
-
-  if(WITH_SASL_CYRUS)
-    string(APPEND PKG_CONFIG_REQUIRES_PRIVATE "libsasl2 ")
   endif()
 
   if(WITH_ZSTD)

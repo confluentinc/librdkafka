@@ -18,32 +18,32 @@ class NugetPackage (Package):
     mappings = [
         Mapping({'arch': 'x64',
                  'plat': 'linux',
-                 'lnk': 'std'},
+                 'lnk': 'all'},
                 'librdkafka.tgz',
                 './usr/local/include/librdkafka/rdkafka.h',
                 'build/native/include/librdkafka/rdkafka.h'),
         Mapping({'arch': 'x64',
                  'plat': 'linux',
-                 'lnk': 'std'},
+                 'lnk': 'all'},
                 'librdkafka.tgz',
                 './usr/local/include/librdkafka/rdkafkacpp.h',
                 'build/native/include/librdkafka/rdkafkacpp.h'),
         Mapping({'arch': 'x64',
                  'plat': 'linux',
-                 'lnk': 'std'},
+                 'lnk': 'all'},
                 'librdkafka.tgz',
                 './usr/local/include/librdkafka/rdkafka_mock.h',
                 'build/native/include/librdkafka/rdkafka_mock.h'),
 
         Mapping({'arch': 'x64',
                  'plat': 'linux',
-                 'lnk': 'std'},
+                 'lnk': 'all'},
                 'librdkafka.tgz',
                 './usr/local/share/doc/librdkafka/README.md',
                 'README.md'),
         Mapping({'arch': 'x64',
                  'plat': 'linux',
-                 'lnk': 'std'},
+                 'lnk': 'all'},
                 'librdkafka.tgz',
                 './usr/local/share/doc/librdkafka/CONFIGURATION.md',
                 'CONFIGURATION.md'),
@@ -67,23 +67,15 @@ class NugetPackage (Package):
                 './usr/local/lib/librdkafka.1.dylib',
                 'runtimes/osx-arm64/native/librdkafka.dylib'),
 
-        # Linux glibc centos8 x64 with GSSAPI
-        Mapping({'arch': 'x64',
-                 'plat': 'linux',
-                 'dist': 'centos8',
-                 'lnk': 'std'},
-                'librdkafka.tgz',
-                './usr/local/lib/librdkafka.so.1',
-                'runtimes/linux-x64/native/librdkafka.so'),
-        # Linux glibc centos8 x64 without GSSAPI (no external deps)
+        # Linux glibc centos8 x64
         Mapping({'arch': 'x64',
                  'plat': 'linux',
                  'dist': 'centos8',
                  'lnk': 'all'},
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
-                'runtimes/linux-x64/native/centos8-librdkafka.so'),
-        # Linux glibc centos8 arm64 without GSSAPI (no external deps)
+                'runtimes/linux-x64/native/librdkafka.so'),
+        # Linux glibc centos8 arm64
         Mapping({'arch': 'arm64',
                  'plat': 'linux',
                  'dist': 'centos8',
@@ -92,7 +84,7 @@ class NugetPackage (Package):
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-arm64/native/librdkafka.so'),
 
-        # Linux musl alpine x64 without GSSAPI (no external deps)
+        # Linux musl alpine x64
         Mapping({'arch': 'x64',
                  'plat': 'linux',
                  'dist': 'alpine',

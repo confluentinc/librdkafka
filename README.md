@@ -107,7 +107,6 @@ If the version is out of date, please [create an issue or pull request](https://
    	pthreads
 	zlib-dev (optional, for gzip compression support)
 	libssl-dev (optional, for SSL and SASL SCRAM support)
-	libsasl2-dev (optional, for SASL GSSAPI support)
 	libzstd-dev (optional, for ZStd compression support)
 	libcurl-dev (optional, for SASL OAUTHBEARER OIDC support)
 

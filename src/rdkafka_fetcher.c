@@ -2004,6 +2004,18 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
         }
 
+        /* Enqueue ack callbacks before destroying ack_details.
+         * Priority order:
+         * 1. Top-level error (err != NO_ERROR): Apply same error to all
+         *    partitions. This happens for transport errors, session errors, etc.
+         *    In this case ack_results is NULL.
+         * 2. No top-level error: Use ack_results which contains per-partition
+         *    results. Each partition has its own error code (NO_ERROR for
+         *    success, or a specific per-partition error). */
+        rd_kafka_share_dispatch_ack_callbacks(
+            rk, rko_orig->rko_u.share_fetch.ack_details,
+            rko_orig->rko_u.share_fetch.ack_results, err);
+
         /* Destroy ack_details — on success the acks have been sent,
          * on error they are unprocessable. */
         if (rko_orig->rko_u.share_fetch.ack_details) {
@@ -2101,19 +2113,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                  * the top-level error. Per-partition callbacks (success or
                  * per-partition errors) are enqueued in
                  * rd_kafka_share_fetch_reply_handle_partition. */
-                if (rk->rk_conf.share_acknowledgement_commit_cb &&
-                    rko_orig->rko_u.share_fetch.ack_details &&
-                    rd_list_cnt(rko_orig->rko_u.share_fetch.ack_details) > 0) {
-                        rd_kafka_share_ack_batches_t *batches;
-                        int k;
-
-                        RD_LIST_FOREACH(batches,
-                                        rko_orig->rko_u.share_fetch.ack_details,
-                                        k) {
-                                rd_kafka_share_enqueue_ack_callback(rk, batches,
-                                                                    err);
-                        }
-                }
+                rd_kafka_share_dispatch_ack_callbacks(
+                    rk, rko_orig->rko_u.share_fetch.ack_details, NULL, err);
         }
 
         /* Destroy ack_details after creating callback op. */

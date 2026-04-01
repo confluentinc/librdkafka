@@ -786,3 +786,60 @@ int rd_kafka_share_partition_offsets_offsets_cnt(
     const rd_kafka_share_partition_offsets_t *partition_offsets) {
         return partition_offsets->cnt;
 }
+
+
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_ack_batch_find(rd_list_t *ack_details,
+                              const char *topic,
+                              int32_t partition) {
+        rd_kafka_share_ack_batches_t *ack_batch;
+        int k;
+
+        if (!ack_details)
+                return NULL;
+
+        RD_LIST_FOREACH(ack_batch, ack_details, k) {
+                if (ack_batch->rktpar &&
+                    !strcmp(ack_batch->rktpar->topic, topic) &&
+                    ack_batch->rktpar->partition == partition)
+                        return ack_batch;
+        }
+        return NULL;
+}
+
+
+void rd_kafka_share_dispatch_ack_callbacks(
+    rd_kafka_t *rk,
+    rd_list_t *ack_details,
+    rd_kafka_topic_partition_list_t *ack_results,
+    rd_kafka_resp_err_t err) {
+        rd_kafka_share_ack_batches_t *ack_batch;
+        int k;
+
+        if (!rk->rk_conf.share_acknowledgement_commit_cb || !ack_details ||
+            rd_list_cnt(ack_details) == 0)
+                return;
+
+        if (err != RD_KAFKA_RESP_ERR_NO_ERROR) {
+                /* Top-level error: apply to all partitions */
+                RD_LIST_FOREACH(ack_batch, ack_details, k) {
+                        rd_kafka_share_enqueue_ack_callback(rk, ack_batch, err);
+                }
+                return;
+        }
+
+        if (!ack_results)
+                return;
+
+        /* No top-level error: use per-partition results */
+        for (int p = 0; p < ack_results->cnt; p++) {
+                rd_kafka_topic_partition_t *rktpar = &ack_results->elems[p];
+
+                ack_batch = rd_kafka_share_ack_batch_find(ack_details,
+                                                         rktpar->topic,
+                                                         rktpar->partition);
+                if (ack_batch)
+                        rd_kafka_share_enqueue_ack_callback(rk, ack_batch,
+                                                           rktpar->err);
+        }
+}

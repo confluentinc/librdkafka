@@ -291,4 +291,34 @@ void rd_kafka_share_enqueue_ack_callback(rd_kafka_t *rk,
                                          rd_kafka_share_ack_batches_t *batches,
                                          rd_kafka_resp_err_t err);
 
+/**
+ * @brief Find ack_batch matching the given topic/partition.
+ *
+ * @param ack_details List of ack batches.
+ * @param topic Topic name.
+ * @param partition Partition id.
+ * @returns Matching ack_batch or NULL if not found.
+ */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_ack_batch_find(rd_list_t *ack_details,
+                              const char *topic,
+                              int32_t partition);
+
+/**
+ * @brief Dispatch ack callbacks for all partitions in ack_details.
+ *
+ * If err is set (top-level error), all partitions receive the same error.
+ * Otherwise, per-partition results from ack_results are used.
+ *
+ * @param rk Kafka handle.
+ * @param ack_details List of ack batches.
+ * @param ack_results Per-partition results (may be NULL).
+ * @param err Top-level error code.
+ */
+void rd_kafka_share_dispatch_ack_callbacks(
+    rd_kafka_t *rk,
+    rd_list_t *ack_details,
+    rd_kafka_topic_partition_list_t *ack_results,
+    rd_kafka_resp_err_t err);
+
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

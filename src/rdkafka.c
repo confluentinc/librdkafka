@@ -3443,6 +3443,20 @@ static void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                          * is then fully destroyed (freeing its entries). */
                         rd_kafka_share_ack_batch_entry_t *entry;
                         int j;
+                        /*
+                         * TODO KIP-932: Merge with overlapping offsets into
+                         * single entry with single type. For example, if
+                         * existing has an ACCEPT for offsets 0-50 and new
+                         * batch has ACCEPT for offsets 51-100, they can be
+                         * merged into a single ACCEPT for offsets 0-100.
+                         * Currently, we are blindly adding entries from the
+                         * new batch into the existing batch, which means we
+                         * may end up with multiple adjacent or overlapping
+                         * entries of the same type that could have been
+                         * merged. This is not incorrect, but it is less
+                         * efficient in terms of the network bandwidth in the
+                         * RPC call.
+                         */
                         RD_LIST_FOREACH(entry, &batch->entries, j) {
                                 rd_list_add(
                                     &existing->entries,
@@ -4212,6 +4226,8 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
         rd_kafka_op_t *rko;
         rd_list_t *ack_batches;
 
+        rd_kafka_dbg(rk, CGRP, "SHARE", "Committing asynchronously");
+
         /* Drain rk_rep for all pending callbacks (non-blocking) */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
@@ -4273,6 +4289,9 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         int i;
 
         *partitions = NULL;
+
+        rd_kafka_dbg(rk, CGRP, "SHARE",
+                     "Committing synchronously with timeout %d ms", timeout_ms);
 
         /* Drain rk_rep for all pending callbacks (non-blocking) */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,

@@ -1801,6 +1801,176 @@ static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
 }
 
 /**
+ * @brief Parse a ShareAcknowledge response.
+ *
+ * ShareAcknowledge response contains per-partition error codes for
+ * acknowledgement results. Returns the top-level error code.
+ *
+ * @locality broker thread
+ */
+static rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
+                                        rd_kafka_buf_t *rkbuf,
+                                        rd_kafka_buf_t *request) {
+        int32_t TopicArrayCnt;
+        int i;
+        const int log_decode_errors = LOG_ERR;
+        int16_t ErrorCode           = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafkap_str_t ErrorStr    = RD_KAFKAP_STR_INITIALIZER_EMPTY;
+        rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        NodeEndpoints.NodeEndpoints   = NULL;
+        NodeEndpoints.NodeEndpointCnt = 0;
+
+        rd_kafka_buf_read_throttle_time(rkbuf);
+
+        rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+        rd_kafka_buf_read_str(rkbuf, &ErrorStr);
+
+        if (ErrorCode) {
+                rd_rkb_log(rkb, LOG_ERR, "SHAREACK",
+                           "ShareAcknowledge response error %s: '%.*s'",
+                           rd_kafka_err2name(ErrorCode),
+                           RD_KAFKAP_STR_PR(&ErrorStr));
+                return ErrorCode;
+        }
+
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
+
+        for (i = 0; i < TopicArrayCnt; i++) {
+                rd_kafka_Uuid_t topic_id = RD_KAFKA_UUID_ZERO;
+                int32_t PartitionArrayCnt;
+                int j;
+
+                rd_kafka_buf_read_uuid(rkbuf, &topic_id);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
+
+                for (j = 0; j < PartitionArrayCnt; j++) {
+                        int32_t Partition;
+                        int16_t PartErrorCode;
+                        rd_kafkap_str_t PartErrorStr;
+                        rd_kafkap_CurrentLeader_t CurrentLeader;
+
+                        rd_kafka_buf_read_i32(rkbuf, &Partition);
+                        rd_kafka_buf_read_i16(rkbuf, &PartErrorCode);
+                        rd_kafka_buf_read_str(rkbuf, &PartErrorStr);
+
+                        /* CurrentLeader */
+                        rd_kafka_buf_read_CurrentLeader(rkbuf, &CurrentLeader);
+
+                        if (PartErrorCode) {
+                                rd_rkb_dbg(rkb, FETCH, "SHAREACK",
+                                           "ShareAcknowledge partition %" PRId32
+                                           " error %s: '%.*s'",
+                                           Partition,
+                                           rd_kafka_err2name(PartErrorCode),
+                                           RD_KAFKAP_STR_PR(&PartErrorStr));
+                                /* TODO KIP-932: Report partition-level ack
+                                 * errors via acknowledgement callback. */
+                        }
+
+                        /* Partition tags */
+                        rd_kafka_buf_skip_tags(rkbuf);
+                }
+
+                /* Topic tags */
+                rd_kafka_buf_skip_tags(rkbuf);
+        }
+
+        rd_kafka_buf_read_NodeEndpoints(rkbuf, &NodeEndpoints);
+
+        /* Top level tags */
+        rd_kafka_buf_skip_tags(rkbuf);
+
+        RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
+        rd_rkb_dbg(rkb, MSG, "BADMSG",
+                   "Bad ShareAcknowledge response (v%d): parse error",
+                   (int)request->rkbuf_reqhdr.ApiVersion);
+        return rkbuf->rkbuf_err;
+}
+
+
+/**
+ * @brief ShareAcknowledge response handling callback.
+ *
+ * @locality broker thread (or any thread if err == __DESTROY).
+ */
+static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
+                                                    rd_kafka_broker_t *rkb,
+                                                    rd_kafka_resp_err_t err,
+                                                    rd_kafka_buf_t *reply,
+                                                    rd_kafka_buf_t *request,
+                                                    void *opaque) {
+        rd_kafka_op_t *rko_orig = opaque;
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                rd_kafka_broker_session_update(rkb);
+                if (rko_orig->rko_u.share_fetch.ack_details) {
+                        rd_list_destroy(
+                            rko_orig->rko_u.share_fetch.ack_details);
+                        rko_orig->rko_u.share_fetch.ack_details = NULL;
+                }
+                rd_kafka_op_reply(rko_orig, err);
+                return;
+        }
+
+        /* Parse and handle the response (unless the request errored) */
+        if (!err && reply)
+                err = rd_kafka_share_acknowledge_reply_handle(rkb, reply,
+                                                              request);
+
+        rd_kafka_broker_session_update(rkb);
+
+        if (unlikely(err)) {
+                rd_rkb_dbg(rkb, FETCH, "SHAREACK",
+                           "ShareAcknowledge reply error: %s",
+                           rd_kafka_err2str(err));
+                switch (err) {
+                case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
+                case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
+                case RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED:
+                case RD_KAFKA_RESP_ERR__TRANSPORT:
+                case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                        rd_kafka_broker_session_reset(rkb, rko_orig);
+                        break;
+
+                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+                case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
+                case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
+                case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
+                case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
+                        char tmp[128];
+                        rd_snprintf(tmp, sizeof(tmp),
+                                    "ShareAcknowledge failed: %s",
+                                    rd_kafka_err2str(err));
+                        rd_kafka_metadata_refresh_known_topics(
+                            rkb->rkb_rk, NULL, rd_true /*force*/, tmp);
+                        break;
+                }
+
+                default:
+                        break;
+                }
+        }
+
+        /* Destroy ack_details — on success the acks have been sent,
+         * on error they are unprocessable. */
+        if (rko_orig->rko_u.share_fetch.ack_details) {
+                rd_list_destroy(rko_orig->rko_u.share_fetch.ack_details);
+                rko_orig->rko_u.share_fetch.ack_details = NULL;
+        }
+
+        if (rko_orig)
+                rd_kafka_op_reply(rko_orig, err);
+}
+
+
+/**
  * @broker ShareFetchResponse handling.
  *
  * @locality broker thread  (or any thread if err == __DESTROY).
@@ -2370,6 +2540,184 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
         return;
 }
 
+/**
+ * @brief Build and send a ShareAcknowledge request.
+ *
+ * Used for ack-only requests (no fetching) and session close (epoch=-1).
+ * ShareAcknowledge carries GroupId, MemberId, ShareSessionEpoch, and
+ * acknowledgement batches only — no fetch parameters or forgotten topics.
+ *
+ * @param rkb Broker to send request to.
+ * @param group_id Consumer group id.
+ * @param member_id Consumer member id.
+ * @param share_session_epoch Session epoch (-1 for close).
+ * @param rko_orig The originating SHARE_FETCH op (carries ack_details).
+ * @param now Current timestamp.
+ *
+ * @locality broker thread
+ */
+void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
+                                      const rd_kafkap_str_t *group_id,
+                                      const rd_kafkap_str_t *member_id,
+                                      int32_t share_session_epoch,
+                                      rd_kafka_op_t *rko_orig,
+                                      rd_ts_t now) {
+        rd_kafka_buf_t *rkbuf;
+        int cnt                     = 0;
+        size_t of_TopicArrayCnt     = 0;
+        int TopicArrayCnt           = 0;
+        size_t of_PartitionArrayCnt = 0;
+        int PartitionArrayCnt       = 0;
+        size_t rkbuf_size           = 0;
+        rd_list_t *ack_details =
+            rko_orig ? rko_orig->rko_u.share_fetch.ack_details : NULL;
+        int ack_details_cnt   = ack_details ? rd_list_cnt(ack_details) : 0;
+        int total_ack_entries = 0;
+        /* FirstOffset + LastOffset + AcknowledgementType per ack entry */
+        size_t acknowledgement_size = 8 + 8 + 1;
+
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
+                     "ack_details_cnt=%d, share_session_epoch=%" PRId32,
+                     ack_details_cnt, share_session_epoch);
+
+        /* Calculate buffer size */
+        if (group_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_id);
+        if (member_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(member_id);
+        /* ShareSessionEpoch + TopicArrayCnt */
+        rkbuf_size += 4 + 4;
+        /* N x (topic id + partition id) for ack details */
+        rkbuf_size += (ack_details_cnt * (32 + 4));
+        /* Count total ack entries across all ack_details batches */
+        if (ack_details) {
+                rd_kafka_share_ack_batches_t *batches;
+                int k;
+                RD_LIST_FOREACH(batches, ack_details, k) {
+                        total_ack_entries += rd_list_cnt(&batches->entries);
+                }
+        }
+        rkbuf_size += (total_ack_entries * acknowledgement_size);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ShareAcknowledge, 1, rkbuf_size, rd_true);
+
+        rd_kafka_buf_ApiVersion_set(
+            rkbuf,
+            rd_kafka_broker_ApiVersion_supported(
+                rkb, RD_KAFKAP_ShareAcknowledge, 1, 1, NULL),
+            0);
+
+        /* GroupId */
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+
+        /* MemberId */
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+
+        /* ShareSessionEpoch */
+        rd_kafka_buf_write_i32(rkbuf, share_session_epoch);
+
+        /* Topics array with acknowledgement batches */
+        of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
+
+        if (ack_details) {
+                rd_kafka_Uuid_t *topic_id_last = NULL;
+                rd_kafka_share_ack_batches_t *batches;
+                rd_kafka_topic_partition_private_t *parpriv;
+                rd_kafka_share_ack_batch_entry_t *entry;
+                int k, m, entries_cnt;
+
+                RD_LIST_FOREACH(batches, ack_details, k) {
+                        parpriv = (rd_kafka_topic_partition_private_t *)
+                                      batches->rktpar->_private;
+                        rd_dassert(parpriv != NULL);
+
+                        if (topic_id_last == NULL ||
+                            rd_kafka_Uuid_cmp(*topic_id_last,
+                                              parpriv->topic_id) != 0) {
+                                if (topic_id_last != NULL) {
+                                        rd_kafka_buf_finalize_arraycnt(
+                                            rkbuf, of_PartitionArrayCnt,
+                                            PartitionArrayCnt);
+                                        rd_kafka_buf_write_tags_empty(rkbuf);
+                                }
+
+                                /* Topic ID */
+                                rd_kafka_buf_write_uuid(rkbuf,
+                                                        &parpriv->topic_id);
+
+                                TopicArrayCnt++;
+                                topic_id_last = &parpriv->topic_id;
+                                of_PartitionArrayCnt =
+                                    rd_kafka_buf_write_arraycnt_pos(rkbuf);
+                                PartitionArrayCnt = 0;
+                        }
+
+                        PartitionArrayCnt++;
+
+                        /* Partition */
+                        rd_kafka_buf_write_i32(rkbuf,
+                                               batches->rktpar->partition);
+
+                        /* Write acknowledgement batches */
+                        entries_cnt = rd_list_cnt(&batches->entries);
+                        rd_kafka_buf_write_arraycnt(rkbuf, entries_cnt);
+
+                        RD_LIST_FOREACH(entry, &batches->entries, m) {
+                                /* FirstOffset */
+                                rd_kafka_buf_write_i64(rkbuf,
+                                                       entry->start_offset);
+                                /* LastOffset */
+                                rd_kafka_buf_write_i64(rkbuf,
+                                                       entry->end_offset);
+                                /* AcknowledgeTypes */
+                                rd_kafka_buf_write_arraycnt(rkbuf, 1);
+                                rd_kafka_buf_write_i8(rkbuf,
+                                                      (int8_t)entry->types[0]);
+                                /* Acknowledgement tags */
+                                rd_kafka_buf_write_tags_empty(rkbuf);
+                        }
+
+                        /* Partition tags */
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+
+                        rd_rkb_dbg(rkb, FETCH, "SHAREACK",
+                                   "ShareAcknowledge ack for topic %s [%" PRId32
+                                   "] with %d entries",
+                                   batches->rktpar->topic,
+                                   batches->rktpar->partition, entries_cnt);
+
+                        cnt++;
+                }
+
+                /* Finalize last topic from ack_details */
+                if (topic_id_last != NULL) {
+                        rd_kafka_buf_finalize_arraycnt(
+                            rkbuf, of_PartitionArrayCnt, PartitionArrayCnt);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+                }
+        }
+
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
+                     "ShareAcknowledge Request with %d toppars on %d topics",
+                     cnt, TopicArrayCnt);
+
+        /* Update TopicArrayCnt */
+        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
+
+        /* Use configured timeout */
+        rd_kafka_buf_set_timeout(rkbuf, rkb->rkb_rk->rk_conf.socket_timeout_ms,
+                                 now);
+
+        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREACK",
+                     "Issuing ShareAcknowledge request with %d toppars "
+                     "to broker %s (id %" PRId32 ")",
+                     cnt, rkb->rkb_name, rkb->rkb_nodeid);
+        rd_kafka_broker_buf_enq1(
+            rkb, rkbuf, rd_kafka_broker_share_acknowledge_reply, rko_orig);
+}
+
+
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *tmp_rktp;
 
@@ -2441,23 +2789,18 @@ void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
                                        rd_kafka_op_t *rko_orig,
                                        rd_ts_t now) {
         rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
-        rd_kafka_ShareFetchRequest(
-            rkb, rkcg->rkcg_group_id,           /* group_id */
-            rkcg->rkcg_member_id,               /* member_id */
-            rkb->rkb_share_fetch_session.epoch, /* share_session_epoch */
-            rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
-            rkb->rkb_rk->rk_conf.fetch_min_bytes,
-            rkb->rkb_rk->rk_conf.fetch_max_bytes, 0, 0,
-            NULL,     /* toppars to add */
-            NULL,     /* forgetting toppars */
-            rko_orig, /* rko */
-            now);
+        /* Use ShareAcknowledge with epoch=-1 to close the session,
+         * sending any final acknowledgements. */
+        rd_kafka_ShareAcknowledgeRequest(
+            rkb, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
+            -1, /* epoch=-1 signals session close */
+            rko_orig, now);
         rd_kafka_broker_share_fetch_session_clear(rkb);
 }
 
-void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
-                                 rd_kafka_op_t *rko_orig,
-                                 rd_ts_t now) {
+void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
+                               rd_kafka_op_t *rko_orig,
+                               rd_ts_t now) {
 
         rd_kafka_cgrp_t *rkcg     = rkb->rkb_rk->rk_cgrp;
         int32_t max_records       = 0;
@@ -2467,35 +2810,41 @@ void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
         rd_list_t *toppars_to_forget = NULL;
 
         if (!rko_orig->rko_u.share_fetch.should_fetch && !has_ack_details) {
-                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                             "Not sending Share Fetch Request: "
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
+                             "Not sending Share RPC: "
                              "no fetch requested and no acknowledgements");
                 rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__NOOP);
                 return;
         }
 
         if (!rkcg->rkcg_member_id) {
-                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                             "Share Fetch requested without member_id");
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
+                             "Share RPC requested without member_id");
                 rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__INVALID_ARG);
                 return;
         }
 
-        if (rko_orig->rko_u.share_fetch.should_fetch) {
-                max_records    = rkb->rkb_rk->rk_conf.share.max_poll_records;
-                toppars_to_add = rkb->rkb_share_fetch_session.toppars_to_add;
-                toppars_to_forget =
-                    rkb->rkb_share_fetch_session.toppars_to_forget;
+        if (!rko_orig->rko_u.share_fetch.should_fetch) {
+                /* Ack-only: use ShareAcknowledge RPC */
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
+                             "Sending ShareAcknowledge Request with"
+                             " acknowledgements");
+
+                rd_kafka_ShareAcknowledgeRequest(
+                    rkb, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
+                    rkb->rkb_share_fetch_session.epoch, rko_orig, now);
+                return;
         }
 
+        max_records       = rkb->rkb_rk->rk_conf.share.max_poll_records;
+        toppars_to_add    = rkb->rkb_share_fetch_session.toppars_to_add;
+        toppars_to_forget = rkb->rkb_share_fetch_session.toppars_to_forget;
+
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
-                     "Sending Share Fetch Request with%s%s%s%s",
+                     "Sending ShareFetch Request with%s%s%s fetching messages",
                      has_ack_details ? " acknowledgements," : "",
                      toppars_to_add ? " new topics," : "",
-                     toppars_to_forget ? " forgotten toppars," : "",
-                     rko_orig->rko_u.share_fetch.should_fetch
-                         ? " fetching messages"
-                         : "");
+                     toppars_to_forget ? " forgotten toppars," : "");
 
         rd_kafka_ShareFetchRequest(
             rkb, rkcg->rkcg_group_id,           /* group_id */

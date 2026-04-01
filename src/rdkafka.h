@@ -2168,7 +2168,6 @@ void rd_kafka_conf_set_offset_commit_cb(
 
 
 /**
- * @struct rd_kafka_share_partition_offsets_t
  * @brief Share consumer partition offsets for a single offset range.
  *
  * Contains information about an acknowledged offset range including
@@ -2178,7 +2177,6 @@ typedef struct rd_kafka_share_partition_offsets_s
     rd_kafka_share_partition_offsets_t;
 
 /**
- * @struct rd_kafka_share_partition_offsets_list_t
  * @brief List of share consumer partition offsets.
  *
  * Contains multiple partition offset entries.

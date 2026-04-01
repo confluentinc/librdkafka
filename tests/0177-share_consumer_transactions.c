@@ -96,8 +96,8 @@ static rd_kafka_share_t *create_share_consumer(const char *group) {
 static void configure_share_group(rd_kafka_t *rk,
                                   const char *group,
                                   const char *isolation_level) {
-        const char *offset_cfg[] = {"share.auto.offset.reset", "SET",
-                                    "earliest"};
+        const char *offset_cfg[]    = {"share.auto.offset.reset", "SET",
+                                       "earliest"};
         const char *isolation_cfg[] = {"share.isolation.level", "SET",
                                        isolation_level};
 
@@ -209,7 +209,7 @@ static void do_test_committed_transaction(const char *isolation_level) {
         const char *topic;
         char group[128];
         const char *txn_id = "txn-commit-test";
-        const int msg_cnt = 100;
+        const int msg_cnt  = 100;
         rd_kafka_t *producer;
         rd_kafka_share_t *consumer;
         int consumed;
@@ -256,9 +256,10 @@ static void do_test_committed_transaction(const char *isolation_level) {
                     "got %d",
                     isolation_level, msg_cnt, consumed);
 
-        TEST_SAY("SUCCESS [%s]: Share consumer received %d committed "
-                 "messages\n",
-                 isolation_level, consumed);
+        TEST_SAY(
+            "SUCCESS [%s]: Share consumer received %d committed "
+            "messages\n",
+            isolation_level, consumed);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);
@@ -280,7 +281,7 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         const char *topic;
         char group[128];
         const char *txn_id = "txn-abort-test";
-        const int msg_cnt = 100;
+        const int msg_cnt  = 100;
         rd_kafka_t *producer;
         rd_kafka_share_t *consumer;
         int consumed;
@@ -291,7 +292,8 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         rd_snprintf(topic_suffix, sizeof(topic_suffix), "0177-txn-abort-%s",
                     isolation_level);
         topic = test_mk_topic_name(topic_suffix, 1);
-        rd_snprintf(group, sizeof(group), "share-txn-abort-%s", isolation_level);
+        rd_snprintf(group, sizeof(group), "share-txn-abort-%s",
+                    isolation_level);
 
         SUB_TEST("isolation.level=%s", isolation_level);
 
@@ -342,9 +344,10 @@ static void do_test_aborted_transaction(const char *isolation_level) {
                     "got %d",
                     isolation_level, expected_msgs, consumed);
 
-        TEST_SAY("SUCCESS [%s]: Share consumer received %d messages "
-                 "(expected %d)\n",
-                 isolation_level, consumed, expected_msgs);
+        TEST_SAY(
+            "SUCCESS [%s]: Share consumer received %d messages "
+            "(expected %d)\n",
+            isolation_level, consumed, expected_msgs);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);
@@ -382,10 +385,8 @@ static void do_test_mixed_transactions(const char *isolation_level) {
                 rd_bool_t commit;
                 int msg_cnt;
         } txns[] = {
-            {"Commit 50 msgs", rd_true, 50},
-            {"Abort 50 msgs", rd_false, 50},
-            {"Commit 30 msgs", rd_true, 30},
-            {"Abort 20 msgs", rd_false, 20},
+            {"Commit 50 msgs", rd_true, 50}, {"Abort 50 msgs", rd_false, 50},
+            {"Commit 30 msgs", rd_true, 30}, {"Abort 20 msgs", rd_false, 20},
             {"Commit 40 msgs", rd_true, 40},
         };
         const int txn_cnt = sizeof(txns) / sizeof(txns[0]);
@@ -393,7 +394,8 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         rd_snprintf(topic_suffix, sizeof(topic_suffix), "0177-txn-mixed-%s",
                     isolation_level);
         topic = test_mk_topic_name(topic_suffix, 1);
-        rd_snprintf(group, sizeof(group), "share-txn-mixed-%s", isolation_level);
+        rd_snprintf(group, sizeof(group), "share-txn-mixed-%s",
+                    isolation_level);
 
         SUB_TEST("isolation.level=%s", isolation_level);
 
@@ -519,8 +521,8 @@ static void do_test_control_records_filtered(const char *isolation_level) {
          * - Offset 7: commit control record
          *
          * read_committed: should see offsets 2,3,4,5,6 (committed only)
-         * read_uncommitted: should see offsets 0,2,3,4,5,6 (aborted + committed)
-         * Control records (offsets 1 and 7) should NEVER be visible.
+         * read_uncommitted: should see offsets 0,2,3,4,5,6 (aborted +
+         * committed) Control records (offsets 1 and 7) should NEVER be visible.
          */
         expected_msgs = is_read_committed ? 5 : 6;
 
@@ -529,7 +531,7 @@ static void do_test_control_records_filtered(const char *isolation_level) {
                 rd_kafka_message_t *batch[BATCH_SIZE];
                 int attempts = 50;
                 int64_t received_offsets[10];
-                int64_t expected_offsets_committed[] = {2, 3, 4, 5, 6};
+                int64_t expected_offsets_committed[]   = {2, 3, 4, 5, 6};
                 int64_t expected_offsets_uncommitted[] = {0, 2, 3, 4, 5, 6};
                 int64_t *expected_offsets;
                 int j;
@@ -544,8 +546,8 @@ static void do_test_control_records_filtered(const char *isolation_level) {
                         size_t i;
                         rd_kafka_error_t *err;
 
-                        err = rd_kafka_share_consume_batch(
-                            consumer, 3000, batch, &rcvd);
+                        err = rd_kafka_share_consume_batch(consumer, 3000,
+                                                           batch, &rcvd);
                         if (err) {
                                 rd_kafka_error_destroy(err);
                                 continue;
@@ -555,10 +557,9 @@ static void do_test_control_records_filtered(const char *isolation_level) {
                                 if (!batch[i]->err && consumed < 10) {
                                         received_offsets[consumed] =
                                             batch[i]->offset;
-                                        TEST_SAY(
-                                            "  Message %d: offset=%" PRId64
-                                            "\n",
-                                            consumed, batch[i]->offset);
+                                        TEST_SAY("  Message %d: offset=%" PRId64
+                                                 "\n",
+                                                 consumed, batch[i]->offset);
                                         consumed++;
                                 }
                                 rd_kafka_message_destroy(batch[i]);
@@ -576,25 +577,26 @@ static void do_test_control_records_filtered(const char *isolation_level) {
                 }
 
                 /* Verify expected offsets based on isolation level */
-                expected_offsets = is_read_committed ? expected_offsets_committed
-                                                     : expected_offsets_uncommitted;
+                expected_offsets = is_read_committed
+                                       ? expected_offsets_committed
+                                       : expected_offsets_uncommitted;
 
                 TEST_ASSERT(consumed == expected_msgs,
-                            "[%s] Expected %d messages, got %d", isolation_level,
-                            expected_msgs, consumed);
+                            "[%s] Expected %d messages, got %d",
+                            isolation_level, expected_msgs, consumed);
 
                 for (j = 0; j < consumed; j++) {
-                        TEST_ASSERT(
-                            received_offsets[j] == expected_offsets[j],
-                            "[%s] Message %d: expected offset %" PRId64
-                            ", got %" PRId64,
-                            isolation_level, j, expected_offsets[j],
-                            received_offsets[j]);
+                        TEST_ASSERT(received_offsets[j] == expected_offsets[j],
+                                    "[%s] Message %d: expected offset %" PRId64
+                                    ", got %" PRId64,
+                                    isolation_level, j, expected_offsets[j],
+                                    received_offsets[j]);
                 }
 
-                TEST_SAY("SUCCESS [%s]: All %d offsets verified correctly, "
-                         "control records filtered\n",
-                         isolation_level, consumed);
+                TEST_SAY(
+                    "SUCCESS [%s]: All %d offsets verified correctly, "
+                    "control records filtered\n",
+                    isolation_level, consumed);
         }
 
         /* Cleanup */
@@ -613,8 +615,8 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
         char group[128];
-        const char *txn_id = "txn-multipart-test";
-        const int partition_cnt = 3;
+        const char *txn_id           = "txn-multipart-test";
+        const int partition_cnt      = 3;
         const int msgs_per_partition = 30;
         rd_kafka_t *producer;
         rd_kafka_share_t *consumer;
@@ -676,7 +678,8 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         expected_total     = 3 * msgs_per_partition * partition_cnt;
         expected_msgs = is_read_committed ? expected_committed : expected_total;
 
-        TEST_SAY("Expected messages [%s]: %d\n", isolation_level, expected_msgs);
+        TEST_SAY("Expected messages [%s]: %d\n", isolation_level,
+                 expected_msgs);
 
         consumed = consume_share_messages(consumer, expected_msgs, 100, 3000);
 
@@ -790,10 +793,10 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
         char group[128];
-        const char *txn_id = "txn-mixed-type-test";
-        const int non_txn_msgs = 50;
+        const char *txn_id        = "txn-mixed-type-test";
+        const int non_txn_msgs    = 50;
         const int txn_commit_msgs = 30;
-        const int txn_abort_msgs = 20;
+        const int txn_abort_msgs  = 20;
         rd_kafka_t *txn_producer, *regular_producer;
         rd_kafka_share_t *consumer;
         int consumed;
@@ -854,7 +857,8 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
                             ? (non_txn_msgs + txn_commit_msgs)
                             : (non_txn_msgs + txn_commit_msgs + txn_abort_msgs);
 
-        TEST_SAY("Expected messages [%s]: %d\n", isolation_level, expected_msgs);
+        TEST_SAY("Expected messages [%s]: %d\n", isolation_level,
+                 expected_msgs);
 
         consumed = consume_share_messages(consumer, expected_msgs, 100, 3000);
 
@@ -887,9 +891,9 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
  * =================================================================== */
 static void do_test_dynamic_uncommitted_to_committed(void) {
         const char *topic;
-        const char *group = "share-dynamic-uc-to-c";
+        const char *group  = "share-dynamic-uc-to-c";
         const char *txn_id = "txn-dynamic-uc-c";
-        const int msg_cnt = 10;
+        const int msg_cnt  = 10;
         rd_kafka_t *producer;
         rd_kafka_share_t *consumer;
         int consumed;
@@ -969,8 +973,9 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
                     "Phase 5: Expected %d committed msgs, got %d", msg_cnt,
                     consumed);
 
-        TEST_SAY("SUCCESS: Dynamic isolation change READ_UNCOMMITTED -> "
-                 "READ_COMMITTED works correctly\n");
+        TEST_SAY(
+            "SUCCESS: Dynamic isolation change READ_UNCOMMITTED -> "
+            "READ_COMMITTED works correctly\n");
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);
@@ -992,10 +997,10 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
         char group[128];
-        const char *txn_id = "txn-interval-abort";
-        const int total_txns = 20;
+        const char *txn_id       = "txn-interval-abort";
+        const int total_txns     = 20;
         const int abort_interval = 5; /* Every 5th transaction is aborted */
-        const int msgs_per_txn = 5;
+        const int msgs_per_txn   = 5;
         rd_kafka_t *producer;
         rd_kafka_share_t *consumer;
         int consumed;
@@ -1076,14 +1081,14 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         /* Verify no extra messages */
         {
                 int extra = consume_share_no_msgs(consumer, 5, 2000);
-                TEST_ASSERT(extra == 0,
-                            "[%s] Unexpected extra messages: %d",
+                TEST_ASSERT(extra == 0, "[%s] Unexpected extra messages: %d",
                             isolation_level, extra);
         }
 
-        TEST_SAY("SUCCESS [%s]: Interval abort pattern - received exactly %d "
-                 "messages (committed=%d, aborted=%d txns)\n",
-                 isolation_level, consumed, committed_txns, aborted_txns);
+        TEST_SAY(
+            "SUCCESS [%s]: Interval abort pattern - received exactly %d "
+            "messages (committed=%d, aborted=%d txns)\n",
+            isolation_level, consumed, committed_txns, aborted_txns);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);

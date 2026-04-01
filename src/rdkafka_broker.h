@@ -455,6 +455,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /**
          * Whether a share fetch should_fetch set is enqueued on
          * this broker's op queue or not.
+         *
+         * TODO KIP-932: Check the below fields are not causing
+         * thread safety issues. If causing, check if keeping the reference
+         * to the rkb will solve the issue or not.
          */
         rd_bool_t rkb_share_fetch_enqueued;
 

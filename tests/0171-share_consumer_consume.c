@@ -989,7 +989,8 @@ static void test_poll_callback_piggybacked_acks(void) {
         ack_cb_state_t state;
 
         TEST_SAY("\n");
-        TEST_SAY("=== Poll callback test (piggybacked acks on ShareFetch) ===\n");
+        TEST_SAY(
+            "=== Poll callback test (piggybacked acks on ShareFetch) ===\n");
 
         ack_cb_state_init(&state);
 
@@ -1027,7 +1028,8 @@ static void test_poll_callback_piggybacked_acks(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
@@ -1050,7 +1052,8 @@ static void test_poll_callback_piggybacked_acks(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
                 if (err)
                         rd_kafka_error_destroy(err);
 
@@ -1062,11 +1065,13 @@ static void test_poll_callback_piggybacked_acks(void) {
                  state.callback_cnt, state.total_offsets,
                  rd_kafka_err2name(state.last_err));
 
-        TEST_ASSERT(state.callback_cnt >= 1,
-                    "Expected at least 1 callback from piggybacked acks, got %d",
-                    state.callback_cnt);
+        TEST_ASSERT(
+            state.callback_cnt >= 1,
+            "Expected at least 1 callback from piggybacked acks, got %d",
+            state.callback_cnt);
         TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %d", state.total_offsets);
+                    "Expected offsets in callback, got %d",
+                    state.total_offsets);
 
         TEST_SAY("SUCCESS: Poll callback received %d callbacks, %d offsets\n",
                  state.callback_cnt, state.total_offsets);
@@ -1091,8 +1096,8 @@ create_share_consumer_explicit_with_cb(const char *group,
 
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit", errstr,
-                          sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
+                          errstr, sizeof(errstr));
         rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, share_ack_cb);
         rd_kafka_conf_set_opaque(conf, state);
 
@@ -1169,9 +1174,9 @@ static void test_ack_after_commit(void) {
         rd_kafka_resp_err_t ack_err;
         ack_cb_state_t state;
         /* Store message info for re-ack attempt after commit */
-        const char *saved_topic     = NULL;
-        int32_t saved_partition     = -1;
-        int64_t saved_offset        = -1;
+        const char *saved_topic = NULL;
+        int32_t saved_partition = -1;
+        int64_t saved_offset    = -1;
 
         TEST_SAY("\n");
         TEST_SAY("=== Negative test: Acknowledge after commit ===\n");
@@ -1205,9 +1210,10 @@ static void test_ack_after_commit(void) {
                         if (!rkmessages[j]->err) {
                                 /* Save first message info for later */
                                 if (saved_offset < 0) {
-                                        saved_topic     = topic;
-                                        saved_partition = rkmessages[j]->partition;
-                                        saved_offset    = rkmessages[j]->offset;
+                                        saved_topic = topic;
+                                        saved_partition =
+                                            rkmessages[j]->partition;
+                                        saved_offset = rkmessages[j]->offset;
                                         TEST_SAY("Saved msg info: %s [%" PRId32
                                                  "] @ %" PRId64 "\n",
                                                  saved_topic, saved_partition,

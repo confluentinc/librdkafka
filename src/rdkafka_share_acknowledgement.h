@@ -200,9 +200,10 @@ int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
  * @brief Partition with set of acknowledged offsets.
  */
 struct rd_kafka_share_partition_offsets_s {
-        rd_kafka_topic_partition_t partition; /**< Topic partition information */
-        int64_t *offsets;                     /**< Array of acknowledged offsets */
-        int cnt;                              /**< Number of offsets in array */
+        rd_kafka_topic_partition_t
+            partition;    /**< Topic partition information */
+        int64_t *offsets; /**< Array of acknowledged offsets */
+        int cnt;          /**< Number of offsets in array */
 };
 
 /**
@@ -210,8 +211,8 @@ struct rd_kafka_share_partition_offsets_s {
  * @brief List of share partition offsets for callback.
  */
 struct rd_kafka_share_partition_offsets_list_s {
-        int cnt;   /**< Number of partitions */
-        int size;  /**< Allocated size */
+        int cnt;                                   /**< Number of partitions */
+        int size;                                  /**< Allocated size */
         rd_kafka_share_partition_offsets_t *elems; /**< Array of partition
                                                         offsets */
 };

@@ -1619,10 +1619,9 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
         mtx_unlock(&state->lock);
 }
 
-static rd_kafka_share_t *
-create_share_consumer_with_cb(const char *group_id,
-                              const char *ack_mode,
-                              ack_cb_state_t *state) {
+static rd_kafka_share_t *create_share_consumer_with_cb(const char *group_id,
+                                                       const char *ack_mode,
+                                                       ack_cb_state_t *state) {
         rd_kafka_share_t *rkshare;
         rd_kafka_conf_t *conf;
         char errstr[512];
@@ -1735,7 +1734,8 @@ static void do_test_commit_async_callback(void) {
         TEST_ASSERT(state.callback_cnt >= 1,
                     "Expected at least 1 callback, got %d", state.callback_cnt);
         TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %d", state.total_offsets);
+                    "Expected offsets in callback, got %d",
+                    state.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1765,9 +1765,9 @@ static void do_test_ack_after_commit_async(void) {
         rd_kafka_resp_err_t ack_err;
         ack_cb_state_t state;
         /* Store message info for re-ack attempt after commit */
-        const char *saved_topic     = NULL;
-        int32_t saved_partition     = -1;
-        int64_t saved_offset        = -1;
+        const char *saved_topic = NULL;
+        int32_t saved_partition = -1;
+        int64_t saved_offset    = -1;
 
         SUB_TEST();
 
@@ -1795,9 +1795,10 @@ static void do_test_ack_after_commit_async(void) {
                         if (!rkmessages[j]->err) {
                                 /* Save first message info for later */
                                 if (saved_offset < 0) {
-                                        saved_topic     = topic;
-                                        saved_partition = rkmessages[j]->partition;
-                                        saved_offset    = rkmessages[j]->offset;
+                                        saved_topic = topic;
+                                        saved_partition =
+                                            rkmessages[j]->partition;
+                                        saved_offset = rkmessages[j]->offset;
                                         TEST_SAY("Saved msg info: %s [%" PRId32
                                                  "] @ %" PRId64 "\n",
                                                  saved_topic, saved_partition,

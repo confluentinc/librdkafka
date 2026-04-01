@@ -309,8 +309,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
                 sizeof(rko->rko_u.share_fetch_response),
-            [RD_KAFKA_OP_SHARE_ACK_REPLY] =
-                sizeof(rko->rko_u.share_ack_reply),
+            [RD_KAFKA_OP_SHARE_ACK_REPLY] = sizeof(rko->rko_u.share_ack_reply),
             [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
                 sizeof(rko->rko_u.share_commit_async_fanout),
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT] =

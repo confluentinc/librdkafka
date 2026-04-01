@@ -884,17 +884,18 @@ struct rd_kafka_op_s {
 
                 /**
                  * Share acknowledgement callback reply.
-                 * Contains results to deliver to share_acknowledgement_commit_cb.
+                 * Contains results to deliver to
+                 * share_acknowledgement_commit_cb.
                  */
                 struct {
                         /** List of partition offsets. */
                         rd_kafka_share_partition_offsets_list_t *partitions;
                         /** Callback function pointer. */
-                        void (*cb)(rd_kafka_share_t *rkshare,
-                                   rd_kafka_share_partition_offsets_list_t
-                                       *partitions,
-                                   rd_kafka_resp_err_t err,
-                                   void *opaque);
+                        void (*cb)(
+                            rd_kafka_share_t *rkshare,
+                            rd_kafka_share_partition_offsets_list_t *partitions,
+                            rd_kafka_resp_err_t err,
+                            void *opaque);
                         /** Application opaque. */
                         void *opaque;
                 } share_ack_reply;

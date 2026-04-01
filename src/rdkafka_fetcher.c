@@ -1212,7 +1212,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
         /* Enqueue acknowledgement callback for this partition if callback is
          * registered and we have ack_details for this partition. */
-        if (rkb->rkb_rk->rk_conf.share_acknowledgement_commit_cb && ack_details) {
+        if (rkb->rkb_rk->rk_conf.share_acknowledgement_commit_cb &&
+            ack_details) {
                 rd_kafka_share_ack_batches_t *ack_batch;
                 int k;
                 RD_LIST_FOREACH(ack_batch, ack_details, k) {
@@ -1222,7 +1223,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                             ack_batch->rktpar->partition == PartitionId) {
                                 rd_kafka_share_enqueue_ack_callback(
                                     rkb->rkb_rk, ack_batch,
-                                    (rd_kafka_resp_err_t)AcknowledgementErrorCode);
+                                    (rd_kafka_resp_err_t)
+                                        AcknowledgementErrorCode);
                                 break;
                         }
                 }
@@ -2007,8 +2009,8 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
         /* Enqueue ack callbacks before destroying ack_details.
          * Priority order:
          * 1. Top-level error (err != NO_ERROR): Apply same error to all
-         *    partitions. This happens for transport errors, session errors, etc.
-         *    In this case ack_results is NULL.
+         *    partitions. This happens for transport errors, session errors,
+         * etc. In this case ack_results is NULL.
          * 2. No top-level error: Use ack_results which contains per-partition
          *    results. Each partition has its own error code (NO_ERROR for
          *    success, or a specific per-partition error). */

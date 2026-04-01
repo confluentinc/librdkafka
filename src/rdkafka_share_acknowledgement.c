@@ -622,8 +622,8 @@ void rd_kafka_share_partition_offsets_init(
     int offsets_cnt) {
         elem->partition.topic     = rd_strdup(topic);
         elem->partition.partition = partition;
-        elem->offsets             = rd_calloc((size_t)offsets_cnt, sizeof(int64_t));
-        elem->cnt                 = offsets_cnt;
+        elem->offsets = rd_calloc((size_t)offsets_cnt, sizeof(int64_t));
+        elem->cnt     = offsets_cnt;
 }
 
 /**
@@ -649,7 +649,8 @@ void rd_kafka_share_partition_offsets_clear(
  *
  * @param capacity Initial capacity for elements.
  * @returns Newly allocated list, or NULL if capacity is 0.
- *          Caller must destroy with rd_kafka_share_partition_offsets_list_destroy().
+ *          Caller must destroy with
+ * rd_kafka_share_partition_offsets_list_destroy().
  */
 rd_kafka_share_partition_offsets_list_t *
 rd_kafka_share_partition_offsets_list_new(int capacity) {
@@ -676,8 +677,7 @@ rd_kafka_share_build_partition_offsets_list(
         int offset_idx    = 0;
         int j;
 
-        if (!batches || !batches->rktpar ||
-            rd_list_cnt(&batches->entries) == 0)
+        if (!batches || !batches->rktpar || rd_list_cnt(&batches->entries) == 0)
                 return NULL;
 
         /* Count total offsets */
@@ -696,9 +696,9 @@ rd_kafka_share_build_partition_offsets_list(
         list->cnt = 1;
         elem      = &list->elems[0];
 
-        rd_kafka_share_partition_offsets_init(
-            elem, batches->rktpar->topic, batches->rktpar->partition,
-            total_offsets);
+        rd_kafka_share_partition_offsets_init(elem, batches->rktpar->topic,
+                                              batches->rktpar->partition,
+                                              total_offsets);
 
         /* Fill offsets array */
         RD_LIST_FOREACH(entry, &batches->entries, j) {
@@ -835,11 +835,10 @@ void rd_kafka_share_dispatch_ack_callbacks(
         for (int p = 0; p < ack_results->cnt; p++) {
                 rd_kafka_topic_partition_t *rktpar = &ack_results->elems[p];
 
-                ack_batch = rd_kafka_share_ack_batch_find(ack_details,
-                                                         rktpar->topic,
-                                                         rktpar->partition);
+                ack_batch = rd_kafka_share_ack_batch_find(
+                    ack_details, rktpar->topic, rktpar->partition);
                 if (ack_batch)
                         rd_kafka_share_enqueue_ack_callback(rk, ack_batch,
-                                                           rktpar->err);
+                                                            rktpar->err);
         }
 }

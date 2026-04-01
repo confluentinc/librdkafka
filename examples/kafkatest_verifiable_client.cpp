@@ -628,7 +628,7 @@ int main(int argc, char **argv) {
   }
 
   {
-    char hostname[128];
+    char hostname[260] = { 0 };
     gethostname(hostname, sizeof(hostname) - 1);
     conf->set("client.id", std::string("rdkafka@") + hostname, errstr);
   }

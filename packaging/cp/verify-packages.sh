@@ -56,7 +56,8 @@ verify_debian_distros() {
     echo "#### Verifying Debian packages for $platform ####"
     verify_debian debian:11 $version
     verify_debian debian:12 $version
-    verify_debian ubuntu:20.04 $version
+    # Last Ubuntu 20 version is 2.13.2
+    verify_debian ubuntu:20.04 "2.13.2"
     verify_debian ubuntu:22.04 $version
     verify_debian ubuntu:24.04 $version
 }

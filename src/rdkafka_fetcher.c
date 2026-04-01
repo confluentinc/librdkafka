@@ -2651,6 +2651,11 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         /* Topics array with acknowledgement batches */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
+        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
+                     "Building ShareAcknowledge request with %d ack toppars "
+                     "and %d total ack entries",
+                     ack_details_cnt, total_ack_entries);
+
         if (ack_details) {
                 rd_kafka_Uuid_t *topic_id_last = NULL;
                 rd_kafka_share_ack_batches_t *batches;
@@ -2690,11 +2695,25 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_i32(rkbuf,
                                                batches->rktpar->partition);
 
+                        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
+                                     "Adding ack for topic %s [%" PRId32
+                                     "] with %d entries",
+                                     batches->rktpar->topic,
+                                     batches->rktpar->partition,
+                                     rd_list_cnt(&batches->entries));
+
                         /* Write acknowledgement batches */
                         entries_cnt = rd_list_cnt(&batches->entries);
                         rd_kafka_buf_write_arraycnt(rkbuf, entries_cnt);
 
                         RD_LIST_FOREACH(entry, &batches->entries, m) {
+                                rd_kafka_dbg(
+                                    rkb->rkb_rk, FETCH, "SHAREACK",
+                                    "Adding ack entry with start offset "
+                                    "%" PRId64 ", end offset %" PRId64
+                                    ", type %d",
+                                    entry->start_offset, entry->end_offset,
+                                    entry->types[0]);
                                 /* FirstOffset */
                                 rd_kafka_buf_write_i64(rkbuf,
                                                        entry->start_offset);

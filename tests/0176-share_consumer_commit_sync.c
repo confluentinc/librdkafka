@@ -175,8 +175,7 @@ static void do_test_basic_implicit_commit_sync(void) {
                 TEST_SAY("  %s [%" PRId32 "]: %s\n", rktpar->topic,
                          rktpar->partition, rd_kafka_err2str(rktpar->err));
                 TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected NO_ERROR for %s [%" PRId32
-                            "], got %s",
+                            "Expected NO_ERROR for %s [%" PRId32 "], got %s",
                             rktpar->topic, rktpar->partition,
                             rd_kafka_err2str(rktpar->err));
         }
@@ -260,8 +259,7 @@ static void do_test_basic_explicit_commit_sync(void) {
                 TEST_SAY("  %s [%" PRId32 "]: %s\n", rktpar->topic,
                          rktpar->partition, rd_kafka_err2str(rktpar->err));
                 TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Expected NO_ERROR for %s [%" PRId32
-                            "], got %s",
+                            "Expected NO_ERROR for %s [%" PRId32 "], got %s",
                             rktpar->topic, rktpar->partition,
                             rd_kafka_err2str(rktpar->err));
         }
@@ -306,7 +304,8 @@ static void do_test_no_pending_acks(void) {
                     "got %d partition(s)",
                     partitions ? partitions->cnt : -1);
 
-        TEST_SAY("commit_sync with no pending acks returned NULL as expected\n");
+        TEST_SAY(
+            "commit_sync with no pending acks returned NULL as expected\n");
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -490,9 +489,10 @@ static void do_test_mixed_ack_types(void) {
                 }
         }
 
-        TEST_SAY("Consumer A consumed %d messages "
-                 "(5 ACCEPT, 3 RELEASE, 2 REJECT)\n",
-                 consumed);
+        TEST_SAY(
+            "Consumer A consumed %d messages "
+            "(5 ACCEPT, 3 RELEASE, 2 REJECT)\n",
+            consumed);
         TEST_ASSERT(consumed == 10, "Expected 10, got %d", consumed);
         TEST_ASSERT(released_cnt == 3, "Expected 3 released, got %d",
                     released_cnt);
@@ -555,11 +555,10 @@ static void do_test_mixed_ack_types(void) {
                                                 break;
                                         }
                                 }
-                                TEST_ASSERT(
-                                    found,
-                                    "Consumer B got offset %" PRId64
-                                    " which was not RELEASE'd",
-                                    rkmessages[j]->offset);
+                                TEST_ASSERT(found,
+                                            "Consumer B got offset %" PRId64
+                                            " which was not RELEASE'd",
+                                            rkmessages[j]->offset);
 
                                 consumed++;
                         }
@@ -598,9 +597,9 @@ static void do_test_multiple_commit_sync_calls(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        int commit_cnt = 0;
+        int consumed                = 0;
+        int attempts                = 0;
+        int commit_cnt              = 0;
         int acked_since_last_commit = 0;
         int i;
 
@@ -636,12 +635,12 @@ static void do_test_multiple_commit_sync_calls(void) {
                         /* commit_sync every 10 records */
                         if (acked_since_last_commit == 10) {
                                 partitions = NULL;
-                                error = rd_kafka_share_commit_sync(
+                                error      = rd_kafka_share_commit_sync(
                                     rkshare, 30000, &partitions);
                                 commit_cnt++;
                                 TEST_ASSERT(
-                                    !error,
-                                    "commit_sync #%d failed: %s", commit_cnt,
+                                    !error, "commit_sync #%d failed: %s",
+                                    commit_cnt,
                                     error ? rd_kafka_error_string(error) : "");
                                 TEST_ASSERT(
                                     partitions != NULL,
@@ -664,16 +663,17 @@ static void do_test_multiple_commit_sync_calls(void) {
 
                                 rd_kafka_topic_partition_list_destroy(
                                     partitions);
-                                TEST_SAY("commit_sync #%d OK "
-                                         "(consumed %d so far)\n",
-                                         commit_cnt, consumed);
+                                TEST_SAY(
+                                    "commit_sync #%d OK "
+                                    "(consumed %d so far)\n",
+                                    commit_cnt, consumed);
                                 acked_since_last_commit = 0;
 
                                 /* Immediately call commit_sync again —
                                  * no pending acks, should return
                                  * NULL/NULL */
                                 partitions = NULL;
-                                error = rd_kafka_share_commit_sync(
+                                error      = rd_kafka_share_commit_sync(
                                     rkshare, 30000, &partitions);
                                 TEST_ASSERT(
                                     !error,
@@ -687,9 +687,10 @@ static void do_test_multiple_commit_sync_calls(void) {
                                     "expected NULL partitions, got %d",
                                     commit_cnt,
                                     partitions ? partitions->cnt : -1);
-                                TEST_SAY("back-to-back commit_sync after "
-                                         "#%d returned NULL as expected\n",
-                                         commit_cnt);
+                                TEST_SAY(
+                                    "back-to-back commit_sync after "
+                                    "#%d returned NULL as expected\n",
+                                    commit_cnt);
                         }
                 }
         }
@@ -778,7 +779,7 @@ static void do_test_multi_topic_partition(void) {
         size_t j;
         int total_consumed = 0;
         int accepted = 0, released = 0, rejected = 0;
-        int attempts = 0;
+        int attempts   = 0;
         int commit_cnt = 0;
         int total_msgs =
             MULTI_TP_TOPICS * MULTI_TP_PARTITIONS * MULTI_TP_MSGS_PER_PARTITION;
@@ -790,9 +791,8 @@ static void do_test_multi_topic_partition(void) {
         /* Create topics and produce 10 messages per partition */
         for (i = 0; i < MULTI_TP_TOPICS; i++) {
                 topics[i] = rd_strdup(test_mk_topic_name("0176-cs-mtp", 1));
-                test_create_topic_wait_exists(NULL, topics[i],
-                                              MULTI_TP_PARTITIONS, -1,
-                                              60 * 1000);
+                test_create_topic_wait_exists(
+                    NULL, topics[i], MULTI_TP_PARTITIONS, -1, 60 * 1000);
                 for (p = 0; p < MULTI_TP_PARTITIONS; p++)
                         test_produce_msgs_easy(topics[i], p, p,
                                                MULTI_TP_MSGS_PER_PARTITION);
@@ -841,8 +841,7 @@ static void do_test_multi_topic_partition(void) {
                         TEST_ASSERT(!err, "acknowledge_type failed: %s",
                                     rd_kafka_err2str(err));
 
-                        if (ack_type ==
-                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT)
+                        if (ack_type == RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT)
                                 accepted++;
                         else if (ack_type ==
                                  RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE)
@@ -871,30 +870,32 @@ static void do_test_multi_topic_partition(void) {
                 for (i = 0; i < partitions->cnt; i++) {
                         rd_kafka_topic_partition_t *rktpar =
                             &partitions->elems[i];
-                        TEST_ASSERT(
-                            rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "commit_sync #%d: %s [%" PRId32 "] got %s",
-                            commit_cnt, rktpar->topic, rktpar->partition,
-                            rd_kafka_err2str(rktpar->err));
+                        TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "commit_sync #%d: %s [%" PRId32 "] got %s",
+                                    commit_cnt, rktpar->topic,
+                                    rktpar->partition,
+                                    rd_kafka_err2str(rktpar->err));
                 }
 
-                TEST_SAY("commit_sync #%d OK (%d in batch, %d total, "
-                         "settled=%d/%d, %d partition results)\n",
-                         commit_cnt, batch_cnt, total_consumed,
-                         accepted + rejected, total_msgs, partitions->cnt);
+                TEST_SAY(
+                    "commit_sync #%d OK (%d in batch, %d total, "
+                    "settled=%d/%d, %d partition results)\n",
+                    commit_cnt, batch_cnt, total_consumed, accepted + rejected,
+                    total_msgs, partitions->cnt);
 
                 rd_kafka_topic_partition_list_destroy(partitions);
         }
 
-        TEST_SAY("Total consumed=%d (original=%d), commit_sync calls=%d, "
-                 "accepted=%d, released=%d, rejected=%d, "
-                 "max delivery_count=%d\n",
-                 total_consumed, total_msgs, commit_cnt, accepted, released,
-                 rejected, (int)max_dc_seen);
+        TEST_SAY(
+            "Total consumed=%d (original=%d), commit_sync calls=%d, "
+            "accepted=%d, released=%d, rejected=%d, "
+            "max delivery_count=%d\n",
+            total_consumed, total_msgs, commit_cnt, accepted, released,
+            rejected, (int)max_dc_seen);
 
         TEST_ASSERT(accepted + rejected == total_msgs,
-                    "Expected accepted(%d) + rejected(%d) == %d",
-                    accepted, rejected, total_msgs);
+                    "Expected accepted(%d) + rejected(%d) == %d", accepted,
+                    rejected, total_msgs);
 
         /* Verify redelivery happened */
         TEST_ASSERT(max_dc_seen > 1,
@@ -903,8 +904,8 @@ static void do_test_multi_topic_partition(void) {
                     (int)max_dc_seen);
 
         TEST_ASSERT(max_dc_seen <= MAX_REDELIVERY_ROUNDS,
-                    "Max delivery_count=%d exceeds limit=%d",
-                    (int)max_dc_seen, MAX_REDELIVERY_ROUNDS);
+                    "Max delivery_count=%d exceeds limit=%d", (int)max_dc_seen,
+                    MAX_REDELIVERY_ROUNDS);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -985,8 +986,8 @@ mock_produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
  * broker settings, this uses mock cluster bootstraps.
  */
 static rd_kafka_share_t *create_mock_share_consumer(const char *bootstraps,
-                                                     const char *group_id,
-                                                     const char *ack_mode) {
+                                                    const char *group_id,
+                                                    const char *ack_mode) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
 
@@ -1032,13 +1033,13 @@ static void do_test_mock_uses_share_acknowledge(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
-        const char *topic = "mock-cs-share-ack";
-        const int msgcnt  = 50;
-        int consumed = 0;
-        int attempts = 0;
-        int commit_cnt = 0;
-        int commit_with_partitions = 0;
-        int acked_since_last_commit = 0;
+        const char *topic                           = "mock-cs-share-ack";
+        const int msgcnt                            = 50;
+        int consumed                                = 0;
+        int attempts                                = 0;
+        int commit_cnt                              = 0;
+        int commit_with_partitions                  = 0;
+        int acked_since_last_commit                 = 0;
         int share_ack_cnt;
         int i;
 
@@ -1050,8 +1051,8 @@ static void do_test_mock_uses_share_acknowledge(void) {
 
         mock_produce_messages(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps,
-                                              "sg-mock-cs-ack", "explicit");
+        rkshare = create_mock_share_consumer(ctx.bootstraps, "sg-mock-cs-ack",
+                                             "explicit");
 
         {
                 const char *t = topic;
@@ -1086,12 +1087,12 @@ static void do_test_mock_uses_share_acknowledge(void) {
 
                         if (acked_since_last_commit == 10) {
                                 partitions = NULL;
-                                error = rd_kafka_share_commit_sync(
+                                error      = rd_kafka_share_commit_sync(
                                     rkshare, 30000, &partitions);
                                 commit_cnt++;
                                 TEST_ASSERT(
-                                    !error,
-                                    "commit_sync #%d failed: %s", commit_cnt,
+                                    !error, "commit_sync #%d failed: %s",
+                                    commit_cnt,
                                     error ? rd_kafka_error_string(error) : "");
 
                                 if (partitions != NULL) {
@@ -1114,17 +1115,19 @@ static void do_test_mock_uses_share_acknowledge(void) {
                                             partitions);
                                 }
 
-                                TEST_SAY("commit_sync #%d OK "
-                                         "(consumed %d so far)\n",
-                                         commit_cnt, consumed);
+                                TEST_SAY(
+                                    "commit_sync #%d OK "
+                                    "(consumed %d so far)\n",
+                                    commit_cnt, consumed);
                                 acked_since_last_commit = 0;
                         }
                 }
         }
 
-        TEST_SAY("Mock: consumed %d/%d, %d commit_sync calls, "
-                 "%d with partition results\n",
-                 consumed, msgcnt, commit_cnt, commit_with_partitions);
+        TEST_SAY(
+            "Mock: consumed %d/%d, %d commit_sync calls, "
+            "%d with partition results\n",
+            consumed, msgcnt, commit_cnt, commit_with_partitions);
         TEST_ASSERT(consumed == msgcnt, "Expected %d, got %d", msgcnt,
                     consumed);
 
@@ -1134,14 +1137,14 @@ static void do_test_mock_uses_share_acknowledge(void) {
         share_ack_cnt = count_share_ack_requests(ctx.mcluster);
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
-        TEST_SAY("Mock: ShareAcknowledge requests=%d, "
-                 "commit_sync with partitions=%d\n",
-                 share_ack_cnt, commit_with_partitions);
-        TEST_ASSERT(
-            share_ack_cnt == commit_with_partitions,
-            "Expected ShareAcknowledge count (%d) == commit_sync with "
-            "partitions count (%d)",
+        TEST_SAY(
+            "Mock: ShareAcknowledge requests=%d, "
+            "commit_sync with partitions=%d\n",
             share_ack_cnt, commit_with_partitions);
+        TEST_ASSERT(share_ack_cnt == commit_with_partitions,
+                    "Expected ShareAcknowledge count (%d) == commit_sync with "
+                    "partitions count (%d)",
+                    share_ack_cnt, commit_with_partitions);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1170,9 +1173,9 @@ static void do_test_mock_commit_sync_timeout(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
-        const char *topic = "mock-cs-timeout";
-        const char *t     = topic;
-        const int msgcnt  = 10;
+        const char *topic                           = "mock-cs-timeout";
+        const char *t                               = topic;
+        const int msgcnt                            = 10;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
@@ -1191,7 +1194,7 @@ static void do_test_mock_commit_sync_timeout(void) {
         mock_produce_messages(ctx.producer, topic, msgcnt);
 
         rkshare = create_mock_share_consumer(ctx.bootstraps,
-                                              "sg-mock-cs-timeout", "explicit");
+                                             "sg-mock-cs-timeout", "explicit");
         subscribe_consumer(rkshare, &t, 1);
 
         /* Phase 1: Consume all 10 records and ACCEPT */
@@ -1225,15 +1228,14 @@ static void do_test_mock_commit_sync_timeout(void) {
 
         /* commit_sync with 2000ms timeout — should block ~2000ms
          * then time out */
-        t_start = test_clock();
-        partitions = NULL;
-        error = rd_kafka_share_commit_sync(rkshare, 2000, &partitions);
+        t_start      = test_clock();
+        partitions   = NULL;
+        error        = rd_kafka_share_commit_sync(rkshare, 2000, &partitions);
         t_elapsed_ms = (test_clock() - t_start) / 1000;
 
         TEST_SAY("Phase 1: commit_sync returned after %" PRId64
                  "ms, error=%s, partitions=%s\n",
-                 t_elapsed_ms,
-                 error ? rd_kafka_error_string(error) : "NULL",
+                 t_elapsed_ms, error ? rd_kafka_error_string(error) : "NULL",
                  partitions ? "non-NULL" : "NULL");
 
         /* Verify commit_sync blocked for ~2000ms (allow 1500-3000ms) */
@@ -1263,8 +1265,9 @@ static void do_test_mock_commit_sync_timeout(void) {
                 rd_kafka_topic_partition_list_destroy(partitions);
         }
 
-        TEST_ASSERT(got_timed_out, "Expected _TIMED_OUT error from "
-                     "commit_sync with short timeout");
+        TEST_ASSERT(got_timed_out,
+                    "Expected _TIMED_OUT error from "
+                    "commit_sync with short timeout");
 
         /* Phase 2: Remove RTT, wait 5s for broker to finish
          * processing the delayed response */
@@ -1278,7 +1281,7 @@ static void do_test_mock_commit_sync_timeout(void) {
         /* Second consumer: should get 0 records because the broker
          * processed the acks despite client-side timeout */
         rkshare = create_mock_share_consumer(ctx.bootstraps,
-                                              "sg-mock-cs-timeout", "implicit");
+                                             "sg-mock-cs-timeout", "implicit");
         subscribe_consumer(rkshare, &t, 1);
 
         consumed = 0;
@@ -1315,7 +1318,7 @@ static void do_test_mock_commit_sync_timeout(void) {
         mock_produce_messages(ctx.producer, topic, msgcnt);
 
         rkshare = create_mock_share_consumer(ctx.bootstraps,
-                                              "sg-mock-cs-timeout", "explicit");
+                                             "sg-mock-cs-timeout", "explicit");
         subscribe_consumer(rkshare, &t, 1);
 
         consumed = 0;
@@ -1344,7 +1347,7 @@ static void do_test_mock_commit_sync_timeout(void) {
                     consumed);
 
         partitions = NULL;
-        error = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
         TEST_ASSERT(!error, "Phase 3: commit_sync failed: %s",
                     error ? rd_kafka_error_string(error) : "");
         TEST_ASSERT(partitions != NULL,
@@ -1392,10 +1395,10 @@ static void do_test_mixed_commit_types(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        int async_cnt = 0;
-        int sync_cnt = 0;
+        int consumed              = 0;
+        int attempts              = 0;
+        int async_cnt             = 0;
+        int sync_cnt              = 0;
         int acked_since_last_sync = 0;
         int i;
         rd_ts_t t_start, t_elapsed_ms;
@@ -1448,7 +1451,7 @@ static void do_test_mixed_commit_types(void) {
                                          * were already sent by async */
                                         partitions = NULL;
                                         t_start    = test_clock();
-                                        error = rd_kafka_share_commit_sync(
+                                        error      = rd_kafka_share_commit_sync(
                                             rkshare, 30000, &partitions);
                                         t_elapsed_ms =
                                             (test_clock() - t_start) / 1000;
@@ -1466,8 +1469,7 @@ static void do_test_mixed_commit_types(void) {
                                                   : "");
 
                                         if (partitions) {
-                                                for (i = 0;
-                                                     i < partitions->cnt;
+                                                for (i = 0; i < partitions->cnt;
                                                      i++) {
                                                         rd_kafka_topic_partition_t
                                                             *rktpar =
@@ -1489,12 +1491,13 @@ static void do_test_mixed_commit_types(void) {
                                                     partitions);
                                         }
 
-                                        TEST_SAY("commit_sync #%d OK "
-                                                 "in %" PRId64
-                                                 "ms (consumed %d, "
-                                                 "%d async calls)\n",
-                                                 sync_cnt, t_elapsed_ms,
-                                                 consumed, async_cnt);
+                                        TEST_SAY(
+                                            "commit_sync #%d OK "
+                                            "in %" PRId64
+                                            "ms (consumed %d, "
+                                            "%d async calls)\n",
+                                            sync_cnt, t_elapsed_ms, consumed,
+                                            async_cnt);
                                         acked_since_last_sync = 0;
                                 }
                         }
@@ -1513,19 +1516,26 @@ static void do_test_mixed_commit_types(void) {
                 TEST_SAY("Final commit_sync #%d OK\n", sync_cnt);
         }
 
-        TEST_SAY("Consumed %d, async commits=%d, sync commits=%d, "
-                 "max sync elapsed=%" PRId64 "ms\n",
-                 consumed, async_cnt, sync_cnt, max_sync_elapsed_ms);
+        TEST_SAY(
+            "Consumed %d, async commits=%d, sync commits=%d, "
+            "max sync elapsed=%" PRId64 "ms\n",
+            consumed, async_cnt, sync_cnt, max_sync_elapsed_ms);
         TEST_ASSERT(consumed == 50, "Expected 50, got %d", consumed);
 
         /* Verify commit_sync completed quickly — acks were mostly
          * already sent by commit_async, so sync should not wait long.
-         * Allow up to 5000ms to account for broker round-trip. */
-        TEST_ASSERT(max_sync_elapsed_ms < 5000,
+         * Allow up to 1000ms to account for broker round-trip. */
+        TEST_ASSERT(max_sync_elapsed_ms < 1000,
                     "commit_sync took too long (%" PRId64
-                    "ms), expected < 5000ms since acks were "
+                    "ms), expected < 1000ms since acks were "
                     "mostly sent by commit_async",
                     max_sync_elapsed_ms);
+
+        /* Allow time for any in-flight async ack requests to complete
+         * before closing the consumer. The final commit_async calls
+         * may have dispatched acks that are still awaiting broker
+         * response. */
+        rd_sleep(3);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1591,9 +1601,9 @@ static void do_test_mock_broker_dispatch_priority(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
-        const char *topic = "mock-cs-dispatch-prio";
-        const char *t     = topic;
-        const int msgcnt  = 30;
+        const char *topic                           = "mock-cs-dispatch-prio";
+        const char *t                               = topic;
+        const int msgcnt                            = 30;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         rd_kafka_message_t *msg_handles[30];
         size_t rcvd;
@@ -1615,8 +1625,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
         mock_produce_messages(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps,
-                                              "sg-mock-cs-prio", "explicit");
+        rkshare = create_mock_share_consumer(ctx.bootstraps, "sg-mock-cs-prio",
+                                             "explicit");
         subscribe_consumer(rkshare, &t, 1);
 
         /* Consume all 30 records in one batch, keep handles */
@@ -1650,8 +1660,7 @@ static void do_test_mock_broker_dispatch_priority(void) {
          *  Entry 3: async_ack_details (dispatched last) (~2s) */
         rd_kafka_mock_broker_push_request_error_rtts(
             ctx.mcluster, leader_broker_id, RD_KAFKAP_ShareAcknowledge, 3,
-            RD_KAFKA_RESP_ERR_NO_ERROR, 2000,
-            RD_KAFKA_RESP_ERR_NO_ERROR, 2000,
+            RD_KAFKA_RESP_ERR_NO_ERROR, 2000, RD_KAFKA_RESP_ERR_NO_ERROR, 2000,
             RD_KAFKA_RESP_ERR_NO_ERROR, 2000);
 
         /* ACCEPT first 10, commit_async → sends first
@@ -1695,9 +1704,9 @@ static void do_test_mock_broker_dispatch_priority(void) {
                 rd_kafka_share_acknowledge(rkshare, msg_handles[i]);
 
         TEST_SAY("Calling commit_sync(5000ms)\n");
-        t_start    = test_clock();
-        partitions = NULL;
-        error = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
+        t_start      = test_clock();
+        partitions   = NULL;
+        error        = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
         t_elapsed_ms = (test_clock() - t_start) / 1000;
 
         TEST_SAY("commit_sync returned after %" PRId64 "ms, error=%s\n",
@@ -1715,8 +1724,9 @@ static void do_test_mock_broker_dispatch_priority(void) {
                             t_elapsed_ms);
                 rd_kafka_error_destroy(error);
         } else {
-                TEST_SAY("commit_sync returned NO_ERROR — dispatch "
-                         "priority is correct\n");
+                TEST_SAY(
+                    "commit_sync returned NO_ERROR — dispatch "
+                    "priority is correct\n");
         }
 
         /* Verify timing: should complete in ~4s (2s inflight + 2s sync),
@@ -1754,8 +1764,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
         /* Second consumer: should get 0 records since all acks
          * were processed successfully */
-        rkshare = create_mock_share_consumer(ctx.bootstraps,
-                                              "sg-mock-cs-prio", "implicit");
+        rkshare = create_mock_share_consumer(ctx.bootstraps, "sg-mock-cs-prio",
+                                             "implicit");
         subscribe_consumer(rkshare, &t, 1);
 
         consumed = 0;

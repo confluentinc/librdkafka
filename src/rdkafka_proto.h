@@ -177,6 +177,7 @@ static RD_UNUSED const char *rd_kafka_ApiKey2str(int16_t ApiKey) {
             [RD_KAFKAP_PushTelemetry]             = "PushTelemetry",
             [RD_KAFKAP_ShareGroupHeartbeat]       = "ShareGroupHeartbeat",
             [RD_KAFKAP_ShareFetch]                = "ShareFetch",
+            [RD_KAFKAP_ShareAcknowledge]          = "ShareAcknowledge",
 
         };
         static RD_TLS char ret[64];

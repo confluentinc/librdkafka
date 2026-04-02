@@ -81,8 +81,7 @@ static int is_printable(const char *buf, size_t size) {
         return 1;
 }
 
-static const char *
-ack_type_to_str(rd_kafka_share_AcknowledgeType_t type) {
+static const char *ack_type_to_str(rd_kafka_share_AcknowledgeType_t type) {
         switch (type) {
         case RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT:
                 return "ACCEPT";
@@ -260,8 +259,9 @@ int main(int argc, char **argv) {
                                 rd_kafka_topic_partition_list_t *partitions =
                                     NULL;
 
-                                printf("Calling "
-                                       "rd_kafka_share_commit_sync()\n");
+                                printf(
+                                    "Calling "
+                                    "rd_kafka_share_commit_sync()\n");
                                 error = rd_kafka_share_commit_sync(
                                     rkshare, 30000, &partitions);
                                 if (error) {
@@ -271,9 +271,10 @@ int main(int argc, char **argv) {
                                         rd_kafka_error_destroy(error);
                                 } else if (partitions) {
                                         int j;
-                                        printf("Commit sync results "
-                                               "(%d partitions):\n",
-                                               partitions->cnt);
+                                        printf(
+                                            "Commit sync results "
+                                            "(%d partitions):\n",
+                                            partitions->cnt);
                                         for (j = 0; j < partitions->cnt; j++) {
                                                 rd_kafka_topic_partition_t
                                                     *rktpar =

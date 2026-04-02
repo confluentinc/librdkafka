@@ -3612,7 +3612,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_op_reply(rko,
                                           RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
                 } else {
-                        rd_kafka_broker_share_fetch(rkb, rko, rd_clock());
+                        rd_kafka_broker_share_rpc(rkb, rko, rd_clock());
                 }
 
                 // if (!rko->rko_u.share_fetch.should_fetch) {

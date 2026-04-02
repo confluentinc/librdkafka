@@ -2594,6 +2594,32 @@ void rd_kafka_toppar_leader_unavailable(rd_kafka_toppar_t *rktp,
                                          rd_false /* don't force */);
 }
 
+/**
+ * @locality any
+ */
+rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp,
+                                     rd_bool_t do_lock) {
+        rd_bool_t on_cgrp;
+        if (do_lock) {
+                rd_kafka_toppar_lock(rktp);
+        }
+        on_cgrp =
+            (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP) ? rd_true : rd_false;
+
+        if (do_lock) {
+                rd_kafka_toppar_unlock(rktp);
+        }
+
+        return on_cgrp;
+}
+
+/**
+ * @brief Toppar copier for rd_list_copy()
+ */
+void *rd_kafka_toppar_list_copy(const void *elem, void *opaque) {
+        return rd_kafka_toppar_keep((rd_kafka_toppar_t *)elem);
+}
+
 
 const char *
 rd_kafka_topic_partition_topic(const rd_kafka_topic_partition_t *rktpar) {
@@ -2682,6 +2708,16 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,
         rktpar->topic     = rd_strdup(topic);
         rktpar->partition = partition;
 
+        return rktpar;
+}
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_with_id_and_name(rd_kafka_Uuid_t topic_id,
+                                              const char *topic,
+                                              int32_t partition) {
+        rd_kafka_topic_partition_t *rktpar =
+            rd_kafka_topic_partition_new(topic, partition);
+        rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);
         return rktpar;
 }
 

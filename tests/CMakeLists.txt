@@ -144,6 +144,13 @@ set(
     0151-purge-brokers.c
     0152-rebootstrap.c
     0153-memberid.c
+    0155-share_group_heartbeat_mock.c
+    0156-share_consumer_fetch_mock.c
+    0157-share_consumer_ack_mock.c
+    0170-share_consumer_subscription.c
+    0171-share_consumer_consume.c
+    0172-share_consumer_acknowledge.c
+    0173-share_consumer_commit_async.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

@@ -377,6 +377,32 @@ typedef struct rd_kafka_cgrp_s {
         /* Timestamp of last rebalance start */
         rd_ts_t rkcg_ts_rebalance_start;
 
+        struct {
+                size_t last_partition_picked;            /* For round-robin
+                                                          * partition picking */
+                rd_kafka_timer_t share_fetch_fanout_tmr; /**< Timer for
+                                                          *   share fetch
+                                                          *   fanout */
+                rd_bool_t
+                    share_fetch_more_records; /**< Global fetch-in-flight
+                                               *   guard. When rd_true, a
+                                               *   fetch is already in
+                                               *   progress and new FANOUT
+                                               *   ops should not send
+                                               *   another fetch request. */
+                int share_should_fetch_ops_in_flight_cnt; /**< Number of
+                                                           * SHARE_FETCH ops
+                                                           * with
+                                                           * should_fetch=true
+                                                           *   currently
+                                                           * in-flight.
+                                                           *   Incremented when
+                                                           * enqueuing,
+                                                           *   decremented on
+                                                           * reply.
+                                                           *   @locality main
+                                                           * thread */
+        } rkcg_share;
 } rd_kafka_cgrp_t;
 
 

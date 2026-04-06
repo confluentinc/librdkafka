@@ -147,8 +147,6 @@ static void do_test_implicit_second_consumer(void) {
         int attempts = 0;
         int64_t *c1_offsets;
 
-        SUB_TEST();
-
         topic = test_mk_topic_name("0173-ca-impl-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
@@ -244,8 +242,6 @@ static void do_test_implicit_second_consumer(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -267,8 +263,6 @@ static void do_test_explicit_second_consumer(void) {
         int consumed1 = 0, consumed2 = 0;
         int attempts = 0;
         int64_t *c1_offsets;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-expl-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -373,8 +367,6 @@ static void do_test_explicit_second_consumer(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -399,8 +391,6 @@ static void do_test_mixed_acks_second_consumer(void) {
         int released_cnt = 0;
         int attempts     = 0;
         int64_t *released_offsets;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-mixed-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -493,8 +483,6 @@ static void do_test_mixed_acks_second_consumer(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -519,8 +507,6 @@ static void do_test_multi_topic_partition(void) {
         rd_kafka_error_t *error;
         int t, p, round;
         int total_consumed = 0;
-
-        SUB_TEST();
 
         for (t = 0; t < topic_cnt; t++) {
                 topics[t] =
@@ -583,8 +569,6 @@ static void do_test_multi_topic_partition(void) {
 
         for (t = 0; t < topic_cnt; t++)
                 rd_free((void *)topics[t]);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -605,8 +589,6 @@ static void do_test_produce_consume_loop(void) {
         const int rounds         = 5;
         const int msgs_per_round = MAX_MSGS / rounds;
         int total_consumed       = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-loop", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -668,8 +650,6 @@ static void do_test_produce_consume_loop(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -693,8 +673,6 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         int total_consumed       = 0;
         int total_released       = 0;
         int total_redelivered    = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-mr-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -786,8 +764,6 @@ static void do_test_multi_round_mixed_second_consumer(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -799,8 +775,6 @@ static void do_test_no_pending_acks(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
 
-        SUB_TEST();
-
         rkshare = create_share_consumer(group, "implicit");
 
         error = rd_kafka_share_commit_async(rkshare);
@@ -811,8 +785,6 @@ static void do_test_no_pending_acks(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -832,8 +804,6 @@ static void do_test_multiple_commit_async_calls(void) {
         const int second_produce = MAX_MSGS / 2;
         int consumed = 0, consumed2 = 0, call;
         int attempts = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-multi-call", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -906,8 +876,6 @@ static void do_test_multiple_commit_async_calls(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -929,8 +897,6 @@ static void do_test_commit_between_produces(void) {
         const int half = MAX_MSGS / 2;
         int consumed1 = 0, consumed2 = 0, redelivered = 0;
         int attempts = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-between", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -1043,8 +1009,6 @@ static void do_test_commit_between_produces(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -1063,8 +1027,6 @@ static void do_test_all_release_second_consumer(void) {
         rd_kafka_error_t *error;
         int consumed = 0, redelivered = 0;
         int attempts = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-allrel-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -1121,8 +1083,6 @@ static void do_test_all_release_second_consumer(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -1140,8 +1100,6 @@ static void do_test_all_reject_second_consumer(void) {
         rd_kafka_error_t *error;
         int consumed = 0, redelivered;
         int attempts = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-allrej-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -1235,8 +1193,6 @@ static void do_test_all_reject_second_consumer(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -1254,8 +1210,6 @@ static void do_test_per_record_commit_async(void) {
         rd_kafka_error_t *error;
         int consumed = 0, redelivered;
         int attempts = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0173-ca-per-rec", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -1356,8 +1310,6 @@ static void do_test_per_record_commit_async(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -1473,7 +1425,7 @@ static void count_share_requests(rd_kafka_mock_cluster_t *mcluster,
  *  when a request is already inflight (rkb_share_fetch_enqueued=true).
  * =================================================================== */
 static void do_test_mock_inflight_caching(void) {
-        test_ctx_t ctx = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         const char *topic = "mock-inflight-cache";
@@ -1482,7 +1434,9 @@ static void do_test_mock_inflight_caching(void) {
         int share_fetch_cnt, share_ack_cnt;
         int commit_cnt = 0;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1573,7 +1527,6 @@ static void do_test_mock_inflight_caching(void) {
 
 
 int main_0173_share_consumer_commit_async(int argc, char **argv) {
-        /* Real broker tests */
         do_test_implicit_second_consumer();
         do_test_explicit_second_consumer();
         do_test_mixed_acks_second_consumer();
@@ -1587,7 +1540,12 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_all_reject_second_consumer();
         do_test_per_record_commit_async();
 
-        /* Mock broker test */
+        return 0;
+}
+
+int main_0173_share_consumer_commit_async_local(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         do_test_mock_inflight_caching();
 
         return 0;

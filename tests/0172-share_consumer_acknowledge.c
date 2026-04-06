@@ -88,14 +88,23 @@ typedef struct {
 
 
 /**
- * @brief Create share consumer with explicit acknowledgement mode
+ * @brief Create share consumer with explicit acknowledgement mode.
+ *
+ * If TEST_DEBUG_0172 environment variable is set, enables debug logging
+ * for this consumer to help diagnose intermittent failures.
  */
 static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         char errstr[512];
+        const char *debug_0172;
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 0);
+
+        /* Enable debug logging if TEST_DEBUG_0172 is set */
+        debug_0172 = test_getenv("TEST_DEBUG_0172", NULL);
+        if (debug_0172)
+                test_conf_set(conf, "debug", debug_0172);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,

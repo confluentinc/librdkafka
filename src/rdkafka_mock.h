@@ -689,6 +689,20 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_record_lock_duration(
     int lock_duration_ms);
 
 /**
+ * @brief Set the share group isolation level for transactions.
+ *
+ * Controls how the share group handles transactional records:
+ *   0 = read_uncommitted (default) — reads up to HWM, no filtering
+ *   1 = read_committed — reads up to LSO, filters aborted transaction data
+ *
+ * @param mcluster Mock cluster instance.
+ * @param level    Isolation level (0 or 1).
+ */
+RD_EXPORT void
+rd_kafka_mock_sharegroup_set_isolation_level(rd_kafka_mock_cluster_t *mcluster,
+                                             int level);
+
+/**
  * @brief Set the maximum number of members allowed in a share group.
  *
  * New members attempting to join via ShareGroupHeartbeat when the group

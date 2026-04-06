@@ -211,8 +211,6 @@ blocks:
         commands:
           - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
           - sudo dpkg -i rapidjson-dev.deb
-          - sudo apt update
-          - sudo apt remove -y needrestart
           - (cd tests && python3 -m pip install -r requirements.txt)
           - ./configure --install-deps --enable-werror --enable-devel
           - make -j all

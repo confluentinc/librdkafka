@@ -128,8 +128,6 @@ static void do_test_basic_implicit_commit_sync(void) {
         int attempts = 0;
         int i;
 
-        SUB_TEST();
-
         topic = test_mk_topic_name("0176-cs-impl-basic", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 5);
@@ -184,8 +182,6 @@ static void do_test_basic_implicit_commit_sync(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -208,8 +204,6 @@ static void do_test_basic_explicit_commit_sync(void) {
         int consumed = 0;
         int attempts = 0;
         int i;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-expl-basic", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -268,8 +262,6 @@ static void do_test_basic_explicit_commit_sync(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -285,8 +277,6 @@ static void do_test_no_pending_acks(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-no-pending", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -309,8 +299,6 @@ static void do_test_no_pending_acks(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -332,8 +320,6 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-no-redeliver", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -400,8 +386,6 @@ static void do_test_commit_sync_prevents_redelivery(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -426,8 +410,6 @@ static void do_test_mixed_ack_types(void) {
         int i;
         int64_t released_offsets[3];
         int released_cnt = 0;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-mixed-acks", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -574,8 +556,6 @@ static void do_test_mixed_ack_types(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -602,8 +582,6 @@ static void do_test_multiple_commit_sync_calls(void) {
         int commit_cnt              = 0;
         int acked_since_last_commit = 0;
         int i;
-
-        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-multi-calls", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
@@ -734,8 +712,6 @@ static void do_test_multiple_commit_sync_calls(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -785,8 +761,6 @@ static void do_test_multi_topic_partition(void) {
             MULTI_TP_TOPICS * MULTI_TP_PARTITIONS * MULTI_TP_MSGS_PER_PARTITION;
         int i, p;
         int16_t max_dc_seen = 0;
-
-        SUB_TEST();
 
         /* Create topics and produce 10 messages per partition */
         for (i = 0; i < MULTI_TP_TOPICS; i++) {
@@ -912,8 +886,6 @@ static void do_test_multi_topic_partition(void) {
 
         for (i = 0; i < MULTI_TP_TOPICS; i++)
                 rd_free(topics[i]);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -1029,7 +1001,7 @@ static int count_share_ack_requests(rd_kafka_mock_cluster_t *mcluster) {
  *  at least 1 partition result.
  * =================================================================== */
 static void do_test_mock_uses_share_acknowledge(void) {
-        test_ctx_t ctx = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -1043,7 +1015,9 @@ static void do_test_mock_uses_share_acknowledge(void) {
         int share_ack_cnt;
         int i;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1169,7 +1143,7 @@ static void do_test_mock_uses_share_acknowledge(void) {
  *  with normal timeout → succeeds. Verifies recovery.
  * =================================================================== */
 static void do_test_mock_commit_sync_timeout(void) {
-        test_ctx_t ctx = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -1185,7 +1159,9 @@ static void do_test_mock_commit_sync_timeout(void) {
         rd_bool_t got_timed_out = rd_false;
         rd_ts_t t_start, t_elapsed_ms;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1404,8 +1380,6 @@ static void do_test_mixed_commit_types(void) {
         rd_ts_t t_start, t_elapsed_ms;
         rd_ts_t max_sync_elapsed_ms = 0;
 
-        SUB_TEST();
-
         topic = test_mk_topic_name("0176-cs-mixed-types", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 50);
@@ -1570,8 +1544,6 @@ static void do_test_mixed_commit_types(void) {
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
-
-        SUB_TEST_PASS();
 }
 
 
@@ -1597,7 +1569,7 @@ static void do_test_mixed_commit_types(void) {
  *  3. Second consumer gets 0 records (all acks processed)
  * =================================================================== */
 static void do_test_mock_broker_dispatch_priority(void) {
-        test_ctx_t ctx = test_ctx_new();
+        test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -1614,7 +1586,9 @@ static void do_test_mock_broker_dispatch_priority(void) {
         int32_t leader_broker_id = 1;
         rd_ts_t t_start, t_elapsed_ms;
 
-        SUB_TEST();
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1811,7 +1785,13 @@ int main_0176_share_consumer_commit_sync(int argc, char **argv) {
         do_test_multi_topic_partition();
         do_test_mixed_commit_types();
 
-        /* Mock broker tests */
+        return 0;
+}
+
+int main_0176_share_consumer_commit_sync_local(int argc, char **argv) {
+        /* Mock broker tests only (no real broker needed) */
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         do_test_mock_uses_share_acknowledge();
         do_test_mock_commit_sync_timeout();
         do_test_mock_broker_dispatch_priority();

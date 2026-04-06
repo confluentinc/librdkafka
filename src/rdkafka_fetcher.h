@@ -43,9 +43,9 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
 void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
                                        rd_kafka_op_t *rko_orig,
                                        rd_ts_t now);
-void rd_kafka_broker_share_fetch(rd_kafka_broker_t *rkb,
-                                 rd_kafka_op_t *rko_orig,
-                                 rd_ts_t now);
+void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
+                               rd_kafka_op_t *rko_orig,
+                               rd_ts_t now);
 void rd_kafka_share_filter_acquired_records_and_update_ack_type(
     rd_kafka_q_t *temp_fetchq,
     rd_list_t *filtered_msgs,

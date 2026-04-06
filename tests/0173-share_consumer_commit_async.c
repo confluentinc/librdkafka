@@ -1440,22 +1440,27 @@ static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
         return rkshare;
 }
 
-static int count_share_fetch_requests(rd_kafka_mock_cluster_t *mcluster) {
+static void count_share_requests(rd_kafka_mock_cluster_t *mcluster,
+                                 int *share_fetch_cntp,
+                                 int *share_ack_cntp) {
         size_t cnt;
         size_t i;
-        int share_fetch_cnt = 0;
         rd_kafka_mock_request_t **requests;
+
+        *share_fetch_cntp = 0;
+        *share_ack_cntp   = 0;
 
         requests = rd_kafka_mock_get_requests(mcluster, &cnt);
 
         for (i = 0; i < cnt; i++) {
-                if (rd_kafka_mock_request_api_key(requests[i]) ==
-                    RD_KAFKAP_ShareFetch)
-                        share_fetch_cnt++;
+                int16_t api_key = rd_kafka_mock_request_api_key(requests[i]);
+                if (api_key == RD_KAFKAP_ShareFetch)
+                        (*share_fetch_cntp)++;
+                else if (api_key == RD_KAFKAP_ShareAcknowledge)
+                        (*share_ack_cntp)++;
         }
 
         rd_kafka_mock_request_destroy_array(requests, cnt);
-        return share_fetch_cnt;
 }
 
 
@@ -1474,7 +1479,7 @@ static void do_test_mock_inflight_caching(void) {
         const char *topic = "mock-inflight-cache";
         const int msgcnt  = 100;
         int consumed = 0, i = 0;
-        int share_fetch_cnt;
+        int share_fetch_cnt, share_ack_cnt;
         int commit_cnt = 0;
 
         SUB_TEST();
@@ -1539,17 +1544,25 @@ static void do_test_mock_inflight_caching(void) {
         /* Wait for async ops to complete before counting requests */
         rd_sleep(3);
 
-        share_fetch_cnt = count_share_fetch_requests(ctx.mcluster);
+        count_share_requests(ctx.mcluster, &share_fetch_cnt, &share_ack_cnt);
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
-        /* We called commit_async 100 times but the number of ShareFetch
-         * requests should be much fewer due to inflight caching. */
-        TEST_SAY("Mock: commit_async calls=%d, ShareFetch requests=%d\n",
-                 commit_cnt, share_fetch_cnt);
-        TEST_ASSERT(share_fetch_cnt < commit_cnt,
-                    "Expected fewer ShareFetch requests (%d) than "
+        /* We called commit_async 100 times but the total number of
+         * ShareFetch + ShareAcknowledge requests should be much fewer
+         * due to inflight caching. Ack-only requests use ShareAcknowledge
+         * RPC instead of ShareFetch. */
+        TEST_SAY(
+            "Mock: commit_async calls=%d, ShareFetch requests=%d, "
+            "ShareAcknowledge requests=%d\n",
+            commit_cnt, share_fetch_cnt, share_ack_cnt);
+        TEST_ASSERT(share_ack_cnt > 0,
+                    "Expected at least one ShareAcknowledge request, got %d",
+                    share_ack_cnt);
+        TEST_ASSERT(share_fetch_cnt + share_ack_cnt < commit_cnt,
+                    "Expected fewer total share requests (%d + %d = %d) than "
                     "commit_async calls (%d) due to inflight caching",
-                    share_fetch_cnt, commit_cnt);
+                    share_fetch_cnt, share_ack_cnt,
+                    share_fetch_cnt + share_ack_cnt, commit_cnt);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);

@@ -117,14 +117,50 @@ static rd_kafka_share_AcknowledgeType_t get_random_ack_type(void) {
 }
 
 /**
+ * @brief Configure share group using a dedicated producer handle.
+ *        Admin client APIs should not reuse the share consumer handle.
+ */
+static void configure_share_group(const char *group_name,
+                                  const char **cfg,
+                                  size_t cfg_cnt) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
+                                            group_name, cfg, cfg_cnt);
+
+        rd_kafka_destroy(admin);
+}
+
+/**
+ * @brief Delete topic using a dedicated producer handle.
+ *        Admin client APIs should not reuse the share consumer handle.
+ */
+static void delete_topic_admin(const char *topic) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_delete_topic(admin, topic);
+
+        rd_kafka_destroy(admin);
+}
+
+/**
  * @brief Set group offset to earliest
  */
-static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
-                                      const char *group_name) {
+static void set_group_offset_earliest(const char *group_name) {
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group_name,
-                                            cfg, 1);
+        configure_share_group(group_name, cfg, 1);
 }
 
 /**
@@ -177,7 +213,7 @@ static void subscribe_consumers(ack_test_config_t *config,
         rd_kafka_topic_partition_list_t *subs;
         int t, i;
 
-        set_group_offset_earliest(state->consumers[0], state->group_name);
+        set_group_offset_earliest(state->group_name);
 
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
         for (t = 0; t < config->topic_cnt; t++) {
@@ -753,9 +789,7 @@ static void test_ack_invalid_type(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 1);
 
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        configure_share_group(group, grp_conf, 1);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
@@ -790,7 +824,7 @@ static void test_ack_invalid_type(void) {
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         rd_kafka_message_destroy(batch[0]);
 
-        test_delete_topic(test_share_consumer_get_rk(rkshare), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
@@ -822,9 +856,7 @@ static void test_release_then_reject_no_redelivery(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 5);
 
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        configure_share_group(group, grp_conf, 1);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
@@ -892,7 +924,7 @@ static void test_release_then_reject_no_redelivery(void) {
                     "Expected 0 redelivered (REJECT overrides RELEASE), got %d",
                     redelivered);
 
-        test_delete_topic(test_share_consumer_get_rk(rkshare), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
@@ -935,9 +967,7 @@ static void test_max_delivery_attempts(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 1); /* Just 1 message */
 
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        configure_share_group(group, grp_conf, 1);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
@@ -1010,7 +1040,7 @@ static void test_max_delivery_attempts(void) {
         TEST_SAY("SUCCESS: Message not redelivered after %d RELEASE attempts\n",
                  max_deliveries);
 
-        test_delete_topic(test_share_consumer_get_rk(rkshare), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 

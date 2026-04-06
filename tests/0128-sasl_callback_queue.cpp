@@ -118,12 +118,11 @@ static void do_test(bool use_background_queue) {
 static rd_atomic32_t share_cb_called;
 
 static void share_refresh_cb(rd_kafka_t *rk,
-                              const char *oauthbearer_config,
-                              void *opaque) {
-  rd_kafka_oauthbearer_set_token_failure(
-      rk,
-      "Not implemented by this test, "
-      "but that's okay");
+                             const char *oauthbearer_config,
+                             void *opaque) {
+  rd_kafka_oauthbearer_set_token_failure(rk,
+                                         "Not implemented by this test, "
+                                         "but that's okay");
   rd_atomic32_add(&share_cb_called, 1);
   Test::Say("Share consumer refresh callback called!\n");
 }

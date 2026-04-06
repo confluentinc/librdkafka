@@ -197,9 +197,8 @@ static void do_test_consume_batch_oauthbearer_cb(void) {
 
 static rd_bool_t share_refresh_called = rd_false;
 
-static void share_refresh_cb(rd_kafka_t *rk,
-                              const char *oauthbearer_config,
-                              void *opaque) {
+static void
+share_refresh_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
         TEST_SAY("Share consumer refresh callback called\n");
         TEST_ASSERT(!share_refresh_called);
         share_refresh_called = rd_true;
@@ -226,8 +225,7 @@ static void do_test_share_consume_batch_oauthbearer_cb(void) {
         test_conf_set(conf, "security.protocol", "sasl_plaintext");
         test_conf_set(conf, "sasl.mechanism", "OAUTHBEARER");
         test_conf_set(conf, "group.id", "share-oauthbearer-cb-test");
-        rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf,
-                                                        share_refresh_cb);
+        rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf, share_refresh_cb);
 
         /* Create share consumer */
         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));

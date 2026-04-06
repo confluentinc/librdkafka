@@ -128,8 +128,7 @@ void do_test_share_consumer(int64_t reauth_time) {
         int attempts;
         size_t rcvd, m;
 
-        SUB_TEST(
-            "test share consumer message loss while reauthenticating");
+        SUB_TEST("test share consumer message loss while reauthenticating");
 
         test_conf_init(&conf, NULL, 30);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
@@ -143,8 +142,8 @@ void do_test_share_consumer(int64_t reauth_time) {
         sc1 = test_create_share_consumer(group);
 
         /* Set group config for earliest offset */
-        test_IncrementalAlterConfigs_simple(
-            p1, RD_KAFKA_RESOURCE_GROUP, group, grp_conf, 1);
+        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
+                                            grp_conf, 1);
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -400,8 +399,7 @@ void do_test_share_oauthbearer(int64_t reauth_time,
         SUB_TEST(
             "test share consumer reauthentication with oauthbearer, "
             "reauth_time = %ld, token_lifetime = %ld, use_sasl_queue = %s",
-            reauth_time, token_lifetime_ms,
-            use_sasl_queue ? "yes" : "no");
+            reauth_time, token_lifetime_ms, use_sasl_queue ? "yes" : "no");
 
         /* Producer */
         test_conf_init(&conf, NULL, 30);
@@ -457,8 +455,8 @@ void do_test_share_oauthbearer(int64_t reauth_time,
         }
 
         /* Set group config for earliest offset */
-        test_IncrementalAlterConfigs_simple(
-            p1, RD_KAFKA_RESOURCE_GROUP, group, grp_conf, 1);
+        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
+                                            grp_conf, 1);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
@@ -481,8 +479,9 @@ void do_test_share_oauthbearer(int64_t reauth_time,
                     "and consume warmup message");
         for (m = 0; m < rcvd; m++)
                 rd_kafka_message_destroy(batch[m]);
-        TEST_SAY("Share consumer joined group, starting oauthbearer "
-                 "reauth test\n");
+        TEST_SAY(
+            "Share consumer joined group, starting oauthbearer "
+            "reauth test\n");
 
         start_time = test_clock();
         while ((test_clock() - start_time) <= wait_time) {

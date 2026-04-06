@@ -132,6 +132,45 @@ static void setup_topics_and_produce(share_test_config_t *config,
 }
 
 /**
+ * @brief Configure share group using a dedicated producer handle.
+ *        Admin client APIs should not reuse the share consumer handle.
+ */
+static void configure_share_group(const char *group_name,
+                                  const char **cfg,
+                                  size_t cfg_cnt) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
+                                            group_name, cfg, cfg_cnt);
+
+        rd_kafka_destroy(admin);
+}
+
+/**
+ * @brief Delete topic using a dedicated producer handle.
+ *        Admin client APIs should not reuse the share consumer handle.
+ */
+static void delete_topic_admin(const char *topic) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_delete_topic(admin, topic);
+
+        rd_kafka_destroy(admin);
+}
+
+/**
  * @brief Subscribe consumers to topics
  */
 static void subscribe_consumers(share_test_config_t *config,
@@ -140,10 +179,8 @@ static void subscribe_consumers(share_test_config_t *config,
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int t, i;
 
-        /* Set group config using first consumer */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(state->consumers[0]),
-            RD_KAFKA_RESOURCE_GROUP, config->group_name, grp_conf, 1);
+        /* Set group config using a dedicated admin client */
+        configure_share_group(config->group_name, grp_conf, 1);
 
         /* Build subscription list */
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
@@ -255,12 +292,10 @@ static void cleanup_test(share_test_config_t *config,
                          share_test_state_t *state) {
         int t, i;
 
-        /* Delete topics using first consumer */
+        /* Delete topics using a dedicated admin client */
         for (t = 0; t < config->topic_cnt; t++) {
                 if (state->topic_names[t]) {
-                        test_delete_topic(
-                            test_share_consumer_get_rk(state->consumers[0]),
-                            state->topic_names[t]);
+                        delete_topic_admin(state->topic_names[t]);
                         rd_free(state->topic_names[t]);
                         state->topic_names[t] = NULL;
                 }
@@ -543,9 +578,7 @@ static void test_rapid_produce_consume_cycles(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure group */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        configure_share_group(group, grp_conf, 1);
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -595,7 +628,7 @@ static void test_rapid_produce_consume_cycles(void) {
                  total_consumed);
 
         /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -621,9 +654,7 @@ static void test_empty_then_produce(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        configure_share_group(group, grp_conf, 1);
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
@@ -673,7 +704,7 @@ static void test_empty_then_produce(void) {
                  consumed);
 
         /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -703,9 +734,7 @@ static void test_sparse_partitions(void) {
         test_create_topic_wait_exists(NULL, topic, 5, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        configure_share_group(group, grp_conf, 1);
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
@@ -747,7 +776,7 @@ static void test_sparse_partitions(void) {
                  consumed);
 
         /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -794,12 +823,8 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure group: set lock duration to 15 seconds */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf_lock, 1);
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf_offset, 1);
+        configure_share_group(group, grp_conf_lock, 1);
+        configure_share_group(group, grp_conf_offset, 1);
 
         /* Produce messages */
         TEST_SAY("Producing %d messages...\n", msg_cnt);
@@ -918,7 +943,7 @@ static void test_acquisition_lock_expiry_redelivery(void) {
             consumed2);
 
         /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer2), topic);
+        delete_topic_admin(topic);
         rd_kafka_share_consumer_close(consumer2);
         rd_kafka_share_destroy(consumer2);
 }

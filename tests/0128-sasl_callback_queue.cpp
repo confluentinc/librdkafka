@@ -34,6 +34,11 @@
 #include "testcpp.h"
 #include "rdatomic.h"
 
+/* Include C API for share consumer tests */
+extern "C" {
+#include "rdkafka.h"
+}
+
 namespace {
 /* Provide our own token refresh callback */
 class MyCb : public RdKafka::OAuthBearerTokenRefreshCb {
@@ -110,6 +115,92 @@ static void do_test(bool use_background_queue) {
   SUB_TEST_PASS();
 }
 
+static rd_atomic32_t share_cb_called;
+
+static void share_refresh_cb(rd_kafka_t *rk,
+                              const char *oauthbearer_config,
+                              void *opaque) {
+  rd_kafka_oauthbearer_set_token_failure(
+      rk,
+      "Not implemented by this test, "
+      "but that's okay");
+  rd_atomic32_add(&share_cb_called, 1);
+  Test::Say("Share consumer refresh callback called!\n");
+}
+
+/**
+ * @brief Verify that background SASL callback queues work with
+ *        a share consumer using the C API.
+ *
+ * When use_background_queue is true, the SASL queue is enabled and
+ * forwarded to the background thread. The callback should fire even
+ * from a non-polling API (clusterid).
+ *
+ * When use_background_queue is false, the callback should still fire
+ * when polling via share_consume_batch (which serves the main queue).
+ */
+static void do_test_share_consumer(bool use_background_queue) {
+  SUB_TEST("Share consumer: Use background queue = %s",
+           use_background_queue ? "yes" : "no");
+
+  rd_kafka_conf_t *conf = rd_kafka_conf_new();
+  char errstr[512];
+
+  rd_kafka_conf_set(conf, "security.protocol", "SASL_PLAINTEXT", errstr,
+                    sizeof(errstr));
+  rd_kafka_conf_set(conf, "sasl.mechanism", "OAUTHBEARER", errstr,
+                    sizeof(errstr));
+  rd_kafka_conf_set(conf, "group.id", "share-sasl-callback-test", errstr,
+                    sizeof(errstr));
+
+  if (use_background_queue)
+    rd_kafka_conf_enable_sasl_queue(conf, 1);
+
+  rd_atomic32_init(&share_cb_called, 0);
+  rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf, share_refresh_cb);
+
+  rd_kafka_share_t *rkshare =
+      rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+  TEST_ASSERT(rkshare != NULL, "Failed to create share consumer: %s", errstr);
+
+  if (use_background_queue) {
+    rd_kafka_error_t *error =
+        rd_kafka_share_sasl_background_callbacks_enable(rkshare);
+    if (error)
+      Test::Fail("share_sasl_background_callbacks_enable() failed: " +
+                 std::string(rd_kafka_error_string(error)));
+
+    /* Call a non-polling share consumer API — the callback should
+     * still fire via the background thread. */
+    rd_kafka_topic_partition_list_t *sub = NULL;
+    rd_kafka_share_subscription(rkshare, &sub);
+    if (sub)
+      rd_kafka_topic_partition_list_destroy(sub);
+
+  } else {
+    /* Poll via share_consume_batch — this serves the main queue
+     * which should trigger the OAUTHBEARER refresh callback. */
+    rd_kafka_message_t *msgs[1];
+    size_t rcvd = 0;
+    rd_kafka_error_t *err =
+        rd_kafka_share_consume_batch(rkshare, 1000, msgs, &rcvd);
+    if (err)
+      rd_kafka_error_destroy(err);
+  }
+
+  Test::Say(tostr() << "share_cb_called = " << rd_atomic32_get(&share_cb_called)
+                    << "\n");
+  TEST_ASSERT(rd_atomic32_get(&share_cb_called) > 0,
+              "Expected refresh callback to have been called "
+              "for share consumer");
+
+  rd_kafka_share_consumer_close(rkshare);
+  rd_kafka_share_destroy(rkshare);
+
+  SUB_TEST_PASS();
+}
+
+
 extern "C" {
 int main_0128_sasl_callback_queue(int argc, char **argv) {
   if (!test_check_builtin("sasl_oauthbearer")) {
@@ -119,6 +210,8 @@ int main_0128_sasl_callback_queue(int argc, char **argv) {
 
   do_test(true);
   do_test(false);
+  do_test_share_consumer(true);
+  do_test_share_consumer(false);
 
   return 0;
 }

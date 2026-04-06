@@ -45,8 +45,8 @@ blocks:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
-            - ./tests/run-all-tests.sh
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
+            - ./tests/run-all-tests.sh
         - name: "SASL SSL cluster (x86_64)"
           env_vars:
             - name: TEST_SSL
@@ -55,8 +55,8 @@ blocks:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
-            - ./tests/run-all-tests.sh
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
+            - ./tests/run-all-tests.sh
   - name: "Run SASL tests (aarch64)"
     dependencies: []
     task:
@@ -75,8 +75,8 @@ blocks:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
-            - ./tests/run-all-tests.sh
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
+            - ./tests/run-all-tests.sh
         - name: "SASL SSL cluster (aarch64)"
           env_vars:
             - name: TEST_SSL
@@ -85,5 +85,5 @@ blocks:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
-            - ./tests/run-all-tests.sh
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
+            - ./tests/run-all-tests.sh

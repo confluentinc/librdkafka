@@ -3186,19 +3186,24 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         rd_kafka_cgrp_t *rkcg     = rd_kafka_cgrp_get(rk);
         rd_bool_t should_fetch    = rko_orig->rko_u.share_fetch.should_fetch;
         rd_bool_t records_fetched = rko_orig->rko_u.share_fetch.records_fetched;
+        rd_bool_t should_leave    = rko_orig->rko_u.share_fetch.should_leave;
 
         rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                      "Share fetch reply: %s, should_fetch=%d, "
-                     "records_fetched=%d, broker=%s",
+                     "records_fetched=%d, should_leave=%d, broker=%s",
                      rd_kafka_err2str(rko_orig->rko_err), should_fetch,
-                     records_fetched,
-                     reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
+                     records_fetched, should_leave, reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
 
         reply_rkb->rkb_share_fetch_enqueued = rd_false;
 
         if (should_fetch)
-                rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt--;
+            rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt--;
+
+        if (should_leave) {
+            rkcg->rkcg_share.share_session_leave_remaining_cnt--;
+            return RD_KAFKA_OP_RES_HANDLED;
+        }
 
         /*
          * Step 1: If records were fetched and broker is not terminating,
@@ -3208,8 +3213,18 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         if (records_fetched && rko_orig->rko_err != RD_KAFKA_RESP_ERR__DESTROY)
                 rkcg->rkcg_share.share_fetch_more_records = rd_false;
 
+
+        /* TODO: KIP-932 close: Check if we need to change based on comment above
+        * Step 2: If the consumer has been marked for termination,
+        * enqueue a session leave op on the replying broker thread and return
+        */
+        if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
+            rd_kafka_share_enqueue_fetch_leave_op(rkcg->rkcg_rk, reply_rkb);
+            return RD_KAFKA_OP_RES_HANDLED;
+        }
+
         /*
-         * Step 2: If this was the fetch broker but no records were received,
+         * Step 3: If this was the fetch broker but no records were received,
          * try to select another broker to fetch from.
          *
          * TODO: KIP-932: Handle the case where all assignments are removed
@@ -3243,7 +3258,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 3: If the replying broker has cached ack details,
+         * Step 4: If the replying broker has cached ack details,
          * send an ack-only SHARE_FETCH op to it.
          */
         if (reply_rkb->rkb_share_async_ack_details &&
@@ -3298,100 +3313,6 @@ rd_kafka_share_fetch_fanout_reply_op(rd_kafka_t *rk, rd_kafka_op_t *rko_orig) {
         }
         return RD_KAFKA_OP_RES_HANDLED;
 }
-
-/**
- * @brief Find an existing ack batch for the same topic-partition in a list.
- *
- * @param ack_list List of rd_kafka_share_ack_batches_t*
- * @param rktpar Topic-partition to match (by topic id and partition)
- *
- * @returns Matching batch, or NULL if not found.
- * @locality main thread
- */
-static rd_kafka_share_ack_batches_t *
-rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
-                              const rd_kafka_topic_partition_t *rktpar) {
-        rd_kafka_share_ack_batches_t *existing;
-        int i;
-
-        RD_LIST_FOREACH(existing, ack_list, i) {
-                /* TODO KIP-932: We might need to use leader id and epoch
-                 * as well to understand about the stale topic partition
-                 * information */
-                if (rd_kafka_topic_partition_by_id_cmp(existing->rktpar,
-                                                       rktpar) == 0)
-                        return existing;
-        }
-        return NULL;
-}
-
-/**
- * @brief Segregate ack batches from a FANOUT op by partition leader.
- *
- * For each ack batch, looks up the current leader broker via the
- * toppar reference in batch->rktpar, and merges the batch into that
- * broker's rkb_share_async_ack_details list. If the broker already
- * has cached acks for the same topic-partition, the entries are
- * appended to the existing batch.
- *
- * @param rk Client instance
- * @param ack_batches List of rd_kafka_share_ack_batches_t* from FANOUT op.
- *                    Elements whose leader is found are moved to broker
- *                    ack_details; remaining elements are not freed.
- *
- * @locality main thread
- */
-static void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
-                                                    rd_list_t *ack_batches) {
-        rd_kafka_share_ack_batches_t *batch;
-        int batch_cnt = rd_list_cnt(ack_batches);
-
-        while ((batch = rd_list_pop(ack_batches))) {
-                rd_kafka_toppar_t *rktp;
-                rd_kafka_broker_t *leader_rkb;
-                rd_kafka_share_ack_batches_t *existing;
-
-                rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
-                if (!rktp || !rktp->rktp_leader) {
-                        rd_kafka_dbg(rk, CGRP, "SHARE",
-                                     "Ack batch for leader %" PRId32
-                                     " dropped: toppar or leader not available",
-                                     batch->response_leader_id);
-                        rd_kafka_share_ack_batches_destroy(batch);
-                        continue;
-                }
-                leader_rkb = rktp->rktp_leader;
-
-                /* Allocate list on first use with incoming batch count
-                 * as initial capacity hint */
-                if (!leader_rkb->rkb_share_async_ack_details)
-                        leader_rkb->rkb_share_async_ack_details = rd_list_new(
-                            batch_cnt, rd_kafka_share_ack_batches_destroy_free);
-
-                /* Check if there's already a batch for this topic-partition.
-                 * If so, merge entries; otherwise add as new. */
-                existing = rd_kafka_share_find_ack_batch(
-                    leader_rkb->rkb_share_async_ack_details, batch->rktpar);
-
-                if (existing) {
-                        /* Merge: deep-copy entries from new batch into
-                         * existing, preserving order. The source batch
-                         * is then fully destroyed (freeing its entries). */
-                        rd_kafka_share_ack_batch_entry_t *entry;
-                        int j;
-                        RD_LIST_FOREACH(entry, &batch->entries, j) {
-                                rd_list_add(
-                                    &existing->entries,
-                                    rd_kafka_share_ack_batch_entry_copy(entry));
-                        }
-                        rd_kafka_share_ack_batches_destroy(batch);
-                } else {
-                        rd_list_add(leader_rkb->rkb_share_async_ack_details,
-                                    batch);
-                }
-        }
-}
-
 
 /**
  * @brief Create and enqueue a SHARE_FETCH op on a broker.
@@ -3572,6 +3493,12 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                                                  rd_kafka_op_t *rko) {
         rd_kafka_broker_t *selected_rkb = NULL;
         rd_kafka_cgrp_t *rkcg           = rd_kafka_cgrp_get(rk);
+
+        if (rkcg && rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
+            rd_kafka_dbg(rk, CGRP, "SHARE", "Ignoring SHARE_FETCH_FANOUT op received after close()");
+            return RD_KAFKA_OP_RES_HANDLED;
+        }
+
         rd_bool_t fetch_more_records =
             rko->rko_u.share_fetch_fanout.fetch_more_records;
         rd_bool_t has_fanout_acks =
@@ -3652,6 +3579,12 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "rd_kafka_share_consume_batch(): "
                                           "Consumer group not initialized");
+
+        // TODO: This condition needs to be refined. What if close() is already done?
+        if (rkshare->rkshare_consumer_closing)
+            return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
+                                          "rd_kafka_share_consume_batch(): "
+                                          "Consumer close initiated");
 
         /* Drain rk_rep for all pending callbacks (non-blocking) */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
@@ -4462,7 +4395,10 @@ static rd_kafka_error_t *rd_kafka_consumer_close_q(rd_kafka_t *rk,
 
         /* Tell cgrp subsystem to terminate. A TERMINATE op will be posted
          * on the rkq when done. */
-        rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+            rd_kafka_share_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
+        else
+            rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
 
         return error;
 }
@@ -4541,12 +4477,62 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
 }
 
 rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
+
+        // if (rkshare->rkshare_consumer_closing) {
+        //     return rd_kafka_error_new(RD_KAFKA_RESP_ERR__FAIL,
+        //                                   "Consumer close already initiated");
+        // }
         rkshare->rkshare_consumer_closing = rd_true;
         /* TODO KIP-932: Need to check this behavior is correct while closing.
-         */
+        */
         rd_kafka_q_fwd_set(rkshare->rkshare_rk->rk_rep,
-                           rkshare->rkshare_rk->rk_cgrp->rkcg_q);
+                       rkshare->rkshare_rk->rk_cgrp->rkcg_q);
+
         return rd_kafka_consumer_close(rkshare->rkshare_rk);
+
+
+
+
+
+        // // Prevent new fetch fanout ops to be enqueued
+        // // This can't be disabled as broker also posts reply to the same q
+        // // rd_kafka_q_disable(rkshare->rkshare_rk->rk_ops);
+        // // Prevent messages to be delivered
+        // rd_kafka_q_disable(rkshare->rkshare_rk->rk_cgrp->rkcg_q);
+        //
+        // // Wait for in flight ops and requests to complete
+        // while (rd_atomic32_get(&rkshare->rkshare_inflight_ops_count) > 0) {
+        //     int cnt = rd_atomic32_get(&rkshare->rkshare_inflight_ops_count);
+        //     rd_kafka_dbg(rkshare->rkshare_rk, CGRP, "CLOSE",
+        //                  "Waiting for %d in-flight operations to complete", cnt);
+        //
+        //     // Process replies and FANOUT ops
+        //     // This is an optimization
+        //     // rd_kafka_q_serve(rkshare->rkshare_rk->rk_ops, 10, 0,
+        //     //                 RD_KAFKA_Q_CB_CALLBACK, rd_kafka_poll_cb, NULL);
+        //
+        //     rd_usleep(10000, NULL); // 10ms
+        // }
+        //
+        // // Enqueue a terminate ops and create a temp queue for its reply
+        // rkq = rd_kafka_q_new(rkshare->rkshare_rk);
+        //
+        // if (!(rkcg = rd_kafka_cgrp_get(rkshare->rkshare_rk)))
+        //     return rd_kafka_error_new(RD_KAFKA_RESP_ERR__UNKNOWN_GROUP,
+        //                               "Consume close called on non-group "
+        //                               "consumer");
+        //
+        // if (rd_atomic32_get(&rkcg->rkcg_terminated))
+        //     return rd_kafka_error_new(RD_KAFKA_RESP_ERR__DESTROY,
+        //                               "Consumer already closed");
+        //
+        //
+        //
+        // // Check if this forwarding is correct
+        // rd_kafka_q_fwd_set(rkcg->rkcg_q, rkq);
+        //
+        //
+        // rd_kafka_cgrp_terminate(rkcg, RD_KAFKA_REPLYQ(rkq, 0)); /* async */
 }
 
 

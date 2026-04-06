@@ -154,6 +154,9 @@ void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
  */
 void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
 
+void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
+                                                    rd_list_t *ack_batches);
+
 /**
  * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
  *

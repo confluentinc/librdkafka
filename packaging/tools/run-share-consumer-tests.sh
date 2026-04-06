@@ -19,44 +19,28 @@ make -j -C tests build
 
 echo "arguments: $TEST_ARGS"
 
-# Run share consumer tests
-# Test 0172 is run separately with debug logging enabled to diagnose
-# intermittent failures. Debug logs are saved to artifacts if test fails.
-TEST_0172_LOG="${PWD}/artifacts/test_0172_debug.log"
-TEST_0172_FAILED=0
+# Run share consumer tests with debug logging enabled only for test 0172.
+# All tests run together (0170, 0171, 0172, 0173+) since 0172 only fails
+# intermittently when run alongside other tests.
+# TEST_DEBUG_0172 enables debug only for test 0172 consumers (not all tests).
+# Debug logs are captured and saved to artifacts if any test fails.
+DEBUG_LOG="${PWD}/artifacts/test_0172_debug.log"
+mkdir -p "${PWD}/artifacts"
 
-run_test_0172_with_debug() {
-    echo "Running test 0172 with debug logging..."
-    cd tests
-    # Run 0172 with full debug logging, capture output
-    TEST_DEBUG=all TESTS=0172 python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
-        --version "$TEST_KAFKA_GIT_REF" \
-        --cpversion "$TEST_CP_VERSION" \
-        --cmd "./run-test.sh -D" 2>&1 | tee "$TEST_0172_LOG"
-    TEST_0172_FAILED=${PIPESTATUS[0]}
-    cd ..
-
-    if [ $TEST_0172_FAILED -eq 0 ]; then
-        echo "Test 0172 passed, removing debug log"
-        rm -f "$TEST_0172_LOG"
-    else
-        echo "Test 0172 FAILED, debug log saved to: $TEST_0172_LOG"
-        echo "Upload as artifact for debugging"
-    fi
-}
-
-# Run all other share consumer tests (skip 0172)
-(cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
+# Run all share consumer tests together
+# TEST_DEBUG_0172=all enables debug output only for test 0172's consumers
+(cd tests && TEST_DEBUG_0172=all python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
  --conf '["group.share.min.record.lock.duration.ms=1000"]' \
  --version "$TEST_KAFKA_GIT_REF" \
  --cpversion "$TEST_CP_VERSION" \
- --cmd "TESTS_SKIP_BEFORE=0170 TESTS=0170,0171,0173- python run-test-batches.py $TEST_ARGS")
+ --cmd "TESTS_SKIP_BEFORE=0170 TESTS=0170- python run-test-batches.py $TEST_ARGS" 2>&1 | tee "$DEBUG_LOG")
+TEST_RESULT=${PIPESTATUS[0]}
 
-# Run test 0172 separately with debug logging
-run_test_0172_with_debug
-
-# Exit with failure if 0172 failed
-if [ $TEST_0172_FAILED -ne 0 ]; then
-    echo "Test 0172 failed with exit code: $TEST_0172_FAILED"
-    exit $TEST_0172_FAILED
+if [ $TEST_RESULT -eq 0 ]; then
+    echo "All share consumer tests passed, removing debug log"
+    rm -f "$DEBUG_LOG"
+else
+    echo "Share consumer tests FAILED (exit code: $TEST_RESULT)"
+    echo "Debug log saved to: $DEBUG_LOG"
+    exit $TEST_RESULT
 fi

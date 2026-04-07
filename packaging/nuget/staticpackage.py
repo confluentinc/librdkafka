@@ -108,6 +108,24 @@ class StaticPackage (Package):
                 './usr/local/lib/pkgconfig/rdkafka-static.pc',
                 'librdkafka_musl_linux_arm64.pc'),
 
+        # glibc linux s390x static lib and pkg-config file
+        Mapping({'arch': 's390x',
+                 'plat': 'linux',
+                 'dist': 'centos8',
+                 'lnk': 'all',
+                 '!extra': 'gssapi'},
+                'librdkafka.tgz',
+                './usr/local/lib/librdkafka-static.a',
+                'librdkafka_glibc_linux_s390x.a'),
+        Mapping({'arch': 's390x',
+                 'plat': 'linux',
+                 'dist': 'centos8',
+                 'lnk': 'all',
+                 '!extra': 'gssapi'},
+                'librdkafka.tgz',
+                './usr/local/lib/pkgconfig/rdkafka-static.pc',
+                'librdkafka_glibc_linux_s390x.pc'),
+
         # osx x64 static lib and pkg-config file
         Mapping({'arch': 'x64',
                  'plat': 'osx',

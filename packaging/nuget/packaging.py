@@ -46,6 +46,7 @@ magic_patterns = {
     ('win', 'x86', '.lib'): re.compile('current ar archive'),
     ('linux', 'x64', '.so'): re.compile('ELF 64.* x86-64'),
     ('linux', 'arm64', '.so'): re.compile('ELF 64.* ARM aarch64'),
+    ('linux', 's390x', '.so'): re.compile('ELF 64.* IBM S/390'),
     ('osx', 'x64', '.dylib'): re.compile('Mach-O 64.* x86_64'),
     ('osx', 'arm64', '.dylib'): re.compile('Mach-O 64.*arm64')}
 

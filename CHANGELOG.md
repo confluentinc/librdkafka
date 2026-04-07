@@ -1,3 +1,10 @@
+# librdkafka v2.14.1
+
+librdkafka v2.14.1 is a maintenance release:
+
+ * Bundle prebuilt binaries for linux-s390x.
+
+
 # librdkafka v2.14.0
 
 librdkafka v2.14.0 is a feature release:

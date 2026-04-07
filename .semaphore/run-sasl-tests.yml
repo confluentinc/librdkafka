@@ -17,7 +17,7 @@ global_job_config:
       - sudo dpkg -i rapidjson-dev.deb
       - sudo apt update
       - sudo apt remove -y needrestart
-      - sudo apt install -y valgrind libcurl4-openssl-dev libssl-dev
+      - sudo apt install -y valgrind libcurl4-openssl-dev libssl-dev krb5-user krb5-kdc krb5-admin-server
       - python3 -m pip install -U pip
       - python3 -m pip -V
       - (cd tests && python3 -m pip install -r requirements.txt)

@@ -59,6 +59,7 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         mcluster->defaults.sharegroup_record_lock_duration_ms = 0;
         mcluster->defaults.sharegroup_max_size                = 0;
         mcluster->defaults.sharegroup_isolation_level         = 0;
+        mcluster->defaults.sharegroup_max_fetch_sessions      = 2000;
 }
 
 /**
@@ -114,6 +115,8 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
             mcluster->defaults.sharegroup_record_lock_duration_ms;
         mshgrp->isolation_level = mcluster->defaults.sharegroup_isolation_level;
         mshgrp->max_size        = mcluster->defaults.sharegroup_max_size;
+        mshgrp->max_fetch_sessions =
+            mcluster->defaults.sharegroup_max_fetch_sessions;
 
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,
@@ -775,6 +778,20 @@ void rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
         mshgrp->max_size                       = max_size;
         mcluster->defaults.sharegroup_max_size = max_size;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the maximum number of fetch sessions allowed in a share group.
+ */
+void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_fetch_sessions) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+        mshgrp->max_fetch_sessions = max_fetch_sessions;
+        mcluster->defaults.sharegroup_max_fetch_sessions = max_fetch_sessions;
         mtx_unlock(&mcluster->lock);
 }
 

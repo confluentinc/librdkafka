@@ -718,6 +718,21 @@ rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
                                       int max_size);
 
 /**
+ * @brief Set the maximum number of fetch sessions allowed in a share group.
+ *
+ * New sessions attempted via ShareFetch with epoch 0 when the group
+ * is at capacity will receive SHARE_SESSION_LIMIT_REACHED.
+ *
+ * Default is 2000 (per KIP-932 group.share.max.share.sessions).
+ *
+ * @param mcluster Mock cluster instance.
+ * @param max_fetch_sessions Maximum fetch sessions allowed. 0 = unlimited.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_fetch_sessions);
+
+/**
  * @brief Set a manual target assignment for a sharegroup.
  *
  * This allows tests to override the automatic partition assignment

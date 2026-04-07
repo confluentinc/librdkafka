@@ -3964,16 +3964,35 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 mtx_lock(&mcluster->lock);
                 sgrp = rd_kafka_mock_sharegroup_get(mcluster, &GroupId);
 
+                /* epoch=0 (full fetch / new session) must not
+                 * contain acknowledgements.  Check BEFORE
+                 * session_validate to avoid destroying an existing
+                 * session for a malformed request. */
+                if (SessionEpoch == 0 && rd_list_cnt(&ack_entries) > 0) {
+                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
+                                     "ShareFetch: rejecting epoch=0 request "
+                                     "with %d ack(s) (INVALID_REQUEST)",
+                                     rd_list_cnt(&ack_entries));
+                        err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+                }
+
                 /* Common validation: member check, session lookup,
                  * epoch -1 close, epoch > 0 validation. */
-                err = rd_kafka_mock_sgrp_session_validate(
-                    sgrp, &MemberId, mconn->broker->id, SessionEpoch, &session,
-                    "ShareFetch");
+                if (!err)
+                        err = rd_kafka_mock_sgrp_session_validate(
+                            sgrp, &MemberId, mconn->broker->id, SessionEpoch,
+                            &session, "ShareFetch");
 
                 if (!err && SessionEpoch == 0) {
                         /* Open a new session (or reuse if one already exists
                          * for this member on this broker). */
-                        if (!session) {
+                        if (!session && sgrp->max_fetch_sessions > 0 &&
+                            sgrp->fetch_session_cnt >=
+                                sgrp->max_fetch_sessions) {
+                                /* Session cache is full. */
+                                err =
+                                    RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED;
+                        } else if (!session) {
                                 session = rd_calloc(1, sizeof(*session));
                                 session->member_id =
                                     RD_KAFKAP_STR_DUP(&MemberId);
@@ -4090,17 +4109,6 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         }
                                 }
                         }
-                }
-
-                /* epoch=0 (full fetch / new session) must not
-                 * contain acknowledgements. */
-                if (!err && SessionEpoch == 0 &&
-                    rd_list_cnt(&ack_entries) > 0) {
-                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
-                                     "ShareFetch: rejecting epoch=0 request "
-                                     "with %d ack(s) (INVALID_REQUEST)",
-                                     rd_list_cnt(&ack_entries));
-                        err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
                 }
 
                 /* Apply piggy-backed acknowledgements (implicit ack)

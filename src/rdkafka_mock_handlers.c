@@ -3659,8 +3659,30 @@ struct rd_kafka_mock_sgrp_ack_entry {
         int32_t partition;
         int64_t first_offset;
         int64_t last_offset;
-        int8_t ack_type; /**< 0=GAP, 1=ACCEPT, 2=RELEASE, 3=REJECT */
+        int8_t ack_type;          /**< 0=GAP, 1=ACCEPT, 2=RELEASE, 3=REJECT */
+        rd_kafka_resp_err_t err;  /**< Per-batch ack result, set after apply */
 };
+
+/**
+ * @brief Find the worst ack error for the given (topic_id, partition) across
+ *        all ack entries.  Returns NO_ERROR if no ack targeted this partition
+ *        or all acks succeeded.
+ */
+static rd_kafka_resp_err_t rd_kafka_mock_sgrp_ack_error_for_partition(
+    const rd_list_t *ack_entries,
+    rd_kafka_Uuid_t topic_id,
+    int32_t partition) {
+        int k;
+        for (k = 0; k < rd_list_cnt(ack_entries); k++) {
+                const struct rd_kafka_mock_sgrp_ack_entry *entry =
+                    rd_list_elem(ack_entries, k);
+                if (entry->partition == partition &&
+                    !rd_kafka_Uuid_cmp(entry->topic_id, topic_id) &&
+                    entry->err)
+                        return entry->err;
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
 
 /**
  * @brief Apply a single acknowledgement batch to share-group partition
@@ -3674,19 +3696,21 @@ struct rd_kafka_mock_sgrp_ack_entry {
  *
  * @locks mcluster->lock MUST be held.
  */
-static void rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
-                                         rd_kafka_Uuid_t topic_id,
-                                         int32_t partition,
-                                         int64_t first_offset,
-                                         int64_t last_offset,
-                                         int8_t ack_type,
-                                         const rd_kafkap_str_t *member_id) {
+static rd_kafka_resp_err_t
+rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
+                             rd_kafka_Uuid_t topic_id,
+                             int32_t partition,
+                             int64_t first_offset,
+                             int64_t last_offset,
+                             int8_t ack_type,
+                             const rd_kafkap_str_t *member_id) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
+        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int64_t offset;
 
         pmeta = rd_kafka_mock_sgrp_partmeta_find(sgrp, topic_id, partition);
         if (!pmeta)
-                return;
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
 
         for (offset = first_offset; offset <= last_offset; offset++) {
                 rd_kafka_mock_sgrp_record_state_t *state =
@@ -3694,13 +3718,17 @@ static void rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                 if (!state)
                         continue;
 
-                /* Only the owning member may acknowledge acquired records */
-                if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                /* Only the owning member may acknowledge acquired records.
+                 * If the record's lock expired (reverted to Available),
+                 * was re-acquired by another member, or is otherwise not
+                 * in ACQUIRED state for this member, report
+                 * INVALID_RECORD_STATE. */
+                if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED ||
+                    !state->owner_member_id ||
+                    rd_kafkap_str_cmp_str(member_id, state->owner_member_id)) {
+                        err = RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
                         continue;
-                if (!state->owner_member_id)
-                        continue;
-                if (rd_kafkap_str_cmp_str(member_id, state->owner_member_id))
-                        continue;
+                }
 
                 switch (ack_type) {
                 case 0: /* GAP */
@@ -3730,6 +3758,8 @@ static void rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                         break;
                 pmeta->spso++;
         }
+
+        return err;
 }
 
 /**
@@ -4125,7 +4155,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
                                 struct rd_kafka_mock_sgrp_ack_entry *entry =
                                     rd_list_elem(&ack_entries, k);
-                                rd_kafka_mock_sgrp_apply_ack(
+                                entry->err = rd_kafka_mock_sgrp_apply_ack(
                                     sgrp, entry->topic_id, entry->partition,
                                     entry->first_offset, entry->last_offset,
                                     entry->ack_type, &MemberId);
@@ -4268,6 +4298,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                       sgrp, topic_id,
                                                       rktpar->partition)
                                                 : NULL;
+                                        rd_kafka_resp_err_t ack_err;
                                         rd_kafka_resp_err_t part_err =
                                             mpart
                                                 ? RD_KAFKA_RESP_ERR_NO_ERROR
@@ -4289,10 +4320,21 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                 rd_kafka_buf_write_str(
                                                     resp, NULL, -1);
                                         /* Response: AcknowledgementErrorCode */
-                                        rd_kafka_buf_write_i16(resp, 0);
-                                        /* Response: AcknowledgementErrorString
-                                         */
-                                        rd_kafka_buf_write_str(resp, NULL, -1);
+                                        ack_err =
+                                            rd_kafka_mock_sgrp_ack_error_for_partition(
+                                                &ack_entries, topic_id,
+                                                rktpar->partition);
+                                        rd_kafka_buf_write_i16(resp, ack_err);
+                                        /* Response:
+                                         * AcknowledgementErrorString */
+                                        if (ack_err)
+                                                rd_kafka_buf_write_str(
+                                                    resp,
+                                                    rd_kafka_err2str(ack_err),
+                                                    -1);
+                                        else
+                                                rd_kafka_buf_write_str(
+                                                    resp, NULL, -1);
                                         /* Response: CurrentLeader */
                                         rd_kafka_buf_write_i32(resp, -1);
                                         rd_kafka_buf_write_i32(resp, -1);
@@ -4529,7 +4571,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                         for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
                                 struct rd_kafka_mock_sgrp_ack_entry *entry =
                                     rd_list_elem(&ack_entries, k);
-                                rd_kafka_mock_sgrp_apply_ack(
+                                entry->err = rd_kafka_mock_sgrp_apply_ack(
                                     sgrp, entry->topic_id, entry->partition,
                                     entry->first_offset, entry->last_offset,
                                     entry->ack_type, &MemberId);
@@ -4613,7 +4655,9 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                         rd_kafka_topic_partition_t *rktpar =
                                             &ack_partitions->elems[j];
                                         rd_kafka_resp_err_t part_err =
-                                            RD_KAFKA_RESP_ERR_NO_ERROR;
+                                            rd_kafka_mock_sgrp_ack_error_for_partition(
+                                                &ack_entries, topic_id,
+                                                rktpar->partition);
 
                                         /* PartitionIndex */
                                         rd_kafka_buf_write_i32(
@@ -4621,7 +4665,14 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                         /* ErrorCode */
                                         rd_kafka_buf_write_i16(resp, part_err);
                                         /* ErrorMessage */
-                                        rd_kafka_buf_write_str(resp, NULL, -1);
+                                        if (part_err)
+                                                rd_kafka_buf_write_str(
+                                                    resp,
+                                                    rd_kafka_err2str(part_err),
+                                                    -1);
+                                        else
+                                                rd_kafka_buf_write_str(
+                                                    resp, NULL, -1);
                                         /* CurrentLeader */
                                         rd_kafka_buf_write_i32(
                                             resp, -1); /* LeaderId */

@@ -183,9 +183,10 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
  * @brief Share record state.
  */
 enum rd_kafka_mock_sgrp_record_state_e {
-        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE = 0,
-        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED  = 1,
-        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED  = 2
+        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE    = 0,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED     = 1,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED = 2,
+        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED     = 3
 };
 
 typedef struct rd_kafka_mock_sgrp_record_state_s {
@@ -221,6 +222,7 @@ typedef struct rd_kafka_mock_sgrp_fetch_session_s {
         int32_t session_epoch;
         rd_ts_t ts_last_activity;
         rd_kafka_topic_partition_list_t *partitions;
+        int partition_start_idx; /**< Rotation index for starvation prevention */
 } rd_kafka_mock_sgrp_fetch_session_t;
 
 /**
@@ -258,6 +260,13 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int isolation_level;         /**< Share isolation level */
         int max_size;                /**< Max members allowed.
                                       *   0 = unlimited (default). */
+        int max_fetch_sessions;      /**< Max fetch sessions allowed.
+                                      *   0 = unlimited (default 2000). */
+        int max_record_locks;        /**< Max in-flight records per
+                                      *   share-partition.
+                                      *   0 = unlimited (default 2000). */
+        int auto_offset_reset;       /**< 0 = latest (default per KIP-932),
+                                      *   1 = earliest. */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -643,6 +652,15 @@ struct rd_kafka_mock_cluster_s {
                 /** Max members allowed in share group (KIP 932).
                  *  0 = unlimited. */
                 int sharegroup_max_size;
+                /** Max fetch sessions per share group (KIP 932).
+                 *  0 = unlimited. */
+                int sharegroup_max_fetch_sessions;
+                /** Max in-flight records per share-partition (KIP 932).
+                 *  0 = unlimited. */
+                int sharegroup_max_record_locks;
+                /** Auto offset reset (KIP 932).
+                 *  0 = latest (default), 1 = earliest. */
+                int sharegroup_auto_offset_reset;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

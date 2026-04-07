@@ -748,6 +748,21 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_max_record_locks(
     int max_record_locks);
 
 /**
+ * @brief Set the auto offset reset policy for share groups.
+ *
+ * Controls where SPSO is initialized when a share-partition is first
+ * consumed.
+ *
+ * Default is 0 ("latest") per KIP-932.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param auto_offset_reset 0 = latest, 1 = earliest.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_auto_offset_reset(
+    rd_kafka_mock_cluster_t *mcluster,
+    int auto_offset_reset);
+
+/**
  * @brief Set a manual target assignment for a sharegroup.
  *
  * This allows tests to override the automatic partition assignment

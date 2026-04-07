@@ -62,6 +62,10 @@ static test_ctx_t test_ctx_new(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to enable ShareFetch");
 
+        /* Set auto.offset.reset=earliest so tests that produce
+         * before consuming see all records. */
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(ctx.mcluster, 1);
+
         /* Create a producer targeting the mock cluster */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);

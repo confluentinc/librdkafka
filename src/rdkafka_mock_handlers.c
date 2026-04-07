@@ -3373,7 +3373,12 @@ rd_kafka_mock_sgrp_partmeta_get(rd_kafka_mock_sharegroup_t *sgrp,
         pmeta            = rd_calloc(1, sizeof(*pmeta));
         pmeta->topic_id  = topic_id;
         pmeta->partition = partition;
-        pmeta->spso      = mpart->start_offset;
+        /* Initialize SPSO based on auto.offset.reset:
+         * 0 = latest (end of log), 1 = earliest (start of log). */
+        if (sgrp->auto_offset_reset == 1)
+                pmeta->spso = mpart->start_offset;
+        else
+                pmeta->spso = mpart->end_offset;
         if (mpart->end_offset > mpart->start_offset)
                 pmeta->speo = mpart->end_offset - 1;
         else

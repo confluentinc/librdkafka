@@ -4161,6 +4161,17 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     entry->first_offset, entry->last_offset,
                                     entry->ack_type, &MemberId);
                         }
+                } else if (err && rd_list_cnt(&ack_entries) > 0) {
+                        /* Broad error prevents ack processing.
+                         * Per KIP-932, propagate the top-level error to
+                         * AcknowledgeErrorCode for all partitions that
+                         * had piggybacked acks. */
+                        int k;
+                        for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
+                                struct rd_kafka_mock_sgrp_ack_entry *entry =
+                                    rd_list_elem(&ack_entries, k);
+                                entry->err = err;
+                        }
                 }
 
                 /* Remove forgotten partitions from session and release

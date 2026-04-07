@@ -55,7 +55,7 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; exit 1; }; fi
+            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
             - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}
@@ -68,7 +68,7 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; exit 1; }; fi
+            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
             - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}
@@ -91,7 +91,7 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; exit 1; }; fi
+            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
             - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}
@@ -104,7 +104,7 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; exit 1; }; fi
+            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
             - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}

@@ -476,6 +476,12 @@ rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable(rd_kafka_t *rk) {
 }
 
 
+rd_kafka_error_t *
+rd_kafka_share_sasl_background_callbacks_enable(rd_kafka_share_t *rkshare) {
+        return rd_kafka_sasl_background_callbacks_enable(rkshare->rkshare_rk);
+}
+
+
 /**
  * Global SASL termination.
  */

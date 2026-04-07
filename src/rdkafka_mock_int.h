@@ -221,6 +221,7 @@ typedef struct rd_kafka_mock_sgrp_fetch_session_s {
         int32_t session_epoch;
         rd_ts_t ts_last_activity;
         rd_kafka_topic_partition_list_t *partitions;
+        int partition_start_idx; /**< Rotation index for starvation prevention */
 } rd_kafka_mock_sgrp_fetch_session_t;
 
 /**
@@ -259,6 +260,9 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int max_size;                /**< Max members allowed.
                                       *   0 = unlimited (default). */
         int max_fetch_sessions;      /**< Max fetch sessions allowed.
+                                      *   0 = unlimited (default 2000). */
+        int max_record_locks;        /**< Max in-flight records per
+                                      *   share-partition.
                                       *   0 = unlimited (default 2000). */
 } rd_kafka_mock_sharegroup_t;
 
@@ -648,6 +652,9 @@ struct rd_kafka_mock_cluster_s {
                 /** Max fetch sessions per share group (KIP 932).
                  *  0 = unlimited. */
                 int sharegroup_max_fetch_sessions;
+                /** Max in-flight records per share-partition (KIP 932).
+                 *  0 = unlimited. */
+                int sharegroup_max_record_locks;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

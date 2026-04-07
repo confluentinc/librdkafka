@@ -3458,6 +3458,7 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
     const rd_kafkap_str_t *member_id,
     rd_ts_t lock_expiry_ts,
     int max_delivery_attempts,
+    int max_record_locks,
     int64_t *remaining_records,
     int64_t *remaining_bytes,
     int *acquired_cnt,
@@ -3481,6 +3482,11 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
                 if (remaining_records && *remaining_records == 0)
                         break;
                 if (remaining_bytes && *remaining_bytes == 0)
+                        break;
+
+                /* Check max in-flight record locks per partition */
+                if (max_record_locks > 0 &&
+                    pmeta->inflight_cnt >= max_record_locks)
                         break;
 
                 state = rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
@@ -4224,9 +4230,15 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         }
                 }
 
-                if (!err && sgrp && session && session->partitions) {
-                        rd_kafka_topic_partition_t *rktpar;
-                        RD_KAFKA_TPLIST_FOREACH(rktpar, session->partitions) {
+                if (!err && sgrp && session && session->partitions &&
+                    session->partitions->cnt > 0) {
+                        int pi, pcnt = session->partitions->cnt;
+                        int start    = session->partition_start_idx % pcnt;
+
+                        for (pi = 0; pi < pcnt; pi++) {
+                                int idx = (start + pi) % pcnt;
+                                rd_kafka_topic_partition_t *rktpar =
+                                    &session->partitions->elems[idx];
                                 rd_kafka_Uuid_t topic_id =
                                     rd_kafka_topic_partition_get_topic_id(
                                         rktpar);
@@ -4262,11 +4274,15 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                 : sgrp->session_timeout_ms) *
                                            1000),
                                     sgrp->max_delivery_attempts,
+                                    sgrp->max_record_locks,
                                     MaxRecords > 0 ? &remaining_records : NULL,
                                     MaxBytes > 0 ? &remaining_bytes : NULL,
                                     &acquired_cnt, &acquired_bytes,
                                     sgrp->isolation_level);
                         }
+
+                        /* Rotate start index for next request */
+                        session->partition_start_idx = (start + 1) % pcnt;
                 }
 
                 rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",

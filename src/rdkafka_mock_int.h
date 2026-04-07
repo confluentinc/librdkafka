@@ -258,6 +258,8 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int isolation_level;         /**< Share isolation level */
         int max_size;                /**< Max members allowed.
                                       *   0 = unlimited (default). */
+        int max_fetch_sessions;      /**< Max fetch sessions allowed.
+                                      *   0 = unlimited (default 2000). */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -643,6 +645,9 @@ struct rd_kafka_mock_cluster_s {
                 /** Max members allowed in share group (KIP 932).
                  *  0 = unlimited. */
                 int sharegroup_max_size;
+                /** Max fetch sessions per share group (KIP 932).
+                 *  0 = unlimited. */
+                int sharegroup_max_fetch_sessions;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

@@ -189,50 +189,11 @@ typedef struct {
 
 
 /**
- * @brief Configure share group using a dedicated producer handle.
- *        Admin client APIs should not reuse the share consumer handle.
- */
-static void configure_share_group(const char *group_name,
-                                  const char **cfg,
-                                  size_t cfg_cnt) {
-        rd_kafka_t *admin;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 0);
-        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
-
-        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
-                                            group_name, cfg, cfg_cnt);
-
-        rd_kafka_destroy(admin);
-}
-
-/**
- * @brief Delete topic using a dedicated producer handle.
- *        Admin client APIs should not reuse the share consumer handle.
- */
-static void delete_topic_admin(const char *topic) {
-        rd_kafka_t *admin;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 0);
-        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
-
-        test_delete_topic(admin, topic);
-
-        rd_kafka_destroy(admin);
-}
-
-/**
  * @brief Set group config to earliest offset
  */
 static void state_set_offset_earliest(sub_test_state_t *state) {
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        configure_share_group(state->group_name, cfg, 1);
+        test_alter_group_configurations(state->group_name, cfg, 1);
 }
 
 /**
@@ -551,7 +512,6 @@ static void exec_delete_topic(sub_test_state_t *state, const test_op_t *op) {
         TEST_SAY("  DELETE_TOPIC: index %d (%s)\n", op->topic_idx,
                  state->all_topics[idx]);
 
-        delete_topic_admin(state->all_topics[idx]);
 
         /* Mark as deleted to skip during cleanup */
         state->topic_deleted[idx] = rd_true;
@@ -633,12 +593,8 @@ static void state_init(sub_test_state_t *state,
 static void state_cleanup(sub_test_state_t *state) {
         int i;
 
-        /* Delete all created topics (skip already deleted ones) */
         for (i = 0; i < state->all_topic_cnt; i++) {
                 if (state->all_topics[i]) {
-                        if (!state->topic_deleted[i]) {
-                                delete_topic_admin(state->all_topics[i]);
-                        }
                         rd_free(state->all_topics[i]);
                 }
         }
@@ -870,7 +826,7 @@ static void do_test_multi_consumer_overlap(void) {
         rkshare1 = test_create_share_consumer(group);
 
         /* Set group offset */
-        configure_share_group(group, cfg, 1);
+        test_alter_group_configurations(group, cfg, 1);
 
         /* Subscribe with overlapping topics */
         test_share_consumer_subscribe_multi(rkshare0, 2, shared, c0_only);
@@ -960,7 +916,7 @@ static void do_test_subscribe_15_topics(void) {
         rkshare = test_create_share_consumer(group);
 
         /* Set group offset */
-        configure_share_group(group, cfg, 1);
+        test_alter_group_configurations(group, cfg, 1);
 
         /* Subscribe to all topics */
         subs = rd_kafka_topic_partition_list_new(topic_cnt);

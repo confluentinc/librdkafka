@@ -4131,19 +4131,42 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         session->session_epoch++;
                 }
 
-                /* epoch=-1 (final fetch / close session) must
-                 * not add or forget topics. */
+                /* epoch=-1 (final fetch / close session) must not
+                 * contain ForgottenTopicsData.  Acks in the Topics
+                 * array ARE allowed per KIP-932. */
                 if (!err && SessionEpoch == -1 &&
-                    ((requested_partitions && requested_partitions->cnt > 0) ||
-                     (forgotten_partitions && forgotten_partitions->cnt > 0))) {
+                    (forgotten_partitions && forgotten_partitions->cnt > 0)) {
                         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
                                      "ShareFetch: rejecting epoch=-1 request "
-                                     "with topic add/forget (INVALID_REQUEST)");
+                                     "with ForgottenTopicsData (INVALID_REQUEST)");
                         err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
                 }
 
+                /* Apply piggy-backed acknowledgements BEFORE forgotten
+                 * partition processing, so that acks for partitions
+                 * being removed are applied while the records are still
+                 * in ACQUIRED state. */
+                if (!err && sgrp && rd_list_cnt(&ack_entries) > 0) {
+                        int k;
+                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
+                                     "ShareFetch: applying %d acknowledgement "
+                                     "batch(es) for member %.*s",
+                                     rd_list_cnt(&ack_entries),
+                                     RD_KAFKAP_STR_PR(&MemberId));
+                        for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
+                                struct rd_kafka_mock_sgrp_ack_entry *entry =
+                                    rd_list_elem(&ack_entries, k);
+                                entry->err = rd_kafka_mock_sgrp_apply_ack(
+                                    sgrp, entry->topic_id, entry->partition,
+                                    entry->first_offset, entry->last_offset,
+                                    entry->ack_type, &MemberId);
+                        }
+                }
+
                 /* Remove forgotten partitions from session and release
-                 * any in-flight ACQUIRED records owned by this member. */
+                 * any remaining ACQUIRED records owned by this member.
+                 * Runs AFTER ack application so that acks for partitions
+                 * being removed have already been processed. */
                 if (!err && session && forgotten_partitions &&
                     forgotten_partitions->cnt > 0) {
                         rd_kafka_topic_partition_t *ftp;
@@ -4187,27 +4210,6 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                     sgrp, state);
                                         }
                                 }
-                        }
-                }
-
-                /* Apply piggy-backed acknowledgements (implicit ack)
-                 * before acquiring new records.  This processes the
-                 * AcknowledgementBatches sent by the client for records
-                 * delivered in the previous ShareFetch response. */
-                if (!err && sgrp && rd_list_cnt(&ack_entries) > 0) {
-                        int k;
-                        rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
-                                     "ShareFetch: applying %d acknowledgement "
-                                     "batch(es) for member %.*s",
-                                     rd_list_cnt(&ack_entries),
-                                     RD_KAFKAP_STR_PR(&MemberId));
-                        for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
-                                struct rd_kafka_mock_sgrp_ack_entry *entry =
-                                    rd_list_elem(&ack_entries, k);
-                                entry->err = rd_kafka_mock_sgrp_apply_ack(
-                                    sgrp, entry->topic_id, entry->partition,
-                                    entry->first_offset, entry->last_offset,
-                                    entry->ack_type, &MemberId);
                         }
                 }
 

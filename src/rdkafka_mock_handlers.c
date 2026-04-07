@@ -3576,7 +3576,8 @@ static void rd_kafka_mock_sgrp_partmeta_prune_archived(
         rd_kafka_mock_sgrp_record_state_t *state, *tmp;
 
         TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
-                if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED)
+                if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED &&
+                    state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED)
                         continue;
                 if (state->offset >= pmeta->spso)
                         continue;
@@ -3745,7 +3746,8 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                 case 0: /* GAP */
                 case 1: /* ACCEPT */
                 case 3: /* REJECT */
-                        state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                        state->state =
+                            RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED;
                         rd_free(state->owner_member_id);
                         state->owner_member_id = NULL;
                         state->lock_expiry_ts  = 0;
@@ -3758,15 +3760,15 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                 }
         }
 
-        /* Advance SPSO past contiguous ARCHIVED records from the start,
-         * so that acknowledged records are no longer considered for
-         * future acquisitions. */
+        /* Advance SPSO past contiguous ACKNOWLEDGED records from
+         * the start, transitioning them to ARCHIVED. */
         while (pmeta->spso <= pmeta->speo) {
                 rd_kafka_mock_sgrp_record_state_t *state =
                     rd_kafka_mock_sgrp_record_state_find(pmeta, pmeta->spso);
                 if (!state ||
-                    state->state != RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED)
+                    state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED)
                         break;
+                state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
                 pmeta->spso++;
         }
 

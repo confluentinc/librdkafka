@@ -183,9 +183,10 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
  * @brief Share record state.
  */
 enum rd_kafka_mock_sgrp_record_state_e {
-        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE = 0,
-        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED  = 1,
-        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED  = 2
+        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE    = 0,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED     = 1,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED = 2,
+        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED     = 3
 };
 
 typedef struct rd_kafka_mock_sgrp_record_state_s {

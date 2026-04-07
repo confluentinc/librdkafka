@@ -3360,8 +3360,22 @@ rd_kafka_mock_sgrp_partmeta_get(rd_kafka_mock_sharegroup_t *sgrp,
         if (pmeta) {
                 log_start = mpart->start_offset;
                 log_end   = mpart->end_offset;
-                if (log_start > pmeta->spso)
+                if (log_start > pmeta->spso) {
+                        /* Log retention moved start_offset past SPSO.
+                         * Archive all in-flight records below the new
+                         * SPSO — they are no longer in the log. */
+                        rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+                        TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link,
+                                           tmp) {
+                                if (state->offset >= log_start)
+                                        continue;
+                                state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                                RD_IF_FREE(state->owner_member_id, rd_free);
+                                state->owner_member_id = NULL;
+                                state->lock_expiry_ts  = 0;
+                        }
                         pmeta->spso = log_start;
+                }
                 if (log_end > log_start) {
                         int64_t new_speo = log_end - 1;
                         if (new_speo > pmeta->speo)

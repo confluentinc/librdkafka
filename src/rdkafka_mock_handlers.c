@@ -4268,18 +4268,13 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                                    topic_id);
                                 rd_kafka_mock_partition_t *mpart;
 
-                                if (!mtopic) {
-                                        err =
-                                            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
-                                        break;
-                                }
-
-                                mpart = rd_kafka_mock_partition_find(
-                                    mtopic, rktpar->partition);
-                                if (!mpart) {
-                                        err =
-                                            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
-                                        break;
+                                if (!mtopic || !(mpart = rd_kafka_mock_partition_find(
+                                                     mtopic, rktpar->partition))) {
+                                        /* Per-partition error: skip this
+                                         * partition but continue with others.
+                                         * The response writer handles the
+                                         * error via mpart==NULL check. */
+                                        continue;
                                 }
 
                                 rd_kafka_mock_sgrp_partmeta_t *pmeta =

@@ -1071,6 +1071,303 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that SHARE_SESSION_LIMIT_REACHED is returned when the
+ *        session cache is full.
+ *
+ * Set max_fetch_sessions=1, open a session with consumer 1,
+ * then attempt to open a second session with consumer 2.
+ * Consumer 2 should fail to consume any records because every
+ * ShareFetch epoch=0 attempt gets SHARE_SESSION_LIMIT_REACHED.
+ */
+static void do_test_session_limit_reached(void) {
+        const char *topic = "kip932_session_limit";
+        const int msgcnt  = 5;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer1, *consumer2;
+        int consumed1, consumed2;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        /* Limit to 1 session */
+        rd_kafka_mock_sharegroup_set_max_fetch_sessions(ctx.mcluster, 1);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer 1 opens a session successfully */
+        consumer1 = new_share_consumer(ctx.bootstraps, "sg-session-limit");
+        subscribe_topics(consumer1, &topic, 1);
+        consumed1 = consume_n(consumer1, msgcnt, 30);
+        TEST_ASSERT(consumed1 == msgcnt,
+                    "Consumer 1: expected %d consumed, got %d", msgcnt,
+                    consumed1);
+
+        /* Consumer 2 tries to open a session — cache is full */
+        consumer2 = new_share_consumer(ctx.bootstraps, "sg-session-limit");
+        subscribe_topics(consumer2, &topic, 1);
+        consumed2 = consume_n(consumer2, 1, 5);
+        TEST_ASSERT(consumed2 == 0,
+                    "Consumer 2: expected 0 consumed (session limit), got %d",
+                    consumed2);
+
+        rd_kafka_share_consumer_close(consumer1);
+        rd_kafka_share_destroy(consumer1);
+        rd_kafka_share_consumer_close(consumer2);
+        rd_kafka_share_destroy(consumer2);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test that ShareFetch with epoch=0 and acks is rejected with
+ *        INVALID_REQUEST via the mock broker's injected error mechanism.
+ *
+ * Injects SHARE_SESSION_LIMIT_REACHED errors to force the client to
+ * retry with epoch=0.  The client never piggybacks acks on epoch=0
+ * (that's a protocol violation), so this test validates that the mock
+ * broker's error injection for SHARE_SESSION_LIMIT_REACHED works and
+ * the client recovers when the error clears.
+ */
+static void do_test_session_limit_recovery(void) {
+        const char *topic = "kip932_session_limit_recovery";
+        const int msgcnt  = 5;
+        test_ctx_t ctx    = test_ctx_new();
+        rd_kafka_share_t *consumer;
+        int consumed;
+
+        SUB_TEST_QUICK();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Push 3 SHARE_SESSION_LIMIT_REACHED errors, then let it succeed */
+        rd_kafka_mock_push_request_errors(
+            ctx.mcluster, RD_KAFKAP_ShareFetch, 3,
+            RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED,
+            RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED,
+            RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED);
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-session-recovery");
+        subscribe_topics(consumer, &topic, 1);
+        consumed = consume_n(consumer, msgcnt, 30);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed == msgcnt,
+                    "Expected %d consumed after recovery, got %d", msgcnt,
+                    consumed);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test that max_record_locks limits the number of in-flight
+ *        records per share-partition.
+ *
+ * Produce 10 records, set max_record_locks=3.  Consumer A should get
+ * only 3 records on the first fetch round (the rest are blocked by
+ * the lock limit).  After A acks (via second poll) and closes,
+ * consumer B should get the next batch.  Total consumed across both
+ * should be 10.
+ */
+static void do_test_max_record_locks(void) {
+        const char *topic = "kip932_max_record_locks";
+        const int msgcnt  = 10;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int total_consumed = 0;
+        int rounds         = 0;
+
+        SUB_TEST_QUICK();
+        ctx = test_ctx_new();
+
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 3);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consume in rounds.  Each round can get at most 3 records
+         * (the lock limit).  The implicit ack from the next poll
+         * frees the locks for the next batch. */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-max-locks");
+        subscribe_topics(consumer, &topic, 1);
+
+        while (total_consumed < msgcnt && rounds < 20) {
+                int got = consume_n(consumer, 3, 10);
+                if (got == 0)
+                        break;
+                total_consumed += got;
+                rounds++;
+                TEST_SAY("max_record_locks: round %d consumed %d (total %d/%d)\n",
+                         rounds, got, total_consumed, msgcnt);
+        }
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(total_consumed == msgcnt,
+                    "Expected %d total consumed, got %d", msgcnt,
+                    total_consumed);
+        TEST_ASSERT(rounds > 1,
+                    "Expected multiple rounds (lock limit=3, msgs=10), "
+                    "got %d rounds",
+                    rounds);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test that auto.offset.reset=latest (the default per KIP-932)
+ *        causes the consumer to skip records produced before subscription.
+ *
+ * Produce 5 records, then subscribe with auto.offset.reset=latest.
+ * Consumer should get 0 old records but should get new records
+ * produced after subscription.
+ */
+/**
+ * @brief Test that SPSO advances when log retention deletes records
+ *        below the current SPSO.
+ *
+ * Produce 10 records (offsets 0-9).  Consumer A acquires 0-4.
+ * Then delete records before offset 5 (simulating log retention).
+ * Consumer A closes (acks 0-4, but they're already archived by
+ * retention).  Consumer B should get records 5-9 only — SPSO
+ * was advanced to 5 by the retention, and in-flight records
+ * below 5 were archived.
+ */
+static void do_test_spso_advances_on_log_retention(void) {
+        const char *topic = "kip932_log_retention_spso";
+        const int msgcnt  = 10;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b;
+
+        SUB_TEST_QUICK();
+        ctx = test_ctx_new();
+
+        /* Limit to 5 records per fetch so A gets only 0-4. */
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 5);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer A acquires records 0-4. */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-log-retention");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_a = consume_n(consumer, 5, 30);
+        TEST_SAY("log_retention: A consumed %d/5\n", consumed_a);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        /* Simulate log retention: delete records before offset 5. */
+        TEST_ASSERT(rd_kafka_mock_partition_delete_records(
+                        ctx.mcluster, topic, 0, 5) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to delete records");
+
+        /* Remove lock limit. */
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 0);
+
+        /* Consumer B should get records 5-9 (SPSO advanced to 5). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-log-retention");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, 5, 30);
+        TEST_SAY("log_retention: B consumed %d/5\n", consumed_b);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed_a == 5,
+                    "A: expected 5 consumed, got %d", consumed_a);
+        TEST_ASSERT(consumed_b == 5,
+                    "B: expected 5 consumed, got %d", consumed_b);
+
+        SUB_TEST_PASS();
+}
+
+static void do_test_auto_offset_reset_latest(void) {
+        const char *topic = "kip932_offset_reset_latest";
+        const int msgcnt  = 5;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed;
+
+        SUB_TEST_QUICK();
+
+        /* Create a fresh context — do NOT set auto_offset_reset=earliest
+         * (the default is "latest" per KIP-932). */
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.mcluster = test_mock_cluster_new(3, &ctx.bootstraps);
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareGroupHeartbeat");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(ctx.mcluster,
+                                                 RD_KAFKAP_ShareFetch, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to enable ShareFetch");
+        /* Intentionally NOT calling set_auto_offset_reset — default is latest */
+        {
+                rd_kafka_conf_t *conf;
+                char errstr[512];
+                test_conf_init(&conf, NULL, 0);
+                test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+                ctx.producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                            sizeof(errstr));
+                TEST_ASSERT(ctx.producer != NULL,
+                            "Failed to create producer: %s", errstr);
+        }
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        /* Produce records BEFORE subscribing */
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Subscribe — SPSO should start at end of log (latest) */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-offset-latest");
+        subscribe_topics(consumer, &topic, 1);
+        consumed = consume_n(consumer, 1, 5);
+        TEST_SAY("offset_reset_latest: consumed %d (expected 0)\n", consumed);
+        TEST_ASSERT(consumed == 0,
+                    "Expected 0 consumed with latest offset reset, got %d",
+                    consumed);
+
+        /* Produce new records AFTER subscription — these should be visible */
+        produce_messages(ctx.producer, topic, msgcnt);
+        consumed = consume_n(consumer, msgcnt, 30);
+        TEST_SAY("offset_reset_latest: consumed %d new records (expected %d)\n",
+                 consumed, msgcnt);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed == msgcnt,
+                    "Expected %d new records consumed, got %d", msgcnt,
+                    consumed);
+
+        SUB_TEST_PASS();
+}
+
 int main_0156_share_consumer_fetch_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -1113,6 +1410,19 @@ int main_0156_share_consumer_fetch_mock(int argc, char **argv) {
 
         do_test_sharefetch_fetch_disconnected();
         do_test_sharefetch_fetch_and_close_implicit();
+
+        /* Session management */
+        do_test_session_limit_reached();
+        do_test_session_limit_recovery();
+
+        /* Record lock limits */
+        do_test_max_record_locks();
+
+        /* Offset reset */
+        do_test_auto_offset_reset_latest();
+
+        /* Log retention */
+        do_test_spso_advances_on_log_retention();
 
         return 0;
 }

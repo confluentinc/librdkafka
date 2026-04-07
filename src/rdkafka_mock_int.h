@@ -264,6 +264,8 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int max_record_locks;        /**< Max in-flight records per
                                       *   share-partition.
                                       *   0 = unlimited (default 2000). */
+        int auto_offset_reset;       /**< 0 = latest (default per KIP-932),
+                                      *   1 = earliest. */
 } rd_kafka_mock_sharegroup_t;
 
 /**
@@ -655,6 +657,9 @@ struct rd_kafka_mock_cluster_s {
                 /** Max in-flight records per share-partition (KIP 932).
                  *  0 = unlimited. */
                 int sharegroup_max_record_locks;
+                /** Auto offset reset (KIP 932).
+                 *  0 = latest (default), 1 = earliest. */
+                int sharegroup_auto_offset_reset;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */

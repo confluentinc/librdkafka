@@ -61,6 +61,7 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         mcluster->defaults.sharegroup_isolation_level         = 0;
         mcluster->defaults.sharegroup_max_fetch_sessions      = 2000;
         mcluster->defaults.sharegroup_max_record_locks        = 2000;
+        mcluster->defaults.sharegroup_auto_offset_reset       = 0; /* latest */
 }
 
 /**
@@ -120,6 +121,8 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
             mcluster->defaults.sharegroup_max_fetch_sessions;
         mshgrp->max_record_locks =
             mcluster->defaults.sharegroup_max_record_locks;
+        mshgrp->auto_offset_reset =
+            mcluster->defaults.sharegroup_auto_offset_reset;
 
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,
@@ -810,6 +813,20 @@ void rd_kafka_mock_sharegroup_set_max_record_locks(
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
         mshgrp->max_record_locks = max_record_locks;
         mcluster->defaults.sharegroup_max_record_locks = max_record_locks;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the auto offset reset policy for share groups.
+ */
+void rd_kafka_mock_sharegroup_set_auto_offset_reset(
+    rd_kafka_mock_cluster_t *mcluster,
+    int auto_offset_reset) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+        mshgrp->auto_offset_reset = auto_offset_reset;
+        mcluster->defaults.sharegroup_auto_offset_reset = auto_offset_reset;
         mtx_unlock(&mcluster->lock);
 }
 

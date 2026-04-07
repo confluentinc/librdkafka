@@ -67,7 +67,8 @@ static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
         errstr[0] = '\0';
         while (test_clock() < deadline) {
                 rd_kafka_resp_err_t err = rd_kafka_fatal_error(
-                    rd_kafka_share_consumer_get_rk(share_c), errstr, errstr_size);
+                    rd_kafka_share_consumer_get_rk(share_c), errstr,
+                    errstr_size);
                 if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
                         return err;
                 rd_usleep(100 * 1000, 0);
@@ -227,12 +228,12 @@ static void do_test_share_group_assignment_rebalance(void) {
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
 
-                TEST_CALL_ERR__(
-                    rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c1),
-                                        &share_c1_assignment));
-                TEST_CALL_ERR__(
-                    rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c2),
-                                        &share_c2_assignment));
+                TEST_CALL_ERR__(rd_kafka_assignment(
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assignment));
+                TEST_CALL_ERR__(rd_kafka_assignment(
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assignment));
 
                 if (share_c1_assignment->cnt + share_c2_assignment->cnt == 3 &&
                     share_c1_assignment->cnt > 0 &&
@@ -338,9 +339,11 @@ static void do_test_share_group_multi_topic_assignment(void) {
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
 
                 total_orders =
                     count_topic_partitions(share_c1_assign, topic_orders) +
@@ -385,11 +388,14 @@ static void do_test_share_group_multi_topic_assignment(void) {
         while (test_clock() < deadline) {
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c3), &share_c3_assign));
+                    rd_kafka_share_consumer_get_rk(share_c3),
+                    &share_c3_assign));
 
                 total_orders =
                     count_topic_partitions(share_c1_assign, topic_orders) +
@@ -442,9 +448,11 @@ static void do_test_share_group_multi_topic_assignment(void) {
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c3), &share_c3_assign));
+                    rd_kafka_share_consumer_get_rk(share_c3),
+                    &share_c3_assign));
 
                 if (count_topic_partitions(share_c2_assign, topic_orders) ==
                         4 &&
@@ -610,8 +618,8 @@ static void do_test_share_group_rtt_injection(void) {
         rd_usleep(500 * 1000, 0);
 
         /* Verify initial assignment */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_ASSERT(assignment->cnt == 3,
                     "Expected 3 partitions initially, got %d", assignment->cnt);
         rd_kafka_topic_partition_list_destroy(assignment);
@@ -635,8 +643,8 @@ static void do_test_share_group_rtt_injection(void) {
         rd_usleep(500 * 1000, 0);
 
         /* Verify consumer recovered and still has assignment */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_ASSERT(assignment->cnt == 3,
                     "Expected 3 partitions after timeout recovery, got %d",
                     assignment->cnt);
@@ -702,9 +710,11 @@ static void do_test_share_group_session_timeout(void) {
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 share_c1_initial = share_c1_assign->cnt;
                 share_c2_initial = share_c2_assign->cnt;
                 rd_kafka_topic_partition_list_destroy(share_c1_assign);
@@ -784,9 +794,11 @@ static void do_test_share_group_target_assignment(void) {
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 if (share_c1_assign->cnt + share_c2_assign->cnt == 4 &&
                     share_c1_assign->cnt > 0 && share_c2_assign->cnt > 0) {
                         rd_kafka_topic_partition_list_destroy(share_c1_assign);
@@ -840,9 +852,11 @@ static void do_test_share_group_target_assignment(void) {
         while (test_clock() < dl) {
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
 
                 if ((share_c1_assign->cnt == 4 && share_c2_assign->cnt == 0) ||
                     (share_c1_assign->cnt == 0 && share_c2_assign->cnt == 4)) {
@@ -1396,8 +1410,8 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
         rd_usleep(500 * 1000, 0);
 
         /* Verify initial assignment (member is now in stable state) */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_ASSERT(assignment->cnt == 3,
                     "Expected 3 partitions initially, got %d", assignment->cnt);
         rd_kafka_topic_partition_list_destroy(assignment);
@@ -1474,9 +1488,11 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 if (share_c1_assign->cnt + share_c2_assign->cnt == 4 &&
                     share_c1_assign->cnt > 0 && share_c2_assign->cnt > 0) {
                         rd_kafka_topic_partition_list_destroy(share_c1_assign);
@@ -1547,8 +1563,8 @@ static void do_test_partition_assignment_with_multiple_topics(void) {
                     "Expected 5 partitions (3+2)");
 
         /* Verify assignment includes partitions from both topics */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
 
         /* Count partitions per topic */
         for (i = 0; i < assignment->cnt; i++) {
@@ -1620,11 +1636,14 @@ static void do_test_multiple_members_partition_distribution(void) {
         dl = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c3), &share_c3_assign));
+                    rd_kafka_share_consumer_get_rk(share_c3),
+                    &share_c3_assign));
                 total_partitions = share_c1_assign->cnt + share_c2_assign->cnt +
                                    share_c3_assign->cnt;
                 if (share_c1_assign->cnt >= 1 && share_c2_assign->cnt >= 1 &&
@@ -1837,8 +1856,8 @@ static void do_test_subscription_change(void) {
                     "Expected 2 partitions from topicA");
 
         /* Verify assignment has topic A only */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         for (i = 0; i < assignment->cnt; i++) {
                 TEST_ASSERT(strcmp(assignment->elems[i].topic, topicA) == 0,
                             "Expected topicA, got %s",
@@ -1943,8 +1962,8 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
         rd_usleep(500 * 1000, 0);
 
         /* Verify consumer is NOT in fatal state - error should be benign */
-        fatal_err = rd_kafka_fatal_error(rd_kafka_share_consumer_get_rk(share_c),
-                                         errstr, sizeof(errstr));
+        fatal_err = rd_kafka_fatal_error(
+            rd_kafka_share_consumer_get_rk(share_c), errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected no fatal error when GROUP_ID_NOT_FOUND arrives "
                     "while unsubscribed, but got: %s (%s)",
@@ -2017,7 +2036,8 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
 //         rd_usleep(500 * 1000, 0);
 
 //         /* Verify consumer entered fatal state */
-//         fatal_err = rd_kafka_fatal_error(rd_kafka_share_consumer_get_rk(share_c),
+//         fatal_err =
+//         rd_kafka_fatal_error(rd_kafka_share_consumer_get_rk(share_c),
 //                                          errstr, sizeof(errstr));
 //         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
 //                     "Expected consumer to be in fatal state after "
@@ -2255,8 +2275,8 @@ static void do_test_graceful_shutdown_stable_state(void) {
         rd_usleep(500 * 1000, 0);
 
         /* Verify initial assignment - member is in stable state */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_ASSERT(assignment->cnt == 3,
                     "Expected 3 partitions initially, got %d", assignment->cnt);
         rd_kafka_topic_partition_list_destroy(assignment);
@@ -2316,8 +2336,8 @@ static void do_test_resubscribe_after_unsubscribe(void) {
         wait_share_heartbeats(mcluster, 1, 1000);
         rd_usleep(500 * 1000, 0);
 
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_ASSERT(assignment->cnt == 3,
                     "Expected 3 partitions on first subscribe, got %d",
                     assignment->cnt);
@@ -2329,8 +2349,8 @@ static void do_test_resubscribe_after_unsubscribe(void) {
         rd_usleep(500 * 1000, 0);
 
         /* Verify no assignment after unsubscribe */
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_ASSERT(assignment->cnt == 0,
                     "Expected 0 partitions after unsubscribe, got %d",
                     assignment->cnt);
@@ -2419,9 +2439,11 @@ static void do_test_consumer_leave_rebalance(void) {
         while (test_clock() < dl) {
 
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c1), &share_c1_assign));
+                    rd_kafka_share_consumer_get_rk(share_c1),
+                    &share_c1_assign));
                 TEST_CALL_ERR__(rd_kafka_assignment(
-                    rd_kafka_share_consumer_get_rk(share_c2), &share_c2_assign));
+                    rd_kafka_share_consumer_get_rk(share_c2),
+                    &share_c2_assign));
                 final_total = share_c1_assign->cnt + share_c2_assign->cnt;
                 rd_kafka_topic_partition_list_destroy(share_c1_assign);
                 rd_kafka_topic_partition_list_destroy(share_c2_assign);
@@ -2533,8 +2555,8 @@ static void do_test_empty_topic_subscription(void) {
         /* Wait for assignment on empty topic */
         rd_usleep(500 * 1000, 0);
 
-        TEST_CALL_ERR__(rd_kafka_assignment(rd_kafka_share_consumer_get_rk(share_c),
-                                            &assignment));
+        TEST_CALL_ERR__(rd_kafka_assignment(
+            rd_kafka_share_consumer_get_rk(share_c), &assignment));
         TEST_SAY("Empty topic: %d partitions\n", assignment->cnt);
         TEST_ASSERT(assignment->cnt == 3, "Expected 3 partitions, got %d",
                     assignment->cnt);

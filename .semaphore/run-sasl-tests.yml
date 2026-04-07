@@ -25,6 +25,12 @@ global_job_config:
       - make -j all
       - make -j -C tests build
       - sem-version java 17
+  epilogue:
+    always:
+      commands:
+        - artifact push job tests/tmp/LibrdkafkaTestCluster/**/stderr.log --destination logs/stderr.log 2>/dev/null || true
+        - artifact push job tests/tmp-KafkaCluster/**/stderr.log --destination logs/trivup-stderr.log 2>/dev/null || true
+        - artifact push job tests/test_suite_*.json --destination logs/ 2>/dev/null || true
   env_vars:
     - name: CACHE_TAG
       value: '7'

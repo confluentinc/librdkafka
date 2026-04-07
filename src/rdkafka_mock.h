@@ -733,6 +733,21 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
     int max_fetch_sessions);
 
 /**
+ * @brief Set the maximum number of in-flight record locks per share-partition.
+ *
+ * Once the limit is reached, no more records are acquired until existing
+ * locks are released (via ack, release, reject, or lock expiry).
+ *
+ * Default is 2000 (per KIP-932 group.share.partition.max.record.locks).
+ *
+ * @param mcluster Mock cluster instance.
+ * @param max_record_locks Maximum in-flight records per partition. 0 = unlimited.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_max_record_locks(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_record_locks);
+
+/**
  * @brief Set a manual target assignment for a sharegroup.
  *
  * This allows tests to override the automatic partition assignment

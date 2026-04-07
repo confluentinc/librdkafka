@@ -150,11 +150,6 @@ blocks:
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
-      epilogue:
-        always:
-          commands:
-            # Upload test 0172 debug log as artifact if it exists (test failed)
-            - '[ -f artifacts/test_0172_debug.log ] && artifact push job artifacts/test_0172_debug.log --destination debug-logs/test_0172_debug_amd64.log || true'
       jobs:
         - name: 'Build and run share consumer tests'
           commands:
@@ -172,11 +167,6 @@ blocks:
       agent:
         machine:
           type: s1-macos-15-arm64-8
-      epilogue:
-        always:
-          commands:
-            # Upload test 0172 debug log as artifact if it exists (test failed)
-            - '[ -f artifacts/test_0172_debug.log ] && artifact push job artifacts/test_0172_debug.log --destination debug-logs/test_0172_debug_osx_arm64.log || true'
       jobs:
         - name: 'Build and run share consumer tests'
           commands:
@@ -200,11 +190,6 @@ blocks:
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
-      epilogue:
-        always:
-          commands:
-            # Upload test 0172 debug log as artifact if it exists (test failed)
-            - '[ -f artifacts/test_0172_debug.log ] && artifact push job artifacts/test_0172_debug.log --destination debug-logs/test_0172_debug_arm64.log || true'
       jobs:
         - name: 'Build and run share consumer tests'
           commands:

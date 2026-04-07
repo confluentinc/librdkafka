@@ -18,7 +18,15 @@ make -j all
 make -j -C tests build
 
 echo "arguments: $TEST_ARGS"
-(cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
+
+# Run share consumer tests with debug logging enabled for all tests.
+# All tests run together (0170, 0171, 0172, 0173+) since 0172 only fails
+# intermittently when run alongside other tests.
+# TEST_DEBUG=all enables debug output for all share consumer tests.
+# Debug logs are output to console and captured in Semaphore job logs.
+
+# Run all share consumer tests together with debug logging
+(cd tests && TEST_DEBUG=all python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
  --version "$TEST_KAFKA_GIT_REF" \
  --cpversion "$TEST_CP_VERSION" \
  --cmd "TESTS_SKIP_BEFORE=0170 python run-test-batches.py $TEST_ARGS")

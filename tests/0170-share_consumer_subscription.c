@@ -193,9 +193,7 @@ typedef struct {
  */
 static void state_set_offset_earliest(sub_test_state_t *state) {
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(state->consumers[0]),
-            RD_KAFKA_RESOURCE_GROUP, state->group_name, cfg, 1);
+        test_alter_group_configurations(state->group_name, cfg, 1);
 }
 
 /**
@@ -514,8 +512,6 @@ static void exec_delete_topic(sub_test_state_t *state, const test_op_t *op) {
         TEST_SAY("  DELETE_TOPIC: index %d (%s)\n", op->topic_idx,
                  state->all_topics[idx]);
 
-        test_delete_topic(test_share_consumer_get_rk(state->consumers[0]),
-                          state->all_topics[idx]);
 
         /* Mark as deleted to skip during cleanup */
         state->topic_deleted[idx] = rd_true;
@@ -597,14 +593,8 @@ static void state_init(sub_test_state_t *state,
 static void state_cleanup(sub_test_state_t *state) {
         int i;
 
-        /* Delete all created topics (skip already deleted ones) */
         for (i = 0; i < state->all_topic_cnt; i++) {
                 if (state->all_topics[i]) {
-                        if (!state->topic_deleted[i]) {
-                                test_delete_topic(test_share_consumer_get_rk(
-                                                      state->consumers[0]),
-                                                  state->all_topics[i]);
-                        }
                         rd_free(state->all_topics[i]);
                 }
         }
@@ -836,9 +826,7 @@ static void do_test_multi_consumer_overlap(void) {
         rkshare1 = test_create_share_consumer(group);
 
         /* Set group offset */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(rkshare0), RD_KAFKA_RESOURCE_GROUP,
-            group, cfg, 1);
+        test_alter_group_configurations(group, cfg, 1);
 
         /* Subscribe with overlapping topics */
         test_share_consumer_subscribe_multi(rkshare0, 2, shared, c0_only);
@@ -928,9 +916,7 @@ static void do_test_subscribe_15_topics(void) {
         rkshare = test_create_share_consumer(group);
 
         /* Set group offset */
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group, cfg,
-                                            1);
+        test_alter_group_configurations(group, cfg, 1);
 
         /* Subscribe to all topics */
         subs = rd_kafka_topic_partition_list_new(topic_cnt);

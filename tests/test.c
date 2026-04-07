@@ -1049,7 +1049,7 @@ static int test_should_enable_debug(void) {
         const char *test_debug;
         char *tests_copy;
         char *token;
-        char *saveptr = NULL;
+        char *saveptr    = NULL;
         int should_debug = 0;
 
         /* If TEST_DEBUG is not set, no debug logging */
@@ -1062,7 +1062,8 @@ static int test_should_enable_debug(void) {
         if (!tests_to_debug)
                 return 1;
 
-        /* Extract test number from current test name (e.g., "0172" from "0172-share_consumer_acknowledge") */
+        /* Extract test number from current test name (e.g., "0172" from
+         * "0172-share_consumer_acknowledge") */
         if (!test_curr || !test_curr->name)
                 return 1; /* Enable by default if test name not available */
 

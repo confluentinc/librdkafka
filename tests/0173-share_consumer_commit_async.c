@@ -44,6 +44,23 @@
 #define MAX_MSGS      500
 #define CONSUME_ARRAY 10001
 
+/** Common producer reused across all non-mock subtests. */
+static rd_kafka_t *common_producer;
+
+/** Common admin client reused across all non-mock subtests. */
+static rd_kafka_t *common_admin;
+
+/**
+ * @brief Produce messages using the common producer.
+ */
+static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
+        rd_kafka_topic_t *rkt;
+        rkt = test_create_producer_topic(common_producer, topic, NULL);
+        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
+                          0);
+        rd_kafka_topic_destroy(rkt);
+}
+
 
 /**
  * @brief Create share consumer with specified ack mode.
@@ -55,7 +72,7 @@ static rd_kafka_share_t *create_share_consumer(const char *group_id,
         rd_kafka_conf_t *conf;
         char errstr[512];
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
@@ -70,22 +87,24 @@ static rd_kafka_share_t *create_share_consumer(const char *group_id,
 
 /**
  * @brief Set share.auto.offset.reset=earliest for a share group.
- *        Uses a new admin client (not the share consumer handle).
  */
 static void set_group_offset_earliest(const char *group_name) {
-        rd_kafka_t *admin;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
-        test_conf_init(&conf, NULL, 30);
-        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
-        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+        test_IncrementalAlterConfigs_simple(
+            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
+}
 
-        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
-                                            group_name, cfg, 1);
+/**
+ * @brief Set share.record.lock.duration.ms for a share group.
+ */
+static void set_group_lock_duration(const char *group_name,
+                                    const char *duration_ms) {
+        const char *cfg[] = {"share.record.lock.duration.ms", "SET",
+                             duration_ms};
 
-        rd_kafka_destroy(admin);
+        test_IncrementalAlterConfigs_simple(
+            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
 }
 
 
@@ -149,10 +168,11 @@ static void do_test_implicit_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-impl-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         c1_offsets = rd_calloc(MAX_MSGS, sizeof(*c1_offsets));
@@ -187,56 +207,39 @@ static void do_test_implicit_second_consumer(void) {
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
-        /* Second consumer: consume remaining records and verify none
-         * overlap with consumer 1's committed records.
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
+
+        /* Second consumer: should only get the 5 verification records.
          * No lock wait needed — implicit mode close tears down the
          * connection and broker releases records immediately. */
         rkshare = create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
-        rd_sleep(3);
 
-        attempts = 0;
-        while (attempts++ < 5) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
-
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
-                                int k;
-
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]) == 1,
-                                    "Consumer 2 got redelivered record at "
-                                    "offset %" PRId64 " (delivery_count=%d)",
-                                    rkmessages[j]->offset,
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]));
-
-                                for (k = 0; k < consumed1; k++) {
-                                        TEST_ASSERT(
-                                            rkmessages[j]->offset !=
-                                                c1_offsets[k],
-                                            "Consumer 2 got offset %" PRId64
-                                            " which was committed by "
-                                            "consumer 1",
-                                            rkmessages[j]->offset);
-                                }
-                                consumed2++;
-                        }
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error) {
+                rd_kafka_error_destroy(error);
         }
 
-        TEST_SAY(
-            "Consumer 2 got %d remaining messages, "
-            "none overlapped with consumer 1's %d\n",
-            consumed2, consumed1);
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer 2 got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        consumed2++;
+                }
+                rd_kafka_message_destroy(rkmessages[j]);
+        }
+
+        TEST_SAY("Consumer 2 got %d messages (expected 5)\n", consumed2);
+        TEST_ASSERT(consumed2 == 5, "Expected 5 verification records, got %d",
+                    consumed2);
 
         rd_free(c1_offsets);
 
@@ -266,10 +269,11 @@ static void do_test_explicit_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-expl-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         c1_offsets = rd_calloc(MAX_MSGS, sizeof(*c1_offsets));
@@ -307,61 +311,39 @@ static void do_test_explicit_second_consumer(void) {
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
-        /* Records are either committed by the last commit_async or
-         * released on the broker side when the connection is closed.
-         * No lock wait needed.
-         * TODO KIP-932: When share consumer close is fully implemented,
-         * these tests may need to wait for the acquisition lock
-         * timeout before closing as close will commit acknowledged
-         * records in explicit acknowledgement mode. */
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
 
-        /* Second consumer: consume remaining and verify no overlap */
+        /* Second consumer: should only get the 5 verification records.
+         * Records are either committed by the last commit_async or
+         * released on the broker side when the connection is closed. */
         rkshare = create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
-        rd_sleep(3);
 
-        attempts = 0;
-        while (attempts++ < 5) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
-
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
-                                int k;
-
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]) == 1,
-                                    "Consumer 2 got redelivered record at "
-                                    "offset %" PRId64 " (delivery_count=%d)",
-                                    rkmessages[j]->offset,
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]));
-
-                                for (k = 0; k < consumed1; k++) {
-                                        TEST_ASSERT(
-                                            rkmessages[j]->offset !=
-                                                c1_offsets[k],
-                                            "Consumer 2 got offset %" PRId64
-                                            " which was committed by "
-                                            "consumer 1",
-                                            rkmessages[j]->offset);
-                                }
-                                consumed2++;
-                        }
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error) {
+                rd_kafka_error_destroy(error);
         }
 
-        TEST_SAY(
-            "Consumer 2 got %d remaining messages, "
-            "none overlapped with consumer 1's %d\n",
-            consumed2, consumed1);
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer 2 got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        consumed2++;
+                }
+                rd_kafka_message_destroy(rkmessages[j]);
+        }
+
+        TEST_SAY("Consumer 2 got %d messages (expected 5)\n", consumed2);
+        TEST_ASSERT(consumed2 == 5, "Expected 5 verification records, got %d",
+                    consumed2);
 
         rd_free(c1_offsets);
 
@@ -394,7 +376,7 @@ static void do_test_mixed_acks_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-mixed-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
@@ -525,8 +507,7 @@ static void do_test_multi_topic_partition(void) {
 
                 for (t = 0; t < topic_cnt; t++) {
                         for (p = 0; p < part_cnt; p++)
-                                test_produce_msgs_easy(topics[t], 0, p,
-                                                       msgs_per_part);
+                                produce_to_topic(topics[t], p, msgs_per_part);
                 }
 
                 while (consumed < msgs_per_round && attempts++ < 100) {
@@ -601,7 +582,7 @@ static void do_test_produce_consume_loop(void) {
                 int consumed = 0;
                 int attempts = 0;
 
-                test_produce_msgs_easy(topic, 0, 0, msgs_per_round);
+                produce_to_topic(topic, 0, msgs_per_round);
                 TEST_SAY("Round %d: produced %d messages\n", round,
                          msgs_per_round);
 
@@ -682,7 +663,7 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         subscribe_consumer(rkshare, &topic, 1);
 
         for (round = 0; round < rounds; round++) {
-                test_produce_msgs_easy(topic, 0, 0, msgs_per_round);
+                produce_to_topic(topic, 0, msgs_per_round);
                 int consumed     = 0;
                 int released_cnt = 0;
                 int redelivered  = 0;
@@ -812,7 +793,7 @@ static void do_test_multiple_commit_async_calls(void) {
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
-        test_produce_msgs_easy(topic, 0, 0, first_produce);
+        produce_to_topic(topic, 0, first_produce);
 
         while (consumed < first_produce && attempts++ < 100) {
                 rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
@@ -838,7 +819,7 @@ static void do_test_multiple_commit_async_calls(void) {
         TEST_ASSERT(consumed == first_produce, "Expected %d, got %d",
                     first_produce, consumed);
 
-        test_produce_msgs_easy(topic, 0, 0, second_produce);
+        produce_to_topic(topic, 0, second_produce);
 
         for (call = 0; call < 10; call++) {
                 error = rd_kafka_share_commit_async(rkshare);
@@ -895,7 +876,7 @@ static void do_test_commit_between_produces(void) {
         size_t rcvd;
         size_t j;
         const int half = MAX_MSGS / 2;
-        int consumed1 = 0, consumed2 = 0, redelivered = 0;
+        int consumed1 = 0, consumed2 = 0, received = 0;
         int attempts = 0;
 
         topic = test_mk_topic_name("0173-ca-between", 1);
@@ -903,10 +884,11 @@ static void do_test_commit_between_produces(void) {
 
         rkshare = create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* First half: produce, wait for records, commit_async */
-        test_produce_msgs_easy(topic, 0, 0, half);
+        produce_to_topic(topic, 0, half);
 
         while (consumed1 == 0 && attempts++ < 30) {
                 rcvd  = 0;
@@ -918,8 +900,17 @@ static void do_test_commit_between_produces(void) {
                 }
 
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
+                        if (!rkmessages[j]->err) {
+                                TEST_ASSERT(rd_kafka_message_delivery_count(
+                                                rkmessages[j]) == 1,
+                                            "First half: redelivered record at "
+                                            "offset %" PRId64
+                                            " (delivery_count=%d)",
+                                            rkmessages[j]->offset,
+                                            rd_kafka_message_delivery_count(
+                                                rkmessages[j]));
                                 consumed1++;
+                        }
                         rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
@@ -932,13 +923,13 @@ static void do_test_commit_between_produces(void) {
         TEST_ASSERT(!error, "commit_async failed: %s",
                     error ? rd_kafka_error_string(error) : "");
 
-        /* Wait for acquisition lock timeout so first half's acks
+        /* Wait for acquisition lock timeout (3s) so first half's acks
          * are fully committed or released before producing the second
          * half */
-        rd_sleep(35);
+        rd_sleep(4);
 
         /* Second half: produce more, wait for records, commit_async */
-        test_produce_msgs_easy(topic, 0, 0, half);
+        produce_to_topic(topic, 0, half);
 
         attempts = 0;
         while (consumed2 == 0 && attempts++ < 30) {
@@ -951,8 +942,17 @@ static void do_test_commit_between_produces(void) {
                 }
 
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
+                        if (!rkmessages[j]->err) {
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]) == 1,
+                                    "Second half: redelivered record at "
+                                    "offset %" PRId64 " (delivery_count=%d)",
+                                    rkmessages[j]->offset,
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]));
                                 consumed2++;
+                        }
                         rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
@@ -970,42 +970,39 @@ static void do_test_commit_between_produces(void) {
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
-        /* No lock wait needed — implicit mode close tears down the
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
+
+        /* Second consumer: should only get the 5 verification records.
+         * No lock wait needed — implicit mode close tears down the
          * connection and broker releases records immediately. */
         rkshare = create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
-        rd_sleep(3);
 
-        attempts = 0;
-        while (attempts++ < 5) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
-
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]) >= 2,
-                                    "Consumer 2 got non-redelivered record at "
-                                    "offset %" PRId64 " (delivery_count=%d)",
-                                    rkmessages[j]->offset,
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]));
-                                redelivered++;
-                        }
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error) {
+                rd_kafka_error_destroy(error);
         }
 
-        TEST_SAY("Consumer 2 got %d messages (expected 0)\n", redelivered);
-        TEST_ASSERT(redelivered == 0,
-                    "Expected 0 redelivered for consumer 2, got %d",
-                    redelivered);
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer 2 got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        received++;
+                }
+                rd_kafka_message_destroy(rkmessages[j]);
+        }
+
+        TEST_SAY("Consumer 2 got %d messages (expected 5)\n", received);
+        TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
+                    received);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1030,7 +1027,7 @@ static void do_test_all_release_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-allrel-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
@@ -1098,30 +1095,32 @@ static void do_test_all_reject_second_consumer(void) {
         const char *group = "commit-async-all-reject-second";
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        int consumed = 0, redelivered;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0, received = 0;
         int attempts = 0;
 
         topic = test_mk_topic_name("0173-ca-allrej-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         while (consumed < MAX_MSGS && attempts++ < 100) {
-                rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-                size_t rcvd = 0;
-                size_t j;
+                size_t rcvd_inner = 0;
 
                 error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
+                                                     &rcvd_inner);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
-                for (j = 0; j < rcvd; j++) {
+                for (j = 0; j < rcvd_inner; j++) {
                         if (!rkmessages[j]->err) {
                                 rd_kafka_share_acknowledge_type(
                                     rkshare, rkmessages[j],
@@ -1140,9 +1139,6 @@ static void do_test_all_reject_second_consumer(void) {
         TEST_ASSERT(consumed == MAX_MSGS, "Expected %d consumed, got %d",
                     MAX_MSGS, consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
-
         /* Records are either committed by the last commit_async or
          * released on the broker side when the connection is closed.
          * No lock wait needed.
@@ -1151,45 +1147,43 @@ static void do_test_all_reject_second_consumer(void) {
          * timeout before closing as close will commit acknowledged
          * records in explicit acknowledgement mode. */
 
-        /* Second consumer verifies no redeliveries (REJECT is final) */
-        rkshare = create_share_consumer(group, "implicit");
-        subscribe_consumer(rkshare, &topic, 1);
         rd_sleep(3);
 
-        redelivered = 0;
-        attempts    = 0;
-        while (attempts++ < 5) {
-                rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-                size_t rcvd = 0;
-                size_t j;
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
 
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]) >= 2,
-                                    "Consumer 2 got non-redelivered record at "
-                                    "offset %" PRId64 " (delivery_count=%d)",
-                                    rkmessages[j]->offset,
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]));
-                                redelivered++;
-                        }
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
+        /* Second consumer: should only get the 5 verification records.
+         * REJECT'd records are archived and not redelivered. */
+        rkshare = create_share_consumer(group, "implicit");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error) {
+                rd_kafka_error_destroy(error);
         }
 
-        TEST_SAY("Consumer 2 got %d messages (expected 0)\n", redelivered);
-        TEST_ASSERT(redelivered == 0,
-                    "Expected 0 redelivered for consumer 2, got %d",
-                    redelivered);
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer 2 got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        received++;
+                }
+                rd_kafka_message_destroy(rkmessages[j]);
+        }
+
+        TEST_SAY("Consumer 2 got %d messages (expected 5)\n", received);
+        TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
+                    received);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1208,32 +1202,34 @@ static void do_test_per_record_commit_async(void) {
         const char *group = "commit-async-per-record";
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        int consumed = 0, redelivered;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0, received = 0;
         int attempts = 0;
 
         topic = test_mk_topic_name("0173-ca-per-rec", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_easy(topic, 0, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume all records, ACCEPT each individually with
          * commit_async after every record */
         while (consumed < MAX_MSGS && attempts++ < 100) {
-                rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-                size_t rcvd = 0;
-                size_t j;
+                size_t rcvd_inner = 0;
 
                 error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
+                                                     &rcvd_inner);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
-                for (j = 0; j < rcvd; j++) {
+                for (j = 0; j < rcvd_inner; j++) {
                         if (!rkmessages[j]->err) {
                                 rd_kafka_share_acknowledge(rkshare,
                                                            rkmessages[j]);
@@ -1254,12 +1250,6 @@ static void do_test_per_record_commit_async(void) {
         TEST_ASSERT(consumed == MAX_MSGS, "Expected %d, got %d", MAX_MSGS,
                     consumed);
 
-        /* Wait for async commits to propagate */
-        rd_sleep(3);
-
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
-
         /* Records are either committed by the last commit_async or
          * released on the broker side when the connection is closed.
          * No lock wait needed.
@@ -1268,45 +1258,44 @@ static void do_test_per_record_commit_async(void) {
          * timeout before closing as close will commit acknowledged
          * records in explicit acknowledgement mode. */
 
-        /* Second consumer verifies no redeliveries */
-        rkshare = create_share_consumer(group, "implicit");
-        subscribe_consumer(rkshare, &topic, 1);
+        /* Wait for async commits to propagate */
         rd_sleep(3);
 
-        redelivered = 0;
-        attempts    = 0;
-        while (attempts++ < 5) {
-                rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-                size_t rcvd = 0;
-                size_t j;
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
-                if (error) {
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
+        /* Produce 5 verification records */
+        produce_to_topic(topic, 0, 5);
 
-                for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]) >= 2,
-                                    "Consumer 2 got non-redelivered record at "
-                                    "offset %" PRId64 " (delivery_count=%d)",
-                                    rkmessages[j]->offset,
-                                    rd_kafka_message_delivery_count(
-                                        rkmessages[j]));
-                                redelivered++;
-                        }
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
+        /* Second consumer: should only get the 5 verification records.
+         * All previous records were ACCEPT'd via per-record commit_async. */
+        rkshare = create_share_consumer(group, "implicit");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
+        if (error) {
+                rd_kafka_error_destroy(error);
         }
 
-        TEST_SAY("Consumer 2 got %d messages (expected 0)\n", redelivered);
-        TEST_ASSERT(redelivered == 0,
-                    "Expected 0 redelivered for consumer 2, got %d",
-                    redelivered);
+        for (j = 0; j < rcvd; j++) {
+                if (!rkmessages[j]->err) {
+                        TEST_ASSERT(
+                            rd_kafka_message_delivery_count(rkmessages[j]) == 1,
+                            "Consumer 2 got redelivered record at "
+                            "offset %" PRId64 " (delivery_count=%d)",
+                            rkmessages[j]->offset,
+                            rd_kafka_message_delivery_count(rkmessages[j]));
+                        received++;
+                }
+                rd_kafka_message_destroy(rkmessages[j]);
+        }
+
+        TEST_SAY("Consumer 2 got %d messages (expected 5)\n", received);
+        TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
+                    received);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -1526,7 +1515,124 @@ static void do_test_mock_inflight_caching(void) {
 }
 
 
+/* ===================================================================
+ *  Acquisition lock timeout — verify that records are redelivered
+ *  to the SAME consumer after lock expiry when not acknowledged.
+ *
+ *  TODO KIP-932: Move this to 0171 file maybe when admin client
+ *  related things are finalized in that test case.
+ *
+ *  Steps:
+ *    1. Produce 10 records.
+ *    2. Consume all 10 — verify delivery_count == 1.
+ *    3. Do NOT acknowledge or commit.
+ *    4. Wait for the 3 s acquisition lock to expire.
+ *    5. Consume again — verify the same 10 records arrive with
+ *       delivery_count == 2.
+ * =================================================================== */
+static void do_test_lock_timeout_redelivery(void) {
+        const char *topic;
+        const char *group = "commit-async-lock-timeout";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed1 = 0, consumed2 = 0;
+        int attempts;
+        const int msg_cnt = 10;
+
+        SUB_TEST("Lock timeout redelivery to same consumer");
+
+        topic = test_mk_topic_name("0173-ca-lock-to", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, msg_cnt);
+
+        rkshare = create_share_consumer(group, "implicit");
+        set_group_offset_earliest(group);
+        set_group_lock_duration(group, "3000");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* First consume: get all records, verify delivery_count == 1.
+         * Do NOT call commit_async — records stay ACQUIRED. */
+        attempts = 0;
+        while (consumed1 == 0 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                TEST_ASSERT(
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]) == 1,
+                                    "First consume: expected delivery_count=1, "
+                                    "got %d at offset %" PRId64,
+                                    rd_kafka_message_delivery_count(
+                                        rkmessages[j]),
+                                    rkmessages[j]->offset);
+                                consumed1++;
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("First consume: got %d/%d records (not acknowledged)\n",
+                 consumed1, msg_cnt);
+        TEST_ASSERT(consumed1 > 0, "Expected records on first consume, got 0");
+
+        /* Wait for acquisition lock to expire (3 s + buffer) */
+        TEST_SAY("Waiting 4 s for acquisition lock to expire...\n");
+        rd_sleep(4);
+
+        /* Second consume on the SAME consumer: records should be
+         * redelivered with delivery_count == 2. */
+        attempts = 0;
+        while (consumed2 == 0 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                TEST_ASSERT(rd_kafka_message_delivery_count(
+                                                rkmessages[j]) == 2,
+                                            "Second consume: expected "
+                                            "delivery_count=2, got %d at "
+                                            "offset %" PRId64,
+                                            rd_kafka_message_delivery_count(
+                                                rkmessages[j]),
+                                            rkmessages[j]->offset);
+                                consumed2++;
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Second consume: got %d/%d redelivered records\n", consumed2,
+                 msg_cnt);
+        TEST_ASSERT(consumed2 > 0, "Expected redelivered records, got 0");
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0173_share_consumer_commit_async(int argc, char **argv) {
+        test_timeout_set(120);
+        common_producer = test_create_producer();
+        common_admin    = test_create_producer();
+
         do_test_implicit_second_consumer();
         do_test_explicit_second_consumer();
         do_test_mixed_acks_second_consumer();
@@ -1539,6 +1645,10 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_all_release_second_consumer();
         do_test_all_reject_second_consumer();
         do_test_per_record_commit_async();
+        do_test_lock_timeout_redelivery();
+
+        rd_kafka_destroy(common_admin);
+        rd_kafka_destroy(common_producer);
 
         return 0;
 }

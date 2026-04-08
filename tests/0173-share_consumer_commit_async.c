@@ -218,8 +218,8 @@ static void do_test_implicit_second_consumer(void) {
 
         rcvd  = 0;
         error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
-        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%d, error=%s\n", rcvd,
-                 error ? rd_kafka_error_string(error) : "none");
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
         if (error) {
                 rd_kafka_error_destroy(error);
         }
@@ -322,8 +322,8 @@ static void do_test_explicit_second_consumer(void) {
 
         rcvd  = 0;
         error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
-        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%d, error=%s\n", rcvd,
-                 error ? rd_kafka_error_string(error) : "none");
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
         if (error) {
                 rd_kafka_error_destroy(error);
         }
@@ -981,8 +981,8 @@ static void do_test_commit_between_produces(void) {
 
         rcvd  = 0;
         error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
-        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%d, error=%s\n", rcvd,
-                 error ? rd_kafka_error_string(error) : "none");
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
         if (error) {
                 rd_kafka_error_destroy(error);
         }
@@ -1162,8 +1162,8 @@ static void do_test_all_reject_second_consumer(void) {
 
         rcvd  = 0;
         error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
-        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%d, error=%s\n", rcvd,
-                 error ? rd_kafka_error_string(error) : "none");
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
         if (error) {
                 rd_kafka_error_destroy(error);
         }
@@ -1274,8 +1274,8 @@ static void do_test_per_record_commit_async(void) {
 
         rcvd  = 0;
         error = rd_kafka_share_consume_batch(rkshare, 15000, rkmessages, &rcvd);
-        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%d, error=%s\n", rcvd,
-                 error ? rd_kafka_error_string(error) : "none");
+        TEST_SAY("Consumer 2 consume_batch returned: rcvd=%zu, error=%s\n",
+                 rcvd, error ? rd_kafka_error_string(error) : "none");
         if (error) {
                 rd_kafka_error_destroy(error);
         }

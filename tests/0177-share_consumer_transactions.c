@@ -62,29 +62,6 @@ static rd_kafka_t *create_txn_producer(const char *txn_id) {
 
 
 /**
- * @brief Create a share consumer with specified group.
- *
- * Note: For share consumers, isolation.level is configured on the
- * BROKER-SIDE via share group configuration (share.isolation.level),
- * not on the client. See configure_share_group().
- */
-static rd_kafka_share_t *create_share_consumer(const char *group) {
-        rd_kafka_share_t *rkshare;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer: %s",
-                    errstr);
-
-        return rkshare;
-}
-
-
-/**
  * @brief Create an admin client (producer) for admin API calls.
  *
  * Admin APIs should use a separate handle from the share consumer.
@@ -111,15 +88,12 @@ static rd_kafka_t *create_admin_client(void) {
 static void configure_share_group(rd_kafka_t *admin_rk,
                                   const char *group,
                                   const char *isolation_level) {
-        const char *offset_cfg[]    = {"share.auto.offset.reset", "SET",
-                                       "earliest"};
-        const char *isolation_cfg[] = {"share.isolation.level", "SET",
-                                       isolation_level};
+        const char *configs[] = {
+            "share.auto.offset.reset", "SET", "earliest",
+            "share.isolation.level",   "SET", isolation_level};
 
         test_IncrementalAlterConfigs_simple(admin_rk, RD_KAFKA_RESOURCE_GROUP,
-                                            group, offset_cfg, 1);
-        test_IncrementalAlterConfigs_simple(admin_rk, RD_KAFKA_RESOURCE_GROUP,
-                                            group, isolation_cfg, 1);
+                                            group, configs, 2);
 }
 
 
@@ -213,12 +187,98 @@ static int consume_share_no_msgs(rd_kafka_share_t *rkshare,
 }
 
 
-/* ===================================================================
- *  Test: Committed transaction visibility.
+/**
+ * @brief Consume messages and verify exact offsets.
  *
- *  Both read_committed and read_uncommitted should see committed
- *  messages.
- * =================================================================== */
+ * Consumes messages from the share consumer and verifies that:
+ * 1. The number of messages matches expected_msg_cnt
+ * 2. The offsets match the expected_offsets array
+ * 3. None of the forbidden_offsets appear (e.g., control records)
+ *
+ * @param rkshare Share consumer instance
+ * @param expected_msg_cnt Expected number of messages to consume
+ * @param expected_offsets Array of expected offsets in order
+ * @param forbidden_offsets Array of offsets that should never appear
+ * @param forbidden_cnt Number of forbidden offsets
+ * @param isolation_level Isolation level string (for logging)
+ *
+ * @returns Number of messages consumed
+ */
+static int consume_and_verify_offsets(rd_kafka_share_t *rkshare,
+                                      int expected_msg_cnt,
+                                      const int64_t *expected_offsets,
+                                      const int64_t *forbidden_offsets,
+                                      int forbidden_cnt,
+                                      const char *isolation_level) {
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        int attempts = 50;
+        int64_t received_offsets[10];
+        int consumed = 0;
+        int i, j;
+
+        TEST_SAY("[%s] Consuming messages and verifying offsets:\n",
+                 isolation_level);
+
+        /* Consume messages and collect offsets */
+        while (consumed < expected_msg_cnt && attempts-- > 0) {
+                size_t rcvd = 0;
+                rd_kafka_error_t *err;
+
+                err = rd_kafka_share_consume_batch(rkshare, 3000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (i = 0; i < (int)rcvd; i++) {
+                        if (!batch[i]->err && consumed < 10) {
+                                received_offsets[consumed] = batch[i]->offset;
+                                TEST_SAY("  Message %d: offset=%" PRId64 "\n",
+                                         consumed, batch[i]->offset);
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[i]);
+                }
+        }
+
+        /* Verify no forbidden offsets were received */
+        for (i = 0; i < consumed; i++) {
+                for (j = 0; j < forbidden_cnt; j++) {
+                        TEST_ASSERT(received_offsets[i] != forbidden_offsets[j],
+                                    "[%s] Received forbidden offset %" PRId64
+                                    " at position %d - should be filtered!",
+                                    isolation_level, forbidden_offsets[j], i);
+                }
+        }
+
+        /* Verify message count */
+        TEST_ASSERT(consumed == expected_msg_cnt,
+                    "[%s] Expected %d messages, got %d", isolation_level,
+                    expected_msg_cnt, consumed);
+
+        /* Verify exact offsets */
+        for (i = 0; i < consumed; i++) {
+                TEST_ASSERT(received_offsets[i] == expected_offsets[i],
+                            "[%s] Message %d: expected offset %" PRId64
+                            ", got %" PRId64,
+                            isolation_level, i, expected_offsets[i],
+                            received_offsets[i]);
+        }
+
+        TEST_SAY(
+            "SUCCESS [%s]: All %d offsets verified correctly, "
+            "forbidden offsets filtered\n",
+            isolation_level, consumed);
+
+        return consumed;
+}
+
+
+/**
+ * @brief Test committed transaction visibility.
+ *
+ * Both read_committed and read_uncommitted should see committed messages.
+ */
 static void do_test_committed_transaction(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -248,7 +308,7 @@ static void do_test_committed_transaction(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -289,12 +349,12 @@ static void do_test_committed_transaction(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Aborted transaction visibility.
+/**
+ * @brief Test aborted transaction visibility.
  *
- *  - read_committed: Should NOT see aborted messages (expect 0)
- *  - read_uncommitted: Should see ALL messages (expect msg_cnt)
- * =================================================================== */
+ * - read_committed: Should NOT see aborted messages (expect 0)
+ * - read_uncommitted: Should see ALL messages (expect msg_cnt)
+ */
 static void do_test_aborted_transaction(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -332,7 +392,7 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -381,12 +441,12 @@ static void do_test_aborted_transaction(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Mixed transactions (some committed, some aborted).
+/**
+ * @brief Test mixed transactions (some committed, some aborted).
  *
- *  - read_committed: Only see committed messages
- *  - read_uncommitted: See ALL messages
- * =================================================================== */
+ * - read_committed: Only see committed messages
+ * - read_uncommitted: See ALL messages
+ */
 static void do_test_mixed_transactions(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -433,7 +493,7 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -487,12 +547,12 @@ static void do_test_mixed_transactions(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Control records filtering.
+/**
+ * @brief Test control records filtering.
  *
- *  Control records (abort/commit markers) should never be visible
- *  to the application, regardless of isolation level.
- * =================================================================== */
+ * Control records (abort/commit markers) should never be visible to the
+ * application, regardless of isolation level.
+ */
 static void do_test_control_records_filtered(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -523,7 +583,7 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -557,77 +617,17 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         expected_msgs = is_read_committed ? 5 : 6;
 
         /* Consume and verify exact offsets */
-        {
-                rd_kafka_message_t *batch[BATCH_SIZE];
-                int attempts = 50;
-                int64_t received_offsets[10];
-                int64_t expected_offsets_committed[]   = {2, 3, 4, 5, 6};
-                int64_t expected_offsets_uncommitted[] = {0, 2, 3, 4, 5, 6};
-                int64_t *expected_offsets;
-                int j;
+        int64_t expected_offsets_committed[]   = {2, 3, 4, 5, 6};
+        int64_t expected_offsets_uncommitted[] = {0, 2, 3, 4, 5, 6};
+        int64_t control_record_offsets[]       = {1, 7};
+        const int64_t *expected_offsets;
 
-                consumed = 0;
+        expected_offsets = is_read_committed ? expected_offsets_committed
+                                             : expected_offsets_uncommitted;
 
-                TEST_SAY("[%s] Consuming messages and verifying offsets:\n",
-                         isolation_level);
-
-                while (consumed < expected_msgs && attempts-- > 0) {
-                        size_t rcvd = 0;
-                        size_t i;
-                        rd_kafka_error_t *err;
-
-                        err = rd_kafka_share_consume_batch(consumer, 3000,
-                                                           batch, &rcvd);
-                        if (err) {
-                                rd_kafka_error_destroy(err);
-                                continue;
-                        }
-
-                        for (i = 0; i < rcvd; i++) {
-                                if (!batch[i]->err && consumed < 10) {
-                                        received_offsets[consumed] =
-                                            batch[i]->offset;
-                                        TEST_SAY("  Message %d: offset=%" PRId64
-                                                 "\n",
-                                                 consumed, batch[i]->offset);
-                                        consumed++;
-                                }
-                                rd_kafka_message_destroy(batch[i]);
-                        }
-                }
-
-                /* Verify no control records (offsets 1 and 7) were received */
-                for (j = 0; j < consumed; j++) {
-                        TEST_ASSERT(
-                            received_offsets[j] != 1 &&
-                                received_offsets[j] != 7,
-                            "[%s] Received control record at offset %" PRId64
-                            " - should be filtered!",
-                            isolation_level, received_offsets[j]);
-                }
-
-                /* Verify expected offsets based on isolation level */
-                expected_offsets = is_read_committed
-                                       ? expected_offsets_committed
-                                       : expected_offsets_uncommitted;
-
-                TEST_ASSERT(consumed == expected_msgs,
-                            "[%s] Expected %d messages, got %d",
-                            isolation_level, expected_msgs, consumed);
-
-                for (j = 0; j < consumed; j++) {
-                        TEST_ASSERT(received_offsets[j] == expected_offsets[j],
-                                    "[%s] Message %d: expected offset %" PRId64
-                                    ", got %" PRId64,
-                                    isolation_level, j, expected_offsets[j],
-                                    received_offsets[j]);
-                }
-
-                TEST_SAY(
-                    "SUCCESS [%s]: All %d offsets verified correctly, "
-                    "control records filtered\n",
-                    isolation_level, consumed);
-        }
+        consumed = consume_and_verify_offsets(
+            consumer, expected_msgs, expected_offsets, control_record_offsets,
+            2, isolation_level);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);
@@ -639,9 +639,9 @@ static void do_test_control_records_filtered(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Multiple partitions with transactions.
- * =================================================================== */
+/**
+ * @brief Test multiple partitions with transactions.
+ */
 static void do_test_multi_partition_transactions(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -677,7 +677,7 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -734,9 +734,9 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Interleaved transactions from multiple producers.
- * =================================================================== */
+/**
+ * @brief Test interleaved transactions from multiple producers.
+ */
 static void do_test_interleaved_producers(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -769,7 +769,7 @@ static void do_test_interleaved_producers(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -825,9 +825,9 @@ static void do_test_interleaved_producers(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Non-transactional and transactional messages mixed.
- * =================================================================== */
+/**
+ * @brief Test non-transactional and transactional messages mixed.
+ */
 static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -865,7 +865,7 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -922,16 +922,17 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
 }
 
 
-/* ===================================================================
- *  Test: Dynamic isolation level change (READ_UNCOMMITTED -> READ_COMMITTED)
+/**
+ * @brief Test dynamic isolation level change (READ_UNCOMMITTED ->
+ * READ_COMMITTED).
  *
- *  1. Start with READ_UNCOMMITTED
- *  2. Produce committed txn, consume and acknowledge
- *  3. Produce aborted txn, consume and release
- *  4. Change to READ_COMMITTED
- *  5. Produce more committed/aborted txns
- *  6. Verify only committed txns are now returned
- * =================================================================== */
+ * 1. Start with READ_UNCOMMITTED
+ * 2. Produce committed txn, consume and acknowledge
+ * 3. Produce aborted txn, consume and release
+ * 4. Change to READ_COMMITTED
+ * 5. Produce more committed/aborted txns
+ * 6. Verify only committed txns are now returned
+ */
 static void do_test_dynamic_uncommitted_to_committed(void) {
         const char *topic;
         const char *group  = "share-dynamic-uc-to-c";
@@ -956,7 +957,7 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
         admin_client = create_admin_client();
 
         /* Create share consumer with READ_UNCOMMITTED */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, "read_uncommitted");
         subscribe_share_consumer(consumer, topic);
 
@@ -1032,13 +1033,13 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
 }
 
 
-/* ===================================================================
- *  Test: Interval-based abort pattern.
+/**
+ * @brief Test interval-based abort pattern.
  *
- *  Produce N transactions where every Kth one is aborted.
- *  Verify READ_COMMITTED skips exactly the aborted ones.
- *  Verify READ_UNCOMMITTED sees all.
- * =================================================================== */
+ * Produce N transactions where every Kth one is aborted.
+ * Verify READ_COMMITTED skips exactly the aborted ones.
+ * Verify READ_UNCOMMITTED sees all.
+ */
 static void do_test_interval_abort_pattern(const char *isolation_level) {
         char topic_suffix[64];
         const char *topic;
@@ -1075,7 +1076,7 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         admin_client = create_admin_client();
 
         /* Create share consumer and set group config */
-        consumer = create_share_consumer(group);
+        consumer = test_create_share_consumer(group);
         configure_share_group(admin_client, group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 

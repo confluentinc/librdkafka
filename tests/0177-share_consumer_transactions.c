@@ -42,6 +42,10 @@
 
 #define BATCH_SIZE 1000
 
+/* Common handles shared across all tests */
+static rd_kafka_t *common_admin;
+static rd_kafka_t *common_regular_producer;
+
 
 /**
  * @brief Create a transactional producer.
@@ -62,19 +66,6 @@ static rd_kafka_t *create_txn_producer(const char *txn_id) {
 
 
 /**
- * @brief Create an admin client (producer) for admin API calls.
- *
- * Admin APIs should use a separate handle from the share consumer.
- */
-static rd_kafka_t *create_admin_client(void) {
-        rd_kafka_conf_t *conf;
-
-        test_conf_init(&conf, NULL, 60);
-        return test_create_handle(RD_KAFKA_PRODUCER, conf);
-}
-
-
-/**
  * @brief Configure share group settings.
  *
  * Sets share.auto.offset.reset=earliest and share.isolation.level
@@ -82,18 +73,15 @@ static rd_kafka_t *create_admin_client(void) {
  *
  * Note: share.isolation.level is a BROKER-SIDE share group configuration.
  * Transaction filtering happens on the broker, not the client.
- *
- * @param admin_rk Admin client handle (producer) for admin API calls.
  */
-static void configure_share_group(rd_kafka_t *admin_rk,
-                                  const char *group,
+static void configure_share_group(const char *group,
                                   const char *isolation_level) {
         const char *configs[] = {
             "share.auto.offset.reset", "SET", "earliest",
             "share.isolation.level",   "SET", isolation_level};
 
-        test_IncrementalAlterConfigs_simple(admin_rk, RD_KAFKA_RESOURCE_GROUP,
-                                            group, configs, 2);
+        test_IncrementalAlterConfigs_simple(
+            common_admin, RD_KAFKA_RESOURCE_GROUP, group, configs, 2);
 }
 
 
@@ -282,7 +270,6 @@ static void do_test_committed_transaction(const char *isolation_level) {
         const char *txn_id = "txn-commit-test";
         const int msg_cnt  = 100;
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
 
@@ -300,12 +287,9 @@ static void do_test_committed_transaction(const char *isolation_level) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Begin transaction */
@@ -339,7 +323,6 @@ static void do_test_committed_transaction(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -358,7 +341,6 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         const char *txn_id = "txn-abort-test";
         const int msg_cnt  = 100;
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
         int expected_msgs;
@@ -384,12 +366,9 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Begin transaction */
@@ -431,7 +410,6 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -449,7 +427,6 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         char group[128];
         const char *txn_id = "txn-mixed-test";
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
         int i;
@@ -485,12 +462,9 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Execute transactions */
@@ -537,7 +511,6 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -555,7 +528,6 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         char group[128];
         const char *txn_id = "txn-ctrl-test";
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int expected_msgs;
         rd_bool_t is_read_committed =
@@ -574,12 +546,9 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Transaction 1: Produce and ABORT (1 msg + 1 abort marker) */
@@ -627,7 +596,6 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -644,7 +612,6 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         const int partition_cnt      = 3;
         const int msgs_per_partition = 30;
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
         int expected_committed;
@@ -667,12 +634,9 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Transaction 1: Produce to all partitions and COMMIT */
@@ -722,7 +686,6 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -737,7 +700,6 @@ static void do_test_interleaved_producers(const char *isolation_level) {
         char group[128];
         const int msg_cnt = 50;
         rd_kafka_t *producer1, *producer2;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
         int expected_msgs;
@@ -759,12 +721,9 @@ static void do_test_interleaved_producers(const char *isolation_level) {
         producer1 = create_txn_producer("txn-producer-1");
         producer2 = create_txn_producer("txn-producer-2");
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Producer 1: Begin transaction */
@@ -813,7 +772,6 @@ static void do_test_interleaved_producers(const char *isolation_level) {
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer1);
         rd_kafka_destroy(producer2);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -830,8 +788,7 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         const int non_txn_msgs    = 50;
         const int txn_commit_msgs = 30;
         const int txn_abort_msgs  = 20;
-        rd_kafka_t *txn_producer, *regular_producer;
-        rd_kafka_t *admin_client;
+        rd_kafka_t *txn_producer;
         rd_kafka_share_t *consumer;
         int consumed;
         int expected_msgs;
@@ -852,20 +809,14 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         /* Create transactional producer */
         txn_producer = create_txn_producer(txn_id);
 
-        /* Create regular (non-transactional) producer */
-        regular_producer = test_create_producer();
-
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Produce non-transactional messages */
         TEST_SAY("Producing %d non-transactional messages\n", non_txn_msgs);
-        test_produce_msgs2(regular_producer, topic, test_id_generate(),
+        test_produce_msgs2(common_regular_producer, topic, test_id_generate(),
                            RD_KAFKA_PARTITION_UA, 0, non_txn_msgs, NULL, 0);
 
         /* Transactional: Commit */
@@ -909,8 +860,6 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(txn_producer);
-        rd_kafka_destroy(regular_producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -933,7 +882,6 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
         const char *txn_id = "txn-dynamic-uc-c";
         const int msg_cnt  = 10;
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
 
@@ -947,12 +895,9 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer with READ_UNCOMMITTED */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, "read_uncommitted");
+        configure_share_group(group, "read_uncommitted");
         subscribe_share_consumer(consumer, topic);
 
         /* Phase 1: Produce and consume committed transaction */
@@ -985,7 +930,7 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
 
         /* Phase 3: Change isolation level to READ_COMMITTED */
         TEST_SAY("Phase 3: Changing isolation level to READ_COMMITTED\n");
-        configure_share_group(admin_client, group, "read_committed");
+        configure_share_group(group, "read_committed");
 
         /* Phase 4: Produce aborted transaction - should NOT be visible now */
         TEST_SAY("Phase 4: Aborted transaction with READ_COMMITTED\n");
@@ -1021,7 +966,6 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
@@ -1043,7 +987,6 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         const int abort_interval = 5; /* Every 5th transaction is aborted */
         const int msgs_per_txn   = 5;
         rd_kafka_t *producer;
-        rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
         int consumed;
         int i;
@@ -1066,12 +1009,9 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
 
-        /* Create admin client for group configuration */
-        admin_client = create_admin_client();
-
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group);
-        configure_share_group(admin_client, group, isolation_level);
+        configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
         /* Produce transactions with interval-based abort pattern */
@@ -1138,17 +1078,19 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
-        rd_kafka_destroy(admin_client);
 
         SUB_TEST_PASS();
 }
 
 
 int main_0177_share_consumer_transactions(int argc, char **argv) {
-
         /* Test both isolation levels */
         const char *isolation_levels[] = {"read_committed", "read_uncommitted"};
         int i;
+
+        /* Create common handles for all tests */
+        common_admin            = test_create_producer();
+        common_regular_producer = test_create_producer();
 
         for (i = 0; i < 2; i++) {
                 const char *level = isolation_levels[i];
@@ -1184,6 +1126,10 @@ int main_0177_share_consumer_transactions(int argc, char **argv) {
         TEST_SAY("========================================\n");
 
         do_test_dynamic_uncommitted_to_committed();
+
+        /* Cleanup common handles */
+        rd_kafka_destroy(common_admin);
+        rd_kafka_destroy(common_regular_producer);
 
         return 0;
 }

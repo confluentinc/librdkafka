@@ -1,3 +1,16 @@
+# Unreleased
+
+## Fixes
+
+### Admin client fixes
+
+* Fix use-after-free in `rd_kafka_admin_coord_request()` error path
+  that caused an assertion failure
+  (`rd_kafka_enq_once_del_source_return: Assertion 'eonce->refcnt > 0' failed`)
+  and process abort when a coordinator-targeted Admin API request
+  (e.g., DescribeConsumerGroups, DeleteConsumerGroupOffsets,
+  ListConsumerGroupOffsets) failed to send (#4605, #3663).
+
 # librdkafka v2.14.1
 
 librdkafka v2.14.1 is a maintenance release:

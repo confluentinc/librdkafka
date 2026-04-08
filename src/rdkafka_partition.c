@@ -198,6 +198,9 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb(rd_kafka_timers_t *rkts,
 void rd_kafka_toppar_op_version_bump(rd_kafka_toppar_t *rktp, int32_t version) {
         rd_kafka_op_t *rko;
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+                return;
+
         rktp->rktp_op_version = version;
         rko                   = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
         rko->rko_version      = version;

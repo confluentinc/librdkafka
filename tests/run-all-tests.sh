@@ -55,6 +55,8 @@ if [ ! -z $TEST_PARALLEL ]; then
 fi
 if [ ! -z $TEST_CONF ]; then
     TEST_CONF_ARG="--conf '$TEST_CONF'"
+else
+    TEST_CONF_ARG="--conf '[\"group.share.min.record.lock.duration.ms=1000\"]'"
 fi
 if [ ! -z $TEST_ENV_VARIABLES ]; then
     IFS=',' read -ra TEST_ENV_VARIABLES_ARRAY <<< "$TEST_ENV_VARIABLES"

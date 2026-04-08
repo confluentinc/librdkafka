@@ -5,7 +5,7 @@ set -e
 # with fallback to positional args for backward compatibility.
 export TEST_KAFKA_GIT_REF="${TEST_KAFKA_GIT_REF:-${1:-4.2.0}}"
 export TEST_CP_VERSION="${TEST_CP_VERSION:-${2:-8.2.0}}"
-TEST_CONFIGURATION="${TEST_CONFIGURATION:---kraft}"
+TEST_CONFIGURATION="${TEST_CONFIGURATION:---kraft --conf '[\"group.share.min.record.lock.duration.ms=1000\"]'}"
 
 if [[ "$(uname)" == "Darwin" ]]; then
     CONFIGURE_ARGS="--install-deps --source-deps-only"

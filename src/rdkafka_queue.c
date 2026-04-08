@@ -922,6 +922,11 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         rd_kafka_q_deq0(rkq, rko);
         mtx_unlock(&rkq->rkq_lock);
 
+        rd_kafka_dbg(rk, QUEUE, "SHAREQ",
+                     "rd_kafka_q_serve_share_rkmessages: "
+                     "dequeued op %s (type %d)",
+                     rd_kafka_op2str(rko->rko_type), rko->rko_type);
+
         if (rko->rko_type == RD_KAFKA_OP_SHARE_FETCH_RESPONSE) {
                 /* Return messages from this response */
                 cnt = rd_kafka_op_process_share_fetch_response(

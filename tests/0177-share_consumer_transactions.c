@@ -201,15 +201,13 @@ static int consume_share_no_msgs(rd_kafka_share_t *rkshare,
  * @param forbidden_offsets Array of offsets that should never appear
  * @param forbidden_cnt Number of forbidden offsets
  * @param isolation_level Isolation level string (for logging)
- *
- * @returns Number of messages consumed
  */
-static int consume_and_verify_offsets(rd_kafka_share_t *rkshare,
-                                      int expected_msg_cnt,
-                                      const int64_t *expected_offsets,
-                                      const int64_t *forbidden_offsets,
-                                      int forbidden_cnt,
-                                      const char *isolation_level) {
+static void consume_and_verify_offsets(rd_kafka_share_t *rkshare,
+                                       int expected_msg_cnt,
+                                       const int64_t *expected_offsets,
+                                       const int64_t *forbidden_offsets,
+                                       int forbidden_cnt,
+                                       const char *isolation_level) {
         rd_kafka_message_t *batch[BATCH_SIZE];
         int attempts = 50;
         int64_t received_offsets[10];
@@ -269,8 +267,6 @@ static int consume_and_verify_offsets(rd_kafka_share_t *rkshare,
             "SUCCESS [%s]: All %d offsets verified correctly, "
             "forbidden offsets filtered\n",
             isolation_level, consumed);
-
-        return consumed;
 }
 
 
@@ -561,7 +557,6 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         rd_kafka_t *producer;
         rd_kafka_t *admin_client;
         rd_kafka_share_t *consumer;
-        int consumed;
         int expected_msgs;
         rd_bool_t is_read_committed =
             !strcmp(isolation_level, "read_committed");
@@ -625,9 +620,8 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         expected_offsets = is_read_committed ? expected_offsets_committed
                                              : expected_offsets_uncommitted;
 
-        consumed = consume_and_verify_offsets(
-            consumer, expected_msgs, expected_offsets, control_record_offsets,
-            2, isolation_level);
+        consume_and_verify_offsets(consumer, expected_msgs, expected_offsets,
+                                   control_record_offsets, 2, isolation_level);
 
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);

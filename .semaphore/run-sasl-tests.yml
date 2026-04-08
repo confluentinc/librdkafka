@@ -17,7 +17,7 @@ global_job_config:
       - sudo dpkg -i rapidjson-dev.deb
       - sudo apt update
       - sudo apt remove -y needrestart
-      - sudo DEBIAN_FRONTEND=noninteractive apt install -y valgrind libcurl4-openssl-dev libssl-dev krb5-user krb5-kdc krb5-admin-server libsasl2-modules-gssapi-mit
+      - sudo DEBIAN_FRONTEND=noninteractive apt install -y valgrind libcurl4-openssl-dev libssl-dev
       - python3 -m pip install -U pip
       - python3 -m pip -V
       - (cd tests && python3 -m pip install -r requirements.txt)
@@ -25,12 +25,6 @@ global_job_config:
       - make -j all
       - make -j -C tests build
       - sem-version java 17
-  epilogue:
-    always:
-      commands:
-        - artifact push job tests/tmp/LibrdkafkaTestCluster/**/stderr.log --destination logs/stderr.log 2>/dev/null || true
-        - artifact push job tests/tmp-KafkaCluster/**/stderr.log --destination logs/trivup-stderr.log 2>/dev/null || true
-        - artifact push job tests/test_suite_*.json --destination logs/ 2>/dev/null || true
   env_vars:
     - name: CACHE_TAG
       value: '7'
@@ -55,10 +49,8 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - 'if [[ "$TEST_SASL" == "GSSAPI" ]]; then sudo bash -c ''echo -e "[libdefaults]\n  default_realm = MYREALM\n  dns_lookup_realm = false\n  dns_lookup_kdc = false\n[realms]\n  MYREALM = {\n    kdc = localhost\n    admin_server = localhost\n  }" > /etc/krb5.conf''; fi'
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; echo "Sleeping 2hrs for SSH debug..."; sleep 7200; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
-            - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
+            - ./tests/run-all-tests.sh
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}
         - name: "SASL SSL cluster (x86_64)"
           env_vars:
@@ -69,10 +61,8 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - 'if [[ "$TEST_SASL" == "GSSAPI" ]]; then sudo bash -c ''echo -e "[libdefaults]\n  default_realm = MYREALM\n  dns_lookup_realm = false\n  dns_lookup_kdc = false\n[realms]\n  MYREALM = {\n    kdc = localhost\n    admin_server = localhost\n  }" > /etc/krb5.conf''; fi'
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; echo "Sleeping 2hrs for SSH debug..."; sleep 7200; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
-            - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
+            - ./tests/run-all-tests.sh
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}
   - name: "Run SASL tests (aarch64)"
     dependencies: []
@@ -93,10 +83,8 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - 'if [[ "$TEST_SASL" == "GSSAPI" ]]; then sudo bash -c ''echo -e "[libdefaults]\n  default_realm = MYREALM\n  dns_lookup_realm = false\n  dns_lookup_kdc = false\n[realms]\n  MYREALM = {\n    kdc = localhost\n    admin_server = localhost\n  }" > /etc/krb5.conf''; fi'
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; echo "Sleeping 2hrs for SSH debug..."; sleep 7200; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
-            - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
+            - ./tests/run-all-tests.sh
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}
         - name: "SASL SSL cluster (aarch64)"
           env_vars:
@@ -107,8 +95,6 @@ blocks:
             - 'export TEST_TRIVUP_PARAMETERS=''--conf ["connections.max.reauth.ms=10000"]'''
             - 'if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then export TEST_TRIVUP_PARAMETERS=''--oidc --conf ["connections.max.reauth.ms=10000"]''; fi'
             - if [[ "$TEST_SASL" == "OAUTHBEARER" ]]; then (cd tests && echo "TESTS=0126 make 2>&1; exit" | python3 interactive_broker_version.py --kraft --sasl OAUTHBEARER --oauthbearer-method OIDC ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "OIDC tests (0126) PASSED" || { echo "OIDC tests (0126) FAILED"; exit 1; }; fi
-            - 'if [[ "$TEST_SASL" == "GSSAPI" ]]; then sudo bash -c ''echo -e "[libdefaults]\n  default_realm = MYREALM\n  dns_lookup_realm = false\n  dns_lookup_kdc = false\n[realms]\n  MYREALM = {\n    kdc = localhost\n    admin_server = localhost\n  }" > /etc/krb5.conf''; fi'
-            - if [[ "$TEST_SASL" == "GSSAPI" ]]; then (cd tests && python3 sasl_test.py --kraft --suite "SASL Kerberos" ${TEST_KAFKA_GIT_REF:-4.2.0}) && echo "GSSAPI tests PASSED" || { echo "GSSAPI tests FAILED"; cat tests/tmp/LibrdkafkaTestCluster/*/LibrdkafkaTestApp/*/stderr.log 2>/dev/null | tail -500; echo "Sleeping 2hrs for SSH debug..."; sleep 7200; exit 1; }; fi
             - cache restore trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG}
-            - if [[ "$TEST_SASL" != "GSSAPI" ]]; then ./tests/run-all-tests.sh; fi
+            - ./tests/run-all-tests.sh
             - cache store trivup-kafka-${TEST_KAFKA_GIT_REF:-4.2.0}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${TEST_KAFKA_GIT_REF:-4.2.0}

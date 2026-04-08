@@ -1963,7 +1963,6 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
-                case RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED:
                 case RD_KAFKA_RESP_ERR__TRANSPORT:
                 case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
                         rd_kafka_broker_session_reset(rkb, rko_orig);

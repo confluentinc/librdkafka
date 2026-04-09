@@ -3289,6 +3289,25 @@ RD_EXPORT
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
+ * @brief Get the underlying rd_kafka_t handle from a share consumer instance.
+ *
+ * This function retrieves the internal rd_kafka_t handle associated with
+ * the share consumer. This is useful for accessing low-level consumer
+ * information such as assignment, fatal errors, etc.
+ *
+ * @param rkshare Share consumer instance.
+ *
+ * @returns The underlying rd_kafka_t handle, or NULL if \p rkshare is NULL.
+ *
+ * @remark The returned handle is owned by the share consumer and must not
+ *         be destroyed by the application.
+ *
+ * @sa rd_kafka_share_consumer_new()
+ */
+RD_EXPORT
+rd_kafka_t *rd_kafka_share_consumer_get_rk(rd_kafka_share_t *rkshare);
+
+/**
  * @brief Flags for rd_kafka_destroy_flags()
  */
 

@@ -990,6 +990,8 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         common_producer = test_create_producer();
         common_admin    = test_create_producer();
 
+        test_timeout_set(200);
+
         /* Basic subscription tests */
         do_test_scenario(&test_single_subscribe);
         do_test_scenario(&test_single_unsubscribe);

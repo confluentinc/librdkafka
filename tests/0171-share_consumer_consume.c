@@ -757,6 +757,8 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         common_producer = test_create_producer();
         common_admin    = test_create_producer();
 
+        test_timeout_set(200);
+
         /* Single-consumer tests */
         test_single_consumer_single_topic_single_partition();      /* Single
                                                                       consumer,

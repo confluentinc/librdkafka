@@ -555,7 +555,8 @@ rd_kafka_t *test_create_consumer(
     rd_kafka_conf_t *conf,
     rd_kafka_topic_conf_t *default_topic_conf);
 
-rd_kafka_share_t *test_create_share_consumer(const char *group_id);
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode);
 
 
 #define TEST_SHARE_BATCH_SIZE 500

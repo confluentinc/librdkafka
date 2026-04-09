@@ -2841,7 +2841,8 @@ rd_kafka_t *test_create_consumer(
  *         once these properties are added as defaults to
  *         rd_kafka_share_consumer_new().
  */
-rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         char errstr[512];
@@ -2851,6 +2852,11 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                           sizeof(errstr));
+
+        if (ack_mode) {
+                rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode,
+                                  errstr, sizeof(errstr));
+        }
 
         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);

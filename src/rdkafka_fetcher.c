@@ -1957,7 +1957,7 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
-                rd_rkb_dbg(rkb, FETCH, "SHAREACK",
+                rd_rkb_log(rkb, LOG_INFO, "SHAREACK",
                            "ShareAcknowledge reply error: %s",
                            rd_kafka_err2str(err));
                 switch (err) {
@@ -1965,16 +1965,26 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
                 case RD_KAFKA_RESP_ERR__TRANSPORT:
                 case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                        /* TODO KIP-932: For __TRANSPORT and
+                         * REQUEST_TIMED_OUT, also tear down the broker
+                         * connection. See Session Management Design
+                         * doc for details. */
                         rd_kafka_broker_session_reset(rkb, rko_orig);
                         break;
 
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-                case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-                case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
+                        /* TODO KIP-932:
+                         * 1) Java only triggers metadata refresh for
+                         *    UNKNOWN_TOPIC_ID at the top-level. The
+                         *    other errors are handled at partition-
+                         *    level. Consider removing them here.
+                         * 2) Java uses leader info from the response
+                         *    (currentLeader + nodeEndpoints) to update
+                         *    partition leadership directly, rather
+                         *    than a full metadata refresh RPC. */
                         rd_snprintf(tmp, sizeof(tmp),
                                     "ShareAcknowledge failed: %s",
                                     rd_kafka_err2str(err));
@@ -1984,6 +1994,12 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
 
                 default:
+                        /* TODO KIP-932: Java retries retriable errors
+                         * with exponential backoff
+                         * (moveAllToIncompleteAcks) and fails
+                         * non-retriable errors permanently (completes
+                         * acks with the error via callback).
+                         * Currently acks are silently destroyed. */
                         break;
                 }
         }
@@ -2040,10 +2056,14 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 err = rd_kafka_share_fetch_reply_handle(rkb, reply, request,
                                                         &response_rko);
 
+        /* TODO KIP-932: Partition add/remove is done unconditionally
+         * here, which is likely correct — Java also keeps partitions
+         * in the session after errors and relies on metadata-driven
+         * migration. Verify this matches Java behavior. */
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
-                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                rd_rkb_log(rkb, LOG_INFO, "SHAREFETCH",
                            "ShareFetch reply error: %s", rd_kafka_err2str(err));
                 switch (err) {
                 case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
@@ -2054,18 +2074,27 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         /* Session is invalid, lost, cannot be created,
                          * or connection/request failed.
                          * Reset session state so the next request
-                         * re-establishes a new session (epoch 0). */
+                         * re-establishes a new session (epoch 0).
+                         * TODO KIP-932: For __TRANSPORT and
+                         * REQUEST_TIMED_OUT, also tear down the broker
+                         * connection. See Session Management Design
+                         * doc for details. */
                         rd_kafka_broker_session_reset(rkb, rko_orig);
                         break;
 
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                case RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-                case RD_KAFKA_RESP_ERR_BROKER_NOT_AVAILABLE:
-                case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* Request metadata information update */
+                        /* TODO KIP-932:
+                         * 1) Java only triggers metadata refresh for
+                         *    UNKNOWN_TOPIC_ID at the top-level. The
+                         *    other errors are handled at partition-
+                         *    level. Consider removing them here.
+                         * 2) Java uses leader info from the response
+                         *    (currentLeader + nodeEndpoints) to update
+                         *    partition leadership directly, rather
+                         *    than a full metadata refresh RPC. */
                         rd_snprintf(tmp, sizeof(tmp), "FetchRequest failed: %s",
                                     rd_kafka_err2str(err));
                         rd_kafka_metadata_refresh_known_topics(
@@ -2074,9 +2103,11 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 }
 
                 default:
-                        /* TODO KIP-932: Fatal error handling.
-                         * Propagate fatal errors to the application
-                         * and do not retry. */
+                        /* No error-specific handling at the request
+                         * level. Java treats all non-session top-level
+                         * errors as transient (increments epoch). The
+                         * main thread retries by selecting another
+                         * broker. */
                         break;
                 }
 
@@ -2899,7 +2930,10 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
         }
 
         if (!rko_orig->rko_u.share_fetch.should_fetch) {
-                /* Ack-only: use ShareAcknowledge RPC */
+                /* Ack-only: use ShareAcknowledge RPC.
+                 * TODO KIP-932: If epoch is 0 (new/reset session),
+                 * fail acks with INVALID_SHARE_SESSION_EPOCH instead
+                 * of sending them. */
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
                              "Sending ShareAcknowledge Request with"
                              " acknowledgements");
@@ -2914,6 +2948,10 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
         toppars_to_add    = rkb->rkb_share_fetch_session.toppars_to_add;
         toppars_to_forget = rkb->rkb_share_fetch_session.toppars_to_forget;
 
+        /* TODO KIP-932: If epoch is 0 (new/reset session), fail
+         * piggybacked acks with INVALID_SHARE_SESSION_EPOCH and
+         * strip them from the request. The ShareFetch itself should
+         * still be sent to create the session. */
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                      "Sending ShareFetch Request with%s%s%s fetching messages",
                      has_ack_details ? " acknowledgements," : "",

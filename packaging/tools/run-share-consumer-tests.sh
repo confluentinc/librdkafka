@@ -26,7 +26,7 @@ echo "arguments: $TEST_ARGS"
 # Debug logs are output to console and captured in Semaphore job logs.
 
 # Run all share consumer tests together with debug logging
-(cd tests && TEST_DEBUG=all python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
+(cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
  --conf '["group.share.min.record.lock.duration.ms=1000"]' \
  --version "$TEST_KAFKA_GIT_REF" \
  --cpversion "$TEST_CP_VERSION" \

@@ -44,6 +44,7 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
+#include "../src/rdstring.h"
 
 
 int test_level = 2;
@@ -1049,9 +1050,6 @@ const char *test_getenv(const char *env, const char *def) {
 static int test_should_enable_debug(void) {
         const char *tests_to_debug;
         const char *test_debug;
-        char *tests_copy;
-        char *token;
-        char *saveptr    = NULL;
         int should_debug = 0;
 
         /* If TEST_DEBUG is not set, no debug logging */
@@ -1069,26 +1067,27 @@ static int test_should_enable_debug(void) {
         if (!test_curr || !test_curr->name)
                 return 1; /* Enable by default if test name not available */
 
-        /* Make a copy of TESTS_TO_DEBUG for tokenization */
-        tests_copy = rd_strdup(tests_to_debug);
+        /* Split TESTS_TO_DEBUG into comma-separated tokens */
+        char **tokens;
+        size_t token_cnt;
+        size_t i;
 
-        /* Check if current test number is in the comma-separated list */
-        token = strtok_r(tests_copy, ",", &saveptr);
-        while (token) {
-                /* Trim leading whitespace */
-                while (*token && isspace((unsigned char)*token))
-                        token++;
+        tokens = rd_string_split(tests_to_debug, ',', rd_true /*skip empty*/,
+                                 &token_cnt);
+        if (!tokens)
+                return 1;
 
+        /* Check if current test number is in the list */
+        for (i = 0; i < token_cnt; i++) {
                 /* Check if current test name starts with this test number */
-                if (strncmp(test_curr->name, token, strlen(token)) == 0) {
+                if (strncmp(test_curr->name, tokens[i], strlen(tokens[i])) ==
+                    0) {
                         should_debug = 1;
                         break;
                 }
-
-                token = strtok_r(NULL, ",", &saveptr);
         }
 
-        rd_free(tests_copy);
+        rd_free(tokens);
         return should_debug;
 }
 

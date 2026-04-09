@@ -1088,6 +1088,8 @@ int main_0177_share_consumer_transactions(int argc, char **argv) {
         const char *isolation_levels[] = {"read_committed", "read_uncommitted"};
         int i;
 
+        test_timeout_set(200);
+
         /* Create common handles for all tests */
         common_admin            = test_create_producer();
         common_regular_producer = test_create_producer();

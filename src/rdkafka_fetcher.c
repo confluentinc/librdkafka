@@ -1964,11 +1964,20 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND:
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
                 case RD_KAFKA_RESP_ERR__TRANSPORT:
-                case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
-                        /* TODO KIP-932: For __TRANSPORT and
-                         * REQUEST_TIMED_OUT, also tear down the broker
-                         * connection. See Session Management Design
-                         * doc for details. */
+                case RD_KAFKA_RESP_ERR__TIMED_OUT:
+                        /* __TRANSPORT means connection is already
+                         * dead.
+                         * TODO KIP-932: For __TIMED_OUT:
+                         * 1) Ensure socket.max.fails cannot be set
+                         *    for share consumer, or if it can be set,
+                         *    tear down the connection for each
+                         *    ShareFetch/ShareAcknowledge timed out
+                         *    request regardless of the threshold.
+                         *    Java always disconnects on timeout.
+                         * 2) Ensure reconnect after teardown. Verify
+                         *    that sparse connection's need_connection
+                         *    is updated after the connection is torn
+                         *    down so that the broker reconnects. */
                         rd_kafka_broker_session_reset(rkb, rko_orig);
                         break;
 
@@ -2070,15 +2079,24 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
                 case RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED:
                 case RD_KAFKA_RESP_ERR__TRANSPORT:
-                case RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT:
+                case RD_KAFKA_RESP_ERR__TIMED_OUT:
                         /* Session is invalid, lost, cannot be created,
                          * or connection/request failed.
                          * Reset session state so the next request
                          * re-establishes a new session (epoch 0).
-                         * TODO KIP-932: For __TRANSPORT and
-                         * REQUEST_TIMED_OUT, also tear down the broker
-                         * connection. See Session Management Design
-                         * doc for details. */
+                         * __TRANSPORT means connection is already
+                         * dead.
+                         * TODO KIP-932: For __TIMED_OUT:
+                         * 1) Ensure socket.max.fails cannot be set
+                         *    for share consumer, or if it can be set,
+                         *    tear down the connection for each
+                         *    ShareFetch/ShareAcknowledge timed out
+                         *    request regardless of the threshold.
+                         *    Java always disconnects on timeout.
+                         * 2) Ensure reconnect after teardown. Verify
+                         *    that sparse connection's need_connection
+                         *    is updated after the connection is torn
+                         *    down so that the broker reconnects. */
                         rd_kafka_broker_session_reset(rkb, rko_orig);
                         break;
 

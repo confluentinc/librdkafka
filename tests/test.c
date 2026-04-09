@@ -44,7 +44,6 @@
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
-#include "../src/rdstring.h"
 
 
 int test_level = 2;
@@ -1067,27 +1066,45 @@ static int test_should_enable_debug(void) {
         if (!test_curr || !test_curr->name)
                 return 1; /* Enable by default if test name not available */
 
-        /* Split TESTS_TO_DEBUG into comma-separated tokens */
-        char **tokens;
-        size_t token_cnt;
-        size_t i;
+        /* Simple comma-separated parsing */
+        const char *p = tests_to_debug;
+        while (*p) {
+                const char *comma;
+                size_t token_len;
 
-        tokens = rd_string_split(tests_to_debug, ',', rd_true /*skip empty*/,
-                                 &token_cnt);
-        if (!tokens)
-                return 1;
+                /* Skip leading whitespace */
+                while (*p && isspace((unsigned char)*p))
+                        p++;
 
-        /* Check if current test number is in the list */
-        for (i = 0; i < token_cnt; i++) {
-                /* Check if current test name starts with this test number */
-                if (strncmp(test_curr->name, tokens[i], strlen(tokens[i])) ==
-                    0) {
+                if (!*p)
+                        break;
+
+                /* Find next comma or end of string */
+                comma = strchr(p, ',');
+                if (comma)
+                        token_len = (size_t)(comma - p);
+                else
+                        token_len = strlen(p);
+
+                /* Trim trailing whitespace */
+                while (token_len > 0 &&
+                       isspace((unsigned char)p[token_len - 1]))
+                        token_len--;
+
+                /* Check if current test name starts with this token */
+                if (token_len > 0 &&
+                    strncmp(test_curr->name, p, token_len) == 0) {
                         should_debug = 1;
                         break;
                 }
+
+                /* Move to next token */
+                if (comma)
+                        p = comma + 1;
+                else
+                        break;
         }
 
-        rd_free(tokens);
         return should_debug;
 }
 

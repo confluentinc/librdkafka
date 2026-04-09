@@ -199,6 +199,34 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
+  - name: 'Linux Ubuntu amd64: Share Consumer Single Broker Tests'
+    dependencies: []
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-1
+      prologue:
+        commands:
+          - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+          - sudo dpkg -i rapidjson-dev.deb
+          - (cd tests && python3 -m pip install -r requirements.txt)
+          - ./configure --install-deps --enable-werror --enable-devel
+          - make -j all
+          - make -j -C tests build
+          - sem-version java 17
+      jobs:
+        - name: 'Build and run share consumer tests'
+          commands:
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft
+              --version ${KAFKA_VERSION} --cpversion ${CP_VERSION}
+              --brokers 1
+              --conf '["share.coordinator.state.topic.replication.factor=1", "share.coordinator.state.topic.min.isr=1", "group.share.min.record.lock.duration.ms=1000"]'
+              --cmd 'TESTS_SKIP_BEFORE=0170 python3 run-test-batches.py')
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
     run:

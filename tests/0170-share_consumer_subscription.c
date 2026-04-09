@@ -1023,6 +1023,7 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_subscribe_15_topics();
 
         /* Cleanup common handles */
+        rd_kafka_flush(common_producer, 5000);
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);
 

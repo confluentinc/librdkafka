@@ -815,6 +815,8 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         test_empty_then_produce();
         test_sparse_partitions();
 
+        TEST_SAY("\nAll share consumer consume tests passed successfully!\n");
+
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

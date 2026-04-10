@@ -59,7 +59,8 @@ static rd_kafka_t *create_txn_producer(const char *txn_id) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 30000));
+        /* Use 60s timeout to account for broker load when tests run in parallel */
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 60000));
 
         return rk;
 }

@@ -555,9 +555,9 @@ rd_kafka_t *test_create_consumer(
     rd_kafka_conf_t *conf,
     rd_kafka_topic_conf_t *default_topic_conf);
 
-rd_kafka_share_t *test_create_share_consumer(const char *group_id);
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode);
 
-rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare);
 
 #define TEST_SHARE_BATCH_SIZE 500
 
@@ -888,6 +888,10 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
                                     const char *resname,
                                     const char **configs,
                                     size_t config_cnt);
+
+void test_alter_group_configurations(const char *group_name,
+                                     const char **cfg,
+                                     size_t cfg_cnt);
 
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,

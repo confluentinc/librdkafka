@@ -31,6 +31,7 @@
 #include "rdkafka_admin.h"
 #include "rdkafka_request.h"
 #include "rdkafka_aux.h"
+#include "rdunittest.h"
 
 #include <stdarg.h>
 
@@ -7581,6 +7582,41 @@ err_parse:
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+/**
+ * @brief Append groups from \p src to \p dst, skipping duplicates.
+ *
+ * Uses a hash map for O(1) lookups.  When the same group is reported
+ * by multiple brokers the first response wins; this is acceptable
+ * because group state is point-in-time and any single broker's view
+ * is equally valid.
+ */
+static void
+rd_kafka_ConsumerGroupListing_list_append_dedup(rd_list_t *dst,
+                                                const rd_list_t *src) {
+        const rd_kafka_ConsumerGroupListing_t *grp;
+        rd_kafka_ConsumerGroupListing_t *copy;
+        int j;
+        rd_map_t seen;
+
+        rd_map_init(&seen, rd_list_cnt(dst) + rd_list_cnt(src),
+                    rd_map_str_cmp, rd_map_str_hash, NULL, NULL);
+
+        RD_LIST_FOREACH(grp, dst, j) {
+                rd_map_set(&seen, (void *)grp->group_id, (void *)grp);
+        }
+
+        rd_list_grow(dst, rd_list_cnt(src));
+        RD_LIST_FOREACH(grp, src, j) {
+                if (rd_map_get(&seen, grp->group_id))
+                        continue;
+                copy = rd_kafka_ConsumerGroupListing_copy(grp);
+                rd_list_add(dst, copy);
+                rd_map_set(&seen, (void *)copy->group_id, (void *)copy);
+        }
+
+        rd_map_destroy(&seen);
+}
+
 /** @brief Merge the ListConsumerGroups response from a single broker
  *         into the user response list.
  */
@@ -7620,11 +7656,8 @@ rd_kafka_ListConsumerGroups_response_merge(rd_kafka_op_t *rko_fanout,
                 new_valid_count  = rd_list_cnt(&newres->valid);
                 new_errors_count = rd_list_cnt(&newres->errors);
                 if (new_valid_count) {
-                        new_valid_list = &newres->valid;
-                        rd_list_grow(&res->valid, new_valid_count);
-                        rd_list_copy_to(
-                            &res->valid, new_valid_list,
-                            rd_kafka_ConsumerGroupListing_copy_opaque, NULL);
+                        rd_kafka_ConsumerGroupListing_list_append_dedup(
+                            &res->valid, &newres->valid);
                 }
                 if (new_errors_count) {
                         new_errors_list = &newres->errors;
@@ -9806,6 +9839,294 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
         rd_kafka_q_enq(rk->rk_ops, rko);
         if (copied_partitions)
                 rd_kafka_topic_partition_list_destroy(copied_partitions);
+}
+
+/**@}*/
+
+
+/**
+ * @name Unit tests
+ * @{
+ */
+
+/**
+ * @brief Helper to create a mock partial result op containing the given
+ *        group_ids, for testing the merge function.
+ */
+static rd_kafka_op_t *
+ut_make_ListConsumerGroups_partial(const char **group_ids, int group_cnt) {
+        rd_kafka_op_t *rko_partial;
+        rd_list_t valid, errors;
+        rd_kafka_ListConsumerGroupsResult_t *result;
+        int i;
+
+        rko_partial = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_RESULT);
+        rko_partial->rko_evtype =
+            RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT;
+        rko_partial->rko_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        rd_list_init(&valid, group_cnt,
+                     rd_kafka_ConsumerGroupListing_free);
+        rd_list_init(&errors, 0, rd_free);
+
+        for (i = 0; i < group_cnt; i++) {
+                rd_list_add(&valid,
+                            rd_kafka_ConsumerGroupListing_new(
+                                group_ids[i], rd_false,
+                                RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
+                                RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC));
+        }
+
+        result = rd_kafka_ListConsumerGroupsResult_new(&valid, &errors);
+
+        rd_list_init(&rko_partial->rko_u.admin_result.results, 1,
+                     rd_kafka_ListConsumerGroupsResult_free);
+        rd_list_add(&rko_partial->rko_u.admin_result.results, result);
+
+        rd_list_destroy(&valid);
+        rd_list_destroy(&errors);
+
+        return rko_partial;
+}
+
+/**
+ * @brief Helper to create a mock partial error result op.
+ */
+static rd_kafka_op_t *
+ut_make_ListConsumerGroups_partial_error(rd_kafka_resp_err_t err) {
+        rd_kafka_op_t *rko_partial;
+
+        rko_partial = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_RESULT);
+        rko_partial->rko_evtype =
+            RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT;
+        rko_partial->rko_err = err;
+
+        rd_list_init(&rko_partial->rko_u.admin_result.results, 0,
+                     NULL);
+
+        return rko_partial;
+}
+
+/**
+ * @brief Helper to create a fanout op for merge testing.
+ */
+static rd_kafka_op_t *ut_make_ListConsumerGroups_fanout(void) {
+        rd_kafka_op_t *rko_fanout;
+
+        rko_fanout = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_FANOUT);
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results, 1,
+                     rd_kafka_ListConsumerGroupsResult_free);
+        rd_list_init(&rko_fanout->rko_u.admin_request.args, 0, NULL);
+
+        return rko_fanout;
+}
+
+/**
+ * @brief Verify that the merged result contains exactly the expected
+ *        group ids (in any order) and no duplicates.
+ *
+ * @returns 0 on success, 1 on failure.
+ */
+static int
+ut_verify_ListConsumerGroups_result(const rd_kafka_op_t *rko_fanout,
+                                   const char **expected_group_ids,
+                                   int expected_cnt,
+                                   int expected_error_cnt,
+                                   const char *test_label) {
+        rd_kafka_ListConsumerGroupsResult_t *res;
+        int valid_cnt, error_cnt, i, j;
+
+        res = rd_list_elem(
+            &rko_fanout->rko_u.admin_request.fanout.results, 0);
+        RD_UT_ASSERT(res != NULL, "%s: expected non-NULL result",
+                     test_label);
+
+        valid_cnt = rd_list_cnt(&res->valid);
+        error_cnt = rd_list_cnt(&res->errors);
+
+        RD_UT_ASSERT(valid_cnt == expected_cnt,
+                     "%s: expected %d unique groups, got %d",
+                     test_label, expected_cnt, valid_cnt);
+
+        RD_UT_ASSERT(error_cnt == expected_error_cnt,
+                     "%s: expected %d errors, got %d",
+                     test_label, expected_error_cnt, error_cnt);
+
+        /* Verify each expected group is present exactly once */
+        for (i = 0; i < expected_cnt; i++) {
+                int found = 0;
+                for (j = 0; j < valid_cnt; j++) {
+                        const rd_kafka_ConsumerGroupListing_t *grp =
+                            rd_list_elem(&res->valid, j);
+                        if (!strcmp(grp->group_id, expected_group_ids[i]))
+                                found++;
+                }
+                RD_UT_ASSERT(found == 1,
+                             "%s: expected group '%s' exactly once, "
+                             "found %d times",
+                             test_label, expected_group_ids[i], found);
+        }
+
+        return 0;
+}
+
+/**
+ * @brief Test ListConsumerGroups_response_merge deduplication.
+ */
+static int ut_ListConsumerGroups_response_merge(void) {
+        rd_kafka_op_t *rko_fanout;
+        rd_kafka_op_t *rko_partial;
+
+        RD_UT_BEGIN();
+
+        /*
+         * Test 1: Two brokers return identical groups.
+         * Merge {A, B} then {A, B} → expect {A, B}
+         */
+        {
+                const char *groups1[]   = {"groupA", "groupB"};
+                const char *groups2[]   = {"groupA", "groupB"};
+                const char *expected[]  = {"groupA", "groupB"};
+
+                rko_fanout = ut_make_ListConsumerGroups_fanout();
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups2, 2);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                if (ut_verify_ListConsumerGroups_result(
+                        rko_fanout, expected, 2, 0,
+                        "identical groups from two brokers"))
+                        return 1;
+
+                rd_kafka_op_destroy(rko_fanout);
+        }
+
+        /*
+         * Test 2: Two brokers return completely disjoint groups.
+         * Merge {A, B} then {C, D} → expect {A, B, C, D}
+         */
+        {
+                const char *groups1[]  = {"groupA", "groupB"};
+                const char *groups2[]  = {"groupC", "groupD"};
+                const char *expected[] = {"groupA", "groupB",
+                                          "groupC", "groupD"};
+
+                rko_fanout = ut_make_ListConsumerGroups_fanout();
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups2, 2);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                if (ut_verify_ListConsumerGroups_result(
+                        rko_fanout, expected, 4, 0,
+                        "disjoint groups from two brokers"))
+                        return 1;
+
+                rd_kafka_op_destroy(rko_fanout);
+        }
+
+        /*
+         * Test 3: Three brokers with complex overlap.
+         * Broker1: {A, B, C}, Broker2: {B, C, D}, Broker3: {C, D, E}
+         * → expect {A, B, C, D, E}
+         */
+        {
+                const char *groups1[]  = {"groupA", "groupB", "groupC"};
+                const char *groups2[]  = {"groupB", "groupC", "groupD"};
+                const char *groups3[]  = {"groupC", "groupD", "groupE"};
+                const char *expected[] = {"groupA", "groupB", "groupC",
+                                          "groupD", "groupE"};
+
+                rko_fanout = ut_make_ListConsumerGroups_fanout();
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups1, 3);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups2, 3);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups3, 3);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                if (ut_verify_ListConsumerGroups_result(
+                        rko_fanout, expected, 5, 0,
+                        "three brokers with complex overlap"))
+                        return 1;
+
+                rd_kafka_op_destroy(rko_fanout);
+        }
+
+        /*
+         * Test 4: Duplicates with interleaved error.
+         * Broker1: {A, B}, Broker2: error, Broker3: {A, C}
+         * → expect {A, B, C} + 1 error
+         */
+        {
+                const char *groups1[]  = {"groupA", "groupB"};
+                const char *groups3[]  = {"groupA", "groupC"};
+                const char *expected[] = {"groupA", "groupB", "groupC"};
+
+                rko_fanout = ut_make_ListConsumerGroups_fanout();
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                rko_partial = ut_make_ListConsumerGroups_partial_error(
+                    RD_KAFKA_RESP_ERR__TIMED_OUT);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                rko_partial =
+                    ut_make_ListConsumerGroups_partial(groups3, 2);
+                rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
+                                                          rko_partial);
+                rd_kafka_op_destroy(rko_partial);
+
+                if (ut_verify_ListConsumerGroups_result(
+                        rko_fanout, expected, 3, 1,
+                        "duplicates with interleaved error"))
+                        return 1;
+
+                rd_kafka_op_destroy(rko_fanout);
+        }
+
+        RD_UT_PASS();
+}
+
+int unittest_admin(void) {
+        int fails = 0;
+        fails += ut_ListConsumerGroups_response_merge();
+        return fails;
 }
 
 /**@}*/

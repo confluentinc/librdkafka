@@ -1192,5 +1192,8 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);
 
+        /* Wait for all background threads to complete */
+        rd_kafka_wait_destroyed(10000);
+
         return 0;
 }

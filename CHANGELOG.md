@@ -1,3 +1,12 @@
+# Unreleased
+
+## Fixes
+
+### Admin client fixes
+
+* Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.
+
+
 # librdkafka v2.14.1
 
 librdkafka v2.14.1 is a maintenance release:

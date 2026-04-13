@@ -419,7 +419,8 @@ do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
 
         TEST_ASSERT(rcvd == 0,
                     "Expected no messages with invalid token endpoint, "
-                    "got %zu", rcvd);
+                    "got %zu",
+                    rcvd);
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer "
                     "with invalid token endpoint");
@@ -555,8 +556,9 @@ fail:
 }
 
 /**
- * @brief Share consumer version of do_test_produce_consumer_with_OIDC_should_fail.
- *        Verifies authentication failure with share consumer.
+ * @brief Share consumer version of
+ * do_test_produce_consumer_with_OIDC_should_fail. Verifies authentication
+ * failure with share consumer.
  */
 static void do_test_produce_share_consumer_with_OIDC_should_fail(
     const char *test_name,
@@ -593,8 +595,8 @@ static void do_test_produce_share_consumer_with_OIDC_should_fail(
         if (err)
                 rd_kafka_error_destroy(err);
 
-        TEST_ASSERT(rcvd == 0,
-                    "Expected no messages on auth failure, got %zu", rcvd);
+        TEST_ASSERT(rcvd == 0, "Expected no messages on auth failure, got %zu",
+                    rcvd);
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer");
 
@@ -823,11 +825,10 @@ static const char *oidc_configuration_sub_claim_variation_name(
         rd_assert(variation >=
                       OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB &&
                   variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT);
-        static const char *names[] = {
-            "default sub claim", "explicit sub claim",
-            "empty string (defaults to sub)",
-            "custom client_id claim (should fail)",
-            "missing claim (should fail)"};
+        static const char *names[] = {"default sub claim", "explicit sub claim",
+                                      "empty string (defaults to sub)",
+                                      "custom client_id claim (should fail)",
+                                      "missing claim (should fail)"};
         return names[variation];
 }
 
@@ -915,8 +916,7 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
         }
 }
 
-void do_test_produce_share_consumer_with_OIDC_sub_claim(
-    rd_kafka_conf_t *conf) {
+void do_test_produce_share_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
         rd_kafka_conf_t *sub_claim_conf;
         oidc_configuration_sub_claim_variation_t variation;
 

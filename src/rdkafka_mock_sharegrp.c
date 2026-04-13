@@ -788,7 +788,7 @@ void rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
 }
 
 /**
- * @brief Set the maximum number of fetch sessions allowed in a share group.
+ * @brief Set the maximum number of fetch sessions allowed per broker.
  */
 void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
     rd_kafka_mock_cluster_t *mcluster,

@@ -718,15 +718,15 @@ rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
                                       int max_size);
 
 /**
- * @brief Set the maximum number of fetch sessions allowed in a share group.
+ * @brief Set the maximum number of fetch sessions allowed per broker.
  *
- * New sessions attempted via ShareFetch with epoch 0 when the group
+ * New sessions attempted via ShareFetch with epoch 0 when the broker
  * is at capacity will receive SHARE_SESSION_LIMIT_REACHED.
  *
  * Default is 2000 (per KIP-932 group.share.max.share.sessions).
  *
  * @param mcluster Mock cluster instance.
- * @param max_fetch_sessions Maximum fetch sessions allowed. 0 = unlimited.
+ * @param max_fetch_sessions Maximum fetch sessions per broker. 0 = unlimited.
  */
 RD_EXPORT void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
     rd_kafka_mock_cluster_t *mcluster,

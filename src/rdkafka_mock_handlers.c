@@ -4092,10 +4092,23 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 if (!err && SessionEpoch == 0) {
                         /* Open a new session (or reuse if one already exists
                          * for this member on this broker). */
+                        int broker_session_cnt = 0;
+                        rd_kafka_mock_sharegroup_t *sg;
+                        rd_kafka_mock_sgrp_fetch_session_t *s;
+                        /* Count sessions across ALL share groups on this
+                         * broker.  Per KIP-932, group.share.max.share.sessions
+                         * is a per-broker limit with cache key (GroupId,
+                         * MemberId). */
+                        TAILQ_FOREACH(sg, &mcluster->sharegrps, link) {
+                                TAILQ_FOREACH(s, &sg->fetch_sessions, link) {
+                                        if (s->node_id == mconn->broker->id)
+                                                broker_session_cnt++;
+                                }
+                        }
                         if (!session && sgrp->max_fetch_sessions > 0 &&
-                            sgrp->fetch_session_cnt >=
+                            broker_session_cnt >=
                                 sgrp->max_fetch_sessions) {
-                                /* Session cache is full. */
+                                /* Session cache is full for this broker. */
                                 err =
                                     RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED;
                         } else if (!session) {

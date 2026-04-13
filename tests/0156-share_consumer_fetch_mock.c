@@ -1125,6 +1125,89 @@ static void do_test_session_limit_reached(void) {
 }
 
 /**
+ * @brief Test that the session limit is enforced per broker, not globally.
+ *
+ * Create two single-partition topics, each with its leader on a
+ * different broker.  Set max_fetch_sessions=1 (per broker).
+ *
+ * Consumer 1 subscribes to topic_a (broker 1) and consumer 2 subscribes
+ * to topic_b (broker 2).  Both should succeed because each broker only
+ * has 1 session despite there being 2 sessions globally.
+ *
+ * Then consumer 3 subscribes to topic_a — this should fail because
+ * broker 1 already has 1 session (from consumer 1).
+ */
+static void do_test_session_limit_per_broker(void) {
+        const char *topic_a = "kip932_session_limit_pb_a";
+        const char *topic_b = "kip932_session_limit_pb_b";
+        const int msgcnt    = 5;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer1, *consumer2, *consumer3;
+        int consumed1, consumed2, consumed3;
+
+        SUB_TEST();
+
+        ctx = test_ctx_new();
+
+        /* Create two topics, each with 1 partition on a different broker. */
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic A");
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_b, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic B");
+        rd_kafka_mock_partition_set_leader(ctx.mcluster, topic_a, 0, 1);
+        rd_kafka_mock_partition_set_leader(ctx.mcluster, topic_b, 0, 2);
+
+        produce_messages(ctx.producer, topic_a, msgcnt);
+        produce_messages(ctx.producer, topic_b, msgcnt);
+
+        /* Limit to 1 session per broker */
+        rd_kafka_mock_sharegroup_set_max_fetch_sessions(ctx.mcluster, 1);
+
+        /* Consumer 1 subscribes to topic_a -> session on broker 1 */
+        consumer1 =
+            new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
+        subscribe_topics(consumer1, &topic_a, 1);
+        consumed1 = consume_n(consumer1, msgcnt, 30);
+        TEST_ASSERT(consumed1 == msgcnt,
+                    "Consumer 1: expected %d consumed, got %d", msgcnt,
+                    consumed1);
+
+        /* Consumer 2 subscribes to topic_b -> session on broker 2.
+         * If the limit were global, this would fail (2 sessions > limit 1).
+         * Per-broker: broker 2 has 0 sessions, so it succeeds. */
+        consumer2 =
+            new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
+        subscribe_topics(consumer2, &topic_b, 1);
+        consumed2 = consume_n(consumer2, msgcnt, 30);
+        TEST_ASSERT(consumed2 == msgcnt,
+                    "Consumer 2: expected %d consumed, got %d", msgcnt,
+                    consumed2);
+
+        /* Consumer 3 subscribes to topic_a -> broker 1 already has
+         * 1 session (from consumer 1), so this should be rejected. */
+        consumer3 =
+            new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
+        subscribe_topics(consumer3, &topic_a, 1);
+        consumed3 = consume_n(consumer3, 1, 5);
+        TEST_ASSERT(consumed3 == 0,
+                    "Consumer 3: expected 0 consumed (broker 1 at limit), "
+                    "got %d",
+                    consumed3);
+
+        rd_kafka_share_consumer_close(consumer1);
+        rd_kafka_share_destroy(consumer1);
+        rd_kafka_share_consumer_close(consumer2);
+        rd_kafka_share_destroy(consumer2);
+        rd_kafka_share_consumer_close(consumer3);
+        rd_kafka_share_destroy(consumer3);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Test that ShareFetch with epoch=0 and acks is rejected with
  *        INVALID_REQUEST via the mock broker's injected error mechanism.
  *
@@ -1413,6 +1496,7 @@ int main_0156_share_consumer_fetch_mock(int argc, char **argv) {
 
         /* Session management */
         do_test_session_limit_reached();
+        do_test_session_limit_per_broker();
         do_test_session_limit_recovery();
 
         /* Record lock limits */

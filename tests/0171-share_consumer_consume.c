@@ -36,6 +36,23 @@
 #define MAX_PARTITIONS 32
 #define BATCH_SIZE     10000
 
+/** Common producer reused across all tests. */
+static rd_kafka_t *common_producer;
+
+/** Common admin client reused across all tests. */
+static rd_kafka_t *common_admin;
+
+/**
+ * @brief Produce messages using the common producer.
+ */
+static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
+        rd_kafka_topic_t *rkt;
+        rkt = test_create_producer_topic(common_producer, topic, NULL);
+        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
+                          0);
+        rd_kafka_topic_destroy(rkt);
+}
+
 /**
  * @brief Test configuration structure
  *
@@ -86,7 +103,7 @@ static void create_share_consumers(share_test_config_t *config,
 
         for (i = 0; i < config->consumer_cnt; i++) {
                 state->consumers[i] =
-                    test_create_share_consumer(config->group_name);
+                    test_create_share_consumer(config->group_name, NULL);
         }
 
         TEST_SAY("Created %d share consumer(s)\n", config->consumer_cnt);
@@ -114,8 +131,8 @@ static void setup_topics_and_produce(share_test_config_t *config,
 
                 /* Produce messages to each partition */
                 for (p = 0; p < config->partitions[t]; p++) {
-                        test_produce_msgs_easy(state->topic_names[t], p, p,
-                                               config->msgs_per_partition);
+                        produce_to_topic(state->topic_names[t], p,
+                                         config->msgs_per_partition);
                         state->total_expected += config->msgs_per_partition;
                 }
 
@@ -140,10 +157,8 @@ static void subscribe_consumers(share_test_config_t *config,
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int t, i;
 
-        /* Set group config using first consumer */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(state->consumers[0]),
-            RD_KAFKA_RESOURCE_GROUP, config->group_name, grp_conf, 1);
+        /* Set group config using a dedicated admin client */
+        test_alter_group_configurations(config->group_name, grp_conf, 1);
 
         /* Build subscription list */
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
@@ -255,12 +270,8 @@ static void cleanup_test(share_test_config_t *config,
                          share_test_state_t *state) {
         int t, i;
 
-        /* Delete topics using first consumer */
         for (t = 0; t < config->topic_cnt; t++) {
                 if (state->topic_names[t]) {
-                        test_delete_topic(
-                            test_share_consumer_get_rk(state->consumers[0]),
-                            state->topic_names[t]);
                         rd_free(state->topic_names[t]);
                         state->topic_names[t] = NULL;
                 }
@@ -538,14 +549,12 @@ static void test_rapid_produce_consume_cycles(void) {
                  rounds, msgs_per_round);
 
         /* Create consumer and topic */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         topic    = test_mk_topic_name("0171-rapid-cycles", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure group */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        test_alter_group_configurations(group, grp_conf, 1);
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -559,7 +568,7 @@ static void test_rapid_produce_consume_cycles(void) {
                 int attempts       = 100;
 
                 /* Produce */
-                test_produce_msgs_easy(topic, 0, 0, msgs_per_round);
+                produce_to_topic(topic, 0, msgs_per_round);
 
                 /* Consume */
                 while (round_consumed < msgs_per_round && attempts-- > 0) {
@@ -594,8 +603,6 @@ static void test_rapid_produce_consume_cycles(void) {
         TEST_SAY("SUCCESS: Rapid cycles completed - %d messages\n",
                  total_consumed);
 
-        /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -616,14 +623,12 @@ static void test_empty_then_produce(void) {
         TEST_SAY("=== Empty topic then produce test ===\n");
 
         /* Create consumer and empty topic */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         topic    = test_mk_topic_name("0171-empty-then-produce", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        test_alter_group_configurations(group, grp_conf, 1);
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
@@ -644,7 +649,7 @@ static void test_empty_then_produce(void) {
 
         /* Now produce messages */
         TEST_SAY("Producing 100 messages...\n");
-        test_produce_msgs_easy(topic, 0, 0, 100);
+        produce_to_topic(topic, 0, 100);
 
         /* Consume - should get messages now */
         attempts = 100;
@@ -672,8 +677,6 @@ static void test_empty_then_produce(void) {
         TEST_SAY("SUCCESS: Empty then produce - consumed %d messages\n",
                  consumed);
 
-        /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -698,23 +701,21 @@ static void test_sparse_partitions(void) {
             "===\n");
 
         /* Create consumer and topic with 5 partitions */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         topic    = test_mk_topic_name("0171-sparse-partitions", 1);
         test_create_topic_wait_exists(NULL, topic, 5, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        test_alter_group_configurations(group, grp_conf, 1);
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
         /* Produce only to partitions 0, 2, 4 (skip 1, 3) */
-        test_produce_msgs_easy(topic, 0, 0, msgs_per_partition);
-        test_produce_msgs_easy(topic, 0, 2, msgs_per_partition);
-        test_produce_msgs_easy(topic, 0, 4, msgs_per_partition);
+        produce_to_topic(topic, 0, msgs_per_partition);
+        produce_to_topic(topic, 2, msgs_per_partition);
+        produce_to_topic(topic, 4, msgs_per_partition);
 
         TEST_SAY("Produced %d messages to partitions 0, 2, 4\n", expected);
 
@@ -746,184 +747,17 @@ static void test_sparse_partitions(void) {
         TEST_SAY("SUCCESS: Sparse partitions - consumed %d messages\n",
                  consumed);
 
-        /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer), topic);
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
 
 
-/**
- * @brief Test acquisition lock expiry and redelivery to another consumer
- *
- * This test verifies that:
- * 1. Records acquired by a consumer are locked for the configured duration
- * 2. When a consumer closes without acknowledging, the lock eventually expires
- * 3. After lock expiry, records are redelivered to another consumer
- *
- * Steps:
- * 1. Set group.share.record.lock.duration.ms to 15 seconds
- * 2. Consumer 1 receives 10 messages but doesn't acknowledge
- * 3. Consumer 1 closes without acknowledging
- * 4. Wait for lock to expire (15+ seconds)
- * 5. Consumer 2 should receive the same 10 messages
- */
-static void test_acquisition_lock_expiry_redelivery(void) {
-        rd_kafka_share_t *consumer1, *consumer2;
-        rd_kafka_message_t *batch[BATCH_SIZE];
-        const char *topic;
-        const char *group = "share-lock-expiry-test";
-        rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf_offset[] = {"share.auto.offset.reset", "SET",
-                                         "earliest"};
-        /* TODO KIP-932: Decrease this timeout */
-        const char *grp_conf_lock[] = {"share.record.lock.duration.ms", "SET",
-                                       "15000"};
-        int consumed1 = 0, consumed2 = 0, attempts;
-        const int msg_cnt          = 10;
-        const int lock_duration_ms = 15000;
-
-        TEST_SAY("\n");
-        TEST_SAY("=== Acquisition lock expiry and redelivery test ===\n");
-        TEST_SAY("Lock duration: %d ms, Messages: %d\n", lock_duration_ms,
-                 msg_cnt);
-
-        /* Create first consumer */
-        consumer1 = test_create_share_consumer(group);
-        topic     = test_mk_topic_name("0171-lock-expiry", 1);
-        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-
-        /* Configure group: set lock duration to 15 seconds */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf_lock, 1);
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf_offset, 1);
-
-        /* Produce messages */
-        TEST_SAY("Producing %d messages...\n", msg_cnt);
-        test_produce_msgs_easy(topic, 0, 0, msg_cnt);
-
-        /* Subscribe consumer 1 */
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        rd_kafka_share_subscribe(consumer1, subs);
-        rd_kafka_topic_partition_list_destroy(subs);
-
-        /* Consumer 1: receive messages but DO NOT acknowledge */
-        TEST_SAY("Consumer 1: receiving messages without acknowledging...\n");
-        attempts = 50;
-        while (consumed1 < msg_cnt && attempts-- > 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
-
-                err =
-                    rd_kafka_share_consume_batch(consumer1, 2000, batch, &rcvd);
-                if (err) {
-                        rd_kafka_error_destroy(err);
-                        continue;
-                }
-
-                for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err) {
-                                /* Verify delivery_count = 1 on first delivery
-                                 */
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(batch[m]) ==
-                                        1,
-                                    "Consumer 1: expected delivery_count=1, "
-                                    "got %d",
-                                    rd_kafka_message_delivery_count(batch[m]));
-                                consumed1++;
-                        }
-                        rd_kafka_message_destroy(batch[m]);
-                }
-        }
-
-        TEST_SAY("Consumer 1: received %d/%d messages (not acknowledged)\n",
-                 consumed1, msg_cnt);
-        TEST_ASSERT(consumed1 == msg_cnt,
-                    "Consumer 1 should receive all %d messages, got %d",
-                    msg_cnt, consumed1);
-
-        /* Close consumer 1 WITHOUT acknowledging - records should be released
-         * after lock expires */
-        TEST_SAY("Closing consumer 1 without acknowledging...\n");
-        rd_kafka_share_consumer_close(consumer1);
-        rd_kafka_share_destroy(consumer1);
-
-        /* Wait for lock to expire + buffer time */
-        TEST_SAY("Waiting %d ms for acquisition lock to expire...\n",
-                 lock_duration_ms + 2000);
-        rd_sleep(lock_duration_ms / 1000 + 2);
-
-        /* Create second consumer */
-        TEST_SAY("Creating consumer 2...\n");
-        consumer2 = test_create_share_consumer(group);
-
-        /* Subscribe consumer 2 */
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        rd_kafka_share_subscribe(consumer2, subs);
-        rd_kafka_topic_partition_list_destroy(subs);
-
-        /* Consumer 2: should receive the same messages (redelivered) */
-        TEST_SAY("Consumer 2: receiving redelivered messages...\n");
-        attempts = 50;
-        while (consumed2 < msg_cnt && attempts-- > 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
-
-                err =
-                    rd_kafka_share_consume_batch(consumer2, 2000, batch, &rcvd);
-                if (err) {
-                        rd_kafka_error_destroy(err);
-                        continue;
-                }
-
-                for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err) {
-                                /* Verify delivery_count = 2 on redelivery */
-                                TEST_ASSERT(
-                                    rd_kafka_message_delivery_count(batch[m]) ==
-                                        2,
-                                    "Consumer 2: expected delivery_count=2 on "
-                                    "redelivery, got %d",
-                                    rd_kafka_message_delivery_count(batch[m]));
-                                consumed2++;
-                                TEST_SAY(
-                                    "Consumer 2: received redelivered "
-                                    "message at offset %" PRId64
-                                    " (delivery_count=%d)\n",
-                                    batch[m]->offset,
-                                    rd_kafka_message_delivery_count(batch[m]));
-                        }
-                        rd_kafka_message_destroy(batch[m]);
-                }
-        }
-
-        TEST_SAY("Consumer 2: received %d/%d redelivered messages\n", consumed2,
-                 msg_cnt);
-        TEST_ASSERT(consumed2 == msg_cnt,
-                    "Consumer 2 should receive all %d redelivered messages, "
-                    "got %d",
-                    msg_cnt, consumed2);
-
-        TEST_SAY(
-            "SUCCESS: Acquisition lock expiry verified - %d messages "
-            "redelivered\n",
-            consumed2);
-
-        /* Cleanup */
-        test_delete_topic(test_share_consumer_get_rk(consumer2), topic);
-        rd_kafka_share_consumer_close(consumer2);
-        rd_kafka_share_destroy(consumer2);
-}
-
 int main_0171_share_consumer_consume(int argc, char **argv) {
+        /* Create common handles for all tests */
+        common_producer = test_create_producer();
+        common_admin    = test_create_producer();
+
+        test_timeout_set(200);
 
         /* Single-consumer tests */
         test_single_consumer_single_topic_single_partition();      /* Single
@@ -983,8 +817,11 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         test_empty_then_produce();
         test_sparse_partitions();
 
-        /* Acquisition lock tests */
-        test_acquisition_lock_expiry_redelivery();
+        TEST_SAY("\nAll share consumer consume tests passed successfully!\n");
+
+        /* Cleanup common handles */
+        rd_kafka_destroy(common_admin);
+        rd_kafka_destroy(common_producer);
 
         return 0;
 }

@@ -5005,7 +5005,41 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
  *
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
+rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Asynchronously close the consumer.
+ *
+ * Performs the same actions as rd_kafka_consumer_close() but in a
+ * background thread.
+ *
+ * Rebalance events/callbacks (etc) will be forwarded to the
+ * application-provided \p rkqu. The application must poll/serve this queue
+ * until rd_kafka_consumer_closed() returns true.
+ *
+ * @remark Depending on consumer group join state there may or may not be
+ *         rebalance events emitted on \p rkqu.
+ *
+ * @returns an error object if the consumer close failed, else NULL.
+ *
+ * @sa rd_kafka_consumer_closed()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
+                                                      rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @returns 1 if the consumer is closed, else 0.
+ *
+ * Should be used in conjunction with rd_kafka_consumer_close_queue() to know
+ * when the consumer has been closed.
+ *
+ * @sa rd_kafka_consumer_close_queue()
+ */
+RD_EXPORT
+int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);
+
 
 /**@}*/
 

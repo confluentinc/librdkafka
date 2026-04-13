@@ -153,6 +153,7 @@ set(
     0172-share_consumer_acknowledge.c
     0173-share_consumer_commit_async.c
     0177-share_consumer_transactions.c
+    0178-share_consumer_close.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

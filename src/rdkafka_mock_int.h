@@ -209,6 +209,7 @@ typedef struct rd_kafka_mock_sgrp_partmeta_s {
         int64_t speo;
         TAILQ_HEAD(, rd_kafka_mock_sgrp_record_state_s) inflight;
         int inflight_cnt;
+        int acquired_cnt; /**< Number of records in ACQUIRED state */
 } rd_kafka_mock_sgrp_partmeta_t;
 
 /**
@@ -746,6 +747,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
     const char *api_name);
 void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_partmeta_t *pmeta,
     rd_kafka_mock_sgrp_record_state_t *state);
 void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                                              const char *member_id);

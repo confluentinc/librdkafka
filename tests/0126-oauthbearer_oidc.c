@@ -278,6 +278,8 @@ static void do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
         if (err)
                 rd_kafka_error_destroy(err);
 
+        TEST_ASSERT(rcvd == 0,
+                    "Expected no messages with expired token, got %zu", rcvd);
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer "
                     "with expired token");
@@ -415,6 +417,9 @@ do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
         if (err)
                 rd_kafka_error_destroy(err);
 
+        TEST_ASSERT(rcvd == 0,
+                    "Expected no messages with invalid token endpoint, "
+                    "got %zu", rcvd);
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer "
                     "with invalid token endpoint");
@@ -549,6 +554,56 @@ fail:
         return NULL;
 }
 
+/**
+ * @brief Share consumer version of do_test_produce_consumer_with_OIDC_should_fail.
+ *        Verifies authentication failure with share consumer.
+ */
+static void do_test_produce_share_consumer_with_OIDC_should_fail(
+    const char *test_name,
+    const rd_kafka_conf_t *base_conf) {
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_message_t *batch[10];
+        size_t rcvd = 0;
+        rd_kafka_error_t *err;
+        char errstr[512];
+
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
+
+        SUB_TEST("Test share consumer auth failure with oidc configuration: %s",
+                 test_name);
+        if (!url) {
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        error_seen = rd_false;
+
+        conf = rd_kafka_conf_dup(base_conf);
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
+        test_conf_set(conf, "group.id", "oidc-share-should-fail");
+
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
+
+        err = rd_kafka_share_consume_batch(sc1, 5 * 1000, batch, &rcvd);
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_ASSERT(rcvd == 0,
+                    "Expected no messages on auth failure, got %zu", rcvd);
+        TEST_ASSERT(error_seen,
+                    "Expected authentication error for share consumer");
+
+        rd_kafka_share_consumer_close(sc1);
+        rd_kafka_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
+
 void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
         rd_kafka_conf_t *jwt_bearer_conf;
         oidc_configuration_jwt_bearer_variation_t variation;
@@ -572,6 +627,35 @@ void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
                                                            jwt_bearer_conf);
                 else
                         do_test_produce_consumer_with_OIDC_should_fail(
+                            test_name, jwt_bearer_conf);
+                rd_kafka_conf_destroy(jwt_bearer_conf);
+        }
+}
+
+void do_test_produce_share_consumer_with_OIDC_jwt_bearer(
+    rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *jwt_bearer_conf;
+        oidc_configuration_jwt_bearer_variation_t variation;
+        for (variation =
+                 OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_FILE;
+             variation < OIDC_CONFIGURATION_JWT_BEARER_VARIATION__CNT;
+             variation++) {
+                const char *test_name;
+                jwt_bearer_conf =
+                    oidc_configuration_jwt_bearer(conf, variation);
+                if (!jwt_bearer_conf)
+                        continue;
+
+                test_name = tsprintf(
+                    "JWT bearer: %s\n",
+                    oidc_configuration_jwt_bearer_variation_name(variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_JWT_BEARER_VARIATION__FIRST_FAILING)
+                        do_test_produce_share_consumer_with_OIDC(
+                            test_name, jwt_bearer_conf);
+                else
+                        do_test_produce_share_consumer_with_OIDC_should_fail(
                             test_name, jwt_bearer_conf);
                 rd_kafka_conf_destroy(jwt_bearer_conf);
         }
@@ -685,23 +769,54 @@ void do_test_produce_consumer_with_OIDC_metadata_authentication(
         }
 }
 
+void do_test_produce_share_consumer_with_OIDC_metadata_authentication(
+    rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *metadata_authentication_conf;
+        oidc_configuration_metadata_authentication_variation_t variation;
+        for (
+            variation =
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS;
+            variation <
+            OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT;
+            variation++) {
+                const char *test_name;
+                metadata_authentication_conf =
+                    oidc_configuration_metadata_authentication(conf, variation);
+
+                test_name = tsprintf(
+                    "Metadata authentication variation: %s\n",
+                    oidc_configuration_metadata_authentication_variation_name(
+                        variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__FIRST_FAILING)
+                        do_test_produce_share_consumer_with_OIDC(
+                            test_name, metadata_authentication_conf);
+                else
+                        do_test_produce_share_consumer_with_OIDC_should_fail(
+                            test_name, metadata_authentication_conf);
+                rd_kafka_conf_destroy(metadata_authentication_conf);
+        }
+}
+
 typedef enum oidc_configuration_sub_claim_variation_t {
         /** Use default "sub" claim (backward compatibility). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB,
         /** Explicitly set "sub" as the claim name. */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EXPLICIT_SUB,
-        /** Use custom claim name "client_id". */
-        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
         /** Set empty string "" — resets to default "sub" per librdkafka string
            semantics. */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING,
+        /** Use custom claim name "client_id" — fails because trivup's OIDC
+           provider does not include a "client_id" claim in the token. */
+        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
         /** Use a claim name that doesn't exist in the token (should fail). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM,
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT
 } oidc_configuration_sub_claim_variation_t;
 
 #define OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__FIRST_FAILING                  \
-        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM
+        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID
 
 static const char *oidc_configuration_sub_claim_variation_name(
     oidc_configuration_sub_claim_variation_t variation) {
@@ -709,8 +824,10 @@ static const char *oidc_configuration_sub_claim_variation_name(
                       OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB &&
                   variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT);
         static const char *names[] = {
-            "default sub claim", "explicit sub claim", "custom client_id claim",
-            "empty string (defaults to sub)", "missing claim (should fail)"};
+            "default sub claim", "explicit sub claim",
+            "empty string (defaults to sub)",
+            "custom client_id claim (should fail)",
+            "missing claim (should fail)"};
         return names[variation];
 }
 
@@ -798,6 +915,42 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
         }
 }
 
+void do_test_produce_share_consumer_with_OIDC_sub_claim(
+    rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *sub_claim_conf;
+        oidc_configuration_sub_claim_variation_t variation;
+
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
+
+        if (!url) {
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set, "
+                    "skipping share consumer sub claim tests\n");
+                return;
+        }
+
+        for (variation = OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB;
+             variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT;
+             variation++) {
+                const char *test_name;
+                sub_claim_conf = oidc_configuration_sub_claim(conf, variation);
+
+                test_name = tsprintf(
+                    "Sub claim variation: %s\n",
+                    oidc_configuration_sub_claim_variation_name(variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__FIRST_FAILING) {
+                        do_test_produce_share_consumer_with_OIDC(
+                            test_name, sub_claim_conf);
+                } else {
+                        do_test_produce_share_consumer_with_OIDC_should_fail(
+                            test_name, sub_claim_conf);
+                }
+                rd_kafka_conf_destroy(sub_claim_conf);
+        }
+}
+
 int main_0126_oauthbearer_oidc(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         const char *sec;
@@ -829,8 +982,11 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
             conf);
         do_test_produce_consumer_with_OIDC_jwt_bearer(conf);
+        do_test_produce_share_consumer_with_OIDC_jwt_bearer(conf);
         do_test_produce_consumer_with_OIDC_metadata_authentication(conf);
+        do_test_produce_share_consumer_with_OIDC_metadata_authentication(conf);
         do_test_produce_consumer_with_OIDC_sub_claim(conf);
+        do_test_produce_share_consumer_with_OIDC_sub_claim(conf);
 
         rd_kafka_conf_destroy(conf);
 

@@ -957,7 +957,10 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
  */
 void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_partmeta_t *pmeta,
     rd_kafka_mock_sgrp_record_state_t *state) {
+        if (state->state == RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                pmeta->acquired_cnt--;
         if (mshgrp->max_delivery_attempts > 0 &&
             state->delivery_count >= mshgrp->max_delivery_attempts) {
                 state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
@@ -992,7 +995,8 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         if (strcmp(state->owner_member_id, member_id) != 0)
                                 continue;
 
-                        rd_kafka_mock_sgrp_record_release(mshgrp, state);
+                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta,
+                                                          state);
                 }
         }
 }
@@ -1021,7 +1025,8 @@ static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         /* Lock has expired. If delivery
                          * count has reached the limit, archive the
                          * record instead of making it available. */
-                        rd_kafka_mock_sgrp_record_release(mshgrp, state);
+                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta,
+                                                          state);
                 }
         }
 }

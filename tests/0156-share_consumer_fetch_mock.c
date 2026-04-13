@@ -1313,6 +1313,83 @@ static void do_test_max_record_locks(void) {
 }
 
 /**
+ * @brief Verify that max_record_locks counts only ACQUIRED records,
+ *        not total inflight records (which includes ARCHIVED).
+ *
+ * Produce 6 records. Set max_record_locks=3, max_delivery_attempts=1.
+ *
+ * Consumer A acquires records 0-2 (lock limit), then is destroyed
+ * WITHOUT close (no implicit ack).  The connection close releases
+ * the locks; with max_delivery_attempts=1 the released records
+ * transition directly to ARCHIVED (delivery_count >= limit).
+ *
+ * At this point:
+ *   - Records 0-2: ARCHIVED, still in the inflight list
+ *   - SPSO = 0 (never advanced — ARCHIVED != ACKNOWLEDGED)
+ *   - inflight_cnt = 3, acquired_cnt = 0
+ *
+ * Consumer B subscribes.  With the correct check (acquired_cnt),
+ * records 3-5 are acquirable because only 0 records are ACQUIRED.
+ * With an inflight_cnt-based check, the limit would block all
+ * acquisition (inflight_cnt=3 >= max_record_locks=3).
+ */
+static void do_test_max_record_locks_acquired_only(void) {
+        const char *topic = "kip932_max_locks_acquired_only";
+        const int msgcnt  = 6;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 3);
+        rd_kafka_mock_sharegroup_set_max_delivery_attempts(ctx.mcluster, 1);
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 500);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer A: acquire first batch (3 records due to lock limit). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-acq-only");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_a = consume_n(consumer, 3, 30);
+        TEST_SAY("acquired_only: A consumed %d/3\n", consumed_a);
+
+        /* Destroy WITHOUT close — avoids implicit ack.
+         * The connection close releases locks; with max_delivery_attempts=1
+         * the released records transition to ARCHIVED (not AVAILABLE).
+         * SPSO stays at 0 because ARCHIVED != ACKNOWLEDGED.
+         * inflight_cnt stays 3, but acquired_cnt drops to 0. */
+        rd_kafka_share_destroy(consumer);
+        rd_usleep(1500 * 1000, 0); /* wait for connection close */
+
+        /* Consumer B subscribes. The share-partition now has:
+         *   - Records 0-2: ARCHIVED (inflight_cnt=3, acquired_cnt=0)
+         *   - Records 3-5: not yet in inflight list
+         * With acquired_cnt check, Consumer B acquires records 3-5.
+         * With inflight_cnt check, the limit would block acquisition. */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-acq-only");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, 3, 30);
+        TEST_SAY("acquired_only: B consumed %d/3\n", consumed_b);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed_a == 3, "A: expected 3, got %d", consumed_a);
+        TEST_ASSERT(consumed_b == 3,
+                    "B: expected 3 (max_record_locks should count only "
+                    "ACQUIRED, not ARCHIVED), got %d",
+                    consumed_b);
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Test that auto.offset.reset=latest (the default per KIP-932)
  *        causes the consumer to skip records produced before subscription.
  *
@@ -1501,6 +1578,7 @@ int main_0156_share_consumer_fetch_mock(int argc, char **argv) {
 
         /* Record lock limits */
         do_test_max_record_locks();
+        do_test_max_record_locks_acquired_only();
 
         /* Offset reset */
         do_test_auto_offset_reset_latest();

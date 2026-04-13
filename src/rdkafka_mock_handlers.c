@@ -3369,6 +3369,9 @@ rd_kafka_mock_sgrp_partmeta_get(rd_kafka_mock_sharegroup_t *sgrp,
                                            tmp) {
                                 if (state->offset >= log_start)
                                         continue;
+                                if (state->state ==
+                                    RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                                        pmeta->acquired_cnt--;
                                 state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
                                 RD_IF_FREE(state->owner_member_id, rd_free);
                                 state->owner_member_id = NULL;
@@ -3503,9 +3506,9 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
                 if (remaining_bytes && *remaining_bytes == 0)
                         break;
 
-                /* Check max in-flight record locks per partition */
+                /* Check max acquired record locks per partition */
                 if (max_record_locks > 0 &&
-                    pmeta->inflight_cnt >= max_record_locks)
+                    pmeta->acquired_cnt >= max_record_locks)
                         break;
 
                 state = rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
@@ -3575,6 +3578,7 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
                 state->delivery_count++;
                 RD_IF_FREE(state->owner_member_id, rd_free);
                 state->owner_member_id = RD_KAFKAP_STR_DUP(member_id);
+                pmeta->acquired_cnt++;
 
                 (*acquired_cnt)++;
                 *acquired_bytes += est_size;
@@ -3690,7 +3694,7 @@ struct rd_kafka_mock_sgrp_ack_entry {
 };
 
 /**
- * @brief Find the worst ack error for the given (topic_id, partition) across
+ * @brief Find the first ack error for the given (topic_id, partition) across
  *        all ack entries.  Returns NO_ERROR if no ack targeted this partition
  *        or all acks succeeded.
  */
@@ -3757,30 +3761,40 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                 }
 
                 switch (ack_type) {
-                case 0: /* GAP */
-                case 1: /* ACCEPT */
-                case 3: /* REJECT */
+                case 1: /* ACCEPT -> Acknowledged */
+                        pmeta->acquired_cnt--;
                         state->state =
                             RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED;
                         rd_free(state->owner_member_id);
                         state->owner_member_id = NULL;
                         state->lock_expiry_ts  = 0;
                         break;
+                case 0: /* GAP -> Archived */
+                case 3: /* REJECT -> Archived */
+                        pmeta->acquired_cnt--;
+                        state->state =
+                            RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
+                        rd_free(state->owner_member_id);
+                        state->owner_member_id = NULL;
+                        state->lock_expiry_ts  = 0;
+                        break;
                 case 2: /* RELEASE */
-                        rd_kafka_mock_sgrp_record_release(sgrp, state);
+                        rd_kafka_mock_sgrp_record_release(sgrp, pmeta,
+                                                          state);
                         break;
                 default:
                         break;
                 }
         }
 
-        /* Advance SPSO past contiguous ACKNOWLEDGED records from
-         * the start, transitioning them to ARCHIVED. */
+        /* Advance SPSO past contiguous ACKNOWLEDGED or ARCHIVED records
+         * from the start, transitioning ACKNOWLEDGED to ARCHIVED. */
         while (pmeta->spso <= pmeta->speo) {
                 rd_kafka_mock_sgrp_record_state_t *state =
                     rd_kafka_mock_sgrp_record_state_find(pmeta, pmeta->spso);
                 if (!state ||
-                    state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED)
+                    (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED &&
+                     state->state != RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED))
                         break;
                 state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
                 pmeta->spso++;
@@ -4258,7 +4272,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                         state->owner_member_id))
                                                         continue;
                                                 rd_kafka_mock_sgrp_record_release(
-                                                    sgrp, state);
+                                                    sgrp, pmeta, state);
                                         }
                                 }
                         }

@@ -4068,7 +4068,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 int64_t acquired_bytes  = 0;
                 rd_ts_t now             = rd_clock();
 
-                /* KIP-932 session management.
+                /* Session management.
                  * Sessions are keyed by (GroupId, MemberId).
                  * SessionEpoch: 0 = open new session,
                  *              -1 = close session,
@@ -4110,8 +4110,8 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_mock_sharegroup_t *sg;
                         rd_kafka_mock_sgrp_fetch_session_t *s;
                         /* Count sessions across ALL share groups on this
-                         * broker.  Per KIP-932, group.share.max.share.sessions
-                         * is a per-broker limit with cache key (GroupId,
+                         * broker.  group.share.max.share.sessions is a
+                         * per-broker limit with cache key (GroupId,
                          * MemberId). */
                         TAILQ_FOREACH(sg, &mcluster->sharegrps, link) {
                                 TAILQ_FOREACH(s, &sg->fetch_sessions, link) {
@@ -4187,7 +4187,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
 
                 /* epoch=-1 (final fetch / close session) must not
                  * contain ForgottenTopicsData.  Acks in the Topics
-                 * array ARE allowed per KIP-932. */
+                 * array ARE allowed. */
                 if (!err && SessionEpoch == -1 &&
                     (forgotten_partitions && forgotten_partitions->cnt > 0)) {
                         rd_kafka_dbg(mconn->broker->cluster->rk, MOCK, "MOCK",
@@ -4217,7 +4217,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         }
                 } else if (err && rd_list_cnt(&ack_entries) > 0) {
                         /* Broad error prevents ack processing.
-                         * Per KIP-932, propagate the top-level error to
+                         * Propagate the top-level error to
                          * AcknowledgeErrorCode for all partitions that
                          * had piggybacked acks. */
                         int k;
@@ -4549,7 +4549,7 @@ err_parse:
 }
 
 /**
- * @brief Handle ShareAcknowledgeRequest (KIP-932).
+ * @brief Handle ShareAcknowledgeRequest.
  *
  * This is the standalone acknowledgement API (key 79).  It has the same
  * acknowledgement-batch wire format as the piggy-backed acks inside

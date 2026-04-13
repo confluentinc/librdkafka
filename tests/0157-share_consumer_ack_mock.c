@@ -31,7 +31,7 @@
 #include "../src/rdkafka_proto.h"
 
 /**
- * @name KIP-932 Share Acknowledgement (implicit ack) mock broker tests.
+ * @name Share Acknowledgement (implicit ack) mock broker tests.
  *
  * Exercises the implicit ack flow via mock broker: records acquired
  * by a ShareFetch are acknowledged on the next ShareFetch, which

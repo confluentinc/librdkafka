@@ -31,7 +31,7 @@
 #include "../src/rdkafka_proto.h"
 
 /**
- * @name KIP-932 ShareFetch mock broker tests using the share consumer API.
+ * @name ShareFetch mock broker tests using the share consumer API.
  *
  * Exercises the ShareFetch path via mock broker.  There is no coordinator
  * or ShareAcknowledge support in the mock broker, so group management and
@@ -1390,14 +1390,6 @@ static void do_test_max_record_locks_acquired_only(void) {
 }
 
 /**
- * @brief Test that auto.offset.reset=latest (the default per KIP-932)
- *        causes the consumer to skip records produced before subscription.
- *
- * Produce 5 records, then subscribe with auto.offset.reset=latest.
- * Consumer should get 0 old records but should get new records
- * produced after subscription.
- */
-/**
  * @brief Test that SPSO advances when log retention deletes records
  *        below the current SPSO.
  *
@@ -1462,6 +1454,14 @@ static void do_test_spso_advances_on_log_retention(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that auto.offset.reset=latest (the default)
+ *        causes the consumer to skip records produced before subscription.
+ *
+ * Produce 5 records, then subscribe with auto.offset.reset=latest.
+ * Consumer should get 0 old records but should get new records
+ * produced after subscription.
+ */
 static void do_test_auto_offset_reset_latest(void) {
         const char *topic = "kip932_offset_reset_latest";
         const int msgcnt  = 5;
@@ -1472,7 +1472,7 @@ static void do_test_auto_offset_reset_latest(void) {
         SUB_TEST_QUICK();
 
         /* Create a fresh context — do NOT set auto_offset_reset=earliest
-         * (the default is "latest" per KIP-932). */
+         * (the default is "latest"). */
         memset(&ctx, 0, sizeof(ctx));
         ctx.mcluster = test_mock_cluster_new(3, &ctx.bootstraps);
         TEST_ASSERT(rd_kafka_mock_set_apiversion(

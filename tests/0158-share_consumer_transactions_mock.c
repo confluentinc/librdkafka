@@ -33,7 +33,7 @@
 #include "../src/rdkafka_proto.h"
 
 /**
- * @name KIP-932 Share Group Transactions mock broker tests.
+ * @name Share Group Transactions mock broker tests.
  *
  * Exercises transactional produce + share consume via mock broker
  * for both read_uncommitted and read_committed isolation levels.

@@ -723,7 +723,7 @@ rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
  * New sessions attempted via ShareFetch with epoch 0 when the broker
  * is at capacity will receive SHARE_SESSION_LIMIT_REACHED.
  *
- * Default is 2000 (per KIP-932 group.share.max.share.sessions).
+ * Default is 2000 (group.share.max.share.sessions).
  *
  * @param mcluster Mock cluster instance.
  * @param max_fetch_sessions Maximum fetch sessions per broker. 0 = unlimited.
@@ -738,7 +738,7 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
  * Once the limit is reached, no more records are acquired until existing
  * locks are released (via ack, release, reject, or lock expiry).
  *
- * Default is 2000 (per KIP-932 group.share.partition.max.record.locks).
+ * Default is 2000 (group.share.partition.max.record.locks).
  *
  * @param mcluster Mock cluster instance.
  * @param max_record_locks Maximum in-flight records per partition. 0 = unlimited.
@@ -753,7 +753,7 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_max_record_locks(
  * Controls where SPSO is initialized when a share-partition is first
  * consumed.
  *
- * Default is 0 ("latest") per KIP-932.
+ * Default is 0 ("latest").
  *
  * @param mcluster Mock cluster instance.
  * @param auto_offset_reset 0 = latest, 1 = earliest.

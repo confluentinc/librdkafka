@@ -1624,12 +1624,8 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
 
-        rd_kafka_flush(common_producer, 5000);
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);
-
-        /* Wait for all background threads to complete */
-        rd_kafka_wait_destroyed(10000);
 
         return 0;
 }

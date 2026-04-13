@@ -815,10 +815,9 @@ struct rd_kafka_share_s {
         rd_bool_t rkshare_fetch_more_records_requested;
 
         /**
-         * Set to true when the consumer is closing. Will be used to:
-         * * prevent any new API call from the app.
-         * * check if SHARE_FETCH_RESPONSE is received to poll_cb only
-         *   while closing
+         * Set to true when the consumer is closing. Will be used to
+         * check if SHARE_FETCH_RESPONSE is received to poll_cb only
+         * while closing
          */
         rd_bool_t rkshare_consumer_closing;
 };
@@ -1315,5 +1314,7 @@ void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
 rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                                                  rd_kafka_q_t *rkq,
                                                  rd_kafka_op_t *rko);
+
+
 
 #endif /* _RDKAFKA_INT_H_ */

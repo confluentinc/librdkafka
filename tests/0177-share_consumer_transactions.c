@@ -1130,12 +1130,8 @@ int main_0177_share_consumer_transactions(int argc, char **argv) {
         do_test_dynamic_uncommitted_to_committed();
 
         /* Cleanup common handles */
-        rd_kafka_flush(common_regular_producer, 5000);
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_regular_producer);
-
-        /* Wait for all background threads to complete */
-        rd_kafka_wait_destroyed(10000);
 
         return 0;
 }

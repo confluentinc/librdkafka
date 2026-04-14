@@ -285,6 +285,99 @@ static void rd_kafka_share_ack_details_batch_destroy(void *ptr) {
 }
 
 /**
+ * @brief Find an existing ack batch for the same topic-partition in a list.
+ *
+ * @param ack_list List of rd_kafka_share_ack_batches_t*
+ * @param rktpar Topic-partition to match (by topic id and partition)
+ *
+ * @returns Matching batch, or NULL if not found.
+ * @locality main thread
+ */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
+                              const rd_kafka_topic_partition_t *rktpar) {
+        rd_kafka_share_ack_batches_t *existing;
+        int i;
+
+        RD_LIST_FOREACH(existing, ack_list, i) {
+                /* TODO KIP-932: We might need to use leader id and epoch
+                 * as well to understand about the stale topic partition
+                 * information */
+                if (rd_kafka_topic_partition_by_id_cmp(existing->rktpar,
+                                                       rktpar) == 0)
+                        return existing;
+        }
+        return NULL;
+}
+
+/**
+ * @brief Segregate ack batches from a FANOUT op by partition leader.
+ *
+ * For each ack batch, looks up the current leader broker via the
+ * toppar reference in batch->rktpar, and merges the batch into that
+ * broker's rkb_share_async_ack_details list. If the broker already
+ * has cached acks for the same topic-partition, the entries are
+ * appended to the existing batch.
+ *
+ * @param rk Client instance
+ * @param ack_batches List of rd_kafka_share_ack_batches_t* from FANOUT op.
+ *                    Elements whose leader is found are moved to broker
+ *                    ack_details; remaining elements are not freed.
+ *
+ * @locality main thread
+ */
+void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
+                                             rd_list_t *ack_batches) {
+        rd_kafka_share_ack_batches_t *batch;
+        int batch_cnt = rd_list_cnt(ack_batches);
+
+        while ((batch = rd_list_pop(ack_batches))) {
+                rd_kafka_toppar_t *rktp;
+                rd_kafka_broker_t *leader_rkb;
+                rd_kafka_share_ack_batches_t *existing;
+
+                rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
+                if (!rktp || !rktp->rktp_leader) {
+                        rd_kafka_dbg(rk, CGRP, "SHARE",
+                                     "Ack batch for leader %" PRId32
+                                     " dropped: toppar or leader not available",
+                                     batch->response_leader_id);
+                        rd_kafka_share_ack_batches_destroy(batch);
+                        continue;
+                }
+                leader_rkb = rktp->rktp_leader;
+
+                /* Allocate list on first use with incoming batch count
+                 * as initial capacity hint */
+                if (!leader_rkb->rkb_share_async_ack_details)
+                        leader_rkb->rkb_share_async_ack_details = rd_list_new(
+                            batch_cnt, rd_kafka_share_ack_batches_destroy_free);
+
+                /* Check if there's already a batch for this topic-partition.
+                 * If so, merge entries; otherwise add as new. */
+                existing = rd_kafka_share_find_ack_batch(
+                    leader_rkb->rkb_share_async_ack_details, batch->rktpar);
+
+                if (existing) {
+                        /* Merge: deep-copy entries from new batch into
+                         * existing, preserving order. The source batch
+                         * is then fully destroyed (freeing its entries). */
+                        rd_kafka_share_ack_batch_entry_t *entry;
+                        int j;
+                        RD_LIST_FOREACH(entry, &batch->entries, j) {
+                                rd_list_add(
+                                    &existing->entries,
+                                    rd_kafka_share_ack_batch_entry_copy(entry));
+                        }
+                        rd_kafka_share_ack_batches_destroy(batch);
+                } else {
+                        rd_list_add(leader_rkb->rkb_share_async_ack_details,
+                                    batch);
+                }
+        }
+}
+
+/**
  * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
  *
  * Iterates through the inflight acknowledgement map and separates each
@@ -596,6 +689,9 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         if (type < RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT ||
             type > RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
+                return RD_KAFKA_RESP_ERR__STATE;
 
         /* Find partition and entry containing the offset */
         err = rd_kafka_share_find_ack_entry(rkshare, topic, partition, offset,

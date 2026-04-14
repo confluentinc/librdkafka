@@ -51,6 +51,8 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
+        if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
+                return RD_KAFKA_RESP_ERR__STATE;
         return rd_kafka_unsubscribe(rkshare->rkshare_rk);
 }
 
@@ -113,6 +115,8 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
+        if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
+                return RD_KAFKA_RESP_ERR__STATE;
         return rd_kafka_subscribe(rkshare->rkshare_rk, topics);
 }
 
@@ -284,6 +288,8 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
+        if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
+                return RD_KAFKA_RESP_ERR__STATE;
         return rd_kafka_subscription(rkshare->rkshare_rk, topics);
 }
 

@@ -1166,8 +1166,7 @@ static void do_test_session_limit_per_broker(void) {
         rd_kafka_mock_sharegroup_set_max_fetch_sessions(ctx.mcluster, 1);
 
         /* Consumer 1 subscribes to topic_a -> session on broker 1 */
-        consumer1 =
-            new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
+        consumer1 = new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
         subscribe_topics(consumer1, &topic_a, 1);
         consumed1 = consume_n(consumer1, msgcnt, 30);
         TEST_ASSERT(consumed1 == msgcnt,
@@ -1177,8 +1176,7 @@ static void do_test_session_limit_per_broker(void) {
         /* Consumer 2 subscribes to topic_b -> session on broker 2.
          * If the limit were global, this would fail (2 sessions > limit 1).
          * Per-broker: broker 2 has 0 sessions, so it succeeds. */
-        consumer2 =
-            new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
+        consumer2 = new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
         subscribe_topics(consumer2, &topic_b, 1);
         consumed2 = consume_n(consumer2, msgcnt, 30);
         TEST_ASSERT(consumed2 == msgcnt,
@@ -1187,8 +1185,7 @@ static void do_test_session_limit_per_broker(void) {
 
         /* Consumer 3 subscribes to topic_a -> broker 1 already has
          * 1 session (from consumer 1), so this should be rejected. */
-        consumer3 =
-            new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
+        consumer3 = new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
         subscribe_topics(consumer3, &topic_a, 1);
         consumed3 = consume_n(consumer3, 1, 5);
         TEST_ASSERT(consumed3 == 0,
@@ -1293,8 +1290,9 @@ static void do_test_max_record_locks(void) {
                         break;
                 total_consumed += got;
                 rounds++;
-                TEST_SAY("max_record_locks: round %d consumed %d (total %d/%d)\n",
-                         rounds, got, total_consumed, msgcnt);
+                TEST_SAY(
+                    "max_record_locks: round %d consumed %d (total %d/%d)\n",
+                    rounds, got, total_consumed, msgcnt);
         }
 
         rd_kafka_share_consumer_close(consumer);
@@ -1428,10 +1426,10 @@ static void do_test_spso_advances_on_log_retention(void) {
         rd_kafka_share_destroy(consumer);
 
         /* Simulate log retention: delete records before offset 5. */
-        TEST_ASSERT(rd_kafka_mock_partition_delete_records(
-                        ctx.mcluster, topic, 0, 5) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to delete records");
+        TEST_ASSERT(
+            rd_kafka_mock_partition_delete_records(ctx.mcluster, topic, 0, 5) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Failed to delete records");
 
         /* Remove lock limit. */
         rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 0);
@@ -1446,10 +1444,10 @@ static void do_test_spso_advances_on_log_retention(void) {
         rd_kafka_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
-        TEST_ASSERT(consumed_a == 5,
-                    "A: expected 5 consumed, got %d", consumed_a);
-        TEST_ASSERT(consumed_b == 5,
-                    "B: expected 5 consumed, got %d", consumed_b);
+        TEST_ASSERT(consumed_a == 5, "A: expected 5 consumed, got %d",
+                    consumed_a);
+        TEST_ASSERT(consumed_b == 5, "B: expected 5 consumed, got %d",
+                    consumed_b);
 
         SUB_TEST_PASS();
 }
@@ -1483,7 +1481,8 @@ static void do_test_auto_offset_reset_latest(void) {
                                                  RD_KAFKAP_ShareFetch, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to enable ShareFetch");
-        /* Intentionally NOT calling set_auto_offset_reset — default is latest */
+        /* Intentionally NOT calling set_auto_offset_reset — default is latest
+         */
         {
                 rd_kafka_conf_t *conf;
                 char errstr[512];

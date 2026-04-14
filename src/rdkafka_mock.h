@@ -741,11 +741,12 @@ RD_EXPORT void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
  * Default is 2000 (group.share.partition.max.record.locks).
  *
  * @param mcluster Mock cluster instance.
- * @param max_record_locks Maximum in-flight records per partition. 0 = unlimited.
+ * @param max_record_locks Maximum in-flight records per partition. 0 =
+ * unlimited.
  */
-RD_EXPORT void rd_kafka_mock_sharegroup_set_max_record_locks(
-    rd_kafka_mock_cluster_t *mcluster,
-    int max_record_locks);
+RD_EXPORT void
+rd_kafka_mock_sharegroup_set_max_record_locks(rd_kafka_mock_cluster_t *mcluster,
+                                              int max_record_locks);
 
 /**
  * @brief Set the auto offset reset policy for share groups.

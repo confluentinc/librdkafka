@@ -223,7 +223,8 @@ typedef struct rd_kafka_mock_sgrp_fetch_session_s {
         int32_t session_epoch;
         rd_ts_t ts_last_activity;
         rd_kafka_topic_partition_list_t *partitions;
-        int partition_start_idx; /**< Rotation index for starvation prevention */
+        int partition_start_idx; /**< Rotation index for starvation prevention
+                                  */
 } rd_kafka_mock_sgrp_fetch_session_t;
 
 /**

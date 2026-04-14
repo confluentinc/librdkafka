@@ -796,7 +796,7 @@ void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
         rd_kafka_mock_sharegroup_t *mshgrp;
         mtx_lock(&mcluster->lock);
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
-        mshgrp->max_fetch_sessions = max_fetch_sessions;
+        mshgrp->max_fetch_sessions                       = max_fetch_sessions;
         mcluster->defaults.sharegroup_max_fetch_sessions = max_fetch_sessions;
         mtx_unlock(&mcluster->lock);
 }
@@ -811,7 +811,7 @@ void rd_kafka_mock_sharegroup_set_max_record_locks(
         rd_kafka_mock_sharegroup_t *mshgrp;
         mtx_lock(&mcluster->lock);
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
-        mshgrp->max_record_locks = max_record_locks;
+        mshgrp->max_record_locks                       = max_record_locks;
         mcluster->defaults.sharegroup_max_record_locks = max_record_locks;
         mtx_unlock(&mcluster->lock);
 }
@@ -825,7 +825,7 @@ void rd_kafka_mock_sharegroup_set_auto_offset_reset(
         rd_kafka_mock_sharegroup_t *mshgrp;
         mtx_lock(&mcluster->lock);
         TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
-        mshgrp->auto_offset_reset = auto_offset_reset;
+        mshgrp->auto_offset_reset                       = auto_offset_reset;
         mcluster->defaults.sharegroup_auto_offset_reset = auto_offset_reset;
         mtx_unlock(&mcluster->lock);
 }
@@ -995,8 +995,7 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         if (strcmp(state->owner_member_id, member_id) != 0)
                                 continue;
 
-                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta,
-                                                          state);
+                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta, state);
                 }
         }
 }
@@ -1025,8 +1024,7 @@ static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         /* Lock has expired. If delivery
                          * count has reached the limit, archive the
                          * record instead of making it available. */
-                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta,
-                                                          state);
+                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta, state);
                 }
         }
 }

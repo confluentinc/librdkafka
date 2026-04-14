@@ -189,16 +189,6 @@ typedef struct {
 
 
 /**
- * @brief Set group config to earliest offset
- */
-static void state_set_offset_earliest(sub_test_state_t *state) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(state->consumers[0]),
-            RD_KAFKA_RESOURCE_GROUP, state->group_name, cfg, 1);
-}
-
-/**
  * @brief Create a new topic with auto-generated name
  */
 static const char *state_create_topic(sub_test_state_t *state,
@@ -543,7 +533,8 @@ static void exec_create_consumer(sub_test_state_t *state, const test_op_t *op) {
         TEST_ASSERT(state->consumers[cidx] == NULL,
                     "Consumer %d already exists", cidx);
 
-        state->consumers[cidx] = test_create_share_consumer(state->group_name);
+        state->consumers[cidx] =
+            test_create_share_consumer(state->group_name, rd_false);
         if (cidx >= state->consumer_cnt)
                 state->consumer_cnt = cidx + 1;
 }
@@ -584,11 +575,12 @@ static void state_init(sub_test_state_t *state,
         /* Create initial consumers */
         for (i = 0; i < state->consumer_cnt; i++) {
                 state->consumers[i] =
-                    test_create_share_consumer(state->group_name);
+                    test_create_share_consumer(state->group_name, rd_false);
         }
 
         /* Set group offset to earliest */
-        state_set_offset_earliest(state);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(state->consumers[0]), state->group_name);
 }
 
 /**
@@ -832,8 +824,8 @@ static void do_test_multi_consumer_overlap(void) {
         test_produce_msgs_easy(c1_only, 0, 0, 10);
 
         /* Create consumers */
-        rkshare0 = test_create_share_consumer(group);
-        rkshare1 = test_create_share_consumer(group);
+        rkshare0 = test_create_share_consumer(group, rd_false);
+        rkshare1 = test_create_share_consumer(group, rd_false);
 
         /* Set group offset */
         test_IncrementalAlterConfigs_simple(
@@ -925,7 +917,7 @@ static void do_test_subscribe_15_topics(void) {
                  topic_cnt);
 
         /* Create consumer */
-        rkshare = test_create_share_consumer(group);
+        rkshare = test_create_share_consumer(group, rd_false);
 
         /* Set group offset */
         test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),

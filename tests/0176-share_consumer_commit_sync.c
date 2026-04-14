@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rdkafka_int.h"
 #include "test.h"
 
 #include "../src/rdkafka_proto.h"
@@ -40,29 +41,6 @@
 
 #define MAX_MSGS      500
 #define CONSUME_ARRAY 10001
-
-
-/**
- * @brief Create share consumer with specified ack mode.
- * @param ack_mode "implicit" or "explicit"
- */
-static rd_kafka_share_t *create_share_consumer(const char *group_id,
-                                               const char *ack_mode) {
-        rd_kafka_share_t *rkshare;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
-                          sizeof(errstr));
-
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
-
-        return rkshare;
-}
 
 
 /**
@@ -132,7 +110,7 @@ static void do_test_basic_implicit_commit_sync(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 5);
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, rd_false);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -209,7 +187,7 @@ static void do_test_basic_explicit_commit_sync(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 5);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, rd_true);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -281,7 +259,7 @@ static void do_test_no_pending_acks(void) {
         topic = test_mk_topic_name("0176-cs-no-pending", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, rd_true);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -326,7 +304,7 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         test_produce_msgs_easy(topic, 0, 0, 5);
 
         /* Consumer A: consume all and commit_sync */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, rd_false);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -358,7 +336,7 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Consumer B: same group, should get 0 records */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, rd_false);
         subscribe_consumer(rkshare, &topic, 1);
 
         consumed = 0;
@@ -417,7 +395,7 @@ static void do_test_mixed_ack_types(void) {
 
         /* Consumer A: consume all 10 in a single batch, apply mixed ack
          * types */
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, rd_true);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -501,7 +479,7 @@ static void do_test_mixed_ack_types(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Consumer B: should only get the 3 RELEASE'd records */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, rd_false);
         subscribe_consumer(rkshare, &topic, 1);
 
         consumed = 0;
@@ -587,7 +565,7 @@ static void do_test_multiple_commit_sync_calls(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 50);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, rd_true);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -683,7 +661,7 @@ static void do_test_multiple_commit_sync_calls(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Consumer B: same group, should get 0 records */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, rd_false);
         subscribe_consumer(rkshare, &topic, 1);
 
         consumed = 0;
@@ -772,7 +750,7 @@ static void do_test_multi_topic_partition(void) {
                                                MULTI_TP_MSGS_PER_PARTITION);
         }
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, rd_true);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, (const char **)topics, MULTI_TP_TOPICS);
 
@@ -954,7 +932,7 @@ mock_produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
 /**
  * @brief Create share consumer for mock broker tests.
  *
- * Unlike create_share_consumer() which uses test_conf_init with real
+ * Unlike test_create_share_consumer() which uses test_conf_init with real
  * broker settings, this uses mock cluster bootstraps.
  */
 static rd_kafka_share_t *create_mock_share_consumer(const char *bootstraps,
@@ -1384,7 +1362,7 @@ static void do_test_mixed_commit_types(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 50);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, rd_true);
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1515,7 +1493,7 @@ static void do_test_mixed_commit_types(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Second consumer: should get 0 records */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, rd_false);
         subscribe_consumer(rkshare, &topic, 1);
 
         consumed = 0;

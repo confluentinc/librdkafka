@@ -86,7 +86,7 @@ static void create_share_consumers(share_test_config_t *config,
 
         for (i = 0; i < config->consumer_cnt; i++) {
                 state->consumers[i] =
-                    test_create_share_consumer(config->group_name);
+                    test_create_share_consumer(config->group_name, rd_false);
         }
 
         TEST_SAY("Created %d share consumer(s)\n", config->consumer_cnt);
@@ -137,13 +137,12 @@ static void setup_topics_and_produce(share_test_config_t *config,
 static void subscribe_consumers(share_test_config_t *config,
                                 share_test_state_t *state) {
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int t, i;
 
         /* Set group config using first consumer */
-        test_IncrementalAlterConfigs_simple(
+        test_set_share_group_offset_earliest(
             test_share_consumer_get_rk(state->consumers[0]),
-            RD_KAFKA_RESOURCE_GROUP, config->group_name, grp_conf, 1);
+            config->group_name);
 
         /* Build subscription list */
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
@@ -527,7 +526,6 @@ static void test_rapid_produce_consume_cycles(void) {
         const char *topic;
         const char *group = "share-rapid-cycles";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int round, total_consumed = 0;
         const int rounds         = 20;
         const int msgs_per_round = 500;
@@ -538,14 +536,13 @@ static void test_rapid_produce_consume_cycles(void) {
                  rounds, msgs_per_round);
 
         /* Create consumer and topic */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, rd_false);
         topic    = test_mk_topic_name("0171-rapid-cycles", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure group */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(consumer), group);
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -609,21 +606,20 @@ static void test_empty_then_produce(void) {
         const char *topic;
         const char *group = "share-empty-then-produce";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        int consumed           = 0, attempts;
+        int consumed = 0, attempts;
 
         TEST_SAY("\n");
         TEST_SAY("=== Empty topic then produce test ===\n");
 
         /* Create consumer and empty topic */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, rd_false);
         topic    = test_mk_topic_name("0171-empty-then-produce", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(consumer), group);
+
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
@@ -687,8 +683,7 @@ static void test_sparse_partitions(void) {
         const char *topic;
         const char *group = "share-sparse-partitions";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        int consumed           = 0, attempts;
+        int consumed                 = 0, attempts;
         const int msgs_per_partition = 100;
         const int expected = 3 * msgs_per_partition; /* partitions 0,2,4 */
 
@@ -698,14 +693,14 @@ static void test_sparse_partitions(void) {
             "===\n");
 
         /* Create consumer and topic with 5 partitions */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, rd_false);
         topic    = test_mk_topic_name("0171-sparse-partitions", 1);
         test_create_topic_wait_exists(NULL, topic, 5, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(consumer), group);
+
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
@@ -774,8 +769,6 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         const char *topic;
         const char *group = "share-lock-expiry-test";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf_offset[] = {"share.auto.offset.reset", "SET",
-                                         "earliest"};
         /* TODO KIP-932: Decrease this timeout */
         const char *grp_conf_lock[] = {"share.record.lock.duration.ms", "SET",
                                        "15000"};
@@ -789,7 +782,7 @@ static void test_acquisition_lock_expiry_redelivery(void) {
                  msg_cnt);
 
         /* Create first consumer */
-        consumer1 = test_create_share_consumer(group);
+        consumer1 = test_create_share_consumer(group, rd_false);
         topic     = test_mk_topic_name("0171-lock-expiry", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
@@ -797,9 +790,8 @@ static void test_acquisition_lock_expiry_redelivery(void) {
         test_IncrementalAlterConfigs_simple(
             test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
             group, grp_conf_lock, 1);
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(consumer1), RD_KAFKA_RESOURCE_GROUP,
-            group, grp_conf_offset, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(consumer1), group);
 
         /* Produce messages */
         TEST_SAY("Producing %d messages...\n", msg_cnt);
@@ -861,7 +853,7 @@ static void test_acquisition_lock_expiry_redelivery(void) {
 
         /* Create second consumer */
         TEST_SAY("Creating consumer 2...\n");
-        consumer2 = test_create_share_consumer(group);
+        consumer2 = test_create_share_consumer(group, rd_false);
 
         /* Subscribe consumer 2 */
         subs = rd_kafka_topic_partition_list_new(1);

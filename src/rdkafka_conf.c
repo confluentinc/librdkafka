@@ -1516,6 +1516,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(offset_commit_cb),
      "Offset commit result propagation callback. "
      "(set with rd_kafka_conf_set_offset_commit_cb())"},
+    {_RK_GLOBAL | _RK_CONSUMER, "share_acknowledgement_commit_cb", _RK_C_PTR,
+     _RK(share_acknowledgement_commit_cb),
+     "Share consumer acknowledgement result callback. "
+     "(set with rd_kafka_conf_set_share_acknowledgement_commit_cb())"},
     {_RK_GLOBAL | _RK_CONSUMER, "enable.partition.eof", _RK_C_BOOL,
      _RK(enable_partition_eof),
      "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
@@ -3000,6 +3004,18 @@ void rd_kafka_conf_set_offset_commit_cb(
                                       offset_commit_cb);
 }
 
+
+void rd_kafka_conf_set_share_acknowledgement_commit_cb(
+    rd_kafka_conf_t *conf,
+    void (*share_acknowledgement_commit_cb)(
+        rd_kafka_share_t *rkshare,
+        rd_kafka_share_partition_offsets_list_t *partitions,
+        rd_kafka_resp_err_t err,
+        void *opaque)) {
+        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
+                                      "share_acknowledgement_commit_cb",
+                                      share_acknowledgement_commit_cb);
+}
 
 
 void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,

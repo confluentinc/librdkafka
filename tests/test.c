@@ -45,18 +45,6 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
-/**
- * Local definition of rd_kafka_share_s to access rkshare_rk
- * without pulling in rdkafka_int.h (which causes Windows link errors
- * due to internal inline functions referencing unexported symbols).
- *
- * TODO: Replace with a proper public API (e.g.
- * rd_kafka_share_consumer_get_rk()) so tests don't depend on the
- * internal struct layout.
- */
-struct rd_kafka_share_s {
-        rd_kafka_t *rkshare_rk;
-};
 
 int test_level = 2;
 int test_seed  = 0;
@@ -1049,10 +1037,81 @@ const char *test_getenv(const char *env, const char *def) {
         return rd_getenv(env, def);
 }
 
+/**
+ * @brief Check if debug logging should be enabled for the current test.
+ *
+ * If TESTS_TO_DEBUG environment variable is set with comma-separated test
+ * numbers (e.g., "0172,0171"), only enable debug for those tests.
+ * Otherwise, enable debug for all tests if TEST_DEBUG is set.
+ *
+ * @returns 1 if debug should be enabled, 0 otherwise.
+ */
+static int test_should_enable_debug(void) {
+        const char *tests_to_debug;
+        const char *test_debug;
+        int should_debug = 0;
+
+        /* If TEST_DEBUG is not set, no debug logging */
+        test_debug = test_getenv("TEST_DEBUG", NULL);
+        if (!test_debug)
+                return 0;
+
+        /* If TESTS_TO_DEBUG is not set, enable for all tests */
+        tests_to_debug = test_getenv("TESTS_TO_DEBUG", NULL);
+        if (!tests_to_debug)
+                return 1;
+
+        /* Extract test number from current test name (e.g., "0172" from
+         * "0172-share_consumer_acknowledge") */
+        if (!test_curr || !test_curr->name)
+                return 1; /* Enable by default if test name not available */
+
+        /* Simple comma-separated parsing */
+        const char *p = tests_to_debug;
+        while (*p) {
+                const char *comma;
+                size_t token_len;
+
+                /* Skip leading whitespace */
+                while (*p && isspace((unsigned char)*p))
+                        p++;
+
+                if (!*p)
+                        break;
+
+                /* Find next comma or end of string */
+                comma = strchr(p, ',');
+                if (comma)
+                        token_len = (size_t)(comma - p);
+                else
+                        token_len = strlen(p);
+
+                /* Trim trailing whitespace */
+                while (token_len > 0 &&
+                       isspace((unsigned char)p[token_len - 1]))
+                        token_len--;
+
+                /* Check if current test name starts with this token */
+                if (token_len > 0 &&
+                    strncmp(test_curr->name, p, token_len) == 0) {
+                        should_debug = 1;
+                        break;
+                }
+
+                /* Move to next token */
+                if (comma)
+                        p = comma + 1;
+                else
+                        break;
+        }
+
+        return should_debug;
+}
+
 void test_conf_common_init(rd_kafka_conf_t *conf, int timeout) {
         if (conf) {
                 const char *tmp = test_getenv("TEST_DEBUG", NULL);
-                if (tmp)
+                if (tmp && test_should_enable_debug())
                         test_conf_set(conf, "debug", tmp);
         }
 
@@ -2798,16 +2857,22 @@ rd_kafka_t *test_create_consumer(
  *         once these properties are added as defaults to
  *         rd_kafka_share_consumer_new().
  */
-rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         char errstr[512];
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                           sizeof(errstr));
+
+        if (ack_mode) {
+                rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode,
+                                  errstr, sizeof(errstr));
+        }
 
         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
@@ -3479,7 +3544,7 @@ void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
         err = rd_kafka_share_subscribe(rk, topics);
         if (err)
                 TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
-                          rd_kafka_name(test_share_consumer_get_rk(rk)),
+                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
                           rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
@@ -3492,9 +3557,6 @@ void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
  * @param rkshare Share consumer handle.
  * @returns The underlying rd_kafka_t handle.
  */
-rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
-        return rkshare->rkshare_rk;
-}
 
 
 /**
@@ -3510,12 +3572,12 @@ rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
         err = rd_kafka_share_subscription(rk, &subscription);
         if (err)
                 TEST_FAIL("%s: Failed to get subscription: %s\n",
-                          rd_kafka_name(test_share_consumer_get_rk(rk)),
+                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
                           rd_kafka_err2str(err));
 
         TEST_ASSERT(subscription != NULL,
                     "%s: subscription() returned NULL list",
-                    rd_kafka_name(test_share_consumer_get_rk(rk)));
+                    rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)));
 
         return subscription;
 }
@@ -5584,6 +5646,29 @@ void test_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
                 test_delete_topic_sh(topicname);
         else
                 test_admin_delete_topic(use_rk, topicname);
+}
+
+
+/**
+ * @brief Alter group configurations using a dedicated producer handle.
+ *        Admin client APIs should not reuse consumer handles.
+ *        Works for both share groups and regular consumer groups.
+ */
+void test_alter_group_configurations(const char *group_name,
+                                     const char **cfg,
+                                     size_t cfg_cnt) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
+                                            group_name, cfg, cfg_cnt);
+
+        rd_kafka_destroy(admin);
 }
 
 

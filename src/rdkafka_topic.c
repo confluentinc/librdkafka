@@ -615,11 +615,6 @@ int rd_kafka_toppar_broker_update(rd_kafka_toppar_t *rktp,
         }
 
         if (rktp->rktp_broker) {
-                if (rktp->rktp_broker == rkb) {
-                        /* No change in broker */
-                        return 0;
-                }
-
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC | RD_KAFKA_DBG_FETCH,
                              "TOPICUPD",
                              "Topic %s [%" PRId32

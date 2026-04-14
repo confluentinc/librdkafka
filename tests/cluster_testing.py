@@ -104,6 +104,8 @@ class LibrdkafkaTestCluster(Cluster):
                         'share.coordinator.state.topic.replication.factor=%d' % min(num_brokers, 3),  # noqa: E501
                         'share.coordinator.state.topic.min.isr=%d' % min(num_brokers, 2),  # noqa: E501
                         'group.share.min.record.lock.duration.ms=1000',
+                        'transaction.state.log.replication.factor=%d' % min(num_brokers, 3),  # noqa: E501
+                        'transaction.state.log.min.isr=%d' % min(num_brokers, 2),  # noqa: E501
                     ]
                 defconf_curr.update(
                     {

@@ -19,7 +19,7 @@ make -j -C tests build
 
 echo "arguments: $TEST_ARGS"
 (cd tests && python3 -m trivup.clusters.KafkaCluster $TEST_CONFIGURATION \
- --conf '["group.share.min.record.lock.duration.ms=1000"]' \
+ --conf '["group.share.min.record.lock.duration.ms=1000", "transaction.state.log.replication.factor=1", "transaction.state.log.min.isr=1"]' \
  --version "$TEST_KAFKA_GIT_REF" \
  --cpversion "$TEST_CP_VERSION" \
  --cmd "TESTS_SKIP_BEFORE=0170 python run-test-batches.py $TEST_ARGS")

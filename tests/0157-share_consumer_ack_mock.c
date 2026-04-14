@@ -1371,8 +1371,7 @@ static void do_test_ack_after_lock_expiry_redelivers(void) {
         produce_messages(ctx.producer, topic, msgcnt);
 
         /* Consumer A acquires records. */
-        consumer_a =
-            new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
+        consumer_a = new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
         subscribe_topics(consumer_a, &topic, 1);
         consumed_a = consume_n(consumer_a, msgcnt, 50);
         TEST_SAY("ack_invalid_state: A consumed %d/%d\n", consumed_a, msgcnt);
@@ -1396,8 +1395,7 @@ static void do_test_ack_after_lock_expiry_redelivers(void) {
         /* Consumer B re-acquires (locks expired) and acks implicitly
          * by doing a second poll (which piggybacks the ack on the next
          * ShareFetch). */
-        consumer_b =
-            new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
+        consumer_b = new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
         subscribe_topics(consumer_b, &topic, 1);
         consumed_b = consume_n(consumer_b, msgcnt, 50);
         TEST_SAY("ack_invalid_state: B consumed %d/%d\n", consumed_b, msgcnt);
@@ -1409,8 +1407,7 @@ static void do_test_ack_after_lock_expiry_redelivers(void) {
         rd_kafka_share_destroy(consumer_b);
 
         /* Consumer C should get 0 records — B's ack succeeded. */
-        consumer_c =
-            new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
+        consumer_c = new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
         subscribe_topics(consumer_c, &topic, 1);
         consumed_c = consume_n(consumer_c, 1, 5);
         TEST_SAY("ack_invalid_state: C consumed %d (expected 0)\n", consumed_c);
@@ -1419,12 +1416,12 @@ static void do_test_ack_after_lock_expiry_redelivers(void) {
         rd_kafka_share_destroy(consumer_c);
         test_ctx_destroy(&ctx);
 
-        TEST_ASSERT(consumed_a == msgcnt,
-                    "A: expected %d consumed, got %d", msgcnt, consumed_a);
-        TEST_ASSERT(consumed_b == msgcnt,
-                    "B: expected %d consumed, got %d", msgcnt, consumed_b);
-        TEST_ASSERT(consumed_c == 0,
-                    "C: expected 0 consumed (B acked), got %d", consumed_c);
+        TEST_ASSERT(consumed_a == msgcnt, "A: expected %d consumed, got %d",
+                    msgcnt, consumed_a);
+        TEST_ASSERT(consumed_b == msgcnt, "B: expected %d consumed, got %d",
+                    msgcnt, consumed_b);
+        TEST_ASSERT(consumed_c == 0, "C: expected 0 consumed (B acked), got %d",
+                    consumed_c);
         SUB_TEST_PASS();
 }
 
@@ -1482,10 +1479,10 @@ static void do_test_ack_success_advances_spso(void) {
         rd_kafka_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
-        TEST_ASSERT(consumed_a == 3,
-                    "A: expected 3 consumed, got %d", consumed_a);
-        TEST_ASSERT(consumed_b == 3,
-                    "B: expected 3 consumed, got %d", consumed_b);
+        TEST_ASSERT(consumed_a == 3, "A: expected 3 consumed, got %d",
+                    consumed_a);
+        TEST_ASSERT(consumed_b == 3, "B: expected 3 consumed, got %d",
+                    consumed_b);
         SUB_TEST_PASS();
 }
 

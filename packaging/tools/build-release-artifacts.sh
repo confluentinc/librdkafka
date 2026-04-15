@@ -26,7 +26,7 @@ docker_image=""
 extra_pkgs_rpm=""
 extra_pkgs_apk=""
 extra_config_args=""
-expected_features="gzip snappy ssl sasl regex lz4 sasl_plain sasl_scram plugins zstd sasl_oauthbearer http oidc"
+expected_features="gzip snappy ssl sasl regex lz4 sasl_plain sasl_scram plugins zstd sasl_oauthbearer http oidc aws_sts"
 
 # Since cyrus-sasl is the only non-statically-linkable dependency,
 # we provide a --disable-gssapi option so that two different libraries
@@ -78,12 +78,12 @@ fi
 if grep -q alpine /etc/os-release 2>/dev/null ; then
     # Alpine
     apk add \
-        bash curl gcc g++ make musl-dev linux-headers bsd-compat-headers git \
+        bash curl gcc g++ make cmake musl-dev linux-headers bsd-compat-headers git \
         python3 perl patch $extra_pkgs_apk
 
 else
     # CentOS
-    yum install -y libstdc++-devel gcc gcc-c++ python3 git perl-IPC-Cmd perl-Pod-Html perl-bignum $extra_pkgs_rpm
+    yum install -y libstdc++-devel gcc gcc-c++ cmake python3 git perl-IPC-Cmd perl-Pod-Html perl-bignum $extra_pkgs_rpm
 fi
 
 

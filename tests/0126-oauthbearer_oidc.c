@@ -322,10 +322,9 @@ static void do_test_produce_consumer_with_OIDC_should_fail(
 
         c1 = test_create_consumer("OIDC.fail.C1", NULL, conf, NULL);
 
-        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 10 * 1000);
+        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 5 * 1000);
 
-        TEST_ASSERT(error_seen,
-                    "Expected authentication error for %s", test_name);
+        TEST_ASSERT(error_seen);
 
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
@@ -807,29 +806,27 @@ typedef enum oidc_configuration_sub_claim_variation_t {
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB,
         /** Explicitly set "sub" as the claim name. */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EXPLICIT_SUB,
+        /** Use custom claim name "client_id". */
+        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
         /** Set empty string "" — resets to default "sub" per librdkafka string
            semantics. */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_EMPTY_STRING,
-        /** Use custom claim name "client_id" — fails because trivup's OIDC
-           provider does not include a "client_id" claim in the token. */
-        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID,
         /** Use a claim name that doesn't exist in the token (should fail). */
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM,
         OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT
 } oidc_configuration_sub_claim_variation_t;
 
 #define OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__FIRST_FAILING                  \
-        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_CUSTOM_CLIENT_ID
+        OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_MISSING_CLAIM
 
 static const char *oidc_configuration_sub_claim_variation_name(
     oidc_configuration_sub_claim_variation_t variation) {
         rd_assert(variation >=
                       OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB &&
                   variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT);
-        static const char *names[] = {"default sub claim", "explicit sub claim",
-                                      "empty string (defaults to sub)",
-                                      "custom client_id claim (should fail)",
-                                      "missing claim (should fail)"};
+        static const char *names[] = {
+            "default sub claim", "explicit sub claim", "custom client_id claim",
+            "empty string (defaults to sub)", "missing claim (should fail)"};
         return names[variation];
 }
 

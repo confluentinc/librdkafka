@@ -1192,7 +1192,10 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         if (rk->rk_cgrp) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                              "Terminating consumer group handler");
-                rd_kafka_consumer_close(rk);
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                        rd_kafka_share_consumer_close(rk->rk_rkshare);
+                else
+                        rd_kafka_consumer_close(rk);
         }
 
         /* Await telemetry termination. This method blocks until the last
@@ -1267,6 +1270,10 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
 
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
+}
+
+void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags) {
+        rd_kafka_destroy_flags(rkshare->rkshare_rk, flags);
 }
 
 

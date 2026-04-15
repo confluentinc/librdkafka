@@ -1696,7 +1696,7 @@ static void do_test_leave_heartbeat_completes_successfully(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-success";
 
@@ -1724,9 +1724,9 @@ static void do_test_leave_heartbeat_completes_successfully(void) {
         /* Leave group - should send leave heartbeat and complete.
          * Note: After close(), we cannot call rd_kafka_assignment() anymore
          * as the broker handle is destroyed. */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(!err, "Expected close to succeed, got %s",
-                    rd_kafka_err2str(err));
+        error = rd_kafka_share_consumer_close(share_c);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
 
         /* Cleanup */
         rd_kafka_share_destroy(share_c);
@@ -1748,7 +1748,7 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-error";
 
@@ -1781,12 +1781,12 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
         /* Leave group - should still complete despite error (best effort).
          * The key behavior: close() must not hang even when the leave
          * heartbeat gets an error response. */
-        err = rd_kafka_share_consumer_close(share_c);
+        error = rd_kafka_share_consumer_close(share_c);
         /* Close completed (didn't hang) - this is the primary assertion.
          * The return code may vary depending on whether the error was
          * processed during leave. */
         TEST_SAY("Leave completed with: %s (didn't hang - correct)\n",
-                 rd_kafka_err2str(err));
+                 rd_kafka_error_name(error));
 
         /* Cleanup */
         rd_kafka_share_destroy(share_c);
@@ -1901,7 +1901,8 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err, fatal_err;
+        rd_kafka_resp_err_t fatal_err;
+        rd_kafka_error_t *error;
         char errstr[256];
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-id-not-found-unsub";
@@ -1951,8 +1952,8 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
                     rd_kafka_err2str(fatal_err), errstr);
 
         /* Close consumer */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_SAY("Close returned: %s\n", rd_kafka_err2str(err));
+        error = rd_kafka_share_consumer_close(share_c);
+        TEST_SAY("Close returned: %s\n", rd_kafka_error_name(error));
 
         /* Cleanup */
         rd_kafka_share_destroy(share_c);
@@ -2229,7 +2230,7 @@ static void do_test_graceful_shutdown_stable_state(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription, *assignment;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
         int found_heartbeats;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-graceful-shutdown";
@@ -2267,9 +2268,9 @@ static void do_test_graceful_shutdown_stable_state(void) {
         rd_kafka_mock_start_request_tracking(mcluster);
 
         /* Close consumer gracefully - should send leave heartbeat */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(!err, "Expected close to succeed, got %s",
-                    rd_kafka_err2str(err));
+        error = rd_kafka_share_consumer_close(share_c);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
 
         /* Verify leave heartbeat was sent */
         found_heartbeats = wait_share_heartbeats(mcluster, 1, 1000);
@@ -2466,7 +2467,7 @@ static void do_test_double_close(void) {
         const char *group_id = topic;
         rd_kafka_share_t *share_c;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
 
         SUB_TEST_QUICK();
 
@@ -2484,16 +2485,16 @@ static void do_test_double_close(void) {
         wait_share_heartbeats(mcluster, 3, 1000);
 
         /* First close - should succeed */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(!err, "Expected first close to succeed, got %s",
-                    rd_kafka_err2str(err));
+        error = rd_kafka_share_consumer_close(share_c);
+        TEST_ASSERT(!error, "Expected first close to succeed, got %s",
+                    rd_kafka_error_name(error));
 
         /* Second close - should handle gracefully without crashing.
          * The Java equivalent tests verify the CompletableFuture
          * completes immediately on double-leave. */
-        err = rd_kafka_share_consumer_close(share_c);
+        error = rd_kafka_share_consumer_close(share_c);
         TEST_SAY("Second close returned: %s (no crash - correct)\n",
-                 rd_kafka_err2str(err));
+                 rd_kafka_error_name(error));
 
         rd_kafka_topic_partition_list_destroy(subscription);
         rd_kafka_share_destroy(share_c);

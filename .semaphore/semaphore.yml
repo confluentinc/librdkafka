@@ -25,7 +25,7 @@ global_job_config:
       value: '4.2.0'
     - name: CP_VERSION
       value: '8.0.0'
-    # Shows plain output from docker build (no progress bars)
+#Shows plain output from docker build(no progress bars)
     - name: BUILDKIT_PROGRESS
       value: plain
     - name: MACOSX_DEPLOYMENT_TARGET
@@ -91,8 +91,8 @@ blocks:
   - name: 'Style check'
     dependencies: []
     skip:
-      # Skip for release tags, we don't want style checks
-      # to fail the release build.
+#Skip for release tags, we don't want style checks
+#to fail the release build.
       when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
@@ -120,8 +120,8 @@ blocks:
   - name: 'Linux Ubuntu amd64: source build'
     dependencies: []
     skip:
-      # Skip for release tags, we don't want flaky CI tests
-      # to fail the release build.
+#Skip for release tags, we don't want flaky CI tests
+#to fail the release build.
       when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
@@ -328,7 +328,7 @@ blocks:
           value: UCRT64
       prologue:
         commands:
-          # Set up msys2
+#Set up msys2
           - "& .\\win32\\setup-msys2.ps1"
       epilogue:
         commands:
@@ -357,14 +357,14 @@ blocks:
         machine:
           type: s1-prod-windows
       env_vars:
-        # Disable vcpkg telemetry
+#Disable vcpkg telemetry
         - name: VCPKG_DISABLE_METRICS
           value: 'yes'
       prologue:
         commands:
-          # install vcpkg in the parent directory.
+#install vcpkg in the parent directory.
           - cd ..
-          # Setup vcpkg
+#Setup vcpkg
           - "& .\\librdkafka\\win32\\setup-vcpkg.ps1"
           - cd librdkafka
       epilogue:
@@ -410,57 +410,52 @@ blocks:
       jobs:
         - name: 'Build NuGet and static packages'
           commands:
-            # Get all artifacts from previous jobs in this workflow/pipeline.
+#Get all artifacts from previous jobs in this workflow / pipeline.
             - artifact pull workflow artifacts
             - mkdir -p packages
-            # Prepare packaging tools
+#Prepare packaging tools
             - cd packaging/nuget
             - python3 -m pip install -U -r requirements.txt
-            # Create NuGet package
-            # We need --ignore-tag since the jobs don't add the tag to
-            # the artifact path, and they don't need to since these artifacts
-            # are part of the same workflow.
-            - ./release.py --directory ../../artifacts --ignore-tag --class NugetPackage ${SEMAPHORE_GIT_TAG_NAME}
-            - cp -v librdkafka.redist.*.nupkg ../../packages
-            # Create static package
-            - ./release.py --directory ../../artifacts --ignore-tag --class StaticPackage ${SEMAPHORE_GIT_TAG_NAME}
-            - cp -v librdkafka-static-bundle*.tgz ../../packages
-            - cd ../../
-            # Copy generated docs to packages for inclusion in the tar ball
-            - cp -v artifacts/librdkafka-docs.tgz packages/
-            # Maker super tar ball of all packages
-            - cd packages
-            - tar cvf librdkafka-packages-${SEMAPHORE_GIT_TAG_NAME}-${SEMAPHORE_WORKFLOW_ID}.tar .
-            # Provide some extra details
-            - ls -la
-            - sha256sum *
-            - cd ..
-            # Upload all packages to project artifact store
-            - artifact push project packages --destination librdkafka-packages-${SEMAPHORE_GIT_TAG_NAME}-${SEMAPHORE_WORKFLOW_ID}
-            - echo Thank you
+#Create NuGet package
+#We need-- ignore - tag since the jobs don't add the tag to
+#the artifact path, and they don't need to since these artifacts
+#are part of the same workflow.
+            - ./release.py --directory ../../artifacts --ignore-tag --class NugetPackage ${
+        SEMAPHORE_GIT_TAG_NAME
+} - cp - v librdkafka.redist.*.nupkg../../ packages
+#Create static package
+    -./ release.py-- directory../../ artifacts-- ignore -
+    tag-- class StaticPackage $ {
+        SEMAPHORE_GIT_TAG_NAME
+} - cp - v librdkafka - static - bundle *.tgz../../ packages -
+    cd../../
+#Copy generated docs to packages for inclusion in the tar ball
+        -cp -
+    v artifacts / librdkafka -
+    docs.tgz packages /
+#Maker super tar ball of all packages
+        -cd packages -
+    tar cvf librdkafka - packages - $ {SEMAPHORE_GIT_TAG_NAME} -
+    $ {SEMAPHORE_WORKFLOW_ID}.tar.
+#Provide some extra details
+    - ls - la - sha256sum * -cd..
+#Upload all packages to project artifact store
+    - artifact push project packages-- destination librdkafka - packages -
+    $ {SEMAPHORE_GIT_TAG_NAME} - $ {SEMAPHORE_WORKFLOW_ID} -
+    echo Thank you
 
-promotions:
-  - name: Run local tests on all architectures and integration tests
-    pipeline_file: semaphore-integration.yml
-    auto_promote_on:
-      - result: passed
-        branch:
-        - "master"
-  # Manual promotion only, the auto promotion on master happens after 
-  # integration tests pass.
-  - name: Run all tests
-    pipeline_file: run-all-tests.yml
-    parameters:
-      env_vars:
-        - required: true
-          name: TEST_KAFKA_GIT_REF
-          default_value: 4.0.0
-        - required: true
-          name: TEST_TYPE
-          default_value: plaintext,ssl
-        - required: true
-          name: TEST_ARCHES
-          default_value: x86_64,aarch64
-        - required: true
-          name: TEST_PARALLEL
-          default_value: "1"
+        promotions : -name
+    : Run local tests on all architectures and integration tests pipeline_file
+    : semaphore -
+      integration.yml auto_promote_on : -result : passed branch : -"master"
+#Manual promotion only, the auto promotion on master happens after
+#integration tests pass.
+      -
+      name : Run all tests pipeline_file : run -
+                                           all -
+                                           tests.yml parameters : env_vars
+    : -required : true name : TEST_KAFKA_GIT_REF default_value : 4.0.0 -
+                                           required : true name
+    : TEST_TYPE default_value : plaintext,
+    ssl - required : true name : TEST_ARCHES default_value : x86_64,
+    aarch64 - required : true name : TEST_PARALLEL default_value : "1"

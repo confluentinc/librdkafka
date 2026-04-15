@@ -1,0 +1,206 @@
+#!/bin/bash
+#
+# AWS STS SDK support, with installer.
+#
+# Provides GetWebIdentityToken support for SASL OAUTHBEARER authentication.
+# The machine's existing AWS credentials (instance role, task role, environment
+# variables, ~/.aws/credentials) are used to obtain a signed JWT which is
+# presented to the Kafka broker as the OAUTHBEARER token.
+#
+# Usage:
+#   mkl_require libaws_cpp_sdk_sts
+#
+# And then call the following function from the correct place/order in checks:
+#   mkl_check libaws_cpp_sdk_sts
+#
+# Requires: libssl and libcurl (must be checked before this module).
+#
+
+mkl_toggle_option "Feature" ENABLE_AWS_STS "--enable-aws-sts" \
+    "Enable AWS STS credential provider (GetWebIdentityToken)" "try"
+
+function manual_checks {
+    case "$ENABLE_AWS_STS" in
+        n) return 0 ;;
+        y) local action=fail ;;
+        try) local action=disable ;;
+        *) mkl_err "mklove internal error: invalid value for ENABLE_AWS_STS: $ENABLE_AWS_STS"; exit 1 ;;
+    esac
+
+    mkl_meta_set "libaws_cpp_sdk_sts" "deb" "libaws-cpp-sdk-dev"
+    mkl_meta_set "libaws_cpp_sdk_sts" "rpm" "aws-sdk-cpp-sts-devel"
+    mkl_meta_set "libaws_cpp_sdk_sts" "brew" "aws-sdk-cpp"
+    # All CRT sub-libraries that aws-cpp-sdk-core references must be listed
+    # so they are merged into librdkafka-static.a by Makefile.base.
+    # On Linux, aws-c-io uses s2n-tls as its TLS backend; libs2n.a must be
+    # included. On macOS, aws-c-io uses Apple Security/Network frameworks
+    # instead, so libs2n.a is not built and must not be listed there.
+    # Archive order matters for GNU ld (single-pass): dependents must precede
+    # their dependencies.  mkl_resolve_static_libs iterates this list in order
+    # and the resulting STATIC_LIB_ variable overrides the -l flags in
+    # mkl_lib_check, so this ordering is what the link probe actually uses.
+    # Dependency graph (abridged):
+    #   sts → core → crt-cpp → s3 → auth → http → event-stream
+    #       → io → cal → mqtt → compression → sdkutils → common
+    #       → checksums [→ s2n (Linux only)]
+    # On Linux, aws-c-io uses s2n-tls as its TLS backend; libs2n.a must be
+    # included last (leaf). On macOS, aws-c-io uses Apple Security/Network
+    # frameworks instead, so libs2n.a is not built and must not be listed.
+    if [[ $MKL_DISTRO == "osx" ]]; then
+        mkl_meta_set "libaws_cpp_sdk_sts" "static" \
+            "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
+             libaws-c-s3.a libaws-c-auth.a libaws-c-http.a libaws-c-event-stream.a \
+             libaws-c-io.a libaws-c-cal.a libaws-c-mqtt.a libaws-c-compression.a \
+             libaws-c-sdkutils.a libaws-c-common.a libaws-checksums.a"
+    else
+        mkl_meta_set "libaws_cpp_sdk_sts" "static" \
+            "libaws-cpp-sdk-sts.a libaws-cpp-sdk-core.a libaws-crt-cpp.a \
+             libaws-c-s3.a libaws-c-auth.a libaws-c-http.a libaws-c-event-stream.a \
+             libaws-c-io.a libaws-c-cal.a libaws-c-mqtt.a libaws-c-compression.a \
+             libaws-c-sdkutils.a libaws-c-common.a libaws-checksums.a libs2n.a"
+    fi
+
+    # On macOS, aws-c-io uses Apple Security and Network frameworks.
+    # These must be in the makefile LDFLAGS before the link probe so
+    # mkl_lib_check_static does not drop them (it only passes through
+    # -l<lib> and .a paths in the $5 flags argument).
+    if [[ $MKL_DISTRO == "osx" ]]; then
+        mkl_mkvar_append LDFLAGS LDFLAGS "-framework Security -framework Network"
+    fi
+
+    # Link probe uses CXX — the AWS SDK is C++ only.
+    # No --no-static: mklove routes the link flags into MKL_STATIC_LIBS so
+    # the archives are merged into librdkafka-static.a automatically via the
+    # existing ar -M / libtool -static logic in Makefile.base.
+    # On Linux, aws-c-io uses s2n-tls as its TLS backend so -ls2n is required
+    # for the link probe to resolve s2n_* symbols. On macOS, aws-c-io uses
+    # Apple Security/Network frameworks instead, so -ls2n must be omitted.
+    local _s2n_flag=""
+    if [[ $MKL_DISTRO != "osx" ]]; then
+        _s2n_flag="-ls2n"
+    fi
+    # Archive order matters for GNU ld: dependents must precede their
+    # dependencies.  Dependency graph (abridged):
+    #   sts → core → crt-cpp → s3 → auth → http → event-stream
+    #       → io → cal → mqtt → compression → sdkutils → common
+    #       → checksums [→ s2n (Linux only)]
+    mkl_lib_check "libaws_cpp_sdk_sts" "WITH_AWS_STS" $action CXX \
+        "-laws-cpp-sdk-sts -laws-cpp-sdk-core -laws-crt-cpp \
+         -laws-c-s3 -laws-c-auth -laws-c-http -laws-c-event-stream \
+         -laws-c-io -laws-c-cal -laws-c-mqtt -laws-c-compression \
+         -laws-c-sdkutils -laws-c-common -laws-checksums ${_s2n_flag}" \
+        "#include <aws/sts/STSClient.h>
+#include <aws/sts/model/GetWebIdentityTokenRequest.h>
+void foo (void) { Aws::STS::STSClient c; }"
+
+    # The C++ runtime must be linked explicitly so that consumers using
+    # plain gcc/cc (rather than g++/clang++) can link against
+    # librdkafka-static.a without needing a C++ linker driver.
+    # On macOS: libc++ (LLVM, ships with the OS since 10.9, always present).
+    # On Linux: libstdc++ (GCC, present on any system with g++ installed).
+    # When CC_LD=$(CXX) is used for the shared library link, the C++ linker
+    # driver pulls in the runtime implicitly — these flags are the fallback
+    # for static consumers using plain gcc/cc.
+    if [[ $MKL_DISTRO == "osx" ]]; then
+        mkl_mkvar_append "libaws_cpp_sdk_sts" LIBS \
+            "-lc++ -framework Security -framework Network"
+    else
+        mkl_mkvar_append "libaws_cpp_sdk_sts" LIBS "-lstdc++"
+    fi
+}
+
+
+# Install AWS STS SDK from source tarball.
+#
+# Critical cmake flags:
+#   -DBUILD_ONLY=sts              - builds only aws-cpp-sdk-sts + aws-cpp-sdk-core,
+#                                   not all 200+ AWS service clients
+#   -DUSE_CRT_HTTP_CLIENT=OFF     - reuses libcurl already in destdir instead of
+#                                   pulling in 11 extra AWS CRT git repositories
+#   -DBUILD_SHARED_LIBS=OFF       - static libraries only
+#   -DENFORCE_SUBMODULE_VERSIONS=OFF - CRT submodules fetched via
+#                                   prefetch_crt_dependency.sh may not match the
+#                                   exact pinned SHAs; disabling avoids cmake abort
+#   -DMINIMIZE_SIZE=ON            - AWS-specific size pass; activates unity build
+#   -DENABLE_UNITY_BUILD=ON       - merges all .cpp per-service into one TU;
+#                                   compiler can eliminate internal linkage at
+#                                   compile time, shrinking the .a significantly
+#   -DENABLE_VIRTUAL_OPERATIONS=OFF - adds -ffunction-sections -fdata-sections;
+#                                   enables dead-code elimination at final link
+#   -DENABLE_RTTI=OFF             - adds -fno-rtti; removes RTTI metadata and
+#                                   virtual dispatch tables (~3-8% on C++ code)
+#   -DENABLE_ZLIB_REQUEST_COMPRESSION=OFF - removes zlib code path from core
+#   -DBUILD_OPTEL=OFF             - no OpenTelemetry overhead
+#   -DENABLE_CURL_LOGGING=OFF     - removes curl debug log callback wiring
+#
+# Must run after libssl and libcurl install_source so their paths are
+# available in destdir for -DOPENSSL_ROOT_DIR and -DCURL_ROOT.
+#
+# Param 1: name (libaws_cpp_sdk_sts)
+# Param 2: install-dir-prefix (DESTDIR)
+function install_source {
+    local name=$1
+    local destdir=$2
+    local ver=1.11.790
+    local checksum="3085b6af5687dfb941ecc985c161522dab22dddb03c4030f15f9cff8fde105ac"
+
+    echo "### Installing $name $ver from source to $destdir"
+
+    if [[ ! -f CMakeLists.txt ]]; then
+        mkl_download_archive \
+            "https://github.com/aws/aws-sdk-cpp/archive/refs/tags/${ver}.tar.gz" \
+            "256" "$checksum" || return 1
+    fi
+
+    # Fetch the CRT sub-libraries required by the SDK's CMake build even
+    # when USE_CRT_HTTP_CLIENT=OFF.  The tarball from GitHub does not include
+    # git submodules, so the SDK ships prefetch_crt_dependency.sh for exactly
+    # this purpose.
+    # unzip may prompt "Continue?" for files with non-ASCII names in the
+    # aws-c-common test resources; pipe 'yes' so the build never blocks.
+    if [[ ! -f crt/aws-crt-cpp/CMakeLists.txt ]]; then
+        yes | bash prefetch_crt_dependency.sh || return 1
+    fi
+
+    mkdir -p _build
+    mkl_pushd _build
+
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_ONLY="sts" \
+        -DENABLE_TESTING=OFF \
+        -DAUTORUN_UNIT_TESTS=OFF \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DFORCE_SHARED_CRT=OFF \
+        -DUSE_CRT_HTTP_CLIENT=OFF \
+        -DENFORCE_SUBMODULE_VERSIONS=OFF \
+        -DMINIMIZE_SIZE=ON \
+        -DENABLE_UNITY_BUILD=ON \
+        -DENABLE_VIRTUAL_OPERATIONS=OFF \
+        -DENABLE_RTTI=OFF \
+        -DENABLE_ZLIB_REQUEST_COMPRESSION=OFF \
+        -DBUILD_OPTEL=OFF \
+        -DENABLE_CURL_LOGGING=OFF \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DOPENSSL_ROOT_DIR="${destdir}/usr" \
+        -DCURL_ROOT="${destdir}/usr" \
+        -DCMAKE_PREFIX_PATH="${destdir}/usr" || { mkl_popd; return 1; }
+
+    make -j$(nproc) || { mkl_popd; return 1; }
+    make DESTDIR="${destdir}" install || { mkl_popd; return 1; }
+
+    mkl_popd
+
+    # Strip debug info (-S) and local symbol table entries (-x) from all
+    # 14 AWS static archives.  This removes hundreds of internal C++ mangled
+    # names (std::, Aws:: internals, anonymous-namespace symbols) that are
+    # never part of the public API and would otherwise bloat librdkafka-static.a.
+    # The object code itself is untouched — only symbol table entries are removed.
+    # Makefile.base already runs strip -S on the final merged librdkafka-static.a,
+    # but only -S (debug info); -x (local symbols) is what gives the extra saving.
+    # Strip from both lib and lib64 — x86_64 Linux installs to lib64.
+    find "${destdir}/usr/lib" "${destdir}/usr/lib64" \
+        -name "libaws*.a" 2>/dev/null | xargs strip -Sx
+
+    return 0
+}

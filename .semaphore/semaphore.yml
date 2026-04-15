@@ -34,12 +34,16 @@ global_job_config:
 blocks:
   - name: 'OSX arm64/m1'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
           type: s1-macos-15-arm64-8
+      prologue:
+        commands:
+        - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-IAM}"'
+        - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-arm64__lnk-all
@@ -62,8 +66,8 @@ blocks:
 
   - name: 'OSX x64'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -71,6 +75,10 @@ blocks:
       env_vars:
         - name: ARTIFACT_KEY
           value: p-librdkafka__plat-osx__arch-x64__lnk-all
+      prologue:
+        commands:
+        - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-IAM}"'
+        - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
@@ -141,8 +149,8 @@ blocks:
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -185,8 +193,8 @@ blocks:
 
   - name: 'Linux arm64: release artifact docker builds'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -228,8 +236,8 @@ blocks:
 
   - name: 'Linux s390x: release artifact docker builds'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -259,8 +267,8 @@ blocks:
 
   - name: 'Windows x64: MinGW-w64'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -294,8 +302,8 @@ blocks:
 
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -338,20 +346,24 @@ blocks:
 
   - name: 'Packaging'
     dependencies:
-      - 'Build documentation'
+      # - 'Build documentation'
       - 'OSX arm64/m1'
       - 'OSX x64'
-      - 'Linux x64: release artifact docker builds'
-      - 'Linux arm64: release artifact docker builds'
-      - 'Linux s390x: release artifact docker builds'
-      - 'Windows x64: MinGW-w64'
-      - 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
-    run:
-      when: "tag =~ '^v[0-9]\\.'"
+      # - 'Linux x64: release artifact docker builds'
+      # - 'Linux arm64: release artifact docker builds'
+      # - 'Linux s390x: release artifact docker builds'
+      # - 'Windows x64: MinGW-w64'
+      # - 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
+    #run:
+      #when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-amd64-2
+      prologue:
+        commands:
+          - 'export SEMAPHORE_GIT_TAG_NAME="${SEMAPHORE_GIT_TAG_NAME:-${SEMAPHORE_WORKFLOW_ID}-IAM}"'
+          - 'echo "SEMAPHORE_GIT_TAG_NAME=${SEMAPHORE_GIT_TAG_NAME}"'
       jobs:
         - name: 'Build NuGet and static packages'
           commands:

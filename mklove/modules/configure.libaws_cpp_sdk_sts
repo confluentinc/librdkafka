@@ -70,12 +70,16 @@ function manual_checks {
     if [[ $MKL_DISTRO != "osx" ]]; then
         _s2n_flag="-ls2n"
     fi
+    # Archive order matters for GNU ld: dependents must precede their
+    # dependencies.  Dependency graph (abridged):
+    #   sts → core → crt-cpp → s3 → auth → http → event-stream
+    #       → io → cal → mqtt → compression → sdkutils → common
+    #       → checksums [→ s2n (Linux only)]
     mkl_lib_check "libaws_cpp_sdk_sts" "WITH_AWS_STS" $action CXX \
         "-laws-cpp-sdk-sts -laws-cpp-sdk-core -laws-crt-cpp \
-         -laws-c-auth -laws-c-cal -laws-c-http -laws-c-io \
-         -laws-c-mqtt -laws-c-common -laws-c-compression \
-         -laws-c-event-stream -laws-c-s3 -laws-c-sdkutils \
-         -laws-checksums ${_s2n_flag}" \
+         -laws-c-s3 -laws-c-auth -laws-c-http -laws-c-event-stream \
+         -laws-c-io -laws-c-cal -laws-c-mqtt -laws-c-compression \
+         -laws-c-sdkutils -laws-c-common -laws-checksums ${_s2n_flag}" \
         "#include <aws/sts/STSClient.h>
 #include <aws/sts/model/GetWebIdentityTokenRequest.h>
 void foo (void) { Aws::STS::STSClient c; }"
@@ -185,7 +189,9 @@ function install_source {
     # The object code itself is untouched — only symbol table entries are removed.
     # Makefile.base already runs strip -S on the final merged librdkafka-static.a,
     # but only -S (debug info); -x (local symbols) is what gives the extra saving.
-    find "${destdir}/usr/lib" -name "libaws*.a" | xargs strip -Sx
+    # Strip from both lib and lib64 — x86_64 Linux installs to lib64.
+    find "${destdir}/usr/lib" "${destdir}/usr/lib64" \
+        -name "libaws*.a" 2>/dev/null | xargs strip -Sx
 
     return 0
 }

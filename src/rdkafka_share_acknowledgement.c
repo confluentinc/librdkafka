@@ -372,6 +372,13 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                                         ->response_leader_epoch,
                                                     0);
                                         }
+                                        rd_kafka_dbg(
+                                            rkshare->rkshare_rk, CGRP,
+                                            "SHAREACK",
+                                            "    Adding ack detail for offsets "
+                                            "[%" PRId64 " - %" PRId64
+                                            "] with type %d",
+                                            run_start, run_end, run_type);
                                         /* Collated: 1 type for entire
                                          * range */
                                         rd_list_add(

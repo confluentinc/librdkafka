@@ -22,6 +22,8 @@ SRCS_$(WITH_HDRHISTOGRAM) += rdhdrhistogram.c
 SRCS_$(WITH_SSL) += rdkafka_ssl.c
 SRCS_$(WITH_CURL) += rdhttp.c
 SRCS_$(WITH_OAUTHBEARER_OIDC) += rdkafka_sasl_oauthbearer_oidc.c
+SRCS_$(WITH_AWS_STS)          += rdkafka_aws_sts.c
+CXXSRCS_$(WITH_AWS_STS)       += rdkafka_aws_sts_impl.cpp
 
 SRCS_LZ4 = rdxxhash.c
 ifneq ($(WITH_LZ4_EXT), y)
@@ -66,10 +68,14 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 
 HDRS=		rdkafka.h rdkafka_mock.h
 
-OBJS=		$(SRCS:.c=.o)
+OBJS=		$(SRCS:.c=.o) $(CXXSRCS_y:.cpp=.o)
 
 
 all: lib check
+
+ifeq ($(WITH_AWS_STS),y)
+CC_LD=$(CXX)
+endif
 
 include ../mklove/Makefile.base
 

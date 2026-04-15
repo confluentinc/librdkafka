@@ -7,8 +7,10 @@ import os
 import tempfile
 import shutil
 import subprocess
+import re
 from packaging import Package, Mapping
 
+SEMVER_PREFIX = re.compile(r"^\d+.\d+.\d+")
 
 class NugetPackage (Package):
     """ All platforms, archs, et.al, are bundled into one set of
@@ -244,6 +246,10 @@ class NugetPackage (Package):
     def __init__(self, version, arts):
         if version.startswith('v'):
             version = version[1:]  # Strip v prefix
+        # PR-only workaround: if it's not a normal semver like 1.2.3...,
+        # wrap it as 0.0.0-<tag>
+        if not SEMVER_PREFIX.match(version):
+            version = f"0.0.0-{version}"
         super(NugetPackage, self).__init__(version, arts)
 
     def cleanup(self):

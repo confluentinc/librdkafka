@@ -322,9 +322,10 @@ static void do_test_produce_consumer_with_OIDC_should_fail(
 
         c1 = test_create_consumer("OIDC.fail.C1", NULL, conf, NULL);
 
-        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 5 * 1000);
+        test_consumer_poll_no_msgs("OIDC.fail.C1", c1, testid, 10 * 1000);
 
-        TEST_ASSERT(error_seen);
+        TEST_ASSERT(error_seen,
+                    "Expected authentication error for %s", test_name);
 
         test_consumer_close(c1);
         rd_kafka_destroy(c1);

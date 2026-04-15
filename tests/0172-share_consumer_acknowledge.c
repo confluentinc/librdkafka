@@ -86,45 +86,11 @@ typedef struct {
         int msgs_released;
 } ack_test_state_t;
 
-
-/**
- * @brief Create share consumer with explicit acknowledgement mode
- */
-static rd_kafka_share_t *create_explicit_ack_consumer(const char *group_id) {
-        rd_kafka_share_t *rk;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
-                          sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
-                          errstr, sizeof(errstr));
-
-        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
-
-        return rk;
-}
-
 /**
  * @brief Generate random ack type with roughly equal distribution
  */
 static rd_kafka_share_AcknowledgeType_t get_random_ack_type(void) {
         return (rd_kafka_share_AcknowledgeType_t)jitter(1, 3);
-}
-
-/**
- * @brief Set group offset to earliest
- */
-static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
-                                      const char *group_name) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group_name,
-                                            cfg, 1);
 }
 
 /**
@@ -177,7 +143,8 @@ static void subscribe_consumers(ack_test_config_t *config,
         rd_kafka_topic_partition_list_t *subs;
         int t, i;
 
-        set_group_offset_earliest(state->consumers[0], state->group_name);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(state->consumers[0]), state->group_name);
 
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
         for (t = 0; t < config->topic_cnt; t++) {
@@ -607,7 +574,7 @@ static int run_ack_test(ack_test_config_t *config) {
 
         for (i = 0; i < config->consumer_cnt; i++) {
                 state.consumers[i] =
-                    create_explicit_ack_consumer(state.group_name);
+                    test_create_share_consumer(state.group_name, rd_true);
         }
 
         setup_topics_and_produce(config, &state);
@@ -684,7 +651,7 @@ static void test_ack_null_message(void) {
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_null_message ===\n");
 
-        rkshare = create_explicit_ack_consumer(group);
+        rkshare = test_create_share_consumer(group, rd_true);
 
         err = rd_kafka_share_acknowledge(rkshare, NULL);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
@@ -743,19 +710,17 @@ static void test_ack_invalid_type(void) {
         const char *topic;
         size_t rcvd = 0;
         int attempts;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_invalid_type ===\n");
 
-        rkshare = create_explicit_ack_consumer(group);
+        rkshare = test_create_share_consumer(group, rd_true);
         topic   = test_mk_topic_name("0172-invalid-type", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 1);
 
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(rkshare), group);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
@@ -811,20 +776,18 @@ static void test_release_then_reject_no_redelivery(void) {
         size_t rcvd = 0;
         size_t m;
         int attempts;
-        int redelivered        = 0;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        int redelivered = 0;
 
         TEST_SAY("\n");
         TEST_SAY("=== test_release_then_reject_no_redelivery ===\n");
 
-        rkshare = create_explicit_ack_consumer(group);
+        rkshare = test_create_share_consumer(group, rd_true);
         topic   = test_mk_topic_name("0172-release-reject", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 5);
 
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(rkshare), group);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
@@ -921,7 +884,6 @@ static void test_max_delivery_attempts(void) {
         int delivery_attempt;
         int attempts;
         const int max_deliveries = 5;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         TEST_SAY("\n");
         TEST_SAY("=== test_max_delivery_attempts ===\n");
@@ -930,14 +892,13 @@ static void test_max_delivery_attempts(void) {
             "attempts\n",
             max_deliveries);
 
-        rkshare = create_explicit_ack_consumer(group);
+        rkshare = test_create_share_consumer(group, rd_true);
         topic   = test_mk_topic_name("0172-max-delivery", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_easy(topic, 0, 0, 1); /* Just 1 message */
 
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        test_set_share_group_offset_earliest(
+            test_share_consumer_get_rk(rkshare), group);
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);

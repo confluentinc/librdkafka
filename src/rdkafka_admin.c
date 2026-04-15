@@ -7583,38 +7583,56 @@ err_parse:
 }
 
 /**
+ * @brief Compare two ConsumerGroupListing by group_id
+ */
+static int rd_kafka_ConsumerGroupListing_cmp_group_id(const void *a,
+                                                      const void *b) {
+        const rd_kafka_ConsumerGroupListing_t *ga = a, *gb = b;
+        return strcmp(ga->group_id, gb->group_id);
+}
+
+/**
  * @brief Append groups from \p src to \p dst, skipping duplicates.
  *
- * Uses a hash map for O(1) lookups.  When the same group is reported
- * by multiple brokers the first response wins; this is acceptable
- * because group state is point-in-time and any single broker's view
- * is equally valid.
+ * Keeps \p dst sorted by group_id so that subsequent calls can use
+ * bsearch for O(log n) dedup lookups.
  */
 static void
 rd_kafka_ConsumerGroupListing_list_append_dedup(rd_list_t *dst,
                                                 const rd_list_t *src) {
         const rd_kafka_ConsumerGroupListing_t *grp;
-        rd_kafka_ConsumerGroupListing_t *copy;
         int j;
-        rd_map_t seen;
+        rd_list_t *to_add = NULL;
 
-        rd_map_init(&seen, rd_list_cnt(dst) + rd_list_cnt(src),
-                    rd_map_str_cmp, rd_map_str_hash, NULL, NULL);
+        if (!rd_list_cnt(src))
+                return;
 
-        RD_LIST_FOREACH(grp, dst, j) {
-                rd_map_set(&seen, (void *)grp->group_id, (void *)grp);
-        }
+        /* Ensure dst is sorted for bsearch lookups. */
+        if (rd_list_cnt(dst) && !(dst->rl_flags & RD_LIST_F_SORTED))
+                rd_list_sort(dst, rd_kafka_ConsumerGroupListing_cmp_group_id);
 
-        rd_list_grow(dst, rd_list_cnt(src));
+        /* Collect pointers to src groups not already in dst.
+         * dst is not modified here so the sorted flag stays valid. */
         RD_LIST_FOREACH(grp, src, j) {
-                if (rd_map_get(&seen, grp->group_id))
+                if (rd_list_cnt(dst) &&
+                    rd_list_find(dst, grp,
+                                rd_kafka_ConsumerGroupListing_cmp_group_id))
                         continue;
-                copy = rd_kafka_ConsumerGroupListing_copy(grp);
-                rd_list_add(dst, copy);
-                rd_map_set(&seen, (void *)copy->group_id, (void *)copy);
+                if (!to_add) {
+                        to_add = rd_alloca(sizeof(*to_add));
+                        rd_list_init(to_add, rd_list_cnt(src), NULL);
+                }
+                rd_list_add(to_add, (void *)grp);
         }
 
-        rd_map_destroy(&seen);
+        /* Copy new groups into dst and resort. */
+        if (to_add) {
+                rd_list_copy_to(dst, to_add,
+                                rd_kafka_ConsumerGroupListing_copy_opaque,
+                                NULL);
+                rd_list_sort(dst, rd_kafka_ConsumerGroupListing_cmp_group_id);
+                rd_list_destroy(to_add);
+        }
 }
 
 /** @brief Merge the ListConsumerGroups response from a single broker
@@ -7647,7 +7665,7 @@ rd_kafka_ListConsumerGroups_response_merge(rd_kafka_op_t *rko_fanout,
         }
         if (!rko_partial->rko_err) {
                 int new_valid_count, new_errors_count;
-                const rd_list_t *new_valid_list, *new_errors_list;
+                const rd_list_t *new_errors_list;
                 /* Read the partial result and merge the valid groups
                  * and the errors into the fanout parent result. */
                 newres =

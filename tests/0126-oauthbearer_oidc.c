@@ -94,6 +94,94 @@ do_test_produce_consumer_with_OIDC(const char *test_name,
 }
 
 
+/**
+ * @brief After config OIDC, make sure the share consumer
+ *        can work successfully.
+ */
+static void
+do_test_produce_share_consumer_with_OIDC(const char *test_name,
+                                         const rd_kafka_conf_t *base_conf) {
+        const char *topic;
+        rd_kafka_t *p1;
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[500];
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        int consumed           = 0, attempts;
+        const int msg_cnt      = 10;
+
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
+
+        SUB_TEST("Test share consumer with oidc configuration: %s", test_name);
+
+        if (!url) {
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
+
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        topic = test_mk_topic_name("0126-oauthbearer_oidc_share", 1);
+        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+        TEST_SAY("Topic: %s is created\n", topic);
+
+        test_produce_msgs_easy(topic, 0, 0, msg_cnt);
+
+        /* Create share consumer (picks up SASL config from test_conf_init) */
+        sc1 = test_create_share_consumer("oidc-share-group");
+
+        /* Set group config for earliest offset */
+        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP,
+                                            "oidc-share-group", grp_conf, 1);
+
+        /* Subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Give it some time to trigger the token refresh. */
+        rd_usleep(5 * 1000 * 1000, NULL);
+
+        /* Consume messages */
+        attempts = 50;
+        while (consumed < msg_cnt && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err = rd_kafka_share_consume_batch(sc1, 3000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_ASSERT(consumed == msg_cnt, "Expected %d messages, consumed %d",
+                    msg_cnt, consumed);
+        TEST_SAY("Share consumer consumed %d/%d messages with OIDC\n", consumed,
+                 msg_cnt);
+
+        rd_kafka_share_consumer_close(sc1);
+        rd_kafka_share_destroy(sc1);
+        rd_kafka_destroy(p1);
+        SUB_TEST_PASS();
+}
+
+
 static void
 auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
         if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
@@ -147,6 +235,60 @@ static void do_test_produce_consumer_with_OIDC_expired_token_should_fail(
         rd_kafka_destroy(c1);
         SUB_TEST_PASS();
 }
+
+/**
+ * @brief After config OIDC with expired token, make sure the share consumer
+ *        authentication fails as expected.
+ */
+static void do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
+    const rd_kafka_conf_t *base_conf) {
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_message_t *batch[10];
+        size_t rcvd = 0;
+        rd_kafka_error_t *err;
+        char errstr[512];
+
+        const char *expired_url = test_getenv("EXPIRED_TOKEN_OIDC_URL", NULL);
+
+        SUB_TEST(
+            "Test OAUTHBEARER/OIDC share consumer failing with "
+            "expired JWT");
+
+        if (!expired_url) {
+                SUB_TEST_SKIP(
+                    "EXPIRED_TOKEN_OIDC_URL environment variable is not "
+                    "set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+
+        error_seen = rd_false;
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", expired_url);
+        test_conf_set(conf, "group.id", "oidc-share-fail");
+
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
+
+        /* Poll — should trigger auth error callback, no messages expected */
+        err = rd_kafka_share_consume_batch(sc1, 10 * 1000, batch, &rcvd);
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_ASSERT(rcvd == 0,
+                    "Expected no messages with expired token, got %zu", rcvd);
+        TEST_ASSERT(error_seen,
+                    "Expected authentication error for share consumer "
+                    "with expired token");
+
+        rd_kafka_share_consumer_close(sc1);
+        rd_kafka_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
 
 /**
  * @brief After configiguring OIDC, make sure the
@@ -229,6 +371,62 @@ do_test_produce_consumer_with_OIDC_should_fail_invalid_token_endpoint(
 
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief After config OIDC with invalid token endpoint, make sure the
+ *        share consumer authentication fails as expected.
+ */
+static void
+do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
+    const rd_kafka_conf_t *base_conf) {
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_message_t *batch[10];
+        size_t rcvd = 0;
+        rd_kafka_error_t *err;
+        char errstr[512];
+
+        const char *invalid_url = test_getenv("INVALID_OIDC_URL", NULL);
+
+        SUB_TEST(
+            "Test OAUTHBEARER/OIDC share consumer failing with "
+            "invalid JWT");
+
+        if (!invalid_url) {
+                SUB_TEST_SKIP(
+                    "INVALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        conf = rd_kafka_conf_dup(base_conf);
+
+        error_seen = rd_false;
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", invalid_url);
+        test_conf_set(conf, "group.id", "oidc-share-fail-invalid");
+
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
+
+        /* Poll — should trigger auth error callback, no messages expected */
+        err = rd_kafka_share_consume_batch(sc1, 10 * 1000, batch, &rcvd);
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_ASSERT(rcvd == 0,
+                    "Expected no messages with invalid token endpoint, "
+                    "got %zu",
+                    rcvd);
+        TEST_ASSERT(error_seen,
+                    "Expected authentication error for share consumer "
+                    "with invalid token endpoint");
+
+        rd_kafka_share_consumer_close(sc1);
+        rd_kafka_share_destroy(sc1);
         SUB_TEST_PASS();
 }
 
@@ -357,6 +555,57 @@ fail:
         return NULL;
 }
 
+/**
+ * @brief Share consumer version of
+ * do_test_produce_consumer_with_OIDC_should_fail. Verifies authentication
+ * failure with share consumer.
+ */
+static void do_test_produce_share_consumer_with_OIDC_should_fail(
+    const char *test_name,
+    const rd_kafka_conf_t *base_conf) {
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_message_t *batch[10];
+        size_t rcvd = 0;
+        rd_kafka_error_t *err;
+        char errstr[512];
+
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
+
+        SUB_TEST("Test share consumer auth failure with oidc configuration: %s",
+                 test_name);
+        if (!url) {
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set\n");
+                return;
+        }
+
+        error_seen = rd_false;
+
+        conf = rd_kafka_conf_dup(base_conf);
+        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url", url);
+        test_conf_set(conf, "group.id", "oidc-share-should-fail");
+
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
+
+        err = rd_kafka_share_consume_batch(sc1, 5 * 1000, batch, &rcvd);
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_ASSERT(rcvd == 0, "Expected no messages on auth failure, got %zu",
+                    rcvd);
+        TEST_ASSERT(error_seen,
+                    "Expected authentication error for share consumer");
+
+        rd_kafka_share_consumer_close(sc1);
+        rd_kafka_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
+
 void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
         rd_kafka_conf_t *jwt_bearer_conf;
         oidc_configuration_jwt_bearer_variation_t variation;
@@ -380,6 +629,35 @@ void do_test_produce_consumer_with_OIDC_jwt_bearer(rd_kafka_conf_t *conf) {
                                                            jwt_bearer_conf);
                 else
                         do_test_produce_consumer_with_OIDC_should_fail(
+                            test_name, jwt_bearer_conf);
+                rd_kafka_conf_destroy(jwt_bearer_conf);
+        }
+}
+
+void do_test_produce_share_consumer_with_OIDC_jwt_bearer(
+    rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *jwt_bearer_conf;
+        oidc_configuration_jwt_bearer_variation_t variation;
+        for (variation =
+                 OIDC_CONFIGURATION_JWT_BEARER_VARIATION_PRIVATE_KEY_FILE;
+             variation < OIDC_CONFIGURATION_JWT_BEARER_VARIATION__CNT;
+             variation++) {
+                const char *test_name;
+                jwt_bearer_conf =
+                    oidc_configuration_jwt_bearer(conf, variation);
+                if (!jwt_bearer_conf)
+                        continue;
+
+                test_name = tsprintf(
+                    "JWT bearer: %s\n",
+                    oidc_configuration_jwt_bearer_variation_name(variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_JWT_BEARER_VARIATION__FIRST_FAILING)
+                        do_test_produce_share_consumer_with_OIDC(
+                            test_name, jwt_bearer_conf);
+                else
+                        do_test_produce_share_consumer_with_OIDC_should_fail(
                             test_name, jwt_bearer_conf);
                 rd_kafka_conf_destroy(jwt_bearer_conf);
         }
@@ -488,6 +766,36 @@ void do_test_produce_consumer_with_OIDC_metadata_authentication(
                             test_name, metadata_authentication_conf);
                 else
                         do_test_produce_consumer_with_OIDC_should_fail(
+                            test_name, metadata_authentication_conf);
+                rd_kafka_conf_destroy(metadata_authentication_conf);
+        }
+}
+
+void do_test_produce_share_consumer_with_OIDC_metadata_authentication(
+    rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *metadata_authentication_conf;
+        oidc_configuration_metadata_authentication_variation_t variation;
+        for (
+            variation =
+                OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION_AZURE_IMDS_SUCCESS;
+            variation <
+            OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__CNT;
+            variation++) {
+                const char *test_name;
+                metadata_authentication_conf =
+                    oidc_configuration_metadata_authentication(conf, variation);
+
+                test_name = tsprintf(
+                    "Metadata authentication variation: %s\n",
+                    oidc_configuration_metadata_authentication_variation_name(
+                        variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_METADATA_AUTHENTICATION_VARIATION__FIRST_FAILING)
+                        do_test_produce_share_consumer_with_OIDC(
+                            test_name, metadata_authentication_conf);
+                else
+                        do_test_produce_share_consumer_with_OIDC_should_fail(
                             test_name, metadata_authentication_conf);
                 rd_kafka_conf_destroy(metadata_authentication_conf);
         }
@@ -606,6 +914,41 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
         }
 }
 
+void do_test_produce_share_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
+        rd_kafka_conf_t *sub_claim_conf;
+        oidc_configuration_sub_claim_variation_t variation;
+
+        const char *url = test_getenv("VALID_OIDC_URL", NULL);
+
+        if (!url) {
+                SUB_TEST_SKIP(
+                    "VALID_OIDC_URL environment variable is not set, "
+                    "skipping share consumer sub claim tests\n");
+                return;
+        }
+
+        for (variation = OIDC_CONFIGURATION_SUB_CLAIM_VARIATION_DEFAULT_SUB;
+             variation < OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__CNT;
+             variation++) {
+                const char *test_name;
+                sub_claim_conf = oidc_configuration_sub_claim(conf, variation);
+
+                test_name = tsprintf(
+                    "Sub claim variation: %s\n",
+                    oidc_configuration_sub_claim_variation_name(variation));
+
+                if (variation <
+                    OIDC_CONFIGURATION_SUB_CLAIM_VARIATION__FIRST_FAILING) {
+                        do_test_produce_share_consumer_with_OIDC(
+                            test_name, sub_claim_conf);
+                } else {
+                        do_test_produce_share_consumer_with_OIDC_should_fail(
+                            test_name, sub_claim_conf);
+                }
+                rd_kafka_conf_destroy(sub_claim_conf);
+        }
+}
+
 int main_0126_oauthbearer_oidc(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         const char *sec;
@@ -628,12 +971,20 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         }
 
         do_test_produce_consumer_with_OIDC("client_credentials", conf);
+        do_test_produce_share_consumer_with_OIDC("client_credentials", conf);
         do_test_produce_consumer_with_OIDC_should_fail_invalid_token_endpoint(
             conf);
+        do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
+            conf);
         do_test_produce_consumer_with_OIDC_expired_token_should_fail(conf);
+        do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
+            conf);
         do_test_produce_consumer_with_OIDC_jwt_bearer(conf);
+        do_test_produce_share_consumer_with_OIDC_jwt_bearer(conf);
         do_test_produce_consumer_with_OIDC_metadata_authentication(conf);
+        do_test_produce_share_consumer_with_OIDC_metadata_authentication(conf);
         do_test_produce_consumer_with_OIDC_sub_claim(conf);
+        do_test_produce_share_consumer_with_OIDC_sub_claim(conf);
 
         rd_kafka_conf_destroy(conf);
 

@@ -3289,6 +3289,25 @@ RD_EXPORT
 void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
+ * @brief Enable SASL background callbacks for a share consumer.
+ *
+ * This is a convenience wrapper around
+ * rd_kafka_sasl_background_callbacks_enable() for share consumers.
+ * It forwards the SASL queue to the background thread so that
+ * OAUTHBEARER token refresh callbacks are served automatically.
+ *
+ * @param rkshare Share consumer instance.
+ *
+ * @returns NULL on success or an error object on failure.
+ *
+ * @sa rd_kafka_sasl_background_callbacks_enable()
+ * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb()
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_share_sasl_background_callbacks_enable(rd_kafka_share_t *rkshare);
+
+/**
  * @brief Flags for rd_kafka_destroy_flags()
  */
 

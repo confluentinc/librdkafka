@@ -2168,6 +2168,115 @@ void rd_kafka_conf_set_offset_commit_cb(
 
 
 /**
+ * @brief Share consumer partition offsets for a single offset range.
+ *
+ * Contains information about an acknowledged offset range including
+ * topic, partition, offset range, and any error.
+ */
+typedef struct rd_kafka_share_partition_offsets_s
+    rd_kafka_share_partition_offsets_t;
+
+/**
+ * @brief List of share consumer partition offsets.
+ *
+ * Contains multiple partition offset entries.
+ */
+typedef struct rd_kafka_share_partition_offsets_list_s
+    rd_kafka_share_partition_offsets_list_t;
+
+/**
+ * @brief Get the number of partitions in the offsets list.
+ * @param list Partition offsets list.
+ * @returns The number of partitions in the list.
+ */
+RD_EXPORT size_t rd_kafka_share_partition_offsets_list_count(
+    const rd_kafka_share_partition_offsets_list_t *list);
+
+/**
+ * @brief Get a partition offsets entry at the specified index.
+ * @param list Partition offsets list.
+ * @param index Zero-based index of the partition to retrieve.
+ * @returns Pointer to the partition offsets entry, or NULL if index is out of
+ *          bounds.
+ */
+RD_EXPORT const rd_kafka_share_partition_offsets_t *
+rd_kafka_share_partition_offsets_list_get(
+    const rd_kafka_share_partition_offsets_list_t *list,
+    size_t index);
+
+/**
+ * @brief Destroy the partition offsets list.
+ * @param list Partition offsets list to destroy.
+ *
+ * @remark Only call this if you have ownership of the list.
+ *         The list passed to the callback is owned by librdkafka
+ *         and will be destroyed automatically after the callback returns.
+ */
+RD_EXPORT void rd_kafka_share_partition_offsets_list_destroy(
+    rd_kafka_share_partition_offsets_list_t *list);
+
+/**
+ * @brief Get the topic partition from a partition offsets entry.
+ * @param partition_offsets The partition offsets entry.
+ * @returns Pointer to the topic partition (valid for the lifetime of the list).
+ */
+RD_EXPORT const rd_kafka_topic_partition_t *
+rd_kafka_share_partition_offsets_partition(
+    const rd_kafka_share_partition_offsets_t *partition_offsets);
+
+/**
+ * @brief Get the offsets array from a partition offsets entry.
+ * @param partition_offsets The partition offsets entry.
+ * @returns Array of acknowledged offsets (valid for the lifetime of the list).
+ */
+RD_EXPORT const int64_t *rd_kafka_share_partition_offsets_offsets(
+    const rd_kafka_share_partition_offsets_t *partition_offsets);
+
+/**
+ * @brief Get the number of offsets in a partition offsets entry.
+ * @param partition_offsets The partition offsets entry.
+ * @returns The number of offsets in the array.
+ */
+RD_EXPORT int rd_kafka_share_partition_offsets_offsets_cnt(
+    const rd_kafka_share_partition_offsets_t *partition_offsets);
+
+/**
+ * @brief Set share acknowledgement commit callback.
+ *
+ * The share acknowledgement commit callback is called when share consumer
+ * acknowledgements (from rd_kafka_share_acknowledge* calls followed by
+ * rd_kafka_share_commit_async() or rd_kafka_share_consume_batch()) complete.
+ *
+ * The callback is called from rd_kafka_share_consume_batch() or
+ * rd_kafka_poll() context.
+ *
+ * @param conf Configuration object.
+ * @param share_acknowledgement_commit_cb Callback to set.
+ *
+ * The callback parameters are:
+ *   - \p rkshare: Share consumer handle.
+ *   - \p partitions: List of partitions with their acknowledged offsets.
+ *   - \p err: Overall error code (RD_KAFKA_RESP_ERR_NO_ERROR on success).
+ *   - \p opaque: Application opaque set with rd_kafka_conf_set_opaque().
+ *
+ * The \p partitions list contains one entry per partition, each with an
+ * array of acknowledged offsets accessible via
+ * rd_kafka_share_partition_offsets_offsets().
+ *
+ * @remark The \p partitions list and its contents are only valid for the
+ *         duration of the callback.
+ */
+RD_EXPORT
+void rd_kafka_conf_set_share_acknowledgement_commit_cb(
+    rd_kafka_conf_t *conf,
+    void (*share_acknowledgement_commit_cb)(
+        rd_kafka_share_t *rkshare,
+        rd_kafka_share_partition_offsets_list_t *partitions,
+        rd_kafka_resp_err_t err,
+        void *opaque));
+
+
+/**
  * @brief Set error callback in provided conf object.
  *
  * The error callback is used by librdkafka to signal warnings and errors
@@ -3333,6 +3442,25 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 RD_EXPORT
 rd_kafka_error_t *
 rd_kafka_share_sasl_background_callbacks_enable(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Get the underlying rd_kafka_t handle from a share consumer instance.
+ *
+ * This function retrieves the internal rd_kafka_t handle associated with
+ * the share consumer. This is useful for accessing low-level consumer
+ * information such as assignment, fatal errors, etc.
+ *
+ * @param rkshare Share consumer instance.
+ *
+ * @returns The underlying rd_kafka_t handle, or NULL if \p rkshare is NULL.
+ *
+ * @remark The returned handle is owned by the share consumer and must not
+ *         be destroyed by the application.
+ *
+ * @sa rd_kafka_share_consumer_new()
+ */
+RD_EXPORT
+rd_kafka_t *rd_kafka_share_consumer_get_rk(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Flags for rd_kafka_destroy_flags()
@@ -5051,7 +5179,41 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
  *
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
+rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Asynchronously close the consumer.
+ *
+ * Performs the same actions as rd_kafka_consumer_close() but in a
+ * background thread.
+ *
+ * Rebalance events/callbacks (etc) will be forwarded to the
+ * application-provided \p rkqu. The application must poll/serve this queue
+ * until rd_kafka_consumer_closed() returns true.
+ *
+ * @remark Depending on consumer group join state there may or may not be
+ *         rebalance events emitted on \p rkqu.
+ *
+ * @returns an error object if the consumer close failed, else NULL.
+ *
+ * @sa rd_kafka_consumer_closed()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
+                                                      rd_kafka_queue_t *rkqu);
+
+
+/**
+ * @returns 1 if the consumer is closed, else 0.
+ *
+ * Should be used in conjunction with rd_kafka_consumer_close_queue() to know
+ * when the consumer has been closed.
+ *
+ * @sa rd_kafka_consumer_close_queue()
+ */
+RD_EXPORT
+int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);
+
 
 /**@}*/
 

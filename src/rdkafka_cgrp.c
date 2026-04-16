@@ -3922,7 +3922,8 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
                 rd_kafka_assert(
                     NULL,
-                    rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
+                    rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk) ||
+                        rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
                 rd_kafka_assert(
                     NULL,
                     rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
@@ -3988,8 +3989,9 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
         if (likely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)))
                 return 0;
 
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
-            rkcg->rkcg_share.share_session_leave_remaining_cnt)
+        /* If user has opted to not wait for close() while calling destroy,
+         * then we should not wait for the brokers to respond */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) && !rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk) && rkcg->rkcg_share.share_session_leave_remaining_cnt)
                 return 0;
 
         /* Check if wait-coord queue has timed out.

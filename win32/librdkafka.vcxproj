@@ -72,8 +72,12 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
+      <!-- msvcprt.lib: needed because rdkafka_aws_sts_impl.cpp is compiled /MD
+           and AWS SDK headers pull in std::ostream from msvcp140.dll.
+           libcmt.lib excluded to prevent /MT+/MD SAFESEH conflict on x86. -->
       <AdditionalOptions>/SAFESEH:NO</AdditionalOptions>
-      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>libcmt.lib</IgnoreSpecificDefaultLibraries>
+      <AdditionalDependencies>msvcprt.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -129,6 +133,7 @@
     <ClInclude Include="..\src\rdkafka_sasl.h" />
     <ClInclude Include="..\src\rdkafka_sasl_int.h" />
     <ClInclude Include="..\src\rdkafka_sasl_oauthbearer_oidc.h" />
+    <ClInclude Include="..\src\rdkafka_aws_sts.h" />
     <ClInclude Include="..\src\rdkafka_transport_int.h" />
     <ClInclude Include="..\src\rdlist.h" />
     <ClInclude Include="..\src\rdposix.h" />
@@ -213,6 +218,14 @@
     <ClCompile Include="..\src\rdkafka_sasl_scram.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
+    <ClCompile Include="..\src\rdkafka_aws_sts.c" />
+    <ClCompile Include="..\src\rdkafka_aws_sts_impl.cpp">
+      <!-- AWS SDK headers transitively include <sstream>/<iostream> whose
+           std::ostream methods are __declspec(dllimport) from msvcp140.dll.
+           This file must be compiled /MD to resolve those __imp_ symbols. -->
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />

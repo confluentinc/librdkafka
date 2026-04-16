@@ -1211,8 +1211,18 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                     msetr, 2 /*MsgVersion v2*/, hdr.Attributes,
                     hdr.BaseTimestamp, hdr.BaseOffset, compressed,
                     payload_size);
-                if (err)
-                        goto err;
+                if (err) {
+                        /* For share consumer: decompression failed, error ops
+                         * already created. Buffer position already advanced past
+                         * compressed payload. Continue parsing next MessageSet.
+                         * For regular consumer: stop parsing. */
+                        if (RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
+                                rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_err, 1);
+                                goto done;
+                        } else {
+                                goto err;
+                        }
+                }
 
         } else {
                 /* Read uncompressed messages */
@@ -1400,10 +1410,13 @@ rd_kafka_msgset_reader(rd_kafka_msgset_reader_t *msetr) {
                                  * due to its use of sendfile(2). */
                                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
-                        /* Continue on unsupported MsgVersions, the
-                         * MessageSet will be skipped. Reset error so loop
-                         * continues parsing remaining MessageSets. */
-                        err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        /* For share consumer: continue on unsupported MsgVersions,
+                         * the MessageSet will be skipped. Reset error so loop
+                         * continues parsing remaining MessageSets.
+                         * For regular consumer: stop parsing (old behavior). */
+                        if (RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
+                                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        }
                         continue;
                 }
 

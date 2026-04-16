@@ -1248,6 +1248,222 @@ static int unittest_msgset_all_errors(void) {
 }
 
 
+#if WITH_ZSTD
+/**
+ * @brief Test all 3 error types interleaved with valid messages
+ *
+ * Verifies parser continues through all error types:
+ * - MessageSet 1: CRC error (10 messages, offsets 0-9)
+ * - MessageSet 2: Valid (10 messages, offsets 10-19)
+ * - MessageSet 3: Decompression error (10 messages, offsets 20-29)
+ * - MessageSet 4: Valid (10 messages, offsets 30-39)
+ * - MessageSet 5: Unsupported MagicByte (10 messages, offsets 40-49)
+ * - MessageSet 6: Valid (10 messages, offsets 50-59)
+ *
+ * This is the critical test case: all batches must be processed,
+ * with valid messages delivered even after errors.
+ */
+static int unittest_msgset_all_error_types_with_valid(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_buf_t *rkbuf;
+        rd_kafka_q_t *response_q;
+        char *buffer;
+        size_t buffer_size = 8192;
+        size_t offset      = 0;
+        struct rd_kafka_toppar_ver tver = {.version = 11};
+        const char *values[]            = {"a", "b", "c", "d", "e",
+                                            "f", "g", "h", "i", "j"};
+        size_t value_lens[]             = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+        int i;
+
+        RD_UT_BEGIN();
+
+        rkshare = ut_create_test_share_consumer();
+        RD_UT_ASSERT(rkshare, "Failed to create share consumer");
+
+        rktp = ut_create_mock_toppar(rkshare->rkshare_rk,
+                                     "test-topic-all-errors", 0);
+        RD_UT_ASSERT(rktp, "Failed to create toppar");
+
+        response_q = rd_kafka_q_new(rkshare->rkshare_rk);
+        buffer     = rd_calloc(1, buffer_size);
+
+        /* MessageSet 1: CRC error with 10 messages (offsets 0-9) */
+        ut_write_msgset_v2_header(buffer + offset, 0, 100, -1, 2, 0xBADC0001,
+                                  0, 9, 0, 0, -1, -1, -1, 10);
+        offset += 112;
+
+        /* MessageSet 2: Valid with 10 messages (offsets 10-19) */
+        offset += ut_build_valid_msgset_v2(buffer + offset, 10, 10, values,
+                                           value_lens);
+
+        /* MessageSet 3: Decompression error with 10 messages (offsets 20-29) */
+        char corrupted_data[32];
+        memset(corrupted_data, 0xDE, sizeof(corrupted_data));
+        size_t decomp_start = offset;
+        ut_write_msgset_v2_header(buffer + offset, 20,
+                                  49 + sizeof(corrupted_data), -1, 2, 0,
+                                  4, /* ZSTD compression */
+                                  9, 0, 0, -1, -1, -1, 10);
+        offset += 61;
+        memcpy(buffer + offset, corrupted_data, sizeof(corrupted_data));
+        offset += sizeof(corrupted_data);
+        /* Fix CRC for decompression error (CRC valid, data corrupt) */
+        uint32_t crc = rd_crc32c(0, buffer + decomp_start + 21,
+                                 49 + sizeof(corrupted_data) - 4 - 1 - 4);
+        *(int32_t *)(buffer + decomp_start + 17) = htobe32(crc);
+
+        /* MessageSet 4: Valid with 10 messages (offsets 30-39) */
+        offset += ut_build_valid_msgset_v2(buffer + offset, 30, 10, values,
+                                           value_lens);
+
+        /* MessageSet 5: Unsupported MagicByte with 10 messages (offsets 40-49) */
+        ut_write_msgset_v2_header(buffer + offset, 40, 100, -1, 99, /* Bad magic */
+                                  0, 0, 9, 0, 0, -1, -1, -1, 10);
+        offset += 112;
+
+        /* MessageSet 6: Valid with 10 messages (offsets 50-59) */
+        offset += ut_build_valid_msgset_v2(buffer + offset, 50, 10, values,
+                                           value_lens);
+
+        RD_UT_SAY("Total buffer size: %zu bytes, 6 MessageSets", offset);
+
+        /* Parse all MessageSets */
+        rkbuf            = rd_kafka_buf_new_shadow(buffer, offset, rd_free);
+        rkbuf->rkbuf_rkb = rd_kafka_broker_internal(rkshare->rkshare_rk);
+
+        rd_kafka_share_msgset_parse(rkbuf, rktp, NULL, &tver, response_q);
+
+        /* Verify MessageSet 1: 10 CRC error ops (offsets 0-9) */
+        RD_UT_SAY("Verifying MessageSet 1: CRC errors");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
+                RD_UT_ASSERT(rko != NULL,
+                             "Expected CRC error op %d of 10, got timeout", i);
+                RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
+                             "Expected CONSUMER_ERR, got %d", rko->rko_type);
+                RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__BAD_MSG,
+                             "Expected BAD_MSG, got %s",
+                             rd_kafka_err2str(rko->rko_err));
+                RD_UT_ASSERT(rko->rko_u.err.offset == 0 + i,
+                             "Expected offset %d, got %" PRId64, i,
+                             rko->rko_u.err.offset);
+                RD_UT_ASSERT(
+                    rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
+                        RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+                    "Expected REJECT ack_type for CRC error");
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Verify MessageSet 2: 10 successful FETCH ops (offsets 10-19) */
+        RD_UT_SAY("Verifying MessageSet 2: Valid messages");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
+                RD_UT_ASSERT(rko != NULL, "Expected FETCH op %d of 10", i);
+                RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_FETCH,
+                             "Expected FETCH op, got %d", rko->rko_type);
+                RD_UT_ASSERT(rko->rko_u.fetch.rkm.rkm_offset == 10 + i,
+                             "Expected offset %d, got %" PRId64, 10 + i,
+                             rko->rko_u.fetch.rkm.rkm_offset);
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Verify MessageSet 3: 10 decompression error ops (offsets 20-29) */
+        RD_UT_SAY("Verifying MessageSet 3: Decompression errors");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
+                RD_UT_ASSERT(rko != NULL, "Expected decomp error op %d of 10",
+                             i);
+                RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
+                             "Expected CONSUMER_ERR, got %d", rko->rko_type);
+                RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__BAD_COMPRESSION,
+                             "Expected BAD_COMPRESSION, got %s",
+                             rd_kafka_err2str(rko->rko_err));
+                RD_UT_ASSERT(rko->rko_u.err.offset == 20 + i,
+                             "Expected offset %d, got %" PRId64, 20 + i,
+                             rko->rko_u.err.offset);
+                RD_UT_ASSERT(
+                    rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
+                        RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE,
+                    "Expected RELEASE ack_type for decompression error");
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Verify MessageSet 4: 10 successful FETCH ops (offsets 30-39) */
+        RD_UT_SAY("Verifying MessageSet 4: Valid messages after decomp error");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
+                RD_UT_ASSERT(
+                    rko != NULL,
+                    "Expected FETCH op %d of 10 after decomp error, got timeout "
+                    "(BUG: parser stopped!)",
+                    i);
+                RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_FETCH,
+                             "Expected FETCH op, got %d", rko->rko_type);
+                RD_UT_ASSERT(rko->rko_u.fetch.rkm.rkm_offset == 30 + i,
+                             "Expected offset %d, got %" PRId64, 30 + i,
+                             rko->rko_u.fetch.rkm.rkm_offset);
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Verify MessageSet 5: 10 unsupported magic error ops (offsets 40-49) */
+        RD_UT_SAY("Verifying MessageSet 5: Unsupported MagicByte errors");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
+                RD_UT_ASSERT(rko != NULL, "Expected magic error op %d of 10", i);
+                RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR,
+                             "Expected CONSUMER_ERR, got %d", rko->rko_type);
+                RD_UT_ASSERT(rko->rko_err == RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
+                             "Expected NOT_IMPLEMENTED, got %s",
+                             rd_kafka_err2str(rko->rko_err));
+                RD_UT_ASSERT(rko->rko_u.err.offset == 40 + i,
+                             "Expected offset %d, got %" PRId64, 40 + i,
+                             rko->rko_u.err.offset);
+                RD_UT_ASSERT(
+                    rko->rko_u.err.rkm.rkm_u.consumer.ack_type ==
+                        RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+                    "Expected REJECT ack_type for unsupported magic");
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Verify MessageSet 6: 10 successful FETCH ops (offsets 50-59) */
+        RD_UT_SAY("Verifying MessageSet 6: Valid messages after magic error");
+        for (i = 0; i < 10; i++) {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 1000, 0);
+                RD_UT_ASSERT(
+                    rko != NULL,
+                    "Expected FETCH op %d of 10 after magic error, got timeout "
+                    "(BUG: parser stopped!)",
+                    i);
+                RD_UT_ASSERT(rko->rko_type == RD_KAFKA_OP_FETCH,
+                             "Expected FETCH op, got %d", rko->rko_type);
+                RD_UT_ASSERT(rko->rko_u.fetch.rkm.rkm_offset == 50 + i,
+                             "Expected offset %d, got %" PRId64, 50 + i,
+                             rko->rko_u.fetch.rkm.rkm_offset);
+                rd_kafka_op_destroy(rko);
+        }
+
+        /* Verify no extra ops */
+        {
+                rd_kafka_op_t *rko = rd_kafka_q_pop(response_q, 100, 0);
+                RD_UT_ASSERT(rko == NULL,
+                             "Unexpected extra op of type %d",
+                             rko ? rko->rko_type : -1);
+        }
+
+        RD_UT_SAY("SUCCESS: All 6 MessageSets processed correctly (60 ops total)");
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_q_destroy_owner(response_q);
+        rd_kafka_toppar_destroy(rktp);
+        ut_destroy_share_consumer(rkshare);
+
+        RD_UT_PASS();
+}
+#endif /* WITH_ZSTD */
+
+
 /**
  * @brief Run all MessageSet error handling unit tests
  */
@@ -1269,6 +1485,11 @@ int rd_kafka_unittest_msgset_errors(void) {
         fails += unittest_msgset_mixed_magic_success_crc_success();
         fails += unittest_msgset_all_success();
         fails += unittest_msgset_all_errors();
+
+        /* Comprehensive test: all error types with valid messages */
+#if WITH_ZSTD
+        fails += unittest_msgset_all_error_types_with_valid();
+#endif
 
         return fails;
 }

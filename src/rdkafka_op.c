@@ -133,6 +133,10 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] = "REPLY:SHARE_FETCH_RESPONSE",
             [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
                 "REPLY:SHARE_COMMIT_ASYNC_FANOUT",
+            [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT] =
+                "REPLY:SHARE_COMMIT_SYNC_FANOUT",
+            [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
+                "REPLY:SHARE_COMMIT_SYNC_FANOUT_REPLY",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -306,6 +310,10 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.share_fetch_response),
             [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
                 sizeof(rko->rko_u.share_commit_async_fanout),
+            [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT] =
+                sizeof(rko->rko_u.share_commit_sync_fanout),
+            [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
+                sizeof(rko->rko_u.share_commit_sync_fanout_reply),
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -530,6 +538,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
                            rd_kafka_broker_destroy);
                 RD_IF_FREE(rko->rko_u.share_fetch.ack_details, rd_list_destroy);
+                RD_IF_FREE(rko->rko_u.share_fetch.ack_results,
+                           rd_kafka_topic_partition_list_destroy);
                 break;
         }
 
@@ -541,6 +551,18 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT:
                 RD_IF_FREE(rko->rko_u.share_commit_async_fanout.ack_batches,
                            rd_list_destroy);
+                break;
+
+        case RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT:
+                RD_IF_FREE(rko->rko_u.share_commit_sync_fanout.ack_batches,
+                           rd_list_destroy);
+                RD_IF_FREE(rko->rko_u.share_commit_sync_fanout.results,
+                           rd_kafka_topic_partition_list_destroy);
+                break;
+
+        case RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY:
+                RD_IF_FREE(rko->rko_u.share_commit_sync_fanout_reply.results,
+                           rd_kafka_topic_partition_list_destroy);
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE: {

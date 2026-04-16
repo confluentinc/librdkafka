@@ -192,11 +192,20 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
                                     applicable. */
         RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
-        RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT,   /**< fanout share commit async
-                                                  *   operation (ack-only,
-                                                  *   no fetch) */
-        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD, /**< share session:
-                                                  * add partition */
+        RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT, /**< fanout share commit async
+                                                *   operation (ack-only,
+                                                *   no fetch) */
+        RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT,  /**< fanout share commit sync
+                                                *   operation. App thread
+                                                *   blocks until main thread
+                                                *   sends response. */
+        RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY, /**< Reply from main thread
+                                                     *   to app thread for
+                                                     *   commit sync. Carries
+                                                     *   per-partition results.
+                                                     */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD,    /**< share session:
+                                                     * add partition */
         RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
                                                      * remove partition */
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
@@ -775,6 +784,19 @@ struct rd_kafka_op_s {
                          *  TODO KIP-932: Change name.
                          */
                         rd_list_t *ack_details;
+
+                        /** Per-partition ack results from
+                         *  ShareAcknowledge response. Set by broker
+                         *  thread, read by main thread in reply
+                         *  handler. Each partition's err field
+                         *  contains the partition-level error. */
+                        rd_kafka_topic_partition_list_t *ack_results;
+
+                        /** commit_sync request ID that this op belongs
+                         *  to, or 0 if not a commit_sync op. Compared
+                         *  with rkcg_commit_sync_request.id to detect
+                         *  stale responses. */
+                        int64_t commit_sync_request_id;
                 } share_fetch;
 
                 struct {
@@ -807,6 +829,31 @@ struct rd_kafka_op_s {
                          *  to per-broker ack_details. */
                         rd_list_t *ack_batches;
                 } share_commit_async_fanout;
+
+                struct {
+                        /** List of all acknowledgement batches to commit.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Built from inflight ack map, will be segregated
+                         *  by leader and sent to respective brokers.
+                         *  Set to NULL after ownership is transferred
+                         *  to per-broker ack_details. */
+                        rd_list_t *ack_batches;
+
+                        /** Absolute timeout for the commit_sync request.
+                         *  Calculated from user-provided timeout_ms. */
+                        rd_ts_t abs_timeout;
+
+                        /** Per-partition results (topic, partition, err).
+                         *  Set in response op by main thread.
+                         *  Read by app thread after unblocking. */
+                        rd_kafka_topic_partition_list_t *results;
+                } share_commit_sync_fanout;
+
+                struct {
+                        /** Per-partition results (topic, partition, err).
+                         *  Moved from commit_sync_request by main thread. */
+                        rd_kafka_topic_partition_list_t *results;
+                } share_commit_sync_fanout_reply;
 
                 /**
                  * Share fetch response - single rko containing all messages

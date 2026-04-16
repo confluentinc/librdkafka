@@ -48,7 +48,6 @@
  * is builtin from within the librdkafka source tree and thus differs. */
 // #include <librdkafka/rdkafka.h>
 #include "rdkafka.h"
-#include "../src/rdkafka.h"
 
 #define TIME_BLOCK_MS(elapsed_var, expr)                                       \
         do {                                                                   \
@@ -145,13 +144,6 @@ int main(int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
-
-        if (rd_kafka_conf_set(conf, "debug", "all", errstr,
-                      sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return 1;
-                      }
 
         /*
          * Create a new share consumer instance.
@@ -271,16 +263,14 @@ int main(int argc, char **argv) {
                 }
         }
 
-        rd_kafka_topic_partition_list_t *partitions = NULL;
-        rd_kafka_share_commit_sync(rkshare, 1000, &partitions);
-        //rd_kafka_topic_partition_list_destroy(partitions);
+
         /* Close the consumer: commit final offsets and leave the group. */
         fprintf(stderr, "%% Closing share consumer\n");
-        //rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_consumer_close(rkshare);
 
 
         /* Destroy the consumer */
-       rd_kafka_share_destroy_flags(rkshare, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+        rd_kafka_share_destroy(rkshare);
 
         return 0;
 }

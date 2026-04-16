@@ -63,29 +63,6 @@ static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
 
 
 /**
- * @brief Create share consumer with specified ack mode.
- * @param ack_mode "implicit" or "explicit"
- */
-static rd_kafka_share_t *create_share_consumer(const char *group_id,
-                                               const char *ack_mode) {
-        rd_kafka_share_t *rkshare;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 0);
-
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
-                          sizeof(errstr));
-
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
-
-        return rkshare;
-}
-
-
-/**
  * @brief Set share.auto.offset.reset=earliest for a share group.
  */
 static void set_group_offset_earliest(const char *group_name) {
@@ -170,7 +147,7 @@ static void do_test_implicit_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
@@ -213,7 +190,7 @@ static void do_test_implicit_second_consumer(void) {
         /* Second consumer: should only get the 5 verification records.
          * No lock wait needed — implicit mode close tears down the
          * connection and broker releases records immediately. */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
         rcvd  = 0;
@@ -271,7 +248,7 @@ static void do_test_explicit_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
@@ -317,7 +294,7 @@ static void do_test_explicit_second_consumer(void) {
         /* Second consumer: should only get the 5 verification records.
          * Records are either committed by the last commit_async or
          * released on the broker side when the connection is closed. */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
         rcvd  = 0;
@@ -378,7 +355,7 @@ static void do_test_mixed_acks_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -497,7 +474,7 @@ static void do_test_multi_topic_partition(void) {
                                               60 * 1000);
         }
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, topics, topic_cnt);
 
@@ -574,7 +551,7 @@ static void do_test_produce_consume_loop(void) {
         topic = test_mk_topic_name("0173-ca-loop", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -658,7 +635,7 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         topic = test_mk_topic_name("0173-ca-mr-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -756,7 +733,7 @@ static void do_test_no_pending_acks(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
 
         error = rd_kafka_share_commit_async(rkshare);
         TEST_SAY("commit_async with no acks: error=%s\n",
@@ -789,7 +766,7 @@ static void do_test_multiple_commit_async_calls(void) {
         topic = test_mk_topic_name("0173-ca-multi-call", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -882,7 +859,7 @@ static void do_test_commit_between_produces(void) {
         topic = test_mk_topic_name("0173-ca-between", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
@@ -976,7 +953,7 @@ static void do_test_commit_between_produces(void) {
         /* Second consumer: should only get the 5 verification records.
          * No lock wait needed — implicit mode close tears down the
          * connection and broker releases records immediately. */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
         rcvd  = 0;
@@ -1029,7 +1006,7 @@ static void do_test_all_release_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1105,7 +1082,7 @@ static void do_test_all_reject_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
@@ -1157,7 +1134,7 @@ static void do_test_all_reject_second_consumer(void) {
 
         /* Second consumer: should only get the 5 verification records.
          * REJECT'd records are archived and not redelivered. */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
         rcvd  = 0;
@@ -1212,7 +1189,7 @@ static void do_test_per_record_commit_async(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = create_share_consumer(group, "explicit");
+        rkshare = test_create_share_consumer(group, "explicit");
         set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
@@ -1269,7 +1246,7 @@ static void do_test_per_record_commit_async(void) {
 
         /* Second consumer: should only get the 5 verification records.
          * All previous records were ACCEPT'd via per-record commit_async. */
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         subscribe_consumer(rkshare, &topic, 1);
 
         rcvd  = 0;
@@ -1548,7 +1525,7 @@ static void do_test_lock_timeout_redelivery(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, msg_cnt);
 
-        rkshare = create_share_consumer(group, "implicit");
+        rkshare = test_create_share_consumer(group, "implicit");
         set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);

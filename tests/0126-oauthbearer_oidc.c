@@ -135,7 +135,7 @@ do_test_produce_share_consumer_with_OIDC(const char *test_name,
         test_produce_msgs_easy(topic, 0, 0, msg_cnt);
 
         /* Create share consumer (picks up SASL config from test_conf_init) */
-        sc1 = test_create_share_consumer("oidc-share-group");
+        sc1 = test_create_share_consumer("oidc-share-group", NULL);
 
         /* Set group config for earliest offset */
         test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP,

@@ -20,8 +20,9 @@
         },
         {
             "name": "aws-sdk-cpp",
+            "version>=": "1.11.790",
             "features": ["sts"]
         }
     ],
-    "builtin-baseline": "56765209ec0e92c58a5fd91aa09c46a16d660026"
+    "builtin-baseline": "37dd44f23f51041f480440e99b45e5706f47765d"
 }

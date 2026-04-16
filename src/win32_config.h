@@ -39,6 +39,7 @@
 #define WITH_ZSTD             1
 #define WITH_CURL             1
 #define WITH_OAUTHBEARER_OIDC 1
+#define WITH_AWS_STS          1
 /* zstd is linked dynamically on Windows, but the dynamic library provides
  * the experimental/advanced API, just as the static builds on *nix */
 #define WITH_ZSTD_STATIC      1
@@ -53,6 +54,6 @@
 /* Notice: Keep up to date */
 #define BUILT_WITH                                                             \
         "SSL ZLIB SNAPPY ZSTD CURL SASL_SCRAM SASL_OAUTHBEARER PLUGINS "       \
-        "HDRHISTOGRAM"
+        "HDRHISTOGRAM AWS_STS"
 
 #endif /* _RD_WIN32_CONFIG_H_ */

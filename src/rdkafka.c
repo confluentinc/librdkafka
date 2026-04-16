@@ -1119,6 +1119,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_conf.sasl.lock);
         rwlock_destroy(&rk->rk_lock);
 
+        rd_free(rk->rk_rkshare);
         rd_free(rk);
         rd_kafka_global_cnt_decr();
 }
@@ -1188,11 +1189,26 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         rd_atomic32_set(&rk->rk_terminate,
                         flags | RD_KAFKA_DESTROY_F_DESTROY_CALLED);
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Destroy inflight acks map to release
+                 * toppar references held by topic_partition objects in the map.
+                 * Otherwise rd_kafka_destroy_app() deadlocks: it joins broker
+                 * threads, which wait for refcnt <= 1, but the toppar holds a
+                 * broker ref via rktp_leader that is only released when the
+                 * toppar is destroyed, which requires refcnt 0, which requires
+                 * releasing the rktp ref held by the inflight_acks map entry.
+                 */
+                RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
+        }
+
         /* The legacy/simple consumer lacks an API to close down the consumer*/
         if (rk->rk_cgrp) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                              "Terminating consumer group handler");
-                rd_kafka_consumer_close(rk);
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                        rd_kafka_share_consumer_close(rk->rk_rkshare);
+                else
+                        rd_kafka_consumer_close(rk);
         }
 
         /* Await telemetry termination. This method blocks until the last
@@ -1252,21 +1268,15 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-
-        /* Destroy inflight acks map before rd_kafka_destroy() to release
-         * toppar references held by topic_partition objects in the map.
-         * Otherwise rd_kafka_destroy() deadlocks: it joins broker threads,
-         * which wait for refcnt <= 1, but the toppar holds a broker ref
-         * via rktp_leader that is only released when the toppar is destroyed,
-         * which requires refcnt 0, which requires releasing the rktp ref
-         * held by the inflight_acks map entry. */
-        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
         rd_kafka_destroy(rkshare->rkshare_rk);
-        rd_free(rkshare);
 }
 
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
+}
+
+void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags) {
+        rd_kafka_destroy_flags(rkshare->rkshare_rk, flags);
 }
 
 

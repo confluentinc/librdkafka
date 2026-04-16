@@ -211,6 +211,9 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
+        RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
+                                            to clear share session during broker
+                                            decommission */
 
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;

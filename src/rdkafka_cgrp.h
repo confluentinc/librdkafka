@@ -402,6 +402,19 @@ typedef struct rd_kafka_cgrp_s {
                                                            * reply.
                                                            *   @locality main
                                                            * thread */
+                int share_session_leave_remaining_cnt;    /**< Number of
+                                                           * session leave requests
+                                                           * which are either
+                                                           * pending to be sent or
+                                                           * are in-flight.
+                                                           * Populated when cgrp
+                                                           * termination op    is
+                                                           * received and
+                                                           * decremented    whenever
+                                                           * we receive a reply    to
+                                                           * a leave request
+                                                           *    @locality main
+                                                           * thread */
                 int64_t commit_sync_request_id_counter; /**< Global counter for
                                                          *   commit_sync request
                                                          *   IDs. Starts at 1,
@@ -471,6 +484,10 @@ void rd_kafka_cgrp_op(rd_kafka_cgrp_t *rkcg,
                       rd_kafka_resp_err_t err);
 void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko);
 void rd_kafka_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq);
+void rd_kafka_share_cgrp_terminate(rd_kafka_cgrp_t *rkcg,
+                                   rd_kafka_replyq_t replyq);
+void rd_kafka_share_enqueue_fetch_leave_op(rd_kafka_t *rk,
+                                           rd_kafka_broker_t *rkb);
 
 
 rd_kafka_resp_err_t rd_kafka_cgrp_topic_pattern_del(rd_kafka_cgrp_t *rkcg,

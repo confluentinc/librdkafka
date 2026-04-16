@@ -203,6 +203,15 @@ struct rd_kafka_property {
             "available at build time"
 #endif
 
+#if WITH_AWS_STS
+#define _UNSUPPORTED_AWS_STS .unsupported = NULL
+#else
+#define _UNSUPPORTED_AWS_STS                                                   \
+        .unsupported =                                                         \
+            "AWS STS credential provider depends on the AWS C++ SDK, "        \
+            "libcurl and OpenSSL which were not available at build time"
+#endif
+
 #if WITH_OAUTHBEARER_OIDC
 #define _UNSUPPORTED_HTTPS .unsupported = NULL
 #else
@@ -398,6 +407,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
              {0x800, "sasl_oauthbearer", _UNSUPPORTED_SSL},
              {0x1000, "http", _UNSUPPORTED_HTTP},
              {0x2000, "oidc", _UNSUPPORTED_OIDC},
+             {0x4000, "aws_sts", _UNSUPPORTED_AWS_STS},
              {0, NULL}}},
     {_RK_GLOBAL, "client.id", _RK_C_STR, _RK(client_id_str),
      "Client identifier.", .sdef = "rdkafka"},

@@ -3253,6 +3253,33 @@ RD_EXPORT
 rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare);
 
 /**
+ * @brief Synchronously commit all pending acknowledgements.
+ *
+ * Sends all pending acknowledgements (from rd_kafka_share_acknowledge*
+ * calls) to their respective brokers and blocks until all broker
+ * replies are received or the timeout expires.
+ *
+ * In implicit ack mode, all ACQUIRED records from the previous poll
+ * are first converted to ACCEPT before committing.
+ *
+ * @param rkshare Share consumer instance.
+ * @param timeout_ms Timeout in milliseconds.
+ * @param partitions [out] Per-partition results. Each partition's err
+ *                   field contains the result for that partition.
+ *                   The caller must destroy the returned list with
+ *                   rd_kafka_topic_partition_list_destroy().
+ *                   Set to NULL if no acks were pending.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t* on failure.
+ *          The returned error must be freed with rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
+                           int timeout_ms,
+                           rd_kafka_topic_partition_list_t **partitions);
+
+/**
  * @brief Destroy Kafka handle.
  *
  * @remark This is a blocking operation.

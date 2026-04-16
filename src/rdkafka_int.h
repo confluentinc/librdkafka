@@ -208,7 +208,7 @@ typedef enum {
         RD_KAFKA_TXN_STATE_ABORT_NOT_ACKED,
         /**< An abortable error has occurred. */
         RD_KAFKA_TXN_STATE_ABORTABLE_ERROR,
-        /* A fatal error has occured. */
+        /* A fatal error has occurred. */
         RD_KAFKA_TXN_STATE_FATAL_ERROR
 } rd_kafka_txn_state_t;
 

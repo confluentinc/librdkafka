@@ -72,7 +72,10 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalOptions>/SAFESEH:NO</AdditionalOptions>
+      <!-- /NODEFAULTLIB:libcmt.lib: rdkafka_aws_sts_impl.cpp is compiled /MD
+           (to resolve msvcp140.dll __imp_ STL symbols from AWS SDK headers).
+           Excluding libcmt.lib prevents the /MT+/MD SAFESEH conflict on x86. -->
+      <AdditionalOptions>/SAFESEH:NO /NODEFAULTLIB:libcmt.lib %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -129,6 +132,7 @@
     <ClInclude Include="..\src\rdkafka_sasl.h" />
     <ClInclude Include="..\src\rdkafka_sasl_int.h" />
     <ClInclude Include="..\src\rdkafka_sasl_oauthbearer_oidc.h" />
+    <ClInclude Include="..\src\rdkafka_aws_sts.h" />
     <ClInclude Include="..\src\rdkafka_transport_int.h" />
     <ClInclude Include="..\src\rdlist.h" />
     <ClInclude Include="..\src\rdposix.h" />
@@ -213,6 +217,14 @@
     <ClCompile Include="..\src\rdkafka_sasl_scram.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer.c" />
     <ClCompile Include="..\src\rdkafka_sasl_oauthbearer_oidc.c" />
+    <ClCompile Include="..\src\rdkafka_aws_sts.c" />
+    <ClCompile Include="..\src\rdkafka_aws_sts_impl.cpp">
+      <!-- AWS SDK headers include MSVC STL (<ostream>, <sstream>) whose methods
+           are __declspec(dllimport) from msvcp140.dll unconditionally. This file
+           must be compiled with /MD to resolve those __imp_ symbols. -->
+      <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreadedDLL</RuntimeLibrary>
+      <RuntimeLibrary Condition="'$(Configuration)'=='Debug'">MultiThreadedDebugDLL</RuntimeLibrary>
+    </ClCompile>
     <ClCompile Include="..\src\rdkafka_subscription.c" />
     <ClCompile Include="..\src\rdkafka_assignment.c" />
     <ClCompile Include="..\src\rdkafka_timer.c" />

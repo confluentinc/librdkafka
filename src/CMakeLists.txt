@@ -74,6 +74,7 @@ set(
     rdunittest.c
     rdunittest_acknowledge.c
     rdunittest_fetcher.c
+    rdunittest_msgset_errors.c
     rdvarint.c
     rdmap.c
     snappy.c

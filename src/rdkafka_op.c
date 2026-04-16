@@ -684,6 +684,72 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
 
 
 /**
+ * @brief Enqueue multiple RD_KAFKA_OP_CONSUMER_ERR ops on \p rkq for
+ *        a range of offsets, used for share consumer MessageSet-level errors.
+ *
+ * @param broker_id Is the relevant broker id, or RD_KAFKA_NODEID_UA (-1)
+ *                  if not applicable.
+ * @param err Error code.
+ * @param version Queue version barrier, or 0 if not applicable.
+ * @param rktp Toppar reference (required for share consumers).
+ * @param start_offset First offset in the error range (inclusive).
+ * @param end_offset Last offset in the error range (inclusive).
+ * @param ack_type Acknowledgement type for share consumer
+ *                 (REJECT for permanent errors, RELEASE for retryable).
+ *
+ * Creates one error op per offset in the range [start_offset, end_offset].
+ * Each op has ack_type pre-set for share consumer acknowledgement tracking.
+ *
+ * @sa rd_kafka_consumer_err()
+ */
+void rd_kafka_share_consumer_err_range(
+    rd_kafka_q_t *rkq,
+    int32_t broker_id,
+    rd_kafka_resp_err_t err,
+    int32_t version,
+    rd_kafka_toppar_t *rktp,
+    int64_t start_offset,
+    int64_t end_offset,
+    rd_kafka_share_internal_acknowledgement_type ack_type,
+    const char *fmt,
+    ...) {
+        va_list ap;
+        char buf[2048];
+        char *errstr;
+        int64_t offset;
+
+        /* Format error message once for all offsets */
+        va_start(ap, fmt);
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+
+        errstr = rd_strdup(buf);
+
+        /* Create one error op per offset in the range */
+        for (offset = start_offset; offset <= end_offset; offset++) {
+                rd_kafka_op_t *rko;
+
+                rko                   = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+                rko->rko_version      = version;
+                rko->rko_err          = err;
+                rko->rko_u.err.offset = offset;
+                rko->rko_u.err.errstr = rd_strdup(errstr);
+                rko->rko_u.err.rkm.rkm_broker_id = broker_id;
+
+                /* Set acknowledgement type for share consumer */
+                rko->rko_u.err.rkm.rkm_u.consumer.ack_type = ack_type;
+
+                if (rktp)
+                        rko->rko_rktp = rd_kafka_toppar_keep(rktp);
+
+                rd_kafka_q_enq(rkq, rko);
+        }
+
+        rd_free(errstr);
+}
+
+
+/**
  * Creates a reply op based on 'rko_orig'.
  * If 'rko_orig' has rko_op_cb set the reply op will be OR:ed with
  * RD_KAFKA_OP_CB, else the reply type will be the original rko_type OR:ed

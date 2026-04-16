@@ -21,6 +21,7 @@ mkl_require libzstd
 mkl_require libssl
 mkl_require libsasl2
 mkl_require libcurl
+mkl_require libaws_cpp_sdk_sts
 
 # Generate version variables from rdkafka.h hex version define
 # so we can use it as string version when generating a pkg-config file.
@@ -149,6 +150,13 @@ void foo (void) {
 
         if [[ $WITH_CURL == y ]]; then
             mkl_allvar_set WITH_OAUTHBEARER_OIDC WITH_OAUTHBEARER_OIDC y
+        fi
+    fi
+
+    if [[ $WITH_SSL == y && $WITH_CURL == y ]]; then
+        mkl_check "libaws_cpp_sdk_sts"
+        if [[ $WITH_AWS_STS == y ]]; then
+            mkl_allvar_set WITH_AWS_STS WITH_AWS_STS y
         fi
     fi
 

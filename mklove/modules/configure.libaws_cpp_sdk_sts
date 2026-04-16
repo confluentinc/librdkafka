@@ -101,15 +101,23 @@ void foo (void) { Aws::STS::STSClient c; }"
     # plain gcc/cc (rather than g++/clang++) can link against
     # librdkafka-static.a without needing a C++ linker driver.
     # On macOS: libc++ (LLVM, ships with the OS since 10.9, always present).
-    # On Linux: libstdc++ (GCC, present on any system with g++ installed).
-    # When CC_LD=$(CXX) is used for the shared library link, the C++ linker
-    # driver pulls in the runtime implicitly — these flags are the fallback
-    # for static consumers using plain gcc/cc.
+    # On Linux: prefer to embed libstdc++.a directly into the fat
+    # librdkafka-static.a (same mechanism as aws-sdk-cpp .a files) so that
+    # static consumers have zero runtime dependency on libstdc++.so.6.
+    # g++ -print-file-name=libstdc++.a returns the full path when the static
+    # archive is available (CentOS gcc-toolset, Alpine g++) or just the bare
+    # filename "libstdc++.a" when it is not — the -f test distinguishes them.
+    # Fall back to -lstdc++ (dynamic) if the static archive is absent.
     if [[ $MKL_DISTRO == "osx" ]]; then
         mkl_mkvar_append "libaws_cpp_sdk_sts" LIBS \
             "-lc++ -framework Security -framework Network"
     else
-        mkl_mkvar_append "libaws_cpp_sdk_sts" LIBS "-lstdc++"
+        _stdc_a=$(${CXX} -print-file-name=libstdc++.a 2>/dev/null)
+        if [[ -f "$_stdc_a" ]]; then
+            mkl_mkvar_append "libaws_cpp_sdk_sts" LIBS "$_stdc_a"
+        else
+            mkl_mkvar_append "libaws_cpp_sdk_sts" LIBS "-lstdc++"
+        fi
     fi
 }
 

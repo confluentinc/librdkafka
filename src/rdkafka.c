@@ -1190,14 +1190,15 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
                         flags | RD_KAFKA_DESTROY_F_DESTROY_CALLED);
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
-            /* Destroy inflight acks map to release
-            * toppar references held by topic_partition objects in the map.
-            * Otherwise rd_kafka_destroy_app() deadlocks: it joins broker threads,
-            * which wait for refcnt <= 1, but the toppar holds a broker ref
-            * via rktp_leader that is only released when the toppar is destroyed,
-            * which requires refcnt 0, which requires releasing the rktp ref
-            * held by the inflight_acks map entry. */
-            RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
+                /* Destroy inflight acks map to release
+                 * toppar references held by topic_partition objects in the map.
+                 * Otherwise rd_kafka_destroy_app() deadlocks: it joins broker
+                 * threads, which wait for refcnt <= 1, but the toppar holds a
+                 * broker ref via rktp_leader that is only released when the
+                 * toppar is destroyed, which requires refcnt 0, which requires
+                 * releasing the rktp ref held by the inflight_acks map entry.
+                 */
+                RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
         }
 
         /* The legacy/simple consumer lacks an API to close down the consumer*/
@@ -3055,6 +3056,12 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                     rd_kafka_share_ack_batches_destroy_free);
 
         return rkshare;
+}
+
+rd_kafka_t *rd_kafka_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
+        if (!rkshare)
+                return NULL;
+        return rkshare->rkshare_rk;
 }
 
 

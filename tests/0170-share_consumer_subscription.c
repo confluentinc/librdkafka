@@ -47,6 +47,23 @@
 #define MAX_CONSUMERS 4
 #define MAX_OPS       50
 
+/** Common producer reused across all tests. */
+static rd_kafka_t *common_producer;
+
+/** Common admin client reused across all tests. */
+static rd_kafka_t *common_admin;
+
+/**
+ * @brief Produce messages using the common producer.
+ */
+static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
+        rd_kafka_topic_t *rkt;
+        rkt = test_create_producer_topic(common_producer, topic, NULL);
+        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
+                          0);
+        rd_kafka_topic_destroy(rkt);
+}
+
 /**
  * @brief Operation types for subscription tests
  */
@@ -187,6 +204,14 @@ typedef struct {
 #define TEST_OPS_END()                                                         \
         { .op = TEST_OP_END }
 
+
+/**
+ * @brief Set group config to earliest offset
+ */
+static void state_set_offset_earliest(sub_test_state_t *state) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(state->group_name, cfg, 1);
+}
 
 /**
  * @brief Create a new topic with auto-generated name
@@ -354,8 +379,7 @@ static void exec_produce_to_topic(sub_test_state_t *state,
         TEST_SAY("  PRODUCE_TO_TOPIC: %d msgs to topic[%d] (%s)\n",
                  op->msgs_per_topic, op->topic_idx, state->all_topics[idx]);
 
-        test_produce_msgs_easy(state->all_topics[idx], 0, 0,
-                               op->msgs_per_topic);
+        produce_to_topic(state->all_topics[idx], 0, op->msgs_per_topic);
         state->msgs_produced[idx] += op->msgs_per_topic;
 }
 
@@ -430,8 +454,7 @@ static void exec_produce(sub_test_state_t *state, const test_op_t *op) {
 
         for (i = 0; i < count; i++) {
                 int idx = start_idx + i;
-                test_produce_msgs_easy(state->all_topics[idx], 0, 0,
-                                       op->msgs_per_topic);
+                produce_to_topic(state->all_topics[idx], 0, op->msgs_per_topic);
                 state->msgs_produced[idx] += op->msgs_per_topic;
         }
 }
@@ -504,8 +527,6 @@ static void exec_delete_topic(sub_test_state_t *state, const test_op_t *op) {
         TEST_SAY("  DELETE_TOPIC: index %d (%s)\n", op->topic_idx,
                  state->all_topics[idx]);
 
-        test_delete_topic(test_share_consumer_get_rk(state->consumers[0]),
-                          state->all_topics[idx]);
 
         /* Mark as deleted to skip during cleanup */
         state->topic_deleted[idx] = rd_true;
@@ -534,7 +555,7 @@ static void exec_create_consumer(sub_test_state_t *state, const test_op_t *op) {
                     "Consumer %d already exists", cidx);
 
         state->consumers[cidx] =
-            test_create_share_consumer(state->group_name, rd_false);
+            test_create_share_consumer(state->group_name, NULL);
         if (cidx >= state->consumer_cnt)
                 state->consumer_cnt = cidx + 1;
 }
@@ -575,12 +596,11 @@ static void state_init(sub_test_state_t *state,
         /* Create initial consumers */
         for (i = 0; i < state->consumer_cnt; i++) {
                 state->consumers[i] =
-                    test_create_share_consumer(state->group_name, rd_false);
+                    test_create_share_consumer(state->group_name, NULL);
         }
 
         /* Set group offset to earliest */
-        test_set_share_group_offset_earliest(
-            test_share_consumer_get_rk(state->consumers[0]), state->group_name);
+        state_set_offset_earliest(state);
 }
 
 /**
@@ -589,14 +609,8 @@ static void state_init(sub_test_state_t *state,
 static void state_cleanup(sub_test_state_t *state) {
         int i;
 
-        /* Delete all created topics (skip already deleted ones) */
         for (i = 0; i < state->all_topic_cnt; i++) {
                 if (state->all_topics[i]) {
-                        if (!state->topic_deleted[i]) {
-                                test_delete_topic(test_share_consumer_get_rk(
-                                                      state->consumers[0]),
-                                                  state->all_topics[i]);
-                        }
                         rd_free(state->all_topics[i]);
                 }
         }
@@ -819,18 +833,16 @@ static void do_test_multi_consumer_overlap(void) {
         test_create_topic_wait_exists(NULL, c1_only, 1, -1, 30000);
 
         /* Produce messages */
-        test_produce_msgs_easy(shared, 0, 0, 20);
-        test_produce_msgs_easy(c0_only, 0, 0, 10);
-        test_produce_msgs_easy(c1_only, 0, 0, 10);
+        produce_to_topic(shared, 0, 20);
+        produce_to_topic(c0_only, 0, 10);
+        produce_to_topic(c1_only, 0, 10);
 
         /* Create consumers */
-        rkshare0 = test_create_share_consumer(group, rd_false);
-        rkshare1 = test_create_share_consumer(group, rd_false);
+        rkshare0 = test_create_share_consumer(group, NULL);
+        rkshare1 = test_create_share_consumer(group, NULL);
 
         /* Set group offset */
-        test_IncrementalAlterConfigs_simple(
-            test_share_consumer_get_rk(rkshare0), RD_KAFKA_RESOURCE_GROUP,
-            group, cfg, 1);
+        test_alter_group_configurations(group, cfg, 1);
 
         /* Subscribe with overlapping topics */
         test_share_consumer_subscribe_multi(rkshare0, 2, shared, c0_only);
@@ -911,18 +923,16 @@ static void do_test_subscribe_15_topics(void) {
 
         /* Produce messages to each topic */
         for (t = 0; t < topic_cnt; t++) {
-                test_produce_msgs_easy(topics[t], 0, 0, msgs_per_topic);
+                produce_to_topic(topics[t], 0, msgs_per_topic);
         }
         TEST_SAY("Produced %d messages to %d topics\n", total_expected,
                  topic_cnt);
 
         /* Create consumer */
-        rkshare = test_create_share_consumer(group, rd_false);
+        rkshare = test_create_share_consumer(group, NULL);
 
         /* Set group offset */
-        test_IncrementalAlterConfigs_simple(test_share_consumer_get_rk(rkshare),
-                                            RD_KAFKA_RESOURCE_GROUP, group, cfg,
-                                            1);
+        test_alter_group_configurations(group, cfg, 1);
 
         /* Subscribe to all topics */
         subs = rd_kafka_topic_partition_list_new(topic_cnt);
@@ -976,6 +986,11 @@ static void do_test_subscribe_15_topics(void) {
 
 
 int main_0170_share_consumer_subscription(int argc, char **argv) {
+        /* Create common handles for all tests */
+        common_producer = test_create_producer();
+        common_admin    = test_create_producer();
+
+        test_timeout_set(200);
 
         /* Basic subscription tests */
         do_test_scenario(&test_single_subscribe);
@@ -1006,6 +1021,10 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
 
         /* Scale tests (many topics) */
         do_test_subscribe_15_topics();
+
+        /* Cleanup common handles */
+        rd_kafka_destroy(common_admin);
+        rd_kafka_destroy(common_producer);
 
         return 0;
 }

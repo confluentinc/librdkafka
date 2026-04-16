@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "rdkafka_int.h"
 #include "rdkafka_protocol.h"
 #include "test.h"
 
@@ -75,6 +76,17 @@ static const char *commit_mode_str(commit_mode_t mode) {
         default:
                 return "unknown";
         }
+}
+
+/**
+ * @brief Set share.auto.offset.reset=earliest for a share group.
+ */
+static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
+                                      const char *group_name) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+
+        test_IncrementalAlterConfigs_simple(
+            rkshare->rkshare_rk, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
 }
 
 /**
@@ -524,11 +536,10 @@ static void test_close_with_acknowledge(void) {
 
                 /* Create C1 with explicit ack mode (will call acknowledge()
                  * explicitly). C2 will be created after C1 closes. */
-                c1 = test_create_share_consumer(ctx.group_id, rd_true);
+                c1 = test_create_share_consumer(ctx.group_id, "explicit");
 
                 /* Set group offset to earliest */
-                test_set_share_group_offset_earliest(
-                    test_share_consumer_get_rk(c1), ctx.group_id);
+                set_group_offset_earliest(c1, ctx.group_id);
 
                 /* Subscribe C1 only - C2 will subscribe after C1 closes */
                 subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
@@ -549,7 +560,7 @@ static void test_close_with_acknowledge(void) {
                 /* Create C2 with implicit ack mode after C1 is fully destroyed
                  */
                 TEST_SAY("C2: Creating and subscribing after C1 close\n");
-                c2 = test_create_share_consumer(ctx.group_id, rd_false);
+                c2 = test_create_share_consumer(ctx.group_id, "implicit");
                 subscribe_consumer(c2, ctx.topic_names, ctx.topic_cnt);
 
                 /* C2: Consume and verify no redelivery */
@@ -641,11 +652,10 @@ static void test_close_without_acknowledge(void) {
 
                 /* Create C1 with implicit ack mode */
                 TEST_SAY("C1: Creating consumer\n");
-                c1 = test_create_share_consumer(ctx.group_id, rd_false);
+                c1 = test_create_share_consumer(ctx.group_id, "implicit");
 
                 /* Set group offset to earliest */
-                test_set_share_group_offset_earliest(
-                    test_share_consumer_get_rk(c1), ctx.group_id);
+                set_group_offset_earliest(c1, ctx.group_id);
 
                 /* Subscribe C1 */
                 subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
@@ -729,7 +739,7 @@ static void test_close_without_acknowledge(void) {
 
                 /* Create C2 after C1 is destroyed */
                 TEST_SAY("C2: Creating consumer after C1 close\n");
-                c2 = test_create_share_consumer(ctx.group_id, rd_false);
+                c2 = test_create_share_consumer(ctx.group_id, "implicit");
                 subscribe_consumer(c2, ctx.topic_names, ctx.topic_cnt);
 
                 /* C2: Should be able to consume all records that C1 released

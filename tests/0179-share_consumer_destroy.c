@@ -88,9 +88,8 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
 /**
  * @brief Produce messages to topic.
  */
-static void produce_messages(rd_kafka_t *producer,
-                             const char *topic,
-                             int msgcnt) {
+static void
+produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
         for (int i = 0; i < msgcnt; i++) {
                 char payload[64];
                 snprintf(payload, sizeof(payload), "%s-%d", topic, i);
@@ -142,12 +141,14 @@ static void subscribe_topics(rd_kafka_share_t *consumer,
 
 
 /**
- * @brief This test uses mock brokers to simulate delayed broker responses and makes commit* calls
- * causing acknowledgements to get cached. Eventually, calls destroy() to validate that it does not hang.
- * @param destroy_flags 0 for normal destroy, RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE
- *                      to skip consumer close.
+ * @brief This test uses mock brokers to simulate delayed broker responses and
+ * makes commit* calls causing acknowledgements to get cached. Eventually, calls
+ * destroy() to validate that it does not hang.
+ * @param destroy_flags 0 for normal destroy,
+ * RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE to skip consumer close.
  */
-static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
+static void
+do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         test_ctx_t ctx;
         const char *topic;
         const char *group = "0179-destroy-cached-acks";
@@ -156,8 +157,8 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd = 0;
         int i;
-        int attempts       = 0;
-        int max_attempts   = 30;
+        int attempts        = 0;
+        int max_attempts    = 30;
         int broker_delay_ms = 5000; /* 5 seconds */
         test_timing_t t_destroy;
 
@@ -166,7 +167,8 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
         /* Initialize test context */
         ctx = test_ctx_new();
 
-        topic = test_mk_topic_name("0179-destroy-cached-acks-delayed-broker", 1);
+        topic =
+            test_mk_topic_name("0179-destroy-cached-acks-delayed-broker", 1);
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 3, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
@@ -184,9 +186,8 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
         TEST_SAY("Consuming messages (up to %d attempts)\n", max_attempts);
         while (rcvd < 10 && attempts < max_attempts) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages + rcvd,
-                                                     &batch_rcvd);
+                error             = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -206,9 +207,10 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
         TEST_SAY("Successfully consumed %d messages\n", (int)rcvd);
 
         /* Setup broker delays for ShareAcknowledge responses */
-        TEST_SAY("Setting up %dms delays for ShareAcknowledge responses on all "
-                 "brokers\n",
-                 broker_delay_ms);
+        TEST_SAY(
+            "Setting up %dms delays for ShareAcknowledge responses on all "
+            "brokers\n",
+            broker_delay_ms);
         for (i = 1; i <= 3; i++) {
                 rd_kafka_mock_broker_push_request_error_rtts(
                     ctx.mcluster, i, RD_KAFKAP_ShareAcknowledge, 3,
@@ -218,7 +220,8 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
         }
 
         /* Step 1: Acknowledge first 2 messages and commit async */
-        TEST_SAY("Step 1: Acknowledging messages 0-1 and calling commit_async\n");
+        TEST_SAY(
+            "Step 1: Acknowledging messages 0-1 and calling commit_async\n");
         for (i = 0; i < 2 && i < (int)rcvd; i++) {
                 rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
         }
@@ -226,16 +229,18 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
         rd_kafka_share_commit_async(rkshare);
 
         /* Step 2: Acknowledge next 4 messages and commit async (cached) */
-        TEST_SAY("Step 2: Acknowledging messages 2-5 and calling commit_async "
-                 "(should cache)\n");
+        TEST_SAY(
+            "Step 2: Acknowledging messages 2-5 and calling commit_async "
+            "(should cache)\n");
         for (i = 2; i < 6 && i < (int)rcvd; i++) {
                 rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
         }
         rd_kafka_share_commit_async(rkshare);
 
         /* Step 3: Acknowledge next 4 messages and commit sync */
-        TEST_SAY("Step 3: Acknowledging messages 6-9 and calling "
-                 "commit_sync (should cache)\n");
+        TEST_SAY(
+            "Step 3: Acknowledging messages 6-9 and calling "
+            "commit_sync (should cache)\n");
         for (i = 6; i < 10 && i < (int)rcvd; i++) {
                 rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
         }
@@ -255,7 +260,8 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
 
         if (error) {
                 rd_kafka_error_destroy(error);
-                TEST_FAIL("commit_sync failed with error: %s", rd_kafka_error_string(error));
+                TEST_FAIL("commit_sync failed with error: %s",
+                          rd_kafka_error_string(error));
         } else {
                 TEST_SAY("commit_sync succeeded in %dms\n",
                          (int)(TIMING_DURATION(&t_commit_sync) / 1000));
@@ -297,21 +303,21 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
                  * which should wait for broker responses. Destroy should
                  * wait for the existing commit async request to complete and
                  * the session leave request initiated by close() */
-                int expected_max_ms = 2 * broker_delay_ms + 2000; /* +2 sec overhead */
+                int expected_max_ms =
+                    2 * broker_delay_ms + 2000; /* +2 sec overhead */
 
-                TEST_ASSERT(TIMING_DURATION(&t_destroy) <=
-                                (expected_max_ms * 1000),
-                            "destroy() took %dms, expected <= %dms",
-                            (int)(TIMING_DURATION(&t_destroy) / 1000),
-                            expected_max_ms);
+                TEST_ASSERT(
+                    TIMING_DURATION(&t_destroy) <= (expected_max_ms * 1000),
+                    "destroy() took %dms, expected <= %dms",
+                    (int)(TIMING_DURATION(&t_destroy) / 1000), expected_max_ms);
 
                 TEST_SAY(
                     "destroy() completed in %dms (expected < %dms for broker "
                     "delay)\n",
-                    (int)(TIMING_DURATION(&t_destroy) / 1000),
-                    expected_max_ms);
+                    (int)(TIMING_DURATION(&t_destroy) / 1000), expected_max_ms);
         }
 
+        TEST_ASSERT(!rkshare);
         TEST_SAY("Destroy completed successfully\n");
 
         test_ctx_destroy(&ctx);
@@ -324,9 +330,11 @@ static void do_test_destroy_with_cached_acks_and_delayed_broker(int destroy_flag
  * @brief Test destroying share consumer after acknowledge without commit.
  *
  * This test consumes messages, acknowledges them, but destroys the consumer
- * before explicitly committing. Tests that destroy handles pending acks correctly.
+ * before explicitly committing. Tests that destroy handles pending acks
+ * correctly.
  *
- * @param destroy_flags Destroy flags (0 or RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
+ * @param destroy_flags Destroy flags (0 or
+ * RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
  */
 static void do_test_destroy_after_acknowledge(int destroy_flags) {
         test_ctx_t ctx;
@@ -363,9 +371,8 @@ static void do_test_destroy_after_acknowledge(int destroy_flags) {
         TEST_SAY("Consuming messages (up to %d attempts)\n", max_attempts);
         while (rcvd < 10 && attempts < max_attempts) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error = rd_kafka_share_consume_batch(rkshare, 3000,
-                                                     rkmessages + rcvd,
-                                                     &batch_rcvd);
+                error             = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -402,6 +409,7 @@ static void do_test_destroy_after_acknowledge(int destroy_flags) {
         else
                 rd_kafka_share_destroy(rkshare);
 
+        TEST_ASSERT(!rkshare);
         TEST_SAY("Destroy completed successfully\n");
 
         test_ctx_destroy(&ctx);
@@ -413,13 +421,14 @@ static void do_test_destroy_after_acknowledge(int destroy_flags) {
 /**
  * @brief Test destroying share consumer after subscribe/unsubscribe.
  *
- * This test creates a share consumer, optionally subscribes to topics, optionally
- * unsubscribes, then destroys it without consuming any messages.
+ * This test creates a share consumer, optionally subscribes to topics,
+ * optionally unsubscribes, then destroys it without consuming any messages.
  * Tests various combinations similar to 0116-kafkaconsumer_close.
  *
  * @param do_subscribe Whether to subscribe to topics
  * @param do_unsubscribe Whether to unsubscribe before destroy
- * @param destroy_flags Destroy flags (0 or RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
+ * @param destroy_flags Destroy flags (0 or
+ * RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
  */
 static void do_test_destroy_with_subscribe_unsubscribe(int do_subscribe,
                                                        int do_unsubscribe,
@@ -433,8 +442,8 @@ static void do_test_destroy_with_subscribe_unsubscribe(int do_subscribe,
                  do_subscribe, do_unsubscribe, destroy_flags);
 
         TEST_SAY("Creating share consumer\n");
-        consumer = test_create_share_consumer("sub-unsub-destroy-test",
-                                               rd_false /* explicit_ack */);
+        consumer = test_create_share_consumer("0179-sub-unsub-destroy-test",
+                                              "explicit");
 
         if (do_subscribe) {
                 TEST_SAY("Subscribing to topic: %s\n", topic);
@@ -460,6 +469,7 @@ static void do_test_destroy_with_subscribe_unsubscribe(int do_subscribe,
         else
                 rd_kafka_share_destroy(consumer);
 
+        TEST_ASSERT(!consumer);
         TEST_SAY("Successfully destroyed share consumer\n");
 
         SUB_TEST_PASS();
@@ -468,7 +478,7 @@ static void do_test_destroy_with_subscribe_unsubscribe(int do_subscribe,
 
 int main_0179_share_consumer_destroy(int argc, char **argv) {
         /* Set overall timeout */
-        test_timeout_set(120); /* 2 minutes per test */
+        test_timeout_set(120);
 
         /* Test destroy with subscribe/unsubscribe combinations
          * Similar to 0116-kafkaconsumer_close, test all combinations */

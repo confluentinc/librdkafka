@@ -555,10 +555,24 @@ rd_kafka_t *test_create_consumer(
     rd_kafka_conf_t *conf,
     rd_kafka_topic_conf_t *default_topic_conf);
 
-void test_produce_msgs_simple(rd_kafka_t *rk,
-                              const char *topic,
-                              int32_t partition,
-                              int msgcnt);
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode);
+
+
+#define TEST_SHARE_BATCH_SIZE 500
+
+int test_share_consume_batch(rd_kafka_share_t *rk,
+                             int timeout_ms,
+                             const char **expected_topics,
+                             int expected_topic_cnt,
+                             int *out_valid);
+
+int test_share_consume_msgs(rd_kafka_share_t *rk,
+                            int expected,
+                            int max_attempts,
+                            int timeout_ms,
+                            const char **expected_topics,
+                            int expected_topic_cnt);
 
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk, const char *topic);
 rd_kafka_topic_t *
@@ -599,6 +613,12 @@ void test_verify_rkmessage0(const char *func,
 void test_consumer_subscribe(rd_kafka_t *rk, const char *topic);
 
 void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...);
+
+void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
+                                         int topic_count,
+                                         ...);
+
+rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk);
 
 void test_consume_msgs_easy_mv0(const char *group_id,
                                 const char *topic,
@@ -1025,41 +1045,6 @@ int test_consumer_group_protocol_classic();
                 TEST_SAY0("Error: %s: %s" _C_CLR "\n",                         \
                           rd_kafka_error_name(_e), rd_kafka_error_string(_e)); \
         } while (0)
-
-/****************************************************************************
- * Share Consumer helpers
- ****************************************************************************/
-
-rd_kafka_share_t *test_create_share_consumer(const char *group_id,
-                                             const char *ack_mode);
-
-#define TEST_SHARE_BATCH_SIZE 10001
-
-int test_share_consume_batch(rd_kafka_share_t *rk,
-                             int timeout_ms,
-                             const char **expected_topics,
-                             int expected_topic_cnt,
-                             int *out_valid);
-
-int test_share_consume_msgs(rd_kafka_share_t *rk,
-                            int expected,
-                            int max_attempts,
-                            int timeout_ms,
-                            const char **expected_topics,
-                            int expected_topic_cnt);
-
-void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
-                                         int topic_count,
-                                         ...);
-
-rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk);
-
-void test_share_set_auto_offset_reset(const char *group_name,
-                                      const char *reset_policy);
-
-void test_share_set_isolation_level(const char *group_name,
-                                    const char *isolation_level);
-
 
 /**
  * @name rusage.c

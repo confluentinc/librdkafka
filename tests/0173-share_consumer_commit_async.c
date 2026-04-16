@@ -50,6 +50,27 @@ static rd_kafka_t *common_producer;
 /** Common admin client reused across all non-mock subtests. */
 static rd_kafka_t *common_admin;
 
+/**
+ * @brief Produce messages using the common producer.
+ */
+static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
+        rd_kafka_topic_t *rkt;
+        rkt = test_create_producer_topic(common_producer, topic, NULL);
+        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
+                          0);
+        rd_kafka_topic_destroy(rkt);
+}
+
+
+/**
+ * @brief Set share.auto.offset.reset=earliest for a share group.
+ */
+static void set_group_offset_earliest(const char *group_name) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
+
+        test_IncrementalAlterConfigs_simple(
+            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
+}
 
 /**
  * @brief Set share.record.lock.duration.ms for a share group.
@@ -124,10 +145,10 @@ static void do_test_implicit_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-impl-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = test_create_share_consumer(group, "implicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -164,7 +185,7 @@ static void do_test_implicit_second_consumer(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        produce_to_topic(topic, 0, 5);
 
         /* Second consumer: should only get the 5 verification records.
          * No lock wait needed — implicit mode close tears down the
@@ -225,10 +246,10 @@ static void do_test_explicit_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-expl-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = test_create_share_consumer(group, "explicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -268,7 +289,7 @@ static void do_test_explicit_second_consumer(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        produce_to_topic(topic, 0, 5);
 
         /* Second consumer: should only get the 5 verification records.
          * Records are either committed by the last commit_async or
@@ -332,10 +353,10 @@ static void do_test_mixed_acks_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-mixed-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = test_create_share_consumer(group, "explicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
         released_offsets = rd_calloc(MAX_MSGS, sizeof(*released_offsets));
@@ -454,7 +475,7 @@ static void do_test_multi_topic_partition(void) {
         }
 
         rkshare = test_create_share_consumer(group, "implicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         subscribe_consumer(rkshare, topics, topic_cnt);
 
         for (round = 0; round < rounds; round++) {
@@ -463,9 +484,7 @@ static void do_test_multi_topic_partition(void) {
 
                 for (t = 0; t < topic_cnt; t++) {
                         for (p = 0; p < part_cnt; p++)
-                                test_produce_msgs_simple(common_producer,
-                                                         topics[t], p,
-                                                         msgs_per_part);
+                                produce_to_topic(topics[t], p, msgs_per_part);
                 }
 
                 while (consumed < msgs_per_round && attempts++ < 100) {
@@ -533,15 +552,14 @@ static void do_test_produce_consume_loop(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         rkshare = test_create_share_consumer(group, "implicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
         for (round = 0; round < rounds; round++) {
                 int consumed = 0;
                 int attempts = 0;
 
-                test_produce_msgs_simple(common_producer, topic, 0,
-                                         msgs_per_round);
+                produce_to_topic(topic, 0, msgs_per_round);
                 TEST_SAY("Round %d: produced %d messages\n", round,
                          msgs_per_round);
 
@@ -618,12 +636,11 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         rkshare = test_create_share_consumer(group, "explicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
         for (round = 0; round < rounds; round++) {
-                test_produce_msgs_simple(common_producer, topic, 0,
-                                         msgs_per_round);
+                produce_to_topic(topic, 0, msgs_per_round);
                 int consumed     = 0;
                 int released_cnt = 0;
                 int redelivered  = 0;
@@ -750,10 +767,10 @@ static void do_test_multiple_commit_async_calls(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         rkshare = test_create_share_consumer(group, "implicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
-        test_produce_msgs_simple(common_producer, topic, 0, first_produce);
+        produce_to_topic(topic, 0, first_produce);
 
         while (consumed < first_produce && attempts++ < 100) {
                 rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
@@ -779,7 +796,7 @@ static void do_test_multiple_commit_async_calls(void) {
         TEST_ASSERT(consumed == first_produce, "Expected %d, got %d",
                     first_produce, consumed);
 
-        test_produce_msgs_simple(common_producer, topic, 0, second_produce);
+        produce_to_topic(topic, 0, second_produce);
 
         for (call = 0; call < 10; call++) {
                 error = rd_kafka_share_commit_async(rkshare);
@@ -843,12 +860,12 @@ static void do_test_commit_between_produces(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         rkshare = test_create_share_consumer(group, "implicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* First half: produce, wait for records, commit_async */
-        test_produce_msgs_simple(common_producer, topic, 0, half);
+        produce_to_topic(topic, 0, half);
 
         while (consumed1 == 0 && attempts++ < 30) {
                 rcvd  = 0;
@@ -889,7 +906,7 @@ static void do_test_commit_between_produces(void) {
         rd_sleep(4);
 
         /* Second half: produce more, wait for records, commit_async */
-        test_produce_msgs_simple(common_producer, topic, 0, half);
+        produce_to_topic(topic, 0, half);
 
         attempts = 0;
         while (consumed2 == 0 && attempts++ < 30) {
@@ -931,7 +948,7 @@ static void do_test_commit_between_produces(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        produce_to_topic(topic, 0, 5);
 
         /* Second consumer: should only get the 5 verification records.
          * No lock wait needed — implicit mode close tears down the
@@ -987,10 +1004,10 @@ static void do_test_all_release_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-allrel-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = test_create_share_consumer(group, "explicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume all records: RELEASE new records, ACCEPT redeliveries.
@@ -1063,10 +1080,10 @@ static void do_test_all_reject_second_consumer(void) {
 
         topic = test_mk_topic_name("0173-ca-allrej-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = test_create_share_consumer(group, "explicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1113,7 +1130,7 @@ static void do_test_all_reject_second_consumer(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        produce_to_topic(topic, 0, 5);
 
         /* Second consumer: should only get the 5 verification records.
          * REJECT'd records are archived and not redelivered. */
@@ -1170,10 +1187,10 @@ static void do_test_per_record_commit_async(void) {
 
         topic = test_mk_topic_name("0173-ca-per-rec", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, MAX_MSGS);
+        produce_to_topic(topic, 0, MAX_MSGS);
 
         rkshare = test_create_share_consumer(group, "explicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1225,7 +1242,7 @@ static void do_test_per_record_commit_async(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        produce_to_topic(topic, 0, 5);
 
         /* Second consumer: should only get the 5 verification records.
          * All previous records were ACCEPT'd via per-record commit_async. */
@@ -1506,10 +1523,10 @@ static void do_test_lock_timeout_redelivery(void) {
 
         topic = test_mk_topic_name("0173-ca-lock-to", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, msg_cnt);
+        produce_to_topic(topic, 0, msg_cnt);
 
         rkshare = test_create_share_consumer(group, "implicit");
-        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_offset_earliest(group);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 

@@ -234,7 +234,10 @@ promotions:
       - result: passed
         branch:
         - "master"
-  - name: Run all tests with SASL
+  # Only OAUTHBEARER is fully supported at the moment.
+  # Other mechanisms (PLAIN, SCRAM, GSSAPI) require additional
+  # trivup/CI fixes before they can be enabled.
+  - name: Run share consumer tests with SASL
     pipeline_file: run-sasl-tests.yml
     parameters:
       env_vars:
@@ -243,12 +246,8 @@ promotions:
           default_value: "4.2.0"
         - required: true
           name: TEST_SASL
-          default_value: "PLAIN"
+          default_value: "OAUTHBEARER"
           options:
-            - "PLAIN"
-            - "SCRAM-SHA-256"
-            - "SCRAM-SHA-512"
-            - "GSSAPI"
             - "OAUTHBEARER"
         - required: true
           name: TEST_TYPE

@@ -1,5 +1,5 @@
 version: v1.0
-name: run-all-tests-with-sasl
+name: run-share-consumer-tests-with-sasl
 
 agent:
   machine:

@@ -2032,6 +2032,9 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
         }
 
+        /* Enqueue ack callbacks */
+        rd_kafka_share_dispatch_ack_callbacks(rk, rko_orig->rko_u.share_fetch.ack_details);
+
         if (rko_orig->rko_u.share_fetch.should_leave)
                 rd_kafka_broker_share_fetch_session_clear(rkb);
 
@@ -2165,6 +2168,9 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 /* There is no retry for ShareFetch RPC at the broker
                  * thread level. */
         }
+
+        /* Enqueue ack callbacks */
+        rd_kafka_share_dispatch_ack_callbacks(rk, rko_orig->rko_u.share_fetch.ack_details);
 
         /* ack_details is owned by the op and freed by the op destructor
          * after the main thread has processed the reply. */

@@ -600,11 +600,13 @@ static void state_cleanup(sub_test_state_t *state) {
         /* Delete all created topics (skip already deleted ones) */
         for (i = 0; i < state->all_topic_cnt; i++) {
                 if (state->all_topics[i]) {
+#ifndef _WIN32
                         if (!state->topic_deleted[i]) {
                                 test_delete_topic(test_share_consumer_get_rk(
                                                       state->consumers[0]),
                                                   state->all_topics[i]);
                         }
+#endif
                         rd_free(state->all_topics[i]);
                 }
         }
@@ -1004,7 +1006,13 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_scenario(&test_poll_after_unsubscribe);
 
         /* Topic deletion tests */
+#ifndef _WIN32
+        /* Skip on Windows: topic deletion causes broker crash due to
+         * NTFS file locking (KAFKA-1194). */
         do_test_scenario(&test_topic_deletion);
+#else
+        TEST_SAY("Skipping topic deletion test on Windows (KAFKA-1194)\n");
+#endif
 
         /* Stress tests */
         do_test_scenario(&test_rapid_updates);

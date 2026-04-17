@@ -464,3 +464,33 @@ promotions:
         - required: true
           name: TEST_PARALLEL
           default_value: "1"
+  # OAUTHBEARER and PLAIN are supported.
+  # Other mechanisms (SCRAM, GSSAPI) require additional
+  # trivup/CI fixes before they can be enabled.
+  - name: Run share consumer tests with SASL
+    pipeline_file: run-sasl-tests.yml
+    parameters:
+      env_vars:
+        - required: true
+          name: TEST_KAFKA_GIT_REF
+          default_value: "4.2.0"
+        - required: true
+          name: TEST_SASL
+          default_value: "PLAIN"
+          options:
+            - "PLAIN"
+            - "OAUTHBEARER"
+        - required: true
+          name: TEST_TYPE
+          default_value: "plaintext,ssl"
+          options:
+            - "plaintext,ssl"
+            - "plaintext"
+            - "ssl"
+        - required: true
+          name: TEST_ARCHES
+          default_value: "x86_64,aarch64"
+          options:
+            - "x86_64,aarch64"
+            - "x86_64"
+            - "aarch64"

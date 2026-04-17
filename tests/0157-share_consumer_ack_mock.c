@@ -1486,6 +1486,272 @@ static void do_test_ack_success_advances_spso(void) {
         SUB_TEST_PASS();
 }
 
+
+/**
+ * @brief epoch=-1 (final fetch) must not acquire new records.
+ *
+ * Consumer A acquires two batches (max_record_locks=3 caps each),
+ * then closes.  The close sends epoch=-1 which releases A's
+ * un-acked records but must not acquire anything new.
+ * Consumer B picks up the released records; consumer C sees 0.
+ */
+static void do_test_final_fetch_no_acquisition(void) {
+        const char *topic = "kip932_final_fetch_no_acq";
+        const int msgcnt  = 6;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_a2, consumed_b, extra;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        /* Limit acquisition to 3 records at a time. */
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 3);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-final-no-acq");
+        subscribe_topics(consumer, &topic, 1);
+
+        consumed_a = consume_n(consumer, 3, 40);
+        TEST_SAY("final_fetch_no_acq: A batch1 consumed %d/3\n", consumed_a);
+
+        /* Implicit ack for batch1, acquires batch2. */
+        consumed_a2 = consume_n(consumer, 3, 40);
+        TEST_SAY("final_fetch_no_acq: A batch2 consumed %d/3\n", consumed_a2);
+
+        /* Close sends epoch=-1; batch2 records released. */
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 0);
+
+        /* B picks up the released batch2 records. */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-final-no-acq");
+        subscribe_topics(consumer, &topic, 1);
+
+        consumed_b = consume_n(consumer, 3, 40);
+        TEST_SAY("final_fetch_no_acq: B consumed %d/3\n", consumed_b);
+
+        extra = consume_n(consumer, 1, 5); /* ack B's records */
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        /* C should see nothing — everything acked. */
+        {
+                rd_kafka_share_t *consumer_c;
+                int consumed_c;
+
+                consumer_c =
+                    new_share_consumer(ctx.bootstraps, "sg-final-no-acq");
+                subscribe_topics(consumer_c, &topic, 1);
+                consumed_c = consume_n(consumer_c, 1, 10);
+                TEST_SAY("final_fetch_no_acq: C consumed %d/0 (should be 0)\n",
+                         consumed_c);
+                rd_kafka_share_consumer_close(consumer_c);
+                rd_kafka_share_destroy(consumer_c);
+
+                TEST_ASSERT(consumed_c == 0,
+                            "C: expected 0 consumed, got %d", consumed_c);
+        }
+
+        test_ctx_destroy(&ctx);
+
+        (void)extra;
+        TEST_ASSERT(consumed_a == 3 && consumed_a2 == 3 && consumed_b == 3,
+                    "Expected A1=3 A2=3 B=3, got A1=%d A2=%d B=%d", consumed_a,
+                    consumed_a2, consumed_b);
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Ack for records past SPSO (log retention) succeeds silently.
+ *
+ * Consumer A acquires 5 records, then log retention moves
+ * start_offset past the first 3.  The implicit ack covers all 5,
+ * including the 3 that are now below SPSO.  Those must be silently
+ * accepted rather than returning INVALID_RECORD_STATE.
+ * Consumer B should see 0.
+ */
+static void do_test_ack_after_log_retention_silent(void) {
+        const char *topic = "kip932_ack_log_retention_silent";
+        const int msgcnt  = 5;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b, extra;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        consumer =
+            new_share_consumer(ctx.bootstraps, "sg-ack-log-ret-silent");
+        subscribe_topics(consumer, &topic, 1);
+
+        consumed_a = consume_n(consumer, msgcnt, 50);
+        TEST_SAY("ack_log_retention_silent: A consumed %d/%d\n", consumed_a,
+                 msgcnt);
+
+        /* Move start_offset past first 3 records (simulates retention). */
+        rd_kafka_mock_partition_set_follower_wmarks(ctx.mcluster, topic, 0,
+                                                     3, -1);
+
+        /* Implicit ack covers all 5; offsets 0-2 are below SPSO now. */
+        extra = consume_n(consumer, 1, 10);
+        TEST_SAY("ack_log_retention_silent: A extra %d/0\n", extra);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        /* B should see nothing. */
+        consumer =
+            new_share_consumer(ctx.bootstraps, "sg-ack-log-ret-silent");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, 1, 10);
+        TEST_SAY("ack_log_retention_silent: B consumed %d/0 (should be 0)\n",
+                 consumed_b);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed_a == msgcnt && consumed_b == 0,
+                    "Expected A=%d B=0, got A=%d B=%d", msgcnt, consumed_a,
+                    consumed_b);
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Ack atomicity — expired locks cause full batch rejection.
+ *
+ * Consumer A acquires records but its locks expire before the ack
+ * arrives (RTT delay).  Because acks are atomic per partition, the
+ * entire batch is rejected rather than partially applied.
+ * Consumer B re-acquires, acks, and consumer C sees 0.
+ */
+static void do_test_ack_atomicity_lock_expiry(void) {
+        const char *topic = "kip932_ack_atomicity";
+        const int msgcnt  = 3;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b, consumed_c;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        /* Very short lock so it expires before A can ack. */
+        rd_kafka_mock_sharegroup_set_record_lock_duration(ctx.mcluster, 200);
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 10000);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-atomicity");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_a = consume_n(consumer, msgcnt, 50);
+        TEST_SAY("ack_atomicity: A consumed %d/%d\n", consumed_a, msgcnt);
+
+        /* Delay A's next ShareFetch past lock expiry. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 3000);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 2, 3000);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 3, 3000);
+
+        rd_usleep(800 * 1000, NULL); /* locks expire */
+        rd_kafka_share_destroy(consumer); /* crash */
+
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 0);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 2, 0);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 3, 0);
+
+        /* B re-acquires everything (A's ack was rejected atomically). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-atomicity");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, msgcnt, 50);
+        TEST_SAY("ack_atomicity: B consumed %d/%d (re-delivered)\n",
+                 consumed_b, msgcnt);
+
+        consume_n(consumer, 1, 5); /* ack B's records */
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        /* C sees nothing. */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-atomicity");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_c = consume_n(consumer, 1, 10);
+        TEST_SAY("ack_atomicity: C consumed %d/0 (should be 0)\n", consumed_c);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt &&
+                        consumed_c == 0,
+                    "Expected A=%d B=%d C=0, got A=%d B=%d C=%d", msgcnt,
+                    msgcnt, consumed_a, consumed_b, consumed_c);
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Leader change mid-session -> client redirects.
+ *
+ * Consumer fetches from broker 1, then we move the partition leader
+ * to broker 2.  The next ShareFetch to broker 1 gets
+ * NOT_LEADER_OR_FOLLOWER; the client refreshes metadata and
+ * continues from broker 2.
+ */
+static void do_test_not_leader_or_follower_redirect(void) {
+        const char *topic = "kip932_not_leader";
+        const int msgcnt  = 6;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        /* Two fetch rounds: 3 records each. */
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 3);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0, 1);
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-not-leader");
+        subscribe_topics(consumer, &topic, 1);
+
+        consumed = consume_n(consumer, 3, 40);
+        TEST_SAY("not_leader: consumed %d/3 from broker 1\n", consumed);
+
+        /* Move leader to broker 2 between fetches. */
+        rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0, 2);
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 0);
+
+        /* Client should handle the redirect transparently. */
+        consumed += consume_n(consumer, 3, 60);
+        TEST_SAY("not_leader: total consumed %d/6\n", consumed);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed == msgcnt,
+                    "Expected consumed=%d, got %d", msgcnt, consumed);
+        SUB_TEST_PASS();
+}
+
 /* ===================================================================
  *  Test runner
  * =================================================================== */
@@ -1524,6 +1790,12 @@ int main_0157_share_consumer_ack_mock(int argc, char **argv) {
         /* Ack validation */
         do_test_ack_after_lock_expiry_redelivers();
         do_test_ack_success_advances_spso();
+
+        /* Mock broker fix tests */
+        do_test_final_fetch_no_acquisition();
+        do_test_ack_after_log_retention_silent();
+        do_test_ack_atomicity_lock_expiry();
+        do_test_not_leader_or_follower_redirect();
 
         return 0;
 }

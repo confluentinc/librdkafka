@@ -554,9 +554,11 @@ static void cleanup_test(ack_test_config_t *config, ack_test_state_t *state) {
 
         for (t = 0; t < config->topic_cnt; t++) {
                 if (state->topic_names[t]) {
+#ifndef _WIN32
                         test_delete_topic(
                             test_share_consumer_get_rk(state->consumers[0]),
                             state->topic_names[t]);
+#endif
                         rd_free(state->topic_names[t]);
                         state->topic_names[t] = NULL;
                 }
@@ -790,7 +792,9 @@ static void test_ack_invalid_type(void) {
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         rd_kafka_message_destroy(batch[0]);
 
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(rkshare), topic);
+#endif
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
@@ -892,7 +896,9 @@ static void test_release_then_reject_no_redelivery(void) {
                     "Expected 0 redelivered (REJECT overrides RELEASE), got %d",
                     redelivered);
 
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(rkshare), topic);
+#endif
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 
@@ -1010,7 +1016,9 @@ static void test_max_delivery_attempts(void) {
         TEST_SAY("SUCCESS: Message not redelivered after %d RELEASE attempts\n",
                  max_deliveries);
 
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(rkshare), topic);
+#endif
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
 

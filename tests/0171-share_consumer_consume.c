@@ -258,9 +258,11 @@ static void cleanup_test(share_test_config_t *config,
         /* Delete topics using first consumer */
         for (t = 0; t < config->topic_cnt; t++) {
                 if (state->topic_names[t]) {
+#ifndef _WIN32
                         test_delete_topic(
                             test_share_consumer_get_rk(state->consumers[0]),
                             state->topic_names[t]);
+#endif
                         rd_free(state->topic_names[t]);
                         state->topic_names[t] = NULL;
                 }
@@ -595,7 +597,9 @@ static void test_rapid_produce_consume_cycles(void) {
                  total_consumed);
 
         /* Cleanup */
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+#endif
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -673,7 +677,9 @@ static void test_empty_then_produce(void) {
                  consumed);
 
         /* Cleanup */
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+#endif
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -747,7 +753,9 @@ static void test_sparse_partitions(void) {
                  consumed);
 
         /* Cleanup */
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(consumer), topic);
+#endif
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
 }
@@ -918,7 +926,9 @@ static void test_acquisition_lock_expiry_redelivery(void) {
             consumed2);
 
         /* Cleanup */
+#ifndef _WIN32
         test_delete_topic(test_share_consumer_get_rk(consumer2), topic);
+#endif
         rd_kafka_share_consumer_close(consumer2);
         rd_kafka_share_destroy(consumer2);
 }

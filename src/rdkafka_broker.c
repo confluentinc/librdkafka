@@ -3257,7 +3257,8 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
          * need to add if it is not present?
          *  * Check if rktp is already present in toppars_to_forget?
          */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
+            rkb->rkb_share_fetch_session.epoch > 0) {
                 rd_kafka_broker_share_session_add_remove_toppar(
                     &rkb->rkb_share_fetch_session.toppars_to_forget,
                     &rkb->rkb_share_fetch_session.toppars_to_add, rktp);
@@ -3580,10 +3581,41 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 // }
 
                 if (rko->rko_u.share_fetch.should_leave) {
-                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                     "Processing SHARE_FETCH op: "
-                                     "should_leave is true");
-                        rd_kafka_broker_share_fetch_leave(rkb, rko, rd_clock());
+                        if (rkb->rkb_share_fetch_session.epoch > 0) {
+                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                             "Processing SHARE_FETCH op: "
+                                             "should_leave is true");
+                                rd_kafka_broker_share_fetch_leave(rkb, rko,
+                                                                  rd_clock());
+                        } else {
+                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                             "Ignoring SHARE_FETCH op with "
+                                             "should_leave = 1: "
+                                             "no active session");
+
+                                /* TODO KIP-932: Session vars should be cleared
+                                 * during destroy() instead of close() */
+                                if (rkb->rkb_share_fetch_session
+                                        .toppars_to_add) {
+                                        rd_rkb_dbg(
+                                            rkb, BROKER, "SHAREFETCH",
+                                            "Clearing %d toppars to add from "
+                                            "ShareFetch session on "
+                                            "clear",
+                                            rd_list_cnt(
+                                                rkb->rkb_share_fetch_session
+                                                    .toppars_to_add));
+                                        rd_list_destroy(
+                                            rkb->rkb_share_fetch_session
+                                                .toppars_to_add);
+                                        rkb->rkb_share_fetch_session
+                                            .toppars_to_add = NULL;
+                                }
+                                rd_kafka_op_reply(
+                                    rko,
+                                    RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
+                        }
+
                         rko = NULL; /* the rko is reused for the reply */
                         break;
                 }
@@ -6522,8 +6554,6 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
             rkb->rkb_source == RD_KAFKA_LEARNED) {
-                rd_kafka_op_t *rko_sf;
-
                 /* Clear pending ack details cached on this broker.
                  * TODO KIP-932: Maybe move ack_details cleanup to clear
                  *               through DESTROY err flow when main thread
@@ -6538,26 +6568,6 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                         rd_list_destroy(rkb->rkb_share_async_ack_details);
                         rkb->rkb_share_async_ack_details = NULL;
                 }
-
-                /**
-                 * TODO KIP-932: Not leaving properly. Need to fix this.
-                 *               It will be moved to consumer close
-                 *               instead of decommissioning.
-                 */
-                rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
-                rko_sf->rko_u.share_fetch.should_leave = rd_true;
-                rko_sf->rko_u.share_fetch.abs_timeout =
-                    0;  // TODO KIP-932: Check timeout part.
-                rko_sf->rko_u.share_fetch.should_fetch = rd_false;
-                rd_kafka_broker_keep(rkb);
-                rko_sf->rko_u.share_fetch.target_broker = rkb;
-                rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
-
-                rd_kafka_dbg(rk, BROKER, "SHAREFETCH",
-                             "Enqueuing leave share fetch op on broker %s: "
-                             "decommissioning broker.",
-                             rd_kafka_broker_name(rkb));
-                rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
         }
 
         rd_atomic32_add(&rkb->termination_in_progress, 1);

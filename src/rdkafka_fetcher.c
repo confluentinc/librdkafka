@@ -1800,71 +1800,6 @@ static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
         rd_kafka_broker_session_update_partitions(rkb);
 }
 
-static void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
-        rd_kafka_toppar_t *rktp, *tmp_rktp;
-
-        /* Clear toppars in session */
-        TAILQ_FOREACH_SAFE(rktp,
-                           &rkb->rkb_share_fetch_session.toppars_in_session,
-                           rktp_rkb_session_link, tmp_rktp) {
-                TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session,
-                             rktp, rktp_rkb_session_link);
-                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
-                           "%s [%" PRId32
-                           "]: removed from ShareFetch session on clear",
-                           rktp->rktp_rkt->rkt_topic->str,
-                           rktp->rktp_partition);
-                rd_kafka_toppar_destroy(rktp);  // from session list
-        }
-        rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
-
-        /* Clear toppars to add */
-        if (rkb->rkb_share_fetch_session.toppars_to_add) {
-                rd_rkb_dbg(
-                    rkb, BROKER, "SHAREFETCH",
-                    "Clearing %d toppars to add from ShareFetch session on "
-                    "clear",
-                    rd_list_cnt(rkb->rkb_share_fetch_session.toppars_to_add));
-                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_add);
-                rkb->rkb_share_fetch_session.toppars_to_add = NULL;
-        }
-
-        /* Clear toppars to forget */
-        if (rkb->rkb_share_fetch_session.toppars_to_forget) {
-                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
-                           "Clearing %d toppars to forget from ShareFetch "
-                           "session on clear",
-                           rd_list_cnt(
-                               rkb->rkb_share_fetch_session.toppars_to_forget));
-                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_forget);
-                rkb->rkb_share_fetch_session.toppars_to_forget = NULL;
-        }
-
-        /* Clear adding toppars */
-        if (rkb->rkb_share_fetch_session.adding_toppars) {
-                rd_rkb_dbg(
-                    rkb, BROKER, "SHAREFETCH",
-                    "Clearing %d adding toppars from ShareFetch session on "
-                    "clear",
-                    rd_list_cnt(rkb->rkb_share_fetch_session.adding_toppars));
-                rd_list_destroy(rkb->rkb_share_fetch_session.adding_toppars);
-                rkb->rkb_share_fetch_session.adding_toppars = NULL;
-        }
-
-        /* Clear forgetting toppars */
-        if (rkb->rkb_share_fetch_session.forgetting_toppars) {
-                rd_rkb_dbg(
-                    rkb, BROKER, "SHAREFETCH",
-                    "Clearing %d forgetting toppars from ShareFetch session on "
-                    "clear",
-                    rd_list_cnt(
-                        rkb->rkb_share_fetch_session.forgetting_toppars));
-                rd_list_destroy(
-                    rkb->rkb_share_fetch_session.forgetting_toppars);
-                rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
-        }
-}
-
 /**
  * @brief Parse a ShareAcknowledge response.
  *
@@ -2054,8 +1989,6 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
         }
 
-        /* TODO KIP-932: Session should be cleared during destroy()
-         * instead of close() */
         if (rko_orig->rko_u.share_fetch.should_leave)
                 rd_kafka_broker_share_fetch_session_clear(rkb);
 
@@ -2838,6 +2771,71 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
                      cnt, rkb->rkb_name, rkb->rkb_nodeid);
         rd_kafka_broker_buf_enq1(
             rkb, rkbuf, rd_kafka_broker_share_acknowledge_reply, rko_orig);
+}
+
+void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
+        rd_kafka_toppar_t *rktp, *tmp_rktp;
+
+        /* Clear toppars in session */
+        TAILQ_FOREACH_SAFE(rktp,
+                           &rkb->rkb_share_fetch_session.toppars_in_session,
+                           rktp_rkb_session_link, tmp_rktp) {
+                TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session,
+                             rktp, rktp_rkb_session_link);
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                           "%s [%" PRId32
+                           "]: removed from ShareFetch session on clear",
+                           rktp->rktp_rkt->rkt_topic->str,
+                           rktp->rktp_partition);
+                rd_kafka_toppar_destroy(rktp);  // from session list
+        }
+        rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
+
+        /* Clear toppars to add */
+        if (rkb->rkb_share_fetch_session.toppars_to_add) {
+                rd_rkb_dbg(
+                    rkb, BROKER, "SHAREFETCH",
+                    "Clearing %d toppars to add from ShareFetch session on "
+                    "clear",
+                    rd_list_cnt(rkb->rkb_share_fetch_session.toppars_to_add));
+                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_add);
+                rkb->rkb_share_fetch_session.toppars_to_add = NULL;
+        }
+
+        /* Clear toppars to forget */
+        if (rkb->rkb_share_fetch_session.toppars_to_forget) {
+                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
+                           "Clearing %d toppars to forget from ShareFetch "
+                           "session on clear",
+                           rd_list_cnt(
+                               rkb->rkb_share_fetch_session.toppars_to_forget));
+                rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_forget);
+                rkb->rkb_share_fetch_session.toppars_to_forget = NULL;
+        }
+
+        /* Clear adding toppars */
+        if (rkb->rkb_share_fetch_session.adding_toppars) {
+                rd_rkb_dbg(
+                    rkb, BROKER, "SHAREFETCH",
+                    "Clearing %d adding toppars from ShareFetch session on "
+                    "clear",
+                    rd_list_cnt(rkb->rkb_share_fetch_session.adding_toppars));
+                rd_list_destroy(rkb->rkb_share_fetch_session.adding_toppars);
+                rkb->rkb_share_fetch_session.adding_toppars = NULL;
+        }
+
+        /* Clear forgetting toppars */
+        if (rkb->rkb_share_fetch_session.forgetting_toppars) {
+                rd_rkb_dbg(
+                    rkb, BROKER, "SHAREFETCH",
+                    "Clearing %d forgetting toppars from ShareFetch session on "
+                    "clear",
+                    rd_list_cnt(
+                        rkb->rkb_share_fetch_session.forgetting_toppars));
+                rd_list_destroy(
+                    rkb->rkb_share_fetch_session.forgetting_toppars);
+                rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
+        }
 }
 
 void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,

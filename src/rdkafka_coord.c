@@ -316,6 +316,14 @@ static void rd_kafka_coord_req_fail(rd_kafka_t *rk,
         rd_kafka_op_t *reply;
         rd_kafka_buf_t *rkbuf;
 
+        if (!creq->creq_reply_opaque) {
+                /* The admin operation has already timed out and been
+                 * destroyed.  The eonce (creq_reply_opaque) may be
+                 * freed.  Do not enqueue a response referencing it. */
+                rd_kafka_coord_req_destroy(rk, creq, rd_true /*done*/);
+                return;
+        }
+
         reply         = rd_kafka_op_new(RD_KAFKA_OP_RECV_BUF);
         reply->rko_rk = rk; /* Set rk since the rkbuf will not have a rkb
                              * to reach it. */
@@ -495,7 +503,15 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
                                                      replyq, creq->creq_resp_cb,
                                                      creq->creq_reply_opaque);
 
-                        if (err) {
+                        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
+                                /* Admin op already timed out.  Clear
+                                 * opaque to prevent coord_req_fail from
+                                 * using freed eonce. */
+                                creq->creq_reply_opaque = NULL;
+                                rd_kafka_replyq_destroy(&replyq);
+                                rd_kafka_coord_req_destroy(rk, creq,
+                                                           rd_true /*done*/);
+                        } else if (err) {
                                 /* Permanent error, e.g., request not
                                  *  supported by broker. */
                                 rd_kafka_replyq_destroy(&replyq);

@@ -3230,6 +3230,18 @@ static void rd_kafka_broker_share_session_toppar_add(rd_kafka_broker_t *rkb,
          *  * Check if rktp is already present in toppars_to_add?
          */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                if (rkb->rkb_share_fetch_session.epoch < 0) {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                   "Not adding %.*s [%" PRId32
+                                   "] to share fetch session "
+                                   "as session epoch is %" PRId32,
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   rkb->rkb_share_fetch_session.epoch);
+
+                        return;
+                }
+
                 rd_kafka_broker_share_session_add_remove_toppar(
                     &rkb->rkb_share_fetch_session.toppars_to_add,
                     &rkb->rkb_share_fetch_session.toppars_to_forget, rktp);
@@ -3257,8 +3269,19 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
          * need to add if it is not present?
          *  * Check if rktp is already present in toppars_to_forget?
          */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
-            rkb->rkb_share_fetch_session.epoch > 0) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                if (rkb->rkb_share_fetch_session.epoch <= 0) {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                   "Not removing %.*s [%" PRId32
+                                   "] from share fetch session "
+                                   "as session epoch is %" PRId32,
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition,
+                                   rkb->rkb_share_fetch_session.epoch);
+
+                        return;
+                }
+
                 rd_kafka_broker_share_session_add_remove_toppar(
                     &rkb->rkb_share_fetch_session.toppars_to_forget,
                     &rkb->rkb_share_fetch_session.toppars_to_add, rktp);
@@ -3579,47 +3602,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
                 //         rko = NULL;
                 // }
-
-                if (rko->rko_u.share_fetch.should_leave) {
-                        if (rkb->rkb_share_fetch_session.epoch > 0) {
-                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                             "Processing SHARE_FETCH op: "
-                                             "should_leave is true");
-                                rd_kafka_broker_share_fetch_leave(rkb, rko,
-                                                                  rd_clock());
-                        } else {
-                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                             "Ignoring SHARE_FETCH op with "
-                                             "should_leave = 1: "
-                                             "no active session");
-
-                                /* TODO KIP-932: Session vars should be cleared
-                                 * during destroy() instead of close() */
-                                if (rkb->rkb_share_fetch_session
-                                        .toppars_to_add) {
-                                        rd_rkb_dbg(
-                                            rkb, BROKER, "SHAREFETCH",
-                                            "Clearing %d toppars to add from "
-                                            "ShareFetch session on "
-                                            "clear",
-                                            rd_list_cnt(
-                                                rkb->rkb_share_fetch_session
-                                                    .toppars_to_add));
-                                        rd_list_destroy(
-                                            rkb->rkb_share_fetch_session
-                                                .toppars_to_add);
-                                        rkb->rkb_share_fetch_session
-                                            .toppars_to_add = NULL;
-                                }
-                                rd_kafka_op_reply(
-                                    rko,
-                                    RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
-                        }
-
-                        rko = NULL; /* the rko is reused for the reply */
-                        break;
-                }
-
+                /* TODO KIP-932: Verify handling of this op */
                 if (rd_kafka_broker_or_instance_terminating(rkb)) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
@@ -3643,10 +3626,36 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                      "already fetching");
                         rd_kafka_op_reply(rko,
                                           RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
+                } else if (rko->rko_u.share_fetch.should_leave) {
+                        if (rkb->rkb_share_fetch_session.epoch > 0) {
+                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                             "Processing SHARE_FETCH op: "
+                                             "should_leave is true");
+                                /* Session vars will be cleared in callback */
+                                rd_kafka_broker_share_fetch_leave(rkb, rko,
+                                                                  rd_clock());
+                        } else {
+                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
+                                             "Ignoring SHARE_FETCH op with "
+                                             "should_leave = 1: "
+                                             "no active session");
+
+                                /* Required as it is possible that we were about
+                                 * to establish a session */
+                                rd_kafka_broker_share_fetch_session_clear(rkb);
+                                rd_kafka_op_reply(
+                                    rko,
+                                    RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
+                        }
+
+                        rko = NULL; /* the rko is reused for the reply */
+                        break;
                 } else {
                         rd_kafka_broker_share_rpc(rkb, rko, rd_clock());
                 }
 
+                /* TODO KIP-932: Add handling for commit sync partition level
+                 * and ack callback errors */
                 // if (!rko->rko_u.share_fetch.should_fetch) {
                 //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                 //                    "Ignoring SHARE_FETCH op: "

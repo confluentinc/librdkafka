@@ -5059,19 +5059,18 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
 
 
 /**
- * @brief Close the consumer.
+ * @brief Close the share consumer.
  *
- * This call will block until the consumer has revoked its assignment,
- * calling the \c rebalance_cb if it is configured, committed offsets
- * to broker, and left the consumer group (if applicable).
- * The maximum blocking time is roughly limited to session.timeout.ms.
+ * This call will block until the consumer has committed all the pending
+ * acknowledgments and left the consumer group. The maximum blocking time is
+ * roughly limited to socket.timeout.ms.
  *
- * @returns An error code indicating if the consumer close was succesful
+ * @returns An error code indicating if the consumer close was successful
  *          or not.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
  *          a fatal error.
  *
- * @remark The application still needs to call rd_kafka_destroy() after
+ * @remark The application still needs to call rd_kafka_share_destroy() after
  *         this call finishes to clean up the underlying handle resources.
  *
  */
@@ -5079,21 +5078,19 @@ RD_EXPORT
 rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
 
 /**
- * @brief Asynchronously close the consumer.
+ * @brief Asynchronously close the share consumer.
  *
- * Performs the same actions as rd_kafka_consumer_close() but in a
+ * Performs the same actions as rd_kafka_share_consumer_close() but in a
  * background thread.
  *
- * Rebalance events/callbacks (etc) will be forwarded to the
+ * Callbacks (etc) will be forwarded to the
  * application-provided \p rkqu. The application must poll/serve this queue
- * until rd_kafka_consumer_closed() returns true.
+ * until rd_kafka_share_consumer_closed() returns true.
  *
- * @remark Depending on consumer group join state there may or may not be
- *         rebalance events emitted on \p rkqu.
  *
  * @returns an error object if the consumer close failed, else NULL.
  *
- * @sa rd_kafka_consumer_closed()
+ * @sa rd_kafka_share_consumer_closed()
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
@@ -5103,10 +5100,10 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
 /**
  * @returns 1 if the consumer is closed, else 0.
  *
- * Should be used in conjunction with rd_kafka_consumer_close_queue() to know
- * when the consumer has been closed.
+ * Should be used in conjunction with rd_kafka_share_consumer_close_queue() to
+ * know when the consumer has been closed.
  *
- * @sa rd_kafka_consumer_close_queue()
+ * @sa rd_kafka_consumer_share_close_queue()
  */
 RD_EXPORT
 int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);

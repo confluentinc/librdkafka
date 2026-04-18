@@ -2377,6 +2377,104 @@ static void do_test_AlterUserScramCredentials(const char *what,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test DescribeLogDirs
+ */
+static void do_test_DescribeLogDirs(const char *what,
+                                    rd_kafka_t *rk,
+                                    rd_kafka_queue_t *useq,
+                                    int with_options,
+                                    int with_topics) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        rd_kafka_event_t *rkev;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_DescribeLogDirs_result_t *res;
+        const rd_kafka_LogDirDescription_t **logdirs;
+        size_t logdir_cnt;
+        int exp_timeout = MY_SOCKET_TIMEOUT_MS;
+        test_timing_t timing;
+        char errstr[512];
+        const char *errstr2;
+        void *my_opaque                         = NULL, *opaque;
+        rd_kafka_topic_partition_list_t *topics = NULL;
+
+        SUB_TEST_QUICK("%s DescribeLogDirs with %s, timeout %dms",
+                       rd_kafka_name(rk), what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (with_topics) {
+                topics = rd_kafka_topic_partition_list_new(2);
+                rd_kafka_topic_partition_list_add(topics, "test_topic1", 0);
+                rd_kafka_topic_partition_list_add(topics, "test_topic2", 1);
+        }
+
+        if (with_options) {
+                options = rd_kafka_AdminOptions_new(
+                    rk, RD_KAFKA_ADMIN_OP_DESCRIBELOGDIRS);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+
+                err = rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "%s", rd_kafka_err2str(err));
+
+                if (useq) {
+                        my_opaque = (void *)456;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "DescribeLogDirs");
+        TEST_SAY("Call DescribeLogDirs, timeout is %dms\n", exp_timeout);
+        rd_kafka_DescribeLogDirs(rk, topics, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        /* Poll result queue */
+        TIMING_START(&timing, "DescribeLogDirs.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("DescribeLogDirs: got %s in %.3fs\n",
+                 rd_kafka_event_name(rkev), TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_DescribeLogDirs_result(rkev);
+        TEST_ASSERT(res, "expected DescribeLogDirs_result, not %s",
+                    rd_kafka_event_name(rkev));
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting error (no real broker) */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err, "expected DescribeLogDirs to fail");
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected RD_KAFKA_RESP_ERR__TIMED_OUT, not %s",
+                    rd_kafka_err2name(err));
+        TEST_SAY("DescribeLogDirs error: %s\n", errstr2);
+
+        /* Validate result accessor returns 0 entries on error */
+        logdirs =
+            rd_kafka_DescribeLogDirs_result_descriptions(res, &logdir_cnt);
+        TEST_ASSERT(!logdirs && logdir_cnt == 0,
+                    "expected no result logdirs, got %p cnt %" PRIusz, logdirs,
+                    logdir_cnt);
+
+        rd_kafka_event_destroy(rkev);
+
+        if (topics)
+                rd_kafka_topic_partition_list_destroy(topics);
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        SUB_TEST_PASS();
+}
+
 static void do_test_ElectLeaders(const char *what,
                                  rd_kafka_t *rk,
                                  rd_kafka_queue_t *useq,
@@ -3037,6 +3135,17 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 
         do_test_AlterUserScramCredentials("main queue", rk, mainq);
         do_test_AlterUserScramCredentials("temp queue", rk, NULL);
+
+        do_test_DescribeLogDirs("temp queue, no options, no topics", rk, NULL,
+                                0, 0);
+        do_test_DescribeLogDirs("temp queue, options, no topics", rk, NULL, 1,
+                                0);
+        do_test_DescribeLogDirs("temp queue, options, with topics", rk, NULL, 1,
+                                1);
+        do_test_DescribeLogDirs("main queue, options, no topics", rk, mainq, 1,
+                                0);
+        do_test_DescribeLogDirs("main queue, options, with topics", rk, mainq,
+                                1, 1);
 
         do_test_ElectLeaders("main queue, options, Preffered Elections", rk,
                              mainq, 1, RD_KAFKA_ELECTION_TYPE_PREFERRED);

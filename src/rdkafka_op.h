@@ -189,6 +189,9 @@ typedef enum {
         RD_KAFKA_OP_ELECTLEADERS,         /**< Admin:
                                            *   ElectLeaders
                                            *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBELOGDIRS,      /**< Admin:
+                                           *   DescribeLogDirs
+                                           *   u.admin_request */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

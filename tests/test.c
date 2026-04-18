@@ -285,6 +285,7 @@ _TEST_DECL(0173_share_consumer_commit_async);
 _TEST_DECL(0176_share_consumer_commit_sync);
 _TEST_DECL(0176_share_consumer_commit_sync_local);
 _TEST_DECL(0177_share_consumer_transactions);
+_TEST_DECL(0178_share_consumer_close);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -566,6 +567,7 @@ struct test tests[] = {
     _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0176_share_consumer_commit_sync_local, TEST_F_LOCAL),
     _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

@@ -815,8 +815,9 @@ struct rd_kafka_share_s {
         rd_bool_t rkshare_fetch_more_records_requested;
 
         /**
-         * Set to true when the consumer is closing. Will be used to
-         * check if SHARE_FETCH_RESPONSE is received to poll_cb only
+         * Set to true when the consumer is closing. Will be used to:
+         * * prevent any new API call from the app.
+         * * check if SHARE_FETCH_RESPONSE is received to poll_cb only
          * while closing
          */
         rd_bool_t rkshare_consumer_closing;
@@ -1314,5 +1315,26 @@ void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk);
 rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
                                                  rd_kafka_q_t *rkq,
                                                  rd_kafka_op_t *rko);
+
+/**
+ * @brief Return an error object if the share consumer is closed or closing.
+ * @returns a newly-allocated error (owned by caller) or NULL if usable.
+ */
+rd_kafka_error_t *
+rd_kafka_share_consumer_closed_or_closing_error(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Return a response-error code if the share consumer is closed or
+ *        closing.
+ * @returns RD_KAFKA_RESP_ERR__STATE if closed/closing, else
+ *          RD_KAFKA_RESP_ERR_NO_ERROR.
+ */
+rd_kafka_resp_err_t
+rd_kafka_share_consumer_closed_or_closing_err(rd_kafka_share_t *rkshare);
+
+void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
+                                     rd_kafka_broker_t *rkb,
+                                     rd_bool_t should_fetch,
+                                     rd_bool_t should_leave);
 
 #endif /* _RDKAFKA_INT_H_ */

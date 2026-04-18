@@ -690,8 +690,9 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
             type > RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
-        if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
-                return RD_KAFKA_RESP_ERR__STATE;
+        if (unlikely(
+                (err = rd_kafka_share_consumer_closed_or_closing_err(rkshare))))
+                return err;
 
         /* Find partition and entry containing the offset */
         err = rd_kafka_share_find_ack_entry(rkshare, topic, partition, offset,

@@ -578,6 +578,10 @@ static void test_close_with_acknowledge(void) {
                 /* Cleanup */
                 free_tracked_messages(tracked_msgs, tracked_cnt);
 
+                for (int t = 0; t < ctx.topic_cnt; t++) {
+                        rd_free(ctx.topic_names[t]);
+                }
+
                 TEST_SAY("Test %s completed successfully\n\n",
                          config->test_name);
         }
@@ -1111,8 +1115,8 @@ static void test_close_respects_socket_timeout(void) {
         const char *group = "sg-close-timeout";
         const int msgcnt  = 10;
         const int rtt_delay_ms =
-            80000; /* 80 seconds - exceeds socket timeout */
-        const int socket_timeout_ms = 60000; /* 60 seconds */
+            40000; /* 40 seconds - exceeds socket timeout */
+        const int socket_timeout_ms = 20000; /* 60 seconds */
         rd_kafka_message_t *batch[BATCH_SIZE];
         rd_kafka_error_t *error;
         size_t rcvd;
@@ -1399,14 +1403,321 @@ static void test_close_with_broker_error_response(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Helper: assert the given rd_kafka_error_t* signals closed/closing.
+ *
+ * Expects non-NULL error with err code RD_KAFKA_RESP_ERR__STATE and a
+ * string containing \p expect_substr ("closed" or "closing").
+ * Destroys the error.
+ */
+static void assert_state_error(rd_kafka_error_t *error,
+                               const char *api_name,
+                               const char *expect_substr) {
+        TEST_ASSERT(error != NULL, "%s: expected error, got NULL", api_name);
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "%s: expected __STATE, got %s", api_name,
+                    rd_kafka_err2name(rd_kafka_error_code(error)));
+        TEST_ASSERT(strstr(rd_kafka_error_string(error), expect_substr) != NULL,
+                    "%s: expected error string to contain '%s', got '%s'",
+                    api_name, expect_substr, rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
+}
+
+/**
+ * @brief Invoke every share-consumer API and assert each returns a
+ *        closed/closing state error.
+ *
+ * @param consumer    Share consumer (already closed or closing).
+ * @param topic       Topic name (for subscribe/acknowledge_offset).
+ * @param expect_substr "closed" or "closing" (matched in error string).
+ */
+static void verify_all_apis_return_state_error(rd_kafka_share_t *consumer,
+                                               const char *topic,
+                                               const char *expect_substr) {
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        rd_kafka_message_t *batch[4];
+        size_t rcvd = 0;
+        rd_kafka_topic_partition_list_t *subs, *sub_result = NULL;
+        rd_kafka_topic_partition_list_t *commit_results = NULL;
+        rd_kafka_queue_t *queue                         = NULL;
+
+        /* 1. consume_batch */
+        error = rd_kafka_share_consume_batch(consumer, 100, batch, &rcvd);
+        assert_state_error(error, "consume_batch", expect_substr);
+
+        /* 2. commit_async */
+        error = rd_kafka_share_commit_async(consumer);
+        assert_state_error(error, "commit_async", expect_substr);
+
+        /* 3. commit_sync */
+        error = rd_kafka_share_commit_sync(consumer, 1000, &commit_results);
+        assert_state_error(error, "commit_sync", expect_substr);
+        TEST_ASSERT(commit_results == NULL,
+                    "commit_sync: expected no partitions on error");
+
+        /* 4. acknowledge_offset */
+        err = rd_kafka_share_acknowledge_offset(
+            consumer, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "acknowledge_offset: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+
+        /* 5. subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        err = rd_kafka_share_subscribe(consumer, subs);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "subscribe: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* 6. unsubscribe */
+        err = rd_kafka_share_unsubscribe(consumer);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "unsubscribe: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+
+        /* 7. subscription */
+        err = rd_kafka_share_subscription(consumer, &sub_result);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "subscription: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(sub_result == NULL, "subscription: expected NULL result");
+
+        /* 8. close */
+        error = rd_kafka_share_consumer_close(consumer);
+        assert_state_error(error, "close", expect_substr);
+
+        /* 9. async close */
+        queue = rd_kafka_queue_new(consumer->rkshare_rk);
+        error = rd_kafka_share_consumer_close_queue(consumer, queue);
+        rd_kafka_queue_destroy(queue);
+        assert_state_error(error, "close", expect_substr);
+}
+
+/**
+ * @brief Test: calling share-consumer APIs after close() completes.
+ *
+ * Verifies every guarded API returns RD_KAFKA_RESP_ERR__STATE with
+ * "closed" in the error string.
+ */
+static void test_api_calls_on_closed_consumer(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *producer;
+        rd_kafka_share_t *consumer;
+        const char *topic = "0178-api-after-close";
+        const char *group = "grp-0178-api-after-close";
+        char errstr[512];
+        rd_kafka_error_t *close_error;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "ShareGroupHeartbeat apiversion");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareFetch,
+                                                 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "ShareFetch apiversion");
+        TEST_ASSERT(
+            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareAcknowledge,
+                                         1, 1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+            "ShareAcknowledge apiversion");
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Create mock topic");
+
+        /* Producer */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        producer =
+            rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(producer, "producer: %s", errstr);
+        TEST_ASSERT(rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(topic),
+                                      RD_KAFKA_V_VALUE("msg", 3),
+                                      RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                      RD_KAFKA_V_END) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "produce");
+        rd_kafka_flush(producer, 5000);
+
+        /* Consumer */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "consumer: %s", errstr);
+
+        rd_kafka_topic_partition_list_t *subs =
+            rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs), "subscribe");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Close (blocking), then verify all APIs reject further calls. */
+        TEST_SAY("Calling close() and waiting for completion\n");
+        close_error = rd_kafka_share_consumer_close(consumer);
+        TEST_ASSERT(close_error == NULL, "initial close: %s",
+                    close_error ? rd_kafka_error_string(close_error) : "");
+        TEST_ASSERT(rd_kafka_share_consumer_closed(consumer),
+                    "consumer should report closed");
+
+        TEST_SAY("Exercising APIs on closed consumer\n");
+        verify_all_apis_return_state_error(consumer, topic, "closed");
+
+        rd_kafka_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test: once close_queue() returns successfully, all subsequent API
+ *        calls must be rejected with RD_KAFKA_RESP_ERR__STATE.
+ *
+ * A 5s RTT delay is injected on ShareAcknowledge so the consumer remains
+ * in the "closing" state (close_queue returns immediately, actual close
+ * completes later), giving us a deterministic window to exercise every
+ * guarded API.
+ */
+static void test_api_calls_during_closing(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *producer;
+        rd_kafka_share_t *consumer;
+        const char *topic = "0178-api-during-closing";
+        const char *group = "grp-0178-api-during-closing";
+        char errstr[512];
+        rd_kafka_queue_t *queue;
+        rd_kafka_error_t *close_error;
+        const int rtt_delay_ms = 5000;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(
+                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "ShareGroupHeartbeat apiversion");
+        TEST_ASSERT(rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareFetch,
+                                                 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "ShareFetch apiversion");
+        TEST_ASSERT(
+            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareAcknowledge,
+                                         1, 1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+            "ShareAcknowledge apiversion");
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Create mock topic");
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        producer =
+            rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(producer, "producer: %s", errstr);
+        TEST_ASSERT(rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(topic),
+                                      RD_KAFKA_V_VALUE("msg", 3),
+                                      RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                      RD_KAFKA_V_END) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "produce");
+        rd_kafka_flush(producer, 5000);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "debug", "all");
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "consumer: %s", errstr);
+
+        rd_kafka_topic_partition_list_t *subs =
+            rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs), "subscribe");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume one batch so there's state to flush on close. */
+        {
+                rd_kafka_message_t *batch[4];
+                size_t rcvd            = 0;
+                int attempts           = 0;
+                rd_kafka_error_t *cerr = NULL;
+                while (attempts++ < 20 && rcvd == 0) {
+                        cerr = rd_kafka_share_consume_batch(consumer, 500,
+                                                            batch, &rcvd);
+                        if (cerr)
+                                rd_kafka_error_destroy(cerr);
+                }
+                for (size_t i = 0; i < rcvd; i++)
+                        rd_kafka_message_destroy(batch[i]);
+        }
+
+        /* Inject 5s delay on ShareAcknowledge so close() stays in flight. */
+        TEST_SAY("Injecting %dms RTT delay on broker\n", rtt_delay_ms);
+        rd_kafka_mock_broker_set_rtt(mcluster, 1, rtt_delay_ms);
+
+        queue = rd_kafka_queue_new(consumer->rkshare_rk);
+
+        TEST_SAY("Calling close_queue() to initiate async close\n");
+        close_error = rd_kafka_share_consumer_close_queue(consumer, queue);
+        TEST_ASSERT(close_error == NULL, "close_queue: %s",
+                    close_error ? rd_kafka_error_string(close_error) : "");
+
+        /* close_queue has returned. Consumer must now be in closing state
+         * (not fully closed yet, since ShareAcknowledge response is still
+         * delayed). Every subsequent API call must be rejected. */
+        TEST_ASSERT(!rd_kafka_share_consumer_closed(consumer),
+                    "consumer should still be closing, not closed");
+
+        TEST_SAY("Exercising APIs on closing consumer\n");
+        verify_all_apis_return_state_error(consumer, topic, "closing");
+
+        /* Wait for async close to complete before destroying. */
+        TEST_SAY("Waiting for consumer to finish closing\n");
+        while (!rd_kafka_share_consumer_closed(consumer)) {
+                rd_usleep(500 * 1000, NULL); /* 500ms */
+        }
+
+        rd_kafka_queue_destroy(queue);
+        rd_kafka_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0178_share_consumer_close(int argc, char **argv) {
         /* Set overall timeout for all tests */
         test_timeout_set(600); /* 10 minutes */
+
+        /* Real broker tests */
         test_close_with_acknowledge();
         test_close_without_acknowledge();
+
+        return 0;
+}
+
+int main_0178_share_consumer_close_local(int argc, char **argv) {
+        /* Mock broker tests only (no real broker needed) */
+        TEST_SKIP_MOCK_CLUSTER(0);
+
         test_close_with_slow_broker_response();
         test_close_respects_socket_timeout();
         test_close_with_broker_error_response();
+        test_api_calls_on_closed_consumer();
+        test_api_calls_during_closing();
 
         return 0;
 }

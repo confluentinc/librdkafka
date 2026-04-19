@@ -1192,9 +1192,12 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         if (rk->rk_cgrp) {
                 rd_kafka_dbg(rk, GENERIC, "TERMINATE",
                              "Terminating consumer group handler");
-                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
-                        rd_kafka_share_consumer_close(rk->rk_rkshare);
-                else
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_kafka_error_t *error =
+                            rd_kafka_share_consumer_close(rk->rk_rkshare);
+                        if (error)
+                                rd_kafka_error_destroy(error);
+                } else
                         rd_kafka_consumer_close(rk);
         }
 
@@ -3813,7 +3816,6 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
             rkcg->rkcg_commit_sync_request.results;
 
         rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
-
         rkcg->rkcg_commit_sync_request.id                          = 0;
         rkcg->rkcg_commit_sync_request.results                     = NULL;
         rkcg->rkcg_commit_sync_request.replyq                      = NULL;
@@ -4255,9 +4257,14 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         rd_kafka_q_t *tmpq;
         rd_ts_t abs_timeout;
         rd_kafka_topic_partition_list_t *results;
+        rd_kafka_error_t *error;
         int i;
 
         *partitions = NULL;
+
+        if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
+                          rkshare)) != NULL))
+                return error;
 
         rd_kafka_dbg(rk, CGRP, "SHARE",
                      "Committing synchronously with timeout %d ms", timeout_ms);

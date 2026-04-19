@@ -1989,6 +1989,9 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
         }
 
+        if (rko_orig->rko_u.share_fetch.should_leave)
+                rd_kafka_broker_share_fetch_session_clear(rkb);
+
         /* Destroy ack_details — on success the acks have been sent,
          * on error they are unprocessable. */
         if (rko_orig->rko_u.share_fetch.ack_details) {
@@ -2770,11 +2773,8 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
             rkb, rkbuf, rd_kafka_broker_share_acknowledge_reply, rko_orig);
 }
 
-
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *tmp_rktp;
-
-        rkb->rkb_share_fetch_session.epoch = -1;
 
         /* Clear toppars in session */
         TAILQ_FOREACH_SAFE(rktp,
@@ -2842,13 +2842,14 @@ void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
                                        rd_kafka_op_t *rko_orig,
                                        rd_ts_t now) {
         rd_kafka_cgrp_t *rkcg = rkb->rkb_rk->rk_cgrp;
-        /* Use ShareAcknowledge with epoch=-1 to close the session,
-         * sending any final acknowledgements. */
+
+        /* Set epoch to -1 to signal session close before sending request.
+         * This ensures session_update_epoch() skips incrementing on reply. */
+        rkb->rkb_share_fetch_session.epoch = -1;
         rd_kafka_ShareAcknowledgeRequest(
             rkb, rkcg->rkcg_group_id, rkcg->rkcg_member_id,
             -1, /* epoch=-1 signals session close */
             rko_orig, now);
-        rd_kafka_broker_share_fetch_session_clear(rkb);
 }
 
 void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,

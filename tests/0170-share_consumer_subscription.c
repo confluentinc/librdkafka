@@ -54,17 +54,6 @@ static rd_kafka_t *common_producer;
 static rd_kafka_t *common_admin;
 
 /**
- * @brief Produce messages using the common producer.
- */
-static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
-        rd_kafka_topic_t *rkt;
-        rkt = test_create_producer_topic(common_producer, topic, NULL);
-        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
-                          0);
-        rd_kafka_topic_destroy(rkt);
-}
-
-/**
  * @brief Operation types for subscription tests
  */
 typedef enum {
@@ -204,14 +193,6 @@ typedef struct {
 #define TEST_OPS_END()                                                         \
         { .op = TEST_OP_END }
 
-
-/**
- * @brief Set group config to earliest offset
- */
-static void state_set_offset_earliest(sub_test_state_t *state) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_alter_group_configurations(state->group_name, cfg, 1);
-}
 
 /**
  * @brief Create a new topic with auto-generated name
@@ -379,7 +360,8 @@ static void exec_produce_to_topic(sub_test_state_t *state,
         TEST_SAY("  PRODUCE_TO_TOPIC: %d msgs to topic[%d] (%s)\n",
                  op->msgs_per_topic, op->topic_idx, state->all_topics[idx]);
 
-        produce_to_topic(state->all_topics[idx], 0, op->msgs_per_topic);
+        test_produce_msgs_simple(common_producer, state->all_topics[idx], 0,
+                                 op->msgs_per_topic);
         state->msgs_produced[idx] += op->msgs_per_topic;
 }
 
@@ -454,7 +436,8 @@ static void exec_produce(sub_test_state_t *state, const test_op_t *op) {
 
         for (i = 0; i < count; i++) {
                 int idx = start_idx + i;
-                produce_to_topic(state->all_topics[idx], 0, op->msgs_per_topic);
+                test_produce_msgs_simple(common_producer, state->all_topics[idx],
+                                         0, op->msgs_per_topic);
                 state->msgs_produced[idx] += op->msgs_per_topic;
         }
 }
@@ -600,7 +583,7 @@ static void state_init(sub_test_state_t *state,
         }
 
         /* Set group offset to earliest */
-        state_set_offset_earliest(state);
+        test_share_set_auto_offset_reset(state->group_name, "earliest");
 }
 
 /**
@@ -818,7 +801,6 @@ static void do_test_multi_consumer_overlap(void) {
         rd_kafka_share_t *rkshare0, *rkshare1;
         int c0_cnt = 0, c1_cnt = 0;
         int attempts;
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -833,16 +815,16 @@ static void do_test_multi_consumer_overlap(void) {
         test_create_topic_wait_exists(NULL, c1_only, 1, -1, 30000);
 
         /* Produce messages */
-        produce_to_topic(shared, 0, 20);
-        produce_to_topic(c0_only, 0, 10);
-        produce_to_topic(c1_only, 0, 10);
+        test_produce_msgs_simple(common_producer, shared, 0, 20);
+        test_produce_msgs_simple(common_producer, c0_only, 0, 10);
+        test_produce_msgs_simple(common_producer, c1_only, 0, 10);
 
         /* Create consumers */
         rkshare0 = test_create_share_consumer(group, NULL);
         rkshare1 = test_create_share_consumer(group, NULL);
 
         /* Set group offset */
-        test_alter_group_configurations(group, cfg, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
 
         /* Subscribe with overlapping topics */
         test_share_consumer_subscribe_multi(rkshare0, 2, shared, c0_only);
@@ -904,7 +886,6 @@ static void do_test_subscribe_15_topics(void) {
         int consumed = 0;
         int attempts;
         int t;
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -923,7 +904,8 @@ static void do_test_subscribe_15_topics(void) {
 
         /* Produce messages to each topic */
         for (t = 0; t < topic_cnt; t++) {
-                produce_to_topic(topics[t], 0, msgs_per_topic);
+                test_produce_msgs_simple(common_producer, topics[t], 0,
+                                         msgs_per_topic);
         }
         TEST_SAY("Produced %d messages to %d topics\n", total_expected,
                  topic_cnt);
@@ -932,7 +914,7 @@ static void do_test_subscribe_15_topics(void) {
         rkshare = test_create_share_consumer(group, NULL);
 
         /* Set group offset */
-        test_alter_group_configurations(group, cfg, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
 
         /* Subscribe to all topics */
         subs = rd_kafka_topic_partition_list_new(topic_cnt);

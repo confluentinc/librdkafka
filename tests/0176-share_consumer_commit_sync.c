@@ -871,8 +871,9 @@ static void do_test_multi_topic_partition(void) {
                                               MULTI_TP_PARTITIONS, -1,
                                               60 * 1000);
                 for (p = 0; p < MULTI_TP_PARTITIONS; p++)
-                        test_produce_msgs_simple(common_producer, topics[i], p,
-                                                 MULTI_TP_MSGS_PER_PARTITION);
+                        test_produce_msgs_simple(
+                            common_producer, topics[i], p,
+                            MULTI_TP_MSGS_PER_PARTITION);
         }
 
         rkshare = create_share_consumer(group, "explicit");

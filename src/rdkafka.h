@@ -3304,17 +3304,6 @@ void rd_kafka_destroy(rd_kafka_t *rk);
 RD_EXPORT
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags);
 
-
-/**
- * @brief Destroy the share consumer instance.
- *
- * @remark This is a blocking operation.
- *
- * @sa rd_kafka_share_consumer_close()
- */
-RD_EXPORT
-void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
-
 /**
  * @brief Enable SASL background callbacks for a share consumer.
  *
@@ -5102,6 +5091,25 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
 RD_EXPORT
 int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);
 
+
+/**
+ * @brief Destroy the share consumer instance and free all associated resources.
+ *
+ * @param rkshare Share consumer instance.
+ */
+RD_EXPORT
+void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Destroy the share consumer instance according to specified destroy
+ * flags.
+ *
+ * @param rkshare Share consumer instance.
+ *
+ * @param flags Destroy flags (see RD_KAFKA_DESTROY_F_* defines).
+ */
+RD_EXPORT
+void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags);
 
 /**@}*/
 

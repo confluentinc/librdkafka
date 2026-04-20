@@ -540,7 +540,8 @@ static void do_test_produce_consume_loop(void) {
                 int consumed = 0;
                 int attempts = 0;
 
-                test_produce_msgs_simple(common_producer, topic, 0, msgs_per_round);
+                test_produce_msgs_simple(common_producer, topic, 0,
+                                         msgs_per_round);
                 TEST_SAY("Round %d: produced %d messages\n", round,
                          msgs_per_round);
 
@@ -621,7 +622,8 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         subscribe_consumer(rkshare, &topic, 1);
 
         for (round = 0; round < rounds; round++) {
-                test_produce_msgs_simple(common_producer, topic, 0, msgs_per_round);
+                test_produce_msgs_simple(common_producer, topic, 0,
+                                         msgs_per_round);
                 int consumed     = 0;
                 int released_cnt = 0;
                 int redelivered  = 0;

@@ -714,7 +714,7 @@ static void test_ack_invalid_type(void) {
         const char *topic;
         size_t rcvd = 0;
         int attempts;
-TEST_SAY("\n");
+        TEST_SAY("\n");
         TEST_SAY("=== test_ack_invalid_type ===\n");
 
         rkshare = test_create_share_consumer(group, "explicit");
@@ -777,8 +777,8 @@ static void test_release_then_reject_no_redelivery(void) {
         size_t rcvd = 0;
         size_t m;
         int attempts;
-        int redelivered        = 0;
-TEST_SAY("\n");
+        int redelivered = 0;
+        TEST_SAY("\n");
         TEST_SAY("=== test_release_then_reject_no_redelivery ===\n");
 
         rkshare = test_create_share_consumer(group, "explicit");
@@ -882,7 +882,7 @@ static void test_max_delivery_attempts(void) {
         int delivery_attempt;
         int attempts;
         const int max_deliveries = 5;
-TEST_SAY("\n");
+        TEST_SAY("\n");
         TEST_SAY("=== test_max_delivery_attempts ===\n");
         TEST_SAY(
             "Testing that record is not redelivered after %d RELEASE "
@@ -892,7 +892,8 @@ TEST_SAY("\n");
         rkshare = test_create_share_consumer(group, "explicit");
         topic   = test_mk_topic_name("0172-max-delivery", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        test_produce_msgs_simple(common_producer, topic, 0, 1); /* Just 1 message */
+        test_produce_msgs_simple(common_producer, topic, 0,
+                                 1); /* Just 1 message */
 
         test_share_set_auto_offset_reset(group, "earliest");
 

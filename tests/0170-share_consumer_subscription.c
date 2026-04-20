@@ -436,8 +436,9 @@ static void exec_produce(sub_test_state_t *state, const test_op_t *op) {
 
         for (i = 0; i < count; i++) {
                 int idx = start_idx + i;
-                test_produce_msgs_simple(common_producer, state->all_topics[idx],
-                                         0, op->msgs_per_topic);
+                test_produce_msgs_simple(common_producer,
+                                         state->all_topics[idx], 0,
+                                         op->msgs_per_topic);
                 state->msgs_produced[idx] += op->msgs_per_topic;
         }
 }

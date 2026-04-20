@@ -605,7 +605,7 @@ static void test_empty_then_produce(void) {
         const char *topic;
         const char *group = "share-empty-then-produce";
         rd_kafka_topic_partition_list_t *subs;
-        int consumed           = 0, attempts;
+        int consumed = 0, attempts;
 
         TEST_SAY("\n");
         TEST_SAY("=== Empty topic then produce test ===\n");
@@ -678,7 +678,7 @@ static void test_sparse_partitions(void) {
         const char *topic;
         const char *group = "share-sparse-partitions";
         rd_kafka_topic_partition_list_t *subs;
-        int consumed           = 0, attempts;
+        int consumed                 = 0, attempts;
         const int msgs_per_partition = 100;
         const int expected = 3 * msgs_per_partition; /* partitions 0,2,4 */
 

@@ -1,0 +1,12 @@
+{
+    "name": "rdkafka-aws-sts",
+    "version-string": "1.0.0",
+    "dependencies": [
+        {
+            "name": "aws-sdk-cpp",
+            "version>=": "1.11.790",
+            "features": ["sts"]
+        }
+    ],
+    "builtin-baseline": "37dd44f23f51041f480440e99b45e5706f47765d"
+}

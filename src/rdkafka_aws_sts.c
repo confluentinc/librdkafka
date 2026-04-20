@@ -1,7 +1,7 @@
 /*
- * librdkafka - Apache Kafka C library
+ * librdkafka - The Apache Kafka C/C++ library
  *
- * Copyright (c) 2012-2022, Magnus Edenhill
+ * Copyright (c) 2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,33 +27,28 @@
  */
 
 /**
- * Hand-crafted config header file for Win32 builds.
+ * @brief AWS STS GetWebIdentityToken integration.
+ *
+ * This file gates compilation on WITH_AWS_STS and will house the
+ * SASL OAUTHBEARER token refresh callback wiring once the full
+ * integration is complete.
+ *
+ * The actual AWS SDK call lives in rdkafka_aws_sts_impl.cpp — the only
+ * .cpp file in src/ and the only file that includes AWS SDK headers.
+ * This pure C file exists so that the rest of the library can call
+ * into the AWS STS subsystem without touching any C++ constructs.
  */
-#ifndef _RD_WIN32_CONFIG_H_
-#define _RD_WIN32_CONFIG_H_
 
-#ifndef WITHOUT_WIN32_CONFIG
-#define WITH_SSL              1
-#define WITH_ZLIB             1
-#define WITH_SNAPPY           1
-#define WITH_ZSTD             1
-#define WITH_CURL             1
-#define WITH_OAUTHBEARER_OIDC 1
-#define WITH_AWS_STS          1
-/* zstd is linked dynamically on Windows, but the dynamic library provides
- * the experimental/advanced API, just as the static builds on *nix */
-#define WITH_ZSTD_STATIC      1
-#define WITH_SASL_SCRAM       1
-#define WITH_SASL_OAUTHBEARER 1
-#define ENABLE_DEVEL          0
-#define WITH_PLUGINS          1
-#define WITH_HDRHISTOGRAM     1
-#endif
-#define SOLIB_EXT ".dll"
+#include "rdkafka_int.h"
 
-/* Notice: Keep up to date */
-#define BUILT_WITH                                                             \
-        "SSL ZLIB SNAPPY ZSTD CURL SASL_SCRAM SASL_OAUTHBEARER PLUGINS "       \
-        "HDRHISTOGRAM AWS_STS"
+#if WITH_AWS_STS
 
-#endif /* _RD_WIN32_CONFIG_H_ */
+#include "rdkafka_aws_sts.h"
+
+/* Function pointer prevents the linker from stripping rdkafka_aws_sts_impl.cpp
+ * until the full SASL OAUTHBEARER wiring is complete. */
+rd_kafka_resp_err_t (*rd_kafka_aws_sts_get_web_identity_token_fp)(
+    const char *, char *, size_t, int64_t *, char *, size_t) =
+    rd_kafka_aws_sts_get_web_identity_token;
+
+#endif /* WITH_AWS_STS */

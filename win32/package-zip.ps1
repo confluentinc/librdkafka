@@ -41,6 +41,11 @@ Copy-Item "${srcdir}\librdkafka.dll","${srcdir}\librdkafkacpp.dll",
 "${srcdir}\libcrypto-3${platformpart}.dll","${srcdir}\libssl-3${platformpart}.dll",
 "${srcdir}\zlib1.dll","${srcdir}\zstd.dll","${srcdir}\libcurl.dll" -Destination $bindir
 
+# Ship the rdkafka-aws-sts shim DLL. AWS SDK is statically linked inside the
+# shim (built via the x{64,86}-windows-static vcpkg triplet), so there are no
+# aws-cpp-sdk-*.dll files to ship alongside it.
+Copy-Item "${srcdir}\rdkafka-aws-sts.dll" -Destination $bindir
+
 Copy-Item "${srcdir}\librdkafka.lib","${srcdir}\librdkafkacpp.lib" -Destination $libdir
 
 7z.exe a "artifacts\librdkafka.redist.zip" "build"

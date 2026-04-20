@@ -4,6 +4,8 @@ VisualStudioVersion = 16.0.31112.23
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librdkafka", "librdkafka.vcxproj", "{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "rdkafka-aws-sts", "rdkafka-aws-sts\rdkafka-aws-sts.vcxproj", "{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}"
+EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "librdkafkacpp", "librdkafkacpp\librdkafkacpp.vcxproj", "{E9641737-EE62-4EC8-88C8-792D2E3CE32D}"
 	ProjectSection(ProjectDependencies) = postProject
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54} = {4BEBB59C-477B-4F7A-8AE8-4228D0861E54}
@@ -82,6 +84,22 @@ Global
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}.Release|x64.ActiveCfg = Release|x64
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}.Release|x64.Build.0 = Release|x64
 		{4BEBB59C-477B-4F7A-8AE8-4228D0861E54}.Release|x86.ActiveCfg = Release|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|Any CPU.ActiveCfg = Debug|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|Mixed Platforms.Build.0 = Debug|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|Win32.ActiveCfg = Debug|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|Win32.Build.0 = Debug|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|x64.ActiveCfg = Debug|x64
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|x64.Build.0 = Debug|x64
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Debug|x86.ActiveCfg = Debug|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|Any CPU.ActiveCfg = Release|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|Mixed Platforms.ActiveCfg = Release|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|Mixed Platforms.Build.0 = Release|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|Win32.ActiveCfg = Release|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|Win32.Build.0 = Release|Win32
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|x64.ActiveCfg = Release|x64
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|x64.Build.0 = Release|x64
+		{7A2F1E9D-4B3C-4F8A-B2E6-9C8D1E4F7A3B}.Release|x86.ActiveCfg = Release|Win32
 		{E9641737-EE62-4EC8-88C8-792D2E3CE32D}.Debug|Any CPU.ActiveCfg = Debug|Win32
 		{E9641737-EE62-4EC8-88C8-792D2E3CE32D}.Debug|Mixed Platforms.ActiveCfg = Debug|Win32
 		{E9641737-EE62-4EC8-88C8-792D2E3CE32D}.Debug|Mixed Platforms.Build.0 = Debug|Win32

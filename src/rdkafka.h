@@ -5111,6 +5111,8 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 RD_EXPORT
 void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags);
 
+/**@}*/
+
 
 
 /**

@@ -3304,17 +3304,6 @@ void rd_kafka_destroy(rd_kafka_t *rk);
 RD_EXPORT
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags);
 
-
-/**
- * @brief Destroy the share consumer instance.
- *
- * @remark This is a blocking operation.
- *
- * @sa rd_kafka_share_consumer_close()
- */
-RD_EXPORT
-void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
-
 /**
  * @brief Enable SASL background callbacks for a share consumer.
  *
@@ -5053,18 +5042,19 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
 
 
 /**
- * @brief Close the share consumer.
+ * @brief Close the consumer.
  *
- * This call will block until the consumer has committed all the pending
- * acknowledgments and left the consumer group. The maximum blocking time is
- * roughly limited to socket.timeout.ms.
+ * This call will block until the consumer has revoked its assignment,
+ * calling the \c rebalance_cb if it is configured, committed offsets
+ * to broker, and left the consumer group (if applicable).
+ * The maximum blocking time is roughly limited to session.timeout.ms.
  *
- * @returns An error code indicating if the consumer close was successful
+ * @returns An error code indicating if the consumer close was succesful
  *          or not.
  *          RD_KAFKA_RESP_ERR__FATAL is returned if the consumer has raised
  *          a fatal error.
  *
- * @remark The application still needs to call rd_kafka_share_destroy() after
+ * @remark The application still needs to call rd_kafka_destroy() after
  *         this call finishes to clean up the underlying handle resources.
  *
  */
@@ -5072,19 +5062,21 @@ RD_EXPORT
 rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare);
 
 /**
- * @brief Asynchronously close the share consumer.
+ * @brief Asynchronously close the consumer.
  *
- * Performs the same actions as rd_kafka_share_consumer_close() but in a
+ * Performs the same actions as rd_kafka_consumer_close() but in a
  * background thread.
  *
- * Callbacks (etc) will be forwarded to the
+ * Rebalance events/callbacks (etc) will be forwarded to the
  * application-provided \p rkqu. The application must poll/serve this queue
- * until rd_kafka_share_consumer_closed() returns true.
+ * until rd_kafka_consumer_closed() returns true.
  *
+ * @remark Depending on consumer group join state there may or may not be
+ *         rebalance events emitted on \p rkqu.
  *
  * @returns an error object if the consumer close failed, else NULL.
  *
- * @sa rd_kafka_share_consumer_closed()
+ * @sa rd_kafka_consumer_closed()
  */
 RD_EXPORT
 rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
@@ -5094,16 +5086,33 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
 /**
  * @returns 1 if the consumer is closed, else 0.
  *
- * Should be used in conjunction with rd_kafka_share_consumer_close_queue() to
- * know when the consumer has been closed.
+ * Should be used in conjunction with rd_kafka_consumer_close_queue() to know
+ * when the consumer has been closed.
  *
- * @sa rd_kafka_consumer_share_close_queue()
+ * @sa rd_kafka_consumer_close_queue()
  */
 RD_EXPORT
 int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);
 
 
-/**@}*/
+/**
+ * @brief Destroy the share consumer instance and free all associated resources.
+ *
+ * @param rkshare Share consumer instance.
+ */
+RD_EXPORT
+void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Destroy the share consumer instance according to specified destroy
+ * flags.
+ *
+ * @param rkshare Share consumer instance.
+ *
+ * @param flags Destroy flags (see RD_KAFKA_DESTROY_F_* defines).
+ */
+RD_EXPORT
+void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags);
 
 
 

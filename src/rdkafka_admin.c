@@ -7618,10 +7618,8 @@ rd_kafka_ConsumerGroupListing_list_append_dedup(rd_list_t *dst,
                     rd_list_find(dst, grp,
                                 rd_kafka_ConsumerGroupListing_cmp_group_id))
                         continue;
-                if (!to_add) {
-                        to_add = rd_alloca(sizeof(*to_add));
-                        rd_list_init(to_add, rd_list_cnt(src), NULL);
-                }
+                if (!to_add)
+                        to_add = rd_list_new(rd_list_cnt(src), NULL);
                 rd_list_add(to_add, (void *)grp);
         }
 

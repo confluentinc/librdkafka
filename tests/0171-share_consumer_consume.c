@@ -43,17 +43,6 @@ static rd_kafka_t *common_producer;
 static rd_kafka_t *common_admin;
 
 /**
- * @brief Produce messages using the common producer.
- */
-static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
-        rd_kafka_topic_t *rkt;
-        rkt = test_create_producer_topic(common_producer, topic, NULL);
-        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
-                          0);
-        rd_kafka_topic_destroy(rkt);
-}
-
-/**
  * @brief Test configuration structure
  *
  * This structure defines all parameters for a share consumer test scenario.
@@ -131,8 +120,9 @@ static void setup_topics_and_produce(share_test_config_t *config,
 
                 /* Produce messages to each partition */
                 for (p = 0; p < config->partitions[t]; p++) {
-                        produce_to_topic(state->topic_names[t], p,
-                                         config->msgs_per_partition);
+                        test_produce_msgs_simple(common_producer,
+                                                 state->topic_names[t], p,
+                                                 config->msgs_per_partition);
                         state->total_expected += config->msgs_per_partition;
                 }
 
@@ -154,11 +144,10 @@ static void setup_topics_and_produce(share_test_config_t *config,
 static void subscribe_consumers(share_test_config_t *config,
                                 share_test_state_t *state) {
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int t, i;
 
         /* Set group config using a dedicated admin client */
-        test_alter_group_configurations(config->group_name, grp_conf, 1);
+        test_share_set_auto_offset_reset(config->group_name, "earliest");
 
         /* Build subscription list */
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
@@ -538,7 +527,6 @@ static void test_rapid_produce_consume_cycles(void) {
         const char *topic;
         const char *group = "share-rapid-cycles";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int round, total_consumed = 0;
         const int rounds         = 20;
         const int msgs_per_round = 500;
@@ -554,7 +542,7 @@ static void test_rapid_produce_consume_cycles(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure group */
-        test_alter_group_configurations(group, grp_conf, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -568,7 +556,8 @@ static void test_rapid_produce_consume_cycles(void) {
                 int attempts       = 100;
 
                 /* Produce */
-                produce_to_topic(topic, 0, msgs_per_round);
+                test_produce_msgs_simple(common_producer, topic, 0,
+                                         msgs_per_round);
 
                 /* Consume */
                 while (round_consumed < msgs_per_round && attempts-- > 0) {
@@ -616,7 +605,6 @@ static void test_empty_then_produce(void) {
         const char *topic;
         const char *group = "share-empty-then-produce";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int consumed           = 0, attempts;
 
         TEST_SAY("\n");
@@ -628,7 +616,7 @@ static void test_empty_then_produce(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_alter_group_configurations(group, grp_conf, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
@@ -649,7 +637,7 @@ static void test_empty_then_produce(void) {
 
         /* Now produce messages */
         TEST_SAY("Producing 100 messages...\n");
-        produce_to_topic(topic, 0, 100);
+        test_produce_msgs_simple(common_producer, topic, 0, 100);
 
         /* Consume - should get messages now */
         attempts = 100;
@@ -690,7 +678,6 @@ static void test_sparse_partitions(void) {
         const char *topic;
         const char *group = "share-sparse-partitions";
         rd_kafka_topic_partition_list_t *subs;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int consumed           = 0, attempts;
         const int msgs_per_partition = 100;
         const int expected = 3 * msgs_per_partition; /* partitions 0,2,4 */
@@ -706,16 +693,16 @@ static void test_sparse_partitions(void) {
         test_create_topic_wait_exists(NULL, topic, 5, -1, 60 * 1000);
 
         /* Configure and subscribe */
-        test_alter_group_configurations(group, grp_conf, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
         /* Produce only to partitions 0, 2, 4 (skip 1, 3) */
-        produce_to_topic(topic, 0, msgs_per_partition);
-        produce_to_topic(topic, 2, msgs_per_partition);
-        produce_to_topic(topic, 4, msgs_per_partition);
+        test_produce_msgs_simple(common_producer, topic, 0, msgs_per_partition);
+        test_produce_msgs_simple(common_producer, topic, 2, msgs_per_partition);
+        test_produce_msgs_simple(common_producer, topic, 4, msgs_per_partition);
 
         TEST_SAY("Produced %d messages to partitions 0, 2, 4\n", expected);
 

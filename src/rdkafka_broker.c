@@ -3234,10 +3234,9 @@ static void rd_kafka_broker_share_session_toppar_add(rd_kafka_broker_t *rkb,
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                                    "Not adding %.*s [%" PRId32
                                    "] to share fetch session "
-                                   "as session epoch is %" PRId32,
+                                   "as share session is closed",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition,
-                                   rkb->rkb_share_fetch_session.epoch);
+                                   rktp->rktp_partition);
 
                         return;
                 }
@@ -3627,27 +3626,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_op_reply(rko,
                                           RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
                 } else if (rko->rko_u.share_fetch.should_leave) {
-                        if (rkb->rkb_share_fetch_session.epoch > 0) {
-                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                             "Processing SHARE_FETCH op: "
-                                             "should_leave is true");
-                                /* Session vars will be cleared in callback */
-                                rd_kafka_broker_share_fetch_leave(rkb, rko,
+                        rd_kafka_broker_share_fetch_session_leave(rkb, rko,
                                                                   rd_clock());
-                        } else {
-                                rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                             "Ignoring SHARE_FETCH op with "
-                                             "should_leave = 1: "
-                                             "no active session");
-
-                                /* Required as it is possible that we were about
-                                 * to establish a session */
-                                rd_kafka_broker_share_fetch_session_clear(rkb);
-                                rd_kafka_op_reply(
-                                    rko,
-                                    RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
-                        }
-
                         rko = NULL; /* the rko is reused for the reply */
                         break;
                 } else {

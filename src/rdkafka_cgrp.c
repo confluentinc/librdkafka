@@ -3912,14 +3912,14 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_cgrp_group_assignment_set(rkcg, NULL);
 
-        rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
+        rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
         rd_kafka_assert(NULL, !rkcg->rkcg_group_assignment);
+        rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
+        rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
         rd_kafka_assert(
             NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
         rd_kafka_assert(
             NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
-        rd_kafka_assert(NULL, !rd_kafka_assignment_in_progress(rkcg->rkcg_rk));
-        rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1 /*lock*/);

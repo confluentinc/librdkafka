@@ -122,7 +122,7 @@ typedef struct {
         /* Topics: all created topics */
         char *all_topics[MAX_TOPICS];
         int all_topic_cnt;
-        int msgs_produced[MAX_TOPICS];       /**< Messages produced per topic */
+        int msgs_produced[MAX_TOPICS]; /**< Messages produced per topic */
 
         /* Current subscription tracking per consumer */
         int sub_start_idx[MAX_CONSUMERS]; /**< Start index in all_topics */

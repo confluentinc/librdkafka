@@ -7608,14 +7608,13 @@ rd_kafka_ConsumerGroupListing_list_append_dedup(rd_list_t *dst,
                 return;
 
         /* Ensure dst is sorted for bsearch lookups. */
-        if (rd_list_cnt(dst) && !(dst->rl_flags & RD_LIST_F_SORTED))
+        if (!(dst->rl_flags & RD_LIST_F_SORTED))
                 rd_list_sort(dst, rd_kafka_ConsumerGroupListing_cmp_group_id);
 
         /* Collect pointers to src groups not already in dst.
          * dst is not modified here so the sorted flag stays valid. */
         RD_LIST_FOREACH(grp, src, j) {
-                if (rd_list_cnt(dst) &&
-                    rd_list_find(dst, grp,
+                if (rd_list_find(dst, grp,
                                  rd_kafka_ConsumerGroupListing_cmp_group_id))
                         continue;
                 if (!to_add)

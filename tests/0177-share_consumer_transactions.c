@@ -320,8 +320,11 @@ static void do_test_committed_transaction(const char *isolation_level) {
             isolation_level, consumed);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -407,8 +410,11 @@ static void do_test_aborted_transaction(const char *isolation_level) {
             isolation_level, consumed, expected_msgs);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_2]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_2]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_2]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -508,8 +514,11 @@ static void do_test_mixed_transactions(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_3]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_3]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_3]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -593,8 +602,11 @@ static void do_test_control_records_filtered(const char *isolation_level) {
                                    control_record_offsets, 2, isolation_level);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_4]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_4]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_4]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -683,8 +695,11 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_5]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_5]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_5]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -768,8 +783,11 @@ static void do_test_interleaved_producers(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_6]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_6]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_6]: Share consumer destroyed\n");
         rd_kafka_destroy(producer1);
         rd_kafka_destroy(producer2);
 
@@ -857,8 +875,11 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_7]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_7]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_7]: Share consumer destroyed\n");
         rd_kafka_destroy(txn_producer);
 
         SUB_TEST_PASS();
@@ -963,8 +984,11 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
             "READ_COMMITTED works correctly\n");
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_8]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_8]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_8]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -1075,8 +1099,11 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
             isolation_level, consumed, committed_txns, aborted_txns);
 
         /* Cleanup */
+        TEST_SAY("[unknown/consumer_9]: Closing share consumer\n");
         rd_kafka_share_consumer_close(consumer);
+        TEST_SAY("[unknown/consumer_9]: Destroying share consumer\n");
         rd_kafka_share_destroy(consumer);
+        TEST_SAY("[unknown/consumer_9]: Share consumer destroyed\n");
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();

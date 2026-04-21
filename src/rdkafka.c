@@ -5719,6 +5719,14 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                                             rko->rko_u.offset_commit.opaque);
                 break;
 
+        case RD_KAFKA_OP_SHARE_ACK_REPLY:
+                if (!rko->rko_u.share_ack_reply.cb)
+                        return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
+                rko->rko_u.share_ack_reply.cb(
+                    rk->rk_rkshare, rko->rko_u.share_ack_reply.partitions,
+                    rko->rko_err, rko->rko_u.share_ack_reply.opaque);
+                break;
+
         case RD_KAFKA_OP_FETCH_STOP | RD_KAFKA_OP_REPLY:
                 /* Reply from toppar FETCH_STOP */
                 rd_kafka_assignment_partition_stopped(rk, rko->rko_rktp);

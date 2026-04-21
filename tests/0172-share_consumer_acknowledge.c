@@ -553,8 +553,20 @@ static void cleanup_test(ack_test_config_t *config, ack_test_state_t *state) {
 
         for (i = 0; i < config->consumer_cnt; i++) {
                 if (state->consumers[i]) {
+                        TEST_SAY(
+                            "[cleanup_test/consumer%d]: Closing share "
+                            "consumer\n",
+                            i);
                         rd_kafka_share_consumer_close(state->consumers[i]);
+                        TEST_SAY(
+                            "[cleanup_test/consumer%d]: Destroying share "
+                            "consumer\n",
+                            i);
                         rd_kafka_share_destroy(state->consumers[i]);
+                        TEST_SAY(
+                            "[cleanup_test/consumer%d]: Share consumer "
+                            "destroyed\n",
+                            i);
                         state->consumers[i] = NULL;
                 }
         }
@@ -684,8 +696,11 @@ static void test_ack_null_message(void) {
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
+        TEST_SAY("[ack_null_message/rkshare]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[ack_null_message/rkshare]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[ack_null_message/rkshare]: Share consumer destroyed\n");
 
         TEST_SAY("=== test_ack_null_message: PASSED ===\n");
 }
@@ -777,8 +792,11 @@ static void test_ack_invalid_type(void) {
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         rd_kafka_message_destroy(batch[0]);
 
+        TEST_SAY("[ack_invalid_type/rkshare]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[ack_invalid_type/rkshare]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[ack_invalid_type/rkshare]: Share consumer destroyed\n");
 
         TEST_SAY("=== test_ack_invalid_type: PASSED ===\n");
 }
@@ -876,8 +894,17 @@ static void test_release_then_reject_no_redelivery(void) {
                     "Expected 0 redelivered (REJECT overrides RELEASE), got %d",
                     redelivered);
 
+        TEST_SAY(
+            "[release_then_reject_no_redelivery/rkshare]: Closing share "
+            "consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY(
+            "[release_then_reject_no_redelivery/rkshare]: Destroying share "
+            "consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY(
+            "[release_then_reject_no_redelivery/rkshare]: Share consumer "
+            "destroyed\n");
 
         TEST_SAY("=== test_release_then_reject_no_redelivery: PASSED ===\n");
 }
@@ -991,8 +1018,12 @@ static void test_max_delivery_attempts(void) {
         TEST_SAY("SUCCESS: Message not redelivered after %d RELEASE attempts\n",
                  max_deliveries);
 
+        TEST_SAY("[max_delivery_attempts/rkshare]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY(
+            "[max_delivery_attempts/rkshare]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[max_delivery_attempts/rkshare]: Share consumer destroyed\n");
 
         TEST_SAY("=== test_max_delivery_attempts: PASSED ===\n");
 }

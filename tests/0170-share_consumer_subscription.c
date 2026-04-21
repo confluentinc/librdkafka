@@ -618,8 +618,20 @@ static void state_cleanup(sub_test_state_t *state) {
         /* Destroy all consumers */
         for (i = 0; i < MAX_CONSUMERS; i++) {
                 if (state->consumers[i]) {
+                        TEST_SAY(
+                            "[state_cleanup/consumer%d]: Closing share "
+                            "consumer\n",
+                            i);
                         rd_kafka_share_consumer_close(state->consumers[i]);
+                        TEST_SAY(
+                            "[state_cleanup/consumer%d]: Destroying share "
+                            "consumer\n",
+                            i);
                         rd_kafka_share_destroy(state->consumers[i]);
+                        TEST_SAY(
+                            "[state_cleanup/consumer%d]: Share consumer "
+                            "destroyed\n",
+                            i);
                 }
         }
 }
@@ -871,10 +883,20 @@ static void do_test_multi_consumer_overlap(void) {
         TEST_ASSERT(c0_cnt > 0 || c1_cnt > 0, "no messages received");
 
         /* Cleanup */
+        TEST_SAY("[multi_consumer_overlap/rkshare0]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare0);
+        TEST_SAY("[multi_consumer_overlap/rkshare1]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare1);
+        TEST_SAY(
+            "[multi_consumer_overlap/rkshare0]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare0);
+        TEST_SAY(
+            "[multi_consumer_overlap/rkshare0]: Share consumer destroyed\n");
+        TEST_SAY(
+            "[multi_consumer_overlap/rkshare1]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare1);
+        TEST_SAY(
+            "[multi_consumer_overlap/rkshare1]: Share consumer destroyed\n");
 
         rd_free(shared);
         rd_free(c0_only);
@@ -973,8 +995,11 @@ static void do_test_subscribe_15_topics(void) {
                     consumed);
 
         /* Cleanup */
+        TEST_SAY("[subscribe_15_topics/rkshare]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[subscribe_15_topics/rkshare]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[subscribe_15_topics/rkshare]: Share consumer destroyed\n");
 
         for (t = 0; t < topic_cnt; t++) {
                 rd_free(topics[t]);

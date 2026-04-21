@@ -62,15 +62,6 @@ static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
 }
 
 
-/**
- * @brief Set share.auto.offset.reset=earliest for a share group.
- */
-static void set_group_offset_earliest(const char *group_name) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-
-        test_IncrementalAlterConfigs_simple(
-            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
-}
 
 /**
  * @brief Set share.record.lock.duration.ms for a share group.
@@ -147,8 +138,9 @@ static void do_test_implicit_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = test_create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "implicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -181,8 +173,11 @@ static void do_test_implicit_second_consumer(void) {
 
         rd_sleep(3);
 
+        TEST_SAY("[unknown/rkshare]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare]: Share consumer destroyed\n");
 
         /* Produce 5 verification records */
         produce_to_topic(topic, 0, 5);
@@ -220,8 +215,15 @@ static void do_test_implicit_second_consumer(void) {
 
         rd_free(c1_offsets);
 
+        TEST_SAY(
+            "[implicit_second_consumer/consumer2]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY(
+            "[implicit_second_consumer/consumer2]: Destroying share "
+            "consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY(
+            "[implicit_second_consumer/consumer2]: Share consumer destroyed\n");
 }
 
 
@@ -248,8 +250,9 @@ static void do_test_explicit_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = test_create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "explicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -285,8 +288,11 @@ static void do_test_explicit_second_consumer(void) {
 
         rd_sleep(3);
 
+        TEST_SAY("[unknown/rkshare_3]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_3]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_3]: Share consumer destroyed\n");
 
         /* Produce 5 verification records */
         produce_to_topic(topic, 0, 5);
@@ -324,8 +330,11 @@ static void do_test_explicit_second_consumer(void) {
 
         rd_free(c1_offsets);
 
+        TEST_SAY("[unknown/rkshare_4]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_4]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_4]: Share consumer destroyed\n");
 }
 
 
@@ -355,8 +364,9 @@ static void do_test_mixed_acks_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = test_create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "explicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
 
         released_offsets = rd_calloc(MAX_MSGS, sizeof(*released_offsets));
@@ -440,8 +450,11 @@ static void do_test_mixed_acks_second_consumer(void) {
 
         rd_free(released_offsets);
 
+        TEST_SAY("[unknown/rkshare_5]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_5]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_5]: Share consumer destroyed\n");
 }
 
 
@@ -474,8 +487,9 @@ static void do_test_multi_topic_partition(void) {
                                               60 * 1000);
         }
 
-        rkshare = test_create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "implicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, topics, topic_cnt);
 
         for (round = 0; round < rounds; round++) {
@@ -522,8 +536,11 @@ static void do_test_multi_topic_partition(void) {
         TEST_SAY("Total consumed across %d rounds: %d\n", rounds,
                  total_consumed);
 
+        TEST_SAY("[unknown/rkshare_6]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_6]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_6]: Share consumer destroyed\n");
 
         for (t = 0; t < topic_cnt; t++)
                 rd_free((void *)topics[t]);
@@ -551,8 +568,9 @@ static void do_test_produce_consume_loop(void) {
         topic = test_mk_topic_name("0173-ca-loop", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = test_create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "implicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
 
         for (round = 0; round < rounds; round++) {
@@ -606,8 +624,11 @@ static void do_test_produce_consume_loop(void) {
         TEST_SAY("Total consumed across %d rounds: %d\n", rounds,
                  total_consumed);
 
+        TEST_SAY("[unknown/rkshare_7]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_7]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_7]: Share consumer destroyed\n");
 }
 
 
@@ -635,8 +656,9 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         topic = test_mk_topic_name("0173-ca-mr-2nd", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = test_create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "explicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
 
         for (round = 0; round < rounds; round++) {
@@ -720,8 +742,11 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         TEST_SAY("Total: consumed %d, released %d, redelivered %d\n",
                  total_consumed, total_released, total_redelivered);
 
+        TEST_SAY("[unknown/rkshare_8]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_8]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_8]: Share consumer destroyed\n");
 }
 
 
@@ -741,8 +766,11 @@ static void do_test_no_pending_acks(void) {
         TEST_ASSERT(!error, "Expected NULL when no pending acks, got error: %s",
                     error ? rd_kafka_error_string(error) : "");
 
+        TEST_SAY("[no_pending_acks/rkshare]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[no_pending_acks/rkshare]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[no_pending_acks/rkshare]: Share consumer destroyed\n");
 }
 
 
@@ -766,8 +794,9 @@ static void do_test_multiple_commit_async_calls(void) {
         topic = test_mk_topic_name("0173-ca-multi-call", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = test_create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "implicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
 
         produce_to_topic(topic, 0, first_produce);
@@ -832,8 +861,11 @@ static void do_test_multiple_commit_async_calls(void) {
                     "Expected %d (second produce), got %d", second_produce,
                     consumed2);
 
+        TEST_SAY("[unknown/rkshare_9]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_9]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_9]: Share consumer destroyed\n");
 }
 
 
@@ -859,8 +891,9 @@ static void do_test_commit_between_produces(void) {
         topic = test_mk_topic_name("0173-ca-between", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        rkshare = test_create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "implicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -944,8 +977,11 @@ static void do_test_commit_between_produces(void) {
 
         rd_sleep(3);
 
+        TEST_SAY("[unknown/rkshare_10]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_10]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_10]: Share consumer destroyed\n");
 
         /* Produce 5 verification records */
         produce_to_topic(topic, 0, 5);
@@ -981,8 +1017,11 @@ static void do_test_commit_between_produces(void) {
         TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
                     received);
 
+        TEST_SAY("[unknown/rkshare_11]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_11]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_11]: Share consumer destroyed\n");
 }
 
 
@@ -1006,8 +1045,9 @@ static void do_test_all_release_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = test_create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "explicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume all records: RELEASE new records, ACCEPT redeliveries.
@@ -1055,8 +1095,11 @@ static void do_test_all_release_second_consumer(void) {
         TEST_ASSERT(redelivered == consumed, "Expected %d redelivered, got %d",
                     consumed, redelivered);
 
+        TEST_SAY("[unknown/rkshare_12]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_12]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_12]: Share consumer destroyed\n");
 }
 
 
@@ -1082,8 +1125,9 @@ static void do_test_all_reject_second_consumer(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = test_create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "explicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1126,8 +1170,11 @@ static void do_test_all_reject_second_consumer(void) {
 
         rd_sleep(3);
 
+        TEST_SAY("[unknown/rkshare_13]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_13]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_13]: Share consumer destroyed\n");
 
         /* Produce 5 verification records */
         produce_to_topic(topic, 0, 5);
@@ -1162,8 +1209,11 @@ static void do_test_all_reject_second_consumer(void) {
         TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
                     received);
 
+        TEST_SAY("[unknown/rkshare_14]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_14]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_14]: Share consumer destroyed\n");
 }
 
 
@@ -1189,8 +1239,9 @@ static void do_test_per_record_commit_async(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, MAX_MSGS);
 
-        rkshare = test_create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "explicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1238,8 +1289,11 @@ static void do_test_per_record_commit_async(void) {
         /* Wait for async commits to propagate */
         rd_sleep(3);
 
+        TEST_SAY("[unknown/rkshare_15]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_15]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_15]: Share consumer destroyed\n");
 
         /* Produce 5 verification records */
         produce_to_topic(topic, 0, 5);
@@ -1274,8 +1328,11 @@ static void do_test_per_record_commit_async(void) {
         TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
                     received);
 
+        TEST_SAY("[unknown/rkshare_16]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_16]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_16]: Share consumer destroyed\n");
 }
 
 
@@ -1484,8 +1541,11 @@ static void do_test_mock_inflight_caching(void) {
                     share_fetch_cnt, share_ack_cnt,
                     share_fetch_cnt + share_ack_cnt, commit_cnt);
 
+        TEST_SAY("[unknown/rkshare_17]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_17]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_17]: Share consumer destroyed\n");
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -1525,8 +1585,9 @@ static void do_test_lock_timeout_redelivery(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         produce_to_topic(topic, 0, msg_cnt);
 
-        rkshare = test_create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        rkshare                = test_create_share_consumer(group, "implicit");
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -1598,8 +1659,410 @@ static void do_test_lock_timeout_redelivery(void) {
                  msg_cnt);
         TEST_ASSERT(consumed2 > 0, "Expected redelivered records, got 0");
 
+        TEST_SAY("[unknown/rkshare_18]: Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_18]: Destroying share consumer\n");
         rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_18]: Share consumer destroyed\n");
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Acknowledgement callback helpers.
+ * =================================================================== */
+
+#define MAX_CB_OFFSETS 500
+
+typedef struct ack_cb_state_s {
+        int callback_cnt;
+        int total_offsets;
+        rd_kafka_resp_err_t last_err;
+        mtx_t lock;
+        cnd_t cond;
+} ack_cb_state_t;
+
+static void ack_cb_state_init(ack_cb_state_t *state) {
+        memset(state, 0, sizeof(*state));
+        mtx_init(&state->lock, mtx_plain);
+        cnd_init(&state->cond);
+}
+
+static void ack_cb_state_destroy(ack_cb_state_t *state) {
+        mtx_destroy(&state->lock);
+        cnd_destroy(&state->cond);
+}
+
+static void share_ack_cb(rd_kafka_share_t *rkshare,
+                         rd_kafka_share_partition_offsets_list_t *partitions,
+                         rd_kafka_resp_err_t err,
+                         void *opaque) {
+        ack_cb_state_t *state = (ack_cb_state_t *)opaque;
+        const rd_kafka_share_partition_offsets_t *entry;
+
+        (void)rkshare;
+
+        mtx_lock(&state->lock);
+        state->callback_cnt++;
+        state->last_err = err;
+
+        entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
+        if (entry)
+                state->total_offsets +=
+                    rd_kafka_share_partition_offsets_offsets_cnt(entry);
+
+        cnd_signal(&state->cond);
+        mtx_unlock(&state->lock);
+}
+
+static rd_kafka_share_t *create_share_consumer_with_cb(const char *group_id,
+                                                       const char *ack_mode,
+                                                       ack_cb_state_t *state) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
+                          sizeof(errstr));
+        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, share_ack_cb);
+        rd_kafka_conf_set_opaque(conf, state);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+        return rkshare;
+}
+
+static rd_bool_t wait_for_cb_with_poll(ack_cb_state_t *state,
+                                       rd_kafka_share_t *rkshare,
+                                       int min_callbacks,
+                                       int timeout_ms) {
+        rd_bool_t success = rd_false;
+        int elapsed       = 0;
+        int poll_interval = 100;
+        rd_kafka_message_t *rkmessages[100];
+        size_t rcvd;
+
+        while (elapsed < timeout_ms) {
+                rd_kafka_error_t *error = rd_kafka_share_consume_batch(
+                    rkshare, poll_interval, rkmessages, &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+
+                for (size_t i = 0; i < rcvd; i++)
+                        rd_kafka_message_destroy(rkmessages[i]);
+
+                mtx_lock(&state->lock);
+                if (state->callback_cnt >= min_callbacks) {
+                        success = rd_true;
+                        mtx_unlock(&state->lock);
+                        break;
+                }
+                mtx_unlock(&state->lock);
+                elapsed += poll_interval;
+        }
+        return success;
+}
+
+
+/* ===================================================================
+ *  Test: commit_async callback invocation.
+ *
+ *  Verifies that share_acknowledgement_commit_cb is invoked after
+ *  commit_async when acks are piggybacked on ShareFetch.
+ * =================================================================== */
+static void do_test_commit_async_callback(void) {
+        const char *topic;
+        const char *group = "commit-async-callback";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        ack_cb_state_t state;
+
+        SUB_TEST();
+
+        ack_cb_state_init(&state);
+
+        topic = test_mk_topic_name("0173-ca-callback", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 50);
+
+        rkshare = create_share_consumer_with_cb(group, "implicit", &state);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume some messages */
+        while (consumed < 20 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        /* Call commit_async to trigger callback */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Wait for callback */
+        wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback count=%d, total_offsets=%d, last_err=%s\n",
+                 state.callback_cnt, state.total_offsets,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+        TEST_ASSERT(state.total_offsets > 0,
+                    "Expected offsets in callback, got %d",
+                    state.total_offsets);
+
+        TEST_SAY("[unknown/rkshare_19]: Closing share consumer\n");
+        rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_19]: Destroying share consumer\n");
+        rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_19]: Share consumer destroyed\n");
+        ack_cb_state_destroy(&state);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Negative Test: Acknowledge after commit_async.
+ *
+ *  After commit_async completes and acks are sent, the acknowledged
+ *  messages are removed from inflight_acks map. Trying to acknowledge
+ *  the same message again should return _STATE error.
+ * =================================================================== */
+static void do_test_ack_after_commit_async(void) {
+        const char *topic;
+        const char *group = "commit-async-ack-after-commit";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        rd_kafka_resp_err_t ack_err;
+        ack_cb_state_t state;
+        /* Store message info for re-ack attempt after commit */
+        const char *saved_topic = NULL;
+        int32_t saved_partition = -1;
+        int64_t saved_offset    = -1;
+
+        SUB_TEST();
+
+        ack_cb_state_init(&state);
+
+        topic = test_mk_topic_name("0173-ca-ack-after-commit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 10);
+
+        rkshare = create_share_consumer_with_cb(group, "explicit", &state);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume messages, acknowledge all, save first message info */
+        while (consumed < 5 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                /* Save first message info for later */
+                                if (saved_offset < 0) {
+                                        saved_topic = topic;
+                                        saved_partition =
+                                            rkmessages[j]->partition;
+                                        saved_offset = rkmessages[j]->offset;
+                                        TEST_SAY("Saved msg info: %s [%" PRId32
+                                                 "] @ %" PRId64 "\n",
+                                                 saved_topic, saved_partition,
+                                                 saved_offset);
+                                }
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Consumed and acknowledged %d messages\n", consumed);
+        TEST_ASSERT(consumed >= 5, "Expected at least 5, got %d", consumed);
+        TEST_ASSERT(saved_offset >= 0, "Expected to save at least 1 message");
+
+        /* commit_async triggers sending acknowledgements */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        TEST_SAY("commit_async succeeded\n");
+
+        /* Wait for callback to confirm acks were sent */
+        wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback: count=%d, last_err=%s\n", state.callback_cnt,
+                 rd_kafka_err2name(state.last_err));
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+
+        /* Now try to acknowledge the same message again using the
+         * offset-based API. This should fail with _STATE because the
+         * message is no longer in inflight_acks. */
+        ack_err = rd_kafka_share_acknowledge_offset(
+            rkshare, saved_topic, saved_partition, saved_offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+
+        TEST_SAY("Ack after commit returned: %s\n", rd_kafka_err2str(ack_err));
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE error when acknowledging after commit, "
+                    "got %s",
+                    rd_kafka_err2str(ack_err));
+
+        TEST_SAY("[unknown/rkshare_20]: Closing share consumer\n");
+        rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_20]: Destroying share consumer\n");
+        rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_20]: Share consumer destroyed\n");
+        ack_cb_state_destroy(&state);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Test: Change ack type before commit_async.
+ *
+ *  Before commit_async is called, user can change their acknowledgement
+ *  decision (e.g., RELEASE then ACCEPT). This should work and the
+ *  final ack type should be committed.
+ * =================================================================== */
+static void do_test_change_ack_type_before_commit_async(void) {
+        const char *topic;
+        const char *group = "commit-async-change-ack-type";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_message_t *test_msg = NULL;
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        rd_kafka_resp_err_t release_err, accept_err;
+        ack_cb_state_t state;
+
+        SUB_TEST();
+
+        ack_cb_state_init(&state);
+
+        topic = test_mk_topic_name("0173-ca-change-ack-type", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        produce_to_topic(topic, 0, 10);
+
+        rkshare = create_share_consumer_with_cb(group, "explicit", &state);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume one message and keep handle */
+        while (test_msg == NULL && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err && test_msg == NULL) {
+                                test_msg = rkmessages[j];
+                                consumed++;
+                        } else {
+                                if (!rkmessages[j]->err) {
+                                        rd_kafka_share_acknowledge(
+                                            rkshare, rkmessages[j]);
+                                        consumed++;
+                                }
+                                rd_kafka_message_destroy(rkmessages[j]);
+                        }
+                }
+        }
+
+        TEST_ASSERT(test_msg != NULL, "Expected to consume at least 1 message");
+        TEST_SAY("Consumed %d messages, kept one for ack type change test\n",
+                 consumed);
+
+        /* First: RELEASE the message (user initially decides to release) */
+        release_err = rd_kafka_share_acknowledge_type(
+            rkshare, test_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        TEST_SAY("RELEASE returned: %s\n", rd_kafka_err2str(release_err));
+        TEST_ASSERT(release_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected RELEASE to succeed, got %s",
+                    rd_kafka_err2str(release_err));
+
+        /* Second: Change mind and ACCEPT the same message before commit */
+        accept_err = rd_kafka_share_acknowledge_type(
+            rkshare, test_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_SAY("ACCEPT (changing from RELEASE) returned: %s\n",
+                 rd_kafka_err2str(accept_err));
+        TEST_ASSERT(accept_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected ACCEPT to succeed (changing ack type before "
+                    "commit is allowed), got %s",
+                    rd_kafka_err2str(accept_err));
+
+        rd_kafka_message_destroy(test_msg);
+
+        /* Commit async - should succeed with ACCEPT as final ack type */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        TEST_SAY("commit_async succeeded\n");
+
+        /* Wait for callback */
+        wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback: count=%d, last_err=%s\n", state.callback_cnt,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR in callback, got %s",
+                    rd_kafka_err2name(state.last_err));
+
+        TEST_SAY("[unknown/rkshare_21]: Closing share consumer\n");
+        rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("[unknown/rkshare_21]: Destroying share consumer\n");
+        rd_kafka_share_destroy(rkshare);
+        TEST_SAY("[unknown/rkshare_21]: Share consumer destroyed\n");
+        ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }
@@ -1623,6 +2086,12 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_all_reject_second_consumer();
         do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
+        /* Callback test */
+        do_test_commit_async_callback();
+
+        /* Negative tests - explicit acknowledgement edge cases */
+        do_test_ack_after_commit_async();
+        do_test_change_ack_type_before_commit_async();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

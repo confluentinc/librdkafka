@@ -1033,7 +1033,7 @@ int test_consumer_group_protocol_classic();
 rd_kafka_share_t *test_create_share_consumer(const char *group_id,
                                              const char *ack_mode);
 
-#define TEST_SHARE_BATCH_SIZE 500
+#define TEST_SHARE_BATCH_SIZE 10001
 
 int test_share_consume_batch(rd_kafka_share_t *rk,
                              int timeout_ms,

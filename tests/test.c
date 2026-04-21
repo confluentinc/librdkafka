@@ -8151,3 +8151,17 @@ void test_share_set_auto_offset_reset(const char *group_name,
         const char *cfg[] = {"share.auto.offset.reset", "SET", reset_policy};
         test_alter_group_configurations(group_name, cfg, 1);
 }
+
+
+/**
+ * @brief Set share.isolation.level configuration for a share group.
+ *
+ * @param group_name The share group name.
+ * @param isolation_level The isolation level ("read_committed" or
+ * "read_uncommitted").
+ */
+void test_share_set_isolation_level(const char *group_name,
+                                    const char *isolation_level) {
+        const char *cfg[] = {"share.isolation.level", "SET", isolation_level};
+        test_alter_group_configurations(group_name, cfg, 1);
+}

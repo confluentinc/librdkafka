@@ -76,12 +76,8 @@ static rd_kafka_t *create_txn_producer(const char *txn_id) {
  */
 static void configure_share_group(const char *group,
                                   const char *isolation_level) {
-        const char *configs[] = {
-            "share.auto.offset.reset", "SET", "earliest",
-            "share.isolation.level",   "SET", isolation_level};
-
-        test_IncrementalAlterConfigs_simple(
-            common_admin, RD_KAFKA_RESOURCE_GROUP, group, configs, 2);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_share_set_isolation_level(group, isolation_level);
 }
 
 

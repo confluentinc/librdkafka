@@ -40,9 +40,9 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                                      rd_kafka_broker_t *rkb,
                                      int force_remove);
 
-void rd_kafka_broker_share_fetch_leave(rd_kafka_broker_t *rkb,
-                                       rd_kafka_op_t *rko_orig,
-                                       rd_ts_t now);
+void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,
+                                               rd_kafka_op_t *rko_orig,
+                                               rd_ts_t now);
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb);
 void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                                rd_kafka_op_t *rko_orig,

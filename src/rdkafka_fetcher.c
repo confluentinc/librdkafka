@@ -2003,12 +2003,14 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
 
                 default:
-                        /* TODO KIP-932: Java retries retriable errors
-                         * with exponential backoff
-                         * (moveAllToIncompleteAcks) and fails
-                         * non-retriable errors permanently (completes
-                         * acks with the error via callback).
-                         * Currently acks are silently destroyed. */
+                        /* Unlike Java, we have decided to not retry
+                         * ShareAcknowledge RPC level errors. Java
+                         * will follow this approach as well.
+                         * TODO KIP-932:
+                         * 1) Report failed acks to the application
+                         *    via the acknowledgement callback.
+                         * 2) Update partition errors in commit_sync
+                         *    result. */
                         break;
                 }
         }

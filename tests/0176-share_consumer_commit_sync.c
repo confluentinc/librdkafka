@@ -46,17 +46,6 @@ static rd_kafka_t *common_producer;
 /** Common admin client reused across all non-mock subtests. */
 static rd_kafka_t *common_admin;
 
-/**
- * @brief Produce messages using the common producer.
- */
-static void produce_to_topic(const char *topic, int32_t partition, int msgcnt) {
-        rd_kafka_topic_t *rkt;
-        rkt = test_create_producer_topic(common_producer, topic, NULL);
-        test_produce_msgs(common_producer, rkt, 0, partition, 0, msgcnt, NULL,
-                          0);
-        rd_kafka_topic_destroy(rkt);
-}
-
 
 /**
  * @brief Create share consumer with specified ack mode.
@@ -80,16 +69,6 @@ static rd_kafka_share_t *create_share_consumer(const char *group_id,
         return rkshare;
 }
 
-
-/**
- * @brief Set share.auto.offset.reset=earliest for a share group.
- */
-static void set_group_offset_earliest(const char *group_name) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-
-        test_IncrementalAlterConfigs_simple(
-            common_admin, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
-}
 
 /**
  * @brief Set share.record.lock.duration.ms for a share group.
@@ -147,10 +126,10 @@ static void do_test_basic_implicit_commit_sync(void) {
 
         topic = test_mk_topic_name("0176-cs-impl-basic", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         rkshare = create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -206,7 +185,7 @@ static void do_test_basic_implicit_commit_sync(void) {
         /* Produce 5 verification records and consume with the same
          * consumer — should get only these 5 (dc == 1), proving
          * the first batch was committed and not redelivered. */
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         consumed = 0;
         attempts = 0;
@@ -265,10 +244,10 @@ static void do_test_basic_explicit_commit_sync(void) {
 
         topic = test_mk_topic_name("0176-cs-expl-basic", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         rkshare = create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         set_group_lock_duration(group, "3000");
         subscribe_consumer(rkshare, &topic, 1);
 
@@ -327,7 +306,7 @@ static void do_test_basic_explicit_commit_sync(void) {
         /* Produce 5 verification records and consume with the same
          * consumer — should get only these 5 (dc == 1), proving
          * the first batch was committed and not redelivered. */
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         consumed = 0;
         attempts = 0;
@@ -382,7 +361,7 @@ static void do_test_no_pending_acks(void) {
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
 
         rkshare = create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* commit_sync with no consumed records */
@@ -423,11 +402,11 @@ static void do_test_commit_sync_prevents_redelivery(void) {
 
         topic = test_mk_topic_name("0176-cs-no-redeliver", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         /* Consumer A: consume all and commit_sync */
         rkshare = create_share_consumer(group, "implicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, &topic, 1);
 
         while (consumed == 0 && attempts++ < 30) {
@@ -458,7 +437,7 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         /* Consumer B: should only get the 5 verification records.
          * Close tears down the connection and broker releases
@@ -519,12 +498,12 @@ static void do_test_mixed_ack_types(void) {
 
         topic = test_mk_topic_name("0176-cs-mixed-acks", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 10);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
 
         /* Consumer A: consume all 10 in a single batch, apply mixed ack
          * types */
         rkshare = create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, &topic, 1);
 
         while (consumed == 0 && attempts++ < 30) {
@@ -695,10 +674,10 @@ static void do_test_multiple_commit_sync_calls(void) {
 
         topic = test_mk_topic_name("0176-cs-multi-calls", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 50);
+        test_produce_msgs_simple(common_producer, topic, 0, 50);
 
         rkshare = create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume all 50, commit_sync every 10 records */
@@ -802,7 +781,7 @@ static void do_test_multiple_commit_sync_calls(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         /* Consumer B: should only get the 5 verification records */
         rkshare = create_share_consumer(group, "implicit");
@@ -892,12 +871,12 @@ static void do_test_multi_topic_partition(void) {
                                               MULTI_TP_PARTITIONS, -1,
                                               60 * 1000);
                 for (p = 0; p < MULTI_TP_PARTITIONS; p++)
-                        produce_to_topic(topics[i], p,
-                                         MULTI_TP_MSGS_PER_PARTITION);
+                        test_produce_msgs_simple(common_producer, topics[i], p,
+                                                 MULTI_TP_MSGS_PER_PARTITION);
         }
 
         rkshare = create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, (const char **)topics, MULTI_TP_TOPICS);
 
         /* Consume until all records are settled
@@ -1537,10 +1516,10 @@ static void do_test_mixed_commit_types(void) {
 
         topic = test_mk_topic_name("0176-cs-mixed-types", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 50);
+        test_produce_msgs_simple(common_producer, topic, 0, 50);
 
         rkshare = create_share_consumer(group, "explicit");
-        set_group_offset_earliest(group);
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume all 50 records, ACCEPT each, alternate between
@@ -1670,7 +1649,7 @@ static void do_test_mixed_commit_types(void) {
         rd_kafka_share_destroy(rkshare);
 
         /* Produce 5 verification records */
-        produce_to_topic(topic, 0, 5);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         /* Second consumer: should only get the 5 verification records */
         rkshare = create_share_consumer(group, "implicit");

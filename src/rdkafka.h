@@ -5103,7 +5103,7 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
  * Should be used in conjunction with rd_kafka_share_consumer_close_queue() to
  * know when the consumer has been closed.
  *
- * @sa rd_kafka_consumer_share_close_queue()
+ * @sa rd_kafka_share_consumer_close_queue()
  */
 RD_EXPORT
 int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);

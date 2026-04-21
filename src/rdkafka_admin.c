@@ -7616,7 +7616,7 @@ rd_kafka_ConsumerGroupListing_list_append_dedup(rd_list_t *dst,
         RD_LIST_FOREACH(grp, src, j) {
                 if (rd_list_cnt(dst) &&
                     rd_list_find(dst, grp,
-                                rd_kafka_ConsumerGroupListing_cmp_group_id))
+                                 rd_kafka_ConsumerGroupListing_cmp_group_id))
                         continue;
                 if (!to_add)
                         to_add = rd_list_new(rd_list_cnt(src), NULL);
@@ -9869,28 +9869,25 @@ void rd_kafka_ElectLeaders(rd_kafka_t *rk,
  * @brief Helper to create a mock partial result op containing the given
  *        group_ids, for testing the merge function.
  */
-static rd_kafka_op_t *
-ut_make_ListConsumerGroups_partial(const char **group_ids, int group_cnt) {
+static rd_kafka_op_t *ut_make_ListConsumerGroups_partial(const char **group_ids,
+                                                         int group_cnt) {
         rd_kafka_op_t *rko_partial;
         rd_list_t valid, errors;
         rd_kafka_ListConsumerGroupsResult_t *result;
         int i;
 
-        rko_partial = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_RESULT);
-        rko_partial->rko_evtype =
-            RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT;
-        rko_partial->rko_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rko_partial             = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_RESULT);
+        rko_partial->rko_evtype = RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT;
+        rko_partial->rko_err    = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        rd_list_init(&valid, group_cnt,
-                     rd_kafka_ConsumerGroupListing_free);
+        rd_list_init(&valid, group_cnt, rd_kafka_ConsumerGroupListing_free);
         rd_list_init(&errors, 0, rd_free);
 
         for (i = 0; i < group_cnt; i++) {
-                rd_list_add(&valid,
-                            rd_kafka_ConsumerGroupListing_new(
-                                group_ids[i], rd_false,
-                                RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
-                                RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC));
+                rd_list_add(&valid, rd_kafka_ConsumerGroupListing_new(
+                                        group_ids[i], rd_false,
+                                        RD_KAFKA_CONSUMER_GROUP_STATE_STABLE,
+                                        RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC));
         }
 
         result = rd_kafka_ListConsumerGroupsResult_new(&valid, &errors);
@@ -9912,13 +9909,11 @@ static rd_kafka_op_t *
 ut_make_ListConsumerGroups_partial_error(rd_kafka_resp_err_t err) {
         rd_kafka_op_t *rko_partial;
 
-        rko_partial = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_RESULT);
-        rko_partial->rko_evtype =
-            RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT;
-        rko_partial->rko_err = err;
+        rko_partial             = rd_kafka_op_new(RD_KAFKA_OP_ADMIN_RESULT);
+        rko_partial->rko_evtype = RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT;
+        rko_partial->rko_err    = err;
 
-        rd_list_init(&rko_partial->rko_u.admin_result.results, 0,
-                     NULL);
+        rd_list_init(&rko_partial->rko_u.admin_result.results, 0, NULL);
 
         return rko_partial;
 }
@@ -9943,30 +9938,27 @@ static rd_kafka_op_t *ut_make_ListConsumerGroups_fanout(void) {
  *
  * @returns 0 on success, 1 on failure.
  */
-static int
-ut_verify_ListConsumerGroups_result(const rd_kafka_op_t *rko_fanout,
-                                   const char **expected_group_ids,
-                                   int expected_cnt,
-                                   int expected_error_cnt,
-                                   const char *test_label) {
+static int ut_verify_ListConsumerGroups_result(const rd_kafka_op_t *rko_fanout,
+                                               const char **expected_group_ids,
+                                               int expected_cnt,
+                                               int expected_error_cnt,
+                                               const char *test_label) {
         rd_kafka_ListConsumerGroupsResult_t *res;
         int valid_cnt, error_cnt, i, j;
 
-        res = rd_list_elem(
-            &rko_fanout->rko_u.admin_request.fanout.results, 0);
-        RD_UT_ASSERT(res != NULL, "%s: expected non-NULL result",
-                     test_label);
+        res = rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results, 0);
+        RD_UT_ASSERT(res != NULL, "%s: expected non-NULL result", test_label);
 
         valid_cnt = rd_list_cnt(&res->valid);
         error_cnt = rd_list_cnt(&res->errors);
 
         RD_UT_ASSERT(valid_cnt == expected_cnt,
-                     "%s: expected %d unique groups, got %d",
-                     test_label, expected_cnt, valid_cnt);
+                     "%s: expected %d unique groups, got %d", test_label,
+                     expected_cnt, valid_cnt);
 
         RD_UT_ASSERT(error_cnt == expected_error_cnt,
-                     "%s: expected %d errors, got %d",
-                     test_label, expected_error_cnt, error_cnt);
+                     "%s: expected %d errors, got %d", test_label,
+                     expected_error_cnt, error_cnt);
 
         /* Verify each expected group is present exactly once */
         for (i = 0; i < expected_cnt; i++) {
@@ -10000,22 +9992,20 @@ static int ut_ListConsumerGroups_response_merge(void) {
          * Merge {A, B} then {A, B} → expect {A, B}
          */
         {
-                const char *groups1[]   = {"groupA", "groupB"};
-                const char *groups2[]   = {"groupA", "groupB"};
-                const char *expected[]  = {"groupA", "groupB"};
+                const char *groups1[]  = {"groupA", "groupB"};
+                const char *groups2[]  = {"groupA", "groupB"};
+                const char *expected[] = {"groupA", "groupB"};
 
                 rko_fanout = ut_make_ListConsumerGroups_fanout();
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups1, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups2, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups2, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
                 if (ut_verify_ListConsumerGroups_result(
@@ -10033,21 +10023,19 @@ static int ut_ListConsumerGroups_response_merge(void) {
         {
                 const char *groups1[]  = {"groupA", "groupB"};
                 const char *groups2[]  = {"groupC", "groupD"};
-                const char *expected[] = {"groupA", "groupB",
-                                          "groupC", "groupD"};
+                const char *expected[] = {"groupA", "groupB", "groupC",
+                                          "groupD"};
 
                 rko_fanout = ut_make_ListConsumerGroups_fanout();
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups1, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups2, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups2, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
                 if (ut_verify_ListConsumerGroups_result(
@@ -10072,22 +10060,19 @@ static int ut_ListConsumerGroups_response_merge(void) {
 
                 rko_fanout = ut_make_ListConsumerGroups_fanout();
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups1, 3);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups1, 3);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups2, 3);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups2, 3);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups3, 3);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups3, 3);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
                 if (ut_verify_ListConsumerGroups_result(
@@ -10110,22 +10095,20 @@ static int ut_ListConsumerGroups_response_merge(void) {
 
                 rko_fanout = ut_make_ListConsumerGroups_fanout();
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups1, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
                 rko_partial = ut_make_ListConsumerGroups_partial_error(
                     RD_KAFKA_RESP_ERR__TIMED_OUT);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups3, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups3, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
                 if (ut_verify_ListConsumerGroups_result(

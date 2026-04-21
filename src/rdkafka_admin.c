@@ -10118,7 +10118,7 @@ static int ut_ListConsumerGroups_response_merge(void) {
                 rd_kafka_op_destroy(rko_fanout);
         }
 
-       /*
+        /*
          * Test 5: Empty broker response interleaved.
          * Broker1: {A, B}, Broker2: {}, Broker3: {B, C}
          * → expect {A, B, C}
@@ -10130,22 +10130,19 @@ static int ut_ListConsumerGroups_response_merge(void) {
 
                 rko_fanout = ut_make_ListConsumerGroups_fanout();
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups1, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups1, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(NULL, 0);
+                rko_partial = ut_make_ListConsumerGroups_partial(NULL, 0);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
-                rko_partial =
-                    ut_make_ListConsumerGroups_partial(groups3, 2);
+                rko_partial = ut_make_ListConsumerGroups_partial(groups3, 2);
                 rd_kafka_ListConsumerGroups_response_merge(rko_fanout,
-                                                          rko_partial);
+                                                           rko_partial);
                 rd_kafka_op_destroy(rko_partial);
 
                 if (ut_verify_ListConsumerGroups_result(

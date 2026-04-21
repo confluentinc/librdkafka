@@ -123,7 +123,6 @@ typedef struct {
         char *all_topics[MAX_TOPICS];
         int all_topic_cnt;
         int msgs_produced[MAX_TOPICS];       /**< Messages produced per topic */
-        rd_bool_t topic_deleted[MAX_TOPICS]; /**< Track deleted topics */
 
         /* Current subscription tracking per consumer */
         int sub_start_idx[MAX_CONSUMERS]; /**< Start index in all_topics */
@@ -511,9 +510,9 @@ static void exec_delete_topic(sub_test_state_t *state, const test_op_t *op) {
         TEST_SAY("  DELETE_TOPIC: index %d (%s)\n", op->topic_idx,
                  state->all_topics[idx]);
 
-
-        /* Mark as deleted to skip during cleanup */
-        state->topic_deleted[idx] = rd_true;
+        /* Actually delete the topic */
+        test_DeleteTopics_simple(common_admin, NULL, &state->all_topics[idx], 1,
+                                 NULL);
 }
 
 /**

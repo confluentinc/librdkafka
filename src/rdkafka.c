@@ -3657,10 +3657,16 @@ rd_kafka_share_consumer_closed_or_closing_error(rd_kafka_share_t *rkshare) {
 
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_or_closing_err(rd_kafka_share_t *rkshare) {
-        if (unlikely(rd_kafka_share_consumer_closed(rkshare) ||
-                     rkshare->rkshare_consumer_closing))
-                return RD_KAFKA_RESP_ERR__STATE;
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+
+        error = rd_kafka_share_consumer_closed_or_closing_error(rkshare);
+        if (!error)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = rd_kafka_error_code(error);
+        rd_kafka_error_destroy(error);
+        return err;
 }
 
 rd_kafka_error_t *rd_kafka_share_consume_batch(
@@ -3816,6 +3822,7 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
             rkcg->rkcg_commit_sync_request.results;
 
         rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
+        rd_kafka_q_destroy(rkcg->rkcg_commit_sync_request.replyq);
         rkcg->rkcg_commit_sync_request.id                          = 0;
         rkcg->rkcg_commit_sync_request.results                     = NULL;
         rkcg->rkcg_commit_sync_request.replyq                      = NULL;
@@ -5055,10 +5062,11 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
         return NULL;
 }
 
-rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
+
+rd_kafka_error_t *rd_kafka_consumer_close0(rd_kafka_t *rk) {
         rd_kafka_error_t *error;
-        rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR__TIMED_OUT;
         rd_kafka_q_t *rkq;
+        rd_bool_t got_terminate = rd_false;
 
         /* Create a temporary reply queue to handle the TERMINATE reply op. */
         rkq = rd_kafka_q_new(rk);
@@ -5066,12 +5074,8 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
         /* Initiate the close (async) */
         error = rd_kafka_consumer_close_q(rk, rkq);
         if (error) {
-                err = rd_kafka_error_is_fatal(error)
-                          ? RD_KAFKA_RESP_ERR__FATAL
-                          : rd_kafka_error_code(error);
-                rd_kafka_error_destroy(error);
                 rd_kafka_q_destroy_owner(rkq);
-                return err;
+                return error;
         }
 
         /* Disable the queue if termination is immediate or the user
@@ -5083,7 +5087,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                 rd_kafka_dbg(rk, CONSUMER, "CLOSE",
                              "Disabling and purging temporary queue to quench "
                              "close events");
-                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                got_terminate = rd_true;
                 rd_kafka_q_disable(rkq);
                 /* Purge ops already enqueued */
                 rd_kafka_q_purge(rkq);
@@ -5094,7 +5098,9 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
                         rd_kafka_op_res_t res;
                         if ((rko->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
                             RD_KAFKA_OP_TERMINATE) {
-                                err = rko->rko_err;
+                                error          = rko->rko_error;
+                                rko->rko_error = NULL;
+                                got_terminate  = rd_true;
                                 rd_kafka_op_destroy(rko);
                                 break;
                         }
@@ -5109,24 +5115,44 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
 
         rd_kafka_q_destroy_owner(rkq);
 
-        if (err)
+        if (!got_terminate)
+                error = rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__TIMED_OUT, "%s",
+                    "Timed out waiting for a TERMINATE reply to arrive");
+
+        if (error)
                 rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
                              "Consumer closed with error: %s",
-                             rd_kafka_err2str(err));
+                             rd_kafka_error_string(error));
         else
                 rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
                              "Consumer closed");
 
+        return error;
+}
+
+rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+
+        error = rd_kafka_consumer_close0(rk);
+        if (!error)
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err = rd_kafka_error_is_fatal(error) ? RD_KAFKA_RESP_ERR__FATAL
+                                             : rd_kafka_error_code(error);
+        rd_kafka_error_destroy(error);
         return err;
 }
 
 rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
         rd_kafka_error_t *error;
         rd_kafka_t *rk;
-        rd_kafka_q_t *rkq;
 
         /* TODO KIP-932: Guard this with checks for rkshare and
-         * rkshare->rkshare_rk */
+         * rkshare->rkshare_rk. Check if this is needed for other APIs
+         * as well.
+         */
         if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
                           rkshare)) != NULL))
                 return error;
@@ -5139,65 +5165,8 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
          */
         rd_kafka_q_fwd_set(rk->rk_rep, rk->rk_cgrp->rkcg_q);
 
-        /* Create a temporary reply queue to handle the TERMINATE reply op. */
-        rkq = rd_kafka_q_new(rk);
+        error = rd_kafka_consumer_close0(rk);
 
-        /* Initiate the close (async) */
-        error = rd_kafka_consumer_close_q(rk, rkq);
-        if (error) {
-                rd_kafka_q_destroy_owner(rkq);
-                goto done;
-        }
-
-        /* Disable the queue if termination is immediate or the user
-         * does not want the blocking consumer_close() behaviour, this will
-         * cause any ops posted for this queue (such as rebalance) to
-         * be destroyed.
-         */
-        if (rd_kafka_destroy_flags_no_consumer_close(rk)) {
-                rd_kafka_dbg(rk, CONSUMER, "CLOSE",
-                             "Disabling and purging temporary queue to quench "
-                             "close events");
-                rd_kafka_q_disable(rkq);
-                /* Purge ops already enqueued */
-                rd_kafka_q_purge(rkq);
-        } else {
-                rd_kafka_op_t *rko;
-                rd_bool_t got_terminate = rd_false;
-
-                rd_kafka_dbg(rk, CONSUMER, "CLOSE", "Waiting for close events");
-                while ((rko = rd_kafka_q_pop(rkq, RD_POLL_INFINITE, 0))) {
-                        if ((rko->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
-                            RD_KAFKA_OP_TERMINATE) {
-                                /* Transfer ownership of rko_error out
-                                 * before op_destroy frees it. */
-                                error         = rd_kafka_op_error_destroy(rko);
-                                got_terminate = rd_true;
-                                break;
-                        }
-                        /* Handle callbacks */
-                        if (rd_kafka_poll_cb(rk, rkq, rko, RD_KAFKA_Q_CB_RETURN,
-                                             NULL) == RD_KAFKA_OP_RES_PASS)
-                                rd_kafka_op_destroy(rko);
-                        /* Ignore YIELD, we need to finish */
-                }
-
-                if (!got_terminate)
-                        error = rd_kafka_error_new(
-                            RD_KAFKA_RESP_ERR__TIMED_OUT,
-                            "Timed out waiting for TERMINATE reply to arrive");
-        }
-
-        rd_kafka_q_destroy_owner(rkq);
-
-done:
-        if (error)
-                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
-                             "Consumer closed with error: %s",
-                             rd_kafka_error_string(error));
-        else
-                rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
-                             "Consumer closed");
         rkshare->rkshare_consumer_closing = rd_false;
         return error;
 }

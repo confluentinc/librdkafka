@@ -26,9 +26,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "rdkafka_int.h"
-#include "rdkafka_protocol.h"
 #include "test.h"
+#include "rdkafka.h"
+#include "rdkafka_protocol.h"
 
 #define MAX_TOPICS     16
 #define MAX_PARTITIONS 32
@@ -86,7 +86,8 @@ static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
         const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
 
         test_IncrementalAlterConfigs_simple(
-            rkshare->rkshare_rk, RD_KAFKA_RESOURCE_GROUP, group_name, cfg, 1);
+            rd_kafka_share_consumer_get_rk(rkshare), RD_KAFKA_RESOURCE_GROUP,
+            group_name, cfg, 1);
 }
 
 /**
@@ -990,7 +991,7 @@ static void test_close_with_slow_broker_response(void) {
                                         sizeof(errstr));
                 TEST_ASSERT(producer, "Failed to create producer: %s", errstr);
 
-                for (i = 0; i < msgcnt; i++) {
+                for (i = 0; i < (size_t)msgcnt; i++) {
                         char payload[64];
                         rd_snprintf(payload, sizeof(payload), "%s-%d", topic,
                                     (int)i);
@@ -1162,7 +1163,7 @@ static void test_close_respects_socket_timeout(void) {
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(producer, "Failed to create producer: %s", errstr);
 
-        for (i = 0; i < msgcnt; i++) {
+        for (i = 0; i < (size_t)msgcnt; i++) {
                 char payload[64];
                 rd_snprintf(payload, sizeof(payload), "%s-%d", topic, (int)i);
                 TEST_ASSERT(rd_kafka_producev(
@@ -1332,7 +1333,7 @@ static void test_close_with_broker_error_response(void) {
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(producer, "Failed to create producer: %s", errstr);
 
-        for (i = 0; i < msgcnt; i++) {
+        for (i = 0; i < (size_t)msgcnt; i++) {
                 char payload[64];
                 rd_snprintf(payload, sizeof(payload), "%s-%d", topic, (int)i);
                 TEST_ASSERT(rd_kafka_producev(
@@ -1490,7 +1491,7 @@ static void verify_all_apis_return_state_error(rd_kafka_share_t *consumer,
         assert_state_error(error, "close", expect_substr);
 
         /* 9. async close */
-        queue = rd_kafka_queue_new(consumer->rkshare_rk);
+        queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
         error = rd_kafka_share_consumer_close_queue(consumer, queue);
         rd_kafka_queue_destroy(queue);
         assert_state_error(error, "close", expect_substr);
@@ -1668,7 +1669,7 @@ static void test_api_calls_during_closing(void) {
         TEST_SAY("Injecting %dms RTT delay on broker\n", rtt_delay_ms);
         rd_kafka_mock_broker_set_rtt(mcluster, 1, rtt_delay_ms);
 
-        queue = rd_kafka_queue_new(consumer->rkshare_rk);
+        queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
 
         TEST_SAY("Calling close_queue() to initiate async close\n");
         close_error = rd_kafka_share_consumer_close_queue(consumer, queue);

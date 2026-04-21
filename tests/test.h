@@ -1057,6 +1057,9 @@ rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk);
 void test_share_set_auto_offset_reset(const char *group_name,
                                       const char *reset_policy);
 
+void test_share_set_isolation_level(const char *group_name,
+                                    const char *isolation_level);
+
 
 /**
  * @name rusage.c

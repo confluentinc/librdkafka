@@ -1406,35 +1406,27 @@ static void test_close_with_broker_error_response(void) {
 
 /**
  * @brief Helper: assert the given rd_kafka_error_t* signals closed/closing.
- *
- * Expects non-NULL error with err code RD_KAFKA_RESP_ERR__STATE and a
- * string containing \p expect_substr ("closed" or "closing").
- * Destroys the error.
  */
-static void assert_state_error(rd_kafka_error_t *error,
-                               const char *api_name,
-                               const char *expect_substr) {
+static void assert_state_error(rd_kafka_error_t *error, const char *api_name) {
         TEST_ASSERT(error != NULL, "%s: expected error, got NULL", api_name);
         TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
                     "%s: expected __STATE, got %s", api_name,
                     rd_kafka_err2name(rd_kafka_error_code(error)));
-        TEST_ASSERT(strstr(rd_kafka_error_string(error), expect_substr) != NULL,
-                    "%s: expected error string to contain '%s', got '%s'",
-                    api_name, expect_substr, rd_kafka_error_string(error));
+        TEST_ASSERT(strstr(rd_kafka_error_string(error), "closed") != NULL,
+                    "%s: expected error string to contain 'closed', got '%s'",
+                    api_name, rd_kafka_error_string(error));
         rd_kafka_error_destroy(error);
 }
 
 /**
  * @brief Invoke every share-consumer API and assert each returns a
- *        closed/closing state error.
+ *        closed state error.
  *
  * @param consumer    Share consumer (already closed or closing).
  * @param topic       Topic name (for subscribe/acknowledge_offset).
- * @param expect_substr "closed" or "closing" (matched in error string).
  */
-static void verify_all_apis_return_state_error(rd_kafka_share_t *consumer,
-                                               const char *topic,
-                                               const char *expect_substr) {
+static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
+                                         const char *topic) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
         rd_kafka_message_t *batch[4];
@@ -1445,15 +1437,15 @@ static void verify_all_apis_return_state_error(rd_kafka_share_t *consumer,
 
         /* 1. consume_batch */
         error = rd_kafka_share_consume_batch(consumer, 100, batch, &rcvd);
-        assert_state_error(error, "consume_batch", expect_substr);
+        assert_state_error(error, "consume_batch");
 
         /* 2. commit_async */
         error = rd_kafka_share_commit_async(consumer);
-        assert_state_error(error, "commit_async", expect_substr);
+        assert_state_error(error, "commit_async");
 
         /* 3. commit_sync */
         error = rd_kafka_share_commit_sync(consumer, 1000, &commit_results);
-        assert_state_error(error, "commit_sync", expect_substr);
+        assert_state_error(error, "commit_sync");
         TEST_ASSERT(commit_results == NULL,
                     "commit_sync: expected no partitions on error");
 
@@ -1488,13 +1480,13 @@ static void verify_all_apis_return_state_error(rd_kafka_share_t *consumer,
 
         /* 8. close */
         error = rd_kafka_share_consumer_close(consumer);
-        assert_state_error(error, "close", expect_substr);
+        assert_state_error(error, "close");
 
         /* 9. async close */
         queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
         error = rd_kafka_share_consumer_close_queue(consumer, queue);
         rd_kafka_queue_destroy(queue);
-        assert_state_error(error, "close", expect_substr);
+        assert_state_error(error, "close");
 }
 
 /**
@@ -1571,7 +1563,7 @@ static void test_api_calls_on_closed_consumer(void) {
                     "consumer should report closed");
 
         TEST_SAY("Exercising APIs on closed consumer\n");
-        verify_all_apis_return_state_error(consumer, topic, "closed");
+        verify_all_apis_return_error(consumer, topic);
 
         rd_kafka_share_destroy(consumer);
         rd_kafka_destroy(producer);
@@ -1683,7 +1675,7 @@ static void test_api_calls_during_closing(void) {
                     "consumer should still be closing, not closed");
 
         TEST_SAY("Exercising APIs on closing consumer\n");
-        verify_all_apis_return_state_error(consumer, topic, "closing");
+        verify_all_apis_return_error(consumer, topic);
 
         /* Wait for async close to complete before destroying. */
         TEST_SAY("Waiting for consumer to finish closing\n");

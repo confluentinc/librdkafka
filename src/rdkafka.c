@@ -3640,12 +3640,10 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
  */
 rd_kafka_error_t *
 rd_kafka_share_consumer_closed_or_closing_error(rd_kafka_share_t *rkshare) {
-        if (unlikely(rd_kafka_share_consumer_closed(rkshare)))
+        if (unlikely(rd_kafka_share_consumer_closed(rkshare) ||
+                     rkshare->rkshare_consumer_closing))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "Share consumer is closed");
-        if (unlikely(rkshare->rkshare_consumer_closing))
-                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                                          "Share consumer is closing");
         return NULL;
 }
 
@@ -3817,6 +3815,7 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
         rd_kafka_q_destroy(rkcg->rkcg_commit_sync_request.replyq);
+
         rkcg->rkcg_commit_sync_request.id                          = 0;
         rkcg->rkcg_commit_sync_request.results                     = NULL;
         rkcg->rkcg_commit_sync_request.replyq                      = NULL;
@@ -5012,9 +5011,18 @@ static rd_kafka_error_t *rd_kafka_consumer_close_q(rd_kafka_t *rk,
         rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_CGRP, "CLOSE",
                      "Closing consumer");
 
-        /* Redirect cgrp queue to the rebalance queue to make sure all posted
-         * ops (e.g., rebalance callbacks) are served by
-         * the application/caller. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Unlike regular consumer, the rk_rep queue is not forwarded to
+                 * rkcg_q by default, so we need this additional step to ensure
+                 * callbacks from rk_rep queue can be served by the
+                 * application/caller */
+                rd_kafka_q_fwd_set(rk->rk_rep, rkq);
+        }
+
+        /* For regular consumers, this redirects cgrp queue to the rebalance
+         * queue to make sure all posted ops (e.g., rebalance callbacks) are
+         * served by the application/caller. For share consumers, this will take
+         * care of forwarding only the cgrp ops */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, rkq);
 
         /* Tell cgrp subsystem to terminate. A TERMINATE op will be posted
@@ -5153,14 +5161,7 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
 
         rk                                = rkshare->rkshare_rk;
         rkshare->rkshare_consumer_closing = rd_true;
-
-        /*
-         * TODO KIP-932: Need to check if this behaviour is correct
-         */
-        rd_kafka_q_fwd_set(rk->rk_rep, rk->rk_cgrp->rkcg_q);
-
-        error = rd_kafka_consumer_close0(rk);
-
+        error                             = rd_kafka_consumer_close0(rk);
         rkshare->rkshare_consumer_closing = rd_false;
         return error;
 }

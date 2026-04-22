@@ -3234,7 +3234,7 @@ static void rd_kafka_broker_share_session_toppar_add(rd_kafka_broker_t *rkb,
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                                    "Not adding %.*s [%" PRId32
                                    "] to share fetch session "
-                                   "as share session is closed",
+                                   "as share session is already closed",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
                                    rktp->rktp_partition);
 
@@ -3273,10 +3273,9 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                                    "Not removing %.*s [%" PRId32
                                    "] from share fetch session "
-                                   "as session epoch is %" PRId32,
+                                   "as share session is already closed",
                                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                                   rktp->rktp_partition,
-                                   rkb->rkb_share_fetch_session.epoch);
+                                   rktp->rktp_partition);
 
                         return;
                 }

@@ -3957,6 +3957,9 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         /* Remove cgrp application queue forwarding, if any. */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_q_fwd_set(rkcg->rkcg_rk->rk_ops, NULL);
+        }
 
         /* Destroy KIP-848 consumer group structures */
         rd_kafka_cgrp_consumer_reset(rkcg);
@@ -6152,6 +6155,9 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
         /* For share groups, we have to additionally close
          * sessions with all the brokers */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                /* TODO KIP-932: the below code is similar to
+                 * rd_kafka_share_segregate_and_dispatch_acks()
+                 * Check if we can reduce code duplication */
                 rd_kafka_broker_t *rkb                             = NULL;
                 rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
                 rd_list_t *ack_batches =
@@ -6170,7 +6176,7 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                                 continue;
 
                         rkcg->rkcg_share.share_session_leave_remaining_cnt++;
-                        rd_assert(
+                        rd_dassert(
                             !rkb->rkb_pending_commit_sync.sync_ack_details);
                         /* For brokers that are currently processing share fetch
                          * requests we will enqueue the leave op when they reply

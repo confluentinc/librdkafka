@@ -1288,8 +1288,15 @@ static void do_test_mock_uses_share_acknowledge(void) {
  *
  *  Phase 1: Consume 10 records, ACCEPT all. Set broker RTT to
  *  5000ms and call commit_sync with timeout_ms=2000. The call
- *  should block ~2000ms then return _TIMED_OUT. The broker still
- *  processes the ack when the delayed response arrives.
+ *  should block ~2000ms then return REQUEST_TIMED_OUT (main
+ *  thread commit_sync deadline) or _TIMED_OUT (broker thread
+ *  socket.timeout.ms) per-partition. The broker still processes
+ *  the ack when the delayed response arrives.
+ *
+ *  TODO KIP-932: Verify and maybe unify the timeout error
+ *  returned by commit_sync. Java uses a single REQUEST_TIMED_OUT
+ *  mapping; librdkafka can return either depending on which
+ *  timer fires first.
  *
  *  Phase 2: Remove RTT, wait 5s for broker to finish processing.
  *  Second consumer should get 0 records (acks were processed).
@@ -1375,7 +1382,12 @@ static void do_test_mock_commit_sync_timeout(void) {
                     "got %" PRId64 "ms",
                     t_elapsed_ms);
 
-        /* May return top-level error or per-partition _TIMED_OUT */
+        /* May return top-level error or per-partition timeout error.
+         * Accept either:
+         * - REQUEST_TIMED_OUT: main thread commit_sync deadline fired
+         *   first (typical when commit_sync timeout is shorter than
+         *   socket.timeout.ms).
+         * - __TIMED_OUT: broker thread socket.timeout.ms fired first. */
         if (error) {
                 TEST_SAY("Phase 1: top-level error: %s\n",
                          rd_kafka_error_string(error));
@@ -1390,15 +1402,17 @@ static void do_test_mock_commit_sync_timeout(void) {
                         TEST_SAY("Phase 1: %s [%" PRId32 "]: %s\n",
                                  rktpar->topic, rktpar->partition,
                                  rd_kafka_err2str(rktpar->err));
-                        if (rktpar->err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                        if (rktpar->err ==
+                                RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT ||
+                            rktpar->err == RD_KAFKA_RESP_ERR__TIMED_OUT)
                                 got_timed_out = rd_true;
                 }
                 rd_kafka_topic_partition_list_destroy(partitions);
         }
 
         TEST_ASSERT(got_timed_out,
-                    "Expected _TIMED_OUT error from "
-                    "commit_sync with short timeout");
+                    "Expected REQUEST_TIMED_OUT or _TIMED_OUT error "
+                    "from commit_sync with short timeout");
 
         /* Phase 2: Remove RTT, wait 5s for broker to finish
          * processing the delayed response */

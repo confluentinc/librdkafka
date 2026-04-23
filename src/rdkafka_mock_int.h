@@ -264,7 +264,7 @@ typedef struct rd_kafka_mock_sharegroup_s {
                                       *   0 = unlimited (default). */
         int max_fetch_sessions;      /**< Max fetch sessions per broker.
                                       *   0 = unlimited (default 2000). */
-        int max_record_locks;        /**< Max in-flight records per
+        int max_record_locks;        /**< Max acquired record locks per
                                       *   share-partition.
                                       *   0 = unlimited (default 2000). */
         int auto_offset_reset;       /**< 0 = latest (default),
@@ -657,7 +657,7 @@ struct rd_kafka_mock_cluster_s {
                 /** Max fetch sessions per broker.
                  *  0 = unlimited. */
                 int sharegroup_max_fetch_sessions;
-                /** Max in-flight records per share-partition.
+                /** Max acquired record locks per share-partition.
                  *  0 = unlimited. */
                 int sharegroup_max_record_locks;
                 /** Auto offset reset.

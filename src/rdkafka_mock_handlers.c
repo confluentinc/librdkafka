@@ -3694,6 +3694,25 @@ struct rd_kafka_mock_sgrp_ack_entry {
 };
 
 /**
+ * @brief Allocate and initialize a new ack entry.
+ */
+static struct rd_kafka_mock_sgrp_ack_entry *
+rd_kafka_mock_sgrp_ack_entry_new(rd_kafka_Uuid_t topic_id,
+                                 int32_t partition,
+                                 int64_t first_offset,
+                                 int64_t last_offset,
+                                 int8_t ack_type) {
+        struct rd_kafka_mock_sgrp_ack_entry *entry =
+            rd_calloc(1, sizeof(*entry));
+        entry->topic_id     = topic_id;
+        entry->partition    = partition;
+        entry->first_offset = first_offset;
+        entry->last_offset  = last_offset;
+        entry->ack_type     = ack_type;
+        return entry;
+}
+
+/**
  * @brief Find the first ack error for the given (topic_id, partition) across
  *        all ack entries.  Returns NO_ERROR if no ack targeted this partition
  *        or all acks succeeded.
@@ -3959,36 +3978,24 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_skip_tags(rkbuf);
 
                                 if (AckTypeCnt == 1 && single_type >= 0) {
-                                        struct rd_kafka_mock_sgrp_ack_entry
-                                            *entry =
-                                                rd_calloc(1, sizeof(*entry));
-                                        entry->topic_id     = TopicId;
-                                        entry->partition    = Partition;
-                                        entry->first_offset = AckFirstOffset;
-                                        entry->last_offset  = AckLastOffset;
-                                        entry->ack_type     = single_type;
-                                        rd_list_add(&ack_entries, entry);
+                                        rd_list_add(
+                                            &ack_entries,
+                                            rd_kafka_mock_sgrp_ack_entry_new(
+                                                TopicId, Partition,
+                                                AckFirstOffset, AckLastOffset,
+                                                single_type));
                                 } else if (ack_types &&
                                            AckTypeCnt == range_len) {
-                                        /* Per-offset: one entry per offset */
                                         for (ti = 0; ti < range_len; ti++) {
-                                                struct
-                                                    rd_kafka_mock_sgrp_ack_entry
-                                                        *entry = rd_calloc(
-                                                            1, sizeof(*entry));
-                                                entry->topic_id  = TopicId;
-                                                entry->partition = Partition;
-                                                entry->first_offset =
-                                                    AckFirstOffset + ti;
-                                                entry->last_offset =
-                                                    AckFirstOffset + ti;
-                                                entry->ack_type = ack_types[ti];
-                                                rd_list_add(&ack_entries,
-                                                            entry);
+                                                rd_list_add(
+                                                    &ack_entries,
+                                                    rd_kafka_mock_sgrp_ack_entry_new(
+                                                        TopicId, Partition,
+                                                        AckFirstOffset + ti,
+                                                        AckFirstOffset + ti,
+                                                        ack_types[ti]));
                                         }
                                 } else if (AckTypeCnt > 0) {
-                                        /* AckTypeCnt is neither 1 nor
-                                         * range_len: malformed request. */
                                         ack_parse_err = rd_true;
                                 }
                         }
@@ -4645,36 +4652,24 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                 rd_kafka_buf_skip_tags(rkbuf);
 
                                 if (AckTypeCnt == 1 && single_type >= 0) {
-                                        struct rd_kafka_mock_sgrp_ack_entry
-                                            *entry =
-                                                rd_calloc(1, sizeof(*entry));
-                                        entry->topic_id     = TopicId;
-                                        entry->partition    = Partition;
-                                        entry->first_offset = AckFirstOffset;
-                                        entry->last_offset  = AckLastOffset;
-                                        entry->ack_type     = single_type;
-                                        rd_list_add(&ack_entries, entry);
+                                        rd_list_add(
+                                            &ack_entries,
+                                            rd_kafka_mock_sgrp_ack_entry_new(
+                                                TopicId, Partition,
+                                                AckFirstOffset, AckLastOffset,
+                                                single_type));
                                 } else if (ack_types &&
                                            AckTypeCnt == range_len) {
-                                        /* Per-offset: one entry per offset */
                                         for (ti = 0; ti < range_len; ti++) {
-                                                struct
-                                                    rd_kafka_mock_sgrp_ack_entry
-                                                        *entry = rd_calloc(
-                                                            1, sizeof(*entry));
-                                                entry->topic_id  = TopicId;
-                                                entry->partition = Partition;
-                                                entry->first_offset =
-                                                    AckFirstOffset + ti;
-                                                entry->last_offset =
-                                                    AckFirstOffset + ti;
-                                                entry->ack_type = ack_types[ti];
-                                                rd_list_add(&ack_entries,
-                                                            entry);
+                                                rd_list_add(
+                                                    &ack_entries,
+                                                    rd_kafka_mock_sgrp_ack_entry_new(
+                                                        TopicId, Partition,
+                                                        AckFirstOffset + ti,
+                                                        AckFirstOffset + ti,
+                                                        ack_types[ti]));
                                         }
                                 } else if (AckTypeCnt > 0) {
-                                        /* AckTypeCnt is neither 1 nor
-                                         * range_len: malformed request. */
                                         ack_parse_err = rd_true;
                                 }
                         }

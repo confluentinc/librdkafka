@@ -3799,8 +3799,8 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                         if (offset < pmeta->spso)
                                 continue;
 
-                        state = rd_kafka_mock_sgrp_record_state_find(pmeta,
-                                                                     offset);
+                        state =
+                            rd_kafka_mock_sgrp_record_state_find(pmeta, offset);
                         if (!state)
                                 continue;
 
@@ -4460,8 +4460,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         if (!mpart)
                                                 part_err =
                                                     RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
-                                        else if (mpart->leader !=
-                                                 mconn->broker)
+                                        else if (mpart->leader != mconn->broker)
                                                 part_err =
                                                     RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
                                         else
@@ -4502,16 +4501,16 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         /* Response: CurrentLeader */
                                         if (mpart && mpart->leader)
                                                 rd_kafka_buf_write_i32(
-                                                    resp,
-                                                    mpart->leader->id);
+                                                    resp, mpart->leader->id);
                                         else
-                                                rd_kafka_buf_write_i32(resp, -1);
-                                        if (mpart)
+                                                rd_kafka_buf_write_i32(resp,
+                                                                       -1);
+                                        if (mpart && mpart->leader)
                                                 rd_kafka_buf_write_i32(
-                                                    resp,
-                                                    mpart->leader_epoch);
+                                                    resp, mpart->leader_epoch);
                                         else
-                                                rd_kafka_buf_write_i32(resp, -1);
+                                                rd_kafka_buf_write_i32(resp,
+                                                                       -1);
                                         rd_kafka_buf_write_tags_empty(resp);
                                         /* Response: Records (all acquired
                                          * batches concatenated) */
@@ -4880,8 +4879,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                         if (!mpart)
                                                 part_err =
                                                     RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
-                                        else if (mpart->leader !=
-                                                 mconn->broker)
+                                        else if (mpart->leader != mconn->broker)
                                                 part_err =
                                                     RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
                                         else
@@ -4907,15 +4905,13 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                         /* CurrentLeader */
                                         if (mpart && mpart->leader)
                                                 rd_kafka_buf_write_i32(
-                                                    resp,
-                                                    mpart->leader->id);
+                                                    resp, mpart->leader->id);
                                         else
                                                 rd_kafka_buf_write_i32(
                                                     resp, -1); /* LeaderId */
-                                        if (mpart)
+                                        if (mpart && mpart->leader)
                                                 rd_kafka_buf_write_i32(
-                                                    resp,
-                                                    mpart->leader_epoch);
+                                                    resp, mpart->leader_epoch);
                                         else
                                                 rd_kafka_buf_write_i32(
                                                     resp, -1); /* LeaderEpoch */

@@ -2872,6 +2872,63 @@ void test_produce_msgs_simple(rd_kafka_t *rk,
         rd_kafka_topic_destroy(rkt);
 }
 
+
+
+/**
+ * @brief Consume share messages until expected count or max attempts.
+ *
+ * @param rk Share consumer handle.
+ * @param expected Number of messages to consume.
+ * @param max_attempts Maximum poll attempts.
+ * @param timeout_ms Timeout per poll in milliseconds.
+ * @param expected_topics Array of valid topic names (NULL to skip
+ * verification).
+ * @param expected_topic_cnt Number of topics in expected_topics.
+ *
+ * @returns Number of messages consumed, or -1 if message from wrong topic.
+ */
+int test_share_consume_msgs(rd_kafka_share_t *rk,
+                            int expected,
+                            int max_attempts,
+                            int timeout_ms,
+                            const char **expected_topics,
+                            int expected_topic_cnt) {
+        int total = 0;
+
+        while (total < expected && max_attempts-- > 0) {
+                int batch_cnt = 0;
+                int ret;
+
+                ret = test_share_consume_batch(rk, timeout_ms, expected_topics,
+                                               expected_topic_cnt, &batch_cnt);
+                if (ret < 0)
+                        return -1; /* Wrong topic detected */
+
+                total += batch_cnt;
+        }
+
+        return total;
+}
+
+
+void test_produce_msgs_simple(rd_kafka_t *producer,
+                              const char *topic,
+                              int msgcnt) {
+        int i;
+        for (i = 0; i < msgcnt; i++) {
+                char payload[64];
+                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
+                TEST_ASSERT(rd_kafka_producev(
+                                producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce failed");
+        }
+        rd_kafka_flush(producer, 5000);
+}
+
+
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk,
                                              const char *topic) {
         rd_kafka_topic_t *rkt;

@@ -110,8 +110,7 @@ static int setup_topics_and_produce(test_context_t *ctx,
                 TEST_SAY("Creating topic %s with %d partition(s)\n",
                          ctx->topic_names[t], partitions[t]);
 
-                test_create_topic_wait_exists(common_admin,
-                                              ctx->topic_names[t],
+                test_create_topic_wait_exists(common_admin, ctx->topic_names[t],
                                               partitions[t], -1, 60 * 1000);
 
                 for (p = 0; p < partitions[t]; p++) {

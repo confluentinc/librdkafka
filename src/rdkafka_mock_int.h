@@ -183,9 +183,10 @@ typedef struct rd_kafka_mock_cgrp_consumer_member_s {
  * @brief Share record state.
  */
 enum rd_kafka_mock_sgrp_record_state_e {
-        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE = 0,
-        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED  = 1,
-        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED  = 2
+        RD_KAFKA_MOCK_SGRP_RECORD_AVAILABLE    = 0,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED     = 1,
+        RD_KAFKA_MOCK_SGRP_RECORD_ACKNOWLEDGED = 2,
+        RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED     = 3
 };
 
 typedef struct rd_kafka_mock_sgrp_record_state_s {
@@ -208,6 +209,7 @@ typedef struct rd_kafka_mock_sgrp_partmeta_s {
         int64_t speo;
         TAILQ_HEAD(, rd_kafka_mock_sgrp_record_state_s) inflight;
         int inflight_cnt;
+        int acquired_cnt; /**< Number of records in ACQUIRED state */
 } rd_kafka_mock_sgrp_partmeta_t;
 
 /**
@@ -221,10 +223,12 @@ typedef struct rd_kafka_mock_sgrp_fetch_session_s {
         int32_t session_epoch;
         rd_ts_t ts_last_activity;
         rd_kafka_topic_partition_list_t *partitions;
+        int partition_start_idx; /**< Rotation index for starvation prevention
+                                  */
 } rd_kafka_mock_sgrp_fetch_session_t;
 
 /**
- * @struct Share group (KIP-932).
+ * @struct Share group.
  */
 typedef struct rd_kafka_mock_sharegroup_s {
         TAILQ_ENTRY(rd_kafka_mock_sharegroup_s) link;
@@ -239,7 +243,7 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int member_cnt;              /**< Number of share group members */
         rd_bool_t manual_assignment; /**< Use manual assignment */
 
-        /* ShareFetch state (KIP-932) */
+        /* ShareFetch state */
         TAILQ_HEAD(, rd_kafka_mock_sgrp_partmeta_s)
         partitions;        /**< Share partition metadata */
         int partition_cnt; /**< Number of partitions */
@@ -258,10 +262,17 @@ typedef struct rd_kafka_mock_sharegroup_s {
         int isolation_level;         /**< Share isolation level */
         int max_size;                /**< Max members allowed.
                                       *   0 = unlimited (default). */
+        int max_fetch_sessions;      /**< Max fetch sessions per broker.
+                                      *   0 = unlimited (default 2000). */
+        int max_record_locks;        /**< Max acquired record locks per
+                                      *   share-partition.
+                                      *   0 = unlimited (default 2000). */
+        int auto_offset_reset;       /**< 0 = latest (default),
+                                      *   1 = earliest. */
 } rd_kafka_mock_sharegroup_t;
 
 /**
- * @struct Share group member (KIP-932).
+ * @struct Share group member.
  */
 typedef struct rd_kafka_mock_sharegroup_member_s {
         TAILQ_ENTRY(rd_kafka_mock_sharegroup_member_s) link;
@@ -627,22 +638,31 @@ struct rd_kafka_mock_cluster_s {
                 int group_consumer_session_timeout_ms;
                 /** Heartbeat interval (KIP 848) */
                 int group_consumer_heartbeat_interval_ms;
-                /** Session timeout (KIP 932) */
+                /** Session timeout */
                 int sharegroup_session_timeout_ms;
-                /** Heartbeat interval (KIP 932) */
+                /** Heartbeat interval */
                 int sharegroup_heartbeat_interval_ms;
-                /** Max delivery attempts per record (KIP 932).
+                /** Max delivery attempts per record.
                  *  0 = unlimited. */
                 int sharegroup_max_delivery_attempts;
-                /** Per-record lock duration in ms (KIP 932).
+                /** Per-record lock duration in ms.
                  *  0 = use session_timeout_ms. */
                 int sharegroup_record_lock_duration_ms;
-                /** Share isolation level (KIP 932).
+                /** Share isolation level.
                  *  0 = read_uncommitted, 1 = read_committed. */
                 int sharegroup_isolation_level;
-                /** Max members allowed in share group (KIP 932).
+                /** Max members allowed in share group.
                  *  0 = unlimited. */
                 int sharegroup_max_size;
+                /** Max fetch sessions per broker.
+                 *  0 = unlimited. */
+                int sharegroup_max_fetch_sessions;
+                /** Max acquired record locks per share-partition.
+                 *  0 = unlimited. */
+                int sharegroup_max_record_locks;
+                /** Auto offset reset.
+                 *  0 = latest (default), 1 = earliest. */
+                int sharegroup_auto_offset_reset;
         } defaults;
 
         /**< Dynamic array of IO handlers for corresponding fd in .fds */
@@ -728,6 +748,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
     const char *api_name);
 void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_partmeta_t *pmeta,
     rd_kafka_mock_sgrp_record_state_t *state);
 void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                                              const char *member_id);
@@ -909,7 +930,7 @@ rd_kafka_mock_cgrp_consumer_member_t *rd_kafka_mock_cgrp_consumer_member_add(
 void rd_kafka_mock_cgrps_connection_closed(rd_kafka_mock_cluster_t *mcluster,
                                            rd_kafka_mock_connection_t *mconn);
 
-/* Share group (KIP-932) */
+/* Share group */
 
 void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster);
 

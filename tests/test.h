@@ -574,6 +574,10 @@ int test_share_consume_msgs(rd_kafka_share_t *rk,
                             const char **expected_topics,
                             int expected_topic_cnt);
 
+void test_produce_msgs_simple(rd_kafka_t *producer,
+                              const char *topic,
+                              int msgcnt);
+
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk, const char *topic);
 rd_kafka_topic_t *
 test_create_topic_object(rd_kafka_t *rk, const char *topic, ...);

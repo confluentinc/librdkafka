@@ -1364,22 +1364,6 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         memset(ctx, 0, sizeof(*ctx));
 }
 
-static void
-produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
-        int i;
-        for (i = 0; i < msgcnt; i++) {
-                char payload[64];
-                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
-                TEST_ASSERT(rd_kafka_producev(
-                                producer, RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Produce failed");
-        }
-        rd_kafka_flush(producer, 5000);
-}
-
 static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
                                             const char *group_id,
                                             const char *ack_mode) {
@@ -1446,7 +1430,7 @@ static void do_test_mock_inflight_caching(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
 
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         rkshare =
             new_share_consumer(ctx.bootstraps, "sg-mock-inflight", "explicit");

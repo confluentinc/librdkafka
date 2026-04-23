@@ -1160,7 +1160,8 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
     rd_kafka_buf_t *rkbuf,
     rd_kafka_buf_t *request,
     rd_list_t *filtered_msgs,
-    rd_kafka_share_ack_batches_t *batches_out) {
+    rd_kafka_share_ack_batches_t *batches_out,
+    rd_list_t *request_ack_details) {
 
         int32_t PartitionId;
         int16_t PartitionFetchErrorCode;
@@ -1199,6 +1200,23 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
             rkbuf, &AcknowledgementErrorCode);  // AcknowledgementError
         rd_kafka_buf_read_str(
             rkbuf, &AcknowledgementErrorStr);  // AcknowledgementErrorString
+
+        /* Set the AcknowledgementErrorCode on the matching ack batch
+         * in request_ack_details, so the main thread can map
+         * per-partition ack errors to commit_sync results /
+         * acknowledgement callback. PartitionFetchErrorCode is for
+         * fetch-level errors and is handled separately. The partition
+         * may be present in the response but absent from
+         * request_ack_details (e.g. fetch-only partitions from
+         * toppars_to_add) — silently skip those, same as Java's
+         * handleShareFetchSuccess at line 870-881. */
+        if (request_ack_details) {
+                rd_kafka_share_ack_batches_t *batch =
+                    rd_kafka_share_find_ack_batch_by_id(request_ack_details,
+                                                        topic_id, PartitionId);
+                if (batch)
+                        batch->rktpar->err = AcknowledgementErrorCode;
+        }
 
         if (AcknowledgementErrorCode != RD_KAFKA_RESP_ERR_NO_ERROR) {
                 rd_kafka_dbg(rkb->rkb_rk, CGRP, "SHAREACK",
@@ -1476,7 +1494,8 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
                         if (rd_kafka_share_fetch_reply_handle_partition(
                                 rkb, &topic, topic_id, rkt, rkbuf, request,
-                                filtered_msgs, batches)) {
+                                filtered_msgs, batches,
+                                rko_orig->rko_u.share_fetch.ack_details)) {
                                 rd_kafka_share_ack_batches_destroy(batches);
                                 goto err_parse;
                         }
@@ -1567,16 +1586,11 @@ err_parse:
  * to toppars_to_add so the next request re-establishes the
  * full session.
  *
- * Any acknowledgements present in \p rko_orig are destroyed since
- * the broker did not process them (session was invalid).
- *
  * @param rkb Broker whose session is being reset.
- * @param rko_orig The SHARE_FETCH op whose ack_details need cleanup.
  *
  * @locality broker thread
  */
-static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb,
-                                          rd_kafka_op_t *rko_orig) {
+static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *tmp_rktp;
 
         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
@@ -1639,16 +1653,6 @@ static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb,
                                     rktp); /* transfer ref */
                 else
                         rd_kafka_toppar_destroy(rktp); /* from session list */
-        }
-
-        /* Destroy acknowledgements from the failed request — the broker
-         * did not process them because the session was invalid.
-         * TODO KIP-932: When acknowledgement callbacks are implemented,
-         * report these acks as failed to the application via the
-         * callback instead of silently dropping them. */
-        if (rko_orig->rko_u.share_fetch.ack_details) {
-                rd_list_destroy(rko_orig->rko_u.share_fetch.ack_details);
-                rko_orig->rko_u.share_fetch.ack_details = NULL;
         }
 }
 
@@ -1804,35 +1808,37 @@ static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
  * @brief Parse a ShareAcknowledge response.
  *
  * ShareAcknowledge response contains per-partition error codes for
- * acknowledgement results. Returns the top-level error code and
- * populates \p ack_resultsp with per-partition error results.
+ * acknowledgement results. Returns the top-level error code and sets
+ * the err field on each matching batch in \p ack_details.
+ *
+ * TODO KIP-932: Consider using rd_kafka_error_t instead of
+ * rd_kafka_resp_err_t for the per-partition result and
+ * acknowledgement callback.
  *
  * @param rkb Broker handle.
  * @param rkbuf Response buffer.
  * @param request Original request buffer.
- * @param ack_resultsp [out] Per-partition error results. Caller must
- *                     destroy. Set to NULL on top-level error or
- *                     parse error.
+ * @param ack_details List of acknowledgement batches sent in the
+ *                    request. Each matched batch's rktpar->err is
+ *                    updated with the partition-level error code
+ *                    from the response.
  *
  * @returns Top-level error code.
  * @locality broker thread
  */
-static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
-    rd_kafka_broker_t *rkb,
-    rd_kafka_buf_t *rkbuf,
-    rd_kafka_buf_t *request,
-    rd_kafka_topic_partition_list_t **ack_resultsp) {
+static rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
+                                        rd_kafka_buf_t *rkbuf,
+                                        rd_kafka_buf_t *request,
+                                        rd_list_t *ack_details) {
         int32_t TopicArrayCnt;
         int i;
         const int log_decode_errors = LOG_ERR;
         int16_t ErrorCode           = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafkap_str_t ErrorStr    = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
-        rd_kafka_topic_partition_list_t *ack_results = NULL;
-        NodeEndpoints.NodeEndpoints                  = NULL;
-        NodeEndpoints.NodeEndpointCnt                = 0;
-
-        *ack_resultsp = NULL;
+        NodeEndpoints.NodeEndpoints   = NULL;
+        NodeEndpoints.NodeEndpointCnt = 0;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1849,16 +1855,12 @@ static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
 
-        ack_results = rd_kafka_topic_partition_list_new(TopicArrayCnt);
-
         for (i = 0; i < TopicArrayCnt; i++) {
                 rd_kafka_Uuid_t topic_id = RD_KAFKA_UUID_ZERO;
-                rd_kafka_topic_t *rkt;
                 int32_t PartitionArrayCnt;
                 int j;
 
                 rd_kafka_buf_read_uuid(rkbuf, &topic_id);
-                rkt = rd_kafka_topic_find_by_topic_id(rkb->rkb_rk, topic_id);
 
                 rd_kafka_buf_read_arraycnt(rkbuf, &PartitionArrayCnt,
                                            RD_KAFKAP_PARTITIONS_MAX);
@@ -1868,7 +1870,7 @@ static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
                         int16_t PartErrorCode;
                         rd_kafkap_str_t PartErrorStr;
                         rd_kafkap_CurrentLeader_t CurrentLeader;
-                        rd_kafka_topic_partition_t *rktpar;
+                        rd_kafka_share_ack_batches_t *batch;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
                         rd_kafka_buf_read_i16(rkbuf, &PartErrorCode);
@@ -1877,11 +1879,17 @@ static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
                         /* CurrentLeader */
                         rd_kafka_buf_read_CurrentLeader(rkbuf, &CurrentLeader);
 
-                        rktpar =
-                            rd_kafka_topic_partition_list_add_with_topic_name_and_id(
-                                ack_results, topic_id,
-                                rkt ? rkt->rkt_topic->str : NULL, Partition);
-                        rktpar->err = PartErrorCode;
+                        batch = rd_kafka_share_find_ack_batch_by_id(
+                            ack_details, topic_id, Partition);
+                        if (batch) {
+                                batch->rktpar->err = PartErrorCode;
+                        } else {
+                                rd_rkb_log(
+                                    rkb, LOG_ERR, "SHAREACK",
+                                    "Invalid partition %" PRId32
+                                    " received in ShareAcknowledge response",
+                                    Partition);
+                        }
 
                         if (PartErrorCode) {
                                 rd_rkb_dbg(rkb, FETCH, "SHAREACK",
@@ -1896,9 +1904,6 @@ static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
                         rd_kafka_buf_skip_tags(rkbuf);
                 }
 
-                if (rkt)
-                        rd_kafka_topic_destroy0(rkt);
-
                 /* Topic tags */
                 rd_kafka_buf_skip_tags(rkbuf);
         }
@@ -1909,12 +1914,10 @@ static rd_kafka_resp_err_t rd_kafka_share_acknowledge_reply_handle(
         rd_kafka_buf_skip_tags(rkbuf);
 
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
-        *ack_resultsp = ack_results;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
-        RD_IF_FREE(ack_results, rd_kafka_topic_partition_list_destroy);
         rd_rkb_dbg(rkb, MSG, "BADMSG",
                    "Bad ShareAcknowledge response (v%d): parse error",
                    (int)request->rkbuf_reqhdr.ApiVersion);
@@ -1935,24 +1938,29 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                                                     void *opaque) {
         rd_kafka_op_t *rko_orig = opaque;
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                rd_kafka_broker_session_update(rkb);
-                if (rko_orig->rko_u.share_fetch.ack_details) {
-                        rd_list_destroy(
-                            rko_orig->rko_u.share_fetch.ack_details);
-                        rko_orig->rko_u.share_fetch.ack_details = NULL;
+        /* Initialize each batch's err to INVALID_RECORD_STATE. Any
+         * batch still with this value after processing means the
+         * partition was sent in the request but missing from the
+         * response — matches Java's INVALID_RESPONSE handling at
+         * ShareConsumeRequestManager.processingComplete. */
+        if (rko_orig->rko_u.share_fetch.ack_details) {
+                rd_kafka_share_ack_batches_t *batch;
+                int i;
+                RD_LIST_FOREACH(batch, rko_orig->rko_u.share_fetch.ack_details,
+                                i) {
+                        batch->rktpar->err =
+                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
                 }
-                rd_kafka_op_reply(rko_orig, err);
-                return;
         }
 
-        /* Parse and handle the response (unless the request errored) */
-        if (!err && reply) {
-                rd_kafka_topic_partition_list_t *ack_results = NULL;
+        /* Parse and handle the response (unless the request errored).
+         * The parser sets per-partition err on the matching batches in
+         * ack_details. DESTROY case falls through here and is handled
+         * by the generic top-level error path below. */
+        if (!err && reply)
                 err = rd_kafka_share_acknowledge_reply_handle(
-                    rkb, reply, request, &ack_results);
-                rko_orig->rko_u.share_fetch.ack_results = ack_results;
-        }
+                    rkb, reply, request,
+                    rko_orig->rko_u.share_fetch.ack_details);
 
         rd_kafka_broker_session_update(rkb);
 
@@ -1978,7 +1986,7 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                          *    that sparse connection's need_connection
                          *    is updated after the connection is torn
                          *    down so that the broker reconnects. */
-                        rd_kafka_broker_session_reset(rkb, rko_orig);
+                        rd_kafka_broker_session_reset(rkb);
                         break;
 
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
@@ -2005,25 +2013,30 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 default:
                         /* Unlike Java, we have decided to not retry
                          * ShareAcknowledge RPC level errors. Java
-                         * will follow this approach as well.
-                         * TODO KIP-932:
-                         * 1) Report failed acks to the application
-                         *    via the acknowledgement callback.
-                         * 2) Update partition errors in commit_sync
-                         *    result. */
+                         * will follow this approach as well. */
                         break;
+                }
+
+                /* Top-level error: the response was not parsed per
+                 * partition. Set err on each ack batch so the main
+                 * thread (or op destructor) can map the error to all
+                 * partitions sent to this broker (for commit_sync
+                 * results and acknowledgement callback). */
+                if (rko_orig->rko_u.share_fetch.ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
+                        int i;
+                        RD_LIST_FOREACH(
+                            batch, rko_orig->rko_u.share_fetch.ack_details, i) {
+                                batch->rktpar->err = err;
+                        }
                 }
         }
 
         if (rko_orig->rko_u.share_fetch.should_leave)
                 rd_kafka_broker_share_fetch_session_clear(rkb);
 
-        /* Destroy ack_details — on success the acks have been sent,
-         * on error they are unprocessable. */
-        if (rko_orig->rko_u.share_fetch.ack_details) {
-                rd_list_destroy(rko_orig->rko_u.share_fetch.ack_details);
-                rko_orig->rko_u.share_fetch.ack_details = NULL;
-        }
+        /* ack_details is owned by the op and freed by the op destructor
+         * after the main thread has processed the reply. */
 
         rd_kafka_op_reply(rko_orig, err);
 }
@@ -2044,25 +2057,29 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         rd_kafka_op_t *rko_orig     = opaque;
         rd_kafka_op_t *response_rko = NULL;
 
-        /**
-         * TODO KIP-932: Improve this handling with Error handling and leave
-         * flow.
-         */
-        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                /* TODO KIP-932: Check what is needed out of the below */
-                rd_kafka_broker_session_update(rkb);
-                if (rko_orig->rko_u.share_fetch.ack_details) {
-                        rd_list_destroy(
-                            rko_orig->rko_u.share_fetch.ack_details);
-                        rko_orig->rko_u.share_fetch.ack_details = NULL;
-                }
-                rd_kafka_op_reply(rko_orig, err);
-                return; /* Terminating */
-        }
-
         rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
 
-        /* Parse and handle the messages (unless the request errored) */
+        /* Initialize each batch's err to INVALID_RECORD_STATE. Any
+         * batch still with this value after processing means the
+         * partition's ack was not acknowledged in the response —
+         * matches Java's INVALID_RESPONSE handling. */
+        if (rko_orig->rko_u.share_fetch.ack_details) {
+                rd_kafka_share_ack_batches_t *batch;
+                int i;
+                RD_LIST_FOREACH(batch, rko_orig->rko_u.share_fetch.ack_details,
+                                i) {
+                        batch->rktpar->err =
+                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
+                }
+        }
+
+        /* Parse the response only if the network/broker layer didn't
+         * report an error. If err is set (e.g. __TRANSPORT,
+         * __TIMED_OUT, __DESTROY), the reply buffer is unusable so
+         * we skip parsing. The parser sets per-partition err on
+         * matching batches in ack_details. The DESTROY/network error
+         * case falls through to the generic top-level error path
+         * below. */
         if (!err && reply)
                 err = rd_kafka_share_fetch_reply_handle(rkb, reply, request,
                                                         &response_rko);
@@ -2099,7 +2116,7 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                          *    that sparse connection's need_connection
                          *    is updated after the connection is torn
                          *    down so that the broker reconnects. */
-                        rd_kafka_broker_session_reset(rkb, rko_orig);
+                        rd_kafka_broker_session_reset(rkb);
                         break;
 
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
@@ -2131,18 +2148,26 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         break;
                 }
 
+                /* Top-level error: the response was not parsed per
+                 * partition (or the request never reached the broker).
+                 * Set err on each ack batch so the main thread can map
+                 * the error to all partitions sent to this broker (for
+                 * commit_sync results and acknowledgement callback). */
+                if (rko_orig->rko_u.share_fetch.ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
+                        int i;
+                        RD_LIST_FOREACH(
+                            batch, rko_orig->rko_u.share_fetch.ack_details, i) {
+                                batch->rktpar->err = err;
+                        }
+                }
+
                 /* There is no retry for ShareFetch RPC at the broker
                  * thread level. */
         }
 
-        /* Destroy ack_details before replying — on success the acks
-         * have been sent to the broker, on error they are unprocessable.
-         * TODO KIP-932: When acknowledgement callbacks are implemented,
-         * report failed acks to the application via the callback. */
-        if (rko_orig->rko_u.share_fetch.ack_details) {
-                rd_list_destroy(rko_orig->rko_u.share_fetch.ack_details);
-                rko_orig->rko_u.share_fetch.ack_details = NULL;
-        }
+        /* ack_details is owned by the op and freed by the op destructor
+         * after the main thread has processed the reply. */
 
         rd_kafka_op_reply(rko_orig, err);
 

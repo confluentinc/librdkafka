@@ -3258,30 +3258,26 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
             rko_orig->rko_u.share_fetch.commit_sync_request_id ==
                 rkcg->rkcg_commit_sync_request.id) {
-                rd_kafka_topic_partition_list_t *ack_results =
-                    rko_orig->rko_u.share_fetch.ack_results;
+                rd_list_t *ack_details =
+                    rko_orig->rko_u.share_fetch.ack_details;
 
-                if (ack_results) {
+                /* Per-partition errors are carried on each batch's
+                 * rktpar->err. The broker thread sets these on both
+                 * success (per-partition error from response) and
+                 * top-level error (top-level err on each batch). */
+                if (ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
                         int k;
-                        for (k = 0; k < ack_results->cnt; k++) {
-                                rd_kafka_topic_partition_t *src =
-                                    &ack_results->elems[k];
+                        RD_LIST_FOREACH(batch, ack_details, k) {
                                 rd_kafka_topic_partition_t *dst =
                                     rd_kafka_topic_partition_list_find(
                                         rkcg->rkcg_commit_sync_request.results,
-                                        src->topic, src->partition);
+                                        batch->rktpar->topic,
+                                        batch->rktpar->partition);
                                 if (dst)
-                                        dst->err = src->err;
+                                        dst->err = batch->rktpar->err;
                         }
                 }
-
-                /* TODO KIP-932: When broker reply has a top-level error
-                 * (e.g. SHARE_SESSION_NOT_FOUND, __TRANSPORT, __DESTROY)
-                 * ack_results is NULL but partitions handled by this
-                 * broker remain as _IN_PROGRESS sentinel. Should map
-                 * rko_orig->rko_err to all partitions that were sent
-                 * to this broker so they don't leak _IN_PROGRESS to
-                 * the caller. */
 
                 rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt--;
 
@@ -3913,12 +3909,14 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
 
         /* TODO: Verify that __TIMED_OUT (local timeout) is the correct
          *  error here rather than REQUEST_TIMED_OUT (broker error). */
-        /* Fill partitions still IN_PROGRESS with __TIMED_OUT */
+        /* Fill partitions still IN_PROGRESS with REQUEST_TIMED_OUT
+         * (matches Java's commit_sync deadline behavior at
+         * ShareConsumeRequestManager.handleAcknowledgeTimedOut). */
         results = rkcg->rkcg_commit_sync_request.results;
         for (i = 0; i < results->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &results->elems[i];
                 if (rktpar->err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
-                        rktpar->err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                        rktpar->err = RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
         }
 
         rd_kafka_share_commit_sync_send_response(rkcg);

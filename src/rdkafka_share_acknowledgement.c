@@ -311,6 +311,39 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
 }
 
 /**
+ * @brief Find an existing ack batch by topic id and partition.
+ *
+ * Same as rd_kafka_share_find_ack_batch but takes topic_id and
+ * partition directly to avoid allocating a temporary
+ * rd_kafka_topic_partition_t for the lookup.
+ *
+ * TODO KIP-932: Merge this with rd_kafka_share_find_ack_batch and use
+ * rd_list_find with binary search once ack_list is kept sorted.
+ *
+ * @param ack_list List of rd_kafka_share_ack_batches_t*.
+ * @param topic_id Topic UUID to match.
+ * @param partition Partition id to match.
+ *
+ * @returns Matching batch, or NULL if not found.
+ */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
+                                    rd_kafka_Uuid_t topic_id,
+                                    int32_t partition) {
+        rd_kafka_share_ack_batches_t *existing;
+        int i;
+
+        RD_LIST_FOREACH(existing, ack_list, i) {
+                if (existing->rktpar->partition == partition &&
+                    !rd_kafka_Uuid_cmp(
+                        rd_kafka_topic_partition_get_topic_id(existing->rktpar),
+                        topic_id))
+                        return existing;
+        }
+        return NULL;
+}
+
+/**
  * @brief Segregate ack batches from a FANOUT op by partition leader.
  *
  * For each ack batch, looks up the current leader broker via the

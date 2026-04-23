@@ -158,6 +158,17 @@ rd_kafka_share_ack_batches_t *
 rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
                               const rd_kafka_topic_partition_t *rktpar);
 
+/**
+ * @brief Find an existing ack batch by topic id and partition.
+ *
+ * TODO KIP-932: Merge with rd_kafka_share_find_ack_batch and use
+ * binary search once ack_list is kept sorted.
+ */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
+                                    rd_kafka_Uuid_t topic_id,
+                                    int32_t partition);
+
 void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);
 

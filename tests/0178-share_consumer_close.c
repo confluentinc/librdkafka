@@ -34,6 +34,12 @@
 #define MAX_PARTITIONS 32
 #define BATCH_SIZE     10000
 
+/** Common producer reused across all real-broker tests. */
+static rd_kafka_t *common_producer;
+
+/** Common admin client reused across all real-broker tests. */
+static rd_kafka_t *common_admin;
+
 /**
  * @brief Commit mode for test scenarios
  */
@@ -79,18 +85,6 @@ static const char *commit_mode_str(commit_mode_t mode) {
 }
 
 /**
- * @brief Set share.auto.offset.reset=earliest for a share group.
- */
-static void set_group_offset_earliest(rd_kafka_share_t *rkshare,
-                                      const char *group_name) {
-        const char *cfg[] = {"share.auto.offset.reset", "SET", "earliest"};
-
-        test_IncrementalAlterConfigs_simple(
-            rd_kafka_share_consumer_get_rk(rkshare), RD_KAFKA_RESOURCE_GROUP,
-            group_name, cfg, 1);
-}
-
-/**
  * @brief Setup topics and produce messages (modular helper)
  *
  * @param ctx Test context to populate
@@ -116,12 +110,14 @@ static int setup_topics_and_produce(test_context_t *ctx,
                 TEST_SAY("Creating topic %s with %d partition(s)\n",
                          ctx->topic_names[t], partitions[t]);
 
-                test_create_topic_wait_exists(NULL, ctx->topic_names[t],
+                test_create_topic_wait_exists(common_admin,
+                                              ctx->topic_names[t],
                                               partitions[t], -1, 60 * 1000);
 
                 for (p = 0; p < partitions[t]; p++) {
-                        test_produce_msgs_easy(ctx->topic_names[t], 0, p,
-                                               msgs_per_partition);
+                        test_produce_msgs_simple(common_producer,
+                                                 ctx->topic_names[t], p,
+                                                 msgs_per_partition);
                         total_msgs += msgs_per_partition;
                 }
 
@@ -463,6 +459,91 @@ static void free_tracked_messages(tracked_msg_t *tracked_msgs,
 }
 
 /**
+ * @brief Helper: assert the given rd_kafka_error_t* signals closed/closing.
+ */
+static void assert_state_error(rd_kafka_error_t *error, const char *api_name) {
+        TEST_ASSERT(error != NULL, "%s: expected error, got NULL", api_name);
+        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
+                    "%s: expected __STATE, got %s", api_name,
+                    rd_kafka_err2name(rd_kafka_error_code(error)));
+        TEST_ASSERT(strstr(rd_kafka_error_string(error), "closed") != NULL,
+                    "%s: expected error string to contain 'closed', got '%s'",
+                    api_name, rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
+}
+
+/**
+ * @brief Invoke every share-consumer API and assert each returns a
+ *        closed state error.
+ *
+ * @param consumer    Share consumer (already closed or closing).
+ * @param topic       Topic name (for subscribe/acknowledge_offset).
+ */
+static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
+                                         const char *topic) {
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        rd_kafka_message_t *batch[4];
+        size_t rcvd = 0;
+        rd_kafka_topic_partition_list_t *subs, *sub_result = NULL;
+        rd_kafka_topic_partition_list_t *commit_results = NULL;
+        rd_kafka_queue_t *queue                         = NULL;
+
+        /* 1. consume_batch */
+        error = rd_kafka_share_consume_batch(consumer, 100, batch, &rcvd);
+        assert_state_error(error, "consume_batch");
+
+        /* 2. commit_async */
+        error = rd_kafka_share_commit_async(consumer);
+        assert_state_error(error, "commit_async");
+
+        /* 3. commit_sync */
+        error = rd_kafka_share_commit_sync(consumer, 1000, &commit_results);
+        assert_state_error(error, "commit_sync");
+        TEST_ASSERT(commit_results == NULL,
+                    "commit_sync: expected no partitions on error");
+
+        /* 4. acknowledge_offset */
+        err = rd_kafka_share_acknowledge_offset(
+            consumer, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "acknowledge_offset: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+
+        /* 5. subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        err = rd_kafka_share_subscribe(consumer, subs);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "subscribe: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* 6. unsubscribe */
+        err = rd_kafka_share_unsubscribe(consumer);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "unsubscribe: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+
+        /* 7. subscription */
+        err = rd_kafka_share_subscription(consumer, &sub_result);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "subscription: expected __STATE, got %s",
+                    rd_kafka_err2name(err));
+        TEST_ASSERT(sub_result == NULL, "subscription: expected NULL result");
+
+        /* 8. close */
+        error = rd_kafka_share_consumer_close(consumer);
+        assert_state_error(error, "close");
+
+        /* 9. async close */
+        queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
+        error = rd_kafka_share_consumer_close_queue(consumer, queue);
+        rd_kafka_queue_destroy(queue);
+        assert_state_error(error, "close");
+}
+
+/**
  * @brief Close with acknowledge test scenarios
  *
  * Tests consumer close behavior with different commit modes and topologies.
@@ -535,12 +616,12 @@ static void test_close_with_acknowledge(void) {
                                          config->partitions,
                                          config->msgs_per_partition);
 
+                /* Set group offset to earliest */
+                test_share_set_auto_offset_reset(ctx.group_id, "earliest");
+
                 /* Create C1 with explicit ack mode (will call acknowledge()
                  * explicitly). C2 will be created after C1 closes. */
                 c1 = test_create_share_consumer(ctx.group_id, "explicit");
-
-                /* Set group offset to earliest */
-                set_group_offset_earliest(c1, ctx.group_id);
 
                 /* Subscribe C1 only - C2 will subscribe after C1 closes */
                 subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
@@ -655,12 +736,12 @@ static void test_close_without_acknowledge(void) {
                                          config->partitions,
                                          config->msgs_per_partition);
 
+                /* Set group offset to earliest */
+                test_share_set_auto_offset_reset(ctx.group_id, "earliest");
+
                 /* Create C1 with implicit ack mode */
                 TEST_SAY("C1: Creating consumer\n");
                 c1 = test_create_share_consumer(ctx.group_id, "implicit");
-
-                /* Set group offset to earliest */
-                set_group_offset_earliest(c1, ctx.group_id);
 
                 /* Subscribe C1 */
                 subscribe_consumer(c1, ctx.topic_names, ctx.topic_cnt);
@@ -1405,91 +1486,6 @@ static void test_close_with_broker_error_response(void) {
 }
 
 /**
- * @brief Helper: assert the given rd_kafka_error_t* signals closed/closing.
- */
-static void assert_state_error(rd_kafka_error_t *error, const char *api_name) {
-        TEST_ASSERT(error != NULL, "%s: expected error, got NULL", api_name);
-        TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
-                    "%s: expected __STATE, got %s", api_name,
-                    rd_kafka_err2name(rd_kafka_error_code(error)));
-        TEST_ASSERT(strstr(rd_kafka_error_string(error), "closed") != NULL,
-                    "%s: expected error string to contain 'closed', got '%s'",
-                    api_name, rd_kafka_error_string(error));
-        rd_kafka_error_destroy(error);
-}
-
-/**
- * @brief Invoke every share-consumer API and assert each returns a
- *        closed state error.
- *
- * @param consumer    Share consumer (already closed or closing).
- * @param topic       Topic name (for subscribe/acknowledge_offset).
- */
-static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
-                                         const char *topic) {
-        rd_kafka_error_t *error;
-        rd_kafka_resp_err_t err;
-        rd_kafka_message_t *batch[4];
-        size_t rcvd = 0;
-        rd_kafka_topic_partition_list_t *subs, *sub_result = NULL;
-        rd_kafka_topic_partition_list_t *commit_results = NULL;
-        rd_kafka_queue_t *queue                         = NULL;
-
-        /* 1. consume_batch */
-        error = rd_kafka_share_consume_batch(consumer, 100, batch, &rcvd);
-        assert_state_error(error, "consume_batch");
-
-        /* 2. commit_async */
-        error = rd_kafka_share_commit_async(consumer);
-        assert_state_error(error, "commit_async");
-
-        /* 3. commit_sync */
-        error = rd_kafka_share_commit_sync(consumer, 1000, &commit_results);
-        assert_state_error(error, "commit_sync");
-        TEST_ASSERT(commit_results == NULL,
-                    "commit_sync: expected no partitions on error");
-
-        /* 4. acknowledge_offset */
-        err = rd_kafka_share_acknowledge_offset(
-            consumer, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "acknowledge_offset: expected __STATE, got %s",
-                    rd_kafka_err2name(err));
-
-        /* 5. subscribe */
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        err = rd_kafka_share_subscribe(consumer, subs);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "subscribe: expected __STATE, got %s",
-                    rd_kafka_err2name(err));
-        rd_kafka_topic_partition_list_destroy(subs);
-
-        /* 6. unsubscribe */
-        err = rd_kafka_share_unsubscribe(consumer);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "unsubscribe: expected __STATE, got %s",
-                    rd_kafka_err2name(err));
-
-        /* 7. subscription */
-        err = rd_kafka_share_subscription(consumer, &sub_result);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "subscription: expected __STATE, got %s",
-                    rd_kafka_err2name(err));
-        TEST_ASSERT(sub_result == NULL, "subscription: expected NULL result");
-
-        /* 8. close */
-        error = rd_kafka_share_consumer_close(consumer);
-        assert_state_error(error, "close");
-
-        /* 9. async close */
-        queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
-        error = rd_kafka_share_consumer_close_queue(consumer, queue);
-        rd_kafka_queue_destroy(queue);
-        assert_state_error(error, "close");
-}
-
-/**
  * @brief Test: calling share-consumer APIs after close() completes.
  *
  * Verifies every guarded API returns RD_KAFKA_RESP_ERR__STATE with
@@ -1695,9 +1691,17 @@ int main_0178_share_consumer_close(int argc, char **argv) {
         /* Set overall timeout for all tests */
         test_timeout_set(600); /* 10 minutes */
 
+        /* Create common handles reused across all real-broker tests */
+        common_producer = test_create_producer();
+        common_admin    = test_create_producer();
+
         /* Real broker tests */
         test_close_with_acknowledge();
         test_close_without_acknowledge();
+
+        /* Cleanup common handles */
+        rd_kafka_destroy(common_admin);
+        rd_kafka_destroy(common_producer);
 
         return 0;
 }

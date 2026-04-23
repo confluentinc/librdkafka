@@ -138,8 +138,7 @@ static void share_auth_error_cb(rd_kafka_t *rk,
                                 int err,
                                 const char *reason,
                                 void *opaque) {
-  if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
-      err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+  if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION) {
     Test::Say(tostr() << "Share consumer auth error: "
                       << rd_kafka_err2str((rd_kafka_resp_err_t)err) << ": "
                       << reason << "\n");
@@ -167,8 +166,7 @@ static void do_test_share_consumer(bool set_after_auth_failure) {
   char errstr[512];
   char *username, *password;
   const char *topic;
-  const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-  const char *group      = "share-sasl-creds-test";
+  const char *group = "share-sasl-creds-test";
   size_t rcvd;
   int attempts;
 
@@ -179,11 +177,6 @@ static void do_test_share_consumer(bool set_after_auth_failure) {
   test_conf_init(&conf, NULL, 30);
   username = rd_strdup(test_conf_get(conf, "sasl.username"));
   password = rd_strdup(test_conf_get(conf, "sasl.password"));
-  if (!username || !password) {
-    rd_kafka_conf_destroy(conf);
-    SUB_TEST_SKIP("sasl.username and/or sasl.password not configured\n");
-    return;
-  }
 
   /* Create a producer with correct creds, produce a message first */
   rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
@@ -193,12 +186,10 @@ static void do_test_share_consumer(bool set_after_auth_failure) {
   test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
 
   /* Set group config for earliest offset */
-  test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
-                                      grp_conf, 1);
+  test_share_set_auto_offset_reset(group, "earliest");
 
   /* Produce a message */
-  test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
-  rd_kafka_flush(p1, 10 * 1000);
+  test_produce_msgs_simple(p1, topic, 0, 1);
 
   /* Create share consumer */
   test_conf_init(&conf, NULL, 30);

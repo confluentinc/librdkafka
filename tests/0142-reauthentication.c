@@ -691,9 +691,8 @@ void do_test_share_reauth_failure(int64_t reauth_time) {
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_message_t *batch[500];
         rd_kafka_error_t *err;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        const char *group      = "share-reauth-failure-test";
-        const char *topic      = test_mk_topic_name("share_reauth_fail", 1);
+        const char *group = "share-reauth-failure-test";
+        const char *topic = test_mk_topic_name("share_reauth_fail", 1);
         char *mechanism;
         char errstr[512];
         int64_t start_time = 0;
@@ -728,16 +727,14 @@ void do_test_share_reauth_failure(int64_t reauth_time) {
         TEST_ASSERT(sc1 != NULL, "Failed to create share consumer: %s", errstr);
 
         /* Set group config for earliest offset */
-        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
-                                            grp_conf, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
 
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         rd_kafka_share_subscribe(sc1, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
-        rd_kafka_flush(p1, 10 * 1000);
+        test_produce_msgs_simple(p1, topic, 0, 1);
         attempts = 50;
         rcvd     = 0;
         while (rcvd == 0 && attempts-- > 0) {
@@ -751,8 +748,7 @@ void do_test_share_reauth_failure(int64_t reauth_time) {
                 rd_kafka_message_destroy(batch[m]);
         TEST_SAY("Share consumer connected, producing messages\n");
 
-        test_produce_msgs2(p1, topic, 0, 0, 0, 200, NULL, 0);
-        rd_kafka_flush(p1, 10 * 1000);
+        test_produce_msgs_simple(p1, topic, 0, 200);
         TEST_SAY("Produced messages\n");
 
         /* Corrupt credentials */
@@ -854,9 +850,9 @@ int main_0142_reauthentication(int argc, char **argv) {
                 return 0;
         }
 
-        /* Each test (13 of them) will take slightly more than 1 reauth_time
+        /* Each test (15 of them) will take slightly more than 1 reauth_time
          * interval. Additional 30s provide a reasonable buffer. */
-        test_timeout_set(15 * reauth_time / 1000 + 30);
+        test_timeout_set(17 * reauth_time / 1000 + 30);
 
 
         do_test_consumer(reauth_time, topic);

@@ -4189,18 +4189,6 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                         session->session_epoch++;
                 }
 
-                /* epoch=-1 (final fetch / close session) must not
-                 * contain ForgottenTopicsData.  Acks in the Topics
-                 * array ARE allowed. */
-                if (!err && SessionEpoch == -1 &&
-                    (forgotten_partitions && forgotten_partitions->cnt > 0)) {
-                        rd_kafka_dbg(
-                            mconn->broker->cluster->rk, MOCK, "MOCK",
-                            "ShareFetch: rejecting epoch=-1 request "
-                            "with ForgottenTopicsData (INVALID_REQUEST)");
-                        err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
-                }
-
                 /* Apply piggy-backed acknowledgements BEFORE forgotten
                  * partition processing, so that acks for partitions
                  * being removed are applied while the records are still
@@ -4219,17 +4207,6 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                     sgrp, entry->topic_id, entry->partition,
                                     entry->first_offset, entry->last_offset,
                                     entry->ack_type, &MemberId);
-                        }
-                } else if (err && rd_list_cnt(&ack_entries) > 0) {
-                        /* Broad error prevents ack processing.
-                         * Propagate the top-level error to
-                         * AcknowledgeErrorCode for all partitions that
-                         * had piggybacked acks. */
-                        int k;
-                        for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
-                                struct rd_kafka_mock_sgrp_ack_entry *entry =
-                                    rd_list_elem(&ack_entries, k);
-                                entry->err = err;
                         }
                 }
 

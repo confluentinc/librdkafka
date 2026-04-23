@@ -2921,6 +2921,24 @@ int test_share_consume_msgs(rd_kafka_share_t *rk,
 }
 
 
+void test_produce_msgs_simple(rd_kafka_t *producer,
+                              const char *topic,
+                              int msgcnt) {
+        int i;
+        for (i = 0; i < msgcnt; i++) {
+                char payload[64];
+                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
+                TEST_ASSERT(rd_kafka_producev(
+                                producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce failed");
+        }
+        rd_kafka_flush(producer, 5000);
+}
+
+
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk,
                                              const char *topic) {
         rd_kafka_topic_t *rkt;

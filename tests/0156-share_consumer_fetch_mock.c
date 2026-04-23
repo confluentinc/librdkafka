@@ -86,21 +86,6 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         memset(ctx, 0, sizeof(*ctx));
 }
 
-static void
-produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
-        for (int i = 0; i < msgcnt; i++) {
-                char payload[64];
-                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
-                TEST_ASSERT(rd_kafka_producev(
-                                producer, RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Produce failed");
-        }
-        rd_kafka_flush(producer, 5000);
-}
-
 static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
                                             const char *group_id) {
         rd_kafka_conf_t *conf;
@@ -129,46 +114,6 @@ static void subscribe_topics(rd_kafka_share_t *consumer,
         rd_kafka_topic_partition_list_destroy(tpl);
 }
 
-static int
-consume_n(rd_kafka_share_t *consumer, int expected, int max_attempts) {
-        int consumed = 0;
-        int attempts = 0;
-
-        while (consumed < expected && attempts < max_attempts) {
-                rd_kafka_message_t *rkmessages[100];
-                size_t rcvd_msgs = 0;
-                rd_kafka_error_t *error;
-
-                error = rd_kafka_share_consume_batch(consumer, 500, rkmessages,
-                                                     &rcvd_msgs);
-                attempts++;
-
-                if (error) {
-                        TEST_SAY("consume error: %s\n",
-                                 rd_kafka_error_string(error));
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
-
-                for (size_t i = 0; i < rcvd_msgs; i++) {
-                        rd_kafka_message_t *rkmsg = rkmessages[i];
-                        if (rkmsg->err) {
-                                TEST_SAY("consume error: %s\n",
-                                         rd_kafka_message_errstr(rkmsg));
-                                rd_kafka_message_destroy(rkmsg);
-                                continue;
-                        }
-                        TEST_SAY("Consumed: %.*s\n", (int)rkmsg->len,
-                                 (const char *)rkmsg->payload);
-                        consumed++;
-                        rd_kafka_message_destroy(rkmsg);
-                }
-        }
-
-        return consumed;
-}
-
-
 static void do_test_basic_consume(void) {
         const char *topic = "kip932_pos_basic";
         const int msgcnt  = 5;
@@ -181,11 +126,11 @@ static void do_test_basic_consume(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-pos-basic");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, msgcnt, 50);
+        consumed = test_share_consume_msgs(consumer, msgcnt, 50, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -207,12 +152,12 @@ static void do_test_followup_fetch(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 5);
+        test_produce_msgs_simple(ctx.producer, topic, 5);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-pos-followup");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 3, 30);
-        consumed += consume_n(consumer, 2, 30);
+        consumed = test_share_consume_msgs(consumer, 3, 30, 500, NULL, 0);
+        consumed += test_share_consume_msgs(consumer, 2, 30, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -234,11 +179,11 @@ static void do_test_multi_partition(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-pos-multipart");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, msgcnt, 60);
+        consumed = test_share_consume_msgs(consumer, msgcnt, 60, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -266,11 +211,11 @@ static void do_test_multi_topic(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic B");
 
-        produce_messages(ctx.producer, topic_a, 2);
-        produce_messages(ctx.producer, topic_b, 2);
+        test_produce_msgs_simple(ctx.producer, topic_a, 2);
+        test_produce_msgs_simple(ctx.producer, topic_b, 2);
         consumer = new_share_consumer(ctx.bootstraps, "sg-pos-multitopic");
         subscribe_topics(consumer, topics, 2);
-        consumed = consume_n(consumer, 4, 40);
+        consumed = test_share_consume_msgs(consumer, 4, 40, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -294,7 +239,7 @@ static void do_test_empty_topic_no_records(void) {
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-pos-empty");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 5);
+        consumed = test_share_consume_msgs(consumer, 1, 5, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -313,14 +258,14 @@ static int do_test_negative_sharefetch_error(rd_kafka_resp_err_t err) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 1);
+        test_produce_msgs_simple(ctx.producer, topic, 1);
 
         rd_kafka_mock_push_request_errors(ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
                                           err);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-sharefetch");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 30);
+        consumed = test_share_consume_msgs(consumer, 1, 30, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -354,7 +299,7 @@ static void do_test_sghb_error(rd_kafka_resp_err_t err, int count) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 1);
+        test_produce_msgs_simple(ctx.producer, topic, 1);
 
         /* Build an array of 'count' identical errors and push them all.
          * Using the array variant avoids UB from mismatched varargs count. */
@@ -368,7 +313,7 @@ static void do_test_sghb_error(rd_kafka_resp_err_t err, int count) {
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-sghb");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 5);
+        consumed = test_share_consume_msgs(consumer, 1, 5, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -392,12 +337,12 @@ static void do_test_topic_error(rd_kafka_resp_err_t err) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 1);
+        test_produce_msgs_simple(ctx.producer, topic, 1);
         rd_kafka_mock_topic_set_error(ctx.mcluster, topic, err);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-topicerr");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 5);
+        consumed = test_share_consume_msgs(consumer, 1, 5, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -422,7 +367,7 @@ static void do_test_unknown_topic_subscription(void) {
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-unknown-topic");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 5);
+        consumed = test_share_consume_msgs(consumer, 1, 5, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -446,7 +391,7 @@ static void do_test_empty_fetch_no_records(void) {
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-neg-empty");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 5);
+        consumed = test_share_consume_msgs(consumer, 1, 5, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -483,13 +428,13 @@ static void do_test_member_validation(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-member-val");
         subscribe_topics(consumer, &topic, 1);
 
         /* Phase 1: Consume normally -- member is registered via SGHB. */
-        consumed_p1 = consume_n(consumer, 2, 30);
+        consumed_p1 = test_share_consume_msgs(consumer, 2, 30, 500, NULL, 0);
         TEST_SAY("member_validation: phase1 consumed %d/2\n", consumed_p1);
 
         /* Phase 2: Block SGHB so heartbeats fail.
@@ -525,7 +470,7 @@ static void do_test_member_validation(void) {
         /* Phase 3: SGHB errors will eventually drain. Once a SGHB
          * succeeds, the member re-joins and the remaining records
          * become fetchable again. */
-        consumed_p3 = consume_n(consumer, 2, 50);
+        consumed_p3 = test_share_consume_msgs(consumer, 2, 50, 500, NULL, 0);
         TEST_SAY("member_validation: phase3 consumed %d/2\n", consumed_p3);
 
         rd_kafka_share_consumer_close(consumer);
@@ -555,14 +500,14 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
         /* Produce only 1 message so a single batch cannot over-consume
-         * past the requested count in consume_n(). */
-        produce_messages(ctx.producer, topic, 1);
+         * past the requested count in test_share_consume_msgs(). */
+        test_produce_msgs_simple(ctx.producer, topic, 1);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-rtt-expiry");
         subscribe_topics(consumer, &topic, 1);
 
         /* Phase 1: consume one message with normal RTT (no injection). */
-        consumed = consume_n(consumer, 1, 20);
+        consumed = test_share_consume_msgs(consumer, 1, 20, 500, NULL, 0);
         TEST_SAY("rtt_expiry: phase1 consumed %d/1\n", consumed);
 
         /* Phase 2: inject RTT >> session timeout to force session expiry.
@@ -576,7 +521,7 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
         /* Phase 3: clear RTT and let the consumer recover.
          * The same record should be re-delivered after session expiry. */
         rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 0);
-        consumed += consume_n(consumer, 1, 30);
+        consumed += test_share_consume_msgs(consumer, 1, 30, 500, NULL, 0);
         TEST_SAY("rtt_expiry: phase3 consumed %d/2 total\n", consumed);
 
         rd_kafka_share_consumer_close(consumer);
@@ -605,13 +550,13 @@ static void do_test_forgotten_topics(void) {
                     "Failed to create mock topic B");
 
         /* Produce 2 messages to each topic */
-        produce_messages(ctx.producer, topic_a, 2);
-        produce_messages(ctx.producer, topic_b, 2);
+        test_produce_msgs_simple(ctx.producer, topic_a, 2);
+        test_produce_msgs_simple(ctx.producer, topic_b, 2);
 
         /* Subscribe to both topics and consume all 4 messages */
         consumer = new_share_consumer(ctx.bootstraps, "sg-forgotten");
         subscribe_topics(consumer, both, 2);
-        consumed = consume_n(consumer, 4, 40);
+        consumed = test_share_consume_msgs(consumer, 4, 40, 500, NULL, 0);
         TEST_SAY("forgotten_topics: consumed %d/4 from both topics\n",
                  consumed);
 
@@ -619,10 +564,10 @@ static void do_test_forgotten_topics(void) {
         subscribe_topics(consumer, &topic_a, 1);
 
         /* Produce 2 more messages to topic_a */
-        produce_messages(ctx.producer, topic_a, 2);
+        test_produce_msgs_simple(ctx.producer, topic_a, 2);
 
         /* Consume the 2 new messages -- only topic_a should deliver */
-        consumed += consume_n(consumer, 2, 30);
+        consumed += test_share_consume_msgs(consumer, 2, 30, 500, NULL, 0);
         TEST_SAY("forgotten_topics: consumed %d/6 total after forget\n",
                  consumed);
 
@@ -673,7 +618,7 @@ static void do_test_multi_batch_consume(void) {
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-multi-batch");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, msgcnt, 50);
+        consumed = test_share_consume_msgs(consumer, msgcnt, 50, 500, NULL, 0);
         TEST_SAY("multi_batch: consumed %d/%d\n", consumed, msgcnt);
 
         rd_kafka_share_consumer_close(consumer);
@@ -710,12 +655,13 @@ static void do_test_max_delivery_attempts(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Delivery 1: Consumer A acquires and "crashes" (no ack). */
         consumer = new_share_consumer(ctx.bootstraps, "sg-max-delivery");
         subscribe_topics(consumer, &topic, 1);
-        consumed_a = consume_n(consumer, msgcnt, 50);
+        consumed_a =
+            test_share_consume_msgs(consumer, msgcnt, 50, 500, NULL, 0);
         TEST_SAY("max_delivery: A consumed %d/%d (delivery 1)\n", consumed_a,
                  msgcnt);
         rd_kafka_share_destroy(consumer);
@@ -725,7 +671,8 @@ static void do_test_max_delivery_attempts(void) {
          * reaches 2 = limit) and "crashes". */
         consumer = new_share_consumer(ctx.bootstraps, "sg-max-delivery");
         subscribe_topics(consumer, &topic, 1);
-        consumed_b = consume_n(consumer, msgcnt, 50);
+        consumed_b =
+            test_share_consume_msgs(consumer, msgcnt, 50, 500, NULL, 0);
         TEST_SAY("max_delivery: B consumed %d/%d (delivery 2)\n", consumed_b,
                  msgcnt);
         rd_kafka_share_destroy(consumer);
@@ -735,7 +682,7 @@ static void do_test_max_delivery_attempts(void) {
          * all records have been archived (delivery_count >= max). */
         consumer = new_share_consumer(ctx.bootstraps, "sg-max-delivery");
         subscribe_topics(consumer, &topic, 1);
-        consumed_c = consume_n(consumer, 1, 10);
+        consumed_c = test_share_consume_msgs(consumer, 1, 10, 500, NULL, 0);
         TEST_SAY("max_delivery: C consumed %d/0 (should be archived)\n",
                  consumed_c);
 
@@ -775,12 +722,13 @@ static void do_test_record_lock_duration(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Consumer A acquires records, then crashes (no close). */
         consumer = new_share_consumer(ctx.bootstraps, "sg-lock-duration");
         subscribe_topics(consumer, &topic, 1);
-        consumed_a = consume_n(consumer, msgcnt, 50);
+        consumed_a =
+            test_share_consume_msgs(consumer, msgcnt, 50, 500, NULL, 0);
         TEST_SAY("lock_duration: A consumed %d/%d\n", consumed_a, msgcnt);
         rd_kafka_share_destroy(consumer);
 
@@ -796,7 +744,8 @@ static void do_test_record_lock_duration(void) {
          * SGHB LEAVE->rejoin cycle delay. */
         consumer = new_share_consumer(ctx.bootstraps, "sg-lock-duration");
         subscribe_topics(consumer, &topic, 1);
-        consumed_b = consume_n(consumer, msgcnt, 100);
+        consumed_b =
+            test_share_consume_msgs(consumer, msgcnt, 100, 500, NULL, 0);
         TEST_SAY("lock_duration: B consumed %d/%d\n", consumed_b, msgcnt);
 
         rd_kafka_share_consumer_close(consumer);
@@ -832,13 +781,14 @@ static void do_test_multi_consumer_lock_expiry(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Consumer A: subscribe and consume all records (acquires locks). */
         consumer_a =
             new_share_consumer(ctx.bootstraps, "sg-multi-consumer-lock");
         subscribe_topics(consumer_a, &topic, 1);
-        consumed_a = consume_n(consumer_a, msgcnt, 50);
+        consumed_a =
+            test_share_consume_msgs(consumer_a, msgcnt, 50, 500, NULL, 0);
         TEST_SAY("multi_consumer: A consumed %d/%d\n", consumed_a, msgcnt);
 
         /* Simulate crash: destroy consumer A without calling close.
@@ -856,7 +806,8 @@ static void do_test_multi_consumer_lock_expiry(void) {
         consumer_b =
             new_share_consumer(ctx.bootstraps, "sg-multi-consumer-lock");
         subscribe_topics(consumer_b, &topic, 1);
-        consumed_b = consume_n(consumer_b, msgcnt, 100);
+        consumed_b =
+            test_share_consume_msgs(consumer_b, msgcnt, 100, 500, NULL, 0);
         TEST_SAY("multi_consumer: B consumed %d/%d\n", consumed_b, msgcnt);
 
         rd_kafka_share_consumer_close(consumer_b);
@@ -888,7 +839,7 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 3);
+        test_produce_msgs_simple(ctx.producer, topic, 3);
 
         /* Push a single error */
         rd_kafka_mock_push_request_errors(ctx.mcluster, RD_KAFKAP_ShareFetch, 1,
@@ -999,7 +950,7 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, 3);
+        test_produce_msgs_simple(ctx.producer, topic, 3);
 
         /* Inject a single ShareFetch error to verify that a fetch failure
          * returns 0 records for the affected poll call.
@@ -1052,13 +1003,13 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-fetch-close");
         subscribe_topics(consumer, &topic, 1);
 
         /* Fetch records */
-        consumed = consume_n(consumer, msgcnt, 50);
+        consumed = test_share_consume_msgs(consumer, msgcnt, 50, 500, NULL, 0);
         TEST_SAY("fetch_and_close: consumed %d/%d\n", consumed, msgcnt);
 
         /* Close — sends ShareAcknowledge/ShareFetch with epoch=-1 */
@@ -1097,12 +1048,13 @@ static void do_test_session_limit_reached(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Consumer 1 opens a session successfully */
         consumer1 = new_share_consumer(ctx.bootstraps, "sg-session-limit");
         subscribe_topics(consumer1, &topic, 1);
-        consumed1 = consume_n(consumer1, msgcnt, 30);
+        consumed1 =
+            test_share_consume_msgs(consumer1, msgcnt, 30, 500, NULL, 0);
         TEST_ASSERT(consumed1 == msgcnt,
                     "Consumer 1: expected %d consumed, got %d", msgcnt,
                     consumed1);
@@ -1110,7 +1062,7 @@ static void do_test_session_limit_reached(void) {
         /* Consumer 2 tries to open a session — cache is full */
         consumer2 = new_share_consumer(ctx.bootstraps, "sg-session-limit");
         subscribe_topics(consumer2, &topic, 1);
-        consumed2 = consume_n(consumer2, 1, 5);
+        consumed2 = test_share_consume_msgs(consumer2, 1, 5, 500, NULL, 0);
         TEST_ASSERT(consumed2 == 0,
                     "Consumer 2: expected 0 consumed (session limit), got %d",
                     consumed2);
@@ -1159,8 +1111,8 @@ static void do_test_session_limit_per_broker(void) {
         rd_kafka_mock_partition_set_leader(ctx.mcluster, topic_a, 0, 1);
         rd_kafka_mock_partition_set_leader(ctx.mcluster, topic_b, 0, 2);
 
-        produce_messages(ctx.producer, topic_a, msgcnt);
-        produce_messages(ctx.producer, topic_b, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic_a, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic_b, msgcnt);
 
         /* Limit to 1 session per broker */
         rd_kafka_mock_sharegroup_set_max_fetch_sessions(ctx.mcluster, 1);
@@ -1168,7 +1120,8 @@ static void do_test_session_limit_per_broker(void) {
         /* Consumer 1 subscribes to topic_a -> session on broker 1 */
         consumer1 = new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
         subscribe_topics(consumer1, &topic_a, 1);
-        consumed1 = consume_n(consumer1, msgcnt, 30);
+        consumed1 =
+            test_share_consume_msgs(consumer1, msgcnt, 30, 500, NULL, 0);
         TEST_ASSERT(consumed1 == msgcnt,
                     "Consumer 1: expected %d consumed, got %d", msgcnt,
                     consumed1);
@@ -1178,7 +1131,8 @@ static void do_test_session_limit_per_broker(void) {
          * Per-broker: broker 2 has 0 sessions, so it succeeds. */
         consumer2 = new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
         subscribe_topics(consumer2, &topic_b, 1);
-        consumed2 = consume_n(consumer2, msgcnt, 30);
+        consumed2 =
+            test_share_consume_msgs(consumer2, msgcnt, 30, 500, NULL, 0);
         TEST_ASSERT(consumed2 == msgcnt,
                     "Consumer 2: expected %d consumed, got %d", msgcnt,
                     consumed2);
@@ -1187,7 +1141,7 @@ static void do_test_session_limit_per_broker(void) {
          * 1 session (from consumer 1), so this should be rejected. */
         consumer3 = new_share_consumer(ctx.bootstraps, "sg-session-limit-pb");
         subscribe_topics(consumer3, &topic_a, 1);
-        consumed3 = consume_n(consumer3, 1, 5);
+        consumed3 = test_share_consume_msgs(consumer3, 1, 5, 500, NULL, 0);
         TEST_ASSERT(consumed3 == 0,
                     "Consumer 3: expected 0 consumed (broker 1 at limit), "
                     "got %d",
@@ -1226,7 +1180,7 @@ static void do_test_session_limit_recovery(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Push 3 SHARE_SESSION_LIMIT_REACHED errors, then let it succeed */
         rd_kafka_mock_push_request_errors(
@@ -1237,7 +1191,7 @@ static void do_test_session_limit_recovery(void) {
 
         consumer = new_share_consumer(ctx.bootstraps, "sg-session-recovery");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, msgcnt, 30);
+        consumed = test_share_consume_msgs(consumer, msgcnt, 30, 500, NULL, 0);
 
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
@@ -1276,7 +1230,7 @@ static void do_test_max_record_locks(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Consume in rounds.  Each round can get at most 3 records
          * (the lock limit).  The implicit ack from the next poll
@@ -1285,7 +1239,8 @@ static void do_test_max_record_locks(void) {
         subscribe_topics(consumer, &topic, 1);
 
         while (total_consumed < msgcnt && rounds < 20) {
-                int got = consume_n(consumer, 3, 10);
+                int got =
+                    test_share_consume_msgs(consumer, 3, 10, 500, NULL, 0);
                 if (got == 0)
                         break;
                 total_consumed += got;
@@ -1348,12 +1303,12 @@ static void do_test_max_record_locks_acquired_only(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Consumer A: acquire first batch (3 records due to lock limit). */
         consumer = new_share_consumer(ctx.bootstraps, "sg-acq-only");
         subscribe_topics(consumer, &topic, 1);
-        consumed_a = consume_n(consumer, 3, 30);
+        consumed_a = test_share_consume_msgs(consumer, 3, 30, 500, NULL, 0);
         TEST_SAY("acquired_only: A consumed %d/3\n", consumed_a);
 
         /* Destroy WITHOUT close — avoids implicit ack.
@@ -1371,7 +1326,7 @@ static void do_test_max_record_locks_acquired_only(void) {
          * With inflight_cnt check, the limit would block acquisition. */
         consumer = new_share_consumer(ctx.bootstraps, "sg-acq-only");
         subscribe_topics(consumer, &topic, 1);
-        consumed_b = consume_n(consumer, 3, 30);
+        consumed_b = test_share_consume_msgs(consumer, 3, 30, 500, NULL, 0);
         TEST_SAY("acquired_only: B consumed %d/3\n", consumed_b);
 
         rd_kafka_share_consumer_close(consumer);
@@ -1414,12 +1369,12 @@ static void do_test_spso_advances_on_log_retention(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Consumer A acquires records 0-4. */
         consumer = new_share_consumer(ctx.bootstraps, "sg-log-retention");
         subscribe_topics(consumer, &topic, 1);
-        consumed_a = consume_n(consumer, 5, 30);
+        consumed_a = test_share_consume_msgs(consumer, 5, 30, 500, NULL, 0);
         TEST_SAY("log_retention: A consumed %d/5\n", consumed_a);
 
         rd_kafka_share_consumer_close(consumer);
@@ -1437,7 +1392,7 @@ static void do_test_spso_advances_on_log_retention(void) {
         /* Consumer B should get records 5-9 (SPSO advanced to 5). */
         consumer = new_share_consumer(ctx.bootstraps, "sg-log-retention");
         subscribe_topics(consumer, &topic, 1);
-        consumed_b = consume_n(consumer, 5, 30);
+        consumed_b = test_share_consume_msgs(consumer, 5, 30, 500, NULL, 0);
         TEST_SAY("log_retention: B consumed %d/5\n", consumed_b);
 
         rd_kafka_share_consumer_close(consumer);
@@ -1465,6 +1420,8 @@ static void do_test_auto_offset_reset_latest(void) {
         const int msgcnt  = 5;
         test_ctx_t ctx;
         rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
         int consumed;
 
         SUB_TEST_QUICK();
@@ -1483,36 +1440,32 @@ static void do_test_auto_offset_reset_latest(void) {
                     "Failed to enable ShareFetch");
         /* Intentionally NOT calling set_auto_offset_reset — default is latest
          */
-        {
-                rd_kafka_conf_t *conf;
-                char errstr[512];
-                test_conf_init(&conf, NULL, 0);
-                test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
-                ctx.producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
-                                            sizeof(errstr));
-                TEST_ASSERT(ctx.producer != NULL,
-                            "Failed to create producer: %s", errstr);
-        }
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        ctx.producer =
+            rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(ctx.producer != NULL, "Failed to create producer: %s",
+                    errstr);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
 
         /* Produce records BEFORE subscribing */
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
 
         /* Subscribe — SPSO should start at end of log (latest) */
         consumer = new_share_consumer(ctx.bootstraps, "sg-offset-latest");
         subscribe_topics(consumer, &topic, 1);
-        consumed = consume_n(consumer, 1, 5);
+        consumed = test_share_consume_msgs(consumer, 1, 5, 500, NULL, 0);
         TEST_SAY("offset_reset_latest: consumed %d (expected 0)\n", consumed);
         TEST_ASSERT(consumed == 0,
                     "Expected 0 consumed with latest offset reset, got %d",
                     consumed);
 
         /* Produce new records AFTER subscription — these should be visible */
-        produce_messages(ctx.producer, topic, msgcnt);
-        consumed = consume_n(consumer, msgcnt, 30);
+        test_produce_msgs_simple(ctx.producer, topic, msgcnt);
+        consumed = test_share_consume_msgs(consumer, msgcnt, 30, 500, NULL, 0);
         TEST_SAY("offset_reset_latest: consumed %d new records (expected %d)\n",
                  consumed, msgcnt);
 

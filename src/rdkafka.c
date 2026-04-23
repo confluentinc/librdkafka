@@ -3047,6 +3047,12 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         return rkshare;
 }
 
+rd_kafka_t *rd_kafka_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
+        if (!rkshare)
+                return NULL;
+        return rkshare->rkshare_rk;
+}
+
 
 /**
  * @locality main thread

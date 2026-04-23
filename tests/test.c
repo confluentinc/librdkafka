@@ -45,18 +45,6 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
-/**
- * Local definition of rd_kafka_share_s to access rkshare_rk
- * without pulling in rdkafka_int.h (which causes Windows link errors
- * due to internal inline functions referencing unexported symbols).
- *
- * TODO: Replace with a proper public API (e.g.
- * rd_kafka_share_consumer_get_rk()) so tests don't depend on the
- * internal struct layout.
- */
-struct rd_kafka_share_s {
-        rd_kafka_t *rkshare_rk;
-};
 
 int test_level = 2;
 int test_seed  = 0;
@@ -1051,10 +1039,81 @@ const char *test_getenv(const char *env, const char *def) {
         return rd_getenv(env, def);
 }
 
+/**
+ * @brief Check if debug logging should be enabled for the current test.
+ *
+ * If TESTS_TO_DEBUG environment variable is set with comma-separated test
+ * numbers (e.g., "0172,0171"), only enable debug for those tests.
+ * Otherwise, enable debug for all tests if TEST_DEBUG is set.
+ *
+ * @returns 1 if debug should be enabled, 0 otherwise.
+ */
+static int test_should_enable_debug(void) {
+        const char *tests_to_debug;
+        const char *test_debug;
+        int should_debug = 0;
+
+        /* If TEST_DEBUG is not set, no debug logging */
+        test_debug = test_getenv("TEST_DEBUG", NULL);
+        if (!test_debug)
+                return 0;
+
+        /* If TESTS_TO_DEBUG is not set, enable for all tests */
+        tests_to_debug = test_getenv("TESTS_TO_DEBUG", NULL);
+        if (!tests_to_debug)
+                return 1;
+
+        /* Extract test number from current test name (e.g., "0172" from
+         * "0172-share_consumer_acknowledge") */
+        if (!test_curr || !test_curr->name)
+                return 1; /* Enable by default if test name not available */
+
+        /* Simple comma-separated parsing */
+        const char *p = tests_to_debug;
+        while (*p) {
+                const char *comma;
+                size_t token_len;
+
+                /* Skip leading whitespace */
+                while (*p && isspace((unsigned char)*p))
+                        p++;
+
+                if (!*p)
+                        break;
+
+                /* Find next comma or end of string */
+                comma = strchr(p, ',');
+                if (comma)
+                        token_len = (size_t)(comma - p);
+                else
+                        token_len = strlen(p);
+
+                /* Trim trailing whitespace */
+                while (token_len > 0 &&
+                       isspace((unsigned char)p[token_len - 1]))
+                        token_len--;
+
+                /* Check if current test name starts with this token */
+                if (token_len > 0 &&
+                    strncmp(test_curr->name, p, token_len) == 0) {
+                        should_debug = 1;
+                        break;
+                }
+
+                /* Move to next token */
+                if (comma)
+                        p = comma + 1;
+                else
+                        break;
+        }
+
+        return should_debug;
+}
+
 void test_conf_common_init(rd_kafka_conf_t *conf, int timeout) {
         if (conf) {
                 const char *tmp = test_getenv("TEST_DEBUG", NULL);
-                if (tmp)
+                if (tmp && test_should_enable_debug())
                         test_conf_set(conf, "debug", tmp);
         }
 
@@ -2789,141 +2848,29 @@ rd_kafka_t *test_create_consumer(
         return rk;
 }
 
-/**
- * @brief Create a share consumer with standard configuration.
- *
- * @param group_id The share group ID.
- *
- * @returns A new share consumer instance.
- *
- * @remark TODO: Remove explicit group.id and enable.auto.commit settings
- *         once these properties are added as defaults to
- *         rd_kafka_share_consumer_new().
- */
-rd_kafka_share_t *test_create_share_consumer(const char *group_id) {
-        rd_kafka_share_t *rk;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
-                          sizeof(errstr));
-
-        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
-
-        return rk;
-}
-
 
 /**
- * @brief Consume share messages and verify they come from expected topics.
+ * @brief Produce messages to a topic using a specific producer handle.
  *
- * @param rk Share consumer handle.
- * @param timeout_ms Poll timeout in milliseconds.
- * @param expected_topics Array of topic names that are valid sources
- *                        (NULL to skip verification).
- * @param expected_topic_cnt Number of topics in expected_topics array.
- * @param out_valid Output: count of valid (non-error) messages received.
+ * This is a convenience wrapper that creates a producer topic, produces
+ * messages, and cleans up. Commonly used with a shared producer instance
+ * across multiple test cases.
  *
- * @returns 0 on success, -1 if message from unexpected topic received.
+ * @param rk Producer handle to use.
+ * @param topic Topic name.
+ * @param partition Partition to produce to.
+ * @param msgcnt Number of messages to produce.
  */
-int test_share_consume_batch(rd_kafka_share_t *rk,
-                             int timeout_ms,
-                             const char **expected_topics,
-                             int expected_topic_cnt,
-                             int *out_valid) {
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
-        rd_kafka_error_t *err;
-        size_t rcvd = 0;
-        int valid   = 0;
-        size_t i;
-        int j;
-        int ret = 0;
+void test_produce_msgs_simple(rd_kafka_t *rk,
+                              const char *topic,
+                              int32_t partition,
+                              int msgcnt) {
+        rd_kafka_topic_t *rkt;
 
-        err = rd_kafka_share_consume_batch(rk, timeout_ms, batch, &rcvd);
-        if (err) {
-                rd_kafka_error_destroy(err);
-                *out_valid = 0;
-                return 0;
-        }
-
-        for (i = 0; i < rcvd; i++) {
-                if (batch[i]->err) {
-                        /* Skip error messages */
-                        rd_kafka_message_destroy(batch[i]);
-                        continue;
-                }
-
-                if (expected_topics) {
-                        const char *msg_topic =
-                            rd_kafka_topic_name(batch[i]->rkt);
-                        int found = 0;
-
-                        /* Verify message is from expected topic */
-                        for (j = 0; j < expected_topic_cnt; j++) {
-                                if (strcmp(msg_topic, expected_topics[j]) ==
-                                    0) {
-                                        found = 1;
-                                        break;
-                                }
-                        }
-
-                        if (!found) {
-                                TEST_SAY(
-                                    "ERROR: Received message from "
-                                    "unexpected topic '%s'\n",
-                                    msg_topic);
-                                ret = -1;
-                        }
-                }
-                valid++;
-                rd_kafka_message_destroy(batch[i]);
-        }
-
-        *out_valid = valid;
-        return ret;
+        rkt = test_create_producer_topic(rk, topic, NULL);
+        test_produce_msgs(rk, rkt, 0, partition, 0, msgcnt, NULL, 0);
+        rd_kafka_topic_destroy(rkt);
 }
-
-
-/**
- * @brief Consume share messages until expected count or max attempts.
- *
- * @param rk Share consumer handle.
- * @param expected Number of messages to consume.
- * @param max_attempts Maximum poll attempts.
- * @param timeout_ms Timeout per poll in milliseconds.
- * @param expected_topics Array of valid topic names (NULL to skip
- * verification).
- * @param expected_topic_cnt Number of topics in expected_topics.
- *
- * @returns Number of messages consumed, or -1 if message from wrong topic.
- */
-int test_share_consume_msgs(rd_kafka_share_t *rk,
-                            int expected,
-                            int max_attempts,
-                            int timeout_ms,
-                            const char **expected_topics,
-                            int expected_topic_cnt) {
-        int total = 0;
-
-        while (total < expected && max_attempts-- > 0) {
-                int batch_cnt = 0;
-                int ret;
-
-                ret = test_share_consume_batch(rk, timeout_ms, expected_topics,
-                                               expected_topic_cnt, &batch_cnt);
-                if (ret < 0)
-                        return -1; /* Wrong topic detected */
-
-                total += batch_cnt;
-        }
-
-        return total;
-}
-
 
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk,
                                              const char *topic) {
@@ -3455,73 +3402,6 @@ void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...) {
 
         rd_kafka_topic_partition_list_destroy(topics);
 }
-
-
-/**
- * @brief Start subscribing for multiple topics (share consumers).
- */
-void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
-                                         int topic_count,
-                                         ...) {
-        rd_kafka_topic_partition_list_t *topics;
-        rd_kafka_resp_err_t err;
-        va_list ap;
-        int i;
-
-        topics = rd_kafka_topic_partition_list_new(topic_count);
-
-        va_start(ap, topic_count);
-        for (i = 0; i < topic_count; i++) {
-                const char *topic = va_arg(ap, const char *);
-                rd_kafka_topic_partition_list_add(topics, topic,
-                                                  RD_KAFKA_PARTITION_UA);
-        }
-        va_end(ap);
-
-        err = rd_kafka_share_subscribe(rk, topics);
-        if (err)
-                TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
-                          rd_kafka_name(test_share_consumer_get_rk(rk)),
-                          rd_kafka_err2str(err));
-
-        rd_kafka_topic_partition_list_destroy(topics);
-}
-
-
-/**
- * @brief Get underlying rd_kafka_t handle from share consumer.
- *
- * @param rkshare Share consumer handle.
- * @returns The underlying rd_kafka_t handle.
- */
-rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
-        return rkshare->rkshare_rk;
-}
-
-
-/**
- * @brief Get current subscription list for share consumers.
- *
- * @returns The subscription list. Caller must destroy with
- *          rd_kafka_topic_partition_list_destroy().
- */
-rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
-        rd_kafka_topic_partition_list_t *subscription = NULL;
-        rd_kafka_resp_err_t err;
-
-        err = rd_kafka_share_subscription(rk, &subscription);
-        if (err)
-                TEST_FAIL("%s: Failed to get subscription: %s\n",
-                          rd_kafka_name(test_share_consumer_get_rk(rk)),
-                          rd_kafka_err2str(err));
-
-        TEST_ASSERT(subscription != NULL,
-                    "%s: subscription() returned NULL list",
-                    rd_kafka_name(test_share_consumer_get_rk(rk)));
-
-        return subscription;
-}
-
 
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,
@@ -5586,6 +5466,29 @@ void test_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
                 test_delete_topic_sh(topicname);
         else
                 test_admin_delete_topic(use_rk, topicname);
+}
+
+
+/**
+ * @brief Alter group configurations using a dedicated producer handle.
+ *        Admin client APIs should not reuse consumer handles.
+ *        Works for both share groups and regular consumer groups.
+ */
+void test_alter_group_configurations(const char *group_name,
+                                     const char **cfg,
+                                     size_t cfg_cnt) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
+                                            group_name, cfg, cfg_cnt);
+
+        rd_kafka_destroy(admin);
 }
 
 
@@ -8033,4 +7936,232 @@ const char *test_consumer_group_protocol() {
 int test_consumer_group_protocol_classic() {
         return !test_consumer_group_protocol_str ||
                !strcmp(test_consumer_group_protocol_str, "classic");
+}
+
+
+/****************************************************************************
+ * Share Consumer helpers
+ ****************************************************************************/
+
+/**
+ * @brief Create a share consumer with standard configuration.
+ *
+ * @param group_id The share group ID.
+ *
+ * @returns A new share consumer instance.
+ *
+ * @remark TODO: Remove explicit group.id and enable.auto.commit settings
+ *         once these properties are added as defaults to
+ *         rd_kafka_share_consumer_new().
+ */
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode) {
+        rd_kafka_share_t *rk;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                          sizeof(errstr));
+
+        if (ack_mode) {
+                rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode,
+                                  errstr, sizeof(errstr));
+        }
+
+        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
+
+        return rk;
+}
+
+
+/**
+ * @brief Consume share messages and verify they come from expected topics.
+ *
+ * @param rk Share consumer handle.
+ * @param timeout_ms Poll timeout in milliseconds.
+ * @param expected_topics Array of topic names that are valid sources
+ *                        (NULL to skip verification).
+ * @param expected_topic_cnt Number of topics in expected_topics array.
+ * @param out_valid Output: count of valid (non-error) messages received.
+ *
+ * @returns 0 on success, -1 if message from unexpected topic received.
+ */
+int test_share_consume_batch(rd_kafka_share_t *rk,
+                             int timeout_ms,
+                             const char **expected_topics,
+                             int expected_topic_cnt,
+                             int *out_valid) {
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_error_t *err;
+        size_t rcvd = 0;
+        int valid   = 0;
+        size_t i;
+        int j;
+        int ret = 0;
+
+        err = rd_kafka_share_consume_batch(rk, timeout_ms, batch, &rcvd);
+        if (err) {
+                rd_kafka_error_destroy(err);
+                *out_valid = 0;
+                return 0;
+        }
+
+        for (i = 0; i < rcvd; i++) {
+                if (batch[i]->err) {
+                        /* Skip error messages */
+                        rd_kafka_message_destroy(batch[i]);
+                        continue;
+                }
+
+                if (expected_topics) {
+                        const char *msg_topic =
+                            rd_kafka_topic_name(batch[i]->rkt);
+                        int found = 0;
+
+                        /* Verify message is from expected topic */
+                        for (j = 0; j < expected_topic_cnt; j++) {
+                                if (strcmp(msg_topic, expected_topics[j]) ==
+                                    0) {
+                                        found = 1;
+                                        break;
+                                }
+                        }
+
+                        if (!found) {
+                                TEST_SAY(
+                                    "ERROR: Received message from "
+                                    "unexpected topic '%s'\n",
+                                    msg_topic);
+                                ret = -1;
+                        }
+                }
+                valid++;
+                rd_kafka_message_destroy(batch[i]);
+        }
+
+        *out_valid = valid;
+        return ret;
+}
+
+
+/**
+ * @brief Consume share messages until expected count or max attempts.
+ *
+ * @param rk Share consumer handle.
+ * @param expected Number of messages to consume.
+ * @param max_attempts Maximum poll attempts.
+ * @param timeout_ms Timeout per poll in milliseconds.
+ * @param expected_topics Array of valid topic names (NULL to skip
+ * verification).
+ * @param expected_topic_cnt Number of topics in expected_topics.
+ *
+ * @returns Number of messages consumed, or -1 if message from wrong topic.
+ */
+int test_share_consume_msgs(rd_kafka_share_t *rk,
+                            int expected,
+                            int max_attempts,
+                            int timeout_ms,
+                            const char **expected_topics,
+                            int expected_topic_cnt) {
+        int total = 0;
+
+        while (total < expected && max_attempts-- > 0) {
+                int batch_cnt = 0;
+                int ret;
+
+                ret = test_share_consume_batch(rk, timeout_ms, expected_topics,
+                                               expected_topic_cnt, &batch_cnt);
+                if (ret < 0)
+                        return -1; /* Wrong topic detected */
+
+                total += batch_cnt;
+        }
+
+        return total;
+}
+
+
+/**
+ * @brief Start subscribing for multiple topics (share consumers).
+ */
+void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
+                                         int topic_count,
+                                         ...) {
+        rd_kafka_topic_partition_list_t *topics;
+        rd_kafka_resp_err_t err;
+        va_list ap;
+        int i;
+
+        topics = rd_kafka_topic_partition_list_new(topic_count);
+
+        va_start(ap, topic_count);
+        for (i = 0; i < topic_count; i++) {
+                const char *topic = va_arg(ap, const char *);
+                rd_kafka_topic_partition_list_add(topics, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+        va_end(ap);
+
+        err = rd_kafka_share_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
+                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
+                          rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+}
+
+
+/**
+ * @brief Get current subscription list for share consumers.
+ *
+ * @returns The subscription list. Caller must destroy with
+ *          rd_kafka_topic_partition_list_destroy().
+ */
+rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
+        rd_kafka_topic_partition_list_t *subscription = NULL;
+        rd_kafka_resp_err_t err;
+
+        err = rd_kafka_share_subscription(rk, &subscription);
+        if (err)
+                TEST_FAIL("%s: Failed to get subscription: %s\n",
+                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
+                          rd_kafka_err2str(err));
+
+        TEST_ASSERT(subscription != NULL,
+                    "%s: subscription() returned NULL list",
+                    rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)));
+
+        return subscription;
+}
+
+
+/**
+ * @brief Set share.auto.offset.reset configuration for a share group.
+ *
+ * @param group_name The share group name.
+ * @param reset_policy The offset reset policy ("earliest" or "latest").
+ */
+void test_share_set_auto_offset_reset(const char *group_name,
+                                      const char *reset_policy) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", reset_policy};
+        test_alter_group_configurations(group_name, cfg, 1);
+}
+
+
+/**
+ * @brief Set share.isolation.level configuration for a share group.
+ *
+ * @param group_name The share group name.
+ * @param isolation_level The isolation level ("read_committed" or
+ * "read_uncommitted").
+ */
+void test_share_set_isolation_level(const char *group_name,
+                                    const char *isolation_level) {
+        const char *cfg[] = {"share.isolation.level", "SET", isolation_level};
+        test_alter_group_configurations(group_name, cfg, 1);
 }

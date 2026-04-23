@@ -139,7 +139,7 @@ void do_test_share_consumer(int64_t reauth_time) {
         TEST_SAY("Topic: %s is created\n", topic);
 
         /* Create share consumer */
-        sc1 = test_create_share_consumer(group);
+        sc1 = test_create_share_consumer(group, NULL);
 
         /* Set group config for earliest offset */
         test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,

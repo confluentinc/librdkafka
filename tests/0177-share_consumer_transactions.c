@@ -54,12 +54,12 @@ static rd_kafka_t *create_txn_producer(const char *txn_id) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "transactional.id", txn_id);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
-        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 30000));
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
 
         return rk;
 }
@@ -76,12 +76,8 @@ static rd_kafka_t *create_txn_producer(const char *txn_id) {
  */
 static void configure_share_group(const char *group,
                                   const char *isolation_level) {
-        const char *configs[] = {
-            "share.auto.offset.reset", "SET", "earliest",
-            "share.isolation.level",   "SET", isolation_level};
-
-        test_IncrementalAlterConfigs_simple(
-            common_admin, RD_KAFKA_RESOURCE_GROUP, group, configs, 2);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_share_set_isolation_level(group, isolation_level);
 }
 
 
@@ -288,7 +284,7 @@ static void do_test_committed_transaction(const char *isolation_level) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -367,7 +363,7 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -463,7 +459,7 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -547,7 +543,7 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -635,7 +631,7 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -722,7 +718,7 @@ static void do_test_interleaved_producers(const char *isolation_level) {
         producer2 = create_txn_producer("txn-producer-2");
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -810,7 +806,7 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         txn_producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -896,7 +892,7 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer with READ_UNCOMMITTED */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, "read_uncommitted");
         subscribe_share_consumer(consumer, topic);
 
@@ -1010,7 +1006,7 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         producer = create_txn_producer(txn_id);
 
         /* Create share consumer and set group config */
-        consumer = test_create_share_consumer(group);
+        consumer = test_create_share_consumer(group, NULL);
         configure_share_group(group, isolation_level);
         subscribe_share_consumer(consumer, topic);
 
@@ -1087,6 +1083,8 @@ int main_0177_share_consumer_transactions(int argc, char **argv) {
         /* Test both isolation levels */
         const char *isolation_levels[] = {"read_committed", "read_uncommitted"};
         int i;
+
+        test_timeout_set(200);
 
         /* Create common handles for all tests */
         common_admin            = test_create_producer();

@@ -2773,6 +2773,7 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
             rkb, rkbuf, rd_kafka_broker_share_acknowledge_reply, rko_orig);
 }
 
+
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
         rd_kafka_toppar_t *rktp, *tmp_rktp;
 

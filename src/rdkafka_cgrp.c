@@ -6104,6 +6104,8 @@ rd_kafka_cgrp_subscribe(rd_kafka_cgrp_t *rkcg,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+
+
 /**
  * Same as cgrp_terminate() but called from the cgrp/main thread upon receiving
  * the op 'rko' from cgrp_terminate().

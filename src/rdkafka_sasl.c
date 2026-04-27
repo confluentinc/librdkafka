@@ -482,6 +482,14 @@ rd_kafka_share_sasl_background_callbacks_enable(rd_kafka_share_t *rkshare) {
 }
 
 
+rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
+                                                      const char *username,
+                                                      const char *password) {
+        return rd_kafka_sasl_set_credentials(rkshare->rkshare_rk, username,
+                                             password);
+}
+
+
 /**
  * Global SASL termination.
  */

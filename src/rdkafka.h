@@ -3354,6 +3354,31 @@ RD_EXPORT
 rd_kafka_t *rd_kafka_share_consumer_get_rk(rd_kafka_share_t *rkshare);
 
 /**
+ * @brief Sets SASL credentials used for SASL PLAIN and SCRAM mechanisms by
+ *        this share consumer.
+ *
+ * This function sets or resets the SASL username and password credentials
+ * used by this share consumer. The new credentials will be used the next time
+ * this client needs to authenticate to a broker. This function
+ * will not disconnect existing connections that might have been made using
+ * the old credentials.
+ *
+ * @remark This function only applies to the SASL PLAIN and SCRAM mechanisms.
+ *
+ * @param rkshare Share consumer instance.
+ * @param username New SASL username.
+ * @param password New SASL password.
+ *
+ * @returns NULL on success or an error object on error.
+ *
+ * @sa rd_kafka_sasl_set_credentials()
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
+                                                      const char *username,
+                                                      const char *password);
+
+/**
  * @brief Flags for rd_kafka_destroy_flags()
  */
 

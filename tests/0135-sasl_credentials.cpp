@@ -32,6 +32,12 @@
  */
 #include "testcpp.h"
 
+/* Include C API and test helpers for share consumer tests */
+extern "C" {
+#include "test.h"
+#include "rdkafka.h"
+}
+
 
 
 class authErrorEventCb : public RdKafka::EventCb {
@@ -126,6 +132,130 @@ static void do_test(bool set_after_auth_failure) {
   SUB_TEST_PASS();
 }
 
+static rd_bool_t share_error_seen = rd_false;
+
+static void share_auth_error_cb(rd_kafka_t *rk,
+                                int err,
+                                const char *reason,
+                                void *opaque) {
+  if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION) {
+    Test::Say(tostr() << "Share consumer auth error: "
+                      << rd_kafka_err2str((rd_kafka_resp_err_t)err) << ": "
+                      << reason << "\n");
+    share_error_seen = rd_true;
+  }
+}
+
+/**
+ * @brief Test setting SASL credentials on a share consumer.
+ *
+ * 1. Produce a message to a topic.
+ * 2. Create share consumer with wrong credentials (or correct if
+ *    set_after_auth_failure is false).
+ * 3. Optionally wait for auth failure.
+ * 4. Set correct credentials via rd_kafka_share_sasl_set_credentials().
+ * 5. Verify share consumer can consume the message.
+ */
+static void do_test_share_consumer(bool set_after_auth_failure) {
+  rd_kafka_conf_t *conf;
+  rd_kafka_t *p1;
+  rd_kafka_share_t *sc;
+  rd_kafka_topic_partition_list_t *subs;
+  rd_kafka_message_t *batch[10];
+  rd_kafka_error_t *err;
+  char errstr[512];
+  char *username, *password;
+  const char *topic;
+  const char *group = "share-sasl-creds-test";
+  size_t rcvd;
+  int attempts;
+
+  SUB_TEST("Share consumer: set_after_auth_failure=%s",
+           set_after_auth_failure ? "yes" : "no");
+
+  /* Get correct credentials from test config */
+  test_conf_init(&conf, NULL, 30);
+  username = rd_strdup(test_conf_get(conf, "sasl.username"));
+  password = rd_strdup(test_conf_get(conf, "sasl.password"));
+
+  /* Create a producer with correct creds, produce a message first */
+  rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+  p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+  topic = test_mk_topic_name("0135_share_sasl_creds", 1);
+  test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+
+  /* Set group config for earliest offset */
+  test_share_set_auto_offset_reset(group, "earliest");
+
+  /* Produce a message */
+  test_produce_msgs_simple(p1, topic, 0, 1);
+
+  /* Create share consumer */
+  test_conf_init(&conf, NULL, 30);
+  if (set_after_auth_failure) {
+    /* Start with wrong credentials */
+    test_conf_set(conf, "sasl.username", "ThisIsNotRight");
+    test_conf_set(conf, "sasl.password", "Neither Is This");
+  }
+  rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+
+  share_error_seen = rd_false;
+  rd_kafka_conf_set_error_cb(conf, share_auth_error_cb);
+
+  sc = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+  TEST_ASSERT(sc != NULL, "Failed to create share consumer: %s", errstr);
+
+  /* Subscribe */
+  subs = rd_kafka_topic_partition_list_new(1);
+  rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+  rd_kafka_share_subscribe(sc, subs);
+  rd_kafka_topic_partition_list_destroy(subs);
+
+  if (set_after_auth_failure) {
+    Test::Say("Awaiting share consumer auth failure\n");
+    while (!share_error_seen) {
+      rcvd = 0;
+      err  = rd_kafka_share_consume_batch(sc, 1000, batch, &rcvd);
+      if (err)
+        rd_kafka_error_destroy(err);
+      for (size_t i = 0; i < rcvd; i++)
+        rd_kafka_message_destroy(batch[i]);
+    }
+    Test::Say("Share consumer authentication error seen\n");
+  }
+
+  /* Set correct credentials */
+  Test::Say("Setting proper credentials on share consumer\n");
+  err = rd_kafka_share_sasl_set_credentials(sc, username, password);
+  TEST_ASSERT(!err, "share_sasl_set_credentials failed: %s",
+              err ? rd_kafka_error_string(err) : "");
+
+  /* Consume the message to verify connectivity */
+  attempts = 100;
+  rcvd     = 0;
+  while (rcvd == 0 && attempts-- > 0) {
+    err = rd_kafka_share_consume_batch(sc, 3000, batch, &rcvd);
+    if (err)
+      rd_kafka_error_destroy(err);
+  }
+  TEST_ASSERT(rcvd > 0,
+              "Share consumer failed to consume message after "
+              "credential update");
+  for (size_t i = 0; i < rcvd; i++)
+    rd_kafka_message_destroy(batch[i]);
+
+  Test::Say("Share consumer successfully consumed after credential update\n");
+
+  rd_kafka_share_consumer_close(sc);
+  rd_kafka_share_destroy(sc);
+  rd_kafka_destroy(p1);
+  free(username);
+  free(password);
+
+  SUB_TEST_PASS();
+}
+
 extern "C" {
 int main_0135_sasl_credentials(int argc, char **argv) {
   const char *mech = test_conf_get(NULL, "sasl.mechanism");
@@ -137,6 +267,8 @@ int main_0135_sasl_credentials(int argc, char **argv) {
 
   do_test(false);
   do_test(true);
+  do_test_share_consumer(false);
+  do_test_share_consumer(true);
 
   return 0;
 }

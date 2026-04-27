@@ -1003,11 +1003,11 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_scenario(&test_poll_no_subscription);
         do_test_scenario(&test_poll_after_unsubscribe);
 
-        /* Topic deletion tests */
+        /* Topic deletion tests (Skipped for Windows)*/
         if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows"))
                 TEST_SAY(
                     "Skipping topic deletion scenario"
-                         "(broker on Windows)\n");
+                    "(broker on Windows)\n");
         else
                 do_test_scenario(&test_topic_deletion);
 

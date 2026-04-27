@@ -993,7 +993,12 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_scenario(&test_poll_after_unsubscribe);
 
         /* Topic deletion tests */
-        do_test_scenario(&test_topic_deletion);
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows"))
+                TEST_SAY(
+                    "Skipping topic deletion scenario"
+                         "(broker on Windows)\n");
+        else
+                do_test_scenario(&test_topic_deletion);
 
         /* Stress tests */
         do_test_scenario(&test_rapid_updates);

@@ -5462,6 +5462,13 @@ static void test_admin_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
  * @brief Delete a topic
  */
 void test_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping deletion of topic \"%s\": broker on Windows "
+                    "(NTFS file locking causes broker shutdown on rename)\n",
+                    topicname);
+                return;
+        }
         if (test_broker_version < TEST_BRKVER(0, 10, 2, 0))
                 test_delete_topic_sh(topicname);
         else

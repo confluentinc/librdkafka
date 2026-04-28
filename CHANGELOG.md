@@ -1,3 +1,66 @@
+# Unreleased
+
+## Fixes
+
+### Admin client fixes
+
+* Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.
+
+
+# librdkafka v2.14.1
+
+librdkafka v2.14.1 is a maintenance release:
+
+* Bundle prebuilt binaries for linux-s390x (#5365).
+
+
+
+# librdkafka v2.14.0
+
+librdkafka v2.14.0 is a feature release:
+
+* [KIP-768](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=186877575#KIP768:ExtendSASL/OAUTHBEARERwithSupportforOIDC-ClientConfiguration) Extend SASL/OAUTHBEARER to support OIDC claim mapping beyond the default `sub` claim (#5336).
+
+
+
+# librdkafka v2.13.2
+
+librdkafka v2.13.2 is a maintenance release:
+
+* The `librdkafka.redist` NuGet package now includes binary for alpine-arm64 ([#5237](https://github.com/confluentinc/librdkafka/pull/5237), [@mclayton7](https://github.com/mclayton7))
+* Remove CPU usage regression when a subscription matches no topics (#5324).
+* Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
+  position on EOF or error messages (#5213).
+* Fix compilation without `getentropy` (@olegrok, @lpsinger, #5288).
+* Use a truly random seed for pseudo-random number generation whenever available (#5288).
+* Fix rd_list destroy callback type mismatch by changing rd_kafka_assignor_destroy to take a void * argument, as expected by rd_list_init() destroy callbacks, and casting internally to rd_kafka_assignor_t * (#5195) (#5278).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5283.
+  Fix compilation without `getentropy`.
+  glibc versions lacking support are those less than 2.25 (2017).
+  Happening since 2.13.0 (@olegrok, @lpsinger, #5288).
+
+### Consumer fixes
+
+* Issues: #5324.
+  Remove CPU usage regression when a subscription matches no topics.
+  The increased CPU usage (~30%) was seen in particular when there are many topics
+  in the clusters and the given subscription regex doesn't match any.
+  Happening since 2.10.0 (#5324).
+* Issues: #4844.
+  Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
+  position when receiving EOF or error messages, causing the position to
+  move forward and likely be stored and committed.
+  When storing the application offset the leader epoch is also considered for correct offset ordering in case of log truncation.
+  Happening since 2.2.0 (#5213).
+
+
+
 # librdkafka v2.13.0
 
 librdkafka v2.13.0 is a feature release:

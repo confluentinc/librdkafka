@@ -278,7 +278,7 @@ static void do_test_committed_transaction(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
@@ -357,7 +357,7 @@ static void do_test_aborted_transaction(const char *isolation_level) {
         expected_msgs = is_read_committed ? 0 : msg_cnt;
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
@@ -453,7 +453,7 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
@@ -537,7 +537,7 @@ static void do_test_control_records_filtered(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
@@ -625,7 +625,7 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic with multiple partitions */
-        test_create_topic(NULL, topic, partition_cnt, 1);
+        test_create_topic(NULL, topic, partition_cnt, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
@@ -711,7 +711,7 @@ static void do_test_interleaved_producers(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create two transactional producers */
         producer1 = create_txn_producer("txn-producer-1");
@@ -800,7 +800,7 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         txn_producer = create_txn_producer(txn_id);
@@ -886,7 +886,7 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
         topic = test_mk_topic_name("0177-dynamic-uc-to-c", 1);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);
@@ -1000,7 +1000,7 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
         SUB_TEST("isolation.level=%s", isolation_level);
 
         /* Create topic */
-        test_create_topic(NULL, topic, 1, 1);
+        test_create_topic(NULL, topic, 1, -1);
 
         /* Create transactional producer */
         producer = create_txn_producer(txn_id);

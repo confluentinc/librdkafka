@@ -160,8 +160,8 @@ static void do_test_implicit_second_consumer(void) {
 
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -199,8 +199,8 @@ static void do_test_implicit_second_consumer(void) {
 
         rd_free(c1_offsets);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -264,8 +264,8 @@ static void do_test_explicit_second_consumer(void) {
 
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -303,8 +303,8 @@ static void do_test_explicit_second_consumer(void) {
 
         rd_free(c1_offsets);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -419,8 +419,8 @@ static void do_test_mixed_acks_second_consumer(void) {
 
         rd_free(released_offsets);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -503,8 +503,8 @@ static void do_test_multi_topic_partition(void) {
         TEST_SAY("Total consumed across %d rounds: %d\n", rounds,
                  total_consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         for (t = 0; t < topic_cnt; t++)
                 rd_free((void *)topics[t]);
@@ -588,8 +588,8 @@ static void do_test_produce_consume_loop(void) {
         TEST_SAY("Total consumed across %d rounds: %d\n", rounds,
                  total_consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -703,8 +703,8 @@ static void do_test_multi_round_mixed_second_consumer(void) {
         TEST_SAY("Total: consumed %d, released %d, redelivered %d\n",
                  total_consumed, total_released, total_redelivered);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -724,8 +724,8 @@ static void do_test_no_pending_acks(void) {
         TEST_ASSERT(!error, "Expected NULL when no pending acks, got error: %s",
                     error ? rd_kafka_error_string(error) : "");
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -815,8 +815,8 @@ static void do_test_multiple_commit_async_calls(void) {
                     "Expected %d (second produce), got %d", second_produce,
                     consumed2);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -883,7 +883,7 @@ static void do_test_commit_between_produces(void) {
         TEST_ASSERT(!error, "commit_async failed: %s",
                     error ? rd_kafka_error_string(error) : "");
 
-        /* Wait for acquisition lock timeout (3s) so first half's acks
+        /* Wait for acquisition lock timeout (3 s + buffer) so first half's acks
          * are fully committed or released before producing the second
          * half */
         rd_sleep(4);
@@ -927,8 +927,8 @@ static void do_test_commit_between_produces(void) {
 
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -964,8 +964,8 @@ static void do_test_commit_between_produces(void) {
         TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
                     received);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -1038,8 +1038,8 @@ static void do_test_all_release_second_consumer(void) {
         TEST_ASSERT(redelivered == consumed, "Expected %d redelivered, got %d",
                     consumed, redelivered);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -1109,8 +1109,8 @@ static void do_test_all_reject_second_consumer(void) {
 
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -1145,8 +1145,8 @@ static void do_test_all_reject_second_consumer(void) {
         TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
                     received);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -1221,8 +1221,8 @@ static void do_test_per_record_commit_async(void) {
         /* Wait for async commits to propagate */
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -1257,8 +1257,8 @@ static void do_test_per_record_commit_async(void) {
         TEST_ASSERT(received == 5, "Expected 5 verification records, got %d",
                     received);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -1467,8 +1467,8 @@ static void do_test_mock_inflight_caching(void) {
                     share_fetch_cnt, share_ack_cnt,
                     share_fetch_cnt + share_ack_cnt, commit_cnt);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -1581,8 +1581,8 @@ static void do_test_lock_timeout_redelivery(void) {
                  msg_cnt);
         TEST_ASSERT(consumed2 > 0, "Expected redelivered records, got 0");
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         SUB_TEST_PASS();
 }

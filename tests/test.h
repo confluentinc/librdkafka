@@ -1030,6 +1030,8 @@ int test_consumer_group_protocol_classic();
  * Share Consumer helpers
  ****************************************************************************/
 
+rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare);
+
 rd_kafka_share_t *test_create_share_consumer(const char *group_id,
                                              const char *ack_mode);
 

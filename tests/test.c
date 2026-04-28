@@ -45,6 +45,19 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
+/**
+ * Local definition of rd_kafka_share_s to access rkshare_rk
+ * without pulling in rdkafka_int.h (which causes Windows link errors
+ * due to internal inline functions referencing unexported symbols).
+ *
+ * TODO: Replace with a proper public API (e.g.
+ * test_share_consumer_get_rk()) so tests don't depend on the
+ * internal struct layout.
+ */
+struct rd_kafka_share_s {
+        rd_kafka_t *rkshare_rk;
+};
+
 
 int test_level = 2;
 int test_seed  = 0;
@@ -7951,6 +7964,17 @@ int test_consumer_group_protocol_classic() {
  ****************************************************************************/
 
 /**
+ * @brief Get underlying rd_kafka_t handle from share consumer.
+ *
+ * @param rkshare Share consumer handle.
+ * @returns The underlying rd_kafka_t handle.
+ */
+rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
+        return rkshare->rkshare_rk;
+}
+
+
+/**
  * @brief Create a share consumer with standard configuration.
  *
  * @param group_id The share group ID.
@@ -8116,7 +8140,7 @@ void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
         err = rd_kafka_share_subscribe(rk, topics);
         if (err)
                 TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
-                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
+                          rd_kafka_name(test_share_consumer_get_rk(rk)),
                           rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
@@ -8136,12 +8160,12 @@ rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
         err = rd_kafka_share_subscription(rk, &subscription);
         if (err)
                 TEST_FAIL("%s: Failed to get subscription: %s\n",
-                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
+                          rd_kafka_name(test_share_consumer_get_rk(rk)),
                           rd_kafka_err2str(err));
 
         TEST_ASSERT(subscription != NULL,
                     "%s: subscription() returned NULL list",
-                    rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)));
+                    rd_kafka_name(test_share_consumer_get_rk(rk)));
 
         return subscription;
 }

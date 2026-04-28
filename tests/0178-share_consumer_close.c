@@ -718,17 +718,17 @@ static void setup_3broker_share_consumer(const char *test_name,
 /** is_fatal_cb hook scoped to test_close_with_broker_down: ignores
  *  the transport error and cascading ALL_BROKERS_DOWN that result from
  *  taking the mock broker down mid-close. */
-// static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
-//                                                    rd_kafka_resp_err_t err,
-//                                                    const char *reason) {
-//         if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
-//             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
-//                 TEST_SAY("Ignoring expected error: %s: %s\n",
-//                          rd_kafka_err2name(err), reason);
-//                 return 0;
-//             }
-//         return 1;
-// }
+static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
+                                                   rd_kafka_resp_err_t err,
+                                                   const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                TEST_SAY("Ignoring expected error: %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+                return 0;
+        }
+        return 1;
+}
 
 /*#################################################################################*/
 
@@ -1435,125 +1435,125 @@ static void test_close_with_broker_busy(void) {
  *   broker down and call close().
  * - close() should return immediately and return NULL (no error).
  */
-// static void test_close_with_broker_down(void) {
-//         rd_kafka_mock_cluster_t *mcluster;
-//         const char *bootstraps;
-//         rd_kafka_share_t *consumer;
-//         rd_kafka_conf_t *conf;
-//         const char *topic           = "mock-close-broker-down";
-//         const char *group           = "sg-close-broker-down";
-//         const int msgcnt            = 10;
-//         const int socket_timeout_ms = 20000;
-//         rd_kafka_message_t *batch[BATCH_SIZE];
-//         rd_kafka_error_t *error;
-//         rd_kafka_error_t *close_err;
-//         size_t rcvd;
-//         int attempts       = 0;
-//         rd_bool_t got_msgs = rd_false;
-//         size_t i;
-//         rd_ts_t t_start, t_elapsed_ms;
-//         char errstr[512];
-//
-//         SUB_TEST("close-with-broker-down");
-//
-//         /* Suppress the transport-error / all-brokers-down events that the
-//          * test framework's default error_cb would otherwise fail on once we
-//          * set the broker down. Scoped to this test only. */
-//         test_curr->is_fatal_cb = test_close_with_broker_down_is_fatal_cb;
-//
-//         TEST_SAY("\n========================================\n");
-//         TEST_SAY("Test: close with broker down\n");
-//         TEST_SAY("Socket timeout: %dms\n", socket_timeout_ms);
-//         TEST_SAY("========================================\n\n");
-//
-//         mcluster = test_mock_cluster_new(1, &bootstraps);
-//         enable_share_apis(mcluster);
-//
-//         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
-//                         RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Failed to create mock topic");
-//
-//         /* Produce msgcnt messages via test helper. */
-//         test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 16,
-//                                  "bootstrap.servers", bootstraps, NULL);
-//
-//         /* Consumer with implicit ack mode and explicit socket timeout. */
-//         test_conf_init(&conf, NULL, 0);
-//         test_conf_set(conf, "bootstrap.servers", bootstraps);
-//         test_conf_set(conf, "group.id", group);
-//         test_conf_set(conf, "share.acknowledgement.mode", "implicit");
-//
-//         consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-//         TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
-//
-//         rd_kafka_topic_partition_list_t *subs =
-//             rd_kafka_topic_partition_list_new(1);
-//         rd_kafka_topic_partition_list_add(subs, topic,
-//         RD_KAFKA_PARTITION_UA);
-//         TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs),
-//                     "Subscribe failed");
-//         rd_kafka_topic_partition_list_destroy(subs);
-//
-//         /* Consume until we get at least one batch of messages, then break.
-//         */ TEST_SAY("Consuming until first non-empty batch...\n"); while
-//         (!got_msgs && attempts++ < 30) {
-//                 rcvd = 0;
-//                 error =
-//                     rd_kafka_share_consume_batch(consumer, 3000, batch,
-//                     &rcvd);
-//                 if (error) {
-//                         rd_kafka_error_destroy(error);
-//                         continue;
-//                 }
-//
-//                 if (rcvd > 0) {
-//                         TEST_SAY("Received %d messages\n", (int)rcvd);
-//                         for (i = 0; i < rcvd; i++)
-//                                 rd_kafka_message_destroy(batch[i]);
-//                         got_msgs = rd_true;
-//                         break;
-//                 }
-//         }
-//
-//         TEST_ASSERT(got_msgs, "Expected to receive at least one message");
-//
-//         /* Bring the broker down before calling close(). */
-//         TEST_SAY("Setting broker 1 down\n");
-//         TEST_ASSERT(rd_kafka_mock_broker_set_down(mcluster, 1) ==
-//                         RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Failed to set broker down");
-//
-//         /* close() should fail fast (broker connection was closed) */
-//         TEST_SAY("Calling close() with broker down\n");
-//         t_start      = test_clock();
-//         close_err    = rd_kafka_share_consumer_close(consumer);
-//         t_elapsed_ms = (test_clock() - t_start) / 1000;
-//
-//         TEST_SAY("Close completed after %" PRId64 " ms (err=%s)\n",
-//                  t_elapsed_ms,
-//                  close_err ? rd_kafka_error_string(close_err) : "NULL");
-//
-//         if (close_err)
-//                 rd_kafka_error_destroy(close_err);
-//
-//         TEST_SAY("SUCCESS: close() returned in %" PRId64
-//                  "ms after broker down\n",
-//                  t_elapsed_ms);
-//
-//         /* Bring the broker back up so the consumer's network threads can
-//          * finish their shutdown handshake cleanly during destroy. */
-//         TEST_ASSERT(rd_kafka_mock_broker_set_up(mcluster, 1) ==
-//                         RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Failed to set broker up");
-//
-//         rd_kafka_share_destroy(consumer);
-//         test_mock_cluster_destroy(mcluster);
-//
-//         /* Restore default error-fatal behavior for subsequent tests. */
-//         test_curr->is_fatal_cb = NULL;
-//
-//         SUB_TEST_PASS();
-// }
+static void test_close_with_broker_down(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        const char *topic           = "mock-close-broker-down";
+        const char *group           = "sg-close-broker-down";
+        const int msgcnt            = 10;
+        const int socket_timeout_ms = 20000;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        rd_kafka_error_t *close_err;
+        size_t rcvd;
+        int attempts       = 0;
+        rd_bool_t got_msgs = rd_false;
+        size_t i;
+        rd_ts_t t_start, t_elapsed_ms;
+        char errstr[512];
+
+        SUB_TEST("close-with-broker-down");
+
+        /* Suppress the transport-error / all-brokers-down events that the
+         * test framework's default error_cb would otherwise fail on once we
+         * set the broker down. Scoped to this test only. */
+        test_curr->is_fatal_cb = test_close_with_broker_down_is_fatal_cb;
+
+        TEST_SAY("\n========================================\n");
+        TEST_SAY("Test: close with broker down\n");
+        TEST_SAY("Socket timeout: %dms\n", socket_timeout_ms);
+        TEST_SAY("========================================\n\n");
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        enable_share_apis(mcluster);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        /* Produce msgcnt messages via test helper. */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        /* Consumer with implicit ack mode and explicit socket timeout. */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "implicit");
+        test_conf_set(conf, "debug", "all");
+
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
+
+        rd_kafka_topic_partition_list_t *subs =
+            rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs),
+                    "Subscribe failed");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume until we get at least one batch of messages, then break.
+         */
+        TEST_SAY("Consuming until first non-empty batch...\n");
+        while (!got_msgs && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                if (rcvd > 0) {
+                        TEST_SAY("Received %d messages\n", (int)rcvd);
+                        for (i = 0; i < rcvd; i++)
+                                rd_kafka_message_destroy(batch[i]);
+                        got_msgs = rd_true;
+                        break;
+                }
+        }
+
+        TEST_ASSERT(got_msgs, "Expected to receive at least one message");
+
+        /* Bring the broker down before calling close(). */
+        TEST_SAY("Setting broker 1 down\n");
+        TEST_ASSERT(rd_kafka_mock_broker_set_down(mcluster, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to set broker down");
+
+        /* close() should fail fast (broker connection was closed) */
+        TEST_SAY("Calling close() with broker down\n");
+        t_start      = test_clock();
+        close_err    = rd_kafka_share_consumer_close(consumer);
+        t_elapsed_ms = (test_clock() - t_start) / 1000;
+
+        TEST_SAY("Close completed after %" PRId64 " ms (err=%s)\n",
+                 t_elapsed_ms,
+                 close_err ? rd_kafka_error_string(close_err) : "NULL");
+
+        if (close_err)
+                rd_kafka_error_destroy(close_err);
+
+        TEST_SAY("SUCCESS: close() returned in %" PRId64
+                 "ms after broker down\n",
+                 t_elapsed_ms);
+
+        /* Bring the broker back up so the consumer's network threads can
+         * finish their shutdown handshake cleanly during destroy. */
+        TEST_ASSERT(rd_kafka_mock_broker_set_up(mcluster, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to set broker up");
+
+        rd_kafka_share_destroy(consumer);
+        test_mock_cluster_destroy(mcluster);
+
+        /* Restore default error-fatal behavior for subsequent tests. */
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
 
 /**
  * @brief Test: calling share-consumer APIs after close() completes.
@@ -1738,11 +1738,8 @@ int main_0178_share_consumer_close_local(int argc, char **argv) {
         test_close_respects_socket_timeout();
         test_close_with_broker_error_response();
         test_close_with_broker_busy();
+        test_close_with_broker_down();
         test_api_calls_on_closed_consumer();
         test_api_calls_during_closing();
-
-        /* TODO KIP-932: This test case hangs on destroy.
-         * Include it once destroy is fixed */
-        // test_close_with_broker_down();
         return 0;
 }

@@ -595,7 +595,7 @@ static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
         assert_state_error(error, "close");
 
         /* 9. async close */
-        queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
+        queue = rd_kafka_queue_new(test_share_consumer_get_rk(consumer));
         error = rd_kafka_share_consumer_close_queue(consumer, queue);
         rd_kafka_queue_destroy(queue);
         assert_state_error(error, "close_queue");
@@ -1681,7 +1681,7 @@ static void test_api_calls_during_closing(void) {
         TEST_SAY("Injecting %dms RTT delay on broker\n", rtt_delay_ms);
         rd_kafka_mock_broker_set_rtt(mcluster, 1, rtt_delay_ms);
 
-        queue = rd_kafka_queue_new(rd_kafka_share_consumer_get_rk(consumer));
+        queue = rd_kafka_queue_new(test_share_consumer_get_rk(consumer));
 
         TEST_SAY("Calling close_queue() to initiate async close\n");
         close_error = rd_kafka_share_consumer_close_queue(consumer, queue);

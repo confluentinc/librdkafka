@@ -601,8 +601,8 @@ static void state_cleanup(sub_test_state_t *state) {
         /* Destroy all consumers */
         for (i = 0; i < MAX_CONSUMERS; i++) {
                 if (state->consumers[i]) {
-                        rd_kafka_share_consumer_close(state->consumers[i]);
-                        rd_kafka_share_destroy(state->consumers[i]);
+                        test_share_consumer_close(state->consumers[i]);
+                        test_share_destroy(state->consumers[i]);
                 }
         }
 }
@@ -853,10 +853,10 @@ static void do_test_multi_consumer_overlap(void) {
         TEST_ASSERT(c0_cnt > 0 || c1_cnt > 0, "no messages received");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(rkshare0);
-        rd_kafka_share_consumer_close(rkshare1);
-        rd_kafka_share_destroy(rkshare0);
-        rd_kafka_share_destroy(rkshare1);
+        test_share_consumer_close(rkshare0);
+        test_share_consumer_close(rkshare1);
+        test_share_destroy(rkshare0);
+        test_share_destroy(rkshare1);
 
         rd_free(shared);
         rd_free(c0_only);
@@ -955,8 +955,8 @@ static void do_test_subscribe_15_topics(void) {
                     consumed);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         for (t = 0; t < topic_cnt; t++) {
                 rd_free(topics[t]);

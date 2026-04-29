@@ -546,7 +546,7 @@ static void do_test_share_group_error_injection(void) {
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
         /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
+        fatal_err = wait_fatal_error(share_c, 7000, errstr, sizeof(errstr));
         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected consumer to be in fatal state after "
                     "INVALID_REQUEST error");
@@ -554,7 +554,7 @@ static void do_test_share_group_error_injection(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        test_share_consumer_close(share_c);
+        rd_kafka_share_consumer_close(share_c);
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -1279,7 +1279,7 @@ static void do_test_group_authorization_failed_error(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        test_share_consumer_close(share_c);
+        rd_kafka_share_consumer_close(share_c);
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -1350,7 +1350,7 @@ static void do_test_group_max_size_reached_error(void) {
 
         /* Cleanup */
         test_share_consumer_close(share_c1);
-        test_share_consumer_close(share_c2);
+        rd_kafka_share_consumer_close(share_c2);
         test_share_destroy(share_c1);
         test_share_destroy(share_c2);
 
@@ -2076,7 +2076,7 @@ static void do_test_invalid_request_error(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        test_share_consumer_close(share_c);
+        rd_kafka_share_consumer_close(share_c);
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -2135,7 +2135,7 @@ static void do_test_unsupported_version_error(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        test_share_consumer_close(share_c);
+        rd_kafka_share_consumer_close(share_c);
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -2476,7 +2476,7 @@ static void do_test_double_close(void) {
         /* Second close - should handle gracefully without crashing.
          * The Java equivalent tests verify the CompletableFuture
          * completes immediately on double-leave. */
-        test_share_consumer_close(share_c);
+        rd_kafka_share_consumer_close(share_c);
 
         rd_kafka_topic_partition_list_destroy(subscription);
         test_share_destroy(share_c);

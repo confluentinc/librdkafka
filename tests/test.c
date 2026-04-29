@@ -8198,20 +8198,15 @@ void test_share_set_isolation_level(const char *group_name,
 }
 
 /**
- * @brief Close a share consumer and verify it succeeds.
+ * @brief Close a share consumer.
  *
  * @param rkshare The share consumer to close.
  */
 void test_share_consumer_close(rd_kafka_share_t *rkshare) {
         rd_kafka_resp_err_t error;
-        test_timing_t timing;
 
         TEST_SAY("Calling rd_kafka_share_consumer_close\n");
-
-        TIMING_START(&timing, "SHARE_CONSUMER.CLOSE");
         error = rd_kafka_share_consumer_close(rkshare);
-        TIMING_STOP(&timing);
-
         TEST_SAY("Completed rd_kafka_share_consumer_close\n");
 
         if (error)

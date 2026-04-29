@@ -161,8 +161,8 @@ static void do_test_share_group_heartbeat_basic(void) {
                     "Expected at least 2 heartbeats, got %d", found_heartbeats);
 
         /* Close consumer (sends leave heartbeat) */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         /* Verify leave heartbeat was sent */
         found_heartbeats = wait_share_heartbeats(mcluster, 3, 1000);
@@ -265,8 +265,8 @@ static void do_test_share_group_assignment_rebalance(void) {
         rd_kafka_topic_partition_list_destroy(share_c2_assignment);
 
         /* C2 leaves - C1 should get all partitions back */
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_destroy(share_c2);
+        test_share_consumer_close(share_c2);
+        test_share_destroy(share_c2);
 
         cnt = wait_assignment_count(share_c1, 3, 10000);
         TEST_ASSERT(cnt == 3,
@@ -274,8 +274,8 @@ static void do_test_share_group_assignment_rebalance(void) {
                     cnt);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_destroy(share_c1);
+        test_share_consumer_close(share_c1);
+        test_share_destroy(share_c1);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -436,8 +436,8 @@ static void do_test_share_group_multi_topic_assignment(void) {
 
         /* C1 leaves - C2 should get all orders, C3 all events.
          * Wait until C2 has 4 orders and C3 has 2 events. */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_destroy(share_c1);
+        test_share_consumer_close(share_c1);
+        test_share_destroy(share_c1);
 
         deadline = test_clock() + 15000 * 1000;
         while (test_clock() < deadline) {
@@ -472,8 +472,8 @@ static void do_test_share_group_multi_topic_assignment(void) {
         rd_kafka_topic_partition_list_destroy(share_c3_assign);
 
         /* C2 leaves - C3 should still have events only */
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_destroy(share_c2);
+        test_share_consumer_close(share_c2);
+        test_share_destroy(share_c2);
 
         /* Wait for C3 to stabilize with 2 events, 0 orders */
         cnt = wait_assignment_count(share_c3, 2, 10000);
@@ -489,8 +489,8 @@ static void do_test_share_group_multi_topic_assignment(void) {
         rd_kafka_topic_partition_list_destroy(share_c3_assign);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c3);
-        rd_kafka_share_destroy(share_c3);
+        test_share_consumer_close(share_c3);
+        test_share_destroy(share_c3);
 
         rd_kafka_topic_partition_list_destroy(sub_both);
         rd_kafka_topic_partition_list_destroy(sub_orders);
@@ -554,8 +554,8 @@ static void do_test_share_group_error_injection(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -643,8 +643,8 @@ static void do_test_share_group_rtt_injection(void) {
         rd_kafka_topic_partition_list_destroy(assignment);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -721,15 +721,15 @@ static void do_test_share_group_session_timeout(void) {
                     "Both consumers should have partitions");
 
         /* Destroy C2 without close to simulate crash */
-        rd_kafka_share_destroy(share_c2);
+        test_share_destroy(share_c2);
 
         /* Wait for C2's session to time out (3s) and C1 to get
          * all partitions back. */
         TEST_ASSERT(wait_assignment_count(share_c1, 4, 10000) == 4,
                     "C1 should have all 4 partitions after C2 timeout");
 
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_destroy(share_c1);
+        test_share_consumer_close(share_c1);
+        test_share_destroy(share_c1);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -880,10 +880,10 @@ static void do_test_share_group_target_assignment(void) {
         rd_free(member_ids);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_destroy(share_c1);
-        rd_kafka_share_destroy(share_c2);
+        test_share_consumer_close(share_c1);
+        test_share_consumer_close(share_c2);
+        test_share_destroy(share_c1);
+        test_share_destroy(share_c2);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -952,8 +952,8 @@ static void do_test_share_group_no_spurious_fencing(void) {
         TEST_SAY("No spurious fencing after 5 seconds\n");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();
@@ -1022,8 +1022,8 @@ static void do_test_unknown_member_id_error(void) {
                     "Expected 3 partitions after rejoin");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1088,8 +1088,8 @@ static void do_test_fenced_member_epoch_error(void) {
                     "Expected 3 partitions after rejoin");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1154,8 +1154,8 @@ static void do_test_coordinator_not_available_error(void) {
                     "Expected 3 partitions after retry");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1220,8 +1220,8 @@ static void do_test_not_coordinator_error(void) {
                     "Expected 3 partitions after finding coordinator");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1279,8 +1279,8 @@ static void do_test_group_authorization_failed_error(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1349,10 +1349,10 @@ static void do_test_group_max_size_reached_error(void) {
         rd_kafka_topic_partition_list_destroy(subscription);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_destroy(share_c1);
-        rd_kafka_share_destroy(share_c2);
+        test_share_consumer_close(share_c1);
+        test_share_consumer_close(share_c2);
+        test_share_destroy(share_c1);
+        test_share_destroy(share_c2);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1421,8 +1421,8 @@ static void do_test_member_rejoin_with_epoch_zero(void) {
                     "Expected 3 partitions after rejoin");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1489,16 +1489,16 @@ static void do_test_leaving_member_bumps_group_epoch(void) {
         }
 
         /* C2 leaves (sends epoch=-1 leave heartbeat) */
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_destroy(share_c2);
+        test_share_consumer_close(share_c2);
+        test_share_destroy(share_c2);
 
         /* Wait for C1 to get all partitions after C2 left */
         TEST_ASSERT(wait_assignment_count(share_c1, 4, 10000) == 4,
                     "C1 should have all 4 partitions after C2 left");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_destroy(share_c1);
+        test_share_consumer_close(share_c1);
+        test_share_destroy(share_c1);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1564,8 +1564,8 @@ static void do_test_partition_assignment_with_multiple_topics(void) {
         rd_kafka_topic_partition_list_destroy(assignment);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1672,12 +1672,12 @@ static void do_test_multiple_members_partition_distribution(void) {
         rd_kafka_topic_partition_list_destroy(share_c3_assign);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_consumer_close(share_c3);
-        rd_kafka_share_destroy(share_c1);
-        rd_kafka_share_destroy(share_c2);
-        rd_kafka_share_destroy(share_c3);
+        test_share_consumer_close(share_c1);
+        test_share_consumer_close(share_c2);
+        test_share_consumer_close(share_c3);
+        test_share_destroy(share_c1);
+        test_share_destroy(share_c2);
+        test_share_destroy(share_c3);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1696,7 +1696,6 @@ static void do_test_leave_heartbeat_completes_successfully(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-success";
 
@@ -1724,12 +1723,10 @@ static void do_test_leave_heartbeat_completes_successfully(void) {
         /* Leave group - should send leave heartbeat and complete.
          * Note: After close(), we cannot call rd_kafka_assignment() anymore
          * as the broker handle is destroyed. */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(!err, "Expected close to succeed, got %s",
-                    rd_kafka_err2str(err));
+        test_share_consumer_close(share_c);
 
         /* Cleanup */
-        rd_kafka_share_destroy(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1748,7 +1745,6 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-leave-error";
 
@@ -1781,15 +1777,10 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
         /* Leave group - should still complete despite error (best effort).
          * The key behavior: close() must not hang even when the leave
          * heartbeat gets an error response. */
-        err = rd_kafka_share_consumer_close(share_c);
-        /* Close completed (didn't hang) - this is the primary assertion.
-         * The return code may vary depending on whether the error was
-         * processed during leave. */
-        TEST_SAY("Leave completed with: %s (didn't hang - correct)\n",
-                 rd_kafka_err2str(err));
+        test_share_consumer_close(share_c);
 
         /* Cleanup */
-        rd_kafka_share_destroy(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1880,8 +1871,8 @@ static void do_test_subscription_change(void) {
                     found_topicB);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -1901,7 +1892,7 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err, fatal_err;
+        rd_kafka_resp_err_t fatal_err;
         char errstr[256];
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-id-not-found-unsub";
@@ -1951,11 +1942,10 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
                     rd_kafka_err2str(fatal_err), errstr);
 
         /* Close consumer */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_SAY("Close returned: %s\n", rd_kafka_err2str(err));
+        test_share_consumer_close(share_c);
 
         /* Cleanup */
-        rd_kafka_share_destroy(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2027,8 +2017,8 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
 //                  rd_kafka_err2str(fatal_err), errstr);
 
 //         /* Cleanup */
-//         rd_kafka_share_consumer_close(share_c);
-//         rd_kafka_share_destroy(share_c);
+//         test_share_consumer_close(share_c);
+//         test_share_destroy(share_c);
 
 //         rd_kafka_mock_stop_request_tracking(mcluster);
 //         test_mock_cluster_destroy(mcluster);
@@ -2086,8 +2076,8 @@ static void do_test_invalid_request_error(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2145,8 +2135,8 @@ static void do_test_unsupported_version_error(void) {
                  rd_kafka_err2str(fatal_err), errstr);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2210,8 +2200,8 @@ static void do_test_coordinator_load_in_progress_error(void) {
                     "Expected 3 partitions after retry");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2230,7 +2220,6 @@ static void do_test_graceful_shutdown_stable_state(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription, *assignment;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t err;
         int found_heartbeats;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-graceful-shutdown";
@@ -2268,16 +2257,14 @@ static void do_test_graceful_shutdown_stable_state(void) {
         rd_kafka_mock_start_request_tracking(mcluster);
 
         /* Close consumer gracefully - should send leave heartbeat */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(!err, "Expected close to succeed, got %s",
-                    rd_kafka_err2str(err));
+        test_share_consumer_close(share_c);
 
         /* Verify leave heartbeat was sent */
         found_heartbeats = wait_share_heartbeats(mcluster, 1, 1000);
         TEST_SAY("Found %d heartbeats during shutdown\n", found_heartbeats);
 
         /* Cleanup */
-        rd_kafka_share_destroy(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2347,8 +2334,8 @@ static void do_test_resubscribe_after_unsubscribe(void) {
                     "Expected 3 partitions after resubscribe");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2412,8 +2399,8 @@ static void do_test_consumer_leave_rebalance(void) {
 
         /* share consumer 3 leaves */
         TEST_SAY("Share consumer 3 leaving...\n");
-        rd_kafka_share_consumer_close(share_c3);
-        rd_kafka_share_destroy(share_c3);
+        test_share_consumer_close(share_c3);
+        test_share_destroy(share_c3);
 
         /* Wait for rebalance to propagate to remaining consumers */
         dl = test_clock() + 15000 * 1000;
@@ -2446,10 +2433,10 @@ static void do_test_consumer_leave_rebalance(void) {
                     final_total);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(share_c1);
-        rd_kafka_share_consumer_close(share_c2);
-        rd_kafka_share_destroy(share_c1);
-        rd_kafka_share_destroy(share_c2);
+        test_share_consumer_close(share_c1);
+        test_share_consumer_close(share_c2);
+        test_share_destroy(share_c1);
+        test_share_destroy(share_c2);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2467,7 +2454,6 @@ static void do_test_double_close(void) {
         const char *group_id = topic;
         rd_kafka_share_t *share_c;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_resp_err_t err;
 
         SUB_TEST_QUICK();
 
@@ -2485,19 +2471,15 @@ static void do_test_double_close(void) {
         wait_share_heartbeats(mcluster, 3, 1000);
 
         /* First close - should succeed */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(!err, "Expected first close to succeed, got %s",
-                    rd_kafka_err2str(err));
+        test_share_consumer_close(share_c);
 
         /* Second close - should handle gracefully without crashing.
          * The Java equivalent tests verify the CompletableFuture
          * completes immediately on double-leave. */
-        err = rd_kafka_share_consumer_close(share_c);
-        TEST_SAY("Second close returned: %s (no crash - correct)\n",
-                 rd_kafka_err2str(err));
+        test_share_consumer_close(share_c);
 
         rd_kafka_topic_partition_list_destroy(subscription);
-        rd_kafka_share_destroy(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2542,8 +2524,8 @@ static void do_test_empty_topic_subscription(void) {
 
         rd_kafka_topic_partition_list_destroy(subscription);
         rd_kafka_topic_partition_list_destroy(assignment);
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
         test_mock_cluster_destroy(mcluster);
@@ -2583,7 +2565,7 @@ static void do_test_empty_topic_list_subscription(void) {
                  rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(empty_list);
-        rd_kafka_share_destroy(share_c);
+        test_share_destroy(share_c);
 
         test_mock_cluster_destroy(mcluster);
 

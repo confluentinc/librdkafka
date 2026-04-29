@@ -1062,6 +1062,8 @@ void test_share_set_auto_offset_reset(const char *group_name,
 void test_share_set_isolation_level(const char *group_name,
                                     const char *isolation_level);
 
+void test_share_consumer_close(rd_kafka_share_t *rkshare);
+void test_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
  * @name rusage.c

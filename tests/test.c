@@ -8196,3 +8196,32 @@ void test_share_set_isolation_level(const char *group_name,
         const char *cfg[] = {"share.isolation.level", "SET", isolation_level};
         test_alter_group_configurations(group_name, cfg, 1);
 }
+
+/**
+ * @brief Close a share consumer.
+ *
+ * @param rkshare The share consumer to close.
+ */
+void test_share_consumer_close(rd_kafka_share_t *rkshare) {
+        rd_kafka_resp_err_t error;
+
+        TEST_SAY("Calling rd_kafka_share_consumer_close\n");
+        error = rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("Completed rd_kafka_share_consumer_close\n");
+
+        if (error)
+                TEST_FAIL("Failed to close share consumer: %s\n",
+                          rd_kafka_err2str(error));
+}
+
+/**
+ * @brief Destroy a share consumer.
+ *
+ * @param rkshare The share consumer to destroy.
+ */
+void test_share_destroy(rd_kafka_share_t *rkshare) {
+
+        TEST_SAY("Calling rd_kafka_share_destroy\n");
+        rd_kafka_share_destroy(rkshare);
+        TEST_SAY("Completed rd_kafka_share_destroy\n");
+}

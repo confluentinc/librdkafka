@@ -183,8 +183,8 @@ static void do_test_basic_consume(void) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, msgcnt, 50);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
@@ -210,8 +210,8 @@ static void do_test_followup_fetch(void) {
         consumed = consume_n(consumer, 3, 30);
         consumed += consume_n(consumer, 2, 30);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 5, "Expected 5 consumed, got %d", consumed);
@@ -236,8 +236,8 @@ static void do_test_multi_partition(void) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, msgcnt, 60);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
@@ -268,8 +268,8 @@ static void do_test_multi_topic(void) {
         subscribe_topics(consumer, topics, 2);
         consumed = consume_n(consumer, 4, 40);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 4, "Expected 4 consumed, got %d", consumed);
@@ -292,8 +292,8 @@ static void do_test_empty_topic_no_records(void) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, 1, 5);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
@@ -318,8 +318,8 @@ static int do_test_negative_sharefetch_error(rd_kafka_resp_err_t err) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, 1, 30);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         return consumed;
@@ -366,8 +366,8 @@ static void do_test_sghb_error(rd_kafka_resp_err_t err, int count) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, 1, 5);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
@@ -395,8 +395,8 @@ static void do_test_topic_error(rd_kafka_resp_err_t err) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, 1, 5);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
@@ -420,8 +420,8 @@ static void do_test_unknown_topic_subscription(void) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, 1, 5);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
@@ -444,8 +444,8 @@ static void do_test_empty_fetch_no_records(void) {
         subscribe_topics(consumer, &topic, 1);
         consumed = consume_n(consumer, 1, 5);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed, got %d", consumed);
@@ -524,8 +524,8 @@ static void do_test_member_validation(void) {
         consumed_p3 = consume_n(consumer, 2, 50);
         TEST_SAY("member_validation: phase3 consumed %d/2\n", consumed_p3);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_p1 >= 2 && (consumed_p1 + consumed_p3) >= msgcnt,
@@ -575,8 +575,8 @@ static void do_test_sharefetch_session_expiry_rtt(void) {
         consumed += consume_n(consumer, 1, 30);
         TEST_SAY("rtt_expiry: phase3 consumed %d/2 total\n", consumed);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 2, "Expected 2 consumed, got %d", consumed);
@@ -622,8 +622,8 @@ static void do_test_forgotten_topics(void) {
         TEST_SAY("forgotten_topics: consumed %d/6 total after forget\n",
                  consumed);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         /* We expect at least the 4 initial + 2 from topic_a = 6.
@@ -672,8 +672,8 @@ static void do_test_multi_batch_consume(void) {
         consumed = consume_n(consumer, msgcnt, 50);
         TEST_SAY("multi_batch: consumed %d/%d\n", consumed, msgcnt);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,
@@ -714,7 +714,7 @@ static void do_test_max_delivery_attempts(void) {
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("max_delivery: A consumed %d/%d (delivery 1)\n", consumed_a,
                  msgcnt);
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
         rd_usleep(1500 * 1000, 0); /* wait for lock expiry */
 
         /* Delivery 2: Consumer B acquires same records again (delivery_count
@@ -724,7 +724,7 @@ static void do_test_max_delivery_attempts(void) {
         consumed_b = consume_n(consumer, msgcnt, 50);
         TEST_SAY("max_delivery: B consumed %d/%d (delivery 2)\n", consumed_b,
                  msgcnt);
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
         rd_usleep(1500 * 1000, 0); /* wait for lock expiry */
 
         /* Delivery 3 attempt: Consumer C should get 0 records because
@@ -735,8 +735,8 @@ static void do_test_max_delivery_attempts(void) {
         TEST_SAY("max_delivery: C consumed %d/0 (should be archived)\n",
                  consumed_c);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt &&
@@ -778,10 +778,10 @@ static void do_test_record_lock_duration(void) {
         subscribe_topics(consumer, &topic, 1);
         consumed_a = consume_n(consumer, msgcnt, 50);
         TEST_SAY("lock_duration: A consumed %d/%d\n", consumed_a, msgcnt);
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
 
         /* Wait for record lock to expire (300ms + margin).
-         * rd_kafka_share_destroy sends SGHB LEAVE which releases
+         * test_share_destroy sends SGHB LEAVE which releases
          * locks immediately, but we still need to wait for the
          * client's internal rejoin cycle to settle. */
         rd_usleep(1000 * 1000, 0);
@@ -795,8 +795,8 @@ static void do_test_record_lock_duration(void) {
         consumed_b = consume_n(consumer, msgcnt, 100);
         TEST_SAY("lock_duration: B consumed %d/%d\n", consumed_b, msgcnt);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
@@ -840,7 +840,7 @@ static void do_test_multi_consumer_lock_expiry(void) {
         /* Simulate crash: destroy consumer A without calling close.
          * The session will time out and the proactive lock-expiry
          * timer will release A's locks. */
-        rd_kafka_share_destroy(consumer_a);
+        test_share_destroy(consumer_a);
 
         /* Wait for locks to expire (session_timeout=500ms, add margin). */
         rd_usleep(1500 * 1000, 0);
@@ -855,8 +855,8 @@ static void do_test_multi_consumer_lock_expiry(void) {
         consumed_b = consume_n(consumer_b, msgcnt, 100);
         TEST_SAY("multi_consumer: B consumed %d/%d\n", consumed_b, msgcnt);
 
-        rd_kafka_share_consumer_close(consumer_b);
-        rd_kafka_share_destroy(consumer_b);
+        test_share_consumer_close(consumer_b);
+        test_share_destroy(consumer_b);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed_a == msgcnt && consumed_b == msgcnt,
@@ -904,8 +904,8 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
         TEST_SAY("fetch_error(%s): consumed=%d rcvd=%zu\n",
                  rd_kafka_err2name(err), consumed, rcvd);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed with %s, got %d",
@@ -1020,8 +1020,8 @@ static void do_test_sharefetch_fetch_disconnected(void) {
 
         TEST_SAY("fetch_disconnected: consumed=%d rcvd=%zu\n", consumed, rcvd);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0, "Expected 0 consumed on disconnect, got %d",
@@ -1058,8 +1058,8 @@ static void do_test_sharefetch_fetch_and_close_implicit(void) {
         TEST_SAY("fetch_and_close: consumed %d/%d\n", consumed, msgcnt);
 
         /* Close — sends ShareAcknowledge/ShareFetch with epoch=-1 */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == msgcnt, "Expected %d consumed, got %d", msgcnt,

@@ -218,8 +218,8 @@ static void do_test_basic_implicit_commit_sync(void) {
         TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -339,8 +339,8 @@ static void do_test_basic_explicit_commit_sync(void) {
         TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -376,8 +376,8 @@ static void do_test_no_pending_acks(void) {
         TEST_SAY(
             "commit_sync with no pending acks returned NULL as expected\n");
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -433,8 +433,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
                     error ? rd_kafka_error_string(error) : "");
         RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -470,8 +470,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -587,8 +587,8 @@ static void do_test_mixed_ack_types(void) {
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Consumer B: should only get the 3 RELEASE'd records */
         rkshare = create_share_consumer(group, "implicit");
@@ -644,8 +644,8 @@ static void do_test_mixed_ack_types(void) {
                     "Consumer B got %d records, expected 3 RELEASE'd",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -777,8 +777,8 @@ static void do_test_multiple_commit_sync_calls(void) {
         TEST_ASSERT(commit_cnt == 5, "Expected 5 commit_sync calls, got %d",
                     commit_cnt);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -812,8 +812,8 @@ static void do_test_multiple_commit_sync_calls(void) {
         TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -1015,8 +1015,8 @@ static void do_test_multi_topic_partition(void) {
                     "Max delivery_count=%d exceeds limit=%d", (int)max_dc_seen,
                     MAX_REDELIVERY_ROUNDS);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         for (i = 0; i < MULTI_TP_TOPICS; i++)
                 rd_free(topics[i]);
@@ -1254,8 +1254,8 @@ static void do_test_mock_uses_share_acknowledge(void) {
                     "partitions count (%d)",
                     share_ack_cnt, commit_with_partitions);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -1385,8 +1385,8 @@ static void do_test_mock_commit_sync_timeout(void) {
         rd_sleep(5);
 
         /* Close first consumer */
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Second consumer: should get 0 records because the broker
          * processed the acks despite client-side timeout */
@@ -1420,8 +1420,8 @@ static void do_test_mock_commit_sync_timeout(void) {
                     "client-side timeout)",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Phase 3: Produce more, consume, commit_sync normally —
          * verify recovery after timeout */
@@ -1476,8 +1476,8 @@ static void do_test_mock_commit_sync_timeout(void) {
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -1645,8 +1645,8 @@ static void do_test_mixed_commit_types(void) {
          * response. */
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Produce 5 verification records */
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -1680,8 +1680,8 @@ static void do_test_mixed_commit_types(void) {
         TEST_ASSERT(consumed == 5, "Expected 5 verification records, got %d",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 }
 
 
@@ -1871,8 +1871,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
         /* Wait for remaining async to complete */
         rd_sleep(3);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         /* Second consumer: should get 0 records since all acks
          * were processed successfully */
@@ -1904,8 +1904,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
                     "(all acks should have been processed)",
                     consumed);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();

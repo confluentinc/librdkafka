@@ -233,8 +233,8 @@ static void do_test_txn_committed_read_uncommitted(void) {
         subscribe_topics(share_c, &topic, 1);
         consumed = consume_n(share_c, 3, 50);
         TEST_ASSERT(consumed == 3, "Expected 3 consumed, got %d", consumed);
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -263,8 +263,8 @@ static void do_test_txn_aborted_read_uncommitted(void) {
 
         consumed = consume_n(share_c, 3, 50);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 3,
@@ -296,8 +296,8 @@ static void do_test_txn_mixed_read_uncommitted(void) {
 
         consumed = consume_n(share_c, 5, 50);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 5, "Expected 5 consumed, got %d", consumed);
@@ -327,8 +327,8 @@ static void do_test_txn_committed_read_committed(void) {
 
         consumed = consume_n(share_c, 3, 50);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 3, "Expected 3 consumed, got %d", consumed);
@@ -360,8 +360,8 @@ static void do_test_txn_aborted_read_committed(void) {
 
         consumed = consume_n(share_c, 0, 15);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 0,
@@ -401,8 +401,8 @@ static void do_test_txn_mixed_read_committed(void) {
 
         consumed = consume_n(share_c, 7, 60);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 7,
@@ -437,8 +437,8 @@ static void do_test_txn_nontxn_read_committed(void) {
 
         consumed = consume_n(share_c, 5, 50);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 5, "Expected 5 consumed, got %d", consumed);
@@ -479,8 +479,8 @@ static void do_test_txn_abort_then_commit_read_committed(void) {
 
         consumed = consume_n(share_c, 3, 50);
 
-        rd_kafka_share_consumer_close(share_c);
-        rd_kafka_share_destroy(share_c);
+        test_share_consumer_close(share_c);
+        test_share_destroy(share_c);
         test_ctx_destroy(&ctx);
 
         TEST_ASSERT(consumed == 3,

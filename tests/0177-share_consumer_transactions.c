@@ -316,8 +316,8 @@ static void do_test_committed_transaction(const char *isolation_level) {
             isolation_level, consumed);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -403,8 +403,8 @@ static void do_test_aborted_transaction(const char *isolation_level) {
             isolation_level, consumed, expected_msgs);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -504,8 +504,8 @@ static void do_test_mixed_transactions(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -589,8 +589,8 @@ static void do_test_control_records_filtered(const char *isolation_level) {
                                    control_record_offsets, 2, isolation_level);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -679,8 +679,8 @@ static void do_test_multi_partition_transactions(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -764,8 +764,8 @@ static void do_test_interleaved_producers(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer1);
         rd_kafka_destroy(producer2);
 
@@ -853,8 +853,8 @@ static void do_test_mixed_txn_non_txn(const char *isolation_level) {
                  isolation_level, consumed);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(txn_producer);
 
         SUB_TEST_PASS();
@@ -959,8 +959,8 @@ static void do_test_dynamic_uncommitted_to_committed(void) {
             "READ_COMMITTED works correctly\n");
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();
@@ -1071,8 +1071,8 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
             isolation_level, consumed, committed_txns, aborted_txns);
 
         /* Cleanup */
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
         rd_kafka_destroy(producer);
 
         SUB_TEST_PASS();

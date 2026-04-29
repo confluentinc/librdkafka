@@ -535,8 +535,8 @@ static void cleanup_test(ack_test_config_t *config, ack_test_state_t *state) {
 
         for (i = 0; i < config->consumer_cnt; i++) {
                 if (state->consumers[i]) {
-                        rd_kafka_share_consumer_close(state->consumers[i]);
-                        rd_kafka_share_destroy(state->consumers[i]);
+                        test_share_consumer_close(state->consumers[i]);
+                        test_share_destroy(state->consumers[i]);
                         state->consumers[i] = NULL;
                 }
         }
@@ -666,8 +666,8 @@ static void test_ack_null_message(void) {
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_null_message: PASSED ===\n");
 }
@@ -757,8 +757,8 @@ static void test_ack_invalid_type(void) {
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
         rd_kafka_message_destroy(batch[0]);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_invalid_type: PASSED ===\n");
 }
@@ -854,8 +854,8 @@ static void test_release_then_reject_no_redelivery(void) {
                     "Expected 0 redelivered (REJECT overrides RELEASE), got %d",
                     redelivered);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         TEST_SAY("=== test_release_then_reject_no_redelivery: PASSED ===\n");
 }
@@ -968,8 +968,8 @@ static void test_max_delivery_attempts(void) {
         TEST_SAY("SUCCESS: Message not redelivered after %d RELEASE attempts\n",
                  max_deliveries);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         TEST_SAY("=== test_max_delivery_attempts: PASSED ===\n");
 }

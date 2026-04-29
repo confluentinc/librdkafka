@@ -269,8 +269,8 @@ static void cleanup_test(share_test_config_t *config,
         /* Destroy consumers */
         for (i = 0; i < config->consumer_cnt; i++) {
                 if (state->consumers[i]) {
-                        rd_kafka_share_consumer_close(state->consumers[i]);
-                        rd_kafka_share_destroy(state->consumers[i]);
+                        test_share_consumer_close(state->consumers[i]);
+                        test_share_destroy(state->consumers[i]);
                         state->consumers[i] = NULL;
                 }
         }
@@ -592,8 +592,8 @@ static void test_rapid_produce_consume_cycles(void) {
         TEST_SAY("SUCCESS: Rapid cycles completed - %d messages\n",
                  total_consumed);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
 }
 
 /**
@@ -665,8 +665,8 @@ static void test_empty_then_produce(void) {
         TEST_SAY("SUCCESS: Empty then produce - consumed %d messages\n",
                  consumed);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
 }
 
 /**
@@ -734,8 +734,8 @@ static void test_sparse_partitions(void) {
         TEST_SAY("SUCCESS: Sparse partitions - consumed %d messages\n",
                  consumed);
 
-        rd_kafka_share_consumer_close(consumer);
-        rd_kafka_share_destroy(consumer);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
 }
 
 

@@ -33,7 +33,7 @@
 #include "../src/rdkafka_proto.h"
 
 /**
- * @name KIP-932 Share Group Transactions mock broker tests.
+ * @name Share Group Transactions mock broker tests.
  *
  * Exercises transactional produce + share consume via mock broker
  * for both read_uncommitted and read_committed isolation levels.
@@ -63,6 +63,10 @@ static test_ctx_t test_ctx_new(const char *txn_id) {
                                                  RD_KAFKAP_ShareFetch, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to enable ShareFetch");
+
+        /* Set auto.offset.reset=earliest so tests that produce
+         * before consuming see all records. */
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(ctx.mcluster, 1);
 
         /* Non-transactional producer */
         test_conf_init(&conf, NULL, 0);

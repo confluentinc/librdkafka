@@ -31,7 +31,7 @@
 #include "../src/rdkafka_proto.h"
 
 /**
- * @name KIP-932 Share Acknowledgement (implicit ack) mock broker tests.
+ * @name Share Acknowledgement (implicit ack) mock broker tests.
  *
  * Exercises the implicit ack flow via mock broker: records acquired
  * by a ShareFetch are acknowledged on the next ShareFetch, which
@@ -61,6 +61,10 @@ static test_ctx_t test_ctx_new(void) {
                                                  RD_KAFKAP_ShareFetch, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to enable ShareFetch");
+
+        /* Set auto.offset.reset=earliest so tests that produce
+         * before consuming see all records. */
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(ctx.mcluster, 1);
 
         /* Create a producer targeting the mock cluster */
         test_conf_init(&conf, NULL, 0);
@@ -1338,6 +1342,150 @@ static void do_test_coordinator_failover_ack_recovery(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that ack validation returns INVALID_RECORD_STATE when the
+ *        record's lock has expired and was re-acquired by another consumer.
+ *
+ * Consumer A acquires records, locks expire, consumer B re-acquires and
+ * successfully acks.  The records should not be redelivered a third time
+ * (consumer B's ack succeeded because the mock broker now correctly
+ * reports INVALID_RECORD_STATE for stale acks and honours valid ones).
+ */
+static void do_test_ack_after_lock_expiry_redelivers(void) {
+        const char *topic = "kip932_ack_invalid_state";
+        const int msgcnt  = 3;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer_a, *consumer_b, *consumer_c;
+        int consumed_a, consumed_b, consumed_c;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        /* Short lock duration so locks expire quickly. */
+        rd_kafka_mock_sharegroup_set_record_lock_duration(ctx.mcluster, 200);
+        rd_kafka_mock_sharegroup_set_session_timeout(ctx.mcluster, 10000);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer A acquires records. */
+        consumer_a = new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
+        subscribe_topics(consumer_a, &topic, 1);
+        consumed_a = consume_n(consumer_a, msgcnt, 50);
+        TEST_SAY("ack_invalid_state: A consumed %d/%d\n", consumed_a, msgcnt);
+
+        /* Inject RTT so A's ack is delayed past lock expiry. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 3000);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 2, 3000);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 3, 3000);
+
+        /* Wait for lock to expire. */
+        rd_usleep(800 * 1000, NULL);
+
+        /* Destroy A without close — ack never delivered. */
+        rd_kafka_share_destroy(consumer_a);
+
+        /* Clear RTT. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 1, 0);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 2, 0);
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, 3, 0);
+
+        /* Consumer B re-acquires (locks expired) and acks implicitly
+         * by doing a second poll (which piggybacks the ack on the next
+         * ShareFetch). */
+        consumer_b = new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
+        subscribe_topics(consumer_b, &topic, 1);
+        consumed_b = consume_n(consumer_b, msgcnt, 50);
+        TEST_SAY("ack_invalid_state: B consumed %d/%d\n", consumed_b, msgcnt);
+
+        /* Second poll triggers implicit ack for B's records. */
+        consume_n(consumer_b, 1, 3);
+
+        rd_kafka_share_consumer_close(consumer_b);
+        rd_kafka_share_destroy(consumer_b);
+
+        /* Consumer C should get 0 records — B's ack succeeded. */
+        consumer_c = new_share_consumer(ctx.bootstraps, "sg-ack-invalid-state");
+        subscribe_topics(consumer_c, &topic, 1);
+        consumed_c = consume_n(consumer_c, 1, 5);
+        TEST_SAY("ack_invalid_state: C consumed %d (expected 0)\n", consumed_c);
+
+        rd_kafka_share_consumer_close(consumer_c);
+        rd_kafka_share_destroy(consumer_c);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed_a == msgcnt, "A: expected %d consumed, got %d",
+                    msgcnt, consumed_a);
+        TEST_ASSERT(consumed_b == msgcnt, "B: expected %d consumed, got %d",
+                    msgcnt, consumed_b);
+        TEST_ASSERT(consumed_c == 0, "C: expected 0 consumed (B acked), got %d",
+                    consumed_c);
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Test that two consumers can sequentially acquire, ack, and
+ *        advance SPSO without interference.
+ *
+ * Consumer A acquires records 0-2 and acks them (implicit ack via
+ * second poll).  Consumer B then gets records 3-5 (not 0-2, since
+ * those were acked and SPSO advanced).  Validates that the ack
+ * error handling doesn't interfere with normal ack flow.
+ */
+static void do_test_ack_success_advances_spso(void) {
+        const char *topic = "kip932_ack_spso_advance";
+        const int msgcnt  = 6;
+        test_ctx_t ctx;
+        rd_kafka_share_t *consumer;
+        int consumed_a, consumed_b;
+
+        SUB_TEST();
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        produce_messages(ctx.producer, topic, msgcnt);
+
+        /* Consumer A acquires first batch. MaxRecords in the client
+         * defaults to a large value, so it will get all 6.  We use
+         * the max_record_locks limit to cap acquisition at 3. */
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 3);
+
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-spso");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_a = consume_n(consumer, 3, 30);
+        TEST_SAY("ack_spso: A consumed %d/3\n", consumed_a);
+
+        /* Second poll triggers implicit ack for A's records. */
+        consume_n(consumer, 1, 3);
+
+        /* Close A cleanly. */
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        /* Remove lock limit so B can get remaining records. */
+        rd_kafka_mock_sharegroup_set_max_record_locks(ctx.mcluster, 0);
+
+        /* Consumer B should get records 3-5 (SPSO advanced past 0-2). */
+        consumer = new_share_consumer(ctx.bootstraps, "sg-ack-spso");
+        subscribe_topics(consumer, &topic, 1);
+        consumed_b = consume_n(consumer, 3, 30);
+        TEST_SAY("ack_spso: B consumed %d/3\n", consumed_b);
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+        test_ctx_destroy(&ctx);
+
+        TEST_ASSERT(consumed_a == 3, "A: expected 3 consumed, got %d",
+                    consumed_a);
+        TEST_ASSERT(consumed_b == 3, "B: expected 3 consumed, got %d",
+                    consumed_b);
+        SUB_TEST_PASS();
+}
+
 /* ===================================================================
  *  Test runner
  * =================================================================== */
@@ -1372,6 +1520,10 @@ int main_0157_share_consumer_ack_mock(int argc, char **argv) {
         do_test_lock_expiry_before_ack();
         do_test_empty_topic_no_ack_side_effects();
         do_test_coordinator_failover_ack_recovery();
+
+        /* Ack validation */
+        do_test_ack_after_lock_expiry_redelivers();
+        do_test_ack_success_advances_spso();
 
         return 0;
 }

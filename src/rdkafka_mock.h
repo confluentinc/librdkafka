@@ -718,6 +718,52 @@ rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
                                       int max_size);
 
 /**
+ * @brief Set the maximum number of fetch sessions allowed per broker.
+ *
+ * New sessions attempted via ShareFetch with epoch 0 when the broker
+ * is at capacity will receive SHARE_SESSION_LIMIT_REACHED.
+ *
+ * Default is 2000 (group.share.max.share.sessions).
+ *
+ * @param mcluster Mock cluster instance.
+ * @param max_fetch_sessions Maximum fetch sessions per broker. 0 = unlimited.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_fetch_sessions);
+
+/**
+ * @brief Set the maximum number of in-flight record locks per share-partition.
+ *
+ * Once the limit is reached, no more records are acquired until existing
+ * locks are released (via ack, release, reject, or lock expiry).
+ *
+ * Default is 2000 (group.share.partition.max.record.locks).
+ *
+ * @param mcluster Mock cluster instance.
+ * @param max_record_locks Maximum in-flight records per partition. 0 =
+ * unlimited.
+ */
+RD_EXPORT void
+rd_kafka_mock_sharegroup_set_max_record_locks(rd_kafka_mock_cluster_t *mcluster,
+                                              int max_record_locks);
+
+/**
+ * @brief Set the auto offset reset policy for share groups.
+ *
+ * Controls where SPSO is initialized when a share-partition is first
+ * consumed.
+ *
+ * Default is 0 ("latest").
+ *
+ * @param mcluster Mock cluster instance.
+ * @param auto_offset_reset 0 = latest, 1 = earliest.
+ */
+RD_EXPORT void rd_kafka_mock_sharegroup_set_auto_offset_reset(
+    rd_kafka_mock_cluster_t *mcluster,
+    int auto_offset_reset);
+
+/**
  * @brief Set a manual target assignment for a sharegroup.
  *
  * This allows tests to override the automatic partition assignment

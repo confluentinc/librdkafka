@@ -59,6 +59,9 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         mcluster->defaults.sharegroup_record_lock_duration_ms = 0;
         mcluster->defaults.sharegroup_max_size                = 0;
         mcluster->defaults.sharegroup_isolation_level         = 0;
+        mcluster->defaults.sharegroup_max_fetch_sessions      = 2000;
+        mcluster->defaults.sharegroup_max_record_locks        = 2000;
+        mcluster->defaults.sharegroup_auto_offset_reset       = 0; /* latest */
 }
 
 /**
@@ -114,6 +117,12 @@ rd_kafka_mock_sharegroup_get(rd_kafka_mock_cluster_t *mcluster,
             mcluster->defaults.sharegroup_record_lock_duration_ms;
         mshgrp->isolation_level = mcluster->defaults.sharegroup_isolation_level;
         mshgrp->max_size        = mcluster->defaults.sharegroup_max_size;
+        mshgrp->max_fetch_sessions =
+            mcluster->defaults.sharegroup_max_fetch_sessions;
+        mshgrp->max_record_locks =
+            mcluster->defaults.sharegroup_max_record_locks;
+        mshgrp->auto_offset_reset =
+            mcluster->defaults.sharegroup_auto_offset_reset;
 
         rd_kafka_timer_start(&mcluster->timers, &mshgrp->session_tmr,
                              1000 * 1000 /* 1s */,
@@ -779,6 +788,49 @@ void rd_kafka_mock_sharegroup_set_max_size(rd_kafka_mock_cluster_t *mcluster,
 }
 
 /**
+ * @brief Set the maximum number of fetch sessions allowed per broker.
+ */
+void rd_kafka_mock_sharegroup_set_max_fetch_sessions(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_fetch_sessions) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+        mshgrp->max_fetch_sessions                       = max_fetch_sessions;
+        mcluster->defaults.sharegroup_max_fetch_sessions = max_fetch_sessions;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the maximum number of in-flight record locks per
+ *        share-partition.
+ */
+void rd_kafka_mock_sharegroup_set_max_record_locks(
+    rd_kafka_mock_cluster_t *mcluster,
+    int max_record_locks) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+        mshgrp->max_record_locks                       = max_record_locks;
+        mcluster->defaults.sharegroup_max_record_locks = max_record_locks;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
+ * @brief Set the auto offset reset policy for share groups.
+ */
+void rd_kafka_mock_sharegroup_set_auto_offset_reset(
+    rd_kafka_mock_cluster_t *mcluster,
+    int auto_offset_reset) {
+        rd_kafka_mock_sharegroup_t *mshgrp;
+        mtx_lock(&mcluster->lock);
+        TAILQ_FOREACH(mshgrp, &mcluster->sharegrps, link)
+        mshgrp->auto_offset_reset                       = auto_offset_reset;
+        mcluster->defaults.sharegroup_auto_offset_reset = auto_offset_reset;
+        mtx_unlock(&mcluster->lock);
+}
+
+/**
  * @brief Destroy share fetch session.
  */
 void rd_kafka_mock_sgrp_fetch_session_destroy(
@@ -905,7 +957,10 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
  */
 void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
+    rd_kafka_mock_sgrp_partmeta_t *pmeta,
     rd_kafka_mock_sgrp_record_state_t *state) {
+        if (state->state == RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
+                pmeta->acquired_cnt--;
         if (mshgrp->max_delivery_attempts > 0 &&
             state->delivery_count >= mshgrp->max_delivery_attempts) {
                 state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
@@ -940,7 +995,7 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         if (strcmp(state->owner_member_id, member_id) != 0)
                                 continue;
 
-                        rd_kafka_mock_sgrp_record_release(mshgrp, state);
+                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta, state);
                 }
         }
 }
@@ -969,7 +1024,7 @@ static void rd_kafka_mock_sgrp_expire_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                         /* Lock has expired. If delivery
                          * count has reached the limit, archive the
                          * record instead of making it available. */
-                        rd_kafka_mock_sgrp_record_release(mshgrp, state);
+                        rd_kafka_mock_sgrp_record_release(mshgrp, pmeta, state);
                 }
         }
 }

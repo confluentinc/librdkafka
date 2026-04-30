@@ -1056,6 +1056,7 @@ static test_ctx_t test_ctx_new(void) {
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         ctx.producer =
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));

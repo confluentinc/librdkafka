@@ -1126,8 +1126,14 @@ int main_0177_share_consumer_transactions(int argc, char **argv) {
         do_test_dynamic_uncommitted_to_committed();
 
         /* Cleanup common handles */
+        /* Cleanup common handles */
+        TEST_SAY("Destroying common_admin\n");
         rd_kafka_destroy(common_admin);
+        TEST_SAY("Completed destroying common_admin\n");
+
+        TEST_SAY("Destroying common_regular_producer\n");
         rd_kafka_destroy(common_regular_producer);
+        TEST_SAY("Completed destroying common_producer\n");
 
         return 0;
 }

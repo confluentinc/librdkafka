@@ -1607,8 +1607,14 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
 
+        /* Cleanup common handles */
+        TEST_SAY("Destroying common_admin\n");
         rd_kafka_destroy(common_admin);
+        TEST_SAY("Completed destroying common_admin\n");
+
+        TEST_SAY("Destroying common_producer\n");
         rd_kafka_destroy(common_producer);
+        TEST_SAY("Completed destroying common_producer\n");
 
         return 0;
 }

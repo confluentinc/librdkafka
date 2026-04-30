@@ -1165,8 +1165,12 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         test_scale_10_topics_3_partitions();
 
         /* Cleanup common handles */
+        TEST_SAY("Destroying common_admin\n");
         rd_kafka_destroy(common_admin);
+        TEST_SAY("Completed destroying common_admin\n");
+        TEST_SAY("Destroying common_producer\n");
         rd_kafka_destroy(common_producer);
+        TEST_SAY("Completed destroying common_producer\n");
 
         return 0;
 }

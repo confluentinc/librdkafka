@@ -1927,8 +1927,14 @@ int main_0176_share_consumer_commit_sync(int argc, char **argv) {
         do_test_multi_topic_partition();
         do_test_mixed_commit_types();
 
+        /* Cleanup common handles */
+        TEST_SAY("Destroying common_admin\n");
         rd_kafka_destroy(common_admin);
+        TEST_SAY("Completed destroying common_admin\n");
+
+        TEST_SAY("Destroying common_producer\n");
         rd_kafka_destroy(common_producer);
+        TEST_SAY("Completed destroying common_producer\n");
 
         return 0;
 }

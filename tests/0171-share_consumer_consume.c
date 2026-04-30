@@ -807,8 +807,12 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         TEST_SAY("\nAll share consumer consume tests passed successfully!\n");
 
         /* Cleanup common handles */
+        TEST_SAY("Destroying common_admin\n");
         rd_kafka_destroy(common_admin);
+        TEST_SAY("Completed destroying common_admin\n");
+        TEST_SAY("Destroying common_producer\n");
         rd_kafka_destroy(common_producer);
+        TEST_SAY("Completed destroying common_producer\n");
 
         return 0;
 }

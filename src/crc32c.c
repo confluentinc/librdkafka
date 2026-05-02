@@ -403,40 +403,6 @@ static void crc32c_init_hw(void)
     crc32c_k_short2 = crc32c_compute_k_clmul(target);
 }
 
-/* Use PCLMULQDQ to fold three parallel CRC stripes into a single CRC.
- * Computes: crc0 * K1 mod P ^ crc1 * K2 mod P ^ crc2
- * where the products are computed in GF(2) using carry-less multiply
- * and reduced modulo P using crc32q. */
-__attribute__((target("pclmul,sse4.2")))
-static RD_INLINE RD_UNUSED uint32_t
-crc32c_fold_stripe_clmul(uint32_t crc0,
-                          uint32_t k1,
-                          uint32_t crc1,
-                          uint32_t k2,
-                          uint32_t crc2) {
-        __m128i a, b, prod0, prod1;
-        uint64_t f0, f1, r0, r1;
-
-        /* GF(2) multiply crc0 by k1 using PCLMULQDQ.
-         * Both are 32-bit values zero-extended to 64-bit, so the
-         * 128-bit product fits in the low 64 bits (degree at most 62). */
-        a = _mm_set_epi64x(0, crc0);
-        b = _mm_set_epi64x(0, k1);
-        prod0 = _mm_clmulepi64_si128(a, b, 0x00);
-        f0 = _mm_extract_epi64(prod0, 0);
-
-        a = _mm_set_epi64x(0, crc1);
-        b = _mm_set_epi64x(0, k2);
-        prod1 = _mm_clmulepi64_si128(a, b, 0x00);
-        f1 = _mm_extract_epi64(prod1, 0);
-
-        /* Reduce each product modulo P using crc32q and combine with crc2. */
-        r0 = _mm_crc32_u64(0, f0);
-        r1 = _mm_crc32_u64(0, f1);
-
-        return (uint32_t)(r0 ^ r1 ^ crc2);
-}
-
 /* Process exactly 3*SHORT (768) bytes using fully unrolled three-way
  * parallel CRC32Q with PCLMULQDQ folding and data prefetch.
  * Optimized for the SHORT block path — eliminates loop overhead. */
@@ -522,6 +488,7 @@ crc32c_hw_clmul_768(const unsigned char *next, uint64_t crc0_in) {
 }
 
 /* Compute CRC-32C using the Intel hardware instruction. */
+__attribute__((target("pclmul,sse4.2")))
 static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 {
     const unsigned char *next = buf;
@@ -565,10 +532,20 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
             next += 8;
         } while (next < end);
         if (clmul) {
-                crc0 = crc32c_fold_stripe_clmul(
-                    (uint32_t)crc0, crc32c_k_long2,
-                    (uint32_t)crc1, crc32c_k_long,
-                    (uint32_t)crc2);
+                /* Fold three stripes using PCLMULQDQ:
+                 * crc0 * K_long2 mod P ^ crc1 * K_long mod P ^ crc2 */
+                __m128i a, b, p0, p1;
+                uint64_t f0, f1, r;
+                a = _mm_set_epi64x(0, (uint32_t)crc0);
+                b = _mm_set_epi64x(0, crc32c_k_long2);
+                p0 = _mm_clmulepi64_si128(a, b, 0x00);
+                f0 = _mm_extract_epi64(p0, 0);
+                a = _mm_set_epi64x(0, (uint32_t)crc1);
+                b = _mm_set_epi64x(0, crc32c_k_long);
+                p1 = _mm_clmulepi64_si128(a, b, 0x00);
+                f1 = _mm_extract_epi64(p1, 0);
+                r = _mm_crc32_u64(0, f0) ^ _mm_crc32_u64(0, f1) ^ (uint32_t)crc2;
+                crc0 = r;
                 if (crc32c_profile.enabled)
                         crc32c_profile.clmul_folds++;
         } else {

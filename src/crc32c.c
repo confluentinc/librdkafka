@@ -59,6 +59,12 @@
 
 #include "crc32c.h"
 
+#if WITH_CRC32C_HW
+#include <smmintrin.h>
+#include <wmmintrin.h>
+#include <emmintrin.h>
+#endif
+
 /* CRC-32C (iSCSI) polynomial in reversed bit order. */
 #define POLY 0x82f63b78
 
@@ -130,6 +136,7 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
 
 #if WITH_CRC32C_HW
 static int sse42;  /* Cached SSE42 support */
+static int clmul;  /* Cached PCLMULQDQ support */
 
 /* Multiply a matrix times a vector over the Galois field of two elements,
    GF(2).  Each element is a bit in an unsigned integer.  mat must have at
@@ -238,11 +245,130 @@ static RD_INLINE uint32_t crc32c_shift(uint32_t zeros[][256], uint32_t crc)
 static uint32_t crc32c_long[4][256];
 static uint32_t crc32c_short[4][256];
 
+/* K constants for folding CRC stripes using PCLMULQDQ.
+ * K_long2 = x^(2*LONG*8) mod P  (fold crc0 by 16384 bytes)
+ * K_long  = x^(LONG*8) mod P     (fold crc1 by 8192 bytes)
+ * K_short2 = x^(2*SHORT*8) mod P (fold crc0 by 512 bytes)
+ * K_short  = x^(SHORT*8) mod P   (fold crc1 by 256 bytes) */
+static uint32_t crc32c_k_long2;
+static uint32_t crc32c_k_long;
+static uint32_t crc32c_k_short2;
+static uint32_t crc32c_k_short;
+
+/* Compute the PCLMULQDQ folding constant K' such that
+ * crc32q(0, K') = x^(fold_distance_bytes * 8) mod P.
+ *
+ * The CRC32Q instruction computes: msg * x^32 mod P (in reflected form).
+ * So K' must satisfy: K' * x^32 mod P = target = x^(N*8) mod P,
+ * i.e. K' = x^(N*8 - 32) mod P.
+ *
+ * We compute this by building the 32x32 GF(2) matrix for the
+ * crc32q(0, *) transform, inverting it, and applying to the target. */
+__attribute__((target("sse4.2")))
+static uint32_t crc32c_compute_k_clmul(uint32_t target) {
+        uint32_t M[32];    /* M[i] = crc32q(0, 1 << i) */
+        uint32_t inv[32];  /* starts as I, becomes M^(-1) */
+        uint32_t K = 0;
+        int row, col, pivot;
+
+        for (row = 0; row < 32; row++) {
+                M[row]   = (uint32_t)_mm_crc32_u64(0, 1ULL << row);
+                inv[row] = 1u << row;
+        }
+
+        /* Gaussian elimination over GF(2) to compute M^(-1). */
+        for (col = 0; col < 32; col++) {
+                pivot = -1;
+                for (row = col; row < 32; row++) {
+                        if (M[row] & (1u << col)) {
+                                pivot = row;
+                                break;
+                        }
+                }
+                if (pivot < 0)
+                        continue;
+                if (pivot != col) {
+                        uint32_t t = M[col];
+                        M[col] = M[pivot]; M[pivot] = t;
+                        t = inv[col];
+                        inv[col] = inv[pivot]; inv[pivot] = t;
+                }
+                for (row = 0; row < 32; row++) {
+                        if (row != col && (M[row] & (1u << col))) {
+                                M[row] ^= M[col];
+                                inv[row] ^= inv[col];
+                        }
+                }
+        }
+
+        /* K = M^(-1) * target */
+        for (row = 0; row < 32; row++) {
+                if (target & M[row]) {
+                        K ^= inv[row];
+                        target ^= M[row];
+                }
+        }
+
+        return K;
+}
+
 /* Initialize tables for shifting crcs. */
 static void crc32c_init_hw(void)
 {
+    uint32_t target;
+
     crc32c_zeros(crc32c_long, LONG);
     crc32c_zeros(crc32c_short, SHORT);
+
+    /* K_long: fold by LONG bytes. target = x^(LONG*8) mod P */
+    target = crc32c_shift(crc32c_long, 1);
+    crc32c_k_long = crc32c_compute_k_clmul(target);
+
+    /* K_long2: fold by 2*LONG bytes. target = shift(target, LONG) */
+    target = crc32c_shift(crc32c_long, target);
+    crc32c_k_long2 = crc32c_compute_k_clmul(target);
+
+    /* K_short: fold by SHORT bytes */
+    target = crc32c_shift(crc32c_short, 1);
+    crc32c_k_short = crc32c_compute_k_clmul(target);
+
+    /* K_short2: fold by 2*SHORT bytes */
+    target = crc32c_shift(crc32c_short, target);
+    crc32c_k_short2 = crc32c_compute_k_clmul(target);
+}
+
+/* Use PCLMULQDQ to fold three parallel CRC stripes into a single CRC.
+ * Computes: crc0 * K1 mod P ^ crc1 * K2 mod P ^ crc2
+ * where the products are computed in GF(2) using carry-less multiply
+ * and reduced modulo P using crc32q. */
+__attribute__((target("pclmul,sse4.2")))
+static RD_INLINE RD_UNUSED uint32_t
+crc32c_fold_stripe_clmul(uint32_t crc0,
+                          uint32_t k1,
+                          uint32_t crc1,
+                          uint32_t k2,
+                          uint32_t crc2) {
+        __m128i a, b, prod0, prod1;
+        uint64_t f0, f1, r0, r1;
+
+        /* GF(2) multiply crc0 by k1 using PCLMULQDQ.
+         * Both are 32-bit values zero-extended to 64-bit, so the
+         * 128-bit product fits in the low 64 bits (degree at most 62). */
+        a = _mm_set_epi64x(0, crc0);
+        b = _mm_set_epi64x(0, k1);
+        prod0 = _mm_clmulepi64_si128(a, b, 0x00);
+        f0 = _mm_extract_epi64(prod0, 0);
+
+        a = _mm_set_epi64x(0, crc1);
+        b = _mm_set_epi64x(0, k2);
+        prod1 = _mm_clmulepi64_si128(a, b, 0x00);
+        f1 = _mm_extract_epi64(prod1, 0);
+
+        /* Reduce each product modulo P using crc32q and combine with crc2. */
+        r0 = _mm_crc32_u64(0, f0);
+        r1 = _mm_crc32_u64(0, f1);
+
+        return (uint32_t)(r0 ^ r1 ^ crc2);
 }
 
 /* Compute CRC-32C using the Intel hardware instruction. */
@@ -281,8 +407,15 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
                     : "r"(next), "0"(crc0), "1"(crc1), "2"(crc2));
             next += 8;
         } while (next < end);
-        crc0 = crc32c_shift(crc32c_long, crc0) ^ crc1;
-        crc0 = crc32c_shift(crc32c_long, crc0) ^ crc2;
+        if (clmul)
+                crc0 = crc32c_fold_stripe_clmul(
+                    (uint32_t)crc0, crc32c_k_long2,
+                    (uint32_t)crc1, crc32c_k_long,
+                    (uint32_t)crc2);
+        else {
+                crc0 = crc32c_shift(crc32c_long, (uint32_t)crc0) ^ crc1;
+                crc0 = crc32c_shift(crc32c_long, (uint32_t)crc0) ^ crc2;
+        }
         next += LONG*2;
         len -= LONG*3;
     }
@@ -301,8 +434,15 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
                     : "r"(next), "0"(crc0), "1"(crc1), "2"(crc2));
             next += 8;
         } while (next < end);
-        crc0 = crc32c_shift(crc32c_short, crc0) ^ crc1;
-        crc0 = crc32c_shift(crc32c_short, crc0) ^ crc2;
+        if (clmul)
+                crc0 = crc32c_fold_stripe_clmul(
+                    (uint32_t)crc0, crc32c_k_short2,
+                    (uint32_t)crc1, crc32c_k_short,
+                    (uint32_t)crc2);
+        else {
+                crc0 = crc32c_shift(crc32c_short, (uint32_t)crc0) ^ crc1;
+                crc0 = crc32c_shift(crc32c_short, (uint32_t)crc0) ^ crc2;
+        }
         next += SHORT*2;
         len -= SHORT*3;
     }
@@ -347,6 +487,20 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
         (have) = (ecx >> 20) & 1; \
     } while (0)
 
+/* Check for PCLMULQDQ via CPUID.01H:ECX bit 1.
+ * PCLMULQDQ was introduced in Westmere (2010), after SSE4.2 in Nehalem (2008).
+ * This reuses the same CPUID call but checks a different bit. */
+#define CLMUL(have) \
+    do { \
+        uint32_t eax, ecx; \
+        eax = 1; \
+        __asm__("cpuid" \
+                : "=c"(ecx) \
+                : "a"(eax) \
+                : "%ebx", "%edx"); \
+        (have) = (ecx >> 1) & 1; \
+    } while (0)
+
 #endif /* WITH_CRC32C_HW */
 
 /* Compute a CRC-32C.  If the crc32 instruction is available, use the hardware
@@ -372,9 +526,10 @@ uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 void rd_crc32c_global_init (void) {
 #if WITH_CRC32C_HW
         SSE42(sse42);
-        if (sse42)
+        if (sse42) {
+                CLMUL(clmul);
                 crc32c_init_hw();
-        else
+        } else
 #endif
                 crc32c_init_sw();
 }
@@ -401,9 +556,12 @@ int unittest_rd_crc32c (void) {
         const char *how;
 
 #if WITH_CRC32C_HW
-        if (sse42)
-                how = "hardware (SSE42)";
-        else
+        if (sse42) {
+                if (clmul)
+                        how = "hardware (SSE42+PCLMULQDQ)";
+                else
+                        how = "hardware (SSE42)";
+        } else
                 how = "software (SSE42 supported in build but not at runtime)";
 #else
         how = "software";

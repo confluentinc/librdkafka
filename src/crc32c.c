@@ -58,6 +58,7 @@
 #include "rdendian.h"
 
 #include "crc32c.h"
+#include "crc32c_impl.h"
 
 #if WITH_CRC32C_HW
 #include <smmintrin.h>
@@ -137,6 +138,11 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
 #if WITH_CRC32C_HW
 static int sse42;  /* Cached SSE42 support */
 static int clmul;  /* Cached PCLMULQDQ support */
+int crc32c_have_sse42;  /* Exported for PCL path */
+int crc32c_have_clmul;  /* Exported for PCL path */
+
+/* Dispatch table entry for the active CRC32C implementation */
+static uint32_t (*crc32c_impl)(uint32_t, const void *, size_t);
 
 /* Profiling counters (enable via RD_CRC32C_PROFILE=1 at init time) */
 static struct {
@@ -678,12 +684,7 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
    version.  Otherwise, use the software version. */
 uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 {
-#if WITH_CRC32C_HW
-        if (sse42)
-                return crc32c_hw(crc, buf, len);
-        else
-#endif
-                return crc32c_sw(crc, buf, len);
+        return crc32c_impl(crc, buf, len);
 }
 
 
@@ -697,8 +698,10 @@ uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 void rd_crc32c_global_init (void) {
 #if WITH_CRC32C_HW
         SSE42(sse42);
+        crc32c_have_sse42 = sse42;
         if (sse42) {
                 CLMUL(clmul);
+                crc32c_have_clmul = clmul;
                 if (clmul && getenv("RD_CRC32C_NO_CLMUL"))
                         clmul = 0;
                 if (getenv("RD_CRC32C_PROFILE")) {
@@ -706,9 +709,21 @@ void rd_crc32c_global_init (void) {
                         atexit(crc32c_profile_print);
                 }
                 crc32c_init_hw();
+
+                /* Default: crc32q + PCLMULQDQ fold (proven + correct).
+                 * Opt-in: full PCLMULQDQ folding via RD_CRC32C_PCL_FULL=1 */
+                if (clmul && getenv("RD_CRC32C_PCL_FULL")) {
+                        crc32c_pcl_init();
+                        crc32c_impl = crc32c_pcl_full;
+                } else {
+                        crc32c_impl = crc32c_hw;
+                }
         } else
 #endif
+        {
                 crc32c_init_sw();
+                crc32c_impl = crc32c_sw;
+        }
 }
 
 int unittest_rd_crc32c (void) {

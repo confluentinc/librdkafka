@@ -528,6 +528,8 @@ void rd_crc32c_global_init (void) {
         SSE42(sse42);
         if (sse42) {
                 CLMUL(clmul);
+                if (clmul && getenv("RD_CRC32C_NO_CLMUL"))
+                        clmul = 0;
                 crc32c_init_hw();
         } else
 #endif

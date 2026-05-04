@@ -219,9 +219,9 @@ int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
  */
 struct rd_kafka_share_partition_offsets_s {
         rd_kafka_topic_partition_t
-            partition;    /**< Topic partition information */
-        int64_t *offsets; /**< Array of acknowledged offsets */
-        int cnt;          /**< Number of offsets in array */
+            *partition;    /**< Topic partition information */
+        int cnt;           /**< Number of offsets in array */
+        int64_t offsets[]; /**< Flexible array of acknowledged offsets */
 };
 
 /**
@@ -229,34 +229,33 @@ struct rd_kafka_share_partition_offsets_s {
  * @brief List of share partition offsets for callback.
  */
 struct rd_kafka_share_partition_offsets_list_s {
-        int cnt;                                   /**< Number of partitions */
-        int size;                                  /**< Allocated size */
-        rd_kafka_share_partition_offsets_t *elems; /**< Array of partition
-                                                        offsets */
+        int cnt; /**< Number of partitions */
+        rd_kafka_share_partition_offsets_t *elems[]; /**< Flexible array of
+                                                          pointers to partition
+                                                          offsets */
 };
 
 /**
- * @brief Initialize a partition offsets element.
+ * @brief Allocate and initialize a partition offsets element.
  *
- * @param elem Element to initialize (must be pre-allocated).
+ * @param topic_id Topic UUID.
  * @param topic Topic name (will be duplicated).
  * @param partition Partition id.
  * @param offsets_cnt Number of offsets to allocate space for.
+ * @returns Newly allocated partition offsets element.
  */
-void rd_kafka_share_partition_offsets_init(
-    rd_kafka_share_partition_offsets_t *elem,
-    const char *topic,
-    int32_t partition,
-    int offsets_cnt);
+rd_kafka_share_partition_offsets_t *
+rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
+                                     const char *topic,
+                                     int32_t partition,
+                                     int offsets_cnt);
 
 /**
- * @brief Clear a partition offsets element (free owned memory).
+ * @brief Destroy a partition offsets element.
  *
- * Does not free the element itself since it is stored inline in an array.
- *
- * @param elem Element to clear.
+ * @param elem Element to destroy.
  */
-void rd_kafka_share_partition_offsets_clear(
+void rd_kafka_share_partition_offsets_destroy(
     rd_kafka_share_partition_offsets_t *elem);
 
 /**
@@ -310,18 +309,6 @@ void rd_kafka_share_enqueue_ack_callback(rd_kafka_t *rk,
                                          rd_kafka_share_ack_batches_t *batches,
                                          rd_kafka_resp_err_t err);
 
-/**
- * @brief Find ack_batch matching the given topic/partition.
- *
- * @param ack_details List of ack batches.
- * @param topic Topic name.
- * @param partition Partition id.
- * @returns Matching ack_batch or NULL if not found.
- */
-rd_kafka_share_ack_batches_t *
-rd_kafka_share_ack_batch_find(rd_list_t *ack_details,
-                              const char *topic,
-                              int32_t partition);
 
 /**
  * @brief Dispatch ack callbacks for all partitions in ack_details.

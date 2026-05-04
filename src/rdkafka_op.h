@@ -212,8 +212,8 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
-        RD_KAFKA_OP_SHARE_ACK_REPLY,      /**< Share acknowledgement callback
-                                           *   reply: broker -> app */
+        RD_KAFKA_OP_SHARE_ACK_COMMIT,     /**< Share acknowledgement callback
+                                           *   reply: main -> app */
 
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
@@ -891,7 +891,7 @@ struct rd_kafka_op_s {
                             void *opaque);
                         /** Application opaque. */
                         void *opaque;
-                } share_ack_reply;
+                } share_ack_commit;
 
         } rko_u;
 };

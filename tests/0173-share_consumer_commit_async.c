@@ -1296,6 +1296,7 @@ static test_ctx_t test_ctx_new(void) {
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         ctx.producer =
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
@@ -1311,22 +1312,6 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         if (ctx->mcluster)
                 test_mock_cluster_destroy(ctx->mcluster);
         memset(ctx, 0, sizeof(*ctx));
-}
-
-static void
-produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
-        int i;
-        for (i = 0; i < msgcnt; i++) {
-                char payload[64];
-                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
-                TEST_ASSERT(rd_kafka_producev(
-                                producer, RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Produce failed");
-        }
-        rd_kafka_flush(producer, 5000);
 }
 
 static rd_kafka_share_t *new_share_consumer(const char *bootstraps,
@@ -1382,6 +1367,7 @@ static void do_test_mock_inflight_caching(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         const char *topic = "mock-inflight-cache";
+        const char *t     = topic;
         const int msgcnt  = 100;
         int consumed = 0, i = 0;
         int share_fetch_cnt, share_ack_cnt;
@@ -1395,15 +1381,13 @@ static void do_test_mock_inflight_caching(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
 
-        produce_messages(ctx.producer, topic, msgcnt);
+        test_produce_msgs_simple(ctx.producer, topic, RD_KAFKA_PARTITION_UA,
+                                 msgcnt);
 
         rkshare =
             new_share_consumer(ctx.bootstraps, "sg-mock-inflight", "explicit");
 
-        {
-                const char *t = topic;
-                subscribe_consumer(rkshare, &t, 1);
-        }
+        subscribe_consumer(rkshare, &t, 1);
 
         /* Clear and start tracking requests before the consume+ack+commit
          * loop */

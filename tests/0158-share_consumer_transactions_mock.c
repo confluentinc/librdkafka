@@ -71,6 +71,7 @@ static test_ctx_t test_ctx_new(const char *txn_id) {
         /* Non-transactional producer */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         ctx.producer =
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(ctx.producer != NULL, "Failed to create producer: %s",
@@ -101,22 +102,6 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         if (ctx->mcluster)
                 test_mock_cluster_destroy(ctx->mcluster);
         memset(ctx, 0, sizeof(*ctx));
-}
-
-static void
-produce_messages(rd_kafka_t *producer, const char *topic, int msgcnt) {
-        int i;
-        for (i = 0; i < msgcnt; i++) {
-                char payload[64];
-                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
-                TEST_ASSERT(rd_kafka_producev(
-                                producer, RD_KAFKA_V_TOPIC(topic),
-                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
-                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
-                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Produce failed");
-        }
-        rd_kafka_flush(producer, 5000);
 }
 
 static void produce_txn_messages(rd_kafka_t *txn_producer,
@@ -177,45 +162,7 @@ static void subscribe_topics(rd_kafka_share_t *share_c,
         rd_kafka_topic_partition_list_destroy(tpl);
 }
 
-/**
- * @brief Consume up to \p expected messages, retrying up to \p max_attempts.
- *        Uses the same pattern as 0156's consume_n.
- */
-static int
-consume_n(rd_kafka_share_t *consumer, int expected, int max_attempts) {
-        int consumed = 0;
-        int attempts = 0;
 
-        while (consumed < expected && attempts < max_attempts) {
-                rd_kafka_message_t *rkmessages[100];
-                size_t rcvd_msgs = 0;
-                rd_kafka_error_t *error;
-                size_t i;
-
-                error = rd_kafka_share_consume_batch(consumer, 500, rkmessages,
-                                                     &rcvd_msgs);
-                attempts++;
-
-                if (error) {
-                        TEST_SAY("consume error: %s\n",
-                                 rd_kafka_error_string(error));
-                        rd_kafka_error_destroy(error);
-                        continue;
-                }
-
-                for (i = 0; i < rcvd_msgs; i++) {
-                        rd_kafka_message_t *rkmsg = rkmessages[i];
-                        if (rkmsg->err) {
-                                rd_kafka_message_destroy(rkmsg);
-                                continue;
-                        }
-                        consumed++;
-                        rd_kafka_message_destroy(rkmsg);
-                }
-        }
-
-        return consumed;
-}
 
 /**
  * @brief Committed txn data is delivered in read_uncommitted mode.
@@ -235,7 +182,7 @@ static void do_test_txn_committed_read_uncommitted(void) {
 
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-committed-ru");
         subscribe_topics(share_c, &topic, 1);
-        consumed = consume_n(share_c, 3, 50);
+        consumed = test_share_consume_msgs(share_c, 3, 50, 500, NULL, 0);
         TEST_ASSERT(consumed == 3, "Expected 3 consumed, got %d", consumed);
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -265,7 +212,7 @@ static void do_test_txn_aborted_read_uncommitted(void) {
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-aborted-ru");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 3, 50);
+        consumed = test_share_consume_msgs(share_c, 3, 50, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -292,13 +239,13 @@ static void do_test_txn_mixed_read_uncommitted(void) {
 
         TEST_CALL_ERR__(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1));
 
-        produce_messages(ctx.producer, topic, 2);
+        test_produce_msgs_simple(ctx.producer, topic, RD_KAFKA_PARTITION_UA, 2);
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
 
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-mixed-ru");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 5, 50);
+        consumed = test_share_consume_msgs(share_c, 5, 50, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -329,7 +276,7 @@ static void do_test_txn_committed_read_committed(void) {
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-committed-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 3, 50);
+        consumed = test_share_consume_msgs(share_c, 3, 50, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -362,7 +309,7 @@ static void do_test_txn_aborted_read_committed(void) {
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-aborted-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 0, 15);
+        consumed = test_share_consume_msgs(share_c, 0, 15, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -395,15 +342,15 @@ static void do_test_txn_mixed_read_committed(void) {
 
         TEST_CALL_ERR__(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1));
 
-        produce_messages(ctx.producer, topic, 2);
+        test_produce_msgs_simple(ctx.producer, topic, RD_KAFKA_PARTITION_UA, 2);
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_true);
         produce_txn_messages(ctx.txn_producer, topic, 3, rd_false);
-        produce_messages(ctx.producer, topic, 2);
+        test_produce_msgs_simple(ctx.producer, topic, RD_KAFKA_PARTITION_UA, 2);
 
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-mixed-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 7, 60);
+        consumed = test_share_consume_msgs(share_c, 7, 60, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -434,12 +381,12 @@ static void do_test_txn_nontxn_read_committed(void) {
 
         TEST_CALL_ERR__(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1));
 
-        produce_messages(ctx.producer, topic, 5);
+        test_produce_msgs_simple(ctx.producer, topic, RD_KAFKA_PARTITION_UA, 5);
 
         share_c = create_share_consumer(ctx.bootstraps, "sg-txn-nontxn-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 5, 50);
+        consumed = test_share_consume_msgs(share_c, 5, 50, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);
@@ -481,7 +428,7 @@ static void do_test_txn_abort_then_commit_read_committed(void) {
             create_share_consumer(ctx.bootstraps, "sg-txn-abort-commit-rc");
         subscribe_topics(share_c, &topic, 1);
 
-        consumed = consume_n(share_c, 3, 50);
+        consumed = test_share_consume_msgs(share_c, 3, 50, 500, NULL, 0);
 
         test_share_consumer_close(share_c);
         test_share_destroy(share_c);

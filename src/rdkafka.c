@@ -3282,7 +3282,14 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 4: Dispatch pending commit_sync to the replying broker
+         * Step 4: Dispatch acknowledgement callbacks.
+         * Per-partition errors were set by the broker thread.
+         */
+        rd_kafka_share_dispatch_ack_callbacks(
+            rk, rko_orig->rko_u.share_fetch.ack_details);
+
+        /*
+         * Step 5: Dispatch pending commit_sync to the replying broker
          * (highest priority). Acks must always be sent.
          */
         if (!reply_rkb->rkb_share_fetch_enqueued &&
@@ -3295,7 +3302,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 5: If this was the fetch broker but no records were received,
+         * Step 6: If this was the fetch broker but no records were received,
          * try to select another broker to fetch from.
          *
          * TODO: KIP-932: Handle the case where all assignments are removed
@@ -3329,7 +3336,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 6: If the replying broker has cached async ack details,
+         * Step 7: If the replying broker has cached async ack details,
          * send an ack-only SHARE_FETCH op to it.
          */
         if (reply_rkb->rkb_share_async_ack_details &&
@@ -5684,6 +5691,14 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rko->rko_u.offset_commit.cb(rk, rko->rko_err,
                                             rko->rko_u.offset_commit.partitions,
                                             rko->rko_u.offset_commit.opaque);
+                break;
+
+        case RD_KAFKA_OP_SHARE_ACK_COMMIT:
+                if (!rko->rko_u.share_ack_commit.cb)
+                        return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
+                rko->rko_u.share_ack_commit.cb(
+                    rk->rk_rkshare, rko->rko_u.share_ack_commit.partitions,
+                    rko->rko_err, rko->rko_u.share_ack_commit.opaque);
                 break;
 
         case RD_KAFKA_OP_FETCH_STOP | RD_KAFKA_OP_REPLY:

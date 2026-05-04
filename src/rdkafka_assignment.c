@@ -332,6 +332,55 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
         rd_kafka_topic_partition_list_destroy(offsets);
 }
 
+static int rd_kafka_share_assignment_serve_removals(rd_kafka_t *rk) {
+        rd_kafka_topic_partition_t *rktpar;
+
+        RD_KAFKA_TPLIST_FOREACH(rktpar, rk->rk_consumer.assignment.removed) {
+                rd_kafka_toppar_t *rktp =
+                    rd_kafka_topic_partition_ensure_toppar(
+                        rk, rktpar, rd_true); /* Borrow ref */
+
+                /* Remove from pending list if present */
+                rd_kafka_topic_partition_list_del(
+                    rk->rk_consumer.assignment.pending, rktpar->topic,
+                    rktpar->partition);
+
+                /* Send PARTITION_LEAVE to cgrp to trigger cleanup.
+                 * This calls rd_kafka_cgrp_partition_del() which sends
+                 * SHARE_SESSION_PARTITION_REMOVE to the broker. */
+                if (rktp->rktp_started) {
+                        /* Partition was started, detach from cgrp. */
+                        rd_assert(rk->rk_consumer.assignment.started_cnt > 0);
+
+                        rd_kafka_toppar_lock(rktp);
+                        rd_assert(rktp->rktp_cgrp);
+                        rd_kafka_cgrp_op(rktp->rktp_cgrp, rktp,
+                                         RD_KAFKA_NO_REPLYQ,
+                                         RD_KAFKA_OP_PARTITION_LEAVE, 0);
+                        rktp->rktp_cgrp = NULL;
+                        rd_kafka_toppar_unlock(rktp);
+                }
+
+                rd_kafka_toppar_lock(rktp);
+
+                /* No longer desired */
+                rd_kafka_toppar_desired_del(rktp);
+
+                rd_assert((rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ASSIGNED));
+                rktp->rktp_flags &= ~RD_KAFKA_TOPPAR_F_ASSIGNED;
+
+                rd_kafka_toppar_unlock(rktp);
+
+                rd_kafka_dbg(rk, CGRP, "REMOVE",
+                             "Removing %s [%" PRId32 "] from share assignment",
+                             rktpar->topic, rktpar->partition);
+        }
+
+        rd_kafka_topic_partition_list_clear(rk->rk_consumer.assignment.removed);
+
+        return rk->rk_consumer.assignment.wait_stop_cnt;
+}
+
 
 /**
  * @brief Decommission all partitions in the removed list.
@@ -432,6 +481,39 @@ static int rd_kafka_assignment_serve_removals(rd_kafka_t *rk) {
 
         return rk->rk_consumer.assignment.wait_stop_cnt +
                rk->rk_consumer.wait_commit_cnt;
+}
+
+static int rd_kafka_share_assignment_serve_pending(rd_kafka_t *rk) {
+        int i;
+
+        for (i = rk->rk_consumer.assignment.pending->cnt - 1; i >= 0; i--) {
+                rd_kafka_topic_partition_t *rktpar =
+                    &rk->rk_consumer.assignment.pending->elems[i];
+                rd_kafka_toppar_t *rktp =
+                    rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
+
+                rd_kafka_dbg(rk, CGRP, "SRVPEND",
+                             "Adding share partition %s [%" PRId32
+                             "] to assignment",
+                             rktpar->topic, rktpar->partition);
+
+                /* Attach partition to cgrp and send PARTITION_JOIN.
+                 * This triggers SHARE_SESSION_PARTITION_ADD to the broker. */
+                rktp->rktp_started = rd_true;
+                rk->rk_consumer.assignment.started_cnt++;
+
+                rd_kafka_toppar_lock(rktp);
+                rd_assert(!rktp->rktp_cgrp);
+                rktp->rktp_cgrp = rk->rk_cgrp;
+                rd_kafka_toppar_unlock(rktp);
+
+                rd_kafka_cgrp_op(rk->rk_cgrp, rktp, RD_KAFKA_NO_REPLYQ,
+                                 RD_KAFKA_OP_PARTITION_JOIN, 0);
+                rd_kafka_topic_partition_list_del_by_idx(
+                    rk->rk_consumer.assignment.pending, i);
+        }
+
+        return rk->rk_consumer.assignment.pending->cnt;
 }
 
 
@@ -601,7 +683,43 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                rk->rk_consumer.assignment.queried->cnt;
 }
 
+/**
+ * @brief Serve updates to the share assignment.
+ *
+ * Call on:
+ * - assignment changes
+ */
+void rd_kafka_share_assignment_serve(rd_kafka_t *rk) {
+        int inp_removals = 0;
+        int inp_pending  = 0;
 
+        rd_kafka_assignment_dump(rk);
+
+        /* Serve any partitions that should be removed */
+        if (rk->rk_consumer.assignment.removed->cnt > 0)
+                inp_removals = rd_kafka_share_assignment_serve_removals(rk);
+
+        /* Serve pending partitions */
+        if (rk->rk_consumer.assignment.wait_stop_cnt == 0 &&
+            inp_removals == 0 && rk->rk_consumer.assignment.pending->cnt > 0)
+                inp_pending = rd_kafka_share_assignment_serve_pending(rk);
+
+        if (inp_removals + inp_pending +
+                rk->rk_consumer.assignment.wait_stop_cnt ==
+            0) {
+                /* No assignment operations in progress,
+                 * signal assignment done back to cgrp */
+                rd_kafka_cgrp_assignment_done(rk->rk_cgrp);
+        } else {
+                rd_kafka_dbg(rk, CGRP, "ASSIGNMENT",
+                             "Share assignment of %d partition(s) "
+                             "with %d pending adds,%d partitions awaiting stop "
+                             "and %d pending removals",
+                             rk->rk_consumer.assignment.all->cnt, inp_pending,
+                             rk->rk_consumer.assignment.wait_stop_cnt,
+                             inp_removals);
+        }
+}
 
 /**
  * @brief Serve updates to the assignment.
@@ -612,6 +730,10 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
  * - partition fetcher is stopped
  */
 void rd_kafka_assignment_serve(rd_kafka_t *rk) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                rd_kafka_share_assignment_serve(rk);
+                return;
+        }
         int inp_removals = 0;
         int inp_pending  = 0;
 

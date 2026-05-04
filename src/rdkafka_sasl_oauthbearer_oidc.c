@@ -1128,6 +1128,30 @@ done:
 }
 
 /**
+ * @brief OIDC token refresh callback for aws_iam metadata
+ *        authentication. As of now, librdkafka does not implement AWS IAM
+ *        natively; the high-level client is expected to register
+ *        its own token-refresh callback. If this stub fires, that
+ *        registration did not happen.
+ */
+void rd_kafka_oidc_token_metadata_aws_iam_refresh_cb(
+    rd_kafka_t *rk,
+    const char *oauthbearer_config,
+    void *opaque) {
+        /*
+         * TODO: Implement native librdkafka flow.
+         * Currently, this block serves as a defensive check to reject this
+         * configuration until the feature is fully supported.
+         */
+        rd_kafka_oauthbearer_set_token_failure(
+            rk,
+            "aws_iam authentication is handled by the high-level "
+            "client. Reaching this code path means no token-refresh "
+            "callback was registered. Verify that the AWS OAUTHBEARER "
+            "package is installed and configured.");
+}
+
+/**
  * @brief Make sure the jwt is able to be extracted from HTTP(S) response.
  *        The JSON response after HTTP(S) call to token provider will be in
  *        rd_http_req_t.hreq_buf and jwt is the value of field "access_token",

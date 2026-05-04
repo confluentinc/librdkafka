@@ -480,6 +480,123 @@ static int commit_thread_func(void *arg) {
 
 
 /**
+ * @brief Test wakeup called before commit_sync.
+ *
+ * Verify that:
+ * - Wakeup before commit_sync returns WAKEUP error immediately
+ * - Acknowledgements are still sent to broker (matching Java behavior)
+ * - One-shot behavior - next commit_sync works normally
+ */
+static void test_wakeup_before_commit_sync(void) {
+        const char *topic = test_mk_topic_name("wakeup_before_commit", 1);
+        const char *group = topic;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *rkmessages[100];
+        size_t msg_cnt;
+        rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        int msgcnt = 10;
+
+        SUB_TEST_QUICK();
+
+        test_create_topic(NULL, topic, 1, 1);
+
+        /* Set share group auto offset reset to earliest */
+        {
+                const char *cfg[] = {"share.auto.offset.reset", "SET",
+                                     "earliest"};
+                test_alter_group_configurations(group, cfg, 1);
+        }
+
+        /* Produce messages */
+        TEST_SAY("Producing %d messages\n", msgcnt);
+        test_produce_msgs_easy(topic, 0, 0, msgcnt);
+
+        rkshare = test_create_share_consumer(group, "explicit");
+
+        /* Subscribe to topic */
+        {
+                rd_kafka_topic_partition_list_t *subs =
+                    rd_kafka_topic_partition_list_new(1);
+                rd_kafka_resp_err_t sub_err;
+                rd_kafka_topic_partition_list_add(subs, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+                sub_err = rd_kafka_share_subscribe(rkshare, subs);
+                TEST_ASSERT(!sub_err, "Failed to subscribe: %s",
+                            rd_kafka_err2str(sub_err));
+                rd_kafka_topic_partition_list_destroy(subs);
+        }
+
+        /* Consume messages */
+        TEST_SAY("Consuming messages\n");
+        err = rd_kafka_share_consume_batch(rkshare, 5000, rkmessages, &msg_cnt);
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_SAY("Consumed %zu messages\n", msg_cnt);
+        for (size_t i = 0; i < msg_cnt; i++) {
+                rd_kafka_message_destroy(rkmessages[i]);
+        }
+
+        if (msg_cnt == 0) {
+                TEST_SAY("No messages consumed, skipping test\n");
+                rd_kafka_share_destroy(rkshare);
+                SUB_TEST_PASS();
+                return;
+        }
+
+        TEST_SAY("Calling wakeup before commit_sync\n");
+        rd_kafka_share_wakeup(rkshare);
+
+        TEST_SAY("Calling commit_sync (should return WAKEUP immediately)\n");
+        err = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
+
+        TEST_ASSERT(err != NULL, "Expected error from commit_sync");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__WAKEUP,
+                    "Expected WAKEUP error, got %s",
+                    rd_kafka_error_name(err));
+        rd_kafka_error_destroy(err);
+
+        if (partitions) {
+                TEST_SAY("Partitions returned: %d\n", partitions->cnt);
+                /* Verify all partitions have WAKEUP error */
+                for (int i = 0; i < partitions->cnt; i++) {
+                        TEST_ASSERT(
+                            partitions->elems[i].err ==
+                                RD_KAFKA_RESP_ERR__WAKEUP,
+                            "Expected WAKEUP for partition %d, got %s", i,
+                            rd_kafka_err2name(partitions->elems[i].err));
+                }
+                rd_kafka_topic_partition_list_destroy(partitions);
+                partitions = NULL;
+        }
+
+        /* Sleep to allow acknowledgements to be sent to broker despite wakeup */
+        TEST_SAY("Sleeping to allow acks to complete\n");
+        rd_sleep(2);
+
+        TEST_SAY("Second commit_sync should work normally (one-shot)\n");
+        err = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
+
+        /* Should succeed or have no acks to send */
+        if (err) {
+                TEST_ASSERT(rd_kafka_error_code(err) !=
+                                RD_KAFKA_RESP_ERR__WAKEUP,
+                            "Second commit should not be woken up, got %s",
+                            rd_kafka_error_name(err));
+                rd_kafka_error_destroy(err);
+        }
+
+        if (partitions)
+                rd_kafka_topic_partition_list_destroy(partitions);
+
+        rd_kafka_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Test wakeup during commit_sync.
  *
  * Verify that:
@@ -602,17 +719,401 @@ static void test_wakeup_commit_sync(void) {
 }
 
 
+/**
+ * @brief State for acknowledgement callback tracking.
+ */
+typedef struct {
+        mtx_t lock;
+        int callback_count;
+        int expected_count;
+        cnd_t cond;
+} ack_callback_state_t;
+
+
+/**
+ * @brief Acknowledgement callback function.
+ */
+static void ack_commit_callback(
+    rd_kafka_share_t *rkshare,
+    rd_kafka_share_partition_offsets_list_t *partitions,
+    rd_kafka_resp_err_t err,
+    void *opaque) {
+        ack_callback_state_t *state = (ack_callback_state_t *)opaque;
+        size_t partition_cnt;
+
+        (void)rkshare;
+        (void)err;
+
+        partition_cnt = rd_kafka_share_partition_offsets_list_count(partitions);
+
+        mtx_lock(&state->lock);
+        state->callback_count += (int)partition_cnt;
+        TEST_SAY("Ack callback invoked: %zu partitions (total %d)\n",
+                 partition_cnt, state->callback_count);
+        cnd_broadcast(&state->cond);
+        mtx_unlock(&state->lock);
+}
+
+
+/**
+ * @brief Test wakeup with acknowledgement callback.
+ *
+ * Verify that:
+ * - When wakeup interrupts commit_sync, acks are still sent to broker
+ * - Acknowledgement callbacks are invoked when broker responses arrive
+ * - Matches Java behavior where background thread continues processing
+ */
+static void test_wakeup_commit_sync_with_callback(void) {
+        const char *topic =
+            test_mk_topic_name("wakeup_commit_callback", 1);
+        const char *group = topic;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *rkmessages[100];
+        size_t msg_cnt;
+        rd_kafka_error_t *err;
+        commit_thread_state_t state;
+        ack_callback_state_t cb_state;
+        thrd_t thread;
+        int msgcnt = 10;
+        rd_kafka_conf_t *conf;
+
+        SUB_TEST_QUICK();
+
+        test_create_topic(NULL, topic, 1, 1);
+
+        /* Set share group auto offset reset to earliest */
+        {
+                const char *cfg[] = {"share.auto.offset.reset", "SET",
+                                     "earliest"};
+                test_alter_group_configurations(group, cfg, 1);
+        }
+
+        /* Produce messages */
+        TEST_SAY("Producing %d messages\n", msgcnt);
+        test_produce_msgs_easy(topic, 0, 0, msgcnt);
+
+        /* Initialize callback state */
+        memset(&cb_state, 0, sizeof(cb_state));
+        mtx_init(&cb_state.lock, mtx_plain);
+        cnd_init(&cb_state.cond);
+        cb_state.expected_count = 0;
+
+        /* Create share consumer with acknowledgement callback */
+        conf = rd_kafka_conf_new();
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf,
+                                                          ack_commit_callback);
+        rd_kafka_conf_set_opaque(conf, &cb_state);
+
+        {
+                char errstr[512];
+                rkshare = rd_kafka_share_consumer_new(conf, errstr,
+                                                      sizeof(errstr));
+                TEST_ASSERT(rkshare, "Failed to create share consumer: %s",
+                            errstr);
+        }
+
+        /* Subscribe to topic */
+        {
+                rd_kafka_topic_partition_list_t *subs =
+                    rd_kafka_topic_partition_list_new(1);
+                rd_kafka_resp_err_t sub_err;
+                rd_kafka_topic_partition_list_add(subs, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+                sub_err = rd_kafka_share_subscribe(rkshare, subs);
+                TEST_ASSERT(!sub_err, "Failed to subscribe: %s",
+                            rd_kafka_err2str(sub_err));
+                rd_kafka_topic_partition_list_destroy(subs);
+        }
+
+        /* Consume messages */
+        TEST_SAY("Consuming messages\n");
+        err = rd_kafka_share_consume_batch(rkshare, 5000, rkmessages, &msg_cnt);
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_SAY("Consumed %zu messages\n", msg_cnt);
+        cb_state.expected_count = (int)msg_cnt;
+        for (size_t i = 0; i < msg_cnt; i++) {
+                rd_kafka_message_destroy(rkmessages[i]);
+        }
+
+        if (msg_cnt == 0) {
+                TEST_SAY("No messages consumed, skipping test\n");
+                mtx_destroy(&cb_state.lock);
+                cnd_destroy(&cb_state.cond);
+                rd_kafka_share_destroy(rkshare);
+                SUB_TEST_PASS();
+                return;
+        }
+
+        /* Initialize commit thread state */
+        memset(&state, 0, sizeof(state));
+        state.rkshare = rkshare;
+        mtx_init(&state.lock, mtx_plain);
+        cnd_init(&state.cond);
+
+        TEST_SAY("Starting commit thread\n");
+        if (thrd_create(&thread, commit_thread_func, &state) != thrd_success)
+                TEST_FAIL("Failed to create thread");
+
+        /* Wait for thread to start */
+        mtx_lock(&state.lock);
+        while (!state.started)
+                cnd_wait(&state.cond, &state.lock);
+        mtx_unlock(&state.lock);
+
+        /* Sleep briefly to let commit start processing */
+        rd_sleep(1);
+
+        TEST_SAY("Calling wakeup during commit_sync\n");
+        rd_kafka_share_wakeup(rkshare);
+
+        /* Wait for commit thread to finish */
+        mtx_lock(&state.lock);
+        while (!state.finished) {
+                cnd_timedwait_ms(&state.cond, &state.lock, 10000);
+        }
+        mtx_unlock(&state.lock);
+
+        thrd_join(thread, NULL);
+
+        TEST_SAY("Commit thread finished with WAKEUP\n");
+        TEST_ASSERT(state.result == RD_KAFKA_RESP_ERR__WAKEUP,
+                    "Expected WAKEUP error, got %s",
+                    rd_kafka_err2name(state.result));
+
+        /* Now wait for acknowledgement callbacks to be invoked.
+         * This verifies that even though commit_sync returned with WAKEUP,
+         * the acknowledgements were still sent to broker and callbacks
+         * are invoked when responses arrive (matching Java behavior). */
+        TEST_SAY("Waiting for acknowledgement callbacks (expected %d)\n",
+                 cb_state.expected_count);
+
+        mtx_lock(&cb_state.lock);
+        rd_ts_t deadline = test_clock() + (10 * 1000000); /* 10 seconds */
+        while (cb_state.callback_count < cb_state.expected_count) {
+                rd_ts_t now = test_clock();
+                if (now >= deadline) {
+                        mtx_unlock(&cb_state.lock);
+                        TEST_FAIL(
+                            "Timeout waiting for callbacks: got %d, expected %d",
+                            cb_state.callback_count, cb_state.expected_count);
+                }
+                int64_t timeout_ms = (deadline - now) / 1000;
+                cnd_timedwait_ms(&cb_state.cond, &cb_state.lock,
+                                 (int)timeout_ms);
+        }
+        mtx_unlock(&cb_state.lock);
+
+        TEST_SAY("All acknowledgement callbacks invoked: %d\n",
+                 cb_state.callback_count);
+        TEST_ASSERT(cb_state.callback_count == cb_state.expected_count,
+                    "Expected %d callbacks, got %d", cb_state.expected_count,
+                    cb_state.callback_count);
+
+        mtx_destroy(&state.lock);
+        cnd_destroy(&state.cond);
+        mtx_destroy(&cb_state.lock);
+        cnd_destroy(&cb_state.cond);
+        rd_kafka_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Test wakeup with multiple brokers (pending acks dispatched).
+ *
+ * Verify that:
+ * - When wakeup is called, ALL pending acks are dispatched immediately
+ * - This includes acks waiting for busy brokers
+ * - Matches Java behavior where network thread continues sending all acks
+ */
+static void test_wakeup_commit_sync_pending_acks(void) {
+        const char *topic_pfx = test_mk_topic_name("wakeup_pending", 1);
+        char topic1[128], topic2[128];
+        const char *group = topic_pfx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *rkmessages[100];
+        size_t msg_cnt;
+        rd_kafka_error_t *err;
+        commit_thread_state_t state;
+        ack_callback_state_t cb_state;
+        thrd_t thread;
+        int msgcnt       = 5;
+        int total_msgs   = 0;
+        rd_kafka_conf_t *conf;
+
+        SUB_TEST_QUICK();
+
+        /* Create two topics to potentially have different leader brokers */
+        rd_snprintf(topic1, sizeof(topic1), "%s_1", topic_pfx);
+        rd_snprintf(topic2, sizeof(topic2), "%s_2", topic_pfx);
+
+        test_create_topic(NULL, topic1, 1, 1);
+        test_create_topic(NULL, topic2, 1, 1);
+
+        /* Set share group auto offset reset to earliest */
+        {
+                const char *cfg[] = {"share.auto.offset.reset", "SET",
+                                     "earliest"};
+                test_alter_group_configurations(group, cfg, 1);
+        }
+
+        /* Produce messages to both topics */
+        TEST_SAY("Producing %d messages to each topic\n", msgcnt);
+        test_produce_msgs_easy(topic1, 0, 0, msgcnt);
+        test_produce_msgs_easy(topic2, 0, 0, msgcnt);
+
+        /* Initialize callback state */
+        memset(&cb_state, 0, sizeof(cb_state));
+        mtx_init(&cb_state.lock, mtx_plain);
+        cnd_init(&cb_state.cond);
+
+        /* Create share consumer with callback */
+        conf = rd_kafka_conf_new();
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf,
+                                                          ack_commit_callback);
+        rd_kafka_conf_set_opaque(conf, &cb_state);
+
+        {
+                char errstr[512];
+                rkshare = rd_kafka_share_consumer_new(conf, errstr,
+                                                      sizeof(errstr));
+                TEST_ASSERT(rkshare, "Failed to create share consumer: %s",
+                            errstr);
+        }
+
+        /* Subscribe to both topics */
+        {
+                rd_kafka_topic_partition_list_t *subs =
+                    rd_kafka_topic_partition_list_new(2);
+                rd_kafka_resp_err_t sub_err;
+                rd_kafka_topic_partition_list_add(subs, topic1,
+                                                  RD_KAFKA_PARTITION_UA);
+                rd_kafka_topic_partition_list_add(subs, topic2,
+                                                  RD_KAFKA_PARTITION_UA);
+                sub_err = rd_kafka_share_subscribe(rkshare, subs);
+                TEST_ASSERT(!sub_err, "Failed to subscribe: %s",
+                            rd_kafka_err2str(sub_err));
+                rd_kafka_topic_partition_list_destroy(subs);
+        }
+
+        /* Consume messages from both topics */
+        TEST_SAY("Consuming messages from both topics\n");
+        for (int i = 0; i < 5; i++) { /* Multiple consume calls */
+                err = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                   &msg_cnt);
+                if (err)
+                        rd_kafka_error_destroy(err);
+
+                for (size_t j = 0; j < msg_cnt; j++) {
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+                total_msgs += (int)msg_cnt;
+
+                if (total_msgs >= msgcnt * 2)
+                        break;
+        }
+
+        TEST_SAY("Consumed %d total messages\n", total_msgs);
+        cb_state.expected_count = total_msgs;
+
+        if (total_msgs == 0) {
+                TEST_SAY("No messages consumed, skipping test\n");
+                mtx_destroy(&cb_state.lock);
+                cnd_destroy(&cb_state.cond);
+                rd_kafka_share_destroy(rkshare);
+                SUB_TEST_PASS();
+                return;
+        }
+
+        /* Initialize commit thread state */
+        memset(&state, 0, sizeof(state));
+        state.rkshare = rkshare;
+        mtx_init(&state.lock, mtx_plain);
+        cnd_init(&state.cond);
+
+        TEST_SAY("Starting commit thread\n");
+        if (thrd_create(&thread, commit_thread_func, &state) != thrd_success)
+                TEST_FAIL("Failed to create thread");
+
+        /* Wait for thread to start */
+        mtx_lock(&state.lock);
+        while (!state.started)
+                cnd_wait(&state.cond, &state.lock);
+        mtx_unlock(&state.lock);
+
+        /* Sleep briefly */
+        rd_sleep(1);
+
+        TEST_SAY("Calling wakeup - should dispatch ALL pending acks\n");
+        rd_kafka_share_wakeup(rkshare);
+
+        /* Wait for commit thread */
+        mtx_lock(&state.lock);
+        while (!state.finished) {
+                cnd_timedwait_ms(&state.cond, &state.lock, 10000);
+        }
+        mtx_unlock(&state.lock);
+
+        thrd_join(thread, NULL);
+
+        TEST_ASSERT(state.result == RD_KAFKA_RESP_ERR__WAKEUP,
+                    "Expected WAKEUP error, got %s",
+                    rd_kafka_err2name(state.result));
+
+        /* Wait for all callbacks */
+        TEST_SAY("Waiting for all acknowledgement callbacks\n");
+        mtx_lock(&cb_state.lock);
+        rd_ts_t deadline = test_clock() + (15 * 1000000);
+        while (cb_state.callback_count < cb_state.expected_count) {
+                rd_ts_t now = test_clock();
+                if (now >= deadline) {
+                        mtx_unlock(&cb_state.lock);
+                        TEST_FAIL(
+                            "Timeout: got %d callbacks, expected %d",
+                            cb_state.callback_count, cb_state.expected_count);
+                }
+                int64_t timeout_ms = (deadline - now) / 1000;
+                cnd_timedwait_ms(&cb_state.cond, &cb_state.lock,
+                                 (int)timeout_ms);
+        }
+        mtx_unlock(&cb_state.lock);
+
+        TEST_SAY("All callbacks invoked successfully\n");
+
+        mtx_destroy(&state.lock);
+        cnd_destroy(&state.cond);
+        mtx_destroy(&cb_state.lock);
+        cnd_destroy(&cb_state.cond);
+        rd_kafka_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0179_share_consumer_wakeup(int argc, char **argv) {
         if (test_needs_auth()) {
                 TEST_SKIP("Mock cluster does not support SSL/SASL\n");
                 return 0;
         }
 
+        /* Wakeup tests for consume_batch */
         test_wakeup_before_consume();
         test_wakeup_during_consume();
         test_wakeup_no_data_loss();
         test_multiple_wakeups();
+
+        /* Wakeup tests for commit_sync */
+        test_wakeup_before_commit_sync();
         test_wakeup_commit_sync();
+        test_wakeup_commit_sync_with_callback();
+        test_wakeup_commit_sync_pending_acks();
 
         return 0;
 }

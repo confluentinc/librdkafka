@@ -3856,8 +3856,87 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
  *
  * @locality main thread
  */
+/**
+ * @brief Abort commit_sync due to wakeup.
+ *
+ * Dispatches all pending_commit_sync acks immediately (matching Java's
+ * behavior where network thread continues sending after wakeup), fills
+ * IN_PROGRESS partitions with __WAKEUP error, and sends response to app.
+ *
+ * Unlike timeout (which defers pending acks to async), wakeup sends all
+ * acks now to match Java semantics where acknowledgements continue being
+ * processed in background and callbacks are invoked asynchronously.
+ *
+ * @param rk Client instance.
+ * @param rkcg Consumer group handle.
+ *
+ * @locality main thread
+ */
+static void rd_kafka_share_commit_sync_abort_wakeup(rd_kafka_t *rk,
+                                                    rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_broker_t *rkb;
+        rd_kafka_topic_partition_list_t *results;
+        int i;
+
+        rd_kafka_dbg(rk, CGRP, "SHARE",
+                     "Commit sync aborted by wakeup, "
+                     "dispatching all pending acks");
+
+        /* Stop timeout timer */
+        rd_kafka_timer_stop(&rk->rk_timers,
+                            &rkcg->rkcg_commit_sync_request.tmr, 1);
+
+        /* Dispatch ALL pending_commit_sync acks immediately.
+         * Unlike timeout (which defers to async), wakeup sends all
+         * acks now to match Java's behavior where the network thread
+         * continues processing after wakeup. */
+        rd_kafka_rdlock(rk);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (!rkb->rkb_pending_commit_sync.sync_ack_details)
+                        continue;
+
+                /* Force dispatch even if broker is busy */
+                rd_kafka_share_enqueue_sync_ack_op(rk, rkb);
+        }
+        rd_kafka_rdunlock(rk);
+
+        /* Fill partitions still IN_PROGRESS with __WAKEUP error */
+        results = rkcg->rkcg_commit_sync_request.results;
+        for (i = 0; i < results->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &results->elems[i];
+                if (rktpar->err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                        rktpar->err = RD_KAFKA_RESP_ERR__WAKEUP;
+        }
+
+        /* Send response to app immediately (don't wait for broker
+         * responses). When broker responses arrive later, they will
+         * still dispatch ack callbacks (line 3290), matching Java
+         * behavior where callbacks are invoked asynchronously. */
+        rd_kafka_share_commit_sync_send_response(rkcg);
+}
+
+/**
+ * @brief Check if all broker results are in and send response if done.
+ *
+ * Also checks for wakeup and aborts the commit_sync if wakeup was called.
+ *
+ * Called after each broker reply arrives. If brokers_awaiting_result_cnt
+ * reaches zero, stops the timeout timer and sends the response op
+ * to the app thread's temp queue.
+ *
+ * @param rk Client instance.
+ * @param rkcg Consumer group handle.
+ *
+ * @locality main thread
+ */
 static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
                                                       rd_kafka_cgrp_t *rkcg) {
+        /* Check if wakeup was called - abort immediately */
+        if (rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+                rd_kafka_share_commit_sync_abort_wakeup(rk, rkcg);
+                return;
+        }
+
         if (rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt > 0)
                 return;
 
@@ -4329,38 +4408,14 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 
-        /* Block on temp queue — main thread always sends a response
-         * (either from broker replies or timeout callback).
-         * Periodically check if wakeup was called. */
-        while (1) {
-                rd_kafka_cgrp_t *rkcg;
-
-                /* Poll with short timeout to allow wakeup checks */
-                rko_reply = rd_kafka_q_pop(tmpq, 100000 /* 100ms */, 0);
-
-                if (rko_reply)
-                        break; /* Got reply */
-
-                /* Check if wakeup was called.
-                 * Note: commit request was already sent, we're just
-                 * interrupting the wait for the response (transactional
-                 * behavior). */
-                if ((rkcg = rd_kafka_cgrp_get(rk)) &&
-                    rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
-                        rd_kafka_q_destroy_owner(tmpq);
-                        return rd_kafka_error_new(
-                            RD_KAFKA_RESP_ERR__WAKEUP,
-                            "Share consumer woken up during commit");
-                }
-
-                /* Check if timeout expired */
-                if (rd_timeout_expired(abs_timeout)) {
-                        /* Timeout expired, but we must still wait for the
-                         * timeout reply from the background thread */
-                        rko_reply = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
-                        break;
-                }
-        }
+        /* Block on temp queue waiting for response from main thread.
+         * Main thread always sends a response via one of:
+         *   - Normal completion (all brokers responded)
+         *   - Timeout callback (timeout expired)
+         *   - Wakeup abort (wakeup called)
+         * Wakeup is handled on main thread in
+         * rd_kafka_share_commit_sync_maybe_complete(). */
+        rko_reply = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
 
         rd_kafka_q_destroy_owner(tmpq);
 

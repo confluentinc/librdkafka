@@ -242,6 +242,8 @@
     <ClCompile Include="..\..\tests\0171-share_consumer_consume.c" />
     <ClCompile Include="..\..\tests\0172-share_consumer_acknowledge.c" />
     <ClCompile Include="..\..\tests\0173-share_consumer_commit_async.c" />
+    <ClCompile Include="..\..\tests\0174-share_consumer_concurrency.c" />
+    <ClCompile Include="..\..\tests\0175-share_consumer_groups.c" />
     <ClCompile Include="..\..\tests\0176-share_consumer_commit_sync.c" />
     <ClCompile Include="..\..\tests\0177-share_consumer_transactions.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />

@@ -69,6 +69,7 @@ static test_ctx_t test_ctx_new(void) {
         /* Create a producer targeting the mock cluster */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
         ctx.producer =
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
@@ -1461,6 +1462,7 @@ static void do_test_auto_offset_reset_latest(void) {
          */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         ctx.producer =
             rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(ctx.producer != NULL, "Failed to create producer: %s",

@@ -659,6 +659,7 @@ static void setup_3broker_share_consumer(const char *test_name,
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         enable_share_apis(mcluster);
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, partition_cnt,
                                                1) == RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -847,7 +848,7 @@ static void test_close_with_acknowledge(void) {
                 TEST_SAY("C2: Closing consumer\n");
                 rd_kafka_share_consumer_close(c2);
                 TEST_SAY("C2: Closed successfully\n");
-                rd_kafka_share_destroy(c2);
+                test_share_destroy(c2);
 
 
                 /* Cleanup */
@@ -859,7 +860,7 @@ static void test_close_with_acknowledge(void) {
 
                 TEST_SAY("Test %s completed successfully\n\n",
                          config->test_name);
-                rd_kafka_share_destroy(c1);
+                test_share_destroy(c1);
         }
 }
 
@@ -959,7 +960,7 @@ static void test_close_without_acknowledge() {
 
                 TEST_SAY("C2: Closing consumer\n");
                 rd_kafka_share_consumer_close(c2);
-                rd_kafka_share_destroy(c2);
+                test_share_destroy(c2);
 
                 free_tracked_messages(tracked_msgs, tracked_cnt);
 
@@ -969,7 +970,7 @@ static void test_close_without_acknowledge() {
 
                 TEST_SAY("Test %s completed successfully\n\n",
                          config->test_name);
-                rd_kafka_share_destroy(c1);
+                test_share_destroy(c1);
         }
 }
 
@@ -1056,7 +1057,7 @@ static void test_close_with_slow_broker_response(void) {
                     "delayed broker response(s)\n",
                     rtt_delay_ms);
 
-                rd_kafka_share_destroy(consumer);
+                test_share_destroy(consumer);
                 test_mock_cluster_destroy(mcluster);
 
                 SUB_TEST_PASS();
@@ -1158,7 +1159,7 @@ static void test_close_respects_socket_timeout(void) {
                     "%d delayed broker(s)\n",
                     socket_timeout_ms, config->delayed_broker_cnt);
 
-                rd_kafka_share_destroy(consumer);
+                test_share_destroy(consumer);
                 test_mock_cluster_destroy(mcluster);
 
                 SUB_TEST_PASS();
@@ -1234,7 +1235,7 @@ static void test_close_with_broker_error_response(void) {
                     "broker(s) (no retry)\n",
                     rd_kafka_err2str(error_code), config->erroring_broker_cnt);
 
-                rd_kafka_share_destroy(consumer);
+                test_share_destroy(consumer);
                 test_mock_cluster_destroy(mcluster);
 
                 SUB_TEST_PASS();
@@ -1291,12 +1292,12 @@ static void test_close_with_broker_busy(void) {
         /* Cluster + APIs + topic */
         mcluster = test_mock_cluster_new(3, &bootstraps);
         enable_share_apis(mcluster);
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, partition_cnt,
                                                1) == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
 
-        /* Producer */
         /* Implicit-ack consumer */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
@@ -1383,7 +1384,7 @@ static void test_close_with_broker_busy(void) {
                     "Close took %" PRId64 " ms, expected 8000-12000 ms",
                     t_elapsed_ms);
 
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
 
         /* Verify nothing was redelivered: c2 should consume 0 messages
          * because c1's close() flushed all acks. */
@@ -1418,7 +1419,7 @@ static void test_close_with_broker_busy(void) {
 
         TEST_SAY("SUCCESS: close() flushed acks; c2 received no msgs\n");
 
-        rd_kafka_share_destroy(c2);
+        test_share_destroy(c2);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();
@@ -1546,7 +1547,7 @@ static void test_close_with_broker_busy(void) {
 //                         RD_KAFKA_RESP_ERR_NO_ERROR,
 //                     "Failed to set broker up");
 //
-//         rd_kafka_share_destroy(consumer);
+//         test_share_destroy(consumer);
 //         test_mock_cluster_destroy(mcluster);
 //
 //         /* Restore default error-fatal behavior for subsequent tests. */
@@ -1609,7 +1610,7 @@ static void test_api_calls_on_closed_consumer(void) {
         TEST_SAY("Exercising APIs on closed consumer\n");
         verify_all_apis_return_error(consumer, topic);
 
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();
@@ -1704,7 +1705,7 @@ static void test_api_calls_during_closing(void) {
         }
 
         rd_kafka_queue_destroy(queue);
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();

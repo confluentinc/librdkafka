@@ -3639,7 +3639,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
  * @returns error if closed/closing, NULL otherwise. Caller owns the error.
  */
 rd_kafka_error_t *
-rd_kafka_share_consumer_closed_or_closing_error(rd_kafka_share_t *rkshare) {
+rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare) {
         if (unlikely(rd_kafka_share_consumer_closed(rkshare) ||
                      rkshare->rkshare_consumer_closing))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
@@ -3648,11 +3648,11 @@ rd_kafka_share_consumer_closed_or_closing_error(rd_kafka_share_t *rkshare) {
 }
 
 rd_kafka_resp_err_t
-rd_kafka_share_consumer_closed_or_closing_err(rd_kafka_share_t *rkshare) {
+rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
 
-        error = rd_kafka_share_consumer_closed_or_closing_error(rkshare);
+        error = rd_kafka_share_consumer_closed_error(rkshare);
         if (!error)
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
 
@@ -3681,8 +3681,8 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                                           "rd_kafka_share_consume_batch(): "
                                           "Consumer group not initialized");
 
-        if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
-                          rkshare)) != NULL))
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
                 return error;
 
         /* Drain rk_rep for all pending callbacks (non-blocking) */
@@ -4193,8 +4193,8 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
         rd_list_t *ack_batches;
         rd_kafka_error_t *error;
 
-        if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
-                          rkshare)) != NULL))
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
                 return error;
 
         rd_kafka_dbg(rk, CGRP, "SHARE", "Committing asynchronously");
@@ -4262,8 +4262,8 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
 
         *partitions = NULL;
 
-        if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
-                          rkshare)) != NULL))
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
                 return error;
 
         rd_kafka_dbg(rk, CGRP, "SHARE",
@@ -5052,8 +5052,8 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
 
         /* TODO KIP-932: Guard this with checks for rkshare
          * and rkshare->rkshare_rk */
-        if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
-                          rkshare)) != NULL))
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
                 return error;
 
         rkshare->rkshare_consumer_closing = rd_true;
@@ -5156,8 +5156,8 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
          * rkshare->rkshare_rk. Check if this is needed for other APIs
          * as well.
          */
-        if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
-                          rkshare)) != NULL))
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
                 return error;
 
         rk                                = rkshare->rkshare_rk;

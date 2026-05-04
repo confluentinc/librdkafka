@@ -3269,7 +3269,7 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
          *  * Check if rktp is already present in toppars_to_forget?
          */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
-                if (rkb->rkb_share_fetch_session.epoch <= 0) {
+                if (rkb->rkb_share_fetch_session.epoch < 0) {
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                                    "Not removing %.*s [%" PRId32
                                    "] from share fetch session "
@@ -3627,8 +3627,6 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 } else if (rko->rko_u.share_fetch.should_leave) {
                         rd_kafka_broker_share_fetch_session_leave(rkb, rko,
                                                                   rd_clock());
-                        rko = NULL; /* the rko is reused for the reply */
-                        break;
                 } else {
                         rd_kafka_broker_share_rpc(rkb, rko, rd_clock());
                 }

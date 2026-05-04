@@ -2837,6 +2837,7 @@ void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
                     rkb->rkb_share_fetch_session.forgetting_toppars);
                 rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
         }
+        rkb->rkb_share_fetch_session.epoch = -1;
 }
 
 void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,

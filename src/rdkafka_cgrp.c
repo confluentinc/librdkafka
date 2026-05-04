@@ -3958,7 +3958,7 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         /* Remove cgrp application queue forwarding, if any. */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
-                rd_kafka_q_fwd_set(rkcg->rkcg_rk->rk_ops, NULL);
+                rd_kafka_q_fwd_set(rkcg->rkcg_rk->rk_rep, NULL);
         }
 
         /* Destroy KIP-848 consumer group structures */
@@ -6240,6 +6240,7 @@ void rd_kafka_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
                 rd_list_t *ack_batches =
                     rd_kafka_share_build_ack_details(rkcg->rkcg_rk->rk_rkshare);
+                RD_MAP_CLEAR(&rkcg->rkcg_rk->rk_rkshare->rkshare_inflight_acks);
 
                 rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
                 rko->rko_replyq    = replyq;

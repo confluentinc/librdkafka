@@ -391,6 +391,13 @@ static RD_INLINE RD_UNUSED void rd_kafka_q_yield(rd_kafka_q_t *rkq) {
 }
 
 /**
+ * @brief Check if queue has a pending yield and consume it if so.
+ * @returns rd_true if yield was pending, rd_false otherwise.
+ * @remark This is a one-shot check - clears the yield flag.
+ */
+rd_bool_t rd_kafka_q_check_yield_and_clear(rd_kafka_q_t *rkq);
+
+/**
  * @brief Low-level unprotected enqueue that only performs
  *        the actual queue enqueue and counter updates.
  * @remark Will not perform locking, signaling, fwdq, READY checking, etc.

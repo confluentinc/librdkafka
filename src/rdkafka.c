@@ -520,6 +520,8 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "the failure of this message too"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY_BROKER,
               "Local: Broker handle destroyed without termination"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__WAKEUP,
+              "Local: Share consumer woken up"),
 
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN, "Unknown broker error"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_NO_ERROR, "Success"),
@@ -3696,6 +3698,15 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                           rkshare)) != NULL))
                 return error;
 
+        /* Check #1: If wakeup was called before this consume_batch,
+         * return immediately without sending any fetch requests.
+         * This prevents wasting resources on fetching data when the
+         * application is likely shutting down. */
+        if (rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__WAKEUP,
+                                          "Share consumer woken up");
+        }
+
         /* Drain rk_rep for all pending callbacks (non-blocking) */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
@@ -4319,8 +4330,37 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         rd_kafka_q_enq(rk->rk_ops, rko);
 
         /* Block on temp queue — main thread always sends a response
-         * (either from broker replies or timeout callback) */
-        rko_reply = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
+         * (either from broker replies or timeout callback).
+         * Periodically check if wakeup was called. */
+        while (1) {
+                rd_kafka_cgrp_t *rkcg;
+
+                /* Poll with short timeout to allow wakeup checks */
+                rko_reply = rd_kafka_q_pop(tmpq, 100000 /* 100ms */, 0);
+
+                if (rko_reply)
+                        break; /* Got reply */
+
+                /* Check if wakeup was called.
+                 * Note: commit request was already sent, we're just
+                 * interrupting the wait for the response (transactional
+                 * behavior). */
+                if ((rkcg = rd_kafka_cgrp_get(rk)) &&
+                    rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+                        rd_kafka_q_destroy_owner(tmpq);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__WAKEUP,
+                            "Share consumer woken up during commit");
+                }
+
+                /* Check if timeout expired */
+                if (rd_timeout_expired(abs_timeout)) {
+                        /* Timeout expired, but we must still wait for the
+                         * timeout reply from the background thread */
+                        rko_reply = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
+                        break;
+                }
+        }
 
         rd_kafka_q_destroy_owner(tmpq);
 

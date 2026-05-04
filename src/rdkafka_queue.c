@@ -902,20 +902,35 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         abs_timeout = rd_timeout_init(timeout_ms);
         rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
         rd_kafka_yield_thread = 0;
+        rd_bool_t was_woken_up = rd_false;
 
         /* Wait for at least one op to arrive */
         mtx_lock(&rkq->rkq_lock);
-        while (!(rko = TAILQ_FIRST(&rkq->rkq_q)) &&
-               !rd_kafka_q_check_yield(rkq) &&
-               cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock, abs_timeout) ==
-                   thrd_success)
-                ;
+        while (!(rko = TAILQ_FIRST(&rkq->rkq_q))) {
+                /* Check #2: Check if wakeup was called during the wait.
+                 * Track the wakeup state so we can return the proper error. */
+                if (rd_kafka_q_check_yield(rkq)) {
+                        was_woken_up = rd_true;
+                        break;
+                }
+
+                if (cnd_timedwait_abs(&rkq->rkq_cond, &rkq->rkq_lock,
+                                      abs_timeout) != thrd_success)
+                        break; /* Timeout */
+        }
         rd_kafka_q_mark_served(rkq);
 
         if (!rko) {
                 mtx_unlock(&rkq->rkq_lock);
                 rd_kafka_app_polled(rk, rkq);
-                return NULL;
+
+                /* If woken up, return wakeup error instead of NULL (timeout) */
+                if (was_woken_up) {
+                        return rd_kafka_error_new(RD_KAFKA_RESP_ERR__WAKEUP,
+                                                  "Share consumer woken up");
+                }
+
+                return NULL; /* Timeout */
         }
 
         /* Dequeue and process one op */
@@ -1112,6 +1127,37 @@ void rd_kafka_queue_io_event_enable(rd_kafka_queue_t *rkqu,
 
 void rd_kafka_queue_yield(rd_kafka_queue_t *rkqu) {
         rd_kafka_q_yield(rkqu->rkqu_q);
+}
+
+
+void rd_kafka_share_wakeup(rd_kafka_share_t *rkshare) {
+        rd_kafka_t *rk = rkshare->rkshare_rk;
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+
+        if (!rkcg)
+                return; /* Consumer group not initialized */
+
+        /* Yield the consumer group queue to wake up any waiting
+         * rd_kafka_share_consume_batch() call. This uses the same
+         * thread-safe queue yield mechanism used internally for
+         * broker thread wakeups and timer wakeups. */
+        rd_kafka_q_yield(rkcg->rkcg_q);
+}
+
+
+/**
+ * @brief Check if queue has a pending yield and consume it if so.
+ * @returns rd_true if yield was pending, rd_false otherwise.
+ * @remark This is a one-shot check - clears the yield flag.
+ */
+rd_bool_t rd_kafka_q_check_yield_and_clear(rd_kafka_q_t *rkq) {
+        rd_bool_t was_yielded;
+
+        mtx_lock(&rkq->rkq_lock);
+        was_yielded = rd_kafka_q_check_yield(rkq);
+        mtx_unlock(&rkq->rkq_lock);
+
+        return was_yielded;
 }
 
 

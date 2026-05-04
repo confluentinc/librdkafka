@@ -741,3 +741,212 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
+
+
+/**
+ * @brief Initialize a partition offsets element with topicid,topic, partition,
+ * and offsets.
+ *
+ * @param topic_id Topic UUID.
+ * @param topic Topic name (will be duplicated).
+ * @param partition Partition id.
+ * @param offsets_cnt Number of offsets to allocate space for.
+ */
+rd_kafka_share_partition_offsets_t *
+rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
+                                     const char *topic,
+                                     int32_t partition,
+                                     int offsets_cnt) {
+        rd_kafka_share_partition_offsets_t *elem;
+        size_t size;
+
+        /* Allocate struct + flexible array in one allocation */
+        size = sizeof(*elem) + ((size_t)offsets_cnt * sizeof(int64_t));
+        elem = rd_malloc(size);
+
+        elem->partition = rd_kafka_topic_partition_new_with_id_and_name(
+            topic_id, topic, partition);
+        elem->cnt = offsets_cnt;
+
+        return elem;
+}
+
+/**
+ * @brief Destroy a partition offsets element.
+ *
+ * @param elem Element to destroy.
+ */
+void rd_kafka_share_partition_offsets_destroy(
+    rd_kafka_share_partition_offsets_t *elem) {
+        if (!elem)
+                return;
+        rd_kafka_topic_partition_destroy(elem->partition);
+        rd_free(elem);
+}
+
+/**
+ * @brief Allocate and initialize a partition offsets list with given capacity.
+ *
+ * @param capacity Number of elements to allocate space for.
+ * @returns Newly allocated list, or NULL if capacity is 0.
+ *          Caller must destroy with
+ *          rd_kafka_share_partition_offsets_list_destroy().
+ */
+rd_kafka_share_partition_offsets_list_t *
+rd_kafka_share_partition_offsets_list_new(int capacity) {
+        rd_kafka_share_partition_offsets_list_t *list;
+        size_t size;
+
+        if (capacity <= 0)
+                return NULL;
+
+        /* Allocate list + flexible array in one allocation */
+        size = sizeof(*list) + ((size_t)capacity *
+                                sizeof(rd_kafka_share_partition_offsets_t *));
+        list = rd_malloc(size);
+
+        list->cnt = 0;
+
+        return list;
+}
+
+rd_kafka_share_partition_offsets_list_t *
+rd_kafka_share_build_partition_offsets_list(
+    rd_kafka_share_ack_batches_t *batches) {
+        rd_kafka_share_partition_offsets_list_t *list;
+        rd_kafka_share_partition_offsets_t *elem;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int total_offsets = 0;
+        int offset_idx    = 0;
+        int j;
+
+        if (!batches || !batches->rktpar || rd_list_cnt(&batches->entries) == 0)
+                return NULL;
+
+        /* Count total offsets */
+        RD_LIST_FOREACH(entry, &batches->entries, j) {
+                total_offsets +=
+                    (int)(entry->end_offset - entry->start_offset + 1);
+        }
+
+        if (total_offsets == 0)
+                return NULL;
+
+        list = rd_kafka_share_partition_offsets_list_new(1);
+        if (!list)
+                return NULL;
+
+        /* Allocate elements */
+        elem = rd_kafka_share_partition_offsets_new(
+            rd_kafka_topic_partition_get_topic_id(batches->rktpar),
+            batches->rktpar->topic, batches->rktpar->partition, total_offsets);
+
+        list->cnt      = 1;
+        list->elems[0] = elem;
+
+        /* Fill offsets array */
+        RD_LIST_FOREACH(entry, &batches->entries, j) {
+                int64_t off;
+                for (off = entry->start_offset; off <= entry->end_offset;
+                     off++) {
+                        elem->offsets[offset_idx++] = off;
+                }
+        }
+
+        return list;
+}
+
+
+void rd_kafka_share_enqueue_ack_callback(rd_kafka_t *rk,
+                                         rd_kafka_share_ack_batches_t *batches,
+                                         rd_kafka_resp_err_t err) {
+        rd_kafka_op_t *cb_rko;
+        rd_kafka_share_partition_offsets_list_t *partitions;
+
+        if (!rk->rk_conf.share_acknowledgement_commit_cb)
+                return;
+
+        partitions = rd_kafka_share_build_partition_offsets_list(batches);
+        if (!partitions)
+                return;
+
+        cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT);
+        cb_rko->rko_err = err;
+        cb_rko->rko_u.share_ack_commit.partitions = partitions;
+        cb_rko->rko_u.share_ack_commit.cb =
+            rk->rk_conf.share_acknowledgement_commit_cb;
+        cb_rko->rko_u.share_ack_commit.opaque = rk->rk_conf.opaque;
+
+        rd_kafka_q_enq(rk->rk_rep, cb_rko);
+}
+
+
+size_t rd_kafka_share_partition_offsets_list_count(
+    const rd_kafka_share_partition_offsets_list_t *list) {
+        if (!list)
+                return 0;
+        return (size_t)list->cnt;
+}
+
+
+const rd_kafka_share_partition_offsets_t *
+rd_kafka_share_partition_offsets_list_get(
+    const rd_kafka_share_partition_offsets_list_t *list,
+    size_t index) {
+        if (!list || index >= (size_t)list->cnt)
+                return NULL;
+        return list->elems[index];
+}
+
+
+void rd_kafka_share_partition_offsets_list_destroy(
+    rd_kafka_share_partition_offsets_list_t *list) {
+        int i;
+
+        if (!list)
+                return;
+
+        /* Free each element */
+        for (i = 0; i < list->cnt; i++) {
+                rd_kafka_share_partition_offsets_destroy(list->elems[i]);
+        }
+        /* Free the list (elems array is inline via FAM) */
+        rd_free(list);
+}
+
+
+const rd_kafka_topic_partition_t *rd_kafka_share_partition_offsets_partition(
+    const rd_kafka_share_partition_offsets_t *partition_offsets) {
+        return partition_offsets->partition;
+}
+
+
+const int64_t *rd_kafka_share_partition_offsets_offsets(
+    const rd_kafka_share_partition_offsets_t *partition_offsets) {
+        return partition_offsets->offsets;
+}
+
+
+int rd_kafka_share_partition_offsets_offsets_cnt(
+    const rd_kafka_share_partition_offsets_t *partition_offsets) {
+        return partition_offsets->cnt;
+}
+
+
+void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
+                                           rd_list_t *ack_details) {
+        rd_kafka_share_ack_batches_t *ack_batch;
+        int k;
+
+        if (!rk->rk_conf.share_acknowledgement_commit_cb || !ack_details ||
+            rd_list_cnt(ack_details) == 0)
+                return;
+
+        /* Use per-partition error from each batch */
+        RD_LIST_FOREACH(ack_batch, ack_details, k) {
+                rd_kafka_share_enqueue_ack_callback(
+                    rk, ack_batch,
+                    ack_batch->rktpar ? ack_batch->rktpar->err
+                                      : RD_KAFKA_RESP_ERR_NO_ERROR);
+        }
+}

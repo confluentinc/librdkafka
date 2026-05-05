@@ -402,6 +402,19 @@ typedef struct rd_kafka_cgrp_s {
                                                            * reply.
                                                            *   @locality main
                                                            * thread */
+                int share_session_leave_remaining_cnt;    /**< Number of
+                                                           * session leave requests
+                                                           * which are either
+                                                           * pending to be sent or
+                                                           * are in-flight.
+                                                           * Populated when cgrp
+                                                           * termination op    is
+                                                           * received and
+                                                           * decremented    whenever
+                                                           * we receive a reply    to
+                                                           * a leave request
+                                                           *    @locality main
+                                                           * thread */
                 int64_t commit_sync_request_id_counter; /**< Global counter for
                                                          *   commit_sync request
                                                          *   IDs. Starts at 1,

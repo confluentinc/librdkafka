@@ -155,6 +155,7 @@ set(
     0176-share_consumer_commit_sync.c
     0177-share_consumer_transactions.c
     0178-share_consumer_close.c
+    0179-share_consumer_wakeup.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

@@ -298,6 +298,8 @@ _TEST_DECL(0173_share_consumer_commit_async);
 _TEST_DECL(0176_share_consumer_commit_sync);
 _TEST_DECL(0176_share_consumer_commit_sync_local);
 _TEST_DECL(0177_share_consumer_transactions);
+_TEST_DECL(0178_share_consumer_close);
+_TEST_DECL(0178_share_consumer_close_local);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -579,6 +581,8 @@ struct test tests[] = {
     _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0176_share_consumer_commit_sync_local, TEST_F_LOCAL),
     _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -8203,7 +8207,7 @@ void test_share_set_isolation_level(const char *group_name,
  * @param rkshare The share consumer to close.
  */
 void test_share_consumer_close(rd_kafka_share_t *rkshare) {
-        rd_kafka_resp_err_t error;
+        rd_kafka_error_t *error;
 
         TEST_SAY("Calling rd_kafka_share_consumer_close\n");
         error = rd_kafka_share_consumer_close(rkshare);
@@ -8211,7 +8215,7 @@ void test_share_consumer_close(rd_kafka_share_t *rkshare) {
 
         if (error)
                 TEST_FAIL("Failed to close share consumer: %s\n",
-                          rd_kafka_err2str(error));
+                          rd_kafka_error_string(error));
 }
 
 /**

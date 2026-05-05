@@ -3196,10 +3196,9 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
  *
  * @locality main thread
  */
-static rd_kafka_op_res_t
-rd_kafka_share_fetch_reply_op_cb(rd_kafka_t *rk,
-                                 rd_kafka_q_t *rkq,
-                                 rd_kafka_op_t *rko) {
+static rd_kafka_op_res_t rd_kafka_share_fetch_reply_op_cb(rd_kafka_t *rk,
+                                                          rd_kafka_q_t *rkq,
+                                                          rd_kafka_op_t *rko) {
         return rd_kafka_share_fetch_reply_op(rk, rko);
 }
 

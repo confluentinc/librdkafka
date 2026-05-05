@@ -1935,13 +1935,9 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                                                     void *opaque) {
         rd_kafka_op_t *rko_orig = opaque;
 
-        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                rd_kafka_broker_session_update(rkb);
-                if (rko_orig->rko_u.share_fetch.ack_details) {
-                        rd_list_destroy(
-                            rko_orig->rko_u.share_fetch.ack_details);
-                        rko_orig->rko_u.share_fetch.ack_details = NULL;
-                }
+        if (rd_kafka_broker_is_any_err_destroy(err)) {
+                /* Session state is already cleared by SHARE_SESSION_CLEAR op,
+                 * enqueued by rd_kafka_broker_decommission. */
                 rd_kafka_op_reply(rko_orig, err);
                 return;
         }
@@ -2022,16 +2018,16 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
          * TODO KIP-932: Improve this handling with Error handling and leave
          * flow.
          */
-        if (err == RD_KAFKA_RESP_ERR__DESTROY) {
-                /* TODO KIP-932: Check what is needed out of the below */
-                rd_kafka_broker_session_update(rkb);
+        if (rd_kafka_broker_is_any_err_destroy(err)) {
+                /* Session state is already cleared by SHARE_SESSION_CLEAR op,
+                 * enqueued by rd_kafka_broker_decommission. */
                 if (rko_orig->rko_u.share_fetch.ack_details) {
                         rd_list_destroy(
                             rko_orig->rko_u.share_fetch.ack_details);
                         rko_orig->rko_u.share_fetch.ack_details = NULL;
                 }
                 rd_kafka_op_reply(rko_orig, err);
-                return; /* Terminating */
+                return;
         }
 
         rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
@@ -2837,6 +2833,10 @@ void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
                     rkb->rkb_share_fetch_session.forgetting_toppars);
                 rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
         }
+
+        /*
+         * This allows us to avoid future changes to the closed share session
+         * Toppar add/remove functions do not allow updates if epoch is -1 */
         rkb->rkb_share_fetch_session.epoch = -1;
 }
 

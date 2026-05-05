@@ -300,11 +300,8 @@ _TEST_DECL(0176_share_consumer_commit_sync_local);
 _TEST_DECL(0177_share_consumer_transactions);
 _TEST_DECL(0178_share_consumer_close);
 _TEST_DECL(0178_share_consumer_close_local);
-<<<<<<< Updated upstream
-=======
 _TEST_DECL(0179_share_consumer_destroy);
 _TEST_DECL(0179_share_consumer_destroy_local);
->>>>>>> Stashed changes
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -588,11 +585,8 @@ struct test tests[] = {
     _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
-<<<<<<< Updated upstream
-=======
     _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
->>>>>>> Stashed changes
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -7978,7 +7972,6 @@ int test_consumer_group_protocol_classic() {
  ****************************************************************************/
 
 /**
-<<<<<<< Updated upstream
  * @brief Get underlying rd_kafka_t handle from share consumer.
  *
  * @param rkshare Share consumer handle.
@@ -7990,8 +7983,6 @@ rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
 
 
 /**
-=======
->>>>>>> Stashed changes
  * @brief Create a share consumer with standard configuration.
  *
  * @param group_id The share group ID.
@@ -8157,11 +8148,7 @@ void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
         err = rd_kafka_share_subscribe(rk, topics);
         if (err)
                 TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
-<<<<<<< Updated upstream
                           rd_kafka_name(test_share_consumer_get_rk(rk)),
-=======
-                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
->>>>>>> Stashed changes
                           rd_kafka_err2str(err));
 
         rd_kafka_topic_partition_list_destroy(topics);
@@ -8181,20 +8168,12 @@ rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
         err = rd_kafka_share_subscription(rk, &subscription);
         if (err)
                 TEST_FAIL("%s: Failed to get subscription: %s\n",
-<<<<<<< Updated upstream
                           rd_kafka_name(test_share_consumer_get_rk(rk)),
-=======
-                          rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)),
->>>>>>> Stashed changes
                           rd_kafka_err2str(err));
 
         TEST_ASSERT(subscription != NULL,
                     "%s: subscription() returned NULL list",
-<<<<<<< Updated upstream
                     rd_kafka_name(test_share_consumer_get_rk(rk)));
-=======
-                    rd_kafka_name(rd_kafka_share_consumer_get_rk(rk)));
->>>>>>> Stashed changes
 
         return subscription;
 }
@@ -8225,7 +8204,6 @@ void test_share_set_isolation_level(const char *group_name,
         const char *cfg[] = {"share.isolation.level", "SET", isolation_level};
         test_alter_group_configurations(group_name, cfg, 1);
 }
-<<<<<<< Updated upstream
 
 /**
  * @brief Close a share consumer.
@@ -8255,5 +8233,3 @@ void test_share_destroy(rd_kafka_share_t *rkshare) {
         rd_kafka_share_destroy(rkshare);
         TEST_SAY("Completed rd_kafka_share_destroy\n");
 }
-=======
->>>>>>> Stashed changes

@@ -9,4 +9,4 @@ set -e
 --disable-c11threads --disable-syslog \
 --enable-werror --enable-devel
 make -j
-TESTS=0155 TEST_DEBUG=all make -j -C tests run_local_quick
+TEST_DEBUG=all make -j -C tests run_local_quick

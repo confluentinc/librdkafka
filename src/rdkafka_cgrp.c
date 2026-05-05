@@ -37,6 +37,7 @@
 #include "rdkafka_metadata.h"
 #include "rdkafka_cgrp.h"
 #include "rdkafka_interceptor.h"
+#include "rdkafka_share_acknowledgement.h"
 #include "rdmap.h"
 
 #include "rdunittest.h"
@@ -3915,6 +3916,10 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(NULL, !rkcg->rkcg_group_assignment);
         rd_kafka_assert(NULL, rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0);
         rd_kafka_assert(NULL, rkcg->rkcg_state == RD_KAFKA_CGRP_STATE_TERM);
+        rd_kafka_assert(
+            NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
+        rd_kafka_assert(
+            NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1 /*lock*/);
@@ -3952,6 +3957,9 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
 
         /* Remove cgrp application queue forwarding, if any. */
         rd_kafka_q_fwd_set(rkcg->rkcg_q, NULL);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_q_fwd_set(rkcg->rkcg_rk->rk_rep, NULL);
+        }
 
         /* Destroy KIP-848 consumer group structures */
         rd_kafka_cgrp_consumer_reset(rkcg);
@@ -3997,6 +4005,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
             rd_list_empty(&rkcg->rkcg_toppars) &&
             !rd_kafka_assignment_in_progress(rkcg->rkcg_rk) &&
             rkcg->rkcg_rk->rk_consumer.wait_commit_cnt == 0 &&
+            rkcg->rkcg_share.share_session_leave_remaining_cnt == 0 &&
             !(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE)) {
                 /* Since we might be deep down in a 'rko' handler
                  * called from cgrp_op_serve() we cant call terminated()
@@ -4013,7 +4022,9 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
                     "Group \"%s\": "
                     "waiting for %s%d toppar(s), "
                     "%s"
-                    "%d commit(s)%s%s%s (state %s, join-state %s) "
+                    "%d commit(s), "
+                    "%d share session leave(s) remaining"
+                    "%s%s%s (state %s, join-state %s) "
                     "before terminating",
                     rkcg->rkcg_group_id->str,
                     RD_KAFKA_CGRP_WAIT_ASSIGN_CALL(rkcg) ? "assign call, " : "",
@@ -4022,6 +4033,7 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
                         ? "assignment in progress, "
                         : "",
                     rkcg->rkcg_rk->rk_consumer.wait_commit_cnt,
+                    rkcg->rkcg_share.share_session_leave_remaining_cnt,
                     (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE)
                         ? ", wait-leave,"
                         : "",
@@ -6141,6 +6153,51 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                     ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN &
                     ~RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN_TO_COMPLETE;
         }
+
+        /* For share groups, we have to additionally close
+         * sessions with all the brokers */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                /* TODO KIP-932: the below code is similar to
+                 * rd_kafka_share_segregate_and_dispatch_acks()
+                 * Check if we can reduce code duplication */
+                rd_kafka_broker_t *rkb                             = NULL;
+                rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
+                rd_list_t *ack_batches =
+                    rko->rko_u.share_fetch_fanout.ack_batches;
+                if (ack_batches) {
+                        rd_kafka_share_segregate_acks_by_leader(rkcg->rkcg_rk,
+                                                                ack_batches);
+                        /* Ownership of elements transferred to broker
+                         * ack_details. Destroy the container. */
+                        rd_list_destroy(ack_batches);
+                }
+                /* TODO KIP-932: See how we can avoid locking the handle */
+                rd_kafka_rdlock(rkcg->rkcg_rk);
+                TAILQ_FOREACH(rkb, &rkcg->rkcg_rk->rk_brokers, rkb_link) {
+                        if (rd_kafka_broker_or_instance_terminating(rkb) ||
+                            RD_KAFKA_BROKER_IS_LOGICAL(rkb))
+                                continue;
+
+                        rkcg->rkcg_share.share_session_leave_remaining_cnt++;
+                        rd_dassert(
+                            !rkb->rkb_pending_commit_sync.sync_ack_details);
+                        /* For brokers that are currently processing share fetch
+                         * requests we will enqueue the leave op when they reply
+                         * back to the main thread */
+                        if (rkb->rkb_share_fetch_enqueued) {
+                                rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "CLOSE",
+                                             "Deferring close request as "
+                                             "broker %s has in-flight request",
+                                             rd_kafka_broker_name(rkb));
+                                continue;
+                        }
+
+                        rd_kafka_share_enqueue_fetch_op(rkcg->rkcg_rk, rkb,
+                                                        rd_false, rd_true);
+                }
+                rd_kafka_rdunlock(rkcg->rkcg_rk);
+        }
+
         rkcg->rkcg_ts_terminate = rd_clock();
         rkcg->rkcg_reply_rko    = rko;
 
@@ -6181,9 +6238,18 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
  */
 void rd_kafka_cgrp_terminate(rd_kafka_cgrp_t *rkcg, rd_kafka_replyq_t replyq) {
         rd_kafka_assert(NULL, !thrd_is_current(rkcg->rkcg_rk->rk_thread));
-        rd_kafka_cgrp_op(rkcg, NULL, replyq, RD_KAFKA_OP_TERMINATE, 0);
-}
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_list_t *ack_batches =
+                    rd_kafka_share_build_ack_details(rkcg->rkcg_rk->rk_rkshare);
+                RD_MAP_CLEAR(&rkcg->rkcg_rk->rk_rkshare->rkshare_inflight_acks);
 
+                rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_TERMINATE);
+                rko->rko_replyq    = replyq;
+                rko->rko_u.share_fetch_fanout.ack_batches = ack_batches;
+                rd_kafka_q_enq(rkcg->rkcg_ops, rko);
+        } else
+                rd_kafka_cgrp_op(rkcg, NULL, replyq, RD_KAFKA_OP_TERMINATE, 0);
+}
 
 struct _op_timeout_offset_commit {
         rd_ts_t now;

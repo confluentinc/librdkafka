@@ -54,36 +54,36 @@ static struct test *this_test;
  * @brief Configuration for a concurrent share consumer test
  */
 typedef struct {
-        int consumer_cnt;              /**< Number of consumers to create */
-        int producer_cnt;              /**< Number of producer threads */
-        int topic_cnt;                 /**< Number of topics */
-        int partitions[MAX_TOPICS];    /**< Partitions per topic */
-        int msgs_per_partition;        /**< Messages to produce per partition */
-        const char *group_name;        /**< Share group name */
-        const char *test_name;         /**< Test description */
-        int max_attempts;              /**< Max poll attempts (0 = default) */
-        int consumer_delay_ms;         /**< Delay between consumer polls */
-        int producer_delay_ms;         /**< Delay between produces */
-        rd_bool_t explicit_ack;        /**< Use explicit acknowledgement */
-        rd_bool_t staggered_start;     /**< Start producers/consumers at
-                                            different times */
+        int consumer_cnt;           /**< Number of consumers to create */
+        int producer_cnt;           /**< Number of producer threads */
+        int topic_cnt;              /**< Number of topics */
+        int partitions[MAX_TOPICS]; /**< Partitions per topic */
+        int msgs_per_partition;     /**< Messages to produce per partition */
+        const char *group_name;     /**< Share group name */
+        const char *test_name;      /**< Test description */
+        int max_attempts;           /**< Max poll attempts (0 = default) */
+        int consumer_delay_ms;      /**< Delay between consumer polls */
+        int producer_delay_ms;      /**< Delay between produces */
+        rd_bool_t explicit_ack;     /**< Use explicit acknowledgement */
+        rd_bool_t staggered_start;  /**< Start producers/consumers at
+                                         different times */
 } concurrent_test_config_t;
 
 /**
  * @brief Shared state for concurrent test threads
  */
 typedef struct {
-        mtx_t lock;                    /**< Mutex for state access */
-        int total_produced;            /**< Total messages produced */
-        int total_consumed;            /**< Total messages consumed */
-        int expected_total;            /**< Expected total messages */
-        rd_bool_t producers_done;      /**< All producers finished */
+        mtx_t lock;                      /**< Mutex for state access */
+        int total_produced;              /**< Total messages produced */
+        int total_consumed;              /**< Total messages consumed */
+        int expected_total;              /**< Expected total messages */
+        rd_bool_t producers_done;        /**< All producers finished */
         rd_bool_t consumers_should_stop; /**< Signal consumers to stop */
-        rd_bool_t test_failed;         /**< Test failure flag */
-        char *topics[MAX_TOPICS];      /**< Topic names */
-        int topic_cnt;                 /**< Number of topics */
-        const char *group_name;        /**< Share group name */
-        rd_bool_t explicit_ack;        /**< Use explicit acknowledgement */
+        rd_bool_t test_failed;           /**< Test failure flag */
+        char *topics[MAX_TOPICS];        /**< Topic names */
+        int topic_cnt;                   /**< Number of topics */
+        const char *group_name;          /**< Share group name */
+        rd_bool_t explicit_ack;          /**< Use explicit acknowledgement */
 } concurrent_test_state_t;
 
 /**
@@ -107,14 +107,14 @@ typedef struct {
  * Produces messages to all topics/partitions in round-robin fashion.
  */
 static int producer_thread_func(void *arg) {
-        producer_thread_args_t *args = (producer_thread_args_t *)arg;
+        producer_thread_args_t *args   = (producer_thread_args_t *)arg;
         concurrent_test_state_t *state = args->state;
         rd_kafka_t *producer;
         int produced = 0;
         int t, p;
 
         /* Restore test context for this thread (test_curr is TLS) */
-        test_curr = this_test;
+        test_curr                = this_test;
         test_curr->exp_dr_status = (rd_kafka_msg_status_t)-1;
         test_curr->ignore_dr_err = rd_true;
 
@@ -124,8 +124,12 @@ static int producer_thread_func(void *arg) {
                  args->producer_id, args->msgs_to_produce);
 
         while (produced < args->msgs_to_produce) {
-                for (t = 0; t < state->topic_cnt && produced < args->msgs_to_produce; t++) {
-                        for (p = 0; p < args->partitions[t] && produced < args->msgs_to_produce; p++) {
+                for (t = 0;
+                     t < state->topic_cnt && produced < args->msgs_to_produce;
+                     t++) {
+                        for (p = 0; p < args->partitions[t] &&
+                                    produced < args->msgs_to_produce;
+                             p++) {
                                 rd_kafka_resp_err_t err;
                                 char value[64];
 
@@ -141,9 +145,10 @@ static int producer_thread_func(void *arg) {
                                     RD_KAFKA_V_END);
 
                                 if (err) {
-                                        TEST_SAY("Producer %d: produce failed: %s\n",
-                                                 args->producer_id,
-                                                 rd_kafka_err2str(err));
+                                        TEST_SAY(
+                                            "Producer %d: produce failed: %s\n",
+                                            args->producer_id,
+                                            rd_kafka_err2str(err));
                                         mtx_lock(&state->lock);
                                         state->test_failed = rd_true;
                                         mtx_unlock(&state->lock);
@@ -194,9 +199,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         int max_attempts;
 
         TEST_SAY("\n");
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("=== %s ===\n", config->test_name);
-        TEST_SAY("============================================================\n");
+        TEST_SAY(
+            "============================================================\n");
         TEST_SAY("Consumers: %d, Producers: %d, Topics: %d\n",
                  config->consumer_cnt, config->producer_cnt, config->topic_cnt);
 
@@ -205,8 +212,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Initialize state */
         mtx_init(&state.lock, mtx_plain);
-        state.topic_cnt = config->topic_cnt;
-        state.group_name = config->group_name;
+        state.topic_cnt    = config->topic_cnt;
+        state.group_name   = config->group_name;
         state.explicit_ack = config->explicit_ack;
 
         /* Calculate total expected messages */
@@ -215,15 +222,15 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         }
         state.expected_total = total_partitions * config->msgs_per_partition;
 
-        TEST_SAY("Total partitions: %d, Messages per partition: %d, "
-                 "Expected total: %d\n",
-                 total_partitions, config->msgs_per_partition,
-                 state.expected_total);
+        TEST_SAY(
+            "Total partitions: %d, Messages per partition: %d, "
+            "Expected total: %d\n",
+            total_partitions, config->msgs_per_partition, state.expected_total);
 
         /* Create topics */
         for (t = 0; t < config->topic_cnt; t++) {
-                state.topics[t] = rd_strdup(
-                    test_mk_topic_name("0174-concurrent", 1));
+                state.topics[t] =
+                    rd_strdup(test_mk_topic_name("0174-concurrent", 1));
                 test_create_topic_wait_exists(NULL, state.topics[t],
                                               config->partitions[t], -1,
                                               60 * 1000);
@@ -233,11 +240,13 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Create consumers */
         for (c = 0; c < config->consumer_cnt; c++) {
-                consumers[c] = test_create_share_consumer(config->group_name, NULL);
+                consumers[c] =
+                    test_create_share_consumer(config->group_name, NULL);
 
                 /* Configure group on first consumer */
                 if (c == 0) {
-                        test_share_set_auto_offset_reset(config->group_name, "earliest");
+                        test_share_set_auto_offset_reset(config->group_name,
+                                                         "earliest");
                 }
         }
 
@@ -258,18 +267,18 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Staggered start: wait before starting producers */
         if (config->staggered_start) {
-                TEST_SAY("Staggered start: waiting 2 seconds before producers\n");
+                TEST_SAY(
+                    "Staggered start: waiting 2 seconds before producers\n");
                 rd_sleep(2);
         }
 
         /* Start producer threads */
         msgs_per_producer = state.expected_total / config->producer_cnt;
         for (p = 0; p < config->producer_cnt; p++) {
-                producer_thread_args_t *args =
-                    rd_calloc(1, sizeof(*args));
-                args->state = &state;
-                args->producer_id = p;
-                args->msgs_to_produce = msgs_per_producer;
+                producer_thread_args_t *args = rd_calloc(1, sizeof(*args));
+                args->state                  = &state;
+                args->producer_id            = p;
+                args->msgs_to_produce        = msgs_per_producer;
                 /* Last producer handles remainder */
                 if (p == config->producer_cnt - 1) {
                         args->msgs_to_produce +=
@@ -293,7 +302,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                 int attempts    = max_attempts;
                 int idle_rounds = 0;
 
-                TEST_SAY("Starting consumption (producers running in background)\n");
+                TEST_SAY(
+                    "Starting consumption (producers running in background)\n");
 
                 while (state.total_consumed < state.expected_total &&
                        attempts-- > 0 && idle_rounds < 30) {
@@ -316,7 +326,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                         if (!batch[m]->err) {
                                                 if (config->explicit_ack) {
                                                         rd_kafka_share_acknowledge_type(
-                                                            consumers[c], batch[m],
+                                                            consumers[c],
+                                                            batch[m],
                                                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                                 }
                                                 state.total_consumed++;
@@ -342,7 +353,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
                         if (attempts % 10 == 0) {
                                 TEST_SAY("Progress: consumed %d/%d\n",
-                                         state.total_consumed, state.expected_total);
+                                         state.total_consumed,
+                                         state.expected_total);
                         }
                 }
         }
@@ -385,7 +397,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                         if (!batch[m]->err) {
                                                 if (config->explicit_ack) {
                                                         rd_kafka_share_acknowledge_type(
-                                                            consumers[c], batch[m],
+                                                            consumers[c],
+                                                            batch[m],
                                                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                                 }
                                                 state.total_consumed++;
@@ -446,8 +459,7 @@ static void test_1p_1c_1t_1part(void) {
             .partitions         = {1},
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-1p1c1t1p",
-            .test_name          = "1 producer, 1 consumer, 1 topic, 1 partition"
-        };
+            .test_name = "1 producer, 1 consumer, 1 topic, 1 partition"};
         run_concurrent_test(&config);
 }
 
@@ -462,8 +474,7 @@ static void test_1p_4c_1t_4part(void) {
             .partitions         = {4},
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-1p4c1t4p",
-            .test_name          = "1 producer, 4 consumers, 1 topic, 4 partitions"
-        };
+            .test_name = "1 producer, 4 consumers, 1 topic, 4 partitions"};
         run_concurrent_test(&config);
 }
 
@@ -478,8 +489,7 @@ static void test_4p_1c_1t_4part(void) {
             .partitions         = {4},
             .msgs_per_partition = 1250,
             .group_name         = "share-conc-4p1c1t4p",
-            .test_name          = "4 producers, 1 consumer, 1 topic, 4 partitions"
-        };
+            .test_name = "4 producers, 1 consumer, 1 topic, 4 partitions"};
         run_concurrent_test(&config);
 }
 
@@ -494,8 +504,7 @@ static void test_4p_4c_1t_4part(void) {
             .partitions         = {4},
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-4p4c1t4p",
-            .test_name          = "4 producers, 4 consumers, 1 topic, 4 partitions"
-        };
+            .test_name = "4 producers, 4 consumers, 1 topic, 4 partitions"};
         run_concurrent_test(&config);
 }
 
@@ -514,8 +523,8 @@ static void test_2p_2c_3t_2part(void) {
             .partitions         = {2, 2, 2},
             .msgs_per_partition = 1666,
             .group_name         = "share-conc-2p2c3t2p",
-            .test_name          = "2 producers, 2 consumers, 3 topics, 2 partitions each"
-        };
+            .test_name =
+                "2 producers, 2 consumers, 3 topics, 2 partitions each"};
         run_concurrent_test(&config);
 }
 
@@ -530,9 +539,8 @@ static void test_2p_2c_8t_1part(void) {
             .partitions         = {1, 1, 1, 1, 1, 1, 1, 1},
             .msgs_per_partition = 1250,
             .group_name         = "share-conc-2p2c8t1p",
-            .test_name          = "2 producers, 2 consumers, 8 topics, 1 partition each",
-            .max_attempts       = 150
-        };
+            .test_name = "2 producers, 2 consumers, 8 topics, 1 partition each",
+            .max_attempts = 150};
         run_concurrent_test(&config);
 }
 
@@ -551,8 +559,8 @@ static void test_1p_8c_1t_1part(void) {
             .partitions         = {1},
             .msgs_per_partition = 40000,
             .group_name         = "share-conc-1p8c1t1p",
-            .test_name          = "1 producer, 8 consumers, 1 partition (high contention)"
-        };
+            .test_name =
+                "1 producer, 8 consumers, 1 partition (high contention)"};
         run_concurrent_test(&config);
 }
 
@@ -567,8 +575,8 @@ static void test_2p_6c_1t_2part(void) {
             .partitions         = {2},
             .msgs_per_partition = 15000,
             .group_name         = "share-conc-2p6c1t2p",
-            .test_name          = "2 producers, 6 consumers, 2 partitions (3:1 consumer ratio)"
-        };
+            .test_name =
+                "2 producers, 6 consumers, 2 partitions (3:1 consumer ratio)"};
         run_concurrent_test(&config);
 }
 
@@ -588,8 +596,7 @@ static void test_explicit_ack_4p_4c(void) {
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-explicit-4p4c",
             .test_name          = "4 producers, 4 consumers, explicit ack",
-            .explicit_ack       = rd_true
-        };
+            .explicit_ack       = rd_true};
         run_concurrent_test(&config);
 }
 
@@ -609,8 +616,7 @@ static void test_staggered_start(void) {
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-staggered",
             .test_name          = "Staggered start: consumers before producers",
-            .staggered_start    = rd_true
-        };
+            .staggered_start    = rd_true};
         run_concurrent_test(&config);
 }
 
@@ -630,8 +636,7 @@ static void test_high_volume_20k(void) {
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-highvol-20k",
             .test_name          = "High volume: 4p x 4c x 20k messages",
-            .max_attempts       = 150
-        };
+            .max_attempts       = 150};
         run_concurrent_test(&config);
 }
 
@@ -646,9 +651,8 @@ static void test_high_volume_many_partitions(void) {
             .partitions         = {8},
             .msgs_per_partition = 2500,
             .group_name         = "share-conc-highvol-8p",
-            .test_name          = "High volume: 8 partitions x 2.5k messages each",
-            .max_attempts       = 150
-        };
+            .test_name    = "High volume: 8 partitions x 2.5k messages each",
+            .max_attempts = 150};
         run_concurrent_test(&config);
 }
 
@@ -667,8 +671,7 @@ static void test_8p_2c(void) {
             .partitions         = {4},
             .msgs_per_partition = 2500,
             .group_name         = "share-conc-8p2c",
-            .test_name          = "8 producers, 2 consumers (producer heavy)"
-        };
+            .test_name          = "8 producers, 2 consumers (producer heavy)"};
         run_concurrent_test(&config);
 }
 
@@ -683,8 +686,7 @@ static void test_2p_8c(void) {
             .partitions         = {4},
             .msgs_per_partition = 10000,
             .group_name         = "share-conc-2p8c",
-            .test_name          = "2 producers, 8 consumers (consumer heavy)"
-        };
+            .test_name          = "2 producers, 8 consumers (consumer heavy)"};
         run_concurrent_test(&config);
 }
 
@@ -703,9 +705,8 @@ static void test_complex_varied_partitions(void) {
             .partitions         = {1, 2, 3, 4},
             .msgs_per_partition = 2000,
             .group_name         = "share-conc-complex-varied",
-            .test_name          = "4 topics with 1,2,3,4 partitions respectively",
-            .max_attempts       = 150
-        };
+            .test_name    = "4 topics with 1,2,3,4 partitions respectively",
+            .max_attempts = 150};
         run_concurrent_test(&config);
 }
 
@@ -720,9 +721,8 @@ static void test_max_concurrent(void) {
             .partitions         = {4, 4, 4, 4},
             .msgs_per_partition = 3125,
             .group_name         = "share-conc-max",
-            .test_name          = "Maximum: 10 producers, 10 consumers, 4 topics",
-            .max_attempts       = 200
-        };
+            .test_name    = "Maximum: 10 producers, 10 consumers, 4 topics",
+            .max_attempts = 200};
         run_concurrent_test(&config);
 }
 
@@ -743,8 +743,7 @@ static void test_slow_consumers(void) {
             .group_name         = "share-conc-slow-consumer",
             .test_name          = "Fast producers, slow consumers",
             .consumer_delay_ms  = 50,
-            .max_attempts       = 200
-        };
+            .max_attempts       = 200};
         run_concurrent_test(&config);
 }
 
@@ -761,8 +760,7 @@ static void test_slow_producers(void) {
             .group_name         = "share-conc-slow-producer",
             .test_name          = "Slow producers, fast consumers",
             .producer_delay_ms  = 50,
-            .max_attempts       = 200
-        };
+            .max_attempts       = 200};
         run_concurrent_test(&config);
 }
 
@@ -775,18 +773,18 @@ int main_0174_share_consumer_concurrency(int argc, char **argv) {
         test_timeout_set(600);
 
         /* Basic concurrency tests */
-        test_1p_1c_1t_1part();   /* Baseline: 1 producer, 1 consumer */
-        test_1p_4c_1t_4part();   /* Fan out: 1 producer, 4 consumers */
-        test_4p_1c_1t_4part();   /* Fan in: 4 producers, 1 consumer */
-        test_4p_4c_1t_4part();   /* Symmetric: 4 producers, 4 consumers */
+        test_1p_1c_1t_1part(); /* Baseline: 1 producer, 1 consumer */
+        test_1p_4c_1t_4part(); /* Fan out: 1 producer, 4 consumers */
+        test_4p_1c_1t_4part(); /* Fan in: 4 producers, 1 consumer */
+        test_4p_4c_1t_4part(); /* Symmetric: 4 producers, 4 consumers */
 
         /* Multi-topic tests */
-        test_2p_2c_3t_2part();   /* Multiple topics */
-        test_2p_2c_8t_1part();   /* Many topics */
+        test_2p_2c_3t_2part(); /* Multiple topics */
+        test_2p_2c_8t_1part(); /* Many topics */
 
         /* High contention tests */
-        test_1p_8c_1t_1part();   /* Many consumers, 1 partition */
-        test_2p_6c_1t_2part();   /* More consumers than partitions */
+        test_1p_8c_1t_1part(); /* Many consumers, 1 partition */
+        test_2p_6c_1t_2part(); /* More consumers than partitions */
 
         /* Explicit acknowledgement */
         test_explicit_ack_4p_4c();
@@ -799,8 +797,8 @@ int main_0174_share_consumer_concurrency(int argc, char **argv) {
         test_high_volume_many_partitions();
 
         /* Asymmetric configurations */
-        test_8p_2c();            /* Producer heavy */
-        test_2p_8c();            /* Consumer heavy */
+        test_8p_2c(); /* Producer heavy */
+        test_2p_8c(); /* Consumer heavy */
 
         /* Complex scenarios */
         test_complex_varied_partitions();

@@ -3931,8 +3931,11 @@ static void rd_kafka_share_commit_sync_abort_wakeup(rd_kafka_t *rk,
  */
 static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
                                                       rd_kafka_cgrp_t *rkcg) {
-        /* Check if wakeup was called - abort immediately */
-        if (rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+        /* Check if wakeup was called - abort immediately.
+         * Only abort if there's an active request (id > 0) to prevent
+         * accessing NULL results after request has completed. */
+        if (rkcg->rkcg_commit_sync_request.id > 0 &&
+            rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
                 rd_kafka_share_commit_sync_abort_wakeup(rk, rkcg);
                 return;
         }
@@ -4353,6 +4356,7 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
                            int timeout_ms,
                            rd_kafka_topic_partition_list_t **partitions) {
         rd_kafka_t *rk = rkshare->rkshare_rk;
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
         rd_kafka_op_t *rko;
         rd_kafka_op_t *rko_reply;
         rd_list_t *ack_batches;
@@ -4367,6 +4371,16 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         if (unlikely((error = rd_kafka_share_consumer_closed_or_closing_error(
                           rkshare)) != NULL))
                 return error;
+
+        /* Check if wakeup was called before commit_sync started.
+         * Matches Java behavior where wakeup() before commitSync()
+         * causes immediate WakeupException. */
+        if (rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "commit_sync aborted: wakeup called before start");
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__WAKEUP,
+                                          "Wakeup called before commit_sync");
+        }
 
         rd_kafka_dbg(rk, CGRP, "SHARE",
                      "Committing synchronously with timeout %d ms", timeout_ms);

@@ -421,6 +421,13 @@ typedef struct rd_kafka_mock_broker_s {
         uint16_t port;
         char *rack;
         rd_bool_t up;
+        /**< If false, broker is hidden from Metadata responses and skipped
+         *   when assigning partition replicas, but its TCP connections and
+         *   listen socket remain active so in-flight requests can still
+         *   complete. Used by rd_kafka_mock_broker_remove_from_metadata to
+         *   simulate a KIP-932 broker decommission seen via metadata
+         *   refresh, decoupled from the connection drop. Default: rd_true. */
+        rd_bool_t in_metadata;
         rd_ts_t rtt; /**< RTT in microseconds */
 
         rd_socket_t listen_s; /**< listen() socket */

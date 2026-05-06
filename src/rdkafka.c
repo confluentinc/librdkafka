@@ -3258,30 +3258,41 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
             rko_orig->rko_u.share_fetch.commit_sync_request_id ==
                 rkcg->rkcg_commit_sync_request.id) {
-                rd_kafka_topic_partition_list_t *ack_results =
-                    rko_orig->rko_u.share_fetch.ack_results;
+                rd_list_t *ack_details =
+                    rko_orig->rko_u.share_fetch.ack_details;
 
-                if (ack_results) {
+                /* Per-partition errors are carried on each batch's
+                 * rktpar->err. The broker thread sets these on both
+                 * success (per-partition error from response via parser)
+                 * and top-level error (top-level err on each batch via
+                 * rd_kafka_share_fetch_op_reply_with_err helper).
+                 *
+                 * Defensive: if the helper was bypassed (e.g. q_enq on
+                 * a disabled rkb_ops queue at rdkafka_queue.h:440 falls
+                 * through to rd_kafka_op_reply directly) the batch err
+                 * is still _IN_PROGRESS from build_ack_details. Override
+                 * with rko_err so the sentinel doesn't leak to the
+                 * app. _IN_PROGRESS check is sufficient because the
+                 * normal helper path overwrites _IN_PROGRESS first
+                 * (buf callback init -> INVALID_RECORD_STATE -> per-
+                 * partition err or top-level err). */
+                if (ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
                         int k;
-                        for (k = 0; k < ack_results->cnt; k++) {
-                                rd_kafka_topic_partition_t *src =
-                                    &ack_results->elems[k];
-                                rd_kafka_topic_partition_t *dst =
-                                    rd_kafka_topic_partition_list_find(
-                                        rkcg->rkcg_commit_sync_request.results,
-                                        src->topic, src->partition);
+                        RD_LIST_FOREACH(batch, ack_details, k) {
+                                rd_kafka_topic_partition_t *dst;
+                                if (rko_orig->rko_err &&
+                                    batch->rktpar->err ==
+                                        RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                        batch->rktpar->err = rko_orig->rko_err;
+                                dst = rd_kafka_topic_partition_list_find(
+                                    rkcg->rkcg_commit_sync_request.results,
+                                    batch->rktpar->topic,
+                                    batch->rktpar->partition);
                                 if (dst)
-                                        dst->err = src->err;
+                                        dst->err = batch->rktpar->err;
                         }
                 }
-
-                /* TODO KIP-932: When broker reply has a top-level error
-                 * (e.g. SHARE_SESSION_NOT_FOUND, __TRANSPORT, __DESTROY)
-                 * ack_results is NULL but partitions handled by this
-                 * broker remain as _IN_PROGRESS sentinel. Should map
-                 * rko_orig->rko_err to all partitions that were sent
-                 * to this broker so they don't leak _IN_PROGRESS to
-                 * the caller. */
 
                 rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt--;
 
@@ -3913,12 +3924,14 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
 
         /* TODO: Verify that __TIMED_OUT (local timeout) is the correct
          *  error here rather than REQUEST_TIMED_OUT (broker error). */
-        /* Fill partitions still IN_PROGRESS with __TIMED_OUT */
+        /* Fill partitions still IN_PROGRESS with REQUEST_TIMED_OUT
+         * (matches Java's commit_sync deadline behavior at
+         * ShareConsumeRequestManager.handleAcknowledgeTimedOut). */
         results = rkcg->rkcg_commit_sync_request.results;
         for (i = 0; i < results->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &results->elems[i];
                 if (rktpar->err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
-                        rktpar->err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                        rktpar->err = RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
         }
 
         rd_kafka_share_commit_sync_send_response(rkcg);

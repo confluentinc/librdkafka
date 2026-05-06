@@ -68,6 +68,7 @@
 #include "rdkafka_idempotence.h"
 #include "rdkafka_txnmgr.h"
 #include "rdkafka_fetcher.h"
+#include "rdkafka_share_acknowledgement.h"
 #include "rdtime.h"
 #include "rdcrc32.h"
 #include "rdrand.h"
@@ -3605,7 +3606,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
                                      "instance or broker is terminating");
-                        rd_kafka_op_reply(
+                        rd_kafka_share_fetch_op_reply_with_err(
                             rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
                 } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
                         /* TODO KIP-932: The main thread should check
@@ -3618,13 +3619,14 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                             "Ignoring SHARE_FETCH op: "
                             "broker not up (state %s)",
                             rd_kafka_broker_state_names[rkb->rkb_state]);
-                        rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
+                        rd_kafka_share_fetch_op_reply_with_err(
+                            rko, RD_KAFKA_RESP_ERR__STATE);
                 } else if (rkb->rkb_fetching) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
                                      "already fetching");
-                        rd_kafka_op_reply(rko,
-                                          RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
+                        rd_kafka_share_fetch_op_reply_with_err(
+                            rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
                 } else if (rko->rko_u.share_fetch.should_leave) {
                         rd_kafka_broker_share_fetch_session_leave(rkb, rko,
                                                                   rd_clock());

@@ -330,9 +330,115 @@ static void do_test(rd_bool_t with_queue) {
 }
 
 
+/**
+ * @name Test LeaveGroup handling when coordinator becomes unavailable
+ *
+ * Verifies that rd_kafka_cgrp_handle_LeaveGroup() correctly handles the case
+ * where the coordinator broker (rkb) is NULL when the consumer group initiates
+ * LeaveGroup during shutdown.
+ *
+ * Previously, rd_kafka_dbg() calls in the error path would dereference
+ * rkb->rkb_rk when rkb was NULL, causing a SIGSEGV crash.
+ *
+ * The fix uses the always-valid `rk` parameter instead of `rkb->rkb_rk`.
+ */
+
+static int leavegroup_allowed_error;
+
+static int leavegroup_error_is_fatal_cb(rd_kafka_t *rk,
+                                        rd_kafka_resp_err_t err,
+                                        const char *reason) {
+        if (err == leavegroup_allowed_error ||
+            err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN ||
+            err == RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE ||
+            err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP) {
+                TEST_SAY("Ignoring allowed error: %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+                return 0;
+        }
+        return 1;
+}
+
+/**
+ * @brief Test that consumer close/destroy handles missing coordinator
+ *        gracefully and does not crash.
+ *
+ * Scenario:
+ * 1. Create a consumer and subscribe to a topic
+ * 2. Wait for consumer to join group and establish coordinator connection
+ * 3. Make coordinator unavailable (broker goes down)
+ * 4. Close/destroy the consumer, which triggers LeaveGroup
+ * 5. Verify no crash occurs (the bug would cause SIGSEGV here)
+ */
+static void do_test_leavegroup_no_coordinator(void) {
+        rd_kafka_t *consumer;
+        rd_kafka_conf_t *conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        rd_kafka_topic_partition_list_t *subscription;
+        rd_kafka_message_t *rkm;
+
+        SUB_TEST();
+
+        TEST_SKIP_MOCK_CLUSTER();
+
+        test_curr->is_fatal_cb   = leavegroup_error_is_fatal_cb;
+        leavegroup_allowed_error = RD_KAFKA_RESP_ERR__TRANSPORT;
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_group_initial_rebalance_delay_ms(mcluster, 0);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        rd_kafka_mock_coordinator_set(mcluster, "group", topic, 1);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", topic);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "session.timeout.ms", "6000");
+        test_conf_set(conf, "heartbeat.interval.ms", "1000");
+
+        consumer = test_create_consumer(topic, NULL, conf, NULL);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_subscribe(consumer, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        TEST_SAY("Waiting for consumer to join group and get assignment\n");
+        rkm = rd_kafka_consumer_poll(consumer, 10000);
+        if (rkm)
+                rd_kafka_message_destroy(rkm);
+
+        TEST_SAY(
+            "Simulating coordinator failure by making broker unavailable\n");
+        rd_kafka_mock_broker_set_down(mcluster, 1);
+
+        rd_sleep(1);
+
+        TEST_SAY(
+            "Destroying consumer - this triggers LeaveGroup "
+            "with coordinator unavailable\n");
+        rd_kafka_destroy(consumer);
+
+        TEST_SAY("Consumer destroyed successfully (no crash)\n");
+
+        test_mock_cluster_destroy(mcluster);
+
+        test_curr->is_fatal_cb   = NULL;
+        leavegroup_allowed_error = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0018_cgrp_term(int argc, char **argv) {
         do_test(rd_false /* rd_kafka_consumer_close() */);
         do_test(rd_true /*  rd_kafka_consumer_close_queue() */);
+        do_test_leavegroup_no_coordinator();
 
         return 0;
 }

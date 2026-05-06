@@ -719,17 +719,30 @@ static void setup_3broker_share_consumer(const char *test_name,
 /** is_fatal_cb hook scoped to test_close_with_broker_down: ignores
  *  the transport error and cascading ALL_BROKERS_DOWN that result from
  *  taking the mock broker down mid-close. */
-// static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
-//                                                    rd_kafka_resp_err_t err,
-//                                                    const char *reason) {
-//         if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
-//             err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
-//                 TEST_SAY("Ignoring expected error: %s: %s\n",
-//                          rd_kafka_err2name(err), reason);
-//                 return 0;
-//             }
-//         return 1;
-// }
+static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
+                                                   rd_kafka_resp_err_t err,
+                                                   const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                TEST_SAY("Ignoring expected error: %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+                return 0;
+        }
+        return 1;
+}
+
+struct delayed_down_state {
+        rd_kafka_mock_cluster_t *mcluster;
+        int32_t broker_id;
+};
+
+static int delayed_down_cb(void *arg) {
+        struct delayed_down_state *state = arg;
+        rd_sleep(2);
+        TEST_SAY("Setting broker %" PRId32 " down\n", state->broker_id);
+        rd_kafka_mock_broker_set_down(state->mcluster, state->broker_id);
+        return 0;
+}
 
 /*#################################################################################*/
 
@@ -1557,6 +1570,144 @@ static void test_close_with_broker_busy(void) {
 // }
 
 /**
+ * @brief Test: close with broker decommission.
+ *
+ * Validates the rko_op_cb fix: when a broker is decommissioned during close,
+ * the deferred leave op's __DESTROY reply must reach the handler so
+ * share_session_leave_remaining_cnt is decremented and close() completes.
+ *
+ * Sequence:
+ *  1. Consume from 3 brokers (sessions established on all 3)
+ *  2. Set high RTT on broker 1 so its ShareFetch response is in-flight
+ *  3. Background thread sets broker 1 DOWN after 2s
+ *  4. close() defers broker 1's leave (in-flight ShareFetch)
+ *  5. Connection drops → __TRANSPORT → reply handler enqueues leave op
+ *  6. Metadata refresh excludes broker 1 → decommission → __DESTROY
+ *  7. With rko_op_cb fix: close completes.  Without: hangs.
+ */
+static void test_close_with_broker_decommission(void) {
+        const int partition_cnt      = 3;
+        const int msgs_per_partition = 10;
+        const int total_msgs         = partition_cnt * msgs_per_partition;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        rd_kafka_error_t *close_err;
+        struct delayed_down_state state;
+        thrd_t thrd;
+        char topic[64], group[64], errstr[512];
+        int p, consumed, attempts;
+        size_t i, rcvd;
+        rd_ts_t t_start, t_elapsed_ms;
+
+        SUB_TEST("close-with-broker-decommission");
+
+        test_curr->is_fatal_cb = test_close_with_broker_down_is_fatal_cb;
+
+        rd_snprintf(topic, sizeof(topic), "mock-close-broker-decommission");
+        rd_snprintf(group, sizeof(group), "sg-close-broker-decommission");
+
+        mcluster = test_mock_cluster_new(3, &bootstraps);
+        enable_share_apis(mcluster);
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, partition_cnt,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        for (p = 0; p < partition_cnt; p++)
+                test_produce_msgs_easy_v(topic, 0, p, 0, msgs_per_partition, 16,
+                                         "bootstrap.servers", bootstraps, NULL);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "1000");
+
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create consumer: %s", errstr);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(consumer, subs),
+                    "Subscribe failed");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume all messages so share sessions are established
+         * with every partition leader (all 3 brokers). */
+        consumed = 0;
+        attempts = 0;
+        while (consumed < total_msgs && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(consumer, 3000, batch,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (i = 0; i < rcvd; i++) {
+                        if (!batch[i]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[i]);
+                }
+        }
+        TEST_ASSERT(consumed == total_msgs, "Expected %d messages, got %d",
+                    total_msgs, consumed);
+        TEST_SAY("Consumed all %d messages\n", consumed);
+
+        /* Set high RTT on broker 1 so the next ShareFetch response
+         * is still in-flight when close() starts. */
+        rd_kafka_mock_broker_set_rtt(mcluster, 1, 5000);
+
+        /* Trigger one more poll so broker 1 has an in-flight ShareFetch
+         * (rkb_share_fetch_enqueued=true).  Brokers 2/3 respond
+         * immediately; broker 1's response is delayed by RTT. */
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+        if (error)
+                rd_kafka_error_destroy(error);
+        for (i = 0; i < rcvd; i++)
+                rd_kafka_message_destroy(batch[i]);
+
+        /* Background thread: sleep 2s then set broker 1 DOWN.
+         * This triggers decommission via metadata refresh while
+         * close() is blocking. */
+        state.mcluster = mcluster;
+        state.broker_id = 1;
+        if (thrd_create(&thrd, delayed_down_cb, &state) != thrd_success)
+                TEST_FAIL("Failed to create background thread");
+
+        TEST_SAY("Calling close() — broker 1 will go down in ~2s\n");
+        t_start   = test_clock();
+        close_err = rd_kafka_share_consumer_close(consumer);
+        t_elapsed_ms = (test_clock() - t_start) / 1000;
+
+        TEST_SAY("Close completed in %" PRId64 "ms (err=%s)\n", t_elapsed_ms,
+                 close_err ? rd_kafka_error_string(close_err) : "none");
+        if (close_err)
+                rd_kafka_error_destroy(close_err);
+
+        TEST_ASSERT(t_elapsed_ms < 30000,
+                    "Close took too long (%" PRId64 "ms), "
+                    "likely hung on decommissioned broker",
+                    t_elapsed_ms);
+
+        thrd_join(thrd, NULL);
+
+        rd_kafka_mock_broker_set_up(mcluster, 1);
+        test_share_destroy(consumer);
+        test_mock_cluster_destroy(mcluster);
+
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Test: calling share-consumer APIs after close() completes.
  *
  * Verifies every guarded API returns RD_KAFKA_RESP_ERR__STATE with
@@ -1745,5 +1896,7 @@ int main_0178_share_consumer_close_local(int argc, char **argv) {
         /* TODO KIP-932: This test case hangs on destroy.
          * Include it once destroy is fixed */
         // test_close_with_broker_down();
+
+        test_close_with_broker_decommission();
         return 0;
 }

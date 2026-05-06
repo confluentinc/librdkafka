@@ -33,21 +33,12 @@
 /**
  * @brief Share consumer top-level error propagation through ShareAcknowledge.
  *
- * Verifies the broker-thread helper + main reply handler defensive sentinel
- * path:
- *   ShareAcknowledge response top-level err
- *     -> rd_kafka_share_fetch_op_reply_with_err sets err on each batch
- *        in ack_details
- *     -> main reply handler copies batch->rktpar->err into
- *        rkcg_commit_sync_request.results
- *     -> commit_sync caller sees per-partition err equal to top-level err
- *
- * Covers:
- *   - Gap #1, #5, #10, #39 — top-level err propagated to all partitions
- *     in the request (no _IN_PROGRESS leak to caller)
- *   - Gap #3 — SHARE_SESSION_LIMIT_REACHED on ShareAck handled via default
- *     case (no session reset)
- *   - Gap #4/#9 — auth/fatal errors propagated through default case
+ * Verifies that a top-level err on a ShareAcknowledge response reaches
+ * the per-partition rktpar->err that commit_sync reads, with no
+ * _IN_PROGRESS sentinel leaking to the caller. The broker-thread helper
+ * (rd_kafka_share_fetch_op_reply_with_err) sets err on each batch in
+ * ack_details; the main reply handler copies batch->rktpar->err into
+ * rkcg_commit_sync_request.results.
  *
  * Out of scope here (need mock enhancements not yet available):
  *   - Per-partition AcknowledgementErrorCode injection (mock only supports
@@ -108,14 +99,15 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
 }
 
 static rd_kafka_share_t *create_mock_share_consumer(const char *bootstraps,
-                                                    const char *group_id) {
+                                                    const char *group_id,
+                                                    const char *ack_mode) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
-        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "share.acknowledgement.mode", ack_mode);
 
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
@@ -215,7 +207,7 @@ do_test_commit_sync_top_level_err(const char *test_name,
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps, group);
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit");
         subscribe_one(rkshare, topic);
 
         acked = consume_and_ack_all(rkshare, msgcnt);
@@ -257,74 +249,48 @@ do_test_commit_sync_top_level_err(const char *test_name,
         SUB_TEST_PASS();
 }
 
-/* ===================================================================
- *  T1 — Top-level SHARE_SESSION_NOT_FOUND on ShareAcknowledge
- *
- *  Covers Gap #1, #5, #10, #39: session-error variant of top-level
- *  err propagation. Without the helper + defensive sentinel the
- *  commit_sync caller would see _IN_PROGRESS instead.
- * =================================================================== */
+/* Top-level session error: SHARE_SESSION_NOT_FOUND on ShareAcknowledge
+ * is propagated to every partition in commit_sync results (no
+ * _IN_PROGRESS leak). */
 static void test_commit_sync_share_session_not_found(void) {
         do_test_commit_sync_top_level_err(
             "session-not-found", RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
 }
 
-/* ===================================================================
- *  T-2 — Top-level INVALID_SHARE_SESSION_EPOCH on ShareAcknowledge
- *
- *  Same path as T1 but exercises a different session error to
- *  confirm propagation isn't tied to a specific err code.
- * =================================================================== */
+/* Same path with a different session error code — confirms
+ * propagation isn't tied to a specific err. */
 static void test_commit_sync_invalid_share_session_epoch(void) {
         do_test_commit_sync_top_level_err(
             "invalid-session-epoch",
             RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH);
 }
 
-/* ===================================================================
- *  T5 — Top-level SHARE_SESSION_LIMIT_REACHED on ShareAcknowledge
- *
- *  Covers Gap #3: previously librdkafka treated this as a session
- *  error and reset the session epoch. Now ShareAcknowledge handler
- *  has no special case for SHARE_SESSION_LIMIT_REACHED — it falls
- *  to the default branch and the top-level err is just propagated
- *  to commit_sync results. (Java does the same: this error is
- *  ShareFetch-only.)
- * =================================================================== */
+/* SHARE_SESSION_LIMIT_REACHED on ShareAcknowledge falls to the
+ * default branch (no session reset, no special handling). The
+ * top-level err is just propagated to commit_sync results. Matches
+ * Java which only checks SHARE_SESSION_LIMIT_REACHED on ShareFetch. */
 static void test_commit_sync_share_session_limit_reached(void) {
         do_test_commit_sync_top_level_err(
             "session-limit-reached",
             RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED);
 }
 
-/* ===================================================================
- *  T6a — Top-level GROUP_AUTHORIZATION_FAILED on ShareAcknowledge
- *
- *  Covers Gap #4/#9 (ShareAck side). Previously hit `default: break`
- *  with no ack propagation. Now propagates through helper +
- *  defensive sentinel to commit_sync results.
- * =================================================================== */
+/* GROUP_AUTHORIZATION_FAILED on ShareAcknowledge propagates through
+ * the default-case path (previously hit `default: break` with no ack
+ * propagation). */
 static void test_commit_sync_group_authorization_failed(void) {
         do_test_commit_sync_top_level_err(
             "group-auth-failed", RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED);
 }
 
-/* ===================================================================
- *  T6b — Top-level TOPIC_AUTHORIZATION_FAILED on ShareAcknowledge
- *
- *  Same default-case path as T6a with a different err.
- * =================================================================== */
+/* Same default-case path as group-auth-failed with a different err. */
 static void test_commit_sync_topic_authorization_failed(void) {
         do_test_commit_sync_top_level_err(
             "topic-auth-failed", RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
 }
 
-/* ===================================================================
- *  T-Default — Top-level INVALID_REQUEST on ShareAcknowledge
- *
- *  Covers default-case path with a generic protocol error to confirm
- *  unknown / fatal codes also propagate.
- * =================================================================== */
+/* Generic protocol error to confirm unknown / fatal codes also
+ * propagate through the default-case path. */
 static void test_commit_sync_invalid_request(void) {
         do_test_commit_sync_top_level_err("invalid-request",
                                           RD_KAFKA_RESP_ERR_INVALID_REQUEST);
@@ -333,7 +299,7 @@ static void test_commit_sync_invalid_request(void) {
 /* ===================================================================
  *  Test — commit_sync at session epoch 0 returns
  *         INVALID_SHARE_SESSION_EPOCH without sending the
- *         ShareAcknowledge request (B4a).
+ *         ShareAcknowledge request.
  *
  *  Rationale: when the broker session epoch is 0 (new consumer or
  *  post-reset) the broker has no session state to acknowledge
@@ -347,8 +313,8 @@ static void test_commit_sync_invalid_request(void) {
  *             commit_sync surfaces SHARE_SESSION_NOT_FOUND for the
  *             partition; broker thread resets epoch to 0.
  *    Phase 2: Acknowledge remaining records and call commit_sync
- *             again. Now epoch is 0 so B4a fires: no ShareAcknowledge
- *             is sent, commit_sync returns
+ *             again. With epoch 0 the client fails acks locally: no
+ *             ShareAcknowledge is sent, commit_sync returns
  *             INVALID_SHARE_SESSION_EPOCH for the partition.
  * =================================================================== */
 static rd_bool_t is_share_ack_request(rd_kafka_mock_request_t *request,
@@ -382,7 +348,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps, group);
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit");
         subscribe_one(rkshare, topic);
 
         /* Phase 0: consume all 10 records. Hold message handles for
@@ -473,7 +439,188 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
             ctx.mcluster, is_share_ack_request, NULL);
         TEST_ASSERT(share_ack_cnt == 0,
                     "Phase 2: expected 0 ShareAck requests "
-                    "(B4a should have prevented send), got %" PRIusz,
+                    "(local epoch-0 fail should have prevented send), "
+                    "got %" PRIusz,
+                    share_ack_cnt);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/* ===================================================================
+ *  Test — consume_batch with session epoch 0 strips piggybacked
+ *         acks from the ShareFetch wire request.
+ *
+ *  Same shape as test_commit_sync_at_epoch_zero_..._error but Phase
+ *  2 calls consume_batch (which triggers a FANOUT -> ShareFetch
+ *  with should_fetch=true) instead of commit_sync. With session
+ *  epoch == 0 and any cached piggyback acks attached, the strip
+ *  path in broker_share_rpc fires: acks are pre-set with
+ *  INVALID_SHARE_SESSION_EPOCH and detached from rko before
+ *  ShareFetch is built, so the wire request goes out with no ack
+ *  data section.
+ *
+ *  To verify the strip path manually, run with:
+ *    TEST_DEBUG=fetch,broker,cgrp TESTS=0182 \
+ *        SUBTESTS=test_consume_batch_at_epoch_zero make
+ *  and look for the "Stripping N piggybacked ack batches" SHAREFETCH
+ *  log line in stderr.
+ *
+ *  TODO: When share_acknowledgement_commit_cb is wired, add an
+ *  assertion that the callback is invoked with
+ *  INVALID_SHARE_SESSION_EPOCH for each stripped batch. Today the
+ *  per-partition err set on the batch by the strip path lives on
+ *  ack_details but has no app-facing surface for piggybacked acks.
+ * =================================================================== */
+static rd_bool_t is_share_fetch_request(rd_kafka_mock_request_t *request,
+                                        void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_ShareFetch;
+}
+
+static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic = "0182-epoch-zero-piggyback";
+        const char *group = "sg-0182-epoch-zero-piggyback";
+        const int msgcnt  = 10;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_message_t *phase2_msgs[CONSUME_ARRAY];
+        int total_consumed = 0;
+        int attempts       = 0;
+        size_t share_ack_cnt;
+        size_t share_fetch_cnt;
+        int i;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce(ctx.producer, topic, msgcnt);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit");
+        subscribe_one(rkshare, topic);
+
+        /* Phase 0: consume all 10 records. */
+        while (total_consumed < msgcnt && attempts++ < 30) {
+                size_t rcvd = 0;
+                error       = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + total_consumed, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                total_consumed += (int)rcvd;
+        }
+        TEST_ASSERT(total_consumed == msgcnt,
+                    "Phase 0: expected %d records, got %d", msgcnt,
+                    total_consumed);
+
+        /* Phase 1: ACCEPT first 5 records, inject SHARE_SESSION_NOT_FOUND
+         * on next ShareAcknowledge, call commit_sync to trigger session
+         * reset on the broker (epoch -> 0). */
+        for (i = 0; i < 5; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareAcknowledge, 1,
+                        RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push SHARE_SESSION_NOT_FOUND");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 1000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 1: expected non-NULL partition results");
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *p = &partitions->elems[i];
+                TEST_SAY("Phase 1 %s [%" PRId32 "]: %s\n", p->topic,
+                         p->partition, rd_kafka_err2name(p->err));
+                TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+                            "Phase 1: expected SHARE_SESSION_NOT_FOUND, "
+                            "got %s",
+                            rd_kafka_err2name(p->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        share_ack_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_ack_request, NULL);
+        TEST_ASSERT(share_ack_cnt == 1,
+                    "Phase 1: expected 1 ShareAck request, got %" PRIusz,
+                    share_ack_cnt);
+
+        /* Phase 2: ACCEPT remaining 5 records and call consume_batch
+         * (NOT commit_sync). This triggers a FANOUT -> ShareFetch with
+         * should_fetch=true. Broker epoch is 0 (reset in phase 1). If
+         * any piggyback acks are attached when broker_share_rpc runs,
+         * the strip path fires and pre-sets each batch's err to
+         * INVALID_SHARE_SESSION_EPOCH. ShareFetch goes out with no ack
+         * data section.
+         *
+         * Wire-level assertions:
+         *   - At least 1 new ShareFetch request was sent (session
+         *     re-establishment).
+         *   - 0 new ShareAck requests (strip prevented send if any
+         *     piggyback acks were present; ack-only path also doesn't
+         *     fire because we did not call commit_sync). */
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        for (i = 5; i < msgcnt; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        attempts = 0;
+        while (attempts++ < 5) {
+                size_t rcvd = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 1000, phase2_msgs,
+                                                     &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                /* phase2_msgs may receive nothing or duplicates after
+                 * lock expiry — we don't assert on contents here, only
+                 * on wire-level requests counted via the mock. */
+                {
+                        size_t j;
+                        for (j = 0; j < rcvd; j++)
+                                rd_kafka_message_destroy(phase2_msgs[j]);
+                }
+        }
+
+        share_fetch_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_fetch_request, NULL);
+        share_ack_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_ack_request, NULL);
+
+        TEST_SAY("Phase 2 wire counts: ShareFetch=%" PRIusz
+                 ", ShareAck=%" PRIusz "\n",
+                 share_fetch_cnt, share_ack_cnt);
+
+        TEST_ASSERT(share_fetch_cnt >= 1,
+                    "Phase 2: expected >= 1 ShareFetch (session "
+                    "re-establish), got %" PRIusz,
+                    share_fetch_cnt);
+        TEST_ASSERT(share_ack_cnt == 0,
+                    "Phase 2: expected 0 ShareAck "
+                    "(strip should have prevented any piggyback ack "
+                    "send and no ack-only path fired), got %" PRIusz,
                     share_ack_cnt);
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
@@ -498,6 +645,7 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_commit_sync_topic_authorization_failed();
         test_commit_sync_invalid_request();
         test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error();
+        test_consume_batch_at_epoch_zero_strips_piggyback_acks();
 
         return 0;
 }

@@ -1938,18 +1938,25 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                                                     void *opaque) {
         rd_kafka_op_t *rko_orig = opaque;
 
-        /* Initialize each batch's err to INVALID_RECORD_STATE. Any
-         * batch still with this value after processing means the
-         * partition was sent in the request but missing from the
-         * response — matches Java's INVALID_RESPONSE handling at
-         * ShareConsumeRequestManager.processingComplete. */
+        /* Upgrade _IN_PROGRESS to INVALID_RECORD_STATE on each batch.
+         * Any batch still at INVALID_RECORD_STATE after processing
+         * means the partition was sent in the request but missing
+         * from the response — matches Java's INVALID_RESPONSE
+         * handling at ShareConsumeRequestManager.processingComplete.
+         *
+         * Conditional override (only _IN_PROGRESS) preserves any err
+         * pre-set by callers before the request was sent (e.g. epoch
+         * 0 piggyback acks pre-failed locally with
+         * INVALID_SHARE_SESSION_EPOCH). */
         if (rko_orig->rko_u.share_fetch.ack_details) {
                 rd_kafka_share_ack_batches_t *batch;
                 int i;
                 RD_LIST_FOREACH(batch, rko_orig->rko_u.share_fetch.ack_details,
                                 i) {
-                        batch->rktpar->err =
-                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
+                        if (batch->rktpar->err ==
+                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                batch->rktpar->err =
+                                    RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
                 }
         }
 
@@ -2040,17 +2047,24 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
         rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
 
-        /* Initialize each batch's err to INVALID_RECORD_STATE. Any
-         * batch still with this value after processing means the
-         * partition's ack was not acknowledged in the response —
-         * matches Java's INVALID_RESPONSE handling. */
+        /* Upgrade _IN_PROGRESS to INVALID_RECORD_STATE on each batch.
+         * Any batch still at INVALID_RECORD_STATE after processing
+         * means the partition's ack was not acknowledged in the
+         * response — matches Java's INVALID_RESPONSE handling.
+         *
+         * Conditional override (only _IN_PROGRESS) preserves any err
+         * pre-set by callers before the request was sent (e.g. epoch
+         * 0 piggyback acks pre-failed locally with
+         * INVALID_SHARE_SESSION_EPOCH). */
         if (rko_orig->rko_u.share_fetch.ack_details) {
                 rd_kafka_share_ack_batches_t *batch;
                 int i;
                 RD_LIST_FOREACH(batch, rko_orig->rko_u.share_fetch.ack_details,
                                 i) {
-                        batch->rktpar->err =
-                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
+                        if (batch->rktpar->err ==
+                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                batch->rktpar->err =
+                                    RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
                 }
         }
 
@@ -2920,6 +2934,7 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
         rd_bool_t has_ack_details = ack_details && rd_list_cnt(ack_details) > 0;
         rd_list_t *toppars_to_add = NULL;
         rd_list_t *toppars_to_forget = NULL;
+        rd_list_t *stripped_acks     = NULL;
 
         if (!rko_orig->rko_u.share_fetch.should_fetch && !has_ack_details) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
@@ -2973,10 +2988,38 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
         toppars_to_add    = rkb->rkb_share_fetch_session.toppars_to_add;
         toppars_to_forget = rkb->rkb_share_fetch_session.toppars_to_forget;
 
-        /* TODO KIP-932: If epoch is 0 (new/reset session), fail
-         * piggybacked acks with INVALID_SHARE_SESSION_EPOCH and
-         * strip them from the request. The ShareFetch itself should
-         * still be sent to create the session. */
+        /* If session epoch is 0 (new/reset session) and we have
+         * piggybacked acks, the broker has no session state to ack
+         * against. Fail the acks locally with
+         * INVALID_SHARE_SESSION_EPOCH and strip them from the wire
+         * request. The ShareFetch itself still goes out to establish
+         * the session. Matches Java's ShareConsumeRequestManager. */
+        if (rkb->rkb_share_fetch_session.epoch == 0 && has_ack_details) {
+                rd_kafka_share_ack_batches_t *batch;
+                int i;
+
+                rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
+                             "Stripping %d piggybacked ack batches: "
+                             "session epoch is 0 (no session)",
+                             rd_list_cnt(ack_details));
+
+                /* Pre-set each batch's err. Conditional buf-cb init
+                 * preserves this; main reply handler propagates to
+                 * commit_sync results / acknowledgement callback. */
+                RD_LIST_FOREACH(batch, ack_details, i) {
+                        batch->rktpar->err =
+                            RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
+                }
+
+                /* Detach so ShareFetchRequest builds without the ack
+                 * data section. Restored after the request is built
+                 * so the buf reply handler / main thread reply
+                 * handler can still read the per-batch err. */
+                stripped_acks = rko_orig->rko_u.share_fetch.ack_details;
+                rko_orig->rko_u.share_fetch.ack_details = NULL;
+                has_ack_details                         = rd_false;
+        }
+
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                      "Sending ShareFetch Request with%s%s%s fetching messages",
                      has_ack_details ? " acknowledgements," : "",
@@ -2996,6 +3039,11 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
             toppars_to_forget, /* forgetting toppars */
             rko_orig,          /* rko (carries ack_details) */
             now);
+
+        /* Restore ack_details so the buf reply handler / main thread
+         * reply handler can read the pre-set per-batch err. */
+        if (stripped_acks)
+                rko_orig->rko_u.share_fetch.ack_details = stripped_acks;
 }
 
 /**

@@ -25,6 +25,12 @@ struct partition_state {
         int64_t max_offset;
 };
 
+/* A topic+partition pair, used as a key in the assigned-set. */
+struct tp_key {
+        char *topic;
+        int32_t partition;
+};
+
 struct consumer_state {
         int verbose;
         int enable_autocommit;
@@ -43,9 +49,24 @@ struct consumer_state {
         int is_consumer_protocol;
         int last_assignment_reported;
 
-        /* Serializes access to buf and related counters between the main
-         * poll thread and the rebalance callback (which runs on a
-         * librdkafka thread). */
+        /* Set of currently-assigned (topic, partition) pairs. Updated
+         * by rebalance_cb (full-replace on eager, incremental for
+         * cooperative). record_message() drops records for partitions
+         * not in this set — necessary because, around a rebalance,
+         * librdkafka may deliver in-flight records for partitions that
+         * have just been revoked. Without filtering, those records get
+         * counted here AND re-counted by the new owner that fetches
+         * from the last commit, breaking
+         *   total_consumed == current_position
+         * in the harness. Mirrors the Go POC's `currentAssignment`
+         * filter at the top of onRecordsReceived. */
+        struct tp_key *assigned;
+        int assigned_cnt;
+        int assigned_cap;
+
+        /* Serializes access to buf, assigned, and related counters
+         * between the main poll thread and the rebalance callback
+         * (which runs on a librdkafka thread). */
         pthread_mutex_t mtx;
 };
 
@@ -230,11 +251,99 @@ static struct partition_state *find_or_add_partition_locked(const char *topic,
         return ps;
 }
 
+/* Assigned-set helpers. All assume state.mtx is held by the caller. */
+
+static int assigned_contains_locked(const char *topic, int32_t partition) {
+        for (int i = 0; i < state.assigned_cnt; i++) {
+                if (state.assigned[i].partition == partition &&
+                    strcmp(state.assigned[i].topic, topic) == 0)
+                        return 1;
+        }
+        return 0;
+}
+
+static void assigned_add_locked(const char *topic, int32_t partition) {
+        if (assigned_contains_locked(topic, partition))
+                return;
+        if (state.assigned_cnt == state.assigned_cap) {
+                int new_cap = state.assigned_cap ? state.assigned_cap * 2 : 8;
+                state.assigned = realloc(state.assigned,
+                                         (size_t)new_cap *
+                                             sizeof(*state.assigned));
+                state.assigned_cap = new_cap;
+        }
+        state.assigned[state.assigned_cnt].topic     = strdup(topic);
+        state.assigned[state.assigned_cnt].partition = partition;
+        state.assigned_cnt++;
+}
+
+static void assigned_remove_locked(const char *topic, int32_t partition) {
+        for (int i = 0; i < state.assigned_cnt; i++) {
+                if (state.assigned[i].partition == partition &&
+                    strcmp(state.assigned[i].topic, topic) == 0) {
+                        free(state.assigned[i].topic);
+                        state.assigned[i] =
+                            state.assigned[--state.assigned_cnt];
+                        return;
+                }
+        }
+}
+
+static void assigned_clear_locked(void) {
+        for (int i = 0; i < state.assigned_cnt; i++)
+                free(state.assigned[i].topic);
+        state.assigned_cnt = 0;
+}
+
+/* Replace the entire assigned set with `parts` (eager rebalance:
+ * full-list semantics on ASSIGN). */
+static void assigned_replace_locked(
+    const rd_kafka_topic_partition_list_t *parts) {
+        assigned_clear_locked();
+        if (!parts)
+                return;
+        for (int i = 0; i < parts->cnt; i++)
+                assigned_add_locked(parts->elems[i].topic,
+                                    parts->elems[i].partition);
+}
+
+/* Add `parts` to the assigned set (cooperative ASSIGN: incremental). */
+static void assigned_add_list_locked(
+    const rd_kafka_topic_partition_list_t *parts) {
+        if (!parts)
+                return;
+        for (int i = 0; i < parts->cnt; i++)
+                assigned_add_locked(parts->elems[i].topic,
+                                    parts->elems[i].partition);
+}
+
+/* Remove `parts` from the assigned set (cooperative REVOKE: incremental). */
+static void assigned_remove_list_locked(
+    const rd_kafka_topic_partition_list_t *parts) {
+        if (!parts)
+                return;
+        for (int i = 0; i < parts->cnt; i++)
+                assigned_remove_locked(parts->elems[i].topic,
+                                       parts->elems[i].partition);
+}
+
 static void record_message(rd_kafka_t *rk, const rd_kafka_message_t *rkm) {
+        const char *topic = rd_kafka_topic_name(rkm->rkt);
+
         pthread_mutex_lock(&state.mtx);
+
+        /* Drop records for partitions we no longer own. librdkafka
+         * may deliver in-flight records after a partition has been
+         * revoked. Counting those would cause the harness to see
+         * total_consumed > current_position because the new owner
+         * will re-fetch and re-count the same offsets. */
+        if (!assigned_contains_locked(topic, rkm->partition)) {
+                pthread_mutex_unlock(&state.mtx);
+                return;
+        }
+
         struct partition_state *ps =
-            find_or_add_partition_locked(rd_kafka_topic_name(rkm->rkt),
-                                         rkm->partition);
+            find_or_add_partition_locked(topic, rkm->partition);
         ps->count++;
         if (rkm->offset < ps->min_offset)
                 ps->min_offset = rkm->offset;
@@ -272,6 +381,13 @@ static void rebalance_cb(rd_kafka_t *rk,
                         rd_kafka_assign(rk, parts);
                 }
                 pthread_mutex_lock(&state.mtx);
+                /* Update assigned-set so record_message can filter
+                 * post-revoke in-flight records. Eager replaces the
+                 * full set; cooperative is incremental-add. */
+                if (cooperative)
+                        assigned_add_list_locked(parts);
+                else
+                        assigned_replace_locked(parts);
                 state.last_assignment_reported = 1;
                 pthread_mutex_unlock(&state.mtx);
         } else if (err == RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS) {
@@ -290,6 +406,14 @@ static void rebalance_cb(rd_kafka_t *rk,
                 pthread_mutex_lock(&state.mtx);
                 rd_kafka_topic_partition_list_t *drained =
                     drain_batch_locked(rk);
+                /* Update assigned-set immediately so any subsequent
+                 * record_message() call drops in-flight records for
+                 * the now-revoked partitions. Eager fully clears;
+                 * cooperative is incremental-remove. */
+                if (cooperative)
+                        assigned_remove_list_locked(parts);
+                else
+                        assigned_clear_locked();
                 state.last_assignment_reported = 0;
                 pthread_mutex_unlock(&state.mtx);
                 if (drained)
@@ -402,11 +526,11 @@ static int stats_cb(rd_kafka_t *rk,
 
 /* -------------------- Assignment-strategy translation -------------------- */
 
-/* Map a Java class name like
+/* Map a single Java assignor class name like
  * "org.apache.kafka.clients.consumer.CooperativeStickyAssignor" to the
- * librdkafka strategy name "cooperative-sticky". Classic protocol only.
- * Returns a static/interned string or NULL if unrecognized. */
-static const char *translate_assignment_strategy(const char *java_class) {
+ * librdkafka strategy name "cooperative-sticky". Returns a static
+ * string or NULL if unrecognized. */
+static const char *translate_one_strategy(const char *java_class) {
         const char *simple = strrchr(java_class, '.');
         simple = simple ? simple + 1 : java_class;
 
@@ -419,6 +543,50 @@ static const char *translate_assignment_strategy(const char *java_class) {
         if (!strcmp(simple, "CooperativeStickyAssignor"))
                 return "cooperative-sticky";
         return NULL;
+}
+
+/* Translate a possibly comma-separated list of Java class names into a
+ * comma-separated list of librdkafka strategy names. Tests like
+ * `consumer_rolling_upgrade_test` pass multiple strategies to switch
+ * preference across rolling restarts. Returns a malloc'd string the
+ * caller must free, or NULL if any element is unrecognized. */
+static char *translate_assignment_strategy(const char *java_classes) {
+        char *input = strdup(java_classes);
+        if (!input)
+                return NULL;
+        char *result = malloc(strlen(java_classes) + 64);
+        if (!result) {
+                free(input);
+                return NULL;
+        }
+        result[0] = '\0';
+
+        int first = 1;
+        char *saveptr = NULL;
+        for (char *tok = strtok_r(input, ",", &saveptr); tok;
+             tok = strtok_r(NULL, ",", &saveptr)) {
+                /* Trim leading whitespace. */
+                while (*tok == ' ' || *tok == '\t')
+                        tok++;
+                /* Trim trailing whitespace. */
+                size_t len = strlen(tok);
+                while (len > 0 &&
+                       (tok[len - 1] == ' ' || tok[len - 1] == '\t')) {
+                        tok[--len] = '\0';
+                }
+                const char *mapped = translate_one_strategy(tok);
+                if (!mapped) {
+                        free(input);
+                        free(result);
+                        return NULL;
+                }
+                if (!first)
+                        strcat(result, ",");
+                strcat(result, mapped);
+                first = 0;
+        }
+        free(input);
+        return result;
 }
 
 /* -------------------- CLI -------------------- */
@@ -557,7 +725,7 @@ int main(int argc, char **argv) {
         if (group_instance_id)
                 CONF_SET("group.instance.id", group_instance_id);
         if (assignment_strategy && !state.is_consumer_protocol) {
-                const char *rd_strategy =
+                char *rd_strategy =
                     translate_assignment_strategy(assignment_strategy);
                 if (!rd_strategy) {
                         fprintf(stderr,
@@ -566,7 +734,11 @@ int main(int argc, char **argv) {
                         rd_kafka_conf_destroy(conf);
                         return 1;
                 }
+                fprintf(stderr,
+                        "%% Mapped assignment strategy %s -> %s\n",
+                        assignment_strategy, rd_strategy);
                 CONF_SET("partition.assignment.strategy", rd_strategy);
+                free(rd_strategy);
         }
         if (session_timeout_ms > 0) {
                 char buf[32];
@@ -637,6 +809,32 @@ int main(int argc, char **argv) {
                                 fprintf(stderr, "consumer poll: %s\n",
                                         rd_kafka_message_errstr(rkm));
                         rd_kafka_message_destroy(rkm);
+
+                        /* Detect fatal errors (e.g., FENCED_INSTANCE_ID
+                         * when another consumer joins with the same
+                         * group.instance.id). librdkafka latches a
+                         * fatal error on the rd_kafka_t; once set, the
+                         * consumer can never recover. We must terminate
+                         * and emit shutdown_complete so the harness
+                         * sees the consumer as dead. Mirrors the Go
+                         * POC's IsFatal() check. */
+                        char ferrstr[512];
+                        rd_kafka_resp_err_t ferr =
+                            rd_kafka_fatal_error(rk, ferrstr, sizeof(ferrstr));
+                        if (ferr) {
+                                fprintf(stderr,
+                                        "%% Fatal error %s: %s — "
+                                        "terminating immediately\n",
+                                        rd_kafka_err2name(ferr), ferrstr);
+                                /* Emit shutdown_complete and exit hard.
+                                 * Don't fall through to consumer_close()
+                                 * — closing a fenced consumer may hang
+                                 * trying to leave the group. Mirrors the
+                                 * Go POC's behavior. */
+                                emit_event("shutdown_complete");
+                                fflush(stdout);
+                                _exit(1);
+                        }
                         continue;
                 }
 
@@ -655,10 +853,13 @@ int main(int argc, char **argv) {
         rd_kafka_consumer_close(rk);
         rd_kafka_destroy(rk);
 
-        /* Release buf memory. */
+        /* Release buf + assigned-set memory. */
         for (int i = 0; i < state.buf_cnt; i++)
                 free(state.buf[i].topic);
         free(state.buf);
+        for (int i = 0; i < state.assigned_cnt; i++)
+                free(state.assigned[i].topic);
+        free(state.assigned);
 
         pthread_mutex_destroy(&state.mtx);
 

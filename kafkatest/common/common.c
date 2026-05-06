@@ -1,5 +1,5 @@
 /*
-* librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
@@ -175,7 +175,7 @@ int load_properties_file(const char *path,
                         continue;
                 }
 
-                *sep = '\0';
+                *sep      = '\0';
                 char *key = trim(line);
                 char *val = trim(sep + 1);
 
@@ -199,16 +199,17 @@ int apply_x_properties(const char *csv,
                 return -1;
         }
 
-        int rc = 0;
+        int rc        = 0;
         char *saveptr = NULL;
         for (char *tok = strtok_r(copy, ",", &saveptr); tok;
-             tok = strtok_r(NULL, ",", &saveptr)) {
-                tok     = trim(tok);
+             tok       = strtok_r(NULL, ",", &saveptr)) {
+                tok      = trim(tok);
                 char *eq = strchr(tok, '=');
                 if (!eq || eq == tok) {
-                        snprintf(errstr, errstr_size,
-                                 "Malformed -X property: %s (expected key=value)",
-                                 tok);
+                        snprintf(
+                            errstr, errstr_size,
+                            "Malformed -X property: %s (expected key=value)",
+                            tok);
                         rc = -1;
                         break;
                 }

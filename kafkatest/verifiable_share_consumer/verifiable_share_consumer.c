@@ -1,6 +1,32 @@
+/*
+* librdkafka - The Apache Kafka C/C++ library
+ *
+ * Copyright (c) 2026, Confluent Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 #define _POSIX_C_SOURCE 200809L
 
-#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -13,6 +39,7 @@
 
 #define POLL_TIMEOUT_MS   5000
 #define BATCH_CAPACITY    1024
+#define COMMIT_TIMEOUT_MS 60000
 
 enum ack_mode {
         ACK_AUTO,   /* share.acknowledgement.mode=implicit; implicit ack via
@@ -21,49 +48,35 @@ enum ack_mode {
         ACK_ASYNC   /* explicit ack + rd_kafka_share_commit_async */
 };
 
+#define MAX_TOPIC_LEN     256
+#define MAX_PARTITIONS    16
+
 struct partition_data {
-        char *topic;
+        char topic[MAX_TOPIC_LEN];
         int32_t partition;
-        int64_t *offsets;
+        int64_t offsets[BATCH_CAPACITY];
         int offsets_cnt;
-        int offsets_cap;
 };
 
-static void pd_init(struct partition_data *pd,
-                    const char *topic,
-                    int32_t partition) {
-        pd->topic       = strdup(topic);
-        pd->partition   = partition;
-        pd->offsets     = NULL;
-        pd->offsets_cnt = 0;
-        pd->offsets_cap = 0;
-}
-
 static void pd_append(struct partition_data *pd, int64_t offset) {
-        if (pd->offsets_cnt == pd->offsets_cap) {
-                int new_cap = pd->offsets_cap ? pd->offsets_cap * 2 : 16;
-                pd->offsets = realloc(pd->offsets,
-                                      (size_t)new_cap * sizeof(int64_t));
-                pd->offsets_cap = new_cap;
+        if (pd->offsets_cnt >= BATCH_CAPACITY) {
+                fprintf(stderr,
+                        "offsets array full (%d) for %s[%" PRId32 "]\n",
+                        BATCH_CAPACITY, pd->topic, pd->partition);
+                return;
         }
         pd->offsets[pd->offsets_cnt++] = offset;
 }
 
-static void pd_free(struct partition_data *pd) {
-        free(pd->topic);
-        free(pd->offsets);
-}
-
 /* Per-batch accumulator indexed by topic+partition. */
 struct partition_bucket {
-        struct partition_data *items;
+        struct partition_data items[MAX_PARTITIONS];
         int cnt;
-        int cap;
 };
 
 static void pb_reset(struct partition_bucket *pb) {
         for (int i = 0; i < pb->cnt; i++)
-                pd_free(&pb->items[i]);
+                pb->items[i].offsets_cnt = 0;
         pb->cnt = 0;
 }
 
@@ -75,14 +88,17 @@ static struct partition_data *pb_find_or_add(struct partition_bucket *pb,
                     strcmp(pb->items[i].topic, topic) == 0)
                         return &pb->items[i];
         }
-        if (pb->cnt == pb->cap) {
-                int new_cap = pb->cap ? pb->cap * 2 : 8;
-                pb->items   = realloc(pb->items,
-                                      (size_t)new_cap * sizeof(*pb->items));
-                pb->cap     = new_cap;
+        if (pb->cnt >= MAX_PARTITIONS) {
+                fprintf(stderr,
+                        "partition bucket full (%d); dropping %s[%" PRId32
+                        "]\n",
+                        MAX_PARTITIONS, topic, partition);
+                return &pb->items[pb->cnt - 1];
         }
         struct partition_data *pd = &pb->items[pb->cnt++];
-        pd_init(pd, topic, partition);
+        snprintf(pd->topic, sizeof(pd->topic), "%s", topic);
+        pd->partition   = partition;
+        pd->offsets_cnt = 0;
         return pd;
 }
 
@@ -183,14 +199,8 @@ static void emit_record_data(const rd_kafka_message_t *rkm) {
 /* -------------------- Share group config via admin API -------------------- */
 
 /* Set `share.auto.offset.reset` on the share group via IncrementalAlterConfigs.
- * Java's VerifiableShareConsumer does the same before subscribing (see
- * tools/src/main/java/.../VerifiableShareConsumer.java:405-421). Required
- * because share groups default to reset=latest, so a fresh group started
+ * Required because share groups default to reset=latest, so a fresh group started
  * after messages were already produced would consume nothing.
- *
- * Pattern taken from tests/0176-share_consumer_commit_sync.c via
- * test_share_set_auto_offset_reset. Uses only public APIs so it can
- * live in this binary.
  *
  * Returns 0 on success, -1 on failure. */
 static int set_share_group_offset_reset(const char *bootstrap,
@@ -258,6 +268,91 @@ static int set_share_group_offset_reset(const char *bootstrap,
         rd_kafka_queue_destroy(q);
         rd_kafka_destroy(admin);
         return rc;
+}
+
+/* Look up the per-partition error in a commit_sync result list.
+ * Returns RD_KAFKA_RESP_ERR_NO_ERROR if not present (commit_sync omits
+ * partitions that had nothing pending). */
+static rd_kafka_resp_err_t lookup_partition_err(
+    const rd_kafka_topic_partition_list_t *result,
+    const char *topic,
+    int32_t partition) {
+        for (int j = 0; j < result->cnt; j++) {
+                if (result->elems[j].partition == partition &&
+                    strcmp(result->elems[j].topic, topic) == 0)
+                        return result->elems[j].err;
+        }
+        return RD_KAFKA_RESP_ERR_UNKNOWN;
+}
+
+/* Run a synchronous commit and emit offsets_acknowledged events.
+ * Returns the number of offsets that committed successfully. */
+static int64_t handle_commit_sync(rd_kafka_share_t *rkshare,
+                                  struct partition_bucket *acked,
+                                  struct partition_bucket *acked_ok,
+                                  struct partition_bucket *acked_err,
+                                  int64_t acked_in_batch) {
+        rd_kafka_topic_partition_list_t *result = NULL;
+        rd_kafka_error_t *commit_error =
+            rd_kafka_share_commit_sync(rkshare, COMMIT_TIMEOUT_MS, &result);
+
+        /* Top-level commit_sync failure: no per-partition result to
+         * inspect. Emit the whole batch as failed. */
+        if (commit_error) {
+                char errmsg[256];
+                snprintf(errmsg, sizeof(errmsg), "%s",
+                         rd_kafka_error_string(commit_error));
+                rd_kafka_error_destroy(commit_error);
+                if (result)
+                        rd_kafka_topic_partition_list_destroy(result);
+                if (acked_in_batch > 0)
+                        emit_offsets_acknowledged(acked, acked_in_batch, 0,
+                                                  errmsg);
+                return 0;
+        }
+
+        /* Split `acked` into per-partition-result buckets. A commit may
+         * partially succeed: some partitions OK, others failed. Emit one
+         * offsets_acknowledged per outcome so the harness records them
+         * correctly. */
+        pb_reset(acked_ok);
+        pb_reset(acked_err);
+        int64_t ok_count  = 0;
+        int64_t err_count = 0;
+        char errmsg[256]  = "";
+
+        for (int i = 0; i < acked->cnt; i++) {
+                struct partition_data *src = &acked->items[i];
+                rd_kafka_resp_err_t perr =
+                    lookup_partition_err(result, src->topic, src->partition);
+
+                struct partition_bucket *dst =
+                    perr == RD_KAFKA_RESP_ERR_NO_ERROR ? acked_ok : acked_err;
+                struct partition_data *pd_dst =
+                    pb_find_or_add(dst, src->topic, src->partition);
+                for (int k = 0; k < src->offsets_cnt; k++)
+                        pd_append(pd_dst, src->offsets[k]);
+
+                if (perr == RD_KAFKA_RESP_ERR_NO_ERROR) {
+                        ok_count += src->offsets_cnt;
+                }
+                else {
+                        err_count += src->offsets_cnt;
+                        if (!*errmsg)
+                                snprintf(errmsg, sizeof(errmsg), "%s",
+                                         rd_kafka_err2str(perr));
+                }
+        }
+
+        if (result)
+                rd_kafka_topic_partition_list_destroy(result);
+
+        if (ok_count > 0)
+                emit_offsets_acknowledged(acked_ok, ok_count, 1, "");
+        if (err_count > 0)
+                emit_offsets_acknowledged(acked_err, err_count, 0, errmsg);
+
+        return ok_count;
 }
 
 /* -------------------- CLI -------------------- */
@@ -363,22 +458,15 @@ int main(int argc, char **argv) {
         char errstr[512];
         rd_kafka_conf_t *conf = rd_kafka_conf_new();
 
-#define CONF_SET(k, v)                                                       \
-        do {                                                                 \
-                if (rd_kafka_conf_set(conf, k, v, errstr, sizeof(errstr)) != \
-                    RD_KAFKA_CONF_OK) {                                      \
-                        fprintf(stderr, "%s: %s\n", k, errstr);              \
-                        rd_kafka_conf_destroy(conf);                         \
-                        return 1;                                            \
-                }                                                            \
-        } while (0)
-
-        CONF_SET("bootstrap.servers", bootstrap);
-        CONF_SET("group.id", group_id);
-        CONF_SET("share.acknowledgement.mode",
-                 ack_mode == ACK_AUTO ? "implicit" : "explicit");
-        if (debug_flags)
-                CONF_SET("debug", debug_flags);
+        if (conf_set(conf, "bootstrap.servers", bootstrap) == -1)
+                return 1;
+        if (conf_set(conf, "group.id", group_id) == -1)
+                return 1;
+        if (conf_set(conf, "share.acknowledgement.mode",
+                     ack_mode == ACK_AUTO ? "implicit" : "explicit") == -1)
+                return 1;
+        if (debug_flags && conf_set(conf, "debug", debug_flags) == -1)
+                return 1;
 
         if (config_file &&
             load_properties_file(config_file, conf, errstr, sizeof(errstr)) ==
@@ -393,8 +481,6 @@ int main(int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
-
-#undef CONF_SET
 
         rd_kafka_share_t *rkshare =
             rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
@@ -434,22 +520,19 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        struct partition_bucket consumed  = {0};
-        struct partition_bucket acked     = {0};
-        struct partition_bucket acked_ok  = {0};
-        struct partition_bucket acked_err = {0};
+        static struct partition_bucket consumed, acked, acked_ok, acked_err;
         rd_kafka_message_t *batch[BATCH_CAPACITY];
         int64_t total_acknowledged = 0;
 
         while (run &&
                (max_messages < 0 || total_acknowledged < max_messages)) {
                 size_t rcvd = 0;
-                rd_kafka_error_t *e = rd_kafka_share_consume_batch(
+                rd_kafka_error_t *error = rd_kafka_share_consume_batch(
                     rkshare, POLL_TIMEOUT_MS, batch, &rcvd);
-                if (e) {
+                if (error) {
                         fprintf(stderr, "consume_batch: %s\n",
-                                rd_kafka_error_string(e));
-                        rd_kafka_error_destroy(e);
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
                         continue;
                 }
                 if (rcvd == 0)
@@ -457,8 +540,8 @@ int main(int argc, char **argv) {
 
                 pb_reset(&consumed);
                 pb_reset(&acked);
-                int64_t batch_consumed = 0;
-                int64_t batch_acked    = 0;
+                int64_t consumed_in_batch = 0;
+                int64_t acked_in_batch    = 0;
 
                 for (size_t i = 0; i < rcvd; i++) {
                         rd_kafka_message_t *rkm = batch[i];
@@ -473,39 +556,35 @@ int main(int argc, char **argv) {
                         struct partition_data *pd_c =
                             pb_find_or_add(&consumed, t, rkm->partition);
                         pd_append(pd_c, rkm->offset);
-                        batch_consumed++;
+                        consumed_in_batch++;
 
                         if (verbose)
                                 emit_record_data(rkm);
 
                         /* In explicit (sync/async) mode we ACCEPT each
-                         * record. The Java verifiable share consumer
-                         * always accepts; chaos scenarios use RELEASE/
-                         * REJECT are out of scope here. */
+                         * record. */
                         if (ack_mode != ACK_AUTO) {
-                                rd_kafka_resp_err_t ae =
+                                rd_kafka_resp_err_t ack_err =
                                     rd_kafka_share_acknowledge_type(
                                         rkshare, rkm,
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-                                if (ae)
+                                if (ack_err)
                                         fprintf(stderr,
                                                 "acknowledge: %s\n",
-                                                rd_kafka_err2str(ae));
+                                                rd_kafka_err2str(ack_err));
                         }
 
-                        /* Track what we are about to commit. For sync
-                         * mode we'll post-filter by the per-partition
-                         * result after commit_sync returns. */
+                        /* Track what we are about to commit. */
                         struct partition_data *pd_a =
                             pb_find_or_add(&acked, t, rkm->partition);
                         pd_append(pd_a, rkm->offset);
-                        batch_acked++;
+                        acked_in_batch++;
 
                         rd_kafka_message_destroy(rkm);
                 }
 
-                if (batch_consumed > 0)
-                        emit_records_consumed(&consumed, batch_consumed);
+                if (consumed_in_batch > 0)
+                        emit_records_consumed(&consumed, consumed_in_batch);
 
                 /* Commit behavior per mode:
                  *
@@ -513,12 +592,9 @@ int main(int argc, char **argv) {
                  *                     means librdkafka accepts on the
                  *                     next poll. We do not issue a
                  *                     commit and cannot emit
-                 *                     offsets_acknowledged (there is no
-                 *                     AcknowledgementCommitCallback in
-                 *                     librdkafka yet — see
-                 *                     project_share_commit_callback
-                 *                     memory). Java's parity would need
-                 *                     that callback.
+                 *                     offsets_acknowledged.
+                 *                     TODO once librdkafka
+                 *                     adds the callback
                  *
                  *   sync: call commit_sync, inspect per-partition
                  *         result, emit offsets_acknowledged with
@@ -530,135 +606,29 @@ int main(int argc, char **argv) {
                  *          adds the callback. */
 
                 if (ack_mode == ACK_SYNC) {
-                        rd_kafka_topic_partition_list_t *result = NULL;
-                        rd_kafka_error_t *ce = rd_kafka_share_commit_sync(
-                            rkshare, 30000, &result);
-
-                        /* Top-level commit_sync failure: no per-partition
-                         * result to inspect. Emit the whole batch as
-                         * failed. */
-                        if (ce) {
-                                char commit_errmsg[256];
-                                snprintf(commit_errmsg, sizeof(commit_errmsg),
-                                         "%s", rd_kafka_error_string(ce));
-                                rd_kafka_error_destroy(ce);
-                                if (result)
-                                        rd_kafka_topic_partition_list_destroy(
-                                            result);
-                                if (batch_acked > 0)
-                                        emit_offsets_acknowledged(
-                                            &acked, batch_acked, 0,
-                                            commit_errmsg);
-                        } else {
-                                /* Split `acked` into per-partition-result
-                                 * buckets. A commit may partially
-                                 * succeed: some partitions OK, others
-                                 * failed. Emit one offsets_acknowledged
-                                 * per outcome so the harness records
-                                 * them correctly. */
-                                pb_reset(&acked_ok);
-                                pb_reset(&acked_err);
-                                int64_t ok_count  = 0;
-                                int64_t err_count = 0;
-                                char commit_errmsg[256] = "";
-
-                                for (int i = 0; i < acked.cnt; i++) {
-                                        struct partition_data *src =
-                                            &acked.items[i];
-                                        /* Find this partition's result. */
-                                        rd_kafka_resp_err_t perr =
-                                            RD_KAFKA_RESP_ERR_NO_ERROR;
-                                        int found = 0;
-                                        if (result) {
-                                                for (int j = 0;
-                                                     j < result->cnt; j++) {
-                                                        if (result->elems[j]
-                                                                .partition ==
-                                                                src->partition &&
-                                                            strcmp(result
-                                                                       ->elems[j]
-                                                                       .topic,
-                                                                   src->topic) ==
-                                                                0) {
-                                                                perr  = result
-                                                                            ->elems[j]
-                                                                            .err;
-                                                                found = 1;
-                                                                break;
-                                                        }
-                                                }
-                                        }
-                                        /* If the result list doesn't
-                                         * mention this partition, treat
-                                         * as success (commit_sync returns
-                                         * NULL if nothing was pending). */
-                                        (void)found;
-
-                                        struct partition_bucket *dst =
-                                            perr == RD_KAFKA_RESP_ERR_NO_ERROR
-                                                ? &acked_ok
-                                                : &acked_err;
-                                        struct partition_data *pd_dst =
-                                            pb_find_or_add(dst, src->topic,
-                                                           src->partition);
-                                        for (int k = 0; k < src->offsets_cnt;
-                                             k++)
-                                                pd_append(pd_dst,
-                                                          src->offsets[k]);
-                                        if (perr ==
-                                            RD_KAFKA_RESP_ERR_NO_ERROR) {
-                                                ok_count += src->offsets_cnt;
-                                        } else {
-                                                err_count += src->offsets_cnt;
-                                                if (!*commit_errmsg)
-                                                        snprintf(
-                                                            commit_errmsg,
-                                                            sizeof(commit_errmsg),
-                                                            "%s",
-                                                            rd_kafka_err2str(
-                                                                perr));
-                                        }
-                                }
-
-                                if (result)
-                                        rd_kafka_topic_partition_list_destroy(
-                                            result);
-
-                                if (ok_count > 0)
-                                        emit_offsets_acknowledged(
-                                            &acked_ok, ok_count, 1, "");
-                                if (err_count > 0)
-                                        emit_offsets_acknowledged(
-                                            &acked_err, err_count, 0,
-                                            commit_errmsg);
-                                total_acknowledged += ok_count;
-                        }
+                        total_acknowledged += handle_commit_sync(
+                            rkshare, &acked, &acked_ok, &acked_err,
+                            acked_in_batch);
                 } else if (ack_mode == ACK_ASYNC) {
-                        rd_kafka_error_t *ce =
+                        rd_kafka_error_t *commit_error =
                             rd_kafka_share_commit_async(rkshare);
-                        if (ce) {
+                        if (commit_error) {
                                 fprintf(stderr, "commit_async: %s\n",
-                                        rd_kafka_error_string(ce));
-                                rd_kafka_error_destroy(ce);
+                                        rd_kafka_error_string(commit_error));
+                                rd_kafka_error_destroy(commit_error);
                         }
                         /* Optimistically count as acked for the
-                         * max-messages guard; do NOT emit an event. */
-                        total_acknowledged += batch_acked;
+                         * max-messages guard; do NOT emit an event.
+                         * TODO once librdkafka adds callback */
+                        total_acknowledged += acked_in_batch;
                 } else {
                         /* auto/implicit: no commit, no event. Count
-                         * consumed-as-acked for the guard. */
-                        total_acknowledged += batch_consumed;
+                         * consumed-as-acked for the guard.
+                         * TODO once librdkafka adds callback
+                         */
+                        total_acknowledged += consumed_in_batch;
                 }
         }
-
-        pb_reset(&consumed);
-        pb_reset(&acked);
-        pb_reset(&acked_ok);
-        pb_reset(&acked_err);
-        free(consumed.items);
-        free(acked.items);
-        free(acked_ok.items);
-        free(acked_err.items);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);

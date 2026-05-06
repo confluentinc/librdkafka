@@ -1,6 +1,32 @@
+/*
+* librdkafka - The Apache Kafka C/C++ library
+ *
+ * Copyright (c) 2026, Confluent Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 #define _POSIX_C_SOURCE 200809L
 
-#include <errno.h>
 #include <getopt.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -272,24 +298,12 @@ int main(int argc, char **argv) {
         char errstr[512];
         rd_kafka_conf_t *conf = rd_kafka_conf_new();
 
-        if (rd_kafka_conf_set(conf, "bootstrap.servers", bootstrap, errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "bootstrap.servers: %s\n", errstr);
-                rd_kafka_conf_destroy(conf);
+        if (conf_set(conf, "bootstrap.servers", bootstrap) == -1)
                 return 1;
-        }
-        if (rd_kafka_conf_set(conf, "acks", acks, errstr, sizeof(errstr)) !=
-            RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "acks: %s\n", errstr);
-                rd_kafka_conf_destroy(conf);
+        if (conf_set(conf, "acks", acks) == -1)
                 return 1;
-        }
-        if (rd_kafka_conf_set(conf, "retries", "0", errstr, sizeof(errstr)) !=
-            RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "retries: %s\n", errstr);
-                rd_kafka_conf_destroy(conf);
+        if (conf_set(conf, "retries", "0") == -1)
                 return 1;
-        }
 
         if (config_file &&
             load_properties_file(config_file, conf, errstr, sizeof(errstr)) ==
@@ -304,13 +318,8 @@ int main(int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
                 return 1;
         }
-        if (debug_flags &&
-            rd_kafka_conf_set(conf, "debug", debug_flags, errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "debug: %s\n", errstr);
-                rd_kafka_conf_destroy(conf);
+        if (debug_flags && conf_set(conf, "debug", debug_flags) == -1)
                 return 1;
-        }
 
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
 

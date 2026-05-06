@@ -1,5 +1,5 @@
 /*
-* librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
@@ -40,7 +40,8 @@ extern volatile sig_atomic_t run;
 /* Install SIGINT/SIGTERM handlers that clear `run`. */
 void install_signals(void);
 
-/* Wallclock milliseconds since Unix epoch (matches Java System.currentTimeMillis). */
+/* Wallclock milliseconds since Unix epoch (matches Java
+ * System.currentTimeMillis). */
 int64_t now_ms(void);
 
 /* Write a JSON-escaped string to `out`, including surrounding quotes. */

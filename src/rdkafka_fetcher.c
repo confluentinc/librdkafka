@@ -2925,8 +2925,8 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
                              "Not sending Share RPC: "
                              "no fetch requested and no acknowledgements");
-                rd_kafka_share_fetch_op_reply_with_err(
-                    rko_orig, RD_KAFKA_RESP_ERR__NOOP);
+                rd_kafka_share_fetch_op_reply_with_err(rko_orig,
+                                                       RD_KAFKA_RESP_ERR__NOOP);
                 return;
         }
 

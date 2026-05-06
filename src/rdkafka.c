@@ -3284,8 +3284,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                                 if (rko_orig->rko_err &&
                                     batch->rktpar->err ==
                                         RD_KAFKA_RESP_ERR__IN_PROGRESS)
-                                        batch->rktpar->err =
-                                            rko_orig->rko_err;
+                                        batch->rktpar->err = rko_orig->rko_err;
                                 dst = rd_kafka_topic_partition_list_find(
                                     rkcg->rkcg_commit_sync_request.results,
                                     batch->rktpar->topic,

@@ -357,8 +357,7 @@ void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
         if (err && rko->rko_u.share_fetch.ack_details) {
                 rd_kafka_share_ack_batches_t *batch;
                 int i;
-                RD_LIST_FOREACH(batch, rko->rko_u.share_fetch.ack_details,
-                                i) {
+                RD_LIST_FOREACH(batch, rko->rko_u.share_fetch.ack_details, i) {
                         batch->rktpar->err = err;
                 }
         }

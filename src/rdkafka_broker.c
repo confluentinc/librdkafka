@@ -5064,6 +5064,8 @@ static int rd_kafka_broker_thread_main(void *arg) {
         rd_kafka_broker_fail(rkb, LOG_DEBUG, rd_kafka_broker_destroy_error(rk),
                              "Broker handle is terminating");
 
+        rd_kafka_broker_share_fetch_session_clear(rkb);
+
         rd_rkb_dbg(rkb, BROKER, "TERMINATE",
                    "Handle terminates in state %s: "
                    "%d refcnts (%p), %d toppar(s), "

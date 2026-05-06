@@ -3263,17 +3263,33 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
 
                 /* Per-partition errors are carried on each batch's
                  * rktpar->err. The broker thread sets these on both
-                 * success (per-partition error from response) and
-                 * top-level error (top-level err on each batch). */
+                 * success (per-partition error from response via parser)
+                 * and top-level error (top-level err on each batch via
+                 * rd_kafka_share_fetch_op_reply_with_err helper).
+                 *
+                 * Defensive: if the helper was bypassed (e.g. q_enq on
+                 * a disabled rkb_ops queue at rdkafka_queue.h:440 falls
+                 * through to rd_kafka_op_reply directly) the batch err
+                 * is still _IN_PROGRESS from build_ack_details. Override
+                 * with rko_err so the sentinel doesn't leak to the
+                 * app. _IN_PROGRESS check is sufficient because the
+                 * normal helper path overwrites _IN_PROGRESS first
+                 * (buf callback init -> INVALID_RECORD_STATE -> per-
+                 * partition err or top-level err). */
                 if (ack_details) {
                         rd_kafka_share_ack_batches_t *batch;
                         int k;
                         RD_LIST_FOREACH(batch, ack_details, k) {
-                                rd_kafka_topic_partition_t *dst =
-                                    rd_kafka_topic_partition_list_find(
-                                        rkcg->rkcg_commit_sync_request.results,
-                                        batch->rktpar->topic,
-                                        batch->rktpar->partition);
+                                rd_kafka_topic_partition_t *dst;
+                                if (rko_orig->rko_err &&
+                                    batch->rktpar->err ==
+                                        RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                        batch->rktpar->err =
+                                            rko_orig->rko_err;
+                                dst = rd_kafka_topic_partition_list_find(
+                                    rkcg->rkcg_commit_sync_request.results,
+                                    batch->rktpar->topic,
+                                    batch->rktpar->partition);
                                 if (dst)
                                         dst->err = batch->rktpar->err;
                         }

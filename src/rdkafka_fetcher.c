@@ -1993,15 +1993,11 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932:
-                         * 1) Java only triggers metadata refresh for
-                         *    UNKNOWN_TOPIC_ID at the top-level. The
-                         *    other errors are handled at partition-
-                         *    level. Consider removing them here.
-                         * 2) Java uses leader info from the response
-                         *    (currentLeader + nodeEndpoints) to update
-                         *    partition leadership directly, rather
-                         *    than a full metadata refresh RPC. */
+                        /* TODO KIP-932: Java uses leader info from
+                         * the response (currentLeader +
+                         * nodeEndpoints) to update partition
+                         * leadership directly, rather than a full
+                         * metadata refresh RPC. */
                         rd_snprintf(tmp, sizeof(tmp),
                                     "ShareAcknowledge failed: %s",
                                     rd_kafka_err2str(err));
@@ -2016,20 +2012,6 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                          * will follow this approach as well. */
                         break;
                 }
-
-                /* Top-level error: the response was not parsed per
-                 * partition. Set err on each ack batch so the main
-                 * thread (or op destructor) can map the error to all
-                 * partitions sent to this broker (for commit_sync
-                 * results and acknowledgement callback). */
-                if (rko_orig->rko_u.share_fetch.ack_details) {
-                        rd_kafka_share_ack_batches_t *batch;
-                        int i;
-                        RD_LIST_FOREACH(
-                            batch, rko_orig->rko_u.share_fetch.ack_details, i) {
-                                batch->rktpar->err = err;
-                        }
-                }
         }
 
         if (rko_orig->rko_u.share_fetch.should_leave)
@@ -2037,8 +2019,7 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
 
         /* ack_details is owned by the op and freed by the op destructor
          * after the main thread has processed the reply. */
-
-        rd_kafka_op_reply(rko_orig, err);
+        rd_kafka_share_fetch_op_reply_with_err(rko_orig, err);
 }
 
 
@@ -2123,15 +2104,11 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932:
-                         * 1) Java only triggers metadata refresh for
-                         *    UNKNOWN_TOPIC_ID at the top-level. The
-                         *    other errors are handled at partition-
-                         *    level. Consider removing them here.
-                         * 2) Java uses leader info from the response
-                         *    (currentLeader + nodeEndpoints) to update
-                         *    partition leadership directly, rather
-                         *    than a full metadata refresh RPC. */
+                        /* TODO KIP-932: Java uses leader info from
+                         * the response (currentLeader +
+                         * nodeEndpoints) to update partition
+                         * leadership directly, rather than a full
+                         * metadata refresh RPC. */
                         rd_snprintf(tmp, sizeof(tmp), "FetchRequest failed: %s",
                                     rd_kafka_err2str(err));
                         rd_kafka_metadata_refresh_known_topics(
@@ -2148,28 +2125,13 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         break;
                 }
 
-                /* Top-level error: the response was not parsed per
-                 * partition (or the request never reached the broker).
-                 * Set err on each ack batch so the main thread can map
-                 * the error to all partitions sent to this broker (for
-                 * commit_sync results and acknowledgement callback). */
-                if (rko_orig->rko_u.share_fetch.ack_details) {
-                        rd_kafka_share_ack_batches_t *batch;
-                        int i;
-                        RD_LIST_FOREACH(
-                            batch, rko_orig->rko_u.share_fetch.ack_details, i) {
-                                batch->rktpar->err = err;
-                        }
-                }
-
                 /* There is no retry for ShareFetch RPC at the broker
                  * thread level. */
         }
 
         /* ack_details is owned by the op and freed by the op destructor
          * after the main thread has processed the reply. */
-
-        rd_kafka_op_reply(rko_orig, err);
+        rd_kafka_share_fetch_op_reply_with_err(rko_orig, err);
 
         /* Enqueue the response for the app thread AFTER sending the
          * reply to the main thread.  This ensures the main thread
@@ -2943,8 +2905,8 @@ void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,
                         /* Required as it is possible that we were about
                          * to establish a session */
                         rd_kafka_broker_share_fetch_session_clear(rkb);
-                rd_kafka_op_reply(rko_orig,
-                                  RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
+                rd_kafka_share_fetch_op_reply_with_err(
+                    rko_orig, RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
         }
 }
 
@@ -2963,14 +2925,16 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
                              "Not sending Share RPC: "
                              "no fetch requested and no acknowledgements");
-                rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__NOOP);
+                rd_kafka_share_fetch_op_reply_with_err(
+                    rko_orig, RD_KAFKA_RESP_ERR__NOOP);
                 return;
         }
 
         if (!rkcg->rkcg_member_id) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
                              "Share RPC requested without member_id");
-                rd_kafka_op_reply(rko_orig, RD_KAFKA_RESP_ERR__INVALID_ARG);
+                rd_kafka_share_fetch_op_reply_with_err(
+                    rko_orig, RD_KAFKA_RESP_ERR__INVALID_ARG);
                 return;
         }
 

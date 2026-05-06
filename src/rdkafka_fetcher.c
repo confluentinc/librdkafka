@@ -2940,9 +2940,25 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
 
         if (!rko_orig->rko_u.share_fetch.should_fetch) {
                 /* Ack-only: use ShareAcknowledge RPC.
-                 * TODO KIP-932: If epoch is 0 (new/reset session),
-                 * fail acks with INVALID_SHARE_SESSION_EPOCH instead
-                 * of sending them. */
+                 *
+                 * If session epoch is 0 (new consumer or post-reset),
+                 * the broker has no session state to acknowledge
+                 * against. Fail the acks locally with
+                 * INVALID_SHARE_SESSION_EPOCH instead of sending —
+                 * matches Java's ShareConsumeRequestManager which
+                 * raises InvalidShareSessionEpochException locally
+                 * for the same condition. */
+                if (rkb->rkb_share_fetch_session.epoch == 0) {
+                        rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
+                                     "Failing %d ack batches locally: "
+                                     "session epoch is 0 (no session)",
+                                     rd_list_cnt(ack_details));
+                        rd_kafka_share_fetch_op_reply_with_err(
+                            rko_orig,
+                            RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH);
+                        return;
+                }
+
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
                              "Sending ShareAcknowledge Request with"
                              " acknowledgements");

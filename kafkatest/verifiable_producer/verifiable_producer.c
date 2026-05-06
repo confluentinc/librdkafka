@@ -1,5 +1,5 @@
 /*
-* librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
@@ -122,10 +122,9 @@ static void emit_send_error(const char *topic,
 
 static void emit_tool_data(void) {
         int64_t elapsed_ms = now_ms() - state.start_ms;
-        double avg =
-            elapsed_ms > 0
-                ? ((double)state.num_acked * 1000.0) / (double)elapsed_ms
-                : 0.0;
+        double avg = elapsed_ms > 0 ? ((double)state.num_acked * 1000.0) /
+                                          (double)elapsed_ms
+                                    : 0.0;
         stdout_lock();
         fputs("{\"name\":\"tool_data\"", stdout);
         fprintf(stdout, ",\"timestamp\":%" PRId64, now_ms());
@@ -139,14 +138,12 @@ static void emit_tool_data(void) {
         stdout_unlock();
 }
 
-static void dr_msg_cb(rd_kafka_t *rk,
-                      const rd_kafka_message_t *rkm,
-                      void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkm, void *opaque) {
         (void)rk;
         (void)opaque;
 
-        const char *topic =
-            rkm->rkt ? rd_kafka_topic_name(rkm->rkt) : "";
+        const char *topic = rkm->rkt ? rd_kafka_topic_name(rkm->rkt) : "";
 
         if (rkm->err) {
                 state.num_errors++;
@@ -155,9 +152,8 @@ static void dr_msg_cb(rd_kafka_t *rk,
                                 rd_kafka_err2name(rkm->err));
         } else {
                 state.num_acked++;
-                emit_send_success(topic, rkm->partition, rkm->offset,
-                                  rkm->key, rkm->key_len, rkm->payload,
-                                  rkm->len);
+                emit_send_success(topic, rkm->partition, rkm->offset, rkm->key,
+                                  rkm->key_len, rkm->payload, rkm->len);
         }
 }
 
@@ -288,7 +284,8 @@ int main(int argc, char **argv) {
         }
 
         if (!topic || !bootstrap) {
-                fprintf(stderr, "--topic and --bootstrap-server are required\n");
+                fprintf(stderr,
+                        "--topic and --bootstrap-server are required\n");
                 usage(argv[0]);
                 return 1;
         }
@@ -305,9 +302,8 @@ int main(int argc, char **argv) {
         if (conf_set(conf, "retries", "0") == -1)
                 return 1;
 
-        if (config_file &&
-            load_properties_file(config_file, conf, errstr, sizeof(errstr)) ==
-                -1) {
+        if (config_file && load_properties_file(config_file, conf, errstr,
+                                                sizeof(errstr)) == -1) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -339,17 +335,17 @@ int main(int argc, char **argv) {
         /* Microseconds between messages, or 0 for unlimited. */
         int64_t rate_sleep_us = throughput > 0 ? 1000000 / throughput : 0;
 
-        int64_t counter   = 0;
-        int key_counter   = 0;
+        int64_t counter = 0;
+        int key_counter = 0;
         char value_buf[64];
         char key_buf[32];
 
         while (run && (max_messages < 0 || counter < max_messages)) {
                 int value_len;
                 if (value_prefix_set)
-                        value_len = snprintf(value_buf, sizeof(value_buf),
-                                             "%d.%" PRId64, value_prefix,
-                                             counter);
+                        value_len =
+                            snprintf(value_buf, sizeof(value_buf),
+                                     "%d.%" PRId64, value_prefix, counter);
                 else
                         value_len = snprintf(value_buf, sizeof(value_buf),
                                              "%" PRId64, counter);
@@ -358,9 +354,9 @@ int main(int argc, char **argv) {
                 size_t key_len      = 0;
                 if (repeating_keys_set && repeating_keys > 0) {
                         int key_val = key_counter % repeating_keys;
-                        key_len     = (size_t)snprintf(
-                            key_buf, sizeof(key_buf), "%d", key_val);
-                        key_ptr = key_buf;
+                        key_len     = (size_t)snprintf(key_buf, sizeof(key_buf),
+                                                       "%d", key_val);
+                        key_ptr     = key_buf;
                         key_counter++;
                 }
 

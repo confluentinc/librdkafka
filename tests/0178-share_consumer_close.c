@@ -1572,6 +1572,8 @@ static void test_close_with_broker_busy(void) {
 /**
  * @brief Test: close with broker decommission.
  *
+ * WIP - not final version.
+ *
  * Validates the rko_op_cb fix: when a broker is decommissioned during close,
  * the deferred leave op's __DESTROY reply must reach the handler so
  * share_session_leave_remaining_cnt is decremented and close() completes.
@@ -1642,9 +1644,9 @@ static void test_close_with_broker_decommission(void) {
         consumed = 0;
         attempts = 0;
         while (consumed < total_msgs && attempts++ < 30) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(consumer, 3000, batch,
-                                                     &rcvd);
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1676,14 +1678,14 @@ static void test_close_with_broker_decommission(void) {
         /* Background thread: sleep 2s then set broker 1 DOWN.
          * This triggers decommission via metadata refresh while
          * close() is blocking. */
-        state.mcluster = mcluster;
+        state.mcluster  = mcluster;
         state.broker_id = 1;
         if (thrd_create(&thrd, delayed_down_cb, &state) != thrd_success)
                 TEST_FAIL("Failed to create background thread");
 
         TEST_SAY("Calling close() — broker 1 will go down in ~2s\n");
-        t_start   = test_clock();
-        close_err = rd_kafka_share_consumer_close(consumer);
+        t_start      = test_clock();
+        close_err    = rd_kafka_share_consumer_close(consumer);
         t_elapsed_ms = (test_clock() - t_start) / 1000;
 
         TEST_SAY("Close completed in %" PRId64 "ms (err=%s)\n", t_elapsed_ms,
@@ -1692,7 +1694,8 @@ static void test_close_with_broker_decommission(void) {
                 rd_kafka_error_destroy(close_err);
 
         TEST_ASSERT(t_elapsed_ms < 30000,
-                    "Close took too long (%" PRId64 "ms), "
+                    "Close took too long (%" PRId64
+                    "ms), "
                     "likely hung on decommissioned broker",
                     t_elapsed_ms);
 

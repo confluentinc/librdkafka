@@ -22,6 +22,10 @@ void json_write_string(FILE *out, const char *s);
 /* Emit a zero-field event: {"name":"<name>","timestamp":<ms>}\n on stdout. */
 void emit_event(const char *name);
 
+/* Set a single config key on `conf`. On error, prints "<key>: <errstr>\n"
+ * to stderr, destroys `conf`, and returns -1. Returns 0 on success. */
+int conf_set(rd_kafka_conf_t *conf, const char *key, const char *value);
+
 /* Parse a Java properties file and apply each key=value to `conf`.
  * Lines starting with '#' or '!' are comments; blank lines are skipped.
  * Splits on the first '=' or ':'.

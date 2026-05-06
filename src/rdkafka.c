@@ -3184,6 +3184,23 @@ static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
                                                       rd_kafka_cgrp_t *rkcg);
 static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
                                                rd_kafka_broker_t *rkb);
+rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
+                                                rd_kafka_op_t *rko_orig);
+
+/**
+ * @brief rko_op_cb wrapper for rd_kafka_share_fetch_reply_op.
+ *
+ * Using rko_op_cb causes rd_kafka_op_reply() to stamp RD_KAFKA_OP_CB
+ * instead of RD_KAFKA_OP_REPLY, which bypasses the handle_std
+ * __DESTROY silent-discard path (rdkafka_op.c:987-991).
+ *
+ * @locality main thread
+ */
+static rd_kafka_op_res_t rd_kafka_share_fetch_reply_op_cb(rd_kafka_t *rk,
+                                                          rd_kafka_q_t *rkq,
+                                                          rd_kafka_op_t *rko) {
+        return rd_kafka_share_fetch_reply_op(rk, rko);
+}
 
 /**
  * Handles RD_KAFKA_OP_SHARE_FETCH | RD_KAFKA_OP_REPLY.
@@ -3419,6 +3436,7 @@ void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
         rd_kafka_broker_keep(rkb);
         rko_sf->rko_u.share_fetch.target_broker = rkb;
         rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+        rko_sf->rko_op_cb  = rd_kafka_share_fetch_reply_op_cb;
 
         /* Set fetch guard flag to prevent multiple in-flight fetches to the
          * same broker.*/
@@ -3939,6 +3957,7 @@ static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
         rd_kafka_broker_keep(rkb);
         rko_sf->rko_u.share_fetch.target_broker = rkb;
         rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
+        rko_sf->rko_op_cb  = rd_kafka_share_fetch_reply_op_cb;
 
         rkb->rkb_share_fetch_enqueued = rd_true;
 
@@ -5861,9 +5880,6 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 res = rd_kafka_metadata_update_op(rk, rko->rko_u.metadata.mdi);
                 break;
 
-        case RD_KAFKA_OP_SHARE_FETCH | RD_KAFKA_OP_REPLY:
-                res = rd_kafka_share_fetch_reply_op(rk, rko);
-                break;
 
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
                 rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));

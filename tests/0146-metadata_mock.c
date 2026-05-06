@@ -477,6 +477,89 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Verify that a producer recovers after the partition leader is
+ *        transiently set to -1 (no leader), as happens when a KRaft
+ *        controller GC pause causes the broker to be fenced.
+ *
+ * The scenario exercises rd_kafka_metadata_update_op(): when a Produce
+ * response carries a KIP-951 CurrentLeader tag with leader_id=-1, that op
+ * must correctly undelegate the toppar rather than skipping it entirely.
+ * Without the fix the toppar remains permanently stuck in NO_INFO even after
+ * the broker recovers.
+ *
+ * Mock changes required: rd_kafka_mock_Produce_reply_tags_partition_write
+ * and rd_kafka_mock_handle_Produce must handle mpart->leader == NULL so that
+ * NOT_LEADER_FOR_PARTITION responses carry CurrentLeader=-1 correctly.
+ */
+static void do_test_metadata_update_op_transient_no_leader(void) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+        rd_bool_t found;
+        int remaining                       = 2;
+        expected_request_t expected_request = {.api_key = RD_KAFKAP_Produce,
+                                               .broker  = 2};
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "batch.num.messages", "1");
+        /* Allow enough time for the retry cycle: NOT_LEADER_FOR_PARTITION
+         * with leader=-1 -> metadata refresh -> leader=2 -> delivery. */
+        test_conf_set(conf, "message.timeout.ms", "15000");
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Establish partition 0 on broker 1 in the client's metadata cache. */
+        test_produce_msgs2(rk, topic, 0, 0, 0, 1, NULL, 0);
+        rd_kafka_flush(rk, 5000);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        /* Simulate broker fencing by the KRaft controller: set leader to -1.
+         * The next Produce to broker 1 will get NOT_LEADER_FOR_PARTITION
+         * with a KIP-951 CurrentLeader tag carrying leader_id=-1.  This
+         * triggers rd_kafka_metadata_update_op() with leader=-1, which must
+         * correctly undelegate the toppar so it can recover. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, -1);
+
+        /* Enqueue messages.  They will fail initially and be retried by the
+         * producer's retry logic. */
+        test_produce_msgs2_nowait(rk, topic, 0, 0, 1, 2, NULL, 0, &remaining);
+
+        /* Allow the NOT_LEADER_FOR_PARTITION + CurrentLeader=-1 response to
+         * be received and processed by rd_kafka_metadata_update_op(). */
+        rd_usleep(500 * 1000, 0);
+
+        /* Simulate ELR re-election: broker 2 becomes the new leader. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+
+        /* All messages must be delivered successfully to broker 2. */
+        rd_kafka_flush(rk, 15000);
+
+        found = verify_requests_after_metadata_update_operation(
+            mcluster, &expected_request);
+        TEST_ASSERT(found,
+                    "Produce requests were not found on broker %" PRId32
+                    " after transient leader=-1 recovery",
+                    expected_request.broker);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
 int main_0146_metadata_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         int variation;
@@ -500,6 +583,8 @@ int main_0146_metadata_mock(int argc, char **argv) {
                         variation % 2  /* 1-3: second leader change,
                                         * 0-2: single leader change */);
         }
+
+        do_test_metadata_update_op_transient_no_leader();
 
         return 0;
 }

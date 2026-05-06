@@ -572,7 +572,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * to contain the partition to rack map. */
         rd_bool_t has_client_rack = rk->rk_conf.client_rack &&
                                     RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack);
-        rd_bool_t compute_racks = has_client_rack;
+        rd_bool_t compute_racks   = has_client_rack;
 
         if (request) {
                 requested_topics    = request->rkbuf_u.Metadata.topics;
@@ -2156,16 +2156,29 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                                 continue;
                         }
 
-                        rkb = rd_kafka_broker_find_by_nodeid(rk, mdp->leader);
-                        if (!rkb) {
-                                rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
-                                             "Partition %s(%s)[%" PRId32
-                                             "]: new leader"
-                                             "%" PRId32 " not found in cache",
-                                             topic,
-                                             rd_kafka_Uuid_base64str(&topic_id),
-                                             part, mdp->leader);
-                                continue;
+                        /* leader=-1 means no current leader (transient
+                         * unavailability, e.g. broker fenced by controller).
+                         * Allow NULL broker to flow through so the toppar is
+                         * correctly undelegated via
+                         * rd_kafka_topic_metadata_update2(), mirroring the
+                         * rd_kafka_topic_metadata_update() behaviour. Any other
+                         * missing broker ID is a genuine cache miss. */
+                        if (mdp->leader == -1) {
+                                rkb = NULL;
+                        } else {
+                                rkb = rd_kafka_broker_find_by_nodeid(
+                                    rk, mdp->leader);
+                                if (!rkb) {
+                                        rd_kafka_log(
+                                            rk, LOG_WARNING, "METADATAUPDATE",
+                                            "Partition %s(%s)[%" PRId32
+                                            "]: new leader"
+                                            "%" PRId32 " not found in cache",
+                                            topic,
+                                            rd_kafka_Uuid_base64str(&topic_id),
+                                            part, mdp->leader);
+                                        continue;
+                                }
                         }
 
                         current_leader_epoch =
@@ -2173,7 +2186,7 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                                 .partitions[part]
                                 .leader_epoch;
 
-                        if (mdpi->leader_epoch != -1 &&
+                        if (rkb && mdpi->leader_epoch != -1 &&
                             current_leader_epoch > mdpi->leader_epoch) {
                                 rd_kafka_broker_destroy(rkb);
                                 rd_kafka_dbg(
@@ -2197,7 +2210,8 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                         rkmce->rkmce_mtopic.partitions[part].leader =
                             mdp->leader;
                         rd_kafka_wrunlock(rk);
-                        rd_kafka_broker_destroy(rkb);
+                        if (rkb)
+                                rd_kafka_broker_destroy(rkb);
 
                         rd_kafka_dbg(rk, METADATA, "METADATAUPDATE",
                                      "Partition %s(%s)[%" PRId32

@@ -6,6 +6,12 @@
 
 * Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.
 
+### Producer fixes
+
+* Fix permanent `NO_INFO` state when partition leader is transiently `-1`
+  (e.g. broker fenced by KRaft controller), causing producer to permanently
+  stop delivering to those partitions (#5430).
+
 
 # librdkafka v2.14.1
 

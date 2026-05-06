@@ -42,7 +42,7 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
-static rd_kafka_share_t *g_rkshare = NULL;
+static rd_kafka_share_t *g_rkshare     = NULL;
 static volatile sig_atomic_t g_running = 1;
 
 
@@ -64,10 +64,10 @@ int main(int argc, char **argv) {
         rd_kafka_conf_t *conf;
         rd_kafka_error_t *err;
         char errstr[512];
-        const char *brokers     = "localhost:9092";
-        const char *group_id    = "example-share-group";
-        const char *topics      = "test-topic";
-        int msg_cnt             = 0;
+        const char *brokers  = "localhost:9092";
+        const char *group_id = "example-share-group";
+        const char *topics   = "test-topic";
+        int msg_cnt          = 0;
 
         if (argc > 1)
                 brokers = argv[1];
@@ -98,8 +98,7 @@ int main(int argc, char **argv) {
         /*
          * Create share consumer instance
          */
-        g_rkshare = rd_kafka_share_consumer_new(conf, errstr,
-                                                 sizeof(errstr));
+        g_rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!g_rkshare) {
                 fprintf(stderr, "Failed to create share consumer: %s\n",
                         errstr);
@@ -137,8 +136,8 @@ int main(int argc, char **argv) {
                 /* Poll for messages with 1 second timeout.
                  * If wakeup is called from the signal handler, this will
                  * return with RD_KAFKA_RESP_ERR__WAKEUP. */
-                err = rd_kafka_share_consume_batch(g_rkshare, 1000,
-                                                   rkmessages, &msg_batch_size);
+                err = rd_kafka_share_consume_batch(g_rkshare, 1000, rkmessages,
+                                                   &msg_batch_size);
 
                 if (err) {
                         rd_kafka_resp_err_t code = rd_kafka_error_code(err);
@@ -146,8 +145,9 @@ int main(int argc, char **argv) {
                         if (code == RD_KAFKA_RESP_ERR__WAKEUP) {
                                 /* Woken up by signal handler, check
                                  * g_running */
-                                fprintf(stderr,
-                                        "Woken up, checking shutdown flag...\n");
+                                fprintf(
+                                    stderr,
+                                    "Woken up, checking shutdown flag...\n");
                                 rd_kafka_error_destroy(err);
                                 continue;
                         }
@@ -168,17 +168,16 @@ int main(int argc, char **argv) {
                                 rd_kafka_message_t *rkmessage = rkmessages[i];
 
                                 if (rkmessage->err) {
-                                        fprintf(stderr,
-                                                "  Message error: %s\n",
-                                                rd_kafka_message_errstr(
-                                                    rkmessage));
+                                        fprintf(
+                                            stderr, "  Message error: %s\n",
+                                            rd_kafka_message_errstr(rkmessage));
                                 } else {
-                                        printf("  [%s] offset %ld: %.*s\n",
-                                               rd_kafka_topic_name(
-                                                   rkmessage->rkt),
-                                               rkmessage->offset,
-                                               (int)rkmessage->len,
-                                               (char *)rkmessage->payload);
+                                        printf(
+                                            "  [%s] offset %ld: %.*s\n",
+                                            rd_kafka_topic_name(rkmessage->rkt),
+                                            rkmessage->offset,
+                                            (int)rkmessage->len,
+                                            (char *)rkmessage->payload);
                                         msg_cnt++;
                                 }
 

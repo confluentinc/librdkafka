@@ -1,5 +1,5 @@
 /*
-* librdkafka - The Apache Kafka C/C++ library
+ * librdkafka - The Apache Kafka C/C++ library
  *
  * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
@@ -42,14 +42,14 @@
 #define COMMIT_TIMEOUT_MS 60000
 
 enum ack_mode {
-        ACK_AUTO,   /* share.acknowledgement.mode=implicit; implicit ack via
-                       commit */
-        ACK_SYNC,   /* explicit ack + rd_kafka_share_commit_sync */
-        ACK_ASYNC   /* explicit ack + rd_kafka_share_commit_async */
+        ACK_AUTO, /* share.acknowledgement.mode=implicit; implicit ack via
+                     commit */
+        ACK_SYNC, /* explicit ack + rd_kafka_share_commit_sync */
+        ACK_ASYNC /* explicit ack + rd_kafka_share_commit_async */
 };
 
-#define MAX_TOPIC_LEN     256
-#define MAX_PARTITIONS    16
+#define MAX_TOPIC_LEN  256
+#define MAX_PARTITIONS 16
 
 struct partition_data {
         char topic[MAX_TOPIC_LEN];
@@ -60,8 +60,7 @@ struct partition_data {
 
 static void pd_append(struct partition_data *pd, int64_t offset) {
         if (pd->offsets_cnt >= BATCH_CAPACITY) {
-                fprintf(stderr,
-                        "offsets array full (%d) for %s[%" PRId32 "]\n",
+                fprintf(stderr, "offsets array full (%d) for %s[%" PRId32 "]\n",
                         BATCH_CAPACITY, pd->topic, pd->partition);
                 return;
         }
@@ -199,8 +198,8 @@ static void emit_record_data(const rd_kafka_message_t *rkm) {
 /* -------------------- Share group config via admin API -------------------- */
 
 /* Set `share.auto.offset.reset` on the share group via IncrementalAlterConfigs.
- * Required because share groups default to reset=latest, so a fresh group started
- * after messages were already produced would consume nothing.
+ * Required because share groups default to reset=latest, so a fresh group
+ * started after messages were already produced would consume nothing.
  *
  * Returns 0 on success, -1 on failure. */
 static int set_share_group_offset_reset(const char *bootstrap,
@@ -232,11 +231,10 @@ static int set_share_group_offset_reset(const char *bootstrap,
             rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group_id);
 
         rd_kafka_error_t *e = rd_kafka_ConfigResource_add_incremental_config(
-            res, "share.auto.offset.reset",
-            RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET, reset_value);
+            res, "share.auto.offset.reset", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
+            reset_value);
         if (e) {
-                snprintf(errbuf, errbuf_size,
-                         "add_incremental_config: %s",
+                snprintf(errbuf, errbuf_size, "add_incremental_config: %s",
                          rd_kafka_error_string(e));
                 rd_kafka_error_destroy(e);
                 rd_kafka_ConfigResource_destroy(res);
@@ -249,7 +247,7 @@ static int set_share_group_offset_reset(const char *bootstrap,
         rd_kafka_ConfigResource_destroy(res);
 
         rd_kafka_event_t *ev = rd_kafka_queue_poll(q, 30000);
-        int rc = 0;
+        int rc               = 0;
         if (!ev) {
                 snprintf(errbuf, errbuf_size,
                          "IncrementalAlterConfigs: timeout");
@@ -273,10 +271,10 @@ static int set_share_group_offset_reset(const char *bootstrap,
 /* Look up the per-partition error in a commit_sync result list.
  * Returns RD_KAFKA_RESP_ERR_NO_ERROR if not present (commit_sync omits
  * partitions that had nothing pending). */
-static rd_kafka_resp_err_t lookup_partition_err(
-    const rd_kafka_topic_partition_list_t *result,
-    const char *topic,
-    int32_t partition) {
+static rd_kafka_resp_err_t
+lookup_partition_err(const rd_kafka_topic_partition_list_t *result,
+                     const char *topic,
+                     int32_t partition) {
         for (int j = 0; j < result->cnt; j++) {
                 if (result->elems[j].partition == partition &&
                     strcmp(result->elems[j].topic, topic) == 0)
@@ -335,8 +333,7 @@ static int64_t handle_commit_sync(rd_kafka_share_t *rkshare,
 
                 if (perr == RD_KAFKA_RESP_ERR_NO_ERROR) {
                         ok_count += src->offsets_cnt;
-                }
-                else {
+                } else {
                         err_count += src->offsets_cnt;
                         if (!*errmsg)
                                 snprintf(errmsg, sizeof(errmsg), "%s",
@@ -379,16 +376,16 @@ static void usage(const char *prog) {
 }
 
 int main(int argc, char **argv) {
-        const char *topic       = NULL;
-        const char *group_id    = NULL;
-        const char *bootstrap   = NULL;
-        int64_t max_messages          = -1;
-        enum ack_mode ack_mode        = ACK_AUTO;
-        int verbose                   = 0;
+        const char *topic                 = NULL;
+        const char *group_id              = NULL;
+        const char *bootstrap             = NULL;
+        int64_t max_messages              = -1;
+        enum ack_mode ack_mode            = ACK_AUTO;
+        int verbose                       = 0;
         const char *offset_reset_strategy = NULL;
-        const char *config_file       = NULL;
-        const char *debug_flags = NULL;
-        const char *x_props     = NULL;
+        const char *config_file           = NULL;
+        const char *debug_flags           = NULL;
+        const char *x_props               = NULL;
 
         static struct option long_opts[] = {
             {"topic", required_argument, 0, 't'},
@@ -408,10 +405,18 @@ int main(int argc, char **argv) {
         int opt;
         while ((opt = getopt_long(argc, argv, "X:h", long_opts, NULL)) != -1) {
                 switch (opt) {
-                case 't': topic = optarg; break;
-                case 'g': group_id = optarg; break;
-                case 'b': bootstrap = optarg; break;
-                case 'm': max_messages = strtoll(optarg, NULL, 10); break;
+                case 't':
+                        topic = optarg;
+                        break;
+                case 'g':
+                        group_id = optarg;
+                        break;
+                case 'b':
+                        bootstrap = optarg;
+                        break;
+                case 'm':
+                        max_messages = strtoll(optarg, NULL, 10);
+                        break;
                 case 'A':
                         if (!strcmp(optarg, "auto"))
                                 ack_mode = ACK_AUTO;
@@ -436,12 +441,24 @@ int main(int argc, char **argv) {
                         }
                         offset_reset_strategy = optarg;
                         break;
-                case 'V': verbose = 1; break;
-                case 'C': config_file = optarg; break;
-                case 'd': debug_flags = optarg; break;
-                case 'X': x_props = optarg; break;
-                case 'h': usage(argv[0]); return 0;
-                default: usage(argv[0]); return 1;
+                case 'V':
+                        verbose = 1;
+                        break;
+                case 'C':
+                        config_file = optarg;
+                        break;
+                case 'd':
+                        debug_flags = optarg;
+                        break;
+                case 'X':
+                        x_props = optarg;
+                        break;
+                case 'h':
+                        usage(argv[0]);
+                        return 0;
+                default:
+                        usage(argv[0]);
+                        return 1;
                 }
         }
 
@@ -468,9 +485,8 @@ int main(int argc, char **argv) {
         if (debug_flags && conf_set(conf, "debug", debug_flags) == -1)
                 return 1;
 
-        if (config_file &&
-            load_properties_file(config_file, conf, errstr, sizeof(errstr)) ==
-                -1) {
+        if (config_file && load_properties_file(config_file, conf, errstr,
+                                                sizeof(errstr)) == -1) {
                 fprintf(stderr, "%s\n", errstr);
                 rd_kafka_conf_destroy(conf);
                 return 1;
@@ -497,10 +513,9 @@ int main(int argc, char **argv) {
          * subscribing. */
         if (offset_reset_strategy) {
                 char admin_errstr[512];
-                if (set_share_group_offset_reset(bootstrap, group_id,
-                                                 offset_reset_strategy,
-                                                 admin_errstr,
-                                                 sizeof(admin_errstr)) != 0) {
+                if (set_share_group_offset_reset(
+                        bootstrap, group_id, offset_reset_strategy,
+                        admin_errstr, sizeof(admin_errstr)) != 0) {
                         fprintf(stderr, "%s\n", admin_errstr);
                         rd_kafka_share_destroy(rkshare);
                         return 1;
@@ -512,7 +527,8 @@ int main(int argc, char **argv) {
             rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subscription, topic,
                                           RD_KAFKA_PARTITION_UA);
-        rd_kafka_resp_err_t err = rd_kafka_share_subscribe(rkshare, subscription);
+        rd_kafka_resp_err_t err =
+            rd_kafka_share_subscribe(rkshare, subscription);
         rd_kafka_topic_partition_list_destroy(subscription);
         if (err) {
                 fprintf(stderr, "subscribe: %s\n", rd_kafka_err2str(err));
@@ -524,9 +540,8 @@ int main(int argc, char **argv) {
         rd_kafka_message_t *batch[BATCH_CAPACITY];
         int64_t total_acknowledged = 0;
 
-        while (run &&
-               (max_messages < 0 || total_acknowledged < max_messages)) {
-                size_t rcvd = 0;
+        while (run && (max_messages < 0 || total_acknowledged < max_messages)) {
+                size_t rcvd             = 0;
                 rd_kafka_error_t *error = rd_kafka_share_consume_batch(
                     rkshare, POLL_TIMEOUT_MS, batch, &rcvd);
                 if (error) {
@@ -569,8 +584,7 @@ int main(int argc, char **argv) {
                                         rkshare, rkm,
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                 if (ack_err)
-                                        fprintf(stderr,
-                                                "acknowledge: %s\n",
+                                        fprintf(stderr, "acknowledge: %s\n",
                                                 rd_kafka_err2str(ack_err));
                         }
 
@@ -606,9 +620,9 @@ int main(int argc, char **argv) {
                  *          adds the callback. */
 
                 if (ack_mode == ACK_SYNC) {
-                        total_acknowledged += handle_commit_sync(
-                            rkshare, &acked, &acked_ok, &acked_err,
-                            acked_in_batch);
+                        total_acknowledged +=
+                            handle_commit_sync(rkshare, &acked, &acked_ok,
+                                               &acked_err, acked_in_batch);
                 } else if (ack_mode == ACK_ASYNC) {
                         rd_kafka_error_t *commit_error =
                             rd_kafka_share_commit_async(rkshare);

@@ -1342,6 +1342,12 @@ int main(int argc, char **argv) {
                                 "share consumer mode\n");
                         exit(1);
                 }
+                if (batch_size) {
+                        fprintf(stderr,
+                                "%% -B is not supported with "
+                                "share consumer mode\n");
+                        exit(1);
+                }
         }
 
         if (read_hdrs && mode == 'P') {
@@ -1783,9 +1789,10 @@ int main(int argc, char **argv) {
                 /* Share Consumer */
                 rd_kafka_share_t *rkshare;
                 rd_kafka_message_t **rkmessages = NULL;
-                int share_batch_size;
+                /* TODO: integrate with max.poll.records once we decide
+                 * how -B should map to share consumer batch sizing. */
+                int share_batch_size = 10001;
 
-                share_batch_size = batch_size ? batch_size : 10001;
                 rkmessages = malloc(sizeof(*rkmessages) * share_batch_size);
 
                 /* Create share consumer instance. */

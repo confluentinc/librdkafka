@@ -463,6 +463,12 @@ struct rd_kafka_conf_s {
                                  rd_kafka_topic_partition_list_t *offsets,
                                  void *opaque);
 
+        void (*share_acknowledgement_commit_cb)(
+            rd_kafka_share_t *rkshare,
+            rd_kafka_share_partition_offsets_list_t *partitions,
+            rd_kafka_resp_err_t err,
+            void *opaque);
+
         rd_kafka_offset_method_t offset_store_method;
 
         rd_kafka_isolation_level_t isolation_level;

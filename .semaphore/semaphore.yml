@@ -136,7 +136,9 @@ blocks:
       jobs:
         - name: 'Build configuration checks'
           commands:
-            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG} ./packaging/tools/build-configurations-checks.sh
+            - python3 -m pip install -U pip
+            - ./packaging/tools/build-configurations-checks.sh make test-runner-amd64-${CACHE_TAG}
+            - ./packaging/tools/build-configurations-checks.sh cmake test-runner-amd64-${CACHE_TAG}
 
 
   - name: 'Linux x64: release artifact docker builds'

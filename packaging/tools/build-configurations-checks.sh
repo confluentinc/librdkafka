@@ -1,10 +1,9 @@
 #!/bin/sh
 set -e
-
 build_tool="$1"
 docker_image_tag="$2"
 
-if [ -n "$docker_image" ]; then
+if [ -n "$docker_image_tag" ]; then
     echo "Running in docker image tag: $docker_image_tag"
     # Running on the host, spin up the docker builder.
     ./packaging/tools/run-in-docker.sh $docker_image_tag ./packaging/tools/build-configurations-checks.sh $build_tool
@@ -17,19 +16,11 @@ if [ -z "$build_tool" ]; then
     build_tool="make"
 fi
 
-if grep -q alpine /etc/os-release 2>/dev/null ; then
-    # Alpine
-    apk add \
-        bash gcc g++ make $build_tool git bsd-compat-headers
-fi
-
 # Clone the repo so other builds are unaffected of what we're doing
 # and we get a pristine build tree.
-git config --system --add safe.directory '/librdkafka/.git'
-git config --system --add safe.directory '/librdkafka2/.git'
-git clone /librdkafka /librdkafka2
+git clone /librdkafka /home/user/librdkafka
 
-cd /librdkafka2
+cd /home/user/librdkafka
 
 # Disable all flags to make sure it
 # compiles correctly in all cases
@@ -50,7 +41,7 @@ fi
 make -j
 
 export CI=true
-if [ "$build_tool" = "make" ]; then
+if [ "0$build_tool" = "0make" ]; then
 make -j -C tests run_local_quick
 else
 ctest -VV -R RdKafkaTestBrokerLessQuick --output-on-failure

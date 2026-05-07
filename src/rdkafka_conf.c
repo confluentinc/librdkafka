@@ -56,7 +56,7 @@
 #include <windows.h>
 #endif
 
-#ifdef WITH_OAUTHBEARER_OIDC
+#if WITH_OAUTHBEARER_OIDC
 #include <curl/curl.h>
 #endif
 

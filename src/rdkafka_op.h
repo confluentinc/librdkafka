@@ -785,13 +785,6 @@ struct rd_kafka_op_s {
                          */
                         rd_list_t *ack_details;
 
-                        /** Per-partition ack results from
-                         *  ShareAcknowledge response. Set by broker
-                         *  thread, read by main thread in reply
-                         *  handler. Each partition's err field
-                         *  contains the partition-level error. */
-                        rd_kafka_topic_partition_list_t *ack_results;
-
                         /** commit_sync request ID that this op belongs
                          *  to, or 0 if not a commit_sync op. Compared
                          *  with rkcg_commit_sync_request.id to detect

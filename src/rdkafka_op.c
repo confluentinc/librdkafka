@@ -538,8 +538,6 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 RD_IF_FREE(rko->rko_u.share_fetch.target_broker,
                            rd_kafka_broker_destroy);
                 RD_IF_FREE(rko->rko_u.share_fetch.ack_details, rd_list_destroy);
-                RD_IF_FREE(rko->rko_u.share_fetch.ack_results,
-                           rd_kafka_topic_partition_list_destroy);
                 break;
         }
 

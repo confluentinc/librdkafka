@@ -41,6 +41,19 @@ Copy-Item "${srcdir}\librdkafka.dll","${srcdir}\librdkafkacpp.dll",
 "${srcdir}\libcrypto-3${platformpart}.dll","${srcdir}\libssl-3${platformpart}.dll",
 "${srcdir}\zlib1.dll","${srcdir}\zstd.dll","${srcdir}\libcurl.dll" -Destination $bindir
 
+# Copy AWS SDK DLLs - first try outdir (copied by vcpkg AppLocalFromInstalled),
+# then fall back to vcpkg installed bin directory.
+$vcpkgBinDir = "vcpkg_installed\${Env:triplet}\${Env:triplet}\bin"
+foreach ($dll in @("aws-cpp-sdk-sts.dll","aws-cpp-sdk-core.dll")) {
+    if (Test-Path "${srcdir}\${dll}") {
+        Copy-Item "${srcdir}\${dll}" -Destination $bindir
+    } elseif (Test-Path "${vcpkgBinDir}\${dll}") {
+        Copy-Item "${vcpkgBinDir}\${dll}" -Destination $bindir
+    } else {
+        Write-Warning "Could not find ${dll} in outdir or vcpkg bin"
+    }
+}
+
 Copy-Item "${srcdir}\librdkafka.lib","${srcdir}\librdkafkacpp.lib" -Destination $libdir
 
 7z.exe a "artifacts\librdkafka.redist.zip" "build"

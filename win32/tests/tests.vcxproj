@@ -245,6 +245,7 @@
     <ClCompile Include="..\..\tests\0176-share_consumer_commit_sync.c" />
     <ClCompile Include="..\..\tests\0177-share_consumer_transactions.c" />
     <ClCompile Include="..\..\tests\0178-share_consumer_close.c" />
+    <ClCompile Include="..\..\tests\0179-share_consumer_destroy.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

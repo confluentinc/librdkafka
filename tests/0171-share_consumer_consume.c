@@ -824,7 +824,7 @@ static void test_poll_callback_piggybacked_acks(void) {
         /* Create topic and produce messages */
         topic = test_mk_topic_name("0171-poll-cb", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 100);
+        test_produce_msgs_simple(common_producer, topic, 0, 100);
 
         /* Configure group */
         test_alter_group_configurations(group, grp_conf, 1);
@@ -988,7 +988,7 @@ static void test_ack_after_commit(void) {
 
         topic = test_mk_topic_name("0171-ack-after-commit", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 10);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
 
         rkshare = create_share_consumer_explicit_with_cb(group, &state);
 
@@ -1098,7 +1098,7 @@ static void test_change_ack_type_before_commit(void) {
 
         topic = test_mk_topic_name("0171-change-ack-type", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 10);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
 
         rkshare = create_share_consumer_explicit_with_cb(group, &state);
 

@@ -6156,7 +6156,8 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 
         /* For share groups, we have to additionally close
          * sessions with all the brokers */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            !rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)) {
                 /* TODO KIP-932: the below code is similar to
                  * rd_kafka_share_segregate_and_dispatch_acks()
                  * Check if we can reduce code duplication */

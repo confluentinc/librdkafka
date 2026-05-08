@@ -1698,7 +1698,7 @@ static void do_test_commit_async_callback(void) {
 
         topic = test_mk_topic_name("0173-ca-callback", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 50);
+        test_produce_msgs_simple(common_producer, topic, 0, 50);
 
         rkshare = create_share_consumer_with_cb(group, "implicit", &state);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
@@ -1780,7 +1780,7 @@ static void do_test_ack_after_commit_async(void) {
 
         topic = test_mk_topic_name("0173-ca-ack-after-commit", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 10);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
 
         rkshare = create_share_consumer_with_cb(group, "explicit", &state);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
@@ -1884,7 +1884,7 @@ static void do_test_change_ack_type_before_commit_async(void) {
 
         topic = test_mk_topic_name("0173-ca-change-ack-type", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
-        produce_to_topic(topic, 0, 10);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
 
         rkshare = create_share_consumer_with_cb(group, "explicit", &state);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};

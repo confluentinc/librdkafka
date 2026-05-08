@@ -32,7 +32,6 @@
 #include "rdkafka.h"
 
 /* Forward declarations */
-typedef struct rd_kafka_share_s rd_kafka_share_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
 
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
@@ -158,6 +157,32 @@ rd_kafka_share_ack_batches_t *
 rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
                               const rd_kafka_topic_partition_t *rktpar);
 
+/**
+ * @brief Find an existing ack batch by topic id and partition.
+ *
+ * TODO KIP-932: Merge with rd_kafka_share_find_ack_batch and use
+ * binary search once ack_list is kept sorted.
+ */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
+                                    rd_kafka_Uuid_t topic_id,
+                                    int32_t partition);
+
+/**
+ * @brief Reply to a SHARE_FETCH op, propagating any top-level error
+ *        to each batch in ack_details.
+ *
+ * On top-level error (err != 0), sets batch->rktpar->err = err on
+ * each batch in rko->rko_u.share_fetch.ack_details since the
+ * partition-level data was not parsed. On success (err == 0), the
+ * per-partition errors have already been set by the response parser
+ * and ack_details is left untouched. Always calls rd_kafka_op_reply
+ * at the end. Safe to use as a drop-in replacement for
+ * rd_kafka_op_reply on SHARE_FETCH ops.
+ */
+void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
+                                            rd_kafka_resp_err_t err);
+
 void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);
 
@@ -201,5 +226,117 @@ rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
  * Used with rd_list_is_sorted().
  */
 int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
+
+
+/**
+ * @struct rd_kafka_share_partition_offsets_s
+ * @brief Partition with set of acknowledged offsets.
+ */
+struct rd_kafka_share_partition_offsets_s {
+        rd_kafka_topic_partition_t
+            *partition;    /**< Topic partition information */
+        int cnt;           /**< Number of offsets in array */
+        int64_t offsets[]; /**< Flexible array of acknowledged offsets */
+};
+
+/**
+ * @struct rd_kafka_share_partition_offsets_list_s
+ * @brief List of share partition offsets for callback.
+ */
+struct rd_kafka_share_partition_offsets_list_s {
+        int cnt; /**< Number of partitions */
+        rd_kafka_share_partition_offsets_t *elems[]; /**< Flexible array of
+                                                          pointers to partition
+                                                          offsets */
+};
+
+/**
+ * @brief Allocate and initialize a partition offsets element.
+ *
+ * @param topic_id Topic UUID.
+ * @param topic Topic name (will be duplicated).
+ * @param partition Partition id.
+ * @param offsets_cnt Number of offsets to allocate space for.
+ * @returns Newly allocated partition offsets element.
+ */
+rd_kafka_share_partition_offsets_t *
+rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
+                                     const char *topic,
+                                     int32_t partition,
+                                     int offsets_cnt);
+
+/**
+ * @brief Destroy a partition offsets element.
+ *
+ * @param elem Element to destroy.
+ */
+void rd_kafka_share_partition_offsets_destroy(
+    rd_kafka_share_partition_offsets_t *elem);
+
+/**
+ * @brief Allocate and initialize a partition offsets list.
+ *
+ * @param capacity Initial capacity for elements.
+ * @returns Newly allocated list, or NULL if capacity is 0.
+ *          Caller must destroy with
+ *          rd_kafka_share_partition_offsets_list_destroy().
+ */
+rd_kafka_share_partition_offsets_list_t *
+rd_kafka_share_partition_offsets_list_new(int capacity);
+
+/**
+ * @brief Destroy a partition offsets list.
+ *
+ * Frees all elements and the list itself.
+ *
+ * @param list List to destroy (may be NULL).
+ */
+void rd_kafka_share_partition_offsets_list_destroy(
+    rd_kafka_share_partition_offsets_list_t *list);
+
+/**
+ * @brief Build partition offsets list for a single partition.
+ *
+ * Creates an rd_kafka_share_partition_offsets_list_t with exactly one element
+ * for the given batches. Used for per-partition callback invocation.
+ *
+ * @param batches Single partition's ack batches.
+ * @returns Allocated list with one element, or NULL if no offsets.
+ *          Caller must destroy with
+ *          rd_kafka_share_partition_offsets_list_destroy().
+ */
+rd_kafka_share_partition_offsets_list_t *
+rd_kafka_share_build_partition_offsets_list(
+    rd_kafka_share_ack_batches_t *batches);
+
+/**
+ * @brief Enqueue share acknowledgement callback for a single partition.
+ *
+ * Creates and enqueues a callback op for the given partition with the
+ * specified error code. Used for both per-partition acknowledgement results
+ * and top-level errors.
+ *
+ * @param rk Kafka handle.
+ * @param batches The ack batches for this partition (contains offsets).
+ * @param err Error code to report in callback.
+ */
+void rd_kafka_share_enqueue_ack_callback(rd_kafka_t *rk,
+                                         rd_kafka_share_ack_batches_t *batches,
+                                         rd_kafka_resp_err_t err);
+
+
+/**
+ * @brief Dispatch ack callbacks for all partitions in ack_details.
+ *
+ * If err is set (top-level error), all partitions receive the same error.
+ * Otherwise, per-partition results from ack_results are used.
+ *
+ * @param rk Kafka handle.
+ * @param ack_details List of ack batches.
+ * @param ack_results Per-partition results (may be NULL).
+ * @param err Top-level error code.
+ */
+void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
+                                           rd_list_t *ack_details);
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

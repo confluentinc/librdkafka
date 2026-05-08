@@ -40,6 +40,7 @@ typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
+typedef struct rd_kafka_share_ack_result_s rd_kafka_share_ack_result_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -211,7 +212,11 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
-
+        RD_KAFKA_OP_SHARE_ACK_COMMIT,     /**< Share acknowledgement callback
+                                           *   reply: main -> app */
+        RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
+                                            to clear share session during broker
+                                            decommission */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -613,6 +618,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                 RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                                RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA,
                                 RD_KAFKA_MOCK_CMD_BROKER_ADD,
                                 RD_KAFKA_MOCK_CMD_COORD_SET,
                                 RD_KAFKA_MOCK_CMD_APIVERSION_SET,
@@ -785,13 +791,6 @@ struct rd_kafka_op_s {
                          */
                         rd_list_t *ack_details;
 
-                        /** Per-partition ack results from
-                         *  ShareAcknowledge response. Set by broker
-                         *  thread, read by main thread in reply
-                         *  handler. Each partition's err field
-                         *  contains the partition-level error. */
-                        rd_kafka_topic_partition_list_t *ack_results;
-
                         /** commit_sync request ID that this op belongs
                          *  to, or 0 if not a commit_sync op. Compared
                          *  with rkcg_commit_sync_request.id to detect
@@ -878,6 +877,24 @@ struct rd_kafka_op_s {
                          */
                         rd_list_t *inflight_acks;
                 } share_fetch_response;
+
+                /**
+                 * Share acknowledgement callback reply.
+                 * Contains results to deliver to
+                 * share_acknowledgement_commit_cb.
+                 */
+                struct {
+                        /** List of partition offsets. */
+                        rd_kafka_share_partition_offsets_list_t *partitions;
+                        /** Callback function pointer. */
+                        void (*cb)(
+                            rd_kafka_share_t *rkshare,
+                            rd_kafka_share_partition_offsets_list_t *partitions,
+                            rd_kafka_resp_err_t err,
+                            void *opaque);
+                        /** Application opaque. */
+                        void *opaque;
+                } share_ack_commit;
 
         } rko_u;
 };

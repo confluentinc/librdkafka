@@ -16,8 +16,8 @@
         },
         {
             "name": "curl",
-            "version>=": "8.10.1#0"
+            "version>=": "8.18.0#0"
         }
     ],
-    "builtin-baseline": "56765209ec0e92c58a5fd91aa09c46a16d660026"
+    "builtin-baseline": "b2f068faf45a3f04145bec0f52a66526ad590227"
 }

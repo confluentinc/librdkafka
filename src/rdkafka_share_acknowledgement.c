@@ -311,6 +311,60 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
 }
 
 /**
+ * @brief Find an existing ack batch by topic id and partition.
+ *
+ * Same as rd_kafka_share_find_ack_batch but takes topic_id and
+ * partition directly to avoid allocating a temporary
+ * rd_kafka_topic_partition_t for the lookup.
+ *
+ * TODO KIP-932: Merge this with rd_kafka_share_find_ack_batch and use
+ * rd_list_find with binary search once ack_list is kept sorted.
+ *
+ * @param ack_list List of rd_kafka_share_ack_batches_t*.
+ * @param topic_id Topic UUID to match.
+ * @param partition Partition id to match.
+ *
+ * @returns Matching batch, or NULL if not found.
+ */
+rd_kafka_share_ack_batches_t *
+rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
+                                    rd_kafka_Uuid_t topic_id,
+                                    int32_t partition) {
+        rd_kafka_share_ack_batches_t *existing;
+        int i;
+
+        RD_LIST_FOREACH(existing, ack_list, i) {
+                if (existing->rktpar->partition == partition &&
+                    !rd_kafka_Uuid_cmp(
+                        rd_kafka_topic_partition_get_topic_id(existing->rktpar),
+                        topic_id))
+                        return existing;
+        }
+        return NULL;
+}
+
+/**
+ * @brief Reply to a SHARE_FETCH op with an error, propagating the
+ *        error to each batch in ack_details.
+ *
+ * On top-level error (err != 0), set err on each batch since the
+ * partition-level data was not parsed. On success (err == 0), the
+ * per-partition errors have already been set by the response parser
+ * and we leave ack_details untouched.
+ */
+void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
+                                            rd_kafka_resp_err_t err) {
+        if (err && rko->rko_u.share_fetch.ack_details) {
+                rd_kafka_share_ack_batches_t *batch;
+                int i;
+                RD_LIST_FOREACH(batch, rko->rko_u.share_fetch.ack_details, i) {
+                        batch->rktpar->err = err;
+                }
+        }
+        rd_kafka_op_reply(rko, err);
+}
+
+/**
  * @brief Segregate ack batches from a FANOUT op by partition leader.
  *
  * For each ack batch, looks up the current leader broker via the
@@ -464,6 +518,26 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                                     inflight_batches
                                                         ->response_leader_epoch,
                                                     0);
+                                                /* Sentinel: no reply path
+                                                 * has touched this batch
+                                                 * yet. Distinct from
+                                                 * INVALID_RECORD_STATE
+                                                 * (set in buf callback)
+                                                 * which means "reply
+                                                 * received but partition
+                                                 * missing from response".
+                                                 * Defensive check in main
+                                                 * reply handler converts
+                                                 * any remaining
+                                                 * _IN_PROGRESS to the
+                                                 * top-level rko_err so
+                                                 * silent-destroy paths
+                                                 * (q_enq disabled queue,
+                                                 * helper bypassed) don't
+                                                 * leak the sentinel to
+                                                 * the app. */
+                                                ack_batch->rktpar->err =
+                                                    RD_KAFKA_RESP_ERR__IN_PROGRESS;
                                         }
                                         rd_kafka_dbg(
                                             rkshare->rkshare_rk, CGRP,

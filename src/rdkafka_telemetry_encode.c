@@ -377,6 +377,13 @@ static const rd_kafka_telemetry_metric_value_calculator_t
             &calculate_consumer_commit_latency_max,
 };
 
+static const rd_kafka_telemetry_metric_value_calculator_t
+    SHARE_CONSUMER_METRIC_VALUE_CALCULATORS
+        [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
+                &calculate_consumer_poll_idle_ratio_avg,
+        };
+
 static const char *get_client_rack(const rd_kafka_t *rk) {
         return rk->rk_conf.client_rack &&
                        RD_KAFKAP_STR_LEN(rk->rk_conf.client_rack)
@@ -778,7 +785,8 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_avg_rollover(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_throttle,
                     &rkb->rkb_telemetry.rd_avg_current.rkb_avg_throttle);
-                if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                if (rk->rk_type == RD_KAFKA_CONSUMER &&
+                    !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
                                             .rkb_avg_fetch_latency);
                         rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover
@@ -801,7 +809,10 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                 rd_avg_rollover(
                     &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
                     &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
+        }
 
+        if (rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_avg_destroy(
                     &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency);
                 rd_avg_rollover(
@@ -883,12 +894,19 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         for (i = 0; i < metrics_to_encode_count; i++) {
 
                 rd_kafka_telemetry_metric_value_calculator_t
-                    metric_value_calculator =
-                        (rk->rk_type == RD_KAFKA_PRODUCER)
-                            ? PRODUCER_METRIC_VALUE_CALCULATORS
-                                  [metrics_to_encode[i]]
-                            : CONSUMER_METRIC_VALUE_CALCULATORS
-                                  [metrics_to_encode[i]];
+                    metric_value_calculator;
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                        metric_value_calculator =
+                            SHARE_CONSUMER_METRIC_VALUE_CALCULATORS
+                                [metrics_to_encode[i]];
+                else if (rk->rk_type == RD_KAFKA_PRODUCER)
+                            metric_value_calculator =
+                                PRODUCER_METRIC_VALUE_CALCULATORS
+                                    [metrics_to_encode[i]];
+                else
+                            metric_value_calculator =
+                                CONSUMER_METRIC_VALUE_CALCULATORS
+                                    [metrics_to_encode[i]];
                 if (info[metrics_to_encode[i]].is_per_broker) {
                         rd_kafka_broker_t *rkb;
 

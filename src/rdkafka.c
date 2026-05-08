@@ -1119,6 +1119,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_conf.sasl.lock);
         rwlock_destroy(&rk->rk_lock);
 
+        rd_free(rk->rk_rkshare);
         rd_free(rk);
         rd_kafka_global_cnt_decr();
 }
@@ -1201,6 +1202,18 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
                         rd_kafka_consumer_close(rk);
         }
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Destroy inflight acks map to release
+                 * toppar references held by topic_partition objects in the map.
+                 * Otherwise rd_kafka_destroy_app() deadlocks: it joins broker
+                 * threads, which wait for refcnt <= 1, but the toppar holds a
+                 * broker ref via rktp_leader that is only released when the
+                 * toppar is destroyed, which requires refcnt 0, which requires
+                 * releasing the rktp ref held by the inflight_acks map entry.
+                 */
+                RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
+        }
+
         /* Await telemetry termination. This method blocks until the last
          * PushTelemetry request is sent (if possible). */
         if (!(flags & RD_KAFKA_DESTROY_F_IMMEDIATE))
@@ -1258,21 +1271,15 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-
-        /* Destroy inflight acks map before rd_kafka_destroy() to release
-         * toppar references held by topic_partition objects in the map.
-         * Otherwise rd_kafka_destroy() deadlocks: it joins broker threads,
-         * which wait for refcnt <= 1, but the toppar holds a broker ref
-         * via rktp_leader that is only released when the toppar is destroyed,
-         * which requires refcnt 0, which requires releasing the rktp ref
-         * held by the inflight_acks map entry. */
-        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
         rd_kafka_destroy(rkshare->rkshare_rk);
-        rd_free(rkshare);
 }
 
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
+}
+
+void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags) {
+        rd_kafka_destroy_flags(rkshare->rkshare_rk, flags);
 }
 
 
@@ -1392,6 +1399,18 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
 
                 thrd  = rd_malloc(sizeof(*thrd));
                 *thrd = rk->rk_internal_rkb->rkb_thread;
+
+                /* TODO KIP-932: Clear any share-session state that may
+                 * have been populated on the internal broker during a
+                 * leader migration (PARTITION_JOIN runs on whichever
+                 * broker the toppar is transiently delegated to,
+                 * including :0/internal). Once the leader-migration
+                 * path is fixed to skip non-LEARNED brokers, this
+                 * SESSION_CLEAR enqueue can be removed. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                        rd_kafka_q_enq(
+                            rk->rk_internal_rkb->rkb_ops,
+                            rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
 
                 /* Send op to trigger queue wake-up.
                  * WARNING: This is last time we can read
@@ -3234,7 +3253,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 1: If records were fetched and broker is not terminating,
+         * Step 1: If records were fetched and the instance is not terminating,
          * reset the global fetch guard so the next FANOUT can select
          * a new fetch broker.
          */
@@ -3246,8 +3265,9 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
          * enqueue a session leave op on the replying broker thread and return
          */
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
-                rd_kafka_share_enqueue_fetch_op(rkcg->rkcg_rk, reply_rkb,
-                                                rd_false, rd_true);
+                if (!rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
+                        rd_kafka_share_enqueue_fetch_op(
+                            rkcg->rkcg_rk, reply_rkb, rd_false, rd_true);
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 

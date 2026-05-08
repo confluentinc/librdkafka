@@ -1959,7 +1959,6 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                                     RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
                 }
         }
-
         /* Parse and handle the response (unless the request errored).
          * The parser sets per-partition err on the matching batches in
          * ack_details. DESTROY case falls through here and is handled
@@ -2888,6 +2887,11 @@ void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
                     rkb->rkb_share_fetch_session.forgetting_toppars);
                 rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
         }
+
+        /*
+         * This allows us to avoid future changes to the closed share session
+         * Toppar add/remove functions do not allow updates if epoch is -1
+         * Avoid future changes to the closed share session */
         rkb->rkb_share_fetch_session.epoch = -1;
 }
 

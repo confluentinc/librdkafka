@@ -1,5 +1,5 @@
 
-Native win32 build instructions using Microsoft Visual Studio 2015 (MSVC).
+Native win32 build instructions using Microsoft Visual Studio 2026 (MSVC).
 
 Requirements:
  * zlib is installed automatically from NuGet,

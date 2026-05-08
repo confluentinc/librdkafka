@@ -17,7 +17,7 @@
 param(
     [string]$config='Release',
     [string]$platform='x64',
-    [string]$toolset='v142',
+    [string]$toolset='v145',
     [string]$version='0.0.0'
 )
 
@@ -35,6 +35,8 @@ New-Item -Path $libdir -ItemType Directory
 $platformpart = ""
 if ("x64" -eq $platform) {
    $platformpart = "-${platform}"
+} elseif ("ARM64" -eq $platform) {
+   $platformpart = "-arm64"
 }
 
 Copy-Item "${srcdir}\librdkafka.dll","${srcdir}\librdkafkacpp.dll",

@@ -7,7 +7,10 @@ import os
 import tempfile
 import shutil
 import subprocess
+import re
 from packaging import Package, Mapping
+
+SEMVER_PREFIX = re.compile(r"^\d+\.\d+\.\d+")
 
 
 class NugetPackage (Package):
@@ -91,14 +94,6 @@ class NugetPackage (Package):
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-arm64/native/librdkafka.so'),
-        # Linux glibc centos8 s390x without GSSAPI (no external deps)
-        Mapping({'arch': 's390x',
-                 'plat': 'linux',
-                 'dist': 'centos8',
-                 'lnk': 'all'},
-                'librdkafka.tgz',
-                './usr/local/lib/librdkafka.so.1',
-                'runtimes/linux-s390x/native/librdkafka.so'),
 
         # Linux musl alpine x64 without GSSAPI (no external deps)
         Mapping({'arch': 'x64',
@@ -164,6 +159,13 @@ class NugetPackage (Package):
                 'librdkafka.redist*',
                 'build/native/bin/v142/x64/Release/libcurl.dll',
                 'runtimes/win-x64/native/libcurl.dll'),
+        # rdkafka-aws-sts shim DLL — AWS SDK is statically linked inside it,
+        # so no aws-cpp-sdk-*.dll is shipped separately.
+        Mapping({'arch': 'x64',
+                 'plat': 'win'},
+                'librdkafka.redist*',
+                'build/native/bin/v142/x64/Release/rdkafka-aws-sts.dll',
+                'runtimes/win-x64/native/rdkafka-aws-sts.dll'),
         # matches x64 librdkafka.redist.zip, lib files
         Mapping({'arch': 'x64',
                  'plat': 'win'},
@@ -225,6 +227,13 @@ class NugetPackage (Package):
                 'librdkafka.redist*',
                 'build/native/bin/v142/Win32/Release/libcurl.dll',
                 'runtimes/win-x86/native/libcurl.dll'),
+        # rdkafka-aws-sts shim DLL — AWS SDK is statically linked inside it,
+        # so no aws-cpp-sdk-*.dll is shipped separately.
+        Mapping({'arch': 'x86',
+                 'plat': 'win'},
+                'librdkafka.redist*',
+                'build/native/bin/v142/Win32/Release/rdkafka-aws-sts.dll',
+                'runtimes/win-x86/native/rdkafka-aws-sts.dll'),
 
         # matches Win32 librdkafka.redist.zip, lib files
         Mapping({'arch': 'x86',
@@ -241,9 +250,173 @@ class NugetPackage (Package):
                 )
     ]
 
+    # See .semamphore/semaphore.yml for where these are built.
+    # OSX-only mappings (kept for reference, superseded by the active mappings below)
+#     mappings = [
+#         #
+#         # Headers + docs from OSX x64 artifact
+#         #
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/include/librdkafka/rdkafka.h',
+#                 'build/native/include/librdkafka/rdkafka.h'),
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/include/librdkafka/rdkafkacpp.h',
+#                 'build/native/include/librdkafkacpp.h'),
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/include/librdkafka/rdkafka_mock.h',
+#                 'build/native/include/librdkafka/rdkafka_mock.h'),
+#
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/share/doc/librdkafka/README.md',
+#                 'README.md'),
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/share/doc/librdkafka/CONFIGURATION.md',
+#                 'CONFIGURATION.md'),
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/share/doc/librdkafka/LICENSES.txt',
+#                 'LICENSES.txt'),
+#
+#         #
+#         # OSX runtimes
+#         #
+#         # OSX x64
+#         Mapping({'arch': 'x64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/lib/librdkafka.dylib',
+#                 'runtimes/osx-x64/native/librdkafka.dylib'),
+#
+#         # OSX arm64
+#         Mapping({'arch': 'arm64',
+#                  'plat': 'osx'},
+#                 'librdkafka.tgz',
+#                 './usr/local/lib/librdkafka.1.dylib',
+#                 'runtimes/osx-arm64/native/librdkafka.dylib'),
+#     ]
+
+    # # OSX + Linux mappings
+    # mappings = [
+    #     #
+    #     # Headers + docs from Linux x64 artifact
+    #     #
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'lnk': 'std'},
+    #             'librdkafka.tgz',
+    #             './usr/local/include/librdkafka/rdkafka.h',
+    #             'build/native/include/librdkafka/rdkafka.h'),
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'lnk': 'std'},
+    #             'librdkafka.tgz',
+    #             './usr/local/include/librdkafka/rdkafkacpp.h',
+    #             'build/native/include/librdkafka/rdkafkacpp.h'),
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'lnk': 'std'},
+    #             'librdkafka.tgz',
+    #             './usr/local/include/librdkafka/rdkafka_mock.h',
+    #             'build/native/include/librdkafka/rdkafka_mock.h'),
+
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'lnk': 'std'},
+    #             'librdkafka.tgz',
+    #             './usr/local/share/doc/librdkafka/README.md',
+    #             'README.md'),
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'lnk': 'std'},
+    #             'librdkafka.tgz',
+    #             './usr/local/share/doc/librdkafka/CONFIGURATION.md',
+    #             'CONFIGURATION.md'),
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'osx',
+    #              'lnk': 'all'},
+    #             'librdkafka.tgz',
+    #             './usr/local/share/doc/librdkafka/LICENSES.txt',
+    #             'LICENSES.txt'),
+
+    #     #
+    #     # OSX runtimes
+    #     #
+    #     # OSX x64
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'osx'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.dylib',
+    #             'runtimes/osx-x64/native/librdkafka.dylib'),
+    #     # OSX arm64
+    #     Mapping({'arch': 'arm64',
+    #              'plat': 'osx'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.1.dylib',
+    #             'runtimes/osx-arm64/native/librdkafka.dylib'),
+
+    #     #
+    #     # Linux runtimes
+    #     #
+    #     # Linux glibc centos8 x64 with GSSAPI
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'dist': 'centos8',
+    #              'lnk': 'std'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.so.1',
+    #             'runtimes/linux-x64/native/librdkafka.so'),
+    #     # Linux glibc centos8 x64 without GSSAPI (no external deps)
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'dist': 'centos8',
+    #              'lnk': 'all'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.so.1',
+    #             'runtimes/linux-x64/native/centos8-librdkafka.so'),
+    #     # Linux glibc centos8 arm64 without GSSAPI (no external deps)
+    #     Mapping({'arch': 'arm64',
+    #              'plat': 'linux',
+    #              'dist': 'centos8',
+    #              'lnk': 'all'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.so.1',
+    #             'runtimes/linux-arm64/native/librdkafka.so'),
+    #     # Linux musl alpine x64 without GSSAPI (no external deps)
+    #     Mapping({'arch': 'x64',
+    #              'plat': 'linux',
+    #              'dist': 'alpine',
+    #              'lnk': 'all'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.so.1',
+    #             'runtimes/linux-x64/native/alpine-librdkafka.so'),
+    #     # Linux musl alpine arm64 without GSSAPI (no external deps)
+    #     Mapping({'arch': 'arm64',
+    #              'plat': 'linux',
+    #              'dist': 'alpine',
+    #              'lnk': 'all'},
+    #             'librdkafka.tgz',
+    #             './usr/local/lib/librdkafka.so.1',
+    #             'runtimes/linux-arm64/native/alpine-librdkafka.so'),
+    # ]
+
     def __init__(self, version, arts):
         if version.startswith('v'):
             version = version[1:]  # Strip v prefix
+        # PR-only workaround: if it's not a normal semver like 1.2.3...,
+        # wrap it as 0.0.0-<tag>
+        if not SEMVER_PREFIX.match(version):
+            version = f"0.0.0-{version}"
         super(NugetPackage, self).__init__(version, arts)
 
     def cleanup(self):

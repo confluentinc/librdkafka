@@ -1062,15 +1062,17 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_avg_destroy(
                     &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
                 rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency);
-                rd_avg_destroy(
                     &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency);
+                if (!RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_rebalance_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_commit_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_rebalance_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_commit_latency);
+                }
         }
 
         /* Purge op-queues */
@@ -2769,22 +2771,24 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 rd_avg_init(
                     &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
                     RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency,
-                    RD_AVG_GAUGE, 0, 900000 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
+                if (!RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_rebalance_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_rebalance_latency,
+                                    RD_AVG_GAUGE, 0, 900000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_commit_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_commit_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                }
 
         } else if (type == RD_KAFKA_PRODUCER) {
                 rk->rk_eos.transactional_id =

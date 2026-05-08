@@ -547,6 +547,13 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_free(conf);
 
         rk->rk_type           = rk_type;
+        /* Auto-detect share consumer from metric name prefix. */
+        if (strncmp(expected_name,
+                    RD_KAFKA_TELEMETRY_METRIC_PREFIX "consumer.share.",
+                    strlen(RD_KAFKA_TELEMETRY_METRIC_PREFIX
+                           "consumer.share.")) == 0)
+                rk->rk_conf.share.is_share_consumer = 1;
+
         rk->rk_cgrp           = rd_calloc(1, sizeof(*rk->rk_cgrp));
         rk->rk_broker_cnt.val = 1;
         rk->rk_telemetry.matched_metrics_cnt = 1;
@@ -992,6 +999,18 @@ int unit_test_telemetry_gauge(void) {
             "The maximum commit latency in ms for the consumer coordinator.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
             unit_test_telemetry_set_commit_latency, default_expected_value_int,
+            default_expected_value_double);
+
+        /* Share consumer metrics */
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.poll.idle.ratio.avg",
+            "The average fraction of time the consumer's poll() is idle "
+            "as opposed to waiting for the user code to process records.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_poll_idle_ratio, default_expected_value_int,
             default_expected_value_double);
         return fails;
 }

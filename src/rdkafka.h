@@ -415,6 +415,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR__INVALID_DIFFERENT_RECORD = -138,
         /** Broker is going away but client isn't terminating */
         RD_KAFKA_RESP_ERR__DESTROY_BROKER = -137,
+        /** Share consumer woken up by rd_kafka_share_wakeup() */
+        RD_KAFKA_RESP_ERR__WAKEUP = -136,
 
         /** End internal error codes */
         RD_KAFKA_RESP_ERR__END = -100,
@@ -3265,6 +3267,34 @@ rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
                              int timeout_ms,
                              rd_kafka_message_t **rkmessages /* out */,
                              size_t *rkmessages_size /* out */);
+
+/**
+ * @brief Wake up the share consumer from blocking consume_batch.
+ *
+ * This function is thread-safe and can be called from any thread to interrupt
+ * a blocking rd_kafka_share_consume_batch() call.
+ *
+ * If rd_kafka_share_consume_batch() is currently blocking, it will return
+ * with an RD_KAFKA_RESP_ERR__WAKEUP error.
+ *
+ * If called before rd_kafka_share_consume_batch(), the next call to
+ * rd_kafka_share_consume_batch() will return immediately with
+ * RD_KAFKA_RESP_ERR__WAKEUP without sending any fetch requests.
+ *
+ * This is a one-shot mechanism: each call to rd_kafka_share_wakeup()
+ * will interrupt exactly one rd_kafka_share_consume_batch() call.
+ *
+ * @param rkshare Share consumer handle.
+ *
+ * @remark Thread-safe: can be called from any thread.
+ * @remark One-shot: each wakeup interrupts exactly one consume_batch call.
+ * @remark No data loss: in-flight fetch requests continue and results
+ *         are buffered for the next consume_batch call.
+ *
+ * @sa rd_kafka_share_consume_batch
+ */
+RD_EXPORT
+void rd_kafka_share_wakeup(rd_kafka_share_t *rkshare);
 
 /**
  * @enum rd_kafka_share_AcknowledgeType_t

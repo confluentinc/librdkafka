@@ -1,5 +1,5 @@
 # Set up vcpkg and install required packages.
-$version = "2025.07.25"
+$version = "37dd44f23f51041f480440e99b45e5706f47765d"
 $vpkgHash=(Get-FileHash ".\librdkafka\vcpkg.json").Hash
 $cacheKey = "vcpkg-$version-$Env:triplet-$vpkgHash-$Env:CACHE_TAG"
 $librdkafkaPath = ".\librdkafka";

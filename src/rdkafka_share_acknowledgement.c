@@ -792,7 +792,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
  * @param partition Partition id.
  * @param offsets_cnt Number of offsets to allocate space for.
  */
-rd_kafka_share_partition_offsets_t *
+static rd_kafka_share_partition_offsets_t *
 rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
                                      const char *topic,
                                      int32_t partition,
@@ -816,7 +816,7 @@ rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
  *
  * @param elem Element to destroy.
  */
-void rd_kafka_share_partition_offsets_destroy(
+static void rd_kafka_share_partition_offsets_destroy(
     rd_kafka_share_partition_offsets_t *elem) {
         if (!elem)
                 return;
@@ -832,7 +832,7 @@ void rd_kafka_share_partition_offsets_destroy(
  *          Caller must destroy with
  *          rd_kafka_share_partition_offsets_list_destroy().
  */
-rd_kafka_share_partition_offsets_list_t *
+static rd_kafka_share_partition_offsets_list_t *
 rd_kafka_share_partition_offsets_list_new(int capacity) {
         rd_kafka_share_partition_offsets_list_t *list;
         size_t size;
@@ -897,9 +897,10 @@ rd_kafka_share_build_partition_offsets_list(
 }
 
 
-void rd_kafka_share_enqueue_ack_callback(rd_kafka_t *rk,
-                                         rd_kafka_share_ack_batches_t *batches,
-                                         rd_kafka_resp_err_t err) {
+void rd_kafka_share_enqueue_ack_commit_cb_op(
+    rd_kafka_t *rk,
+    rd_kafka_share_ack_batches_t *batches,
+    rd_kafka_resp_err_t err) {
         rd_kafka_op_t *cb_rko;
         rd_kafka_share_partition_offsets_list_t *partitions;
 
@@ -910,7 +911,7 @@ void rd_kafka_share_enqueue_ack_callback(rd_kafka_t *rk,
         if (!partitions)
                 return;
 
-        cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT);
+        cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB);
         cb_rko->rko_err = err;
         cb_rko->rko_u.share_ack_commit.partitions = partitions;
         cb_rko->rko_u.share_ack_commit.cb =
@@ -984,9 +985,7 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
 
         /* Use per-partition error from each batch */
         RD_LIST_FOREACH(ack_batch, ack_details, k) {
-                rd_kafka_share_enqueue_ack_callback(
-                    rk, ack_batch,
-                    ack_batch->rktpar ? ack_batch->rktpar->err
-                                      : RD_KAFKA_RESP_ERR_NO_ERROR);
+                rd_kafka_share_enqueue_ack_commit_cb_op(rk, ack_batch,
+                                                        ack_batch->rktpar->err);
         }
 }

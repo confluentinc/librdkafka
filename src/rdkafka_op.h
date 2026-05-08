@@ -212,7 +212,7 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
-        RD_KAFKA_OP_SHARE_ACK_COMMIT,     /**< Share acknowledgement callback
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB,  /**< Share acknowledgement callback
                                            *   reply: main -> app */
 
         RD_KAFKA_OP__END

@@ -1937,26 +1937,21 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
 #define MAX_CB_OFFSETS 500
 
+/* Extended ack callback state with error tracking for sync commit tests */
 typedef struct ack_cb_state_s {
-        int callback_cnt;
-        int total_offsets;
-        rd_kafka_resp_err_t last_err;
+        test_ack_cb_state_t base;       /* Base state from test.h */
         rd_kafka_resp_err_t errors[64]; /* Track errors per callback */
         int error_cnt;
-        mtx_t lock;
-        cnd_t cond;
 } ack_cb_state_t;
 
 static void ack_cb_state_init(ack_cb_state_t *state) {
         memset(state, 0, sizeof(*state));
+        test_ack_cb_state_init(&state->base);
         state->error_cnt = 0;
-        mtx_init(&state->lock, mtx_plain);
-        cnd_init(&state->cond);
 }
 
 static void ack_cb_state_destroy(ack_cb_state_t *state) {
-        mtx_destroy(&state->lock);
-        cnd_destroy(&state->cond);
+        test_ack_cb_state_destroy(&state->base);
 }
 
 static void share_ack_cb(rd_kafka_share_t *rkshare,
@@ -1980,70 +1975,21 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
         TEST_SAY("ACK CALLBACK: err=%s (%d), partitions=%zu, offsets=%d\n",
                  rd_kafka_err2name(err), err, partition_cnt, offsets_in_entry);
 
-        mtx_lock(&state->lock);
-        state->callback_cnt++;
-        state->last_err = err;
+        mtx_lock(&state->base.lock);
+        state->base.callback_cnt++;
+        state->base.last_err = err;
 
         /* Track this error in our errors array */
         if (state->error_cnt < 64)
                 state->errors[state->error_cnt++] = err;
 
         if (entry)
-                state->total_offsets += offsets_in_entry;
+                state->base.total_offsets += offsets_in_entry;
 
-        cnd_signal(&state->cond);
-        mtx_unlock(&state->lock);
+        cnd_signal(&state->base.cond);
+        mtx_unlock(&state->base.lock);
 }
 
-static rd_kafka_share_t *create_share_consumer_with_cb(const char *group_id,
-                                                       const char *ack_mode,
-                                                       ack_cb_state_t *state) {
-        rd_kafka_share_t *rkshare;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
-                          sizeof(errstr));
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, share_ack_cb);
-        rd_kafka_conf_set_opaque(conf, state);
-
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
-        return rkshare;
-}
-
-static rd_bool_t wait_for_cb_with_poll(ack_cb_state_t *state,
-                                       rd_kafka_share_t *rkshare,
-                                       int min_callbacks,
-                                       int timeout_ms) {
-        rd_bool_t success = rd_false;
-        int elapsed       = 0;
-        int poll_interval = 100;
-        rd_kafka_message_t *rkmessages[100];
-        size_t rcvd;
-
-        while (elapsed < timeout_ms) {
-                rd_kafka_error_t *error = rd_kafka_share_consume_batch(
-                    rkshare, poll_interval, rkmessages, &rcvd);
-                if (error)
-                        rd_kafka_error_destroy(error);
-
-                for (size_t i = 0; i < rcvd; i++)
-                        rd_kafka_message_destroy(rkmessages[i]);
-
-                mtx_lock(&state->lock);
-                if (state->callback_cnt >= min_callbacks) {
-                        success = rd_true;
-                        mtx_unlock(&state->lock);
-                        break;
-                }
-                mtx_unlock(&state->lock);
-                elapsed += poll_interval;
-        }
-        return success;
-}
 
 
 /* ===================================================================
@@ -2073,7 +2019,8 @@ static void do_test_commit_sync_callback(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 50);
 
-        rkshare = create_share_consumer_with_cb(group, "explicit", &state);
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
@@ -2107,17 +2054,18 @@ static void do_test_commit_sync_callback(void) {
         RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
 
         /* Wait for callback */
-        wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+        test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
 
         TEST_SAY("Callback count=%d, total_offsets=%d, last_err=%s\n",
-                 state.callback_cnt, state.total_offsets,
-                 rd_kafka_err2name(state.last_err));
+                 state.base.callback_cnt, state.base.total_offsets,
+                 rd_kafka_err2name(state.base.last_err));
 
-        TEST_ASSERT(state.callback_cnt >= 1,
-                    "Expected at least 1 callback, got %d", state.callback_cnt);
-        TEST_ASSERT(state.total_offsets > 0,
+        TEST_ASSERT(state.base.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d",
+                    state.base.callback_cnt);
+        TEST_ASSERT(state.base.total_offsets > 0,
                     "Expected offsets in callback, got %d",
-                    state.total_offsets);
+                    state.base.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
@@ -2160,7 +2108,8 @@ static void do_test_ack_after_commit(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 10);
 
-        rkshare = create_share_consumer_with_cb(group, "explicit", &state);
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
@@ -2209,12 +2158,13 @@ static void do_test_ack_after_commit(void) {
         RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
 
         /* Wait for callback to confirm commit */
-        wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+        test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
 
-        TEST_SAY("Callback: count=%d, last_err=%s\n", state.callback_cnt,
-                 rd_kafka_err2name(state.last_err));
-        TEST_ASSERT(state.callback_cnt >= 1,
-                    "Expected at least 1 callback, got %d", state.callback_cnt);
+        TEST_SAY("Callback: count=%d, last_err=%s\n", state.base.callback_cnt,
+                 rd_kafka_err2name(state.base.last_err));
+        TEST_ASSERT(state.base.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d",
+                    state.base.callback_cnt);
 
         /* Now try to acknowledge the same message again using the
          * offset-based API. This should fail with _STATE because the
@@ -2268,7 +2218,8 @@ static void do_test_change_ack_type_before_commit(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 10);
 
-        rkshare = create_share_consumer_with_cb(group, "explicit", &state);
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
@@ -2343,16 +2294,17 @@ static void do_test_change_ack_type_before_commit(void) {
         rd_kafka_topic_partition_list_destroy(partitions);
 
         /* Wait for callback */
-        wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+        test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
 
-        TEST_SAY("Callback: count=%d, last_err=%s\n", state.callback_cnt,
-                 rd_kafka_err2name(state.last_err));
+        TEST_SAY("Callback: count=%d, last_err=%s\n", state.base.callback_cnt,
+                 rd_kafka_err2name(state.base.last_err));
 
-        TEST_ASSERT(state.callback_cnt >= 1,
-                    "Expected at least 1 callback, got %d", state.callback_cnt);
-        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+        TEST_ASSERT(state.base.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d",
+                    state.base.callback_cnt);
+        TEST_ASSERT(state.base.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Expected NO_ERROR in callback, got %s",
-                    rd_kafka_err2name(state.last_err));
+                    rd_kafka_err2name(state.base.last_err));
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);

@@ -3223,6 +3223,13 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                      records_fetched, should_leave,
                      reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
 
+        /*
+         * Step 1: Dispatch acknowledgement callbacks.
+         * Per-partition errors were set by the broker thread.
+         */
+        rd_kafka_share_dispatch_ack_callbacks(
+            rk, rko_orig->rko_u.share_fetch.ack_details);
+
         reply_rkb->rkb_share_fetch_enqueued = rd_false;
 
         if (should_fetch)
@@ -3234,7 +3241,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 1: If records were fetched and broker is not terminating,
+         * Step 2: If records were fetched and broker is not terminating,
          * reset the global fetch guard so the next FANOUT can select
          * a new fetch broker.
          */
@@ -3242,7 +3249,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                 rkcg->rkcg_share.share_fetch_more_records = rd_false;
 
         /*
-         * Step 2: If the consumer has been marked for termination,
+         * Step 3: If the consumer has been marked for termination,
          * enqueue a session leave op on the replying broker thread and return
          */
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
@@ -3252,7 +3259,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 3: Handle commit_sync reply if this op belongs to
+         * Step 4: Handle commit_sync reply if this op belongs to
          * the current commit_sync request.
          */
         if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
@@ -3306,13 +3313,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
 
                 rd_kafka_share_commit_sync_maybe_complete(rk, rkcg);
         }
-
-        /*
-         * Step 4: Dispatch acknowledgement callbacks.
-         * Per-partition errors were set by the broker thread.
-         */
-        rd_kafka_share_dispatch_ack_callbacks(
-            rk, rko_orig->rko_u.share_fetch.ack_details);
 
         /*
          * Step 5: Dispatch pending commit_sync to the replying broker
@@ -5725,7 +5725,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                                             rko->rko_u.offset_commit.opaque);
                 break;
 
-        case RD_KAFKA_OP_SHARE_ACK_COMMIT:
+        case RD_KAFKA_OP_SHARE_ACK_COMMIT_CB:
                 if (!rko->rko_u.share_ack_commit.cb)
                         return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
                 rko->rko_u.share_ack_commit.cb(

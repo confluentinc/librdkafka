@@ -130,14 +130,40 @@ else # MKL_NO_SELFCONTAINED_STATIC_LIB
 
 ifneq ($(MKL_STATIC_LIBS),)
 _STATIC_FILENAME=$(LIBNAME)-static.a
+
+# Partial-link AWS SDK archives into a single merged archive before the
+# self-contained static library merge step.  This eliminates cross-TU internal
+# symbols (std::, Aws:: internals, anonymous-namespace) that would otherwise
+# bloat librdkafka-static.a.  The 14 individual libaws*.a archives are
+# replaced by a single libaws-merged.a in the same destdir directory.
+_AWS_STATIC_LIBS := $(filter %libaws-cpp-sdk-sts.a %libaws-cpp-sdk-core.a \
+    %libaws-crt-cpp.a %libaws-c-auth.a %libaws-c-cal.a %libaws-c-http.a \
+    %libaws-c-io.a %libaws-c-mqtt.a %libaws-c-common.a %libaws-c-compression.a \
+    %libaws-c-event-stream.a %libaws-c-s3.a %libaws-c-sdkutils.a \
+    %libaws-checksums.a,$(MKL_STATIC_LIBS))
+_NON_AWS_STATIC_LIBS := $(filter-out %libaws-cpp-sdk-sts.a %libaws-cpp-sdk-core.a \
+    %libaws-crt-cpp.a %libaws-c-auth.a %libaws-c-cal.a %libaws-c-http.a \
+    %libaws-c-io.a %libaws-c-mqtt.a %libaws-c-common.a %libaws-c-compression.a \
+    %libaws-c-event-stream.a %libaws-c-s3.a %libaws-c-sdkutils.a \
+    %libaws-checksums.a,$(MKL_STATIC_LIBS))
+ifneq ($(_AWS_STATIC_LIBS),)
+_AWS_MERGED_LIB := $(dir $(firstword $(_AWS_STATIC_LIBS)))libaws-merged.a
+_MKL_STATIC_LIBS_MERGED := $(_NON_AWS_STATIC_LIBS) $(_AWS_MERGED_LIB)
+else
+_MKL_STATIC_LIBS_MERGED := $(MKL_STATIC_LIBS)
+endif
+
 $(LIBNAME)-static.a: $(LIBNAME).a
 	@printf "$(MKL_YELLOW)Creating self-contained static library $@$(MKL_CLR_RESET)\n"
+ifneq ($(_AWS_STATIC_LIBS),)
+	$(MKLOVE_DIR)partial-link-aws.sh $(CXX) $(_AWS_STATIC_LIBS)
+endif
 ifeq ($(HAS_LIBTOOL_STATIC),y)
-	$(LIBTOOL) -static -o $@ - $(LIBNAME).a $(MKL_STATIC_LIBS)
+	$(LIBTOOL) -static -o $@ - $(LIBNAME).a $(_MKL_STATIC_LIBS_MERGED)
 else ifeq ($(HAS_GNU_AR),y)
 	(_tmp=$$(mktemp arstaticXXXXXX) ; \
 	echo "CREATE $@" > $$_tmp ; \
-	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
+	for _f in $(LIBNAME).a $(_MKL_STATIC_LIBS_MERGED) ; do \
 		echo "ADDLIB $$_f" >> $$_tmp ; \
 	done ; \
 	echo "SAVE" >> $$_tmp ; \
@@ -146,7 +172,7 @@ else ifeq ($(HAS_GNU_AR),y)
 	ar -M < $$_tmp || exit 1 ; \
 	rm $$_tmp)
 else
-	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
+	for _f in $(LIBNAME).a $(_MKL_STATIC_LIBS_MERGED) ; do \
 		ar -r $@ $$_f ; \
 	done
 endif

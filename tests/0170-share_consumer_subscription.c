@@ -1010,8 +1010,13 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         do_test_subscribe_15_topics();
 
         /* Cleanup common handles */
+        TEST_SAY("Destroying common_admin\n");
         rd_kafka_destroy(common_admin);
+        TEST_SAY("Completed destroying common_admin\n");
+
+        TEST_SAY("Destroying common_producer\n");
         rd_kafka_destroy(common_producer);
+        TEST_SAY("Completed destroying common_producer\n");
 
         return 0;
 }

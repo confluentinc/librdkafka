@@ -1516,6 +1516,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(offset_commit_cb),
      "Offset commit result propagation callback. "
      "(set with rd_kafka_conf_set_offset_commit_cb())"},
+    /**
+     * TODO KIP-932: Verify if the handling of this callback is required
+     * in the events API or not.
+     */
     {_RK_GLOBAL | _RK_CONSUMER, "share_acknowledgement_commit_cb", _RK_C_PTR,
      _RK(share_acknowledgement_commit_cb),
      "Share consumer acknowledgement result callback. "

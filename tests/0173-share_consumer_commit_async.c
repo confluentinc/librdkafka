@@ -1577,15 +1577,6 @@ static void do_test_lock_timeout_redelivery(void) {
 
 
 /* ===================================================================
- *  Acknowledgement callback helpers.
- * =================================================================== */
-
-#define MAX_CB_OFFSETS 500
-
-/* Use centralized acknowledgement callback helpers from test.h */
-
-
-/* ===================================================================
  *  Test: commit_async callback invocation.
  *
  *  Verifies that share_acknowledgement_commit_cb is invoked after
@@ -1644,14 +1635,14 @@ static void do_test_commit_async_callback(void) {
         /* Wait for callback */
         test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
 
-        TEST_SAY("Callback count=%d, total_offsets=%d, last_err=%s\n",
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
                  state.callback_cnt, state.total_offsets,
                  rd_kafka_err2name(state.last_err));
 
         TEST_ASSERT(state.callback_cnt >= 1,
                     "Expected at least 1 callback, got %d", state.callback_cnt);
         TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %d",
+                    "Expected offsets in callback, got %zu",
                     state.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);

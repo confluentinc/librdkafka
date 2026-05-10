@@ -796,13 +796,13 @@ static rd_kafka_share_partition_offsets_t *
 rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
                                      const char *topic,
                                      int32_t partition,
-                                     int offsets_cnt) {
+                                     size_t offsets_cnt) {
         rd_kafka_share_partition_offsets_t *elem;
         size_t size;
 
         /* Allocate struct + flexible array in one allocation */
-        size = sizeof(*elem) + ((size_t)offsets_cnt * sizeof(int64_t));
-        elem = rd_malloc(size);
+        size = sizeof(*elem) + (offsets_cnt * sizeof(int64_t));
+        elem = rd_calloc(1, size);
 
         elem->partition = rd_kafka_topic_partition_new_with_id_and_name(
             topic_id, topic, partition);
@@ -833,17 +833,14 @@ static void rd_kafka_share_partition_offsets_destroy(
  *          rd_kafka_share_partition_offsets_list_destroy().
  */
 static rd_kafka_share_partition_offsets_list_t *
-rd_kafka_share_partition_offsets_list_new(int capacity) {
+rd_kafka_share_partition_offsets_list_new(size_t capacity) {
         rd_kafka_share_partition_offsets_list_t *list;
         size_t size;
 
-        if (capacity <= 0)
-                return NULL;
-
         /* Allocate list + flexible array in one allocation */
-        size = sizeof(*list) + ((size_t)capacity *
-                                sizeof(rd_kafka_share_partition_offsets_t *));
-        list = rd_malloc(size);
+        size = sizeof(*list) +
+               (capacity * sizeof(rd_kafka_share_partition_offsets_t *));
+        list = rd_calloc(1, size);
 
         list->cnt = 0;
 
@@ -860,21 +857,13 @@ rd_kafka_share_build_partition_offsets_list(
         int offset_idx    = 0;
         int j;
 
-        if (!batches || !batches->rktpar || rd_list_cnt(&batches->entries) == 0)
-                return NULL;
-
         /* Count total offsets */
         RD_LIST_FOREACH(entry, &batches->entries, j) {
                 total_offsets +=
                     (int)(entry->end_offset - entry->start_offset + 1);
         }
 
-        if (total_offsets == 0)
-                return NULL;
-
         list = rd_kafka_share_partition_offsets_list_new(1);
-        if (!list)
-                return NULL;
 
         /* Allocate elements */
         elem = rd_kafka_share_partition_offsets_new(
@@ -908,8 +897,6 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
                 return;
 
         partitions = rd_kafka_share_build_partition_offsets_list(batches);
-        if (!partitions)
-                return;
 
         cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB);
         cb_rko->rko_err = err;
@@ -924,9 +911,7 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
 
 size_t rd_kafka_share_partition_offsets_list_count(
     const rd_kafka_share_partition_offsets_list_t *list) {
-        if (!list)
-                return 0;
-        return (size_t)list->cnt;
+        return list->cnt;
 }
 
 
@@ -934,15 +919,13 @@ const rd_kafka_share_partition_offsets_t *
 rd_kafka_share_partition_offsets_list_get(
     const rd_kafka_share_partition_offsets_list_t *list,
     size_t index) {
-        if (!list || index >= (size_t)list->cnt)
-                return NULL;
         return list->elems[index];
 }
 
 
 void rd_kafka_share_partition_offsets_list_destroy(
     rd_kafka_share_partition_offsets_list_t *list) {
-        int i;
+        size_t i;
 
         if (!list)
                 return;
@@ -968,7 +951,7 @@ const int64_t *rd_kafka_share_partition_offsets_offsets(
 }
 
 
-int rd_kafka_share_partition_offsets_offsets_cnt(
+size_t rd_kafka_share_partition_offsets_offsets_cnt(
     const rd_kafka_share_partition_offsets_t *partition_offsets) {
         return partition_offsets->cnt;
 }

@@ -1935,7 +1935,6 @@ static void do_test_mock_broker_dispatch_priority(void) {
  *  Acknowledgement callback helpers.
  * =================================================================== */
 
-#define MAX_CB_OFFSETS 500
 
 /* Extended ack callback state with error tracking for sync commit tests */
 typedef struct ack_cb_state_s {
@@ -1960,8 +1959,7 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
                          void *opaque) {
         ack_cb_state_t *state = (ack_cb_state_t *)opaque;
         const rd_kafka_share_partition_offsets_t *entry;
-        size_t partition_cnt;
-        int offsets_in_entry = 0;
+        size_t partition_cnt, offsets_in_entry = 0;
 
         (void)rkshare;
 
@@ -1972,7 +1970,7 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
                 offsets_in_entry =
                     rd_kafka_share_partition_offsets_offsets_cnt(entry);
 
-        TEST_SAY("ACK CALLBACK: err=%s (%d), partitions=%zu, offsets=%d\n",
+        TEST_SAY("ACK CALLBACK: err=%s (%d), partitions=%zu, offsets=%zu\n",
                  rd_kafka_err2name(err), err, partition_cnt, offsets_in_entry);
 
         mtx_lock(&state->base.lock);
@@ -2056,7 +2054,7 @@ static void do_test_commit_sync_callback(void) {
         /* Wait for callback */
         test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
 
-        TEST_SAY("Callback count=%d, total_offsets=%d, last_err=%s\n",
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
                  state.base.callback_cnt, state.base.total_offsets,
                  rd_kafka_err2name(state.base.last_err));
 
@@ -2064,7 +2062,7 @@ static void do_test_commit_sync_callback(void) {
                     "Expected at least 1 callback, got %d",
                     state.base.callback_cnt);
         TEST_ASSERT(state.base.total_offsets > 0,
-                    "Expected offsets in callback, got %d",
+                    "Expected offsets in callback, got %zu",
                     state.base.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);

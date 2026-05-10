@@ -1070,7 +1070,7 @@ void test_share_destroy(rd_kafka_share_t *rkshare);
  */
 typedef struct test_ack_cb_state_s {
         int callback_cnt;             /**< Number of callbacks invoked */
-        int total_offsets;            /**< Total offsets acknowledged */
+        size_t total_offsets;         /**< Total offsets acknowledged */
         rd_kafka_resp_err_t last_err; /**< Last error from callback */
         mtx_t lock;                   /**< Mutex for thread-safe access */
         cnd_t cond;                   /**< Condition variable for signaling */

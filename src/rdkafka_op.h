@@ -40,7 +40,6 @@ typedef struct rd_kafka_q_s rd_kafka_q_t;
 typedef struct rd_kafka_toppar_s rd_kafka_toppar_t;
 typedef struct rd_kafka_op_s rd_kafka_op_t;
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
-typedef struct rd_kafka_share_ack_result_s rd_kafka_share_ack_result_t;
 
 /* One-off reply queue + reply version.
  * All APIs that take a rd_kafka_replyq_t makes a copy of the
@@ -999,6 +998,12 @@ rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
                                          rd_kafka_share_t *rkshare,
                                          rd_kafka_message_t **rkmessages,
                                          unsigned int cnt);
+
+void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
+                                            rd_kafka_op_t *response_rko);
+
+void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
+                                            rd_kafka_resp_err_t err);
 
 #define rd_kafka_op_is_ctrl_msg(rko)                                           \
         ((rko)->rko_type == RD_KAFKA_OP_FETCH && !(rko)->rko_err &&            \

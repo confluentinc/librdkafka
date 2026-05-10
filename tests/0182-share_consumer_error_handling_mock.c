@@ -285,7 +285,7 @@ do_test_commit_sync_top_level_err(const char *test_name,
                     rd_kafka_err2name(injected_err),
                     rd_kafka_err2name(cb_state.last_err));
         TEST_ASSERT(cb_state.total_offsets == msgcnt,
-                    "expected callback total_offsets %d, got %d", msgcnt,
+                    "expected callback total_offsets %d, got %zu", msgcnt,
                     cb_state.total_offsets);
 
         test_ack_cb_state_destroy(&cb_state);
@@ -465,7 +465,7 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
                     rd_kafka_err2name(injected_err),
                     rd_kafka_err2name(cb_state.last_err));
         TEST_ASSERT(cb_state.total_offsets == total_msgs,
-                    "expected callback total_offsets %d, got %d", total_msgs,
+                    "expected callback total_offsets %d, got %zu", total_msgs,
                     cb_state.total_offsets);
 
         for (i = 0; i < total_consumed; i++)
@@ -598,11 +598,11 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
         /* In implicit mode, we expect the callback to be invoked for the
          * first batch of messages that were piggybacked */
         TEST_ASSERT(cb_state.total_offsets > 0,
-                    "expected callback total_offsets > 0, got %d",
+                    "expected callback total_offsets > 0, got %zu",
                     cb_state.total_offsets);
 
         TEST_SAY(
-            "Callback invoked %d times with %d total offsets, last_err=%s\n",
+            "Callback invoked %d times with %zu total offsets, last_err=%s\n",
             cb_state.callback_cnt, cb_state.total_offsets,
             rd_kafka_err2name(cb_state.last_err));
 
@@ -737,7 +737,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
             "Phase 1: expected callback err SHARE_SESSION_NOT_FOUND, got %s",
             rd_kafka_err2name(cb_state.last_err));
         TEST_ASSERT(cb_state.total_offsets == 5,
-                    "Phase 1: expected 5 offsets in callback, got %d",
+                    "Phase 1: expected 5 offsets in callback, got %zu",
                     cb_state.total_offsets);
 
         /* Reset callback state for Phase 2 */
@@ -792,7 +792,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
                     "INVALID_SHARE_SESSION_EPOCH, got %s",
                     rd_kafka_err2name(cb_state.last_err));
         TEST_ASSERT(cb_state.total_offsets == 5,
-                    "Phase 2: expected 5 offsets in callback, got %d",
+                    "Phase 2: expected 5 offsets in callback, got %zu",
                     cb_state.total_offsets);
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);

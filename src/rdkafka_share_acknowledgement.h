@@ -28,8 +28,6 @@
 #ifndef _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_
 #define _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_
 
-typedef struct rd_kafka_op_s rd_kafka_op_t;
-
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED =
             -1, /* Acquired records, not acknowledged yet */
@@ -138,13 +136,6 @@ rd_kafka_share_ack_batches_copy(const rd_kafka_share_ack_batches_t *src);
 void *rd_kafka_share_ack_batches_copy_void(const void *elem, void *opaque);
 
 /**
- * @brief Transfer inflight acks from response RKO into rkshare's inflight map.
- */
-void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
-                                            rd_kafka_op_t *response_rko);
-
-
-/**
  * @brief Implicit ack: convert all ACQUIRED types to ACCEPT in inflight map.
  */
 void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
@@ -163,21 +154,6 @@ rd_kafka_share_ack_batches_t *
 rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
                                     rd_kafka_Uuid_t topic_id,
                                     int32_t partition);
-
-/**
- * @brief Reply to a SHARE_FETCH op, propagating any top-level error
- *        to each batch in ack_details.
- *
- * On top-level error (err != 0), sets batch->rktpar->err = err on
- * each batch in rko->rko_u.share_fetch.ack_details since the
- * partition-level data was not parsed. On success (err == 0), the
- * per-partition errors have already been set by the response parser
- * and ack_details is left untouched. Always calls rd_kafka_op_reply
- * at the end. Safe to use as a drop-in replacement for
- * rd_kafka_op_reply on SHARE_FETCH ops.
- */
-void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
-                                            rd_kafka_resp_err_t err);
 
 void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);
@@ -231,7 +207,7 @@ int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
 struct rd_kafka_share_partition_offsets_s {
         rd_kafka_topic_partition_t
             *partition;    /**< Topic partition information */
-        int cnt;           /**< Number of offsets in array */
+        size_t cnt;        /**< Number of offsets in array */
         int64_t offsets[]; /**< Flexible array of acknowledged offsets */
 };
 
@@ -240,7 +216,7 @@ struct rd_kafka_share_partition_offsets_s {
  * @brief List of share partition offsets for callback.
  */
 struct rd_kafka_share_partition_offsets_list_s {
-        int cnt; /**< Number of partitions */
+        size_t cnt; /**< Number of partitions */
         rd_kafka_share_partition_offsets_t *elems[]; /**< Flexible array of
                                                           pointers to partition
                                                           offsets */

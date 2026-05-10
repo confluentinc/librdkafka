@@ -2237,7 +2237,7 @@ RD_EXPORT const int64_t *rd_kafka_share_partition_offsets_offsets(
  * @param partition_offsets The partition offsets entry.
  * @returns The number of offsets in the array.
  */
-RD_EXPORT int rd_kafka_share_partition_offsets_offsets_cnt(
+RD_EXPORT size_t rd_kafka_share_partition_offsets_offsets_cnt(
     const rd_kafka_share_partition_offsets_t *partition_offsets);
 
 /**

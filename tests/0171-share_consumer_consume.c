@@ -739,13 +739,6 @@ static void test_sparse_partitions(void) {
 }
 
 
-/* ===================================================================
- *  Acknowledgement callback helpers for poll/consume.
- * =================================================================== */
-
-/* Use centralized acknowledgement callback helpers from test.h */
-
-
 /**
  * @brief Poll callback - piggybacked acks on ShareFetch.
  *
@@ -837,7 +830,7 @@ static void test_poll_callback_piggybacked_acks(void) {
                         rd_kafka_message_destroy(batch[m]);
         }
 
-        TEST_SAY("Callback count=%d, total_offsets=%d, last_err=%s\n",
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
                  state.callback_cnt, state.total_offsets,
                  rd_kafka_err2name(state.last_err));
 
@@ -846,10 +839,10 @@ static void test_poll_callback_piggybacked_acks(void) {
             "Expected at least 1 callback from piggybacked acks, got %d",
             state.callback_cnt);
         TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %d",
+                    "Expected offsets in callback, got %zu",
                     state.total_offsets);
 
-        TEST_SAY("SUCCESS: Poll callback received %d callbacks, %d offsets\n",
+        TEST_SAY("SUCCESS: Poll callback received %d callbacks, %zu offsets\n",
                  state.callback_cnt, state.total_offsets);
 
         /* Cleanup */

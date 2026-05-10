@@ -3223,6 +3223,13 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                      records_fetched, should_leave,
                      reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
 
+        /*
+         * Step 1: Dispatch acknowledgement callbacks.
+         * Per-partition errors were set by the broker thread.
+         */
+        rd_kafka_share_dispatch_ack_callbacks(
+            rk, rko_orig->rko_u.share_fetch.ack_details);
+
         reply_rkb->rkb_share_fetch_enqueued = rd_false;
 
         if (should_fetch)
@@ -3234,7 +3241,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 1: If records were fetched and broker is not terminating,
+         * Step 2: If records were fetched and broker is not terminating,
          * reset the global fetch guard so the next FANOUT can select
          * a new fetch broker.
          */
@@ -3242,7 +3249,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                 rkcg->rkcg_share.share_fetch_more_records = rd_false;
 
         /*
-         * Step 2: If the consumer has been marked for termination,
+         * Step 3: If the consumer has been marked for termination,
          * enqueue a session leave op on the replying broker thread and return
          */
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
@@ -3252,7 +3259,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 3: Handle commit_sync reply if this op belongs to
+         * Step 4: Handle commit_sync reply if this op belongs to
          * the current commit_sync request.
          */
         if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
@@ -3308,7 +3315,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 4: Dispatch pending commit_sync to the replying broker
+         * Step 5: Dispatch pending commit_sync to the replying broker
          * (highest priority). Acks must always be sent.
          */
         if (!reply_rkb->rkb_share_fetch_enqueued &&
@@ -3321,7 +3328,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 5: If this was the fetch broker but no records were received,
+         * Step 6: If this was the fetch broker but no records were received,
          * try to select another broker to fetch from.
          *
          * TODO: KIP-932: Handle the case where all assignments are removed
@@ -3355,7 +3362,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         }
 
         /*
-         * Step 6: If the replying broker has cached async ack details,
+         * Step 7: If the replying broker has cached async ack details,
          * send an ack-only SHARE_FETCH op to it.
          */
         if (reply_rkb->rkb_share_async_ack_details &&
@@ -5716,6 +5723,14 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rko->rko_u.offset_commit.cb(rk, rko->rko_err,
                                             rko->rko_u.offset_commit.partitions,
                                             rko->rko_u.offset_commit.opaque);
+                break;
+
+        case RD_KAFKA_OP_SHARE_ACK_COMMIT_CB:
+                if (!rko->rko_u.share_ack_commit.cb)
+                        return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
+                rko->rko_u.share_ack_commit.cb(
+                    rk->rk_rkshare, rko->rko_u.share_ack_commit.partitions,
+                    rko->rko_err, rko->rko_u.share_ack_commit.opaque);
                 break;
 
         case RD_KAFKA_OP_FETCH_STOP | RD_KAFKA_OP_REPLY:

@@ -98,9 +98,15 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         memset(ctx, 0, sizeof(*ctx));
 }
 
-static rd_kafka_share_t *create_mock_share_consumer(const char *bootstraps,
-                                                    const char *group_id,
-                                                    const char *ack_mode) {
+static rd_kafka_share_t *
+create_mock_share_consumer(const char *bootstraps,
+                           const char *group_id,
+                           const char *ack_mode,
+                           test_ack_cb_state_t *cb_state,
+                           void (*cb)(rd_kafka_share_t *,
+                                      rd_kafka_share_partition_offsets_list_t *,
+                                      rd_kafka_resp_err_t,
+                                      void *)) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
 
@@ -108,6 +114,11 @@ static rd_kafka_share_t *create_mock_share_consumer(const char *bootstraps,
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "share.acknowledgement.mode", ack_mode);
+
+        if (cb && cb_state) {
+                rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, cb);
+                rd_kafka_conf_set_opaque(conf, cb_state);
+        }
 
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
@@ -136,6 +147,26 @@ static void mock_produce(rd_kafka_t *producer, const char *topic, int msgcnt) {
                                 RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
                                 RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
                             "Produce failed");
+        }
+        rd_kafka_flush(producer, 5000);
+}
+
+static void mock_produce_partition(rd_kafka_t *producer,
+                                   const char *topic,
+                                   int32_t partition,
+                                   int msgcnt) {
+        int i;
+        for (i = 0; i < msgcnt; i++) {
+                char payload[64];
+                snprintf(payload, sizeof(payload), "%s-p%d-%d", topic,
+                         (int)partition, i);
+                TEST_ASSERT(rd_kafka_producev(
+                                producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_PARTITION(partition),
+                                RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                                RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
+                                RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Produce to partition %d failed", (int)partition);
         }
         rd_kafka_flush(producer, 5000);
 }
@@ -193,6 +224,7 @@ do_test_commit_sync_top_level_err(const char *test_name,
         const int msgcnt = 10;
         int acked;
         int i;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK("%s -> %s", test_name, rd_kafka_err2name(injected_err));
 
@@ -207,7 +239,8 @@ do_test_commit_sync_top_level_err(const char *test_name,
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit");
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
 
         acked = consume_and_ack_all(rkshare, msgcnt);
@@ -242,6 +275,18 @@ do_test_commit_sync_top_level_err(const char *test_name,
         }
 
         rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Verify callback was invoked with the error */
+        TEST_ASSERT(cb_state.callback_cnt == 1, "expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(cb_state.last_err == injected_err,
+                    "expected callback err %s, got %s",
+                    rd_kafka_err2name(injected_err),
+                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(cb_state.total_offsets == msgcnt,
+                    "expected callback total_offsets %d, got %zu", msgcnt,
+                    cb_state.total_offsets);
+
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
@@ -297,6 +342,273 @@ static void test_commit_sync_invalid_request(void) {
 }
 
 /* ===================================================================
+ *  Test — top-level error is propagated to all partitions in
+ *         multi-partition acknowledgement.
+ *
+ *  Creates a topic with multiple partitions, consumes and acknowledges
+ *  records from all partitions, injects a top-level error on
+ *  ShareAcknowledge, and verifies that commit_sync returns the error
+ *  for EVERY partition that was part of the acknowledgement request.
+ *
+ *  This ensures the error propagation logic correctly applies the
+ *  top-level error to all partitions in the ack_details list, not
+ *  just the first one.
+ * =================================================================== */
+static void test_commit_sync_multi_partition_top_level_error(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic            = "0182-multi-partition-error";
+        const char *group            = "sg-0182-multi-partition-error";
+        const int partition_cnt      = 3;
+        const int msgs_per_partition = 5;
+        const int total_msgs         = partition_cnt * msgs_per_partition;
+        rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        int total_consumed = 0;
+        int acked          = 0;
+        int attempts       = 0;
+        int i;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        /* Create topic with multiple partitions */
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic,
+                                               partition_cnt,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic with %d partitions", partition_cnt);
+
+        /* Produce messages to all partitions explicitly */
+        for (i = 0; i < partition_cnt; i++)
+                mock_produce_partition(ctx.producer, topic, i,
+                                       msgs_per_partition);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
+        subscribe_one(rkshare, topic);
+
+        /* Consume messages from all partitions */
+        while (total_consumed < total_msgs && attempts++ < 50) {
+                size_t rcvd = 0;
+                error       = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + total_consumed, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                total_consumed += (int)rcvd;
+        }
+
+        TEST_ASSERT(total_consumed == total_msgs,
+                    "expected to consume %d messages from %d partitions, "
+                    "got %d",
+                    total_msgs, partition_cnt, total_consumed);
+
+        /* Acknowledge all messages */
+        for (i = 0; i < total_consumed; i++) {
+                if (!rkmessages[i]->err) {
+                        rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+                        acked++;
+                }
+        }
+
+        TEST_ASSERT(acked == total_msgs, "expected to ack %d messages, got %d",
+                    total_msgs, acked);
+
+        /* Inject top-level error on next ShareAcknowledge */
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareAcknowledge, 1,
+                        injected_err, 0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push error");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL, "expected non-NULL partition results");
+
+        /* Verify ALL partitions have the injected error */
+        TEST_ASSERT(partitions->cnt == partition_cnt,
+                    "expected results for %d partitions, got %d", partition_cnt,
+                    partitions->cnt);
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_SAY("%s [%" PRId32 "]: %s\n", rktpar->topic,
+                         rktpar->partition, rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == injected_err,
+                            "partition [%" PRId32 "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(injected_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Verify callback was invoked with the error.
+         * Callback is invoked once per partition, so we expect
+         * partition_cnt callbacks. */
+        TEST_ASSERT(cb_state.callback_cnt == partition_cnt,
+                    "expected %d callbacks (one per partition), got %d",
+                    partition_cnt, cb_state.callback_cnt);
+        TEST_ASSERT(cb_state.last_err == injected_err,
+                    "expected callback err %s, got %s",
+                    rd_kafka_err2name(injected_err),
+                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(cb_state.total_offsets == total_msgs,
+                    "expected callback total_offsets %d, got %zu", total_msgs,
+                    cb_state.total_offsets);
+
+        for (i = 0; i < total_consumed; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/* ===================================================================
+ *  Test — top-level error on ShareFetch with piggybacked acks is
+ *         propagated to callback for all partitions.
+ *
+ *  Uses implicit mode where acks are piggybacked on ShareFetch.
+ *  Creates a topic with multiple partitions, consumes messages in
+ *  implicit mode (auto-acknowledge), then injects a top-level error
+ *  on the next ShareFetch request (which carries piggybacked acks).
+ *
+ *  Verifies that the acknowledgement callback is invoked with the
+ *  error for all partitions that had piggybacked acks.
+ * =================================================================== */
+static void test_consume_batch_multi_partition_top_level_error(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        const char *topic            = "0182-consume-multi-partition-error";
+        const char *group            = "sg-0182-consume-multi-partition-error";
+        const int partition_cnt      = 3;
+        const int msgs_per_partition = 5;
+        const int total_msgs         = partition_cnt * msgs_per_partition;
+        rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        int total_consumed = 0;
+        int attempts       = 0;
+        int i;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        /* Create topic with multiple partitions */
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic,
+                                               partition_cnt,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic with %d partitions", partition_cnt);
+
+        /* Produce messages to all partitions explicitly */
+        for (i = 0; i < partition_cnt; i++)
+                mock_produce_partition(ctx.producer, topic, i,
+                                       msgs_per_partition);
+
+        /* Use implicit mode - acks are piggybacked on ShareFetch */
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "implicit",
+                                             &cb_state, test_share_ack_cb);
+        subscribe_one(rkshare, topic);
+
+        /* First consume batch - establishes session, consumes messages */
+        while (total_consumed < total_msgs && attempts++ < 50) {
+                size_t rcvd = 0;
+                error       = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + total_consumed, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                total_consumed += (int)rcvd;
+        }
+
+        TEST_ASSERT(total_consumed == total_msgs,
+                    "expected to consume %d messages from %d partitions, "
+                    "got %d",
+                    total_msgs, partition_cnt, total_consumed);
+
+        /* Destroy messages - in implicit mode they're auto-acknowledged */
+        for (i = 0; i < total_consumed; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+
+        /* Produce more messages to trigger another ShareFetch with
+         * piggybacked acks from the previous consume */
+        for (i = 0; i < partition_cnt; i++)
+                mock_produce_partition(ctx.producer, topic, i,
+                                       msgs_per_partition);
+
+        /* Inject top-level error on next ShareFetch (which will carry
+         * piggybacked acks from the previous consume_batch) */
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1, injected_err,
+                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push error on ShareFetch");
+
+        /* Next consume_batch triggers ShareFetch with piggybacked acks.
+         * The error should trigger the callback for the piggybacked acks. */
+        total_consumed = 0;
+        attempts       = 0;
+        while (total_consumed < total_msgs && attempts++ < 50) {
+                size_t rcvd = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        /* May get errors due to injected error */
+                }
+                for (i = 0; i < (int)rcvd; i++) {
+                        if (!rkmessages[i]->err)
+                                total_consumed++;
+                        rd_kafka_message_destroy(rkmessages[i]);
+                }
+                /* Break after we've given the callback a chance to fire */
+                if (cb_state.callback_cnt > 0)
+                        break;
+        }
+
+        /* Verify callback was invoked with the error for piggybacked acks.
+         * The callback should have been invoked for the acks that were
+         * piggybacked on the ShareFetch that got the error. */
+        TEST_ASSERT(cb_state.callback_cnt >= 1,
+                    "expected at least 1 callback for piggybacked acks, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(cb_state.last_err == injected_err,
+                    "expected callback err %s, got %s",
+                    rd_kafka_err2name(injected_err),
+                    rd_kafka_err2name(cb_state.last_err));
+        /* In implicit mode, we expect the callback to be invoked for the
+         * first batch of messages that were piggybacked */
+        TEST_ASSERT(cb_state.total_offsets > 0,
+                    "expected callback total_offsets > 0, got %zu",
+                    cb_state.total_offsets);
+
+        TEST_SAY(
+            "Callback invoked %d times with %zu total offsets, last_err=%s\n",
+            cb_state.callback_cnt, cb_state.total_offsets,
+            rd_kafka_err2name(cb_state.last_err));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/* ===================================================================
  *  Test — commit_sync at session epoch 0 returns
  *         INVALID_SHARE_SESSION_EPOCH without sending the
  *         ShareAcknowledge request.
@@ -337,6 +649,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
         int attempts       = 0;
         size_t share_ack_cnt;
         int i;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK();
 
@@ -348,7 +661,8 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit");
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
 
         /* Phase 0: consume all 10 records. Hold message handles for
@@ -407,6 +721,23 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
                     "Phase 1: expected 1 ShareAck request, got %" PRIusz,
                     share_ack_cnt);
 
+        /* Verify Phase 1 callback was invoked with SHARE_SESSION_NOT_FOUND */
+        TEST_ASSERT(cb_state.callback_cnt == 1,
+                    "Phase 1: expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(
+            cb_state.last_err == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+            "Phase 1: expected callback err SHARE_SESSION_NOT_FOUND, got %s",
+            rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(cb_state.total_offsets == 5,
+                    "Phase 1: expected 5 offsets in callback, got %zu",
+                    cb_state.total_offsets);
+
+        /* Reset callback state for Phase 2 */
+        cb_state.callback_cnt  = 0;
+        cb_state.total_offsets = 0;
+        cb_state.last_err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+
         /* Phase 2: ACCEPT remaining 5 records and call commit_sync
          * again. Broker epoch is 0 (session reset by phase 1). B4a
          * must fire: no ShareAck request sent, commit_sync returns
@@ -442,6 +773,20 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
                     "(local epoch-0 fail should have prevented send), "
                     "got %" PRIusz,
                     share_ack_cnt);
+
+        /* Verify Phase 2 callback was invoked with INVALID_SHARE_SESSION_EPOCH
+         * (local fail because session epoch is 0) */
+        TEST_ASSERT(cb_state.callback_cnt == 1,
+                    "Phase 2: expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(cb_state.last_err ==
+                        RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
+                    "Phase 2: expected callback err "
+                    "INVALID_SHARE_SESSION_EPOCH, got %s",
+                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(cb_state.total_offsets == 5,
+                    "Phase 2: expected 5 offsets in callback, got %zu",
+                    cb_state.total_offsets);
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
@@ -500,6 +845,7 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         size_t share_ack_cnt;
         size_t share_fetch_cnt;
         int i;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK();
 
@@ -511,7 +857,8 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit");
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
 
         /* Phase 0: consume all 10 records. */
@@ -568,6 +915,20 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
                     "Phase 1: expected 1 ShareAck request, got %" PRIusz,
                     share_ack_cnt);
 
+        /* Verify Phase 1 callback was invoked with SHARE_SESSION_NOT_FOUND */
+        TEST_ASSERT(cb_state.callback_cnt == 1,
+                    "Phase 1: expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(
+            cb_state.last_err == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+            "Phase 1: expected callback err SHARE_SESSION_NOT_FOUND, got %s",
+            rd_kafka_err2name(cb_state.last_err));
+
+        /* Reset callback state for Phase 2 */
+        cb_state.callback_cnt  = 0;
+        cb_state.total_offsets = 0;
+        cb_state.last_err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+
         /* Phase 2: ACCEPT remaining 5 records and call consume_batch
          * (NOT commit_sync). This triggers a FANOUT -> ShareFetch with
          * should_fetch=true. Broker epoch is 0 (reset in phase 1). If
@@ -623,6 +984,16 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
                     "send and no ack-only path fired), got %" PRIusz,
                     share_ack_cnt);
 
+        /* TODO: Verify Phase 2 callback invocation with
+         * INVALID_SHARE_SESSION_EPOCH for stripped piggybacked acks.
+         * Currently the strip path sets the error on ack_details but does
+         * not invoke the acknowledgement callback for piggybacked acks.
+         * Once this is implemented, add assertions here to verify:
+         *   - cb_state.callback_cnt == 1
+         *   - cb_state.last_err == INVALID_SHARE_SESSION_EPOCH
+         *   - cb_state.total_offsets == 5
+         */
+
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
         for (i = 0; i < msgcnt; i++)
@@ -644,6 +1015,8 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_commit_sync_group_authorization_failed();
         test_commit_sync_topic_authorization_failed();
         test_commit_sync_invalid_request();
+        test_commit_sync_multi_partition_top_level_error();
+        test_consume_batch_multi_partition_top_level_error();
         test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error();
         test_consume_batch_at_epoch_zero_strips_piggyback_acks();
 

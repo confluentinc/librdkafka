@@ -1066,6 +1066,60 @@ void test_share_consumer_close(rd_kafka_share_t *rkshare);
 void test_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
+ * @brief State for tracking share acknowledgement callbacks.
+ */
+typedef struct test_ack_cb_state_s {
+        int callback_cnt;             /**< Number of callbacks invoked */
+        size_t total_offsets;         /**< Total offsets acknowledged */
+        rd_kafka_resp_err_t last_err; /**< Last error from callback */
+} test_ack_cb_state_t;
+
+/**
+ * @brief Standard share acknowledgement callback.
+ *
+ * Tracks callback invocations, offsets acknowledged, and errors.
+ * Opaque must be a pointer to test_ack_cb_state_t.
+ */
+void test_share_ack_cb(rd_kafka_share_t *rkshare,
+                       rd_kafka_share_partition_offsets_list_t *partitions,
+                       rd_kafka_resp_err_t err,
+                       void *opaque);
+
+/**
+ * @brief Create share consumer with callback and custom acknowledgement mode.
+ *
+ * @param group_id Share group ID
+ * @param ack_mode Acknowledgement mode ("implicit" or "explicit")
+ * @param state Callback state (will be set as opaque)
+ * @param cb Custom callback function (NULL to use test_share_ack_cb)
+ * @returns Created share consumer
+ */
+rd_kafka_share_t *test_create_share_consumer_with_cb(
+    const char *group_id,
+    const char *ack_mode,
+    test_ack_cb_state_t *state,
+    void (*cb)(rd_kafka_share_t *,
+               rd_kafka_share_partition_offsets_list_t *,
+               rd_kafka_resp_err_t,
+               void *));
+
+/**
+ * @brief Wait for acknowledgement callbacks while polling.
+ *
+ * Polls for messages and waits until at least min_callbacks have been invoked.
+ *
+ * @param state Callback state to monitor
+ * @param rkshare Share consumer to poll
+ * @param min_callbacks Minimum number of callbacks to wait for
+ * @param timeout_ms Maximum time to wait in milliseconds
+ * @returns rd_true if min_callbacks reached, rd_false on timeout
+ */
+rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
+                                     rd_kafka_share_t *rkshare,
+                                     int min_callbacks,
+                                     int timeout_ms);
+
+/**
  * @name rusage.c
  * @{
  */

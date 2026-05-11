@@ -194,7 +194,7 @@ static void rd_kafka_global_init0(void) {
         rd_kafka_ssl_init();
 #endif
 
-        cJSON_InitHooks(&json_hooks);
+        kafka_cJSON_InitHooks(&json_hooks);
 
 #if WITH_CURL
         rd_http_global_init();

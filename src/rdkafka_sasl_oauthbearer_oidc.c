@@ -288,15 +288,15 @@ rd_kafka_oidc_assertion_parse_template_file(rd_kafka_t *rk,
                 return -1;
         }
 
-        template_json = cJSON_Parse((char *)template_content);
+        template_json = kafka_cJSON_Parse((char *)template_content);
         if (!template_json) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "Failed to parse JWT template JSON");
                 goto cleanup;
         }
 
-        cJSON *header_item  = cJSON_GetObjectItem(template_json, "header");
-        cJSON *payload_item = cJSON_GetObjectItem(template_json, "payload");
+        cJSON *header_item  = kafka_cJSON_GetObjectItem(template_json, "header");
+        cJSON *payload_item = kafka_cJSON_GetObjectItem(template_json, "payload");
 
         if (!header_item || !payload_item) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
@@ -305,14 +305,14 @@ rd_kafka_oidc_assertion_parse_template_file(rd_kafka_t *rk,
                 goto cleanup;
         }
 
-        *header  = cJSON_Duplicate(header_item, 1);
-        *payload = cJSON_Duplicate(payload_item, 1);
+        *header  = kafka_cJSON_Duplicate(header_item, 1);
+        *payload = kafka_cJSON_Duplicate(payload_item, 1);
 
         if (!*header || !*payload) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
                              "Failed to duplicate header or payload objects");
                 if (*header) {
-                        cJSON_Delete(*header);
+                        kafka_cJSON_Delete(*header);
                         *header = NULL;
                 }
                 goto cleanup;
@@ -324,7 +324,7 @@ cleanup:
         if (template_content)
                 rd_free(template_content);
         if (template_json)
-                cJSON_Delete(template_json);
+                kafka_cJSON_Delete(template_json);
 
         return ret;
 }
@@ -403,56 +403,56 @@ static char *rd_kafka_oidc_assertion_create(
                         return NULL;
                 }
         } else {
-                header_json_obj  = cJSON_CreateObject();
-                payload_json_obj = cJSON_CreateObject();
+                header_json_obj  = kafka_cJSON_CreateObject();
+                payload_json_obj = kafka_cJSON_CreateObject();
         }
 
         /* Add required header fields */
-        cJSON_DeleteItemFromObjectCaseSensitive(header_json_obj, "alg");
-        cJSON_DeleteItemFromObjectCaseSensitive(header_json_obj, "typ");
-        cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "iat");
-        cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "exp");
-        cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "nbf");
-        cJSON_AddStringToObject(
+        kafka_cJSON_DeleteItemFromObjectCaseSensitive(header_json_obj, "alg");
+        kafka_cJSON_DeleteItemFromObjectCaseSensitive(header_json_obj, "typ");
+        kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "iat");
+        kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "exp");
+        kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj, "nbf");
+        kafka_cJSON_AddStringToObject(
             header_json_obj, "alg",
             rd_kafka_oidc_assertion_get_algo_label(token_signing_algo));
-        cJSON_AddStringToObject(header_json_obj, "typ", "JWT");
+        kafka_cJSON_AddStringToObject(header_json_obj, "typ", "JWT");
 
         /* Add required payload fields */
-        cJSON_AddNumberToObject(payload_json_obj, "iat", (double)issued_at);
-        cJSON_AddNumberToObject(payload_json_obj, "exp",
+        kafka_cJSON_AddNumberToObject(payload_json_obj, "iat", (double)issued_at);
+        kafka_cJSON_AddNumberToObject(payload_json_obj, "exp",
                                 (double)expiration_time);
-        cJSON_AddNumberToObject(payload_json_obj, "nbf", (double)not_before);
+        kafka_cJSON_AddNumberToObject(payload_json_obj, "nbf", (double)not_before);
 
         if (subject) {
-                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
                                                         "sub");
-                cJSON_AddStringToObject(payload_json_obj, "sub", subject);
+                kafka_cJSON_AddStringToObject(payload_json_obj, "sub", subject);
         }
 
         if (issuer) {
-                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
                                                         "iss");
-                cJSON_AddStringToObject(payload_json_obj, "iss", issuer);
+                kafka_cJSON_AddStringToObject(payload_json_obj, "iss", issuer);
         }
 
         if (audience) {
-                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
                                                         "aud");
-                cJSON_AddStringToObject(payload_json_obj, "aud", audience);
+                kafka_cJSON_AddStringToObject(payload_json_obj, "aud", audience);
         }
 
         if (jti_include) {
                 jti_uuid     = rd_kafka_Uuid_random();
                 jti_uuid_str = rd_kafka_Uuid_str(&jti_uuid);
-                cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
+                kafka_cJSON_DeleteItemFromObjectCaseSensitive(payload_json_obj,
                                                         "jti");
-                cJSON_AddStringToObject(payload_json_obj, "jti", jti_uuid_str);
+                kafka_cJSON_AddStringToObject(payload_json_obj, "jti", jti_uuid_str);
                 rd_free(jti_uuid_str);
         }
 
-        header_str  = cJSON_PrintUnformatted(header_json_obj);
-        payload_str = cJSON_PrintUnformatted(payload_json_obj);
+        header_str  = kafka_cJSON_PrintUnformatted(header_json_obj);
+        payload_str = kafka_cJSON_PrintUnformatted(payload_json_obj);
 
         if (!header_str || !payload_str) {
                 rd_kafka_log(rk, LOG_ERR, "JWT",
@@ -577,7 +577,7 @@ cleanup:
                 if (header_str)
                         free(header_str); /* cJSON_PrintUnformatted uses malloc
                                            */
-                cJSON_Delete(header_json_obj);
+                kafka_cJSON_Delete(header_json_obj);
         } else if (header_str) {
                 rd_free(header_str); /* rd_malloc was used */
         }
@@ -586,7 +586,7 @@ cleanup:
                 if (payload_str)
                         free(payload_str); /* cJSON_PrintUnformatted uses malloc
                                             */
-                cJSON_Delete(payload_json_obj);
+                kafka_cJSON_Delete(payload_json_obj);
         } else if (payload_str) {
                 rd_free(payload_str); /* rd_malloc was used */
         }
@@ -684,7 +684,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
         const char *decode_errstr = NULL;
         *sub                      = NULL;
 
-        access_token_json = cJSON_GetObjectItem(json, field);
+        access_token_json = kafka_cJSON_GetObjectItem(json, field);
 
         if (!access_token_json) {
                 rd_snprintf(errstr, errstr_size,
@@ -692,7 +692,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        jwt_token = cJSON_GetStringValue(access_token_json);
+        jwt_token = kafka_cJSON_GetStringValue(access_token_json);
         if (!jwt_token) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected token as a string value");
@@ -707,14 +707,14 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        payloads = cJSON_Parse(decoded_payloads);
+        payloads = kafka_cJSON_Parse(decoded_payloads);
         if (payloads == NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Failed to parse JSON JWT payload");
                 goto fail;
         }
 
-        jwt_exp = cJSON_GetObjectItem(payloads, "exp");
+        jwt_exp = kafka_cJSON_GetObjectItem(payloads, "exp");
         if (jwt_exp == NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
@@ -722,7 +722,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        *exp = cJSON_GetNumberValue(jwt_exp);
+        *exp = kafka_cJSON_GetNumberValue(jwt_exp);
         if (*exp <= 0) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
@@ -732,7 +732,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
 
         rd_dassert(sub_claim_name && *sub_claim_name);
 
-        jwt_sub = cJSON_GetObjectItem(payloads, sub_claim_name);
+        jwt_sub = kafka_cJSON_GetObjectItem(payloads, sub_claim_name);
         if (jwt_sub == NULL) {
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
@@ -741,10 +741,10 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
                 goto fail;
         }
 
-        *sub = cJSON_GetStringValue(jwt_sub);
+        *sub = kafka_cJSON_GetStringValue(jwt_sub);
         if (*sub == NULL || **sub == '\0') {
                 /* Reset to NULL to prevent a dangling pointer to cJSON
-                 * internal memory after cJSON_Delete(payloads) */
+                 * internal memory after kafka_cJSON_Delete(payloads) */
                 *sub = NULL;
                 rd_snprintf(errstr, errstr_size,
                             "Expected JSON JWT response with "
@@ -755,7 +755,7 @@ static char *rd_kafka_oidc_token_try_validate(cJSON *json,
         *sub = rd_strdup(*sub);
 done:
         if (payloads)
-                cJSON_Delete(payloads);
+                kafka_cJSON_Delete(payloads);
         if (decoded_payloads)
                 rd_free(decoded_payloads);
         return jwt_token;
@@ -903,7 +903,7 @@ done:
         RD_IF_FREE(jwt_assertion, rd_free);
         RD_IF_FREE(request_body, rd_free);
         RD_IF_FREE(headers, curl_slist_free_all);
-        RD_IF_FREE(json, cJSON_Delete);
+        RD_IF_FREE(json, kafka_cJSON_Delete);
         RD_IF_FREE(extensions, rd_free);
         RD_IF_FREE(extension_key_value, rd_free);
         /* jwt_token is freed as part of the json object */
@@ -1002,7 +1002,7 @@ void rd_kafka_oidc_token_client_credentials_refresh_cb(
 done:
         RD_IF_FREE(sub, rd_free);
         RD_IF_FREE(post_fields, rd_free);
-        RD_IF_FREE(json, cJSON_Delete);
+        RD_IF_FREE(json, kafka_cJSON_Delete);
         RD_IF_FREE(headers, curl_slist_free_all);
         RD_IF_FREE(extensions, rd_free);
         RD_IF_FREE(extension_key_value, rd_free);
@@ -1119,7 +1119,7 @@ void rd_kafka_oidc_token_metadata_azure_imds_refresh_cb(
 
 done:
         RD_IF_FREE(sub, rd_free);
-        RD_IF_FREE(json, cJSON_Delete);
+        RD_IF_FREE(json, kafka_cJSON_Delete);
         RD_IF_FREE(headers, curl_slist_free_all);
         RD_IF_FREE(extensions, rd_free);
         RD_IF_FREE(extension_key_value, rd_free);
@@ -1188,7 +1188,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
 
         RD_UT_ASSERT(json, "Expected non-empty json.");
 
-        parsed_token = cJSON_GetObjectItem(json, "access_token");
+        parsed_token = kafka_cJSON_GetObjectItem(json, "access_token");
 
         RD_UT_ASSERT(parsed_token, "Expected access_token in JSON response.");
         token = parsed_token->valuestring;
@@ -1201,7 +1201,7 @@ static int ut_sasl_oauthbearer_oidc_should_succeed(void) {
         rd_free(expected_token_value);
         rd_http_error_destroy(herr);
         rd_http_req_destroy(&hreq);
-        cJSON_Delete(json);
+        kafka_cJSON_Delete(json);
         rd_free(rk);
 
         RD_UT_PASS();
@@ -1242,15 +1242,15 @@ static int ut_sasl_oauthbearer_oidc_with_empty_key(void) {
 
         RD_UT_ASSERT(json, "Expected non-empty json.");
 
-        parsed_token = cJSON_GetObjectItem(json, "access_token");
+        parsed_token = kafka_cJSON_GetObjectItem(json, "access_token");
 
         RD_UT_ASSERT(!parsed_token,
                      "Did not expecte access_token in JSON response");
 
         rd_http_req_destroy(&hreq);
         rd_http_error_destroy(herr);
-        cJSON_Delete(json);
-        cJSON_Delete(parsed_token);
+        kafka_cJSON_Delete(json);
+        kafka_cJSON_Delete(parsed_token);
         rd_free(rk);
         RD_UT_PASS();
 }
@@ -1416,7 +1416,7 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
 
                 rd_snprintf(access_token_json, sizeof(access_token_json),
                             "{\"access_token\":\"%s\"}", tests[i].jwt);
-                json = cJSON_Parse(access_token_json);
+                json = kafka_cJSON_Parse(access_token_json);
                 RD_UT_ASSERT(json != NULL, "[%s] Failed to build test JSON",
                              tests[i].test_name);
 
@@ -1441,7 +1441,7 @@ static int ut_sasl_oauthbearer_oidc_sub_claim_name(void) {
                 }
 
                 RD_IF_FREE(sub, rd_free);
-                cJSON_Delete(json);
+                kafka_cJSON_Delete(json);
         }
 
         RD_UT_PASS();
@@ -1641,28 +1641,28 @@ static int ut_sasl_oauthbearer_oidc_assertion_process_template_file(void) {
         RD_UT_ASSERT(payload != NULL, "Expected non-NULL payload JSON");
 
         /* Verify header contents */
-        cJSON *kid = cJSON_GetObjectItem(header, "kid");
+        cJSON *kid = kafka_cJSON_GetObjectItem(header, "kid");
         RD_UT_ASSERT(kid != NULL, "Expected kid in header");
-        RD_UT_ASSERT(cJSON_IsString(kid), "Expected kid to be string");
-        RD_UT_ASSERT(!strcmp(cJSON_GetStringValue(kid), "test-key-id"),
+        RD_UT_ASSERT(kafka_cJSON_IsString(kid), "Expected kid to be string");
+        RD_UT_ASSERT(!strcmp(kafka_cJSON_GetStringValue(kid), "test-key-id"),
                      "Incorrect kid value");
 
         /* Verify payload contents */
-        cJSON *sub = cJSON_GetObjectItem(payload, "sub");
+        cJSON *sub = kafka_cJSON_GetObjectItem(payload, "sub");
         RD_UT_ASSERT(sub != NULL, "Expected sub in payload");
-        RD_UT_ASSERT(cJSON_IsString(sub), "Expected sub to be string");
-        RD_UT_ASSERT(!strcmp(cJSON_GetStringValue(sub), "test-subject"),
+        RD_UT_ASSERT(kafka_cJSON_IsString(sub), "Expected sub to be string");
+        RD_UT_ASSERT(!strcmp(kafka_cJSON_GetStringValue(sub), "test-subject"),
                      "Incorrect sub value");
 
-        cJSON *aud = cJSON_GetObjectItem(payload, "aud");
+        cJSON *aud = kafka_cJSON_GetObjectItem(payload, "aud");
         RD_UT_ASSERT(aud != NULL, "Expected aud in payload");
-        RD_UT_ASSERT(cJSON_IsString(aud), "Expected aud to be string");
-        RD_UT_ASSERT(!strcmp(cJSON_GetStringValue(aud), "test-audience"),
+        RD_UT_ASSERT(kafka_cJSON_IsString(aud), "Expected aud to be string");
+        RD_UT_ASSERT(!strcmp(kafka_cJSON_GetStringValue(aud), "test-audience"),
                      "Incorrect aud value");
 
         /* Test with non-existent file */
-        cJSON_Delete(header);
-        cJSON_Delete(payload);
+        kafka_cJSON_Delete(header);
+        kafka_cJSON_Delete(payload);
         header  = NULL;
         payload = NULL;
 
@@ -1678,9 +1678,9 @@ static int ut_sasl_oauthbearer_oidc_assertion_process_template_file(void) {
         rd_free(template_path);
         rd_free(rk);
         if (header)
-                cJSON_Delete(header);
+                kafka_cJSON_Delete(header);
         if (payload)
-                cJSON_Delete(payload);
+                kafka_cJSON_Delete(payload);
 
         RD_UT_PASS();
 }

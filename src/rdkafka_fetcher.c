@@ -1479,6 +1479,13 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
          * Fires only after handler.handleResponse() returns true */
         rd_atomic64_add(&rkb->rkb_rk->rk_telemetry.share_fetch_total, 1);
 
+        /* Share fetch latency = now - request enqueue timestamp.
+         * Stored per broker, aggregated to per instance metric via
+         * brokers_avg/brokers_max in the calculators. */
+        rd_avg_add(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_latency,
+            rd_clock() - request->rkbuf_ts_enq);
+
         rd_kafka_buf_read_i32(rkbuf, &AcquisitionLockTimeoutMs);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);

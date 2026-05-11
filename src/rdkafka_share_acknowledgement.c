@@ -793,9 +793,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
  * @param offsets_cnt Number of offsets to allocate space for.
  */
 static rd_kafka_share_partition_offsets_t *
-rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
-                                     const char *topic,
-                                     int32_t partition,
+rd_kafka_share_partition_offsets_new(rd_kafka_topic_partition_t *tp,
                                      size_t offsets_cnt) {
         rd_kafka_share_partition_offsets_t *elem;
         size_t size;
@@ -804,8 +802,7 @@ rd_kafka_share_partition_offsets_new(rd_kafka_Uuid_t topic_id,
         size = sizeof(*elem) + (offsets_cnt * sizeof(int64_t));
         elem = rd_calloc(1, size);
 
-        elem->partition = rd_kafka_topic_partition_new_with_id_and_name(
-            topic_id, topic, partition);
+        elem->partition = rd_kafka_topic_partition_copy(tp);
         elem->cnt = offsets_cnt;
 
         return elem;
@@ -842,8 +839,6 @@ rd_kafka_share_partition_offsets_list_new(size_t capacity) {
                (capacity * sizeof(rd_kafka_share_partition_offsets_t *));
         list = rd_calloc(1, size);
 
-        list->cnt = 0;
-
         return list;
 }
 
@@ -866,9 +861,7 @@ rd_kafka_share_build_partition_offsets_list(
         list = rd_kafka_share_partition_offsets_list_new(1);
 
         /* Allocate elements */
-        elem = rd_kafka_share_partition_offsets_new(
-            rd_kafka_topic_partition_get_topic_id(batches->rktpar),
-            batches->rktpar->topic, batches->rktpar->partition, total_offsets);
+        elem = rd_kafka_share_partition_offsets_new(batches->rktpar, total_offsets);
 
         list->cnt      = 1;
         list->elems[0] = elem;

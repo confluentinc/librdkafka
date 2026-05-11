@@ -2229,6 +2229,9 @@ rd_kafka_share_partition_offsets_partition(
  * @param partition_offsets The partition offsets entry.
  * @returns Array of acknowledged offsets (valid for the lifetime of the list).
  */
+/**
+ * TODO KIP-932: Recheck name once public interfaces are finalized.
+ */
 RD_EXPORT const int64_t *rd_kafka_share_partition_offsets_offsets(
     const rd_kafka_share_partition_offsets_t *partition_offsets);
 
@@ -2245,21 +2248,24 @@ RD_EXPORT size_t rd_kafka_share_partition_offsets_offsets_cnt(
  *
  * The share acknowledgement commit callback is called when share consumer
  * acknowledgements (from rd_kafka_share_acknowledge* calls followed by
- * rd_kafka_share_commit_async() or rd_kafka_share_consume_batch()) complete.
+ * rd_kafka_share_commit_async(), rd_kafka_share_consume_batch() or
+ * rd_kafka_share_commit_sync()) complete.
  *
- * The callback is called from rd_kafka_share_consume_batch() or
- * rd_kafka_poll() context.
+ * The callback is invoked once per partition with the acknowledgement result
+ * for that partition.
  *
  * @param conf Configuration object.
  * @param share_acknowledgement_commit_cb Callback to set.
  *
  * The callback parameters are:
  *   - \p rkshare: Share consumer handle.
- *   - \p partitions: List of partitions with their acknowledged offsets.
- *   - \p err: Overall error code (RD_KAFKA_RESP_ERR_NO_ERROR on success).
+ *   - \p partitions: List containing exactly one partition with its
+ *                    acknowledged offsets.
+ *   - \p err: Error code for this partition (RD_KAFKA_RESP_ERR_NO_ERROR on
+ *             success). This error applies to all offsets in the partition.
  *   - \p opaque: Application opaque set with rd_kafka_conf_set_opaque().
  *
- * The \p partitions list contains one entry per partition, each with an
+ * The \p partitions list contains exactly one partition entry with an
  * array of acknowledged offsets accessible via
  * rd_kafka_share_partition_offsets_offsets().
  *

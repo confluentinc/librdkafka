@@ -849,24 +849,6 @@ static void test_poll_callback_piggybacked_acks(void) {
 }
 
 
-/* ===================================================================
- *  Negative Test: Acknowledge after commit.
- *
- *  After commit completes, the acknowledged messages are removed
- *  from inflight_acks map. Trying to acknowledge the same message
- *  again should return _STATE error.
- * =================================================================== */
-
-
-/* ===================================================================
- *  Test: Change ack type before commit.
- *
- *  Before commit is called, user can change their acknowledgement
- *  decision (e.g., RELEASE then ACCEPT). This should work and the
- *  final ack type should be committed.
- * =================================================================== */
-
-
 int main_0171_share_consumer_consume(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();

@@ -3879,9 +3879,9 @@ static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
         else
                 rk->rk_telemetry.time_since_last_share_poll = 0;
 
-        rd_avg_add(&rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
-                   rk->rk_telemetry.time_since_last_share_poll /
-                       1000); /* μs → ms */
+        rd_avg_add(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+            rk->rk_telemetry.time_since_last_share_poll / 1000); /* μs → ms */
         rk->rk_telemetry.ts_last_share_poll_start = now;
 }
 

@@ -311,8 +311,8 @@ static const rd_kafka_telemetry_metric_info_t
     RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO
         [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
-                {.name        = "consumer.share.poll.idle.ratio.avg",
-                 .description = "The average fraction of time the consumer's "
+                {.name          = "consumer.share.poll.idle.ratio.avg",
+                 .description   = "The average fraction of time the consumer's "
                                   "poll() is idle as opposed to waiting for the "
                                   "user code to process records.",
                  .unit          = "1",

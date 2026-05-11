@@ -1959,8 +1959,8 @@ int main_0178_share_consumer_close(int argc, char **argv) {
         common_admin    = test_create_producer();
 
         /* Real broker tests */
-        // test_close_with_acknowledge();
-        // test_close_without_acknowledge();
+        test_close_with_acknowledge();
+        test_close_without_acknowledge();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);
@@ -1975,11 +1975,11 @@ int main_0178_share_consumer_close_local(int argc, char **argv) {
         test_timeout_set(300);
 
         test_close_with_slow_broker_response();
-        // test_close_respects_socket_timeout();
-        // test_close_with_broker_error_response();
-        // test_close_with_broker_busy();
-        // test_close_with_broker_down();
-        // test_api_calls_on_closed_consumer();
-        // test_api_calls_during_closing();
+        test_close_respects_socket_timeout();
+        test_close_with_broker_error_response();
+        test_close_with_broker_busy();
+        test_close_with_broker_down();
+        test_api_calls_on_closed_consumer();
+        test_api_calls_during_closing();
         return 0;
 }

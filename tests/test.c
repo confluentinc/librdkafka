@@ -8231,3 +8231,86 @@ void test_share_destroy(rd_kafka_share_t *rkshare) {
         rd_kafka_share_destroy(rkshare);
         TEST_SAY("Completed rd_kafka_share_destroy\n");
 }
+
+/**
+ * @brief Standard share acknowledgement callback.
+ *
+ * Tracks callback invocations, offsets acknowledged, and errors.
+ * Opaque must be a pointer to test_ack_cb_state_t.
+ */
+void test_share_ack_cb(rd_kafka_share_t *rkshare,
+                       rd_kafka_share_partition_offsets_list_t *partitions,
+                       rd_kafka_resp_err_t err,
+                       void *opaque) {
+        test_ack_cb_state_t *state = (test_ack_cb_state_t *)opaque;
+        const rd_kafka_share_partition_offsets_t *entry;
+
+        (void)rkshare;
+
+        state->callback_cnt++;
+        state->last_err = err;
+
+        entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
+        if (entry)
+                state->total_offsets +=
+                    rd_kafka_share_partition_offsets_offsets_cnt(entry);
+}
+
+/**
+ * @brief Create share consumer with callback and custom acknowledgement mode.
+ */
+rd_kafka_share_t *test_create_share_consumer_with_cb(
+    const char *group_id,
+    const char *ack_mode,
+    test_ack_cb_state_t *state,
+    void (*cb)(rd_kafka_share_t *,
+               rd_kafka_share_partition_offsets_list_t *,
+               rd_kafka_resp_err_t,
+               void *)) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
+                          sizeof(errstr));
+        rd_kafka_conf_set_share_acknowledgement_commit_cb(
+            conf, cb ? cb : test_share_ack_cb);
+        rd_kafka_conf_set_opaque(conf, state);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+        return rkshare;
+}
+
+/**
+ * @brief Wait for acknowledgement callbacks while polling.
+ */
+rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
+                                     rd_kafka_share_t *rkshare,
+                                     int min_callbacks,
+                                     int timeout_ms) {
+        rd_bool_t success = rd_false;
+        int elapsed       = 0;
+        int poll_interval = 100;
+        rd_kafka_message_t *rkmessages[100];
+        size_t rcvd;
+
+        while (elapsed < timeout_ms) {
+                rd_kafka_error_t *error = rd_kafka_share_consume_batch(
+                    rkshare, poll_interval, rkmessages, &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+
+                for (size_t i = 0; i < rcvd; i++)
+                        rd_kafka_message_destroy(rkmessages[i]);
+
+                if (state->callback_cnt >= min_callbacks) {
+                        success = rd_true;
+                        break;
+                }
+                elapsed += poll_interval;
+        }
+        return success;
+}

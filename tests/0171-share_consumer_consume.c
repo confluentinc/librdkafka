@@ -739,6 +739,116 @@ static void test_sparse_partitions(void) {
 }
 
 
+/**
+ * @brief Poll callback - piggybacked acks on ShareFetch.
+ *
+ * In implicit mode, acks are automatically sent with the next poll().
+ * This test verifies that the callback is invoked when acks are
+ * piggybacked on ShareFetch responses.
+ */
+static void test_poll_callback_piggybacked_acks(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-poll-callback";
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_conf_t *conf;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        char errstr[512];
+        int consumed              = 0, attempts;
+        test_ack_cb_state_t state = {0};
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "=== Poll callback test (piggybacked acks on ShareFetch) ===\n");
+
+        /* Create consumer with callback */
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "implicit",
+                          errstr, sizeof(errstr));
+        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf,
+                                                          test_share_ack_cb);
+        rd_kafka_conf_set_opaque(conf, &state);
+
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+
+        /* Create topic and produce messages */
+        topic = test_mk_topic_name("0171-poll-cb", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 100);
+
+        /* Configure group */
+        test_alter_group_configurations(group, grp_conf, 1);
+
+        /* Subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* First poll: consume messages (implicit mode auto-acks) */
+        attempts = 50;
+        while (consumed < 50 && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        /* Second poll: this sends piggybacked acks from first batch */
+        attempts = 10;
+        while (attempts-- > 0 && state.callback_cnt == 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+
+                for (m = 0; m < rcvd; m++)
+                        rd_kafka_message_destroy(batch[m]);
+        }
+
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
+                 state.callback_cnt, state.total_offsets,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(
+            state.callback_cnt >= 1,
+            "Expected at least 1 callback from piggybacked acks, got %d",
+            state.callback_cnt);
+        TEST_ASSERT(state.total_offsets > 0,
+                    "Expected offsets in callback, got %zu",
+                    state.total_offsets);
+
+        TEST_SAY("SUCCESS: Poll callback received %d callbacks, %zu offsets\n",
+                 state.callback_cnt, state.total_offsets);
+
+        /* Cleanup */
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+}
+
+
 int main_0171_share_consumer_consume(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();
@@ -804,7 +914,9 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         test_empty_then_produce();
         test_sparse_partitions();
 
-        TEST_SAY("\nAll share consumer consume tests passed successfully!\n");
+        /* Callback tests */
+        test_poll_callback_piggybacked_acks();
+
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

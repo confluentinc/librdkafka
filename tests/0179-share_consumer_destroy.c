@@ -498,7 +498,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 5000;
+        const int broker_delay_ms       = 30000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;
@@ -654,7 +654,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                             target_partition, p->partition);
                 // TODO KIP-932 destroy: Check correct error code
                 TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR__DESTROY_BROKER,
-                            "Expected __DESTROY for partition %" PRId32
+                            "Expected __DESTROY_BROKER for partition %" PRId32
                             " (broker %" PRId32 ", decommissioned), got %s",
                             target_partition, target_broker_id,
                             rd_kafka_err2str(p->err));
@@ -936,7 +936,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 5000;
+        const int broker_delay_ms       = 30000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;
@@ -1121,7 +1121,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 5000;
+        const int broker_delay_ms       = 30000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;

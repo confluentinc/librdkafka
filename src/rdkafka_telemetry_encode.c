@@ -854,9 +854,10 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                                      .rk_avg_share_poll_idle_ratio);
                 rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
                                     .rk_avg_share_time_between_poll);
-                rd_avg_rollover(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll);
+                rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                     .rk_avg_share_time_between_poll,
+                                &rk->rk_telemetry.rd_avg_current
+                                     .rk_avg_share_time_between_poll);
         }
 
         if (rk->rk_type == RD_KAFKA_CONSUMER &&

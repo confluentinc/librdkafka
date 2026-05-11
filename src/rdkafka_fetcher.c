@@ -1474,6 +1474,11 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 return ErrorCode;
         }
 
+        /* Count this successful ShareFetch response for
+         * consumer.share.fetch.manager.fetch.{total,rate}.
+         * Fires only after handler.handleResponse() returns true */
+        rd_atomic64_add(&rkb->rkb_rk->rk_telemetry.share_fetch_total, 1);
+
         rd_kafka_buf_read_i32(rkbuf, &AcquisitionLockTimeoutMs);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);

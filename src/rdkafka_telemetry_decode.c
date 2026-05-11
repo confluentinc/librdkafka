@@ -592,6 +592,8 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
 
+        rd_atomic64_init(&rk->rk_telemetry.share_fetch_total, 0);
+
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data(expected_value_int, expected_value_double);
 
@@ -845,6 +847,14 @@ void unit_test_telemetry_set_time_between_poll(rd_kafka_t *rk,
             60);
 }
 
+void unit_test_telemetry_set_share_fetch_total(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb) {
+        rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 10);
+        rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 15);
+        rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 17);
+        /* Final counter value: 42 */
+}
+
 void unit_test_telemetry_set_commit_latency(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb) {
         rd_avg_add(&rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
@@ -1065,6 +1075,14 @@ int unit_test_telemetry_gauge(void) {
             "The max delay between invocations of poll() in milliseconds.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
             unit_test_telemetry_set_time_between_poll, 60, 0.0);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.fetch.rate",
+            "The number of fetch requests per second.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_share_fetch_total, 0, 42.0);
         return fails;
 }
 
@@ -1114,6 +1132,16 @@ int unit_test_telemetry_sum(void) {
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
             unit_test_telemetry_set_rebalance_latency,
             default_expected_value_int, default_expected_value_double);
+
+        /* Expected 42 */
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.fetch.total",
+            "The total number of fetch requests.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
+            unit_test_telemetry_set_share_fetch_total, 42, 0.0);
         return fails;
 }
 

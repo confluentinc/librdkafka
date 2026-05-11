@@ -90,6 +90,8 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE,
         RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_share_consumer_metric_name_t;
 
@@ -335,6 +337,20 @@ static const rd_kafka_telemetry_metric_info_t
                      "milliseconds.",
                  .unit          = "ms",
                  .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL] =
+                {.name          = "consumer.share.fetch.manager.fetch.total",
+                 .description   = "The total number of fetch requests.",
+                 .unit          = "1",
+                 .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE] =
+                {.name          = "consumer.share.fetch.manager.fetch.rate",
+                 .description   = "The number of fetch requests per second.",
+                 .unit          = "1",
+                 .is_int        = rd_false,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

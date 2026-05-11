@@ -316,6 +316,26 @@ calculate_share_time_between_poll_max(rd_kafka_t *rk,
 }
 
 static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_latency_avg(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb_selected,
+                                  rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t avg_share_fetch_latency;
+        brokers_avg(rk, rkb_avg_share_fetch_latency, THREE_ORDERS_MAGNITUDE,
+                    avg_share_fetch_latency);
+        return avg_share_fetch_latency;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_latency_max(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb_selected,
+                                  rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t max_share_fetch_latency;
+        brokers_max(rk, rkb_avg_share_fetch_latency, THREE_ORDERS_MAGNITUDE,
+                    max_share_fetch_latency);
+        return max_share_fetch_latency;
+}
+
+static rd_kafka_telemetry_metric_value_t
 calculate_share_fetch_total(rd_kafka_t *rk,
                             rd_kafka_broker_t *rkb_selected,
                             rd_ts_t now_ns) {
@@ -458,6 +478,10 @@ static const rd_kafka_telemetry_metric_value_calculator_t
                 &calculate_share_fetch_total,
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE] =
                 &calculate_share_fetch_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG] =
+                &calculate_share_fetch_latency_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX] =
+                &calculate_share_fetch_latency_max,
 };
 
 static const char *get_client_rack(const rd_kafka_t *rk) {
@@ -876,6 +900,15 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                                              .rkb_avg_produce_latency,
                                         &rkb->rkb_telemetry.rd_avg_current
                                              .rkb_avg_produce_latency);
+                }
+
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
+                                            .rkb_avg_share_fetch_latency);
+                        rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover
+                                             .rkb_avg_share_fetch_latency,
+                                        &rkb->rkb_telemetry.rd_avg_current
+                                             .rkb_avg_share_fetch_latency);
                 }
         }
 

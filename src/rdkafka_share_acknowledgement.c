@@ -352,8 +352,9 @@ rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
  * per-partition errors have already been set by the response parser
  * and we leave ack_details untouched.
  */
-void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
-                                            rd_kafka_resp_err_t err) {
+void rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
+    rd_kafka_op_t *rko,
+    rd_kafka_resp_err_t err) {
         /* Propagate top-level err to each batch in ack_details, but
          * only override the _IN_PROGRESS sentinel. This preserves:
          *   - Deliberately pre-set err (e.g. INVALID_SHARE_SESSION_EPOCH

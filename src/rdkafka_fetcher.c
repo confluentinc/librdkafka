@@ -2002,8 +2002,8 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                          *    for share consumer, or if it can be set,
                          *    tear down the connection for each
                          *    ShareFetch/ShareAcknowledge timed out
-                         *    request regardless of the threshold.
-                         *    Java always disconnects on timeout.
+                         *    request regardless of the threshold so
+                         *    that timeouts always force a reconnect.
                          * 2) Ensure reconnect after teardown. Verify
                          *    that sparse connection's need_connection
                          *    is updated after the connection is torn
@@ -2015,10 +2015,10 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932: Java uses leader info from
-                         * the response (currentLeader +
-                         * nodeEndpoints) to update partition
-                         * leadership directly, rather than a full
+                        /* TODO KIP-932: The response already carries
+                         * per-partition currentLeader + nodeEndpoints;
+                         * use that to update partition leadership
+                         * directly instead of triggering a full
                          * metadata refresh RPC. */
                         rd_snprintf(tmp, sizeof(tmp),
                                     "ShareAcknowledge failed: %s",
@@ -2029,9 +2029,11 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 }
 
                 default:
-                        /* Unlike Java, we have decided to not retry
-                         * ShareAcknowledge RPC level errors. Java
-                         * will follow this approach as well. */
+                        /* No retry for ShareAcknowledge RPC-level
+                         * errors. The error semantics (partition
+                         * moved, session state lost, etc.) make a
+                         * blind retry unlikely to succeed and risk
+                         * duplicating side effects. */
                         break;
                 }
         }
@@ -2041,7 +2043,8 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
 
         /* ack_details is owned by the op and freed by the op destructor
          * after the main thread has processed the reply. */
-        rd_kafka_share_fetch_op_reply_with_err(rko_orig, err);
+        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(rko_orig,
+                                                                      err);
 }
 
 
@@ -2097,9 +2100,9 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         }
 
         /* TODO KIP-932: Partition add/remove is done unconditionally
-         * here, which is likely correct — Java also keeps partitions
-         * in the session after errors and relies on metadata-driven
-         * migration. Verify this matches Java behavior. */
+         * here. Likely correct — partitions stay in the session
+         * across response errors and migrate on the next metadata
+         * refresh. Verify this matches the intended KIP-932 flow. */
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
@@ -2122,8 +2125,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                          *    for share consumer, or if it can be set,
                          *    tear down the connection for each
                          *    ShareFetch/ShareAcknowledge timed out
-                         *    request regardless of the threshold.
-                         *    Java always disconnects on timeout.
+                         *    request regardless of the threshold so
+                         *    that timeouts always force a reconnect.
                          * 2) Ensure reconnect after teardown. Verify
                          *    that sparse connection's need_connection
                          *    is updated after the connection is torn
@@ -2135,10 +2138,10 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932: Java uses leader info from
-                         * the response (currentLeader +
-                         * nodeEndpoints) to update partition
-                         * leadership directly, rather than a full
+                        /* TODO KIP-932: The response already carries
+                         * per-partition currentLeader + nodeEndpoints;
+                         * use that to update partition leadership
+                         * directly instead of triggering a full
                          * metadata refresh RPC. */
                         rd_snprintf(tmp, sizeof(tmp), "FetchRequest failed: %s",
                                     rd_kafka_err2str(err));
@@ -2149,10 +2152,9 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
                 default:
                         /* No error-specific handling at the request
-                         * level. Java treats all non-session top-level
-                         * errors as transient (increments epoch). The
-                         * main thread retries by selecting another
-                         * broker. */
+                         * level. Non-session top-level errors are
+                         * treated as transient — the main thread
+                         * retries by selecting another broker. */
                         break;
                 }
 
@@ -2162,7 +2164,8 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
         /* ack_details is owned by the op and freed by the op destructor
          * after the main thread has processed the reply. */
-        rd_kafka_share_fetch_op_reply_with_err(rko_orig, err);
+        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(rko_orig,
+                                                                      err);
 
         /* Enqueue the response for the app thread AFTER sending the
          * reply to the main thread.  This ensures the main thread
@@ -2936,7 +2939,7 @@ void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,
                         /* Required as it is possible that we were about
                          * to establish a session */
                         rd_kafka_broker_share_fetch_session_clear(rkb);
-                rd_kafka_share_fetch_op_reply_with_err(
+                rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                     rko_orig, RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
         }
 }
@@ -2957,15 +2960,15 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
                              "Not sending Share RPC: "
                              "no fetch requested and no acknowledgements");
-                rd_kafka_share_fetch_op_reply_with_err(rko_orig,
-                                                       RD_KAFKA_RESP_ERR__NOOP);
+                rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
+                    rko_orig, RD_KAFKA_RESP_ERR__NOOP);
                 return;
         }
 
         if (!rkcg->rkcg_member_id) {
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHARERPC",
                              "Share RPC requested without member_id");
-                rd_kafka_share_fetch_op_reply_with_err(
+                rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                     rko_orig, RD_KAFKA_RESP_ERR__INVALID_ARG);
                 return;
         }
@@ -2976,16 +2979,14 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                  * If session epoch is 0 (new consumer or post-reset),
                  * the broker has no session state to acknowledge
                  * against. Fail the acks locally with
-                 * INVALID_SHARE_SESSION_EPOCH instead of sending —
-                 * matches Java's ShareConsumeRequestManager which
-                 * raises InvalidShareSessionEpochException locally
-                 * for the same condition. */
+                 * INVALID_SHARE_SESSION_EPOCH instead of sending,
+                 * since the broker would reject the request. */
                 if (rkb->rkb_share_fetch_session.epoch == 0) {
                         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
                                      "Failing %d ack batches locally: "
                                      "session epoch is 0 (no session)",
                                      rd_list_cnt(ack_details));
-                        rd_kafka_share_fetch_op_reply_with_err(
+                        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko_orig,
                             RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH);
                         return;
@@ -3010,7 +3011,7 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
          * against. Fail the acks locally with
          * INVALID_SHARE_SESSION_EPOCH and strip them from the wire
          * request. The ShareFetch itself still goes out to establish
-         * the session. Matches Java's ShareConsumeRequestManager. */
+         * the session. */
         if (rkb->rkb_share_fetch_session.epoch == 0 && has_ack_details) {
                 rd_kafka_share_ack_batches_t *batch;
                 int i;

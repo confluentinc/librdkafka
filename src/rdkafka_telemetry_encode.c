@@ -286,6 +286,36 @@ calculate_consumer_poll_idle_ratio_avg(rd_kafka_t *rk,
 }
 
 static rd_kafka_telemetry_metric_value_t
+calculate_share_consumer_poll_idle_ratio_avg(rd_kafka_t *rk,
+                                             rd_kafka_broker_t *rkb_selected,
+                                             rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t share_poll_idle_avg;
+        share_poll_idle_avg.double_value = calculate_avg(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_poll_idle_ratio, 1e6);
+        return share_poll_idle_avg;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_time_between_poll_avg(rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb_selected,
+                                      rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t time_between_poll_avg;
+        time_between_poll_avg.double_value = calculate_avg(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll, 1);
+        return time_between_poll_avg;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_time_between_poll_max(rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb_selected,
+                                      rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t time_between_poll_max;
+        time_between_poll_max.int_value = calculate_max(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll, 1);
+        return time_between_poll_max;
+}
+
+static rd_kafka_telemetry_metric_value_t
 calculate_consumer_commit_latency_avg(rd_kafka_t *rk,
                                       rd_kafka_broker_t *rkb_selected,
                                       rd_ts_t now_ns) {
@@ -381,8 +411,12 @@ static const rd_kafka_telemetry_metric_value_calculator_t
     SHARE_CONSUMER_METRIC_VALUE_CALCULATORS
         [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
-                &calculate_consumer_poll_idle_ratio_avg,
-        };
+                &calculate_share_consumer_poll_idle_ratio_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG] =
+                &calculate_share_time_between_poll_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
+                &calculate_share_time_between_poll_max,
+};
 
 static const char *get_client_rack(const rd_kafka_t *rk) {
         return rk->rk_conf.client_rack &&
@@ -811,6 +845,20 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                     &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
         }
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                    .rk_avg_share_poll_idle_ratio);
+                rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                     .rk_avg_share_poll_idle_ratio,
+                                &rk->rk_telemetry.rd_avg_current
+                                     .rk_avg_share_poll_idle_ratio);
+                rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                    .rk_avg_share_time_between_poll);
+                rd_avg_rollover(
+                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll);
+        }
+
         if (rk->rk_type == RD_KAFKA_CONSUMER &&
             !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_avg_destroy(
@@ -900,13 +948,13 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                             SHARE_CONSUMER_METRIC_VALUE_CALCULATORS
                                 [metrics_to_encode[i]];
                 else if (rk->rk_type == RD_KAFKA_PRODUCER)
-                            metric_value_calculator =
-                                PRODUCER_METRIC_VALUE_CALCULATORS
-                                    [metrics_to_encode[i]];
+                        metric_value_calculator =
+                            PRODUCER_METRIC_VALUE_CALCULATORS
+                                [metrics_to_encode[i]];
                 else
-                            metric_value_calculator =
-                                CONSUMER_METRIC_VALUE_CALCULATORS
-                                    [metrics_to_encode[i]];
+                        metric_value_calculator =
+                            CONSUMER_METRIC_VALUE_CALCULATORS
+                                [metrics_to_encode[i]];
                 if (info[metrics_to_encode[i]].is_per_broker) {
                         rd_kafka_broker_t *rkb;
 

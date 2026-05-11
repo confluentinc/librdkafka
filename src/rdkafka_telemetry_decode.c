@@ -568,6 +568,11 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
 
         rd_avg_init(&rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_poll_idle_ratio,
+            RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+                    RD_AVG_GAUGE, 0, 60 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency,
@@ -575,6 +580,11 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
 
         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(
+            &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_poll_idle_ratio,
+            RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
+                    RD_AVG_GAUGE, 0, 60 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
@@ -808,6 +818,29 @@ void unit_test_telemetry_set_poll_idle_ratio(rd_kafka_t *rk,
                    1000000);
 }
 
+void unit_test_telemetry_set_share_poll_idle_ratio(rd_kafka_t *rk,
+                                                   rd_kafka_broker_t *rkb) {
+        rd_avg_add(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_poll_idle_ratio,
+            250000);
+        rd_avg_add(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_poll_idle_ratio,
+            500000);
+        rd_avg_add(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_poll_idle_ratio,
+            750000);
+}
+
+void unit_test_telemetry_set_time_between_poll(rd_kafka_t *rk,
+                                               rd_kafka_broker_t *rkb) {
+        rd_avg_add(&rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+                   5);
+        rd_avg_add(&rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+                   25);
+        rd_avg_add(&rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+                   60);
+}
+
 void unit_test_telemetry_set_commit_latency(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb) {
         rd_avg_add(&rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
@@ -1010,8 +1043,24 @@ int unit_test_telemetry_gauge(void) {
             "The average fraction of time the consumer's poll() is idle "
             "as opposed to waiting for the user code to process records.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_poll_idle_ratio, default_expected_value_int,
-            default_expected_value_double);
+            unit_test_telemetry_set_share_poll_idle_ratio, 0, 0.5);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.time.between.poll.avg",
+            "The average delay between invocations of poll() in "
+            "milliseconds.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_time_between_poll, 0, 30.0);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.time.between.poll.max",
+            "The max delay between invocations of poll() in milliseconds.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
+            unit_test_telemetry_set_time_between_poll, 60, 0.0);
         return fails;
 }
 

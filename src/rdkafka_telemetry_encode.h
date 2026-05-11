@@ -88,6 +88,8 @@ typedef enum {
 
 typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX,
         RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_share_consumer_metric_name_t;
 
@@ -311,10 +313,28 @@ static const rd_kafka_telemetry_metric_info_t
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
                 {.name        = "consumer.share.poll.idle.ratio.avg",
                  .description = "The average fraction of time the consumer's "
-                                "poll() is idle as opposed to waiting for the "
-                                "user code to process records.",
+                                  "poll() is idle as opposed to waiting for the "
+                                  "user code to process records.",
                  .unit          = "1",
                  .is_int        = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG] =
+                {.name = "consumer.share.time.between.poll.avg",
+                 .description =
+                     "The average delay between invocations of poll() in "
+                     "milliseconds.",
+                 .unit          = "ms",
+                 .is_int        = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
+                {.name = "consumer.share.time.between.poll.max",
+                 .description =
+                     "The max delay between invocations of poll() in "
+                     "milliseconds.",
+                 .unit          = "ms",
+                 .is_int        = rd_true,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

@@ -815,6 +815,8 @@ struct rd_kafka_s {
 
                 struct {
                         rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t rk_avg_share_time_between_poll; /**< Current time between two share_consume_batch */
                         rd_avg_t rk_avg_commit_latency; /**< Current commit
                                                          *   latency avg */
                         rd_avg_t
@@ -824,12 +826,19 @@ struct rd_kafka_s {
 
                 struct {
                         rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t rk_avg_share_time_between_poll;/**< Rolled over time between two share_consume_batch */
                         rd_avg_t rk_avg_commit_latency; /**< Rolled over commit
                                                          *   latency avg */
                         rd_avg_t
                             rk_avg_rebalance_latency; /**< Rolled over rebalance
                                                        *   latency avg */
                 } rd_avg_rollover;
+
+                /* Share consumer poll/batch tracking */
+                rd_ts_t ts_last_share_poll_start;
+                rd_ts_t ts_share_poll_start;
+                rd_ts_t time_since_last_share_poll;
 
         } rk_telemetry;
 
@@ -1315,7 +1324,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
                 now = rd_clock();
         if (is_blocking)
                 rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
-        if (rkq->rkq_ts_last_poll_end) {
+        if (rkq->rkq_ts_last_poll_end && !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 int64_t poll_idle_ratio = 0;
                 rd_ts_t poll_interval   = now - rkq->rkq_ts_last_poll_start;
                 if (poll_interval) {

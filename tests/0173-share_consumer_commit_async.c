@@ -1576,6 +1576,301 @@ static void do_test_lock_timeout_redelivery(void) {
 }
 
 
+/* ===================================================================
+ *  Test: commit_async callback invocation.
+ *
+ *  Verifies that share_acknowledgement_commit_cb is invoked after
+ *  commit_async when acks are piggybacked on ShareFetch.
+ * =================================================================== */
+static void do_test_commit_async_callback(void) {
+        const char *topic;
+        const char *group = "commit-async-callback";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        test_ack_cb_state_t state;
+
+        SUB_TEST();
+
+        test_ack_cb_state_init(&state);
+
+        topic = test_mk_topic_name("0173-ca-callback", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 50);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume some messages */
+        while (consumed < 20 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        /* Call commit_async to trigger callback */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Wait for callback */
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
+                 state.callback_cnt, state.total_offsets,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+        TEST_ASSERT(state.total_offsets > 0,
+                    "Expected offsets in callback, got %zu",
+                    state.total_offsets);
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Negative Test: Acknowledge after commit_async.
+ *
+ *  After commit_async completes and acks are sent, the acknowledged
+ *  messages are removed from inflight_acks map. Trying to acknowledge
+ *  the same message again should return _STATE error.
+ * =================================================================== */
+static void do_test_ack_after_commit_async(void) {
+        const char *topic;
+        const char *group = "commit-async-ack-after-commit";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        rd_kafka_resp_err_t ack_err;
+        test_ack_cb_state_t state;
+        /* Store message info for re-ack attempt after commit */
+        const char *saved_topic = NULL;
+        int32_t saved_partition = -1;
+        int64_t saved_offset    = -1;
+
+        SUB_TEST();
+
+        test_ack_cb_state_init(&state);
+
+        topic = test_mk_topic_name("0173-ca-ack-after-commit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume messages, acknowledge all, save first message info */
+        while (consumed < 5 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                /* Save first message info for later */
+                                if (saved_offset < 0) {
+                                        saved_topic = topic;
+                                        saved_partition =
+                                            rkmessages[j]->partition;
+                                        saved_offset = rkmessages[j]->offset;
+                                        TEST_SAY("Saved msg info: %s [%" PRId32
+                                                 "] @ %" PRId64 "\n",
+                                                 saved_topic, saved_partition,
+                                                 saved_offset);
+                                }
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Consumed and acknowledged %d messages\n", consumed);
+        TEST_ASSERT(consumed >= 5, "Expected at least 5, got %d", consumed);
+        TEST_ASSERT(saved_offset >= 0, "Expected to save at least 1 message");
+
+        /* commit_async triggers sending acknowledgements */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        TEST_SAY("commit_async succeeded\n");
+
+        /* Wait for callback to confirm acks were sent */
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback: count=%d, last_err=%s\n", state.callback_cnt,
+                 rd_kafka_err2name(state.last_err));
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+
+        /* Now try to acknowledge the same message again using the
+         * offset-based API. This should fail with _STATE because the
+         * message is no longer in inflight_acks. */
+        ack_err = rd_kafka_share_acknowledge_offset(
+            rkshare, saved_topic, saved_partition, saved_offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+
+        TEST_SAY("Ack after commit returned: %s\n", rd_kafka_err2str(ack_err));
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE error when acknowledging after commit, "
+                    "got %s",
+                    rd_kafka_err2str(ack_err));
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Test: Change ack type before commit_async.
+ *
+ *  Before commit_async is called, user can change their acknowledgement
+ *  decision (e.g., RELEASE then ACCEPT). This should work and the
+ *  final ack type should be committed.
+ * =================================================================== */
+static void do_test_change_ack_type_before_commit_async(void) {
+        const char *topic;
+        const char *group = "commit-async-change-ack-type";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_message_t *test_msg = NULL;
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        rd_kafka_resp_err_t release_err, accept_err;
+        test_ack_cb_state_t state;
+
+        SUB_TEST();
+
+        test_ack_cb_state_init(&state);
+
+        topic = test_mk_topic_name("0173-ca-change-ack-type", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume one message and keep handle */
+        while (test_msg == NULL && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err && test_msg == NULL) {
+                                test_msg = rkmessages[j];
+                                consumed++;
+                        } else {
+                                if (!rkmessages[j]->err) {
+                                        rd_kafka_share_acknowledge(
+                                            rkshare, rkmessages[j]);
+                                        consumed++;
+                                }
+                                rd_kafka_message_destroy(rkmessages[j]);
+                        }
+                }
+        }
+
+        TEST_ASSERT(test_msg != NULL, "Expected to consume at least 1 message");
+        TEST_SAY("Consumed %d messages, kept one for ack type change test\n",
+                 consumed);
+
+        /* First: RELEASE the message (user initially decides to release) */
+        release_err = rd_kafka_share_acknowledge_type(
+            rkshare, test_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        TEST_SAY("RELEASE returned: %s\n", rd_kafka_err2str(release_err));
+        TEST_ASSERT(release_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected RELEASE to succeed, got %s",
+                    rd_kafka_err2str(release_err));
+
+        /* Second: Change mind and ACCEPT the same message before commit */
+        accept_err = rd_kafka_share_acknowledge_type(
+            rkshare, test_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_SAY("ACCEPT (changing from RELEASE) returned: %s\n",
+                 rd_kafka_err2str(accept_err));
+        TEST_ASSERT(accept_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected ACCEPT to succeed (changing ack type before "
+                    "commit is allowed), got %s",
+                    rd_kafka_err2str(accept_err));
+
+        rd_kafka_message_destroy(test_msg);
+
+        /* Commit async - should succeed with ACCEPT as final ack type */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        TEST_SAY("commit_async succeeded\n");
+
+        /* Wait for callback */
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback: count=%d, last_err=%s\n", state.callback_cnt,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR in callback, got %s",
+                    rd_kafka_err2name(state.last_err));
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0173_share_consumer_commit_async(int argc, char **argv) {
         test_timeout_set(120);
         common_producer = test_create_producer();
@@ -1594,6 +1889,12 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_all_reject_second_consumer();
         do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
+        /* Callback test */
+        do_test_commit_async_callback();
+
+        /* Negative tests - explicit acknowledgement edge cases */
+        do_test_ack_after_commit_async();
+        do_test_change_ack_type_before_commit_async();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

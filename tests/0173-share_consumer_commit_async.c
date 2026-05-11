@@ -1576,6 +1576,80 @@ static void do_test_lock_timeout_redelivery(void) {
 }
 
 
+/* ===================================================================
+ *  Test: commit_async callback invocation.
+ *
+ *  Verifies that share_acknowledgement_commit_cb is invoked after
+ *  commit_async when acks are piggybacked on ShareFetch.
+ * =================================================================== */
+static void do_test_commit_async_callback(void) {
+        const char *topic;
+        const char *group = "commit-async-callback";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        test_ack_cb_state_t state;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-ca-callback", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 50);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        test_alter_group_configurations(group, grp_conf, 1);
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume some messages */
+        while (consumed < 20 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        /* Call commit_async to trigger callback */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Wait for callback */
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
+
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
+                 state.callback_cnt, state.total_offsets,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected at least 1 callback, got %d", state.callback_cnt);
+        TEST_ASSERT(state.total_offsets > 0,
+                    "Expected offsets in callback, got %zu",
+                    state.total_offsets);
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0173_share_consumer_commit_async(int argc, char **argv) {
         test_timeout_set(120);
         common_producer = test_create_producer();
@@ -1594,6 +1668,8 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_all_reject_second_consumer();
         do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
+        /* Callback test */
+        do_test_commit_async_callback();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

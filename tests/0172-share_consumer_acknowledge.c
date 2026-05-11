@@ -861,6 +861,267 @@ static void test_release_then_reject_no_redelivery(void) {
 }
 
 
+
+/**
+ * @brief Test changing acknowledgement type before commit
+ *
+ * Verifies that acknowledgement type can be changed before commit completes.
+ * Tests both implicit commit (via consume_batch) and explicit commit.
+ */
+static void test_change_ack_type_before_commit(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *batch[10];
+        rd_kafka_error_t *err;
+        rd_kafka_resp_err_t ack_err;
+        rd_kafka_topic_partition_list_t *subs;
+        const char *group = "share-change-ack-type";
+        const char *topic;
+        size_t rcvd = 0;
+        int attempts;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== test_change_ack_type_before_commit ===\n");
+
+        /* Test 1: Explicit mode with explicit commit */
+        rkshare = test_create_share_consumer(group, "explicit");
+        topic   = test_mk_topic_name("0172-change-ack-explicit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume one message */
+        attempts = 30;
+        while (rcvd < 1 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
+                                                   &batch_rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd += batch_rcvd;
+        }
+
+        TEST_ASSERT(rcvd >= 1, "Expected at least 1 message, got %zu", rcvd);
+
+        /* First: RELEASE the message */
+        ack_err = rd_kafka_share_acknowledge_type(
+            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR, "RELEASE failed: %s",
+                    rd_kafka_err2str(ack_err));
+
+        /* Second: Change to ACCEPT before commit */
+        ack_err = rd_kafka_share_acknowledge_type(
+            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "ACCEPT (changing from RELEASE) failed: %s",
+                    rd_kafka_err2str(ack_err));
+
+        rd_kafka_message_destroy(batch[0]);
+
+        /* Commit async - should succeed with ACCEPT as final ack type */
+        err = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!err, "commit_async failed: %s",
+                    err ? rd_kafka_error_string(err) : "");
+
+        /* Wait for commit to complete by polling */
+        rd_sleep(2);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        /* Test 2: Implicit mode (commit happens automatically) */
+        rkshare = test_create_share_consumer(group, "implicit");
+        topic   = test_mk_topic_name("0172-change-ack-implicit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume and change ack type */
+        rcvd     = 0;
+        attempts = 30;
+        while (rcvd < 1 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
+                                                   &batch_rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd += batch_rcvd;
+        }
+
+        TEST_ASSERT(rcvd >= 1, "Expected at least 1 message, got %zu", rcvd);
+
+        /* Change from default ACCEPT to RELEASE then back to ACCEPT */
+        ack_err = rd_kafka_share_acknowledge_type(
+            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR, "RELEASE failed: %s",
+                    rd_kafka_err2str(ack_err));
+
+        ack_err = rd_kafka_share_acknowledge_type(
+            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "ACCEPT (changing from RELEASE) failed: %s",
+                    rd_kafka_err2str(ack_err));
+
+        rd_kafka_message_destroy(batch[0]);
+
+        /* Implicit commit happens on next consume_batch or close */
+        rd_sleep(2);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_change_ack_type_before_commit: PASSED ===\n");
+}
+
+/**
+ * @brief Test that acknowledging after commit fails
+ *
+ * After commit completes, acknowledged messages are removed from
+ * inflight_acks map. Attempting to acknowledge again should fail with _STATE.
+ * Tests both explicit and implicit commit modes.
+ */
+static void test_ack_after_commit(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *batch[10];
+        rd_kafka_error_t *err;
+        rd_kafka_resp_err_t ack_err;
+        rd_kafka_topic_partition_list_t *subs;
+        const char *group = "share-ack-after-commit";
+        const char *topic;
+        size_t rcvd = 0;
+        int attempts;
+        const char *saved_topic = NULL;
+        int32_t saved_partition = -1;
+        int64_t saved_offset    = -1;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== test_ack_after_commit ===\n");
+
+        /* Test 1: Explicit mode with explicit commit */
+        rkshare = test_create_share_consumer(group, "explicit");
+        topic   = test_mk_topic_name("0172-ack-after-commit-explicit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume and acknowledge messages, save first message info */
+        attempts = 30;
+        while (rcvd < 5 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
+                                                   &batch_rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd += batch_rcvd;
+        }
+
+        TEST_ASSERT(rcvd >= 5, "Expected at least 5 messages, got %zu", rcvd);
+
+        /* Save first message info and acknowledge all */
+        saved_topic     = topic;
+        saved_partition = batch[0]->partition;
+        saved_offset    = batch[0]->offset;
+
+        for (size_t i = 0; i < rcvd; i++) {
+                rd_kafka_share_acknowledge(rkshare, batch[i]);
+                rd_kafka_message_destroy(batch[i]);
+        }
+
+        /* Explicit commit */
+        err = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!err, "commit_async failed");
+
+        /* Wait for commit to complete */
+        rd_sleep(3);
+
+        /* Now try to acknowledge the same message again - should fail */
+        ack_err = rd_kafka_share_acknowledge_offset(
+            rkshare, saved_topic, saved_partition, saved_offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE after commit, got %s",
+                    rd_kafka_err2str(ack_err));
+        TEST_SAY(
+            "Explicit mode: Re-ack after commit correctly failed with "
+            "_STATE\n");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        /* Test 2: Implicit mode */
+        rkshare = test_create_share_consumer(group, "implicit");
+        topic   = test_mk_topic_name("0172-ack-after-commit-implicit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Consume messages (implicit commit happens automatically) */
+        rcvd     = 0;
+        attempts = 30;
+        while (rcvd < 5 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
+                                                   &batch_rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd += batch_rcvd;
+        }
+
+        TEST_ASSERT(rcvd >= 5, "Expected at least 5 messages, got %zu", rcvd);
+
+        /* Save first message info */
+        saved_topic     = topic;
+        saved_partition = batch[0]->partition;
+        saved_offset    = batch[0]->offset;
+
+        /* Destroy messages (implicit ACCEPT happens) */
+        for (size_t i = 0; i < rcvd; i++) {
+                rd_kafka_message_destroy(batch[i]);
+        }
+
+        /* Wait for implicit commit */
+        rd_sleep(3);
+
+        /* Try to acknowledge again - should fail */
+        ack_err = rd_kafka_share_acknowledge_offset(
+            rkshare, saved_topic, saved_partition, saved_offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE after implicit commit, got %s",
+                    rd_kafka_err2str(ack_err));
+        TEST_SAY(
+            "Implicit mode: Re-ack after commit correctly failed with "
+            "_STATE\n");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_ack_after_commit: PASSED ===\n");
+}
+
 /***************************************************************************
  * Max Delivery Attempts Tests
  ***************************************************************************/
@@ -1147,6 +1408,10 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         test_ack_null_rkshare();
         test_ack_invalid_type();
         test_release_then_reject_no_redelivery();
+
+        /* Acknowledgement state tests (explicit and implicit commit) */
+        test_change_ack_type_before_commit();
+        test_ack_after_commit();
 
         /* Max delivery attempts test */
         test_max_delivery_attempts();

@@ -1208,13 +1208,20 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
          * fetch-level errors and is handled separately. The partition
          * may be present in the response but absent from
          * request_ack_details (e.g. fetch-only partitions from
-         * toppars_to_add) — silently skip those, same as Java's
-         * handleShareFetchSuccess at line 870-881. */
+         * toppars_to_add) — silently skip those.
+         *
+         * Conditional on _IN_PROGRESS preserves any deliberately
+         * pre-set err on the batch (e.g. INVALID_SHARE_SESSION_EPOCH
+         * from the epoch-0 strip path) — those partitions were never
+         * actually sent to the broker, so the broker's
+         * AcknowledgementErrorCode (typically NO_ERROR) is not the
+         * authoritative result for them. */
         if (request_ack_details) {
                 rd_kafka_share_ack_batches_t *batch =
                     rd_kafka_share_find_ack_batch_by_id(request_ack_details,
                                                         topic_id, PartitionId);
-                if (batch)
+                if (batch &&
+                    batch->rktpar->err == RD_KAFKA_RESP_ERR__IN_PROGRESS)
                         batch->rktpar->err = AcknowledgementErrorCode;
         }
 
@@ -1882,7 +1889,14 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         batch = rd_kafka_share_find_ack_batch_by_id(
                             ack_details, topic_id, Partition);
                         if (batch) {
-                                batch->rktpar->err = PartErrorCode;
+                                /* Conditional on _IN_PROGRESS as a
+                                 * defensive safety net — the broker's
+                                 * per-partition PartErrorCode is the
+                                 * authoritative result for partitions
+                                 * actually sent in the request. */
+                                if (batch->rktpar->err ==
+                                    RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                        batch->rktpar->err = PartErrorCode;
                         } else {
                                 rd_rkb_log(
                                     rkb, LOG_ERR, "SHAREACK",
@@ -1938,36 +1952,37 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                                                     void *opaque) {
         rd_kafka_op_t *rko_orig = opaque;
 
-        /* Upgrade _IN_PROGRESS to INVALID_RECORD_STATE on each batch.
-         * Any batch still at INVALID_RECORD_STATE after processing
-         * means the partition was sent in the request but missing
-         * from the response — matches Java's INVALID_RESPONSE
-         * handling at ShareConsumeRequestManager.processingComplete.
-         *
-         * Conditional override (only _IN_PROGRESS) preserves any err
-         * pre-set by callers before the request was sent (e.g. epoch
-         * 0 piggyback acks pre-failed locally with
-         * INVALID_SHARE_SESSION_EPOCH). */
-        if (rko_orig->rko_u.share_fetch.ack_details) {
-                rd_kafka_share_ack_batches_t *batch;
-                int i;
-                RD_LIST_FOREACH(batch, rko_orig->rko_u.share_fetch.ack_details,
-                                i) {
-                        if (batch->rktpar->err ==
-                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
-                                batch->rktpar->err =
-                                    RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
-                }
-        }
-
         /* Parse and handle the response (unless the request errored).
-         * The parser sets per-partition err on the matching batches in
-         * ack_details. DESTROY case falls through here and is handled
-         * by the generic top-level error path below. */
-        if (!err && reply)
+         * The parser writes per-partition err on matching batches in
+         * ack_details (only on batches still at the _IN_PROGRESS
+         * sentinel as a defensive safety net). DESTROY case falls
+         * through here and is handled by the generic top-level error
+         * path below.
+         *
+         * If the parser ran and succeeded (err remains 0), convert
+         * any batch still at _IN_PROGRESS to INVALID_RECORD_STATE —
+         * those partitions were sent in the request but missing from
+         * the response.
+         *
+         * If the parser was skipped or failed (err != 0), leave
+         * batches at _IN_PROGRESS so the helper at the end can
+         * propagate the top-level err to them. */
+        if (!err && reply) {
                 err = rd_kafka_share_acknowledge_reply_handle(
                     rkb, reply, request,
                     rko_orig->rko_u.share_fetch.ack_details);
+                if (!err && rko_orig->rko_u.share_fetch.ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
+                        int i;
+                        RD_LIST_FOREACH(
+                            batch, rko_orig->rko_u.share_fetch.ack_details, i) {
+                                if (batch->rktpar->err ==
+                                    RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                        batch->rktpar->err =
+                                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
+                        }
+                }
+        }
 
         rd_kafka_broker_session_update(rkb);
 
@@ -2047,37 +2062,39 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
 
         rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
 
-        /* Upgrade _IN_PROGRESS to INVALID_RECORD_STATE on each batch.
-         * Any batch still at INVALID_RECORD_STATE after processing
-         * means the partition's ack was not acknowledged in the
-         * response — matches Java's INVALID_RESPONSE handling.
-         *
-         * Conditional override (only _IN_PROGRESS) preserves any err
-         * pre-set by callers before the request was sent (e.g. epoch
-         * 0 piggyback acks pre-failed locally with
-         * INVALID_SHARE_SESSION_EPOCH). */
-        if (rko_orig->rko_u.share_fetch.ack_details) {
-                rd_kafka_share_ack_batches_t *batch;
-                int i;
-                RD_LIST_FOREACH(batch, rko_orig->rko_u.share_fetch.ack_details,
-                                i) {
-                        if (batch->rktpar->err ==
-                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
-                                batch->rktpar->err =
-                                    RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
-                }
-        }
-
         /* Parse the response only if the network/broker layer didn't
          * report an error. If err is set (e.g. __TRANSPORT,
          * __TIMED_OUT, __DESTROY), the reply buffer is unusable so
-         * we skip parsing. The parser sets per-partition err on
-         * matching batches in ack_details. The DESTROY/network error
-         * case falls through to the generic top-level error path
-         * below. */
-        if (!err && reply)
+         * we skip parsing. The parser writes per-partition err on
+         * matching batches in ack_details (only on batches still at
+         * the _IN_PROGRESS sentinel, so any deliberately pre-set
+         * value such as INVALID_SHARE_SESSION_EPOCH is preserved).
+         * The DESTROY/network error case falls through to the
+         * generic top-level error path below.
+         *
+         * If the parser ran and succeeded (err remains 0), convert
+         * any batch still at _IN_PROGRESS to INVALID_RECORD_STATE —
+         * those partitions were sent in the request but missing from
+         * the response.
+         *
+         * If the parser was skipped or failed (err != 0), leave
+         * batches at _IN_PROGRESS so the helper at the end can
+         * propagate the top-level err to them. */
+        if (!err && reply) {
                 err = rd_kafka_share_fetch_reply_handle(rkb, reply, request,
                                                         &response_rko);
+                if (!err && rko_orig->rko_u.share_fetch.ack_details) {
+                        rd_kafka_share_ack_batches_t *batch;
+                        int i;
+                        RD_LIST_FOREACH(
+                            batch, rko_orig->rko_u.share_fetch.ack_details, i) {
+                                if (batch->rktpar->err ==
+                                    RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                        batch->rktpar->err =
+                                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
+                        }
+                }
+        }
 
         /* TODO KIP-932: Partition add/remove is done unconditionally
          * here, which is likely correct — Java also keeps partitions

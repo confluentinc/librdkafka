@@ -354,11 +354,25 @@ rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
  */
 void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
                                             rd_kafka_resp_err_t err) {
+        /* Propagate top-level err to each batch in ack_details, but
+         * only override the _IN_PROGRESS sentinel. This preserves:
+         *   - Deliberately pre-set err (e.g. INVALID_SHARE_SESSION_EPOCH
+         *     from the epoch-0 strip path).
+         *   - Per-partition err already written by the parser.
+         *   - INVALID_RECORD_STATE from the post-parse "missing from
+         *     response" marker.
+         *
+         * Top-level err only ever needs to land on _IN_PROGRESS
+         * batches: the parser is skipped when there is a top-level
+         * err so no per-partition err / post-parse INVALID_RECORD_STATE
+         * exists when this helper is called with a non-zero err. */
         if (err && rko->rko_u.share_fetch.ack_details) {
                 rd_kafka_share_ack_batches_t *batch;
                 int i;
                 RD_LIST_FOREACH(batch, rko->rko_u.share_fetch.ack_details, i) {
-                        batch->rktpar->err = err;
+                        if (batch->rktpar->err ==
+                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                batch->rktpar->err = err;
                 }
         }
         rd_kafka_op_reply(rko, err);

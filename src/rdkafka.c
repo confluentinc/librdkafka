@@ -3712,6 +3712,10 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         rd_bool_t has_pending_acks;
         rd_kafka_error_t *error;
 
+        /* Default the out count to 0 so error returns leave it
+         * well-defined. */
+        *rkmessages_size = 0;
+
         if (unlikely(!(rkcg = rd_kafka_cgrp_get(rk))))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "rd_kafka_share_consume_batch(): "

@@ -999,12 +999,6 @@ rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
                                          rd_kafka_message_t **rkmessages,
                                          unsigned int cnt);
 
-void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
-                                            rd_kafka_op_t *response_rko);
-
-void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
-                                            rd_kafka_resp_err_t err);
-
 #define rd_kafka_op_is_ctrl_msg(rko)                                           \
         ((rko)->rko_type == RD_KAFKA_OP_FETCH && !(rko)->rko_err &&            \
          ((rko)->rko_u.fetch.rkm.rkm_flags & RD_KAFKA_MSG_F_CONTROL))

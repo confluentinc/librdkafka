@@ -3009,6 +3009,12 @@ void rd_kafka_conf_set_offset_commit_cb(
 }
 
 
+/**
+ * TODO KIP-932: This callback handling needs to be changed.
+ * It is currently set in confs, but we have to expose a public
+ * API function to change the callback while the share consumer
+ * is running.
+ */
 void rd_kafka_conf_set_share_acknowledgement_commit_cb(
     rd_kafka_conf_t *conf,
     void (*share_acknowledgement_commit_cb)(

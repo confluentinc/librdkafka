@@ -8233,23 +8233,6 @@ void test_share_destroy(rd_kafka_share_t *rkshare) {
 }
 
 /**
- * @brief Initialize acknowledgement callback state.
- */
-void test_ack_cb_state_init(test_ack_cb_state_t *state) {
-        memset(state, 0, sizeof(*state));
-        mtx_init(&state->lock, mtx_plain);
-        cnd_init(&state->cond);
-}
-
-/**
- * @brief Destroy acknowledgement callback state.
- */
-void test_ack_cb_state_destroy(test_ack_cb_state_t *state) {
-        mtx_destroy(&state->lock);
-        cnd_destroy(&state->cond);
-}
-
-/**
  * @brief Standard share acknowledgement callback.
  *
  * Tracks callback invocations, offsets acknowledged, and errors.
@@ -8264,7 +8247,6 @@ void test_share_ack_cb(rd_kafka_share_t *rkshare,
 
         (void)rkshare;
 
-        mtx_lock(&state->lock);
         state->callback_cnt++;
         state->last_err = err;
 
@@ -8272,9 +8254,6 @@ void test_share_ack_cb(rd_kafka_share_t *rkshare,
         if (entry)
                 state->total_offsets +=
                     rd_kafka_share_partition_offsets_offsets_cnt(entry);
-
-        cnd_signal(&state->cond);
-        mtx_unlock(&state->lock);
 }
 
 /**
@@ -8327,13 +8306,10 @@ rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
                 for (size_t i = 0; i < rcvd; i++)
                         rd_kafka_message_destroy(rkmessages[i]);
 
-                mtx_lock(&state->lock);
                 if (state->callback_cnt >= min_callbacks) {
                         success = rd_true;
-                        mtx_unlock(&state->lock);
                         break;
                 }
-                mtx_unlock(&state->lock);
                 elapsed += poll_interval;
         }
         return success;

@@ -28,6 +28,9 @@
 #ifndef _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_
 #define _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_
 
+/* Forward declarations */
+typedef struct rd_kafka_op_s rd_kafka_op_t;
+
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED =
             -1, /* Acquired records, not acknowledged yet */
@@ -136,6 +139,13 @@ rd_kafka_share_ack_batches_copy(const rd_kafka_share_ack_batches_t *src);
 void *rd_kafka_share_ack_batches_copy_void(const void *elem, void *opaque);
 
 /**
+ * @brief Transfer inflight acks from response RKO into rkshare's inflight map.
+ */
+void rd_kafka_share_build_inflight_acks_map(rd_kafka_share_t *rkshare,
+                                            rd_kafka_op_t *response_rko);
+
+
+/**
  * @brief Implicit ack: convert all ACQUIRED types to ACCEPT in inflight map.
  */
 void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare);
@@ -154,6 +164,21 @@ rd_kafka_share_ack_batches_t *
 rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
                                     rd_kafka_Uuid_t topic_id,
                                     int32_t partition);
+
+/**
+ * @brief Reply to a SHARE_FETCH op, propagating any top-level error
+ *        to each batch in ack_details.
+ *
+ * On top-level error (err != 0), sets batch->rktpar->err = err on
+ * each batch in rko->rko_u.share_fetch.ack_details since the
+ * partition-level data was not parsed. On success (err == 0), the
+ * per-partition errors have already been set by the response parser
+ * and ack_details is left untouched. Always calls rd_kafka_op_reply
+ * at the end. Safe to use as a drop-in replacement for
+ * rd_kafka_op_reply on SHARE_FETCH ops.
+ */
+void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
+                                            rd_kafka_resp_err_t err);
 
 void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);

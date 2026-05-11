@@ -803,7 +803,7 @@ rd_kafka_share_partition_offsets_new(rd_kafka_topic_partition_t *tp,
         elem = rd_calloc(1, size);
 
         elem->partition = rd_kafka_topic_partition_copy(tp);
-        elem->cnt = offsets_cnt;
+        elem->cnt       = offsets_cnt;
 
         return elem;
 }
@@ -861,7 +861,8 @@ rd_kafka_share_build_partition_offsets_list(
         list = rd_kafka_share_partition_offsets_list_new(1);
 
         /* Allocate elements */
-        elem = rd_kafka_share_partition_offsets_new(batches->rktpar, total_offsets);
+        elem = rd_kafka_share_partition_offsets_new(batches->rktpar,
+                                                    total_offsets);
 
         list->cnt      = 1;
         list->elems[0] = elem;

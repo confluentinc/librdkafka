@@ -224,7 +224,7 @@ do_test_commit_sync_top_level_err(const char *test_name,
         const int msgcnt = 10;
         int acked;
         int i;
-        test_ack_cb_state_t cb_state;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK("%s -> %s", test_name, rd_kafka_err2name(injected_err));
 
@@ -239,7 +239,6 @@ do_test_commit_sync_top_level_err(const char *test_name,
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        test_ack_cb_state_init(&cb_state);
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
@@ -288,7 +287,6 @@ do_test_commit_sync_top_level_err(const char *test_name,
                     "expected callback total_offsets %d, got %zu", msgcnt,
                     cb_state.total_offsets);
 
-        test_ack_cb_state_destroy(&cb_state);
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
@@ -373,7 +371,7 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
         int acked          = 0;
         int attempts       = 0;
         int i;
-        test_ack_cb_state_t cb_state;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK();
 
@@ -390,7 +388,6 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
                 mock_produce_partition(ctx.producer, topic, i,
                                        msgs_per_partition);
 
-        test_ack_cb_state_init(&cb_state);
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
@@ -471,7 +468,6 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
         for (i = 0; i < total_consumed; i++)
                 rd_kafka_message_destroy(rkmessages[i]);
 
-        test_ack_cb_state_destroy(&cb_state);
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
@@ -506,7 +502,7 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
         int total_consumed = 0;
         int attempts       = 0;
         int i;
-        test_ack_cb_state_t cb_state;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK();
 
@@ -523,7 +519,6 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
                 mock_produce_partition(ctx.producer, topic, i,
                                        msgs_per_partition);
 
-        test_ack_cb_state_init(&cb_state);
         /* Use implicit mode - acks are piggybacked on ShareFetch */
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "implicit",
                                              &cb_state, test_share_ack_cb);
@@ -606,7 +601,6 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
             cb_state.callback_cnt, cb_state.total_offsets,
             rd_kafka_err2name(cb_state.last_err));
 
-        test_ack_cb_state_destroy(&cb_state);
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
@@ -655,7 +649,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
         int attempts       = 0;
         size_t share_ack_cnt;
         int i;
-        test_ack_cb_state_t cb_state;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK();
 
@@ -667,7 +661,6 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        test_ack_cb_state_init(&cb_state);
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
@@ -800,7 +793,6 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
         for (i = 0; i < msgcnt; i++)
                 rd_kafka_message_destroy(rkmessages[i]);
 
-        test_ack_cb_state_destroy(&cb_state);
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
@@ -853,7 +845,7 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         size_t share_ack_cnt;
         size_t share_fetch_cnt;
         int i;
-        test_ack_cb_state_t cb_state;
+        test_ack_cb_state_t cb_state = {0};
 
         SUB_TEST_QUICK();
 
@@ -865,7 +857,6 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
 
         mock_produce(ctx.producer, topic, msgcnt);
 
-        test_ack_cb_state_init(&cb_state);
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
@@ -1008,7 +999,6 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         for (i = 0; i < msgcnt; i++)
                 rd_kafka_message_destroy(rkmessages[i]);
 
-        test_ack_cb_state_destroy(&cb_state);
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);

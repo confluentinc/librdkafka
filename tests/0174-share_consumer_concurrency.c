@@ -343,6 +343,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                 idle_rounds++;
                         }
 
+                        /* Apply consumer delay if configured */
+                        if (config->consumer_delay_ms > 0)
+                                rd_usleep(config->consumer_delay_ms * 1000,
+                                          NULL);
+
                         /* Check if producers are done */
                         mtx_lock(&state.lock);
                         if (state.producers_done && idle_rounds >= 20) {
@@ -413,6 +418,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                         } else {
                                 idle_rounds++;
                         }
+
+                        /* Apply consumer delay if configured */
+                        if (config->consumer_delay_ms > 0)
+                                rd_usleep(config->consumer_delay_ms * 1000,
+                                          NULL);
                 }
         }
 

@@ -2,6 +2,12 @@
 
 ## Fixes
 
+### Consumer fixes
+
+* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
+  is unavailable during consumer close. The error logging path dereferenced
+  a potentially NULL broker pointer. Happening since 1.x.
+
 ### Admin client fixes
 
 * Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.

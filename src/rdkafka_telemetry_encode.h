@@ -374,8 +374,8 @@ static const rd_kafka_telemetry_metric_info_t
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL] =
                 {.name = "consumer.share.fetch.manager.acknowledgements.send."
                          "total",
-                 .description = "The total number of record acknowledgements "
-                                "sent.",
+                 .description   = "The total number of record acknowledgements "
+                                  "sent.",
                  .unit          = "1",
                  .is_int        = rd_true,
                  .is_per_broker = rd_false,
@@ -385,8 +385,8 @@ static const rd_kafka_telemetry_metric_info_t
                          "rate",
                  .description = "The average number of record acknowledgements "
                                 "sent per second.",
-                 .unit          = "1",
-                 .is_int        = rd_false,
+                 .unit        = "1",
+                 .is_int      = rd_false,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

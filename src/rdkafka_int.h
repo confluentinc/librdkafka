@@ -744,7 +744,7 @@ struct rd_kafka_s {
                         uint64_t rebalance_latency_total;
                         /** Total share fetch requests up to previous push */
                         int64_t share_fetch_total;
-                        /** Total share fetch requests up to previous push */
+                        /** Total acknowledgements sent up to previous push */
                         int64_t acknowledgements_send_total;
                 } rk_historic_c;
 

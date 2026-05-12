@@ -893,7 +893,14 @@ void unit_test_telemetry_set_share_fetch_total(rd_kafka_t *rk,
         rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 10);
         rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 15);
         rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 17);
-        /* Final counter value: 42 */
+}
+
+void unit_test_telemetry_set_acknowledgements_send_total(
+    rd_kafka_t *rk,
+    rd_kafka_broker_t *rkb) {
+        rd_atomic64_add(&rk->rk_telemetry.acknowledgements_send_total, 10);
+        rd_atomic64_add(&rk->rk_telemetry.acknowledgements_send_total, 15);
+        rd_atomic64_add(&rk->rk_telemetry.acknowledgements_send_total, 17);
 }
 
 void unit_test_telemetry_set_commit_latency(rd_kafka_t *rk,

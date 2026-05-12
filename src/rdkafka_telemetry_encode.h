@@ -94,6 +94,8 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE,
         RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_share_consumer_metric_name_t;
 
@@ -367,6 +369,24 @@ static const rd_kafka_telemetry_metric_info_t
                  .description = "The maximum time taken for any fetch request.",
                  .unit        = "ms",
                  .is_int      = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL] =
+                {.name = "consumer.share.fetch.manager.acknowledgements.send."
+                         "total",
+                 .description = "The total number of record acknowledgements "
+                                "sent.",
+                 .unit          = "1",
+                 .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE] =
+                {.name = "consumer.share.fetch.manager.acknowledgements.send."
+                         "rate",
+                 .description = "The average number of record acknowledgements "
+                                "sent per second.",
+                 .unit          = "1",
+                 .is_int        = rd_false,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

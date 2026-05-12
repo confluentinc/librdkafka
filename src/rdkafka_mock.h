@@ -429,6 +429,31 @@ rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *cluster,
                                   int32_t broker_id);
 
 /**
+ * @brief Hide the broker from Metadata responses without dropping its
+ *        existing TCP connections or its listen socket.
+ *
+ *        Unlike rd_kafka_mock_broker_decommission(), the broker's connections
+ *        stay alive so any in-flight requests can still complete on the
+ *        broker side. The broker is removed from cluster metadata responses
+ *        and partitions are reassigned away from it. This lets a client's
+ *        metadata-driven decommission path observe the broker's removal
+ *        and fail in-flight requests with __DESTROY_BROKER, instead of
+ *        the connection-drop path failing them with __TRANSPORT.
+ *
+ *        The broker remains in the cluster's broker list; its struct is
+ *        not freed until the cluster is destroyed (or the broker is added
+ *        back via the appropriate API in the future).
+ *
+ * @param mcluster The mock cluster.
+ * @param broker_id The broker to hide from metadata.
+ *
+ * @returns Error value or 0 if no error occurred.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_broker_remove_from_metadata(rd_kafka_mock_cluster_t *mcluster,
+                                          int32_t broker_id);
+
+/**
  * @brief Add a new broker to the cluster.
  *        Cluster partition will be reassigned to use the new broker
  *        as well.

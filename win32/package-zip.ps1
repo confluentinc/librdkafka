@@ -39,7 +39,7 @@ if ("x64" -eq $platform) {
 
 Copy-Item "${srcdir}\librdkafka.dll","${srcdir}\librdkafkacpp.dll",
 "${srcdir}\libcrypto-3${platformpart}.dll","${srcdir}\libssl-3${platformpart}.dll",
-"${srcdir}\zlib1.dll","${srcdir}\zstd.dll","${srcdir}\libcurl.dll" -Destination $bindir
+"${srcdir}\z.dll","${srcdir}\z.dll","${srcdir}\libcurl.dll" -Destination $bindir
 
 Copy-Item "${srcdir}\librdkafka.lib","${srcdir}\librdkafkacpp.lib" -Destination $libdir
 

@@ -593,6 +593,7 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
 
         rd_atomic64_init(&rk->rk_telemetry.share_fetch_total, 0);
+        rd_atomic64_init(&rk->rk_telemetry.acknowledgements_send_total, 0);
 
         rd_strlcpy(rk->rk_name, "unittest", sizeof(rk->rk_name));
         clear_unit_test_data(expected_value_int, expected_value_double);
@@ -877,7 +878,14 @@ void unit_test_telemetry_set_share_fetch_total(rd_kafka_t *rk,
         rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 10);
         rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 15);
         rd_atomic64_add(&rk->rk_telemetry.share_fetch_total, 17);
-        /* Final counter value: 42 */
+}
+
+void unit_test_telemetry_set_acknowledgements_send_total(
+    rd_kafka_t *rk,
+    rd_kafka_broker_t *rkb) {
+        rd_atomic64_add(&rk->rk_telemetry.acknowledgements_send_total, 10);
+        rd_atomic64_add(&rk->rk_telemetry.acknowledgements_send_total, 15);
+        rd_atomic64_add(&rk->rk_telemetry.acknowledgements_send_total, 17);
 }
 
 void unit_test_telemetry_set_commit_latency(rd_kafka_t *rk,
@@ -1124,6 +1132,14 @@ int unit_test_telemetry_gauge(void) {
             "The maximum time taken for any fetch request.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
             unit_test_telemetry_set_share_fetch_latency, 23, 0.0);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.acknowledgements.send.rate",
+            "The average number of record acknowledgements sent per second.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_acknowledgements_send_total, 0, 42.0);
         return fails;
 }
 
@@ -1183,6 +1199,14 @@ int unit_test_telemetry_sum(void) {
             "The total number of fetch requests.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
             unit_test_telemetry_set_share_fetch_total, 42, 0.0);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.acknowledgements.send.total",
+            "The total number of record acknowledgements sent.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM, rd_false, rd_false,
+            unit_test_telemetry_set_acknowledgements_send_total, 42, 0.0);
         return fails;
 }
 

@@ -3606,7 +3606,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
                                      "instance or broker is terminating");
-                        rd_kafka_share_fetch_op_reply_with_err(
+                        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
                 } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
                         /* TODO KIP-932: The main thread should check
@@ -3619,13 +3619,13 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                             "Ignoring SHARE_FETCH op: "
                             "broker not up (state %s)",
                             rd_kafka_broker_state_names[rkb->rkb_state]);
-                        rd_kafka_share_fetch_op_reply_with_err(
+                        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, RD_KAFKA_RESP_ERR__STATE);
                 } else if (rkb->rkb_fetching) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
                                      "already fetching");
-                        rd_kafka_share_fetch_op_reply_with_err(
+                        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
                 } else if (rko->rko_u.share_fetch.should_leave) {
                         rd_kafka_broker_share_fetch_session_leave(rkb, rko,
@@ -6550,9 +6550,9 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                  *               with that approach is that broker_final
                  *               might be called before reply for the op
                  *               is processed. Check properly.
-                 * TODO KIP-932: Send SHARE_SESSION_NOT_FOUND error in
-                 *               acknowledgement callback (as done in
-                 *               Java client). */
+                 * TODO KIP-932: Surface SHARE_SESSION_NOT_FOUND on the
+                 *               pending acks via the acknowledgement
+                 *               callback before discarding them. */
                 if (rkb->rkb_share_async_ack_details) {
                         rd_list_destroy(rkb->rkb_share_async_ack_details);
                         rkb->rkb_share_async_ack_details = NULL;

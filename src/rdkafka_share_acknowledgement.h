@@ -177,8 +177,9 @@ rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
  * at the end. Safe to use as a drop-in replacement for
  * rd_kafka_op_reply on SHARE_FETCH ops.
  */
-void rd_kafka_share_fetch_op_reply_with_err(rd_kafka_op_t *rko,
-                                            rd_kafka_resp_err_t err);
+void rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
+    rd_kafka_op_t *rko,
+    rd_kafka_resp_err_t err);
 
 void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);

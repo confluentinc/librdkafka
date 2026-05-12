@@ -3272,7 +3272,8 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                  * rktpar->err. The broker thread sets these on both
                  * success (per-partition error from response via parser)
                  * and top-level error (top-level err on each batch via
-                 * rd_kafka_share_fetch_op_reply_with_err helper).
+                 * rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err
+                 * helper).
                  *
                  * Defensive: if the helper was bypassed (e.g. q_enq on
                  * a disabled rkb_ops queue at rdkafka_queue.h:440 falls
@@ -3712,6 +3713,10 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         rd_bool_t has_pending_acks;
         rd_kafka_error_t *error;
 
+        /* Default the out count to 0 so error returns leave it
+         * well-defined. */
+        *rkmessages_size = 0;
+
         if (unlikely(!(rkcg = rd_kafka_cgrp_get(rk))))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "rd_kafka_share_consume_batch(): "
@@ -3932,8 +3937,7 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
         /* TODO: Verify that __TIMED_OUT (local timeout) is the correct
          *  error here rather than REQUEST_TIMED_OUT (broker error). */
         /* Fill partitions still IN_PROGRESS with REQUEST_TIMED_OUT
-         * (matches Java's commit_sync deadline behavior at
-         * ShareConsumeRequestManager.handleAcknowledgeTimedOut). */
+         * to surface the commit_sync deadline expiry to the caller. */
         results = rkcg->rkcg_commit_sync_request.results;
         for (i = 0; i < results->cnt; i++) {
                 rd_kafka_topic_partition_t *rktpar = &results->elems[i];

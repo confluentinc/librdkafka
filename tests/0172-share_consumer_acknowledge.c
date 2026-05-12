@@ -898,7 +898,7 @@ static void test_change_ack_type_before_commit(void) {
 
         /* Consume five messages */
         attempts = 30;
-        while (rcvd < 5 && attempts-- > 0) {
+        while (rcvd == 0 && attempts-- > 0) {
                 size_t batch_rcvd = 0;
                 err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
                                                    &batch_rcvd);
@@ -909,7 +909,7 @@ static void test_change_ack_type_before_commit(void) {
 
         TEST_SAY("Consumed %zu messages after first commit\n", rcvd);
 
-        TEST_ASSERT(rcvd >= 5, "Expected at least 5 messages, got %zu", rcvd);
+        TEST_ASSERT(rcvd == 5, "Expected at least 5 messages, got %zu", rcvd);
 
         /* First: RELEASE the message */
         ack_err = rd_kafka_share_acknowledge_type(
@@ -941,7 +941,7 @@ static void test_change_ack_type_before_commit(void) {
          * This loop also processes the first callback */
         rcvd     = 0;
         attempts = 30;
-        while ((rcvd < 4 || state.callback_cnt < 1) && attempts-- > 0) {
+        while (rcvd == 0 && attempts-- > 0) {
                 size_t batch_rcvd = 0;
                 err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
                                                    &batch_rcvd);
@@ -952,13 +952,15 @@ static void test_change_ack_type_before_commit(void) {
 
         TEST_ASSERT(state.callback_cnt == 1, "Expected 1 callback, got %d",
                     state.callback_cnt);
-        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+        TEST_ASSERT(test_ack_cb_state_first_err(&state) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
                     "First callback failed: %s",
-                    rd_kafka_err2name(state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
         TEST_SAY("First commit callback received: offsets=%zu, err=%s\n",
-                 state.total_offsets, rd_kafka_err2name(state.last_err));
+                 state.total_offsets,
+                 rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
         TEST_SAY("Consumed %zu redelivered messages\n", rcvd);
-        TEST_ASSERT(rcvd >= 4, "Expected 4 redelivered messages, got %zu",
+        TEST_ASSERT(rcvd == 4, "Expected 4 redelivered messages, got %zu",
                     rcvd);
 
         /* Accept and destroy all received messages */
@@ -976,14 +978,17 @@ static void test_change_ack_type_before_commit(void) {
         test_wait_for_cb_with_poll(&state, rkshare, 2, 10000);
         TEST_ASSERT(state.callback_cnt == 2,
                     "Expected 2 callbacks total, got %d", state.callback_cnt);
-        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+        TEST_ASSERT(test_ack_cb_state_first_err(&state) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Second callback failed: %s",
-                    rd_kafka_err2name(state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
         TEST_SAY("Second commit callback received: total_offsets=%zu, err=%s\n",
-                 state.total_offsets, rd_kafka_err2name(state.last_err));
+                 state.total_offsets,
+                 rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         TEST_SAY("=== test_change_ack_type_before_commit: PASSED ===\n");
 }
@@ -1002,7 +1007,7 @@ static void test_ack_after_commit(void) {
         rd_kafka_topic_partition_list_t *subs;
         const char *group = "share-ack-after-commit";
         const char *topic;
-        size_t rcvd = 0;
+        size_t rcvd = 0, i;
         int attempts;
         const char *saved_topic   = NULL;
         int32_t saved_partition   = -1;
@@ -1028,7 +1033,7 @@ static void test_ack_after_commit(void) {
 
         /* Consume and acknowledge messages, save first message info */
         attempts = 30;
-        while (rcvd < 5 && attempts-- > 0) {
+        while (rcvd == 0 && attempts-- > 0) {
                 size_t batch_rcvd = 0;
                 err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
                                                    &batch_rcvd);
@@ -1037,14 +1042,14 @@ static void test_ack_after_commit(void) {
                 rcvd += batch_rcvd;
         }
 
-        TEST_ASSERT(rcvd >= 5, "Expected at least 5 messages, got %zu", rcvd);
+        TEST_ASSERT(rcvd == 5, "Expected 5 messages, got %zu", rcvd);
 
         /* Save first message info and acknowledge all */
         saved_topic     = topic;
         saved_partition = batch[0]->partition;
         saved_offset    = batch[0]->offset;
 
-        for (size_t i = 0; i < rcvd; i++) {
+        for (i = 0; i < rcvd; i++) {
                 rd_kafka_share_acknowledge(rkshare, batch[i]);
                 rd_kafka_message_destroy(batch[i]);
         }
@@ -1057,10 +1062,13 @@ static void test_ack_after_commit(void) {
         test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
         TEST_ASSERT(state.callback_cnt >= 1,
                     "Expected at least 1 callback, got %d", state.callback_cnt);
-        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Callback failed: %s", rd_kafka_err2name(state.last_err));
+        TEST_ASSERT(test_ack_cb_state_first_err(&state) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Callback failed: %s",
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
         TEST_SAY("Commit callback received: offsets=%zu, err=%s\n",
-                 state.total_offsets, rd_kafka_err2name(state.last_err));
+                 state.total_offsets,
+                 rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
 
         /* Now try to acknowledge the same message again - should fail */
         ack_err = rd_kafka_share_acknowledge_offset(
@@ -1075,6 +1083,7 @@ static void test_ack_after_commit(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         TEST_SAY("=== test_ack_after_commit: PASSED ===\n");
 }

@@ -762,17 +762,18 @@ static void test_poll_callback_piggybacked_acks(void) {
         TEST_SAY(
             "=== Poll callback test (piggybacked acks on ShareFetch) ===\n");
 
-        /* Create consumer with callback */
+        /* Create consumer without callback in config */
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", "implicit",
                           errstr, sizeof(errstr));
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf,
-                                                          test_share_ack_cb);
-        rd_kafka_conf_set_opaque(conf, &state);
 
         consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+
+        /* Register acknowledgement callback at runtime */
+        rd_kafka_share_set_acknowledgement_cb(consumer, test_share_ack_cb,
+                                              &state);
 
         /* Create topic and produce messages */
         topic = test_mk_topic_name("0171-poll-cb", 1);
@@ -828,9 +829,8 @@ static void test_poll_callback_piggybacked_acks(void) {
                         rd_kafka_message_destroy(batch[m]);
         }
 
-        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
-                 state.callback_cnt, state.total_offsets,
-                 rd_kafka_err2name(state.last_err));
+        TEST_SAY("Callback count=%d, total_offsets=%zu\n", state.callback_cnt,
+                 state.total_offsets);
 
         TEST_ASSERT(
             state.callback_cnt >= 1,
@@ -846,6 +846,7 @@ static void test_poll_callback_piggybacked_acks(void) {
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
+        test_ack_cb_state_destroy(&state);
 }
 
 

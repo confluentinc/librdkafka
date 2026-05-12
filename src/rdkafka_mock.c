@@ -706,11 +706,20 @@ static void
 rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
                                         int replication_factor) {
         rd_kafka_mock_cluster_t *mcluster = mpart->topic->cluster;
-        int replica_cnt = RD_MIN(replication_factor, mcluster->broker_cnt);
         rd_kafka_mock_broker_t *mrkb;
+        int eligible_broker_cnt = 0;
+        int replica_cnt;
         int i = 0;
         int first_replica;
         int skipped = 0;
+
+        /* Count brokers eligible to be replicas: must be in metadata. */
+        TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (mrkb->in_metadata)
+                        eligible_broker_cnt++;
+        }
+
+        replica_cnt = RD_MIN(replication_factor, eligible_broker_cnt);
 
         if (mpart->replicas)
                 rd_free(mpart->replicas);
@@ -724,12 +733,14 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
                 return;
         }
 
-        first_replica = (mpart->id * replication_factor) % mcluster->broker_cnt;
+        first_replica = (mpart->id * replication_factor) % eligible_broker_cnt;
 
         /* Use a predictable, determininistic order on a per-topic basis.
          *
          * Two loops are needed for wraparound. */
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (!mrkb->in_metadata)
+                        continue;
                 if (skipped < first_replica) {
                         skipped++;
                         continue;
@@ -739,6 +750,8 @@ rd_kafka_mock_partition_assign_replicas(rd_kafka_mock_partition_t *mpart,
                 mpart->replicas[i++] = mrkb;
         }
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                if (!mrkb->in_metadata)
+                        continue;
                 if (i == mpart->replica_cnt)
                         break;
                 mpart->replicas[i++] = mrkb;
@@ -1901,6 +1914,18 @@ rd_kafka_mock_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_remove_from_metadata(rd_kafka_mock_cluster_t *mcluster,
+                                          int32_t broker_id) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.broker_id = broker_id;
+        rko->rko_u.mock.cmd = RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
 rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
                                              int32_t broker_id) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
@@ -2034,12 +2059,13 @@ rd_kafka_mock_broker_new(rd_kafka_mock_cluster_t *mcluster,
          */
         mrkb = rd_calloc(1, sizeof(*mrkb));
 
-        mrkb->id       = broker_id;
-        mrkb->cluster  = mcluster;
-        mrkb->up       = rd_true;
-        mrkb->listen_s = listen_s;
-        mrkb->sin      = sin;
-        mrkb->port     = ntohs(sin.sin_port);
+        mrkb->id          = broker_id;
+        mrkb->cluster     = mcluster;
+        mrkb->up          = rd_true;
+        mrkb->in_metadata = rd_true;
+        mrkb->listen_s    = listen_s;
+        mrkb->sin         = sin;
+        mrkb->port        = ntohs(sin.sin_port);
         rd_snprintf(mrkb->advertised_listener,
                     sizeof(mrkb->advertised_listener), "%s",
                     rd_sockaddr2str(&sin, 0));
@@ -2749,6 +2775,16 @@ rd_kafka_mock_broker_cmd(rd_kafka_mock_cluster_t *mcluster,
                         mrkb->rack = NULL;
                 break;
 
+        case RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA:
+                /* Hide the broker from Metadata responses and reassign
+                 * partitions away from it. The broker keeps its TCP
+                 * connections so any in-flight requests can still finish
+                 * (or be failed by the client's metadata-driven decommission
+                 * path with __DESTROY_BROKER). */
+                mrkb->in_metadata = rd_false;
+                rd_kafka_mock_cluster_reassign_partitions(mcluster);
+                break;
+
         case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
                 rd_kafka_mock_broker_destroy(mrkb);
                 rd_kafka_mock_cluster_reassign_partitions(mcluster);
@@ -2966,6 +3002,7 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RTT:
         case RD_KAFKA_MOCK_CMD_BROKER_SET_RACK:
         case RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION:
+        case RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA:
                 return rd_kafka_mock_brokers_cmd(mcluster, rko);
 
         case RD_KAFKA_MOCK_CMD_BROKER_ADD:

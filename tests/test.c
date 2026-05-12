@@ -8300,8 +8300,14 @@ rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
         while (elapsed < timeout_ms) {
                 rd_kafka_error_t *error = rd_kafka_share_consume_batch(
                     rkshare, poll_interval, rkmessages, &rcvd);
-                if (error)
+                if (error) {
+                        TEST_SAY(
+                            "test_wait_for_cb_with_poll: "
+                            "consume_batch err=%s (%s) rcvd=%zu\n",
+                            rd_kafka_err2name(rd_kafka_error_code(error)),
+                            rd_kafka_error_string(error), rcvd);
                         rd_kafka_error_destroy(error);
+                }
 
                 for (size_t i = 0; i < rcvd; i++)
                         rd_kafka_message_destroy(rkmessages[i]);

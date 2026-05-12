@@ -813,17 +813,21 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
  *  ShareFetch is built, so the wire request goes out with no ack
  *  data section.
  *
+ *  Asserts (per-partition):
+ *    - Wire-level: ShareFetch is sent (>= 1), no extra ShareAck
+ *      requests fire.
+ *    - Acknowledgement callback fires with
+ *      INVALID_SHARE_SESSION_EPOCH for each stripped batch (the
+ *      session-establish ShareFetch's response would normally cause
+ *      the parser to write the broker's per-partition
+ *      AcknowledgementErrorCode, but the parser conditional preserves
+ *      our pre-set).
+ *
  *  To verify the strip path manually, run with:
  *    TEST_DEBUG=fetch,broker,cgrp TESTS=0182 \
  *        SUBTESTS=test_consume_batch_at_epoch_zero make
  *  and look for the "Stripping N piggybacked ack batches" SHAREFETCH
  *  log line in stderr.
- *
- *  TODO: When share_acknowledgement_commit_cb is wired, add an
- *  assertion that the callback is invoked with
- *  INVALID_SHARE_SESSION_EPOCH for each stripped batch. Today the
- *  per-partition err set on the batch by the strip path lives on
- *  ack_details but has no app-facing surface for piggybacked acks.
  * =================================================================== */
 static rd_bool_t is_share_fetch_request(rd_kafka_mock_request_t *request,
                                         void *opaque) {
@@ -840,10 +844,11 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         const int msgcnt  = 10;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         rd_kafka_message_t *phase2_msgs[CONSUME_ARRAY];
-        int total_consumed = 0;
-        int attempts       = 0;
+        int attempts = 0;
+        size_t rcvd  = 0;
         size_t share_ack_cnt;
         size_t share_fetch_cnt;
+        size_t j;
         int i;
         test_ack_cb_state_t cb_state = {0};
 
@@ -861,20 +866,23 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
                                              &cb_state, test_share_ack_cb);
         subscribe_one(rkshare, topic);
 
-        /* Phase 0: consume all 10 records. */
-        while (total_consumed < msgcnt && attempts++ < 30) {
-                size_t rcvd = 0;
-                error       = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + total_consumed, &rcvd);
-                if (error) {
+        /* Phase 0: consume all msgcnt records in a single consume_batch
+         * call (with retry-on-empty for transient cases). Explicit-mode
+         * contract requires every record from a previous consume_batch
+         * to be acknowledged before the next call, so we must not loop
+         * and accumulate without acking each batch first. msgcnt is far
+         * below max.poll.records (default 500), so a non-empty call
+         * returns the full set. */
+        while (rcvd == 0 && attempts++ < 30) {
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error)
                         rd_kafka_error_destroy(error);
-                        continue;
-                }
-                total_consumed += (int)rcvd;
         }
-        TEST_ASSERT(total_consumed == msgcnt,
-                    "Phase 0: expected %d records, got %d", msgcnt,
-                    total_consumed);
+        TEST_ASSERT(rcvd == (size_t)msgcnt,
+                    "Phase 0: expected %d records in single batch, "
+                    "got %" PRIusz,
+                    msgcnt, rcvd);
 
         /* Phase 1: ACCEPT first 5 records, inject SHARE_SESSION_NOT_FOUND
          * on next ShareAcknowledge, call commit_sync to trigger session
@@ -948,22 +956,17 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         for (i = 5; i < msgcnt; i++)
                 rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
 
-        attempts = 0;
-        while (attempts++ < 5) {
-                size_t rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 1000, phase2_msgs,
-                                                     &rcvd);
-                if (error)
-                        rd_kafka_error_destroy(error);
-                /* phase2_msgs may receive nothing or duplicates after
-                 * lock expiry — we don't assert on contents here, only
-                 * on wire-level requests counted via the mock. */
-                {
-                        size_t j;
-                        for (j = 0; j < rcvd; j++)
-                                rd_kafka_message_destroy(phase2_msgs[j]);
-                }
-        }
+        /* Single consume_batch triggers the strip-mode FANOUT.
+         * Records here may be re-deliveries after lock expiry — we
+         * don't assert on contents, only on wire-level counts.
+         * test_wait_for_cb_with_poll below tolerates the explicit-mode
+         * __STATE the next consume_batch may return for these
+         * un-acknowledged records (rcvd stays 0). */
+        error = rd_kafka_share_consume_batch(rkshare, 1000, phase2_msgs, &rcvd);
+        if (error)
+                rd_kafka_error_destroy(error);
+        for (j = 0; j < rcvd; j++)
+                rd_kafka_message_destroy(phase2_msgs[j]);
 
         share_fetch_cnt = test_mock_get_matching_request_cnt(
             ctx.mcluster, is_share_fetch_request, NULL);
@@ -984,15 +987,218 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
                     "send and no ack-only path fired), got %" PRIusz,
                     share_ack_cnt);
 
-        /* TODO: Verify Phase 2 callback invocation with
-         * INVALID_SHARE_SESSION_EPOCH for stripped piggybacked acks.
-         * Currently the strip path sets the error on ack_details but does
-         * not invoke the acknowledgement callback for piggybacked acks.
-         * Once this is implemented, add assertions here to verify:
-         *   - cb_state.callback_cnt == 1
-         *   - cb_state.last_err == INVALID_SHARE_SESSION_EPOCH
-         *   - cb_state.total_offsets == 5
-         */
+        /* Wait for the per-partition acknowledgement callback to fire
+         * (dispatched on rk_rep when the SHARE_FETCH op reply reaches
+         * the main thread). */
+        TEST_ASSERT(test_wait_for_cb_with_poll(&cb_state, rkshare, 1, 5000),
+                    "Phase 2: timed out waiting for ack callback");
+
+        /* The strip path pre-set INVALID_SHARE_SESSION_EPOCH on each
+         * batch in ack_details. The session-establish ShareFetch
+         * succeeds and the broker echoes the added partition in its
+         * response, so the parser would normally write the broker's
+         * AcknowledgementErrorCode (NO_ERROR) onto the batch — the
+         * parser conditional (override only _IN_PROGRESS) preserves
+         * the pre-set instead. The callback fires with the pre-set
+         * err. */
+        TEST_ASSERT(cb_state.callback_cnt == 1,
+                    "Phase 2: expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(cb_state.last_err ==
+                        RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
+                    "Phase 2: expected callback err "
+                    "INVALID_SHARE_SESSION_EPOCH, got %s",
+                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(cb_state.total_offsets == 5,
+                    "Phase 2: expected 5 acked offsets in callback, "
+                    "got %" PRIusz,
+                    cb_state.total_offsets);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/* ===================================================================
+ *  Test — strip + ShareFetch response top-level err: callback err
+ *         remains INVALID_SHARE_SESSION_EPOCH (not the response err).
+ *
+ *  Same flow as test_consume_batch_at_epoch_zero_strips_piggyback_acks
+ *  but in Phase 2 we ALSO inject a top-level err on the
+ *  session-establish ShareFetch response. The buf-callback's helper
+ *  (rd_kafka_share_fetch_op_reply_with_err) will be called with that
+ *  err — its conditional override (only _IN_PROGRESS) must NOT
+ *  clobber the pre-set INVALID_SHARE_SESSION_EPOCH on the stripped
+ *  batches.
+ *
+ *  Asserts (per-partition via callback):
+ *    - Wire-level: ShareFetch is sent, no ShareAck.
+ *    - Acknowledgement callback fires with
+ *      INVALID_SHARE_SESSION_EPOCH (NOT the injected response err)
+ *      for each stripped batch.
+ * =================================================================== */
+static void test_strip_pre_set_survives_sharefetch_err(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic = "0182-epoch-zero-piggyback-fetch-err";
+        const char *group = "sg-0182-epoch-zero-piggyback-fetch-err";
+        const int msgcnt  = 10;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_message_t *phase2_msgs[CONSUME_ARRAY];
+        int attempts = 0;
+        size_t rcvd  = 0;
+        size_t share_ack_cnt;
+        size_t share_fetch_cnt;
+        size_t j;
+        int i;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce(ctx.producer, topic, msgcnt);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
+        subscribe_one(rkshare, topic);
+
+        /* Phase 0: consume all msgcnt records in a single consume_batch
+         * call (with retry-on-empty for transient cases). Explicit-mode
+         * contract requires every record from a previous consume_batch
+         * to be acknowledged before the next call, so we must not loop
+         * and accumulate without acking each batch first. msgcnt is far
+         * below max.poll.records (default 500), so a non-empty call
+         * returns the full set. */
+        while (rcvd == 0 && attempts++ < 30) {
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+        }
+        TEST_ASSERT(rcvd == (size_t)msgcnt,
+                    "Phase 0: expected %d records in single batch, "
+                    "got %" PRIusz,
+                    msgcnt, rcvd);
+
+        /* Phase 1: ACCEPT first 5 records, inject SHARE_SESSION_NOT_FOUND
+         * on next ShareAcknowledge, call commit_sync to trigger session
+         * reset on the broker (epoch -> 0). */
+        for (i = 0; i < 5; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareAcknowledge, 1,
+                        RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push SHARE_SESSION_NOT_FOUND");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 1000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 1: expected non-NULL partition results");
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *p = &partitions->elems[i];
+                TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+                            "Phase 1: expected SHARE_SESSION_NOT_FOUND, "
+                            "got %s",
+                            rd_kafka_err2name(p->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Reset callback state for Phase 2 */
+        cb_state.callback_cnt  = 0;
+        cb_state.total_offsets = 0;
+        cb_state.last_err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        /* Phase 2: ACCEPT remaining 5 records. Inject
+         * SHARE_SESSION_LIMIT_REACHED on the next ShareFetch — this is
+         * the strip-mode ShareFetch (epoch 0, with stripped piggyback
+         * acks) that goes out from consume_batch. The buf-callback's
+         * helper is then called with SHARE_SESSION_LIMIT_REACHED on a
+         * batch already pre-set to INVALID_SHARE_SESSION_EPOCH; the
+         * helper conditional (only override _IN_PROGRESS) must
+         * preserve the pre-set. */
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        for (i = 5; i < msgcnt; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_SHARE_SESSION_LIMIT_REACHED,
+                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push SHARE_SESSION_LIMIT_REACHED on next ShareFetch");
+
+        /* Single consume_batch triggers the strip-mode FANOUT.
+         * Records here may be re-deliveries after lock expiry — we
+         * don't assert on contents, only on wire-level counts.
+         * test_wait_for_cb_with_poll below tolerates the explicit-mode
+         * __STATE the next consume_batch may return for these
+         * un-acknowledged records (rcvd stays 0). */
+        error = rd_kafka_share_consume_batch(rkshare, 1000, phase2_msgs, &rcvd);
+        if (error)
+                rd_kafka_error_destroy(error);
+        for (j = 0; j < rcvd; j++)
+                rd_kafka_message_destroy(phase2_msgs[j]);
+
+        share_fetch_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_fetch_request, NULL);
+        share_ack_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_ack_request, NULL);
+
+        TEST_SAY("Phase 2 wire counts: ShareFetch=%" PRIusz
+                 ", ShareAck=%" PRIusz "\n",
+                 share_fetch_cnt, share_ack_cnt);
+
+        TEST_ASSERT(share_fetch_cnt >= 1,
+                    "Phase 2: expected >= 1 ShareFetch, got %" PRIusz,
+                    share_fetch_cnt);
+        TEST_ASSERT(share_ack_cnt == 0,
+                    "Phase 2: expected 0 ShareAck (strip), got %" PRIusz,
+                    share_ack_cnt);
+
+        /* Wait for the per-partition acknowledgement callback. */
+        TEST_ASSERT(test_wait_for_cb_with_poll(&cb_state, rkshare, 1, 5000),
+                    "Phase 2: timed out waiting for ack callback");
+
+        /* The injected ShareFetch top-level err
+         * (SHARE_SESSION_LIMIT_REACHED) reached the
+         * rd_kafka_share_fetch_op_reply_with_err helper. The helper's
+         * conditional override (only _IN_PROGRESS) must NOT clobber
+         * the pre-set INVALID_SHARE_SESSION_EPOCH. */
+        TEST_ASSERT(cb_state.callback_cnt == 1,
+                    "Phase 2: expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(cb_state.last_err ==
+                        RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
+                    "Phase 2: expected callback err "
+                    "INVALID_SHARE_SESSION_EPOCH (pre-set preserved), "
+                    "got %s",
+                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(cb_state.total_offsets == 5,
+                    "Phase 2: expected 5 acked offsets in callback, "
+                    "got %" PRIusz,
+                    cb_state.total_offsets);
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
@@ -1019,6 +1225,7 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_consume_batch_multi_partition_top_level_error();
         test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error();
         test_consume_batch_at_epoch_zero_strips_piggyback_acks();
+        test_strip_pre_set_survives_sharefetch_err();
 
         return 0;
 }

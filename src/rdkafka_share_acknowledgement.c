@@ -802,8 +802,10 @@ rd_kafka_share_partition_offsets_new(rd_kafka_topic_partition_t *tp,
         size = sizeof(*elem) + (offsets_cnt * sizeof(int64_t));
         elem = rd_calloc(1, size);
 
-        elem->partition = rd_kafka_topic_partition_copy(tp);
-        elem->cnt       = offsets_cnt;
+        elem->partition = rd_kafka_topic_partition_new_with_id_and_name(
+            rd_kafka_topic_partition_get_topic_id(tp), tp->topic,
+            tp->partition);
+        elem->cnt = offsets_cnt;
 
         return elem;
 }

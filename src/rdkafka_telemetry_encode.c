@@ -536,6 +536,10 @@ static const rd_kafka_telemetry_metric_value_calculator_t
                 &calculate_share_acknowledgements_send_total,
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE] =
                 &calculate_share_acknowledgements_send_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG] =
+                &calculate_throttle_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX] =
+                &calculate_throttle_max,
 };
 
 static const char *get_client_rack(const rd_kafka_t *rk) {

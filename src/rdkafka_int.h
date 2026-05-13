@@ -1322,6 +1322,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_fanout_op(rd_kafka_t *rk,
  */
 rd_kafka_error_t *
 rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
+
 /**
  * @brief Return a response-error code if the share consumer is closed or
  *        closing.
@@ -1330,6 +1331,7 @@ rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
  */
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
+
 void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,
                                      rd_bool_t should_fetch,

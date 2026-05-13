@@ -1155,6 +1155,24 @@ int unit_test_telemetry_gauge(void) {
             "The average number of record acknowledgements sent per second.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
             unit_test_telemetry_set_acknowledgements_send_total, 0, 42.0);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.fetch.throttle.time.avg",
+            "The average throttle time in ms.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_throttle_time,
+            default_expected_value_int, default_expected_value_double);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.fetch.throttle.time.max",
+            "The maximum throttle time in ms.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
+            unit_test_telemetry_set_throttle_time,
+            default_expected_value_int, default_expected_value_double);
         return fails;
 }
 

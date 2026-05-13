@@ -38,7 +38,7 @@
         TEST_FIXTURES_OAUTHBEARER_FOLDER "jwt_assertion_template.json"
 
 static rd_bool_t error_seen;
-static rd_bool_t aws_iam_user_token_cb_called;
+static rd_bool_t user_token_cb_called;
 /**
  * @brief After config OIDC, make sure the producer and consumer
  *        can work successfully.
@@ -110,12 +110,12 @@ auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
 
 /**
  * @brief Test-only token-refresh callback used to verify that a
- *        user-registered callback pre-empts the aws_iam built-in stub.
+ *        user-registered callback pre-empts the built-in OIDC callbacks.
  */
-static void aws_iam_user_token_refresh_cb(rd_kafka_t *rk,
-                                          const char *oauthbearer_config,
-                                          void *opaque) {
-        aws_iam_user_token_cb_called = rd_true;
+static void user_token_refresh_cb(rd_kafka_t *rk,
+                                  const char *oauthbearer_config,
+                                  void *opaque) {
+        user_token_cb_called = rd_true;
         rd_kafka_oauthbearer_set_token_failure(
             rk, "aws_iam test user token refresh cb");
 }
@@ -623,7 +623,7 @@ void do_test_produce_consumer_with_OIDC_sub_claim(rd_kafka_conf_t *conf) {
  * @brief aws_iam round-trips through rd_kafka_conf_set/get, confirming
  *        the s2i wiring for the new enum value.
  */
-static void do_test_aws_iam_conf_roundtrip(void) {
+static void do_test_OIDC_aws_iam_conf_roundtrip(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         char value[64];
@@ -656,8 +656,8 @@ static void do_test_aws_iam_conf_roundtrip(void) {
  *        failure rather than silently falling back to a different
  *        OIDC flow.
  */
-static void
-do_test_aws_iam_stub_fires_without_callback(const rd_kafka_conf_t *base_conf) {
+static void do_test_OIDC_aws_iam_stub_fires_without_callback(
+    const rd_kafka_conf_t *base_conf) {
         rd_kafka_t *c1;
         uint64_t testid;
         rd_kafka_conf_t *conf;
@@ -667,10 +667,6 @@ do_test_aws_iam_stub_fires_without_callback(const rd_kafka_conf_t *base_conf) {
         conf = rd_kafka_conf_dup(base_conf);
         test_conf_set(conf, "sasl.oauthbearer.metadata.authentication.type",
                       "aws_iam");
-        /* Stub fails before any HTTP call, but token.endpoint.url is
-         * still required to pass conf finalize. */
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                      "http://example.invalid/token");
 
         error_seen = rd_false;
         rd_kafka_conf_set_error_cb(conf, auth_error_cb);
@@ -690,13 +686,11 @@ do_test_aws_iam_stub_fires_without_callback(const rd_kafka_conf_t *base_conf) {
 }
 
 /**
- * @brief A user-registered token-refresh callback set before client
- *        creation must override the aws_iam stub. Guards the dispatch
- *        precedence at rdkafka.c (the `if (method==oidc && !cb)` gate
- *        skips the entire stub installation when a callback is set).
+ * @brief User-registered token refresh callback takes precedence over
+ *        the aws_iam stub.
  */
 static void
-do_test_aws_iam_user_callback_wins(const rd_kafka_conf_t *base_conf) {
+do_test_OIDC_aws_iam_user_callback_wins(const rd_kafka_conf_t *base_conf) {
         rd_kafka_t *c1;
         uint64_t testid;
         rd_kafka_conf_t *conf;
@@ -707,14 +701,12 @@ do_test_aws_iam_user_callback_wins(const rd_kafka_conf_t *base_conf) {
         conf = rd_kafka_conf_dup(base_conf);
         test_conf_set(conf, "sasl.oauthbearer.metadata.authentication.type",
                       "aws_iam");
-        test_conf_set(conf, "sasl.oauthbearer.token.endpoint.url",
-                      "http://example.invalid/token");
 
-        rd_kafka_conf_set_oauthbearer_token_refresh_cb(
-            conf, aws_iam_user_token_refresh_cb);
+        rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf,
+                                                       user_token_refresh_cb);
 
-        aws_iam_user_token_cb_called = rd_false;
-        error_seen                   = rd_false;
+        user_token_cb_called = rd_false;
+        error_seen           = rd_false;
         rd_kafka_conf_set_error_cb(conf, auth_error_cb);
 
         testid = test_id_generate();
@@ -722,9 +714,12 @@ do_test_aws_iam_user_callback_wins(const rd_kafka_conf_t *base_conf) {
         c1 = test_create_consumer("aws_iam.user_cb.C1", NULL, conf, NULL);
 
         test_consumer_poll_no_msgs("aws_iam.user_cb.C1", c1, testid, 5 * 1000);
-        TEST_ASSERT(aws_iam_user_token_cb_called,
+        TEST_ASSERT(user_token_cb_called,
                     "Expected user-registered token refresh callback to "
                     "fire instead of the aws_iam stub");
+        TEST_ASSERT(error_seen,
+                    "Expected user-callback's set_token_failure to surface "
+                    "as an authentication error");
 
         test_consumer_close(c1);
         rd_kafka_destroy(c1);
@@ -738,9 +733,7 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
 
         test_conf_init(&conf, NULL, 60);
 
-        /* Pure conf-system check; runs even when the broker isn't
-         * configured for SASL/OIDC. */
-        do_test_aws_iam_conf_roundtrip();
+        do_test_OIDC_aws_iam_conf_roundtrip();  // no broker connection needed
 
         sec = test_conf_get(conf, "security.protocol");
         if (!strstr(sec, "sasl")) {
@@ -764,8 +757,8 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         do_test_produce_consumer_with_OIDC_metadata_authentication(conf);
         do_test_produce_consumer_with_OIDC_sub_claim(conf);
 
-        do_test_aws_iam_stub_fires_without_callback(conf);
-        do_test_aws_iam_user_callback_wins(conf);
+        do_test_OIDC_aws_iam_stub_fires_without_callback(conf);
+        do_test_OIDC_aws_iam_user_callback_wins(conf);
 
         rd_kafka_conf_destroy(conf);
 

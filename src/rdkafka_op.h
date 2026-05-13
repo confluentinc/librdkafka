@@ -211,8 +211,12 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
-        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB,  /**< Share acknowledgement callback
-                                           *   reply: main -> app */
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE,  /**< Share acknowledgement
+                                                   * callback  reply: main -> app
+                                                   */
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER, /**< Register/unregister share
+                                                   *   acknowledgement callback:
+                                                   *   app -> main */
         RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
                                             to clear share session during broker
                                             decommission */
@@ -879,21 +883,23 @@ struct rd_kafka_op_s {
 
                 /**
                  * Share acknowledgement callback reply.
-                 * Contains results to deliver to
-                 * share_acknowledgement_commit_cb.
+                 * Contains results to deliver to the runtime acknowledgement
+                 * callback set via rd_kafka_share_set_acknowledgement_cb().
                  */
                 struct {
                         /** List of partition offsets. */
                         rd_kafka_share_partition_offsets_list_t *partitions;
-                        /** Callback function pointer. */
-                        void (*cb)(
-                            rd_kafka_share_t *rkshare,
-                            rd_kafka_share_partition_offsets_list_t *partitions,
-                            rd_kafka_resp_err_t err,
-                            void *opaque);
-                        /** Application opaque. */
-                        void *opaque;
-                } share_ack_commit;
+                        /* Callback is looked up from rk->rk_rkshare at
+                         * invoke time. */
+                } share_ack_commit_cb_execute;
+
+                /** Share acknowledgement callback registration op.
+                 *  Sent from app thread to main thread when the runtime
+                 *  callback registration state transitions (set ↔ unset). */
+                struct {
+                        rd_bool_t
+                            registered; /**< true=register, false=unregister */
+                } share_ack_commit_cb_register;
 
         } rko_u;
 };

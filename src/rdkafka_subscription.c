@@ -53,9 +53,14 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
                 return err;
-        return rd_kafka_unsubscribe(rkshare->rkshare_rk);
+        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+                goto done;
+        err = rd_kafka_unsubscribe(rkshare->rkshare_rk);
+done:
+        rd_kafka_share_release(rkshare);
+        return err;
 }
 
 
@@ -119,9 +124,14 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
                 return err;
-        return rd_kafka_subscribe(rkshare->rkshare_rk, topics);
+        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+                goto done;
+        err = rd_kafka_subscribe(rkshare->rkshare_rk, topics);
+done:
+        rd_kafka_share_release(rkshare);
+        return err;
 }
 
 
@@ -294,9 +304,14 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
                 return err;
-        return rd_kafka_subscription(rkshare->rkshare_rk, topics);
+        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+                goto done;
+        err = rd_kafka_subscription(rkshare->rkshare_rk, topics);
+done:
+        rd_kafka_share_release(rkshare);
+        return err;
 }
 
 rd_kafka_resp_err_t

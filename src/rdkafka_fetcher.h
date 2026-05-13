@@ -44,6 +44,9 @@ void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,
                                                rd_kafka_op_t *rko_orig,
                                                rd_ts_t now);
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb);
+void rd_kafka_broker_session_remove_partition_from_toppars_in_session(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_toppar_t *rktp);
 void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                                rd_kafka_op_t *rko_orig,
                                rd_ts_t now);

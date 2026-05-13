@@ -5,22 +5,24 @@ librdkafka v2.14.2 is a maintenance release:
 * Fix duplicate groups in `ListConsumerGroups` when multiple brokers
   return the same group (#5417).
 * Fix data race in timers (#5089).
-* Update bundled OpenSSL, libCurl, zstd, zlib and cJSON
+* Update bundled OpenSSL, libcurl, zstd, zlib and cJSON
   dependencies (#5346).
 
 
 ## Fixes
 
-### Admin client fixes
-
-* Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.
-
-
 ### General fixes
 
-* Fix data race in timers (#5089).
-* Update bundled OpenSSL, libCurl, zstd, zlib and cJSON
-  dependencies (#5346).
+* Issues: #5082.
+  Fix data race in timers. The callback and its argument could have been modified after the lock is released.
+  Happening since 1.x (#5089).
+
+
+### Admin client fixes
+
+* Issues: #5417.
+  Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.
+  Happening since 1.x (#5417).
 
 
 # librdkafka v2.14.1

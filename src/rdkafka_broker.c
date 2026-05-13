@@ -3771,24 +3771,6 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_SHARE_SESSION_CLEAR:
                 rd_rkb_dbg(rkb, CGRP, "TERM",
                            "Received SHARE_SESSION_CLEAR op");
-                if (rkb->rkb_share_async_ack_details) {
-                        rd_rkb_dbg(
-                            rkb, BROKER, "TERM",
-                            "Clearing %d pending async ack batch(es)",
-                            rd_list_cnt(rkb->rkb_share_async_ack_details));
-                        rd_list_destroy(rkb->rkb_share_async_ack_details);
-                        rkb->rkb_share_async_ack_details = NULL;
-                }
-                if (rkb->rkb_pending_commit_sync.sync_ack_details) {
-                        rd_rkb_dbg(
-                            rkb, BROKER, "TERM",
-                            "Clearing %d pending commit sync ack batch(es)",
-                            rd_list_cnt(
-                                rkb->rkb_pending_commit_sync.sync_ack_details));
-                        rd_list_destroy(
-                            rkb->rkb_pending_commit_sync.sync_ack_details);
-                        rkb->rkb_pending_commit_sync.sync_ack_details = NULL;
-                }
                 rd_kafka_broker_share_fetch_session_clear(rkb);
                 break;
         default:
@@ -5109,7 +5091,6 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_assert(TAILQ_EMPTY(&rkb->rkb_waitresps.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_toppars));
-
         rd_assert(
             TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_in_session));
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_add);
@@ -6526,10 +6507,7 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
             rkb->rkb_source == RD_KAFKA_LEARNED) {
-                /*
-                 * TODO KIP-932: Send SHARE_SESSION_NOT_FOUND error in
-                 *               acknowledgement callback (as done in
-                 *               Java client). */
+                rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
                 rd_kafka_q_enq(
                     rkb->rkb_ops,
                     rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));

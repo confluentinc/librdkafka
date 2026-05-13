@@ -222,6 +222,7 @@ blocks:
               --version ${KAFKA_VERSION} --cpversion ${CP_VERSION}
               --brokers 1
               --conf '["share.coordinator.state.topic.replication.factor=1", "share.coordinator.state.topic.min.isr=1", "group.share.min.record.lock.duration.ms=1000", "transaction.state.log.replication.factor=1", "transaction.state.log.min.isr=1"]'
+              # TODO KIP-932: Change 0157 to 0155 after leader migration is fixed
               --cmd 'TESTS_SKIP_BEFORE=0157 python3 run-test-batches.py')
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 

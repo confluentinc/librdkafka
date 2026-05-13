@@ -1335,4 +1335,10 @@ void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_bool_t should_fetch,
                                      rd_bool_t should_leave);
 
+void rd_kafka_share_commit_sync_apply_result(rd_kafka_t *rk,
+                                             rd_kafka_cgrp_t *rkcg,
+                                             rd_list_t *ack_batches);
+
+
+
 #endif /* _RDKAFKA_INT_H_ */

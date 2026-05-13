@@ -1205,11 +1205,12 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 /* Destroy inflight acks map to release
                  * toppar references held by topic_partition objects in the map.
-                 * Otherwise rd_kafka_destroy_app() deadlocks: it joins broker
-                 * threads, which wait for refcnt <= 1, but the toppar holds a
-                 * broker ref via rktp_leader that is only released when the
-                 * toppar is destroyed, which requires refcnt 0, which requires
-                 * releasing the rktp ref held by the inflight_acks map entry.
+                 * Otherwise rd_kafka_destroy_internal() deadlocks: it joins
+                 * broker threads, which wait for refcnt <= 1, but the toppar
+                 * holds a broker ref via rktp_leader that is only released when
+                 * the toppar is destroyed, which requires refcnt 0, which
+                 * requires releasing the rktp ref held by the inflight_acks map
+                 * entry.
                  */
                 RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
         }
@@ -3234,10 +3235,14 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         rd_bool_t records_fetched = rko_orig->rko_u.share_fetch.records_fetched;
         rd_bool_t should_leave    = rko_orig->rko_u.share_fetch.should_leave;
 
-        /* TODO KIP-932: This assertion has been commented out as the function
-         * can also be called in broker thread during when rko has __DESTROY set
-         * (client termination). Check if it is safe to keep it this way */
-        // rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
+        /* The reply handler is expected to be invoked on the main thread,
+         * unless the client is terminating with NO_CONSUMER_CLOSE in which
+         * case it can be invoked on the replying's broker thread
+         * (main thread would have come out of its event loop by the time broker
+         * replies)
+         */
+        rd_dassert(thrd_is_current(rk->rk_thread) ||
+                   rko_orig->rko_err == RD_KAFKA_RESP_ERR__DESTROY);
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                      "Share fetch reply: %s, should_fetch=%d, "
                      "records_fetched=%d, should_leave=%d, broker=%s",
@@ -3307,26 +3312,17 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                  * normal helper path overwrites _IN_PROGRESS first
                  * (buf callback init -> INVALID_RECORD_STATE -> per-
                  * partition err or top-level err). */
-                if (ack_details) {
+                if (ack_details && rko_orig->rko_err) {
                         rd_kafka_share_ack_batches_t *batch;
                         int k;
                         RD_LIST_FOREACH(batch, ack_details, k) {
-                                rd_kafka_topic_partition_t *dst;
-                                if (rko_orig->rko_err &&
-                                    batch->rktpar->err ==
-                                        RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                if (batch->rktpar->err ==
+                                    RD_KAFKA_RESP_ERR__IN_PROGRESS)
                                         batch->rktpar->err = rko_orig->rko_err;
-                                dst = rd_kafka_topic_partition_list_find(
-                                    rkcg->rkcg_commit_sync_request.results,
-                                    batch->rktpar->topic,
-                                    batch->rktpar->partition);
-                                if (dst)
-                                        dst->err = batch->rktpar->err;
                         }
                 }
 
-                rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt--;
-
+                rd_kafka_share_commit_sync_apply_result(rk, rkcg, ack_details);
                 rd_kafka_dbg(
                     rk, CGRP, "SHARE",
                     "Commit sync reply from broker %s: %s, "
@@ -3334,8 +3330,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                     rd_kafka_broker_name(reply_rkb),
                     rd_kafka_err2str(rko_orig->rko_err),
                     rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt);
-
-                rd_kafka_share_commit_sync_maybe_complete(rk, rkcg);
         }
 
         /*
@@ -3909,6 +3903,40 @@ static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
                             1);
 
         rd_kafka_share_commit_sync_send_response(rkcg);
+}
+
+/**
+ * @brief Apply a broker's commit_sync result: copy each batch's
+ *        per-partition err onto the corresponding entry in
+ *        rkcg_commit_sync_request.results, decrement the count of
+ *        brokers still awaiting reply, and complete the commit_sync
+ *        if this was the last broker outstanding.
+ *
+ * The caller is responsible for setting batch->rktpar->err on each
+ * batch before invoking this (either from the broker reply path or
+ * from a synthetic failure path like broker decommission).
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_apply_result(rd_kafka_t *rk,
+                                             rd_kafka_cgrp_t *rkcg,
+                                             rd_list_t *ack_batches) {
+        if (ack_batches) {
+                rd_kafka_share_ack_batches_t *batch;
+                int k;
+
+                RD_LIST_FOREACH(batch, ack_batches, k) {
+                        rd_kafka_topic_partition_t *dst =
+                            rd_kafka_topic_partition_list_find(
+                                rkcg->rkcg_commit_sync_request.results,
+                                batch->rktpar->topic, batch->rktpar->partition);
+                        if (dst)
+                                dst->err = batch->rktpar->err;
+                }
+        }
+
+        rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt--;
+        rd_kafka_share_commit_sync_maybe_complete(rk, rkcg);
 }
 
 /**

@@ -22,4 +22,5 @@ echo "arguments: $TEST_ARGS"
  --conf '["group.share.min.record.lock.duration.ms=1000", "transaction.state.log.replication.factor=1", "transaction.state.log.min.isr=1"]' \
  --version "$TEST_KAFKA_GIT_REF" \
  --cpversion "$TEST_CP_VERSION" \
+ # TODO KIP-932: Change 0157 to 0155 after after leader migration is fixed
  --cmd "TESTS_SKIP_BEFORE=0157 python run-test-batches.py $TEST_ARGS")

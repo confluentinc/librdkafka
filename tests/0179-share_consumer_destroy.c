@@ -375,17 +375,17 @@ static int decommission_after_delay(void *arg) {
  *             b. removes the target broker from cluster metadata (its
  *                TCP connection stays up so its outbuf still holds the
  *                parked ShareAck).
- *          3. On the main thread, call commit_sync. The target partition's
+ *          3. On the app thread, call commit_sync. The target partition's
  *             ShareAck is parked on the target broker (5s delay).
  *          4. Periodic metadata refresh — routed via the surviving
  *             broker — sees the target broker missing, runs
  *             rd_kafka_broker_decommission() on it. The OP_TERMINATE
  *             handler purges the parked ShareAck with __DESTROY_BROKER.
  *          5. Reply handler stamps the target-partition entry in
- *             commit_sync_request as __DESTROY.
+ *             commit_sync_request as __DESTROY_BROKER.
  *
  *        Assertion: commit_sync result has 1 entry for the target
- *        partition with err == __DESTROY.
+ *        partition with err == __DESTROY_BROKER.
  */
 static void test_broker_decommission_with_commit_sync(int destroy_flags,
                                                       rd_bool_t explicit_ack) {
@@ -518,7 +518,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                                 &args) == thrd_success,
                     "thrd_create failed");
 
-        /* Call commit_sync on the main thread; will block until the broker
+        /* Call commit_sync on the app thread; will block until the broker
          * decommission fails the in-flight ack or the timeout fires. */
         TEST_SAY("Calling commit_sync (timeout 10s)\n");
         error = rd_kafka_share_commit_sync(rkshare, 10000, &result);
@@ -540,7 +540,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
          * So we expect commit_sync's
          * results to contain only the target partition, whose ShareAck
          * was sent to the target broker and failed with
-         * __DESTROY_BROKER → stamped as __DESTROY here. */
+         * __DESTROY_BROKER → stamped as __DESTROY_BROKER here. */
         TEST_ASSERT(result->cnt == 1,
                     "Expected 1 partition result (partition %" PRId32
                     " only), got %d",
@@ -1004,10 +1004,10 @@ static void test_broker_decommission_during_close(int destroy_flags,
  *        __DESTROY_BROKER.
  *
  *        Expectation: rd_kafka_share_commit_async() returns NULL (no
- *        error) and does not block on the in-flight ack — that's the
- *        whole point of async. destroy() afterwards completes cleanly.
+ *        error) and does not block on the in-flight ack.
+ *        destroy() afterwards completes cleanly.
  *
- *        TODO KIP-932: add assertion for ack callback once it is
+ *        TODO KIP-932 destroy: add assertion for ack callback once it is
  *        implemented.
  */
 static void test_broker_decommission_with_commit_async(int destroy_flags,
@@ -1156,7 +1156,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
                     "Expected commit_async() to return NULL error, got %s",
                     error ? rd_kafka_error_string(error) : "(null)");
 
-        /* TODO KIP-932: add assertion for ack callback once it is
+        /* TODO KIP-932 destroy: add assertion for ack callback once it is
          *               implemented. */
 
         thrd_join(decommission_thrd, NULL);

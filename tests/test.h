@@ -1067,12 +1067,33 @@ void test_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
  * @brief State for tracking share acknowledgement callbacks.
+ *
+ * @remark Call test_ack_cb_state_destroy() to free the @c errs allocation.
  */
 typedef struct test_ack_cb_state_s {
-        int callback_cnt;             /**< Number of callbacks invoked */
-        size_t total_offsets;         /**< Total offsets acknowledged */
-        rd_kafka_resp_err_t last_err; /**< Last error from callback */
+        int callback_cnt;          /**< Number of callbacks invoked */
+        size_t total_offsets;      /**< Total offsets acknowledged */
+        rd_kafka_resp_err_t *errs; /**< Per-callback err, length callback_cnt */
 } test_ack_cb_state_t;
+
+/**
+ * @brief Record the err for one callback invocation. Grows @c errs by one.
+ */
+void test_ack_cb_state_push_err(test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err);
+
+/**
+ * @brief Free the @c errs allocation and zero counters. Safe to call on a
+ *        zero-initialized state.
+ */
+void test_ack_cb_state_destroy(test_ack_cb_state_t *state);
+
+/**
+ * @brief Returns the first non-NO_ERROR err recorded, or NO_ERROR if all
+ *        callbacks were clean (or none have fired yet).
+ */
+rd_kafka_resp_err_t
+test_ack_cb_state_first_err(const test_ack_cb_state_t *state);
 
 /**
  * @brief Standard share acknowledgement callback.

@@ -96,6 +96,8 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX,
         RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_share_consumer_metric_name_t;
 
@@ -387,6 +389,20 @@ static const rd_kafka_telemetry_metric_info_t
                                 "sent per second.",
                  .unit        = "1",
                  .is_int      = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG] =
+                {.name = "consumer.share.fetch.manager.fetch.throttle.time.avg",
+                 .description   = "The average throttle time in ms.",
+                 .unit          = "ms",
+                 .is_int        = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX] =
+                {.name = "consumer.share.fetch.manager.fetch.throttle.time.max",
+                 .description   = "The maximum throttle time in ms.",
+                 .unit          = "ms",
+                 .is_int        = rd_true,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

@@ -746,6 +746,11 @@ rd_kafka_resp_err_t
 rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
                                 rd_kafka_share_AcknowledgeType_t type) {
+        rd_kafka_resp_err_t err;
+
+        if (unlikely((err = rd_kafka_share_check_reentrancy(rkshare))))
+                return err;
+
         if (!rkmessage)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
@@ -766,6 +771,9 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         rd_kafka_share_ack_batch_entry_t *entry;
         int64_t idx;
         rd_kafka_resp_err_t err;
+
+        if (unlikely((err = rd_kafka_share_check_reentrancy(rkshare))))
+                return err;
 
         if (!rkshare || !topic || partition < 0 || offset < 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -904,17 +912,19 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
         rd_kafka_op_t *cb_rko;
         rd_kafka_share_partition_offsets_list_t *partitions;
 
-        if (!rk->rk_conf.share_acknowledgement_commit_cb)
+        /* Check if a runtime callback is registered.
+         * Locality: main thread - reads flag owned by main thread.
+         * No race because the flag is only modified by the main thread
+         * via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op handler. */
+        if (!rk->rk_rkshare ||
+            !rk->rk_rkshare->rkshare_acknowledgement_callback_registered)
                 return;
 
         partitions = rd_kafka_share_build_partition_offsets_list(batches);
 
-        cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB);
-        cb_rko->rko_err = err;
-        cb_rko->rko_u.share_ack_commit.partitions = partitions;
-        cb_rko->rko_u.share_ack_commit.cb =
-            rk->rk_conf.share_acknowledgement_commit_cb;
-        cb_rko->rko_u.share_ack_commit.opaque = rk->rk_conf.opaque;
+        cb_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE);
+        cb_rko->rko_err                                      = err;
+        cb_rko->rko_u.share_ack_commit_cb_execute.partitions = partitions;
 
         rd_kafka_q_enq(rk->rk_rep, cb_rko);
 }
@@ -973,8 +983,10 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
         rd_kafka_share_ack_batches_t *ack_batch;
         int k;
 
-        if (!rk->rk_conf.share_acknowledgement_commit_cb || !ack_details ||
-            rd_list_cnt(ack_details) == 0)
+        /* Locality: main thread - checks runtime-set registration flag. */
+        if (!rk->rk_rkshare ||
+            !rk->rk_rkshare->rkshare_acknowledgement_callback_registered ||
+            !ack_details || rd_list_cnt(ack_details) == 0)
                 return;
 
         /* Use per-partition error from each batch */

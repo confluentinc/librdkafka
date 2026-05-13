@@ -821,6 +821,29 @@ struct rd_kafka_share_s {
          * while closing
          */
         rd_bool_t rkshare_consumer_closing;
+
+        /** Runtime acknowledgement callback set via
+         *  rd_kafka_share_set_acknowledgement_cb().
+         *  @locality APP THREAD ONLY (set in set_acknowledgement_cb). */
+        void (*rkshare_acknowledgement_cb)(
+            rd_kafka_share_t *rkshare,
+            rd_kafka_share_partition_offsets_list_t *partitions,
+            rd_kafka_resp_err_t err,
+            void *opaque);
+
+        /** Application opaque for acknowledgement callback.
+         *  @locality APP THREAD ONLY. */
+        void *rkshare_acknowledgement_opaque;
+
+        /** Reentrancy protection flag - set to true when inside callback.
+         *  @locality APP THREAD ONLY. */
+        rd_bool_t rkshare_in_callback;
+
+        /** Registration flag - whether callback is currently registered.
+         *  Written via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op handler.
+         *  Used by main thread to decide whether to enqueue callback ops.
+         *  @locality MAIN THREAD ONLY. */
+        rd_bool_t rkshare_acknowledgement_callback_registered;
 };
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
@@ -1331,6 +1354,17 @@ rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
  */
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Check if a share consumer API call is being made from within the
+ *        acknowledgement callback (reentrancy protection), or if rkshare
+ *        is NULL.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if not in callback and rkshare is
+ *          non-NULL, RD_KAFKA_RESP_ERR__INVALID_ARG if rkshare is NULL,
+ *          RD_KAFKA_RESP_ERR__STATE if called from within callback.
+ */
+rd_kafka_resp_err_t rd_kafka_share_check_reentrancy(rd_kafka_share_t *rkshare);
 
 void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,

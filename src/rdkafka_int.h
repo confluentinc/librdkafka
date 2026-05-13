@@ -341,6 +341,43 @@ struct rd_kafka_s {
                           *   is called, used to access inflight
                           *   acks for building ack batches. */
 
+        /** Share consumer state. Only used when this rd_kafka_t handle
+         *  is a share consumer (rk_rkshare != NULL). */
+        struct {
+                /** Runtime acknowledgement callback set via
+                 *  rd_kafka_share_set_acknowledgement_cb().
+                 *  @locality APP THREAD ONLY (set in set_acknowledgement_cb).
+                 */
+                void (*acknowledgement_cb)(
+                    rd_kafka_share_t *rkshare,
+                    rd_kafka_share_partition_offsets_list_t *partitions,
+                    rd_kafka_resp_err_t err,
+                    void *opaque);
+
+                /** Application opaque for acknowledgement callback.
+                 *  @locality APP THREAD ONLY. */
+                void *acknowledgement_opaque;
+
+                /** Reentrancy protection flag - set to true when inside
+                 *  callback.
+                 *  @locality APP THREAD ONLY. */
+                rd_bool_t in_callback;
+
+                /** Registration flag - whether callback is currently
+                 *  registered.
+                 *  Written via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op
+                 *  handler. Used by main thread to decide whether to
+                 *  enqueue callback ops.
+                 *  @locality MAIN THREAD ONLY. */
+                rd_bool_t acknowledgement_callback_registered;
+
+                /** Single-thread access gate.
+                 *  Set to 1 via atomic test-and-set on entry to any public
+                 *  share API, reset to 0 on exit. A second thread observing
+                 *  1 is rejected with RD_KAFKA_RESP_ERR__STATE. */
+                rd_atomic32_t locked;
+        } rk_share_consumer;
+
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */
         char rk_name[128];
@@ -1331,6 +1368,30 @@ rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
  */
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Acquire single-thread ownership of the share consumer.
+ *
+ * Public share APIs must call this on entry and pair it with
+ * rd_kafka_share_release() on every return path. Rejects:
+ *   - NULL rkshare
+ *   - Calls from inside the acknowledgement callback
+ *     (rk_share_consumer.in_callback set)
+ *   - Concurrent calls from another application thread (atomic gate
+ *     already held)
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
+ *          RD_KAFKA_RESP_ERR__STATE otherwise.
+ */
+rd_kafka_resp_err_t rd_kafka_share_acquire(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Release ownership acquired by rd_kafka_share_acquire().
+ *
+ * Tolerates NULL rkshare (no-op) so error paths can call it
+ * unconditionally.
+ */
+void rd_kafka_share_release(rd_kafka_share_t *rkshare);
 
 void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,

@@ -752,9 +752,6 @@ static void test_poll_callback_piggybacked_acks(void) {
         const char *topic;
         const char *group = "share-poll-callback";
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_conf_t *conf;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        char errstr[512];
         int consumed              = 0, attempts;
         test_ack_cb_state_t state = {0};
 
@@ -762,17 +759,8 @@ static void test_poll_callback_piggybacked_acks(void) {
         TEST_SAY(
             "=== Poll callback test (piggybacked acks on ShareFetch) ===\n");
 
-        /* Create consumer with callback */
-        test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "implicit",
-                          errstr, sizeof(errstr));
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf,
-                                                          test_share_ack_cb);
-        rd_kafka_conf_set_opaque(conf, &state);
-
-        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+        consumer =
+            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
 
         /* Create topic and produce messages */
         topic = test_mk_topic_name("0171-poll-cb", 1);
@@ -780,7 +768,7 @@ static void test_poll_callback_piggybacked_acks(void) {
         test_produce_msgs_simple(common_producer, topic, 0, 100);
 
         /* Configure group */
-        test_alter_group_configurations(group, grp_conf, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -813,31 +801,17 @@ static void test_poll_callback_piggybacked_acks(void) {
         TEST_ASSERT(consumed > 0, "Expected to consume some messages");
 
         /* Second poll: this sends piggybacked acks from first batch */
-        attempts = 10;
-        while (attempts-- > 0 && state.callback_cnt == 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
+        test_wait_for_cb_with_poll(&state, consumer, 1, 20000);
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
-                if (err)
-                        rd_kafka_error_destroy(err);
-
-                for (m = 0; m < rcvd; m++)
-                        rd_kafka_message_destroy(batch[m]);
-        }
-
-        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
-                 state.callback_cnt, state.total_offsets,
-                 rd_kafka_err2name(state.last_err));
+        TEST_SAY("Callback count=%d, total_offsets=%zu\n", state.callback_cnt,
+                 state.total_offsets);
 
         TEST_ASSERT(
             state.callback_cnt >= 1,
             "Expected at least 1 callback from piggybacked acks, got %d",
             state.callback_cnt);
-        TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %zu",
+        TEST_ASSERT(state.total_offsets == (size_t)consumed,
+                    "Expected %d offsets in callback, got %zu", consumed,
                     state.total_offsets);
 
         TEST_SAY("SUCCESS: Poll callback received %d callbacks, %zu offsets\n",
@@ -846,6 +820,104 @@ static void test_poll_callback_piggybacked_acks(void) {
         /* Cleanup */
         rd_kafka_share_consumer_close(consumer);
         rd_kafka_share_destroy(consumer);
+        test_ack_cb_state_destroy(&state);
+}
+
+
+/**
+ * @brief Worker thread that blocks inside share_consume_batch on an empty
+ *        topic, holding the share consumer access gate for the duration.
+ */
+static int consume_blocker_thread(void *arg) {
+        rd_kafka_share_t *consumer = arg;
+        rd_kafka_message_t *batch[1];
+        size_t rcvd = 0;
+        rd_kafka_error_t *err;
+
+        /* Blocks for ~5s waiting for messages that never arrive.
+         * The share access gate is held for the full duration. */
+        err = rd_kafka_share_consume_batch(consumer, 5000, batch, &rcvd);
+        if (err)
+                rd_kafka_error_destroy(err);
+        return 0;
+}
+
+/**
+ * @brief Verify the share consumer's single-thread access gate rejects
+ *        concurrent calls from a second thread, and that ownership is
+ *        released after the holder returns so a later call succeeds.
+ */
+static void test_concurrent_thread_access_rejected(void) {
+        rd_kafka_share_t *consumer;
+        const char *topic;
+        const char *group = "share-concurrent-thread";
+        rd_kafka_topic_partition_list_t *subs;
+        thrd_t blocker;
+        rd_kafka_message_t *batch[1];
+        size_t rcvd = 0;
+        rd_kafka_error_t *err;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== Concurrent thread access rejected ===\n");
+
+        consumer = test_create_share_consumer(group, NULL);
+        topic    = test_mk_topic_name("0171-concurrent-thread", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Spawn the blocker. It enters consume_batch, takes the gate,
+         * and stays inside for ~5s on the empty topic. */
+        if (thrd_create(&blocker, consume_blocker_thread, consumer) !=
+            thrd_success)
+                TEST_FAIL("thrd_create failed");
+
+        /* Give the blocker time to enter consume_batch, run the non-blocking
+         * prelude, and park in cnd_timedwait_abs holding the gate. Without
+         * this, the main thread can race in first and acquire/release the
+         * gate in a tight loop, leaving no window for the blocker to enter;
+         * the blocker's single attempt then fails with __STATE and exits,
+         * and main never observes the gate being held by anyone else. */
+        rd_usleep(200 * 1000, NULL);
+
+        /* Blocker is now holding the gate. A concurrent call must be
+         * rejected with __STATE. */
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 0, batch, &rcvd);
+        TEST_ASSERT(
+            err && rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+            "Expected __STATE from concurrent consume_batch while blocker "
+            "thread holds the gate; got: %s",
+            err ? rd_kafka_err2name(rd_kafka_error_code(err)) : "no error");
+        rd_kafka_error_destroy(err);
+
+        TEST_SAY("Gate correctly rejected concurrent caller\n");
+
+        /* Wait for blocker to return (releases the gate). */
+        thrd_join(blocker, NULL);
+
+        /* Sequential ownership transfer: gate is now free, the same
+         * main thread should be able to call consume_batch without
+         * hitting the gate. */
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 0, batch, &rcvd);
+        TEST_ASSERT(!err, "After blocker returned, gate should be free; got %s",
+                    err ? rd_kafka_err2str(rd_kafka_error_code(err))
+                        : "no error");
+        if (err)
+                rd_kafka_error_destroy(err);
+
+        TEST_SAY("Sequential ownership transfer works after release\n");
+
+        rd_kafka_share_consumer_close(consumer);
+        rd_kafka_share_destroy(consumer);
+
+        TEST_SAY("SUCCESS: Concurrent thread access correctly rejected\n");
 }
 
 
@@ -916,6 +988,9 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
 
         /* Callback tests */
         test_poll_callback_piggybacked_acks();
+
+        /* Concurrency tests */
+        test_concurrent_thread_access_rejected();
 
 
         /* Cleanup common handles */

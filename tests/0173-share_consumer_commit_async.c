@@ -1579,7 +1579,7 @@ static void do_test_lock_timeout_redelivery(void) {
 /* ===================================================================
  *  Test: commit_async callback invocation.
  *
- *  Verifies that share_acknowledgement_commit_cb is invoked after
+ *  Verifies that the runtime acknowledgement callback is invoked after
  *  commit_async when acks are piggybacked on ShareFetch.
  * =================================================================== */
 static void do_test_commit_async_callback(void) {
@@ -1590,9 +1590,9 @@ static void do_test_commit_async_callback(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        test_ack_cb_state_t state;
+        size_t consumed           = 0;
+        int attempts              = 0;
+        test_ack_cb_state_t state = {0};
 
         SUB_TEST();
 
@@ -1601,13 +1601,13 @@ static void do_test_commit_async_callback(void) {
         test_produce_msgs_simple(common_producer, topic, 0, 50);
 
         rkshare =
-            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        test_alter_group_configurations(group, grp_conf, 1);
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
+        /* Set offset reset to earliest */
+        test_share_set_auto_offset_reset(group, "earliest");
         subscribe_consumer(rkshare, &topic, 1);
 
         /* Consume some messages */
-        while (consumed < 20 && attempts++ < 30) {
+        while (consumed < 50 && attempts++ < 30) {
                 rcvd  = 0;
                 error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
                                                      &rcvd);
@@ -1616,8 +1616,11 @@ static void do_test_commit_async_callback(void) {
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
+                        if (!rkmessages[j]->err) {
                                 consumed++;
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        }
                         rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
@@ -1633,18 +1636,417 @@ static void do_test_commit_async_callback(void) {
         /* Wait for callback */
         test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
 
-        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
-                 state.callback_cnt, state.total_offsets,
-                 rd_kafka_err2name(state.last_err));
+        TEST_SAY("Callback count=%d, total_offsets=%zu\n", state.callback_cnt,
+                 state.total_offsets);
 
-        TEST_ASSERT(state.callback_cnt >= 1,
-                    "Expected at least 1 callback, got %d", state.callback_cnt);
-        TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %zu",
+        TEST_ASSERT(state.callback_cnt == 1,
+                    "Expected callback to be invoked once, got %d",
+                    state.callback_cnt);
+        TEST_ASSERT(state.total_offsets == consumed,
+                    "Expected %zu offsets in callback, got %zu", consumed,
                     state.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Test: changing the runtime acknowledgement callback at runtime.
+ *
+ *  Verifies that after rd_kafka_share_set_acknowledgement_cb() is
+ *  called with a new callback, subsequent commit_async results are
+ *  delivered to the NEW callback and not the OLD one.
+ * =================================================================== */
+static void do_test_change_callback(void) {
+        const char *topic;
+        const char *group = "change-callback";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd, j;
+        int consumed                = 0;
+        int attempts                = 0;
+        int cb_a_after              = 0;
+        test_ack_cb_state_t state_a = {0};
+        test_ack_cb_state_t state_b = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-change-callback", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Phase 1: produce first batch of messages */
+        test_produce_msgs_simple(common_producer, topic, 0, 20);
+
+        /* Create consumer with callback A registered */
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state_a, NULL);
+        /* Set offset reset to earliest */
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Phase 1: consume the first batch and commit with callback A */
+        while (consumed < 20 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                consumed++;
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "First commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Wait for callback A */
+        test_wait_for_cb_with_poll(&state_a, rkshare, 1, 10000);
+        TEST_ASSERT(state_a.callback_cnt == 1,
+                    "Expected callback A to be invoked once, got %d",
+                    state_a.callback_cnt);
+        TEST_ASSERT(state_b.callback_cnt == 0,
+                    "Expected callback B NOT to be invoked yet, got %d",
+                    state_b.callback_cnt);
+        TEST_SAY("Phase 1: callback A invoked %d times, total offsets=%zu\n",
+                 state_a.callback_cnt, state_a.total_offsets);
+
+        /* Phase 2: replace callback A with callback B (different opaque) */
+        err = rd_kafka_share_set_acknowledgement_cb(rkshare, test_share_ack_cb,
+                                                    &state_b);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected to change callback successfully, got %s",
+                    rd_kafka_err2str(err));
+
+        /* Remember current callback A count so we can verify it doesn't
+         * increase after the swap. */
+        cb_a_after = state_a.callback_cnt;
+
+        /* Produce a fresh batch so phase 2 has new messages to consume */
+        test_produce_msgs_simple(common_producer, topic, 0, 20);
+
+        /* Consume the fresh batch */
+        consumed = 0;
+        attempts = 0;
+        while (consumed < 20 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                consumed++;
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_ASSERT(consumed > 0,
+                    "Expected to consume some messages after callback swap");
+
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "Second commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Wait for callback B to be invoked */
+        test_wait_for_cb_with_poll(&state_b, rkshare, 1, 10000);
+        TEST_ASSERT(state_b.callback_cnt == 1,
+                    "Expected callback B to be invoked once, got %d",
+                    state_b.callback_cnt);
+
+        /* Critical assertion: callback A's count must NOT have increased
+         * since the swap - the new callback should be receiving the new
+         * results, not the old one. */
+        TEST_ASSERT(state_a.callback_cnt == cb_a_after,
+                    "Callback A was invoked AFTER swap (was %d, now %d) "
+                    "- new callback should have received the results",
+                    cb_a_after, state_a.callback_cnt);
+
+        TEST_SAY(
+            "Phase 2: callback A unchanged at %d, callback B invoked "
+            "%d times, total offsets=%zu\n",
+            state_a.callback_cnt, state_b.callback_cnt, state_b.total_offsets);
+
+        /* Phase 3: unregister callback (NULL). After this, no callback
+         * should be invoked even when new acks are committed. */
+        int cb_a_before_phase3 = state_a.callback_cnt;
+        int cb_b_before_phase3 = state_b.callback_cnt;
+
+        err = rd_kafka_share_set_acknowledgement_cb(rkshare, NULL, NULL);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to unregister callback: %s", rd_kafka_err2str(err));
+
+        /* Produce a fresh batch to trigger more acknowledgements */
+        test_produce_msgs_simple(common_producer, topic, 0, 20);
+
+        /* Consume the fresh batch */
+        consumed = 0;
+        attempts = 0;
+        while (consumed < 20 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                consumed++;
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(consumed > 0,
+                    "Expected to consume some messages after unregister");
+
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "Third commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Poll for a while to give any pending callbacks a chance to fire.
+         * We can't use test_wait_for_cb_with_poll because we EXPECT no
+         * callback - so we poll manually with a fixed budget. */
+        int poll_iters = 20;
+        while (poll_iters-- > 0) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 200, rkmessages,
+                                                     &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                consumed++;
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        /* Critical assertion: neither callback should have been invoked
+         * after the unregister. */
+        TEST_ASSERT(state_a.callback_cnt == cb_a_before_phase3,
+                    "Callback A was invoked after unregister (was %d, now %d)",
+                    cb_a_before_phase3, state_a.callback_cnt);
+        TEST_ASSERT(state_b.callback_cnt == cb_b_before_phase3,
+                    "Callback B was invoked after unregister (was %d, now %d)",
+                    cb_b_before_phase3, state_b.callback_cnt);
+
+        TEST_SAY(
+            "Phase 3: no callbacks invoked after unregister "
+            "(A=%d, B=%d unchanged)\n",
+            state_a.callback_cnt, state_b.callback_cnt);
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state_a);
+        test_ack_cb_state_destroy(&state_b);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Test: reentrancy protection - share consumer APIs cannot be called
+ *  from within the acknowledgement callback.
+ *
+ *  Verifies that calling any share consumer API from inside the
+ *  registered acknowledgement callback returns RD_KAFKA_RESP_ERR__STATE
+ *  (for rd_kafka_resp_err_t APIs) or a STATE-coded error object
+ *  (for rd_kafka_error_t APIs).
+ * =================================================================== */
+typedef struct reentrancy_check_state_s {
+        test_ack_cb_state_t base; /**< Must be first - we cast to base */
+        int rejections;           /**< Count of correctly rejected calls */
+        int failures;             /**< Count of calls that did NOT reject */
+        rd_kafka_share_t *rkshare;
+} reentrancy_check_state_t;
+
+static void
+reentrancy_check_cb(rd_kafka_share_t *rkshare,
+                    rd_kafka_share_partition_offsets_list_t *partitions,
+                    rd_kafka_resp_err_t err,
+                    void *opaque) {
+        reentrancy_check_state_t *st = (reentrancy_check_state_t *)opaque;
+        rd_kafka_error_t *error_obj;
+        rd_kafka_resp_err_t resp_err;
+        rd_kafka_message_t *batch[8];
+        size_t rcvd = 0;
+        rd_kafka_topic_partition_list_t *subs;
+
+        /* Update base state for callback tracking */
+        test_ack_cb_state_push_err(&st->base, err);
+        if (partitions) {
+                const rd_kafka_share_partition_offsets_t *p =
+                    rd_kafka_share_partition_offsets_list_get(partitions, 0);
+                if (p)
+                        st->base.total_offsets +=
+                            rd_kafka_share_partition_offsets_offsets_cnt(p);
+        }
+
+        /* Try rd_kafka_share_consume_batch - should fail with _STATE */
+        error_obj = rd_kafka_share_consume_batch(rkshare, 100, batch, &rcvd);
+        if (error_obj &&
+            rd_kafka_error_code(error_obj) == RD_KAFKA_RESP_ERR__STATE) {
+                st->rejections++;
+                rd_kafka_error_destroy(error_obj);
+        } else {
+                st->failures++;
+                if (error_obj)
+                        rd_kafka_error_destroy(error_obj);
+        }
+
+        /* Try rd_kafka_share_commit_async - should fail with _STATE */
+        error_obj = rd_kafka_share_commit_async(rkshare);
+        if (error_obj &&
+            rd_kafka_error_code(error_obj) == RD_KAFKA_RESP_ERR__STATE) {
+                st->rejections++;
+                rd_kafka_error_destroy(error_obj);
+        } else {
+                st->failures++;
+                if (error_obj)
+                        rd_kafka_error_destroy(error_obj);
+        }
+
+        /* Try rd_kafka_share_consumer_close - should fail with _STATE */
+        error_obj = rd_kafka_share_consumer_close(rkshare);
+        if (error_obj &&
+            rd_kafka_error_code(error_obj) == RD_KAFKA_RESP_ERR__STATE) {
+                st->rejections++;
+                rd_kafka_error_destroy(error_obj);
+        } else {
+                st->failures++;
+                if (error_obj)
+                        rd_kafka_error_destroy(error_obj);
+        }
+
+        /* Try rd_kafka_share_subscribe - should fail with _STATE */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "dummy", RD_KAFKA_PARTITION_UA);
+        resp_err = rd_kafka_share_subscribe(rkshare, subs);
+        if (resp_err == RD_KAFKA_RESP_ERR__STATE)
+                st->rejections++;
+        else
+                st->failures++;
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Try rd_kafka_share_unsubscribe - should fail with _STATE */
+        resp_err = rd_kafka_share_unsubscribe(rkshare);
+        if (resp_err == RD_KAFKA_RESP_ERR__STATE)
+                st->rejections++;
+        else
+                st->failures++;
+
+        /* Try rd_kafka_share_set_acknowledgement_cb - should fail with
+         * _STATE because you can't change the callback from within itself */
+        resp_err = rd_kafka_share_set_acknowledgement_cb(rkshare, NULL, NULL);
+        if (resp_err == RD_KAFKA_RESP_ERR__STATE)
+                st->rejections++;
+        else
+                st->failures++;
+}
+
+static void do_test_reentrancy_protection(void) {
+        const char *topic;
+        const char *group = "reentrancy-protection";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd, j;
+        int consumed                   = 0;
+        int attempts                   = 0;
+        reentrancy_check_state_t state = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-reentrancy", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 50);
+
+        /* Create consumer without callback - we'll set it at runtime */
+        rkshare       = test_create_share_consumer(group, "explicit");
+        state.rkshare = rkshare;
+
+        /* Register the reentrancy-checking callback at runtime */
+        err = rd_kafka_share_set_acknowledgement_cb(
+            rkshare, reentrancy_check_cb, &state);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to set callback: %s", rd_kafka_err2str(err));
+
+        /* Set offset reset to earliest */
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume messages to trigger acknowledgement and callback invocation
+         */
+        while (consumed < 50 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                consumed++;
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        /* commit_async triggers the callback */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Wait for callback to be invoked at least once */
+        test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
+        TEST_ASSERT(state.base.callback_cnt == 1,
+                    "Expected callback to be invoked, got %d",
+                    state.base.callback_cnt);
+
+        TEST_SAY("Callback invoked %d times, rejections=%d, failures=%d\n",
+                 state.base.callback_cnt, state.rejections, state.failures);
+
+        /* Every callback invocation tries 6 share consumer APIs, all of
+         * which must reject the call from within the callback. */
+        TEST_ASSERT(state.failures == 0,
+                    "Expected 0 failures (all APIs should reject), got %d",
+                    state.failures);
+        TEST_ASSERT(state.rejections == 6, "Expected 6 rejections, got %d",
+                    state.rejections);
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         SUB_TEST_PASS();
 }
@@ -1668,8 +2070,10 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_all_reject_second_consumer();
         do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
-        /* Callback test */
+        /* Callback tests */
         do_test_commit_async_callback();
+        do_test_change_callback();
+        do_test_reentrancy_protection();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

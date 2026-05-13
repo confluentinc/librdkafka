@@ -1993,7 +1993,7 @@ static void do_test_commit_sync_callback(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
-        ack_cb_state_t state;
+        ack_cb_state_t state = {0};
 
         SUB_TEST();
 

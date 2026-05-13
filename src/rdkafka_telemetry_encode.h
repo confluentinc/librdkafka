@@ -36,14 +36,18 @@
 #define RD_KAFKA_TELEMETRY_METRIC_NODE_ID_ATTRIBUTE "node.id"
 
 #define RD_KAFKA_TELEMETRY_METRIC_INFO(rk)                                     \
-        (rk->rk_type == RD_KAFKA_PRODUCER                                      \
-             ? RD_KAFKA_TELEMETRY_PRODUCER_METRICS_INFO                        \
-             : RD_KAFKA_TELEMETRY_CONSUMER_METRICS_INFO)
+        (RD_KAFKA_IS_SHARE_CONSUMER(rk)                                        \
+             ? RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO                  \
+             : (rk->rk_type == RD_KAFKA_PRODUCER                               \
+                    ? RD_KAFKA_TELEMETRY_PRODUCER_METRICS_INFO                 \
+                    : RD_KAFKA_TELEMETRY_CONSUMER_METRICS_INFO))
 
 #define RD_KAFKA_TELEMETRY_METRIC_CNT(rk)                                      \
-        (rk->rk_type == RD_KAFKA_PRODUCER                                      \
-             ? RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT                         \
-             : RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT)
+        (RD_KAFKA_IS_SHARE_CONSUMER(rk)                                        \
+             ? RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT                   \
+             : (rk->rk_type == RD_KAFKA_PRODUCER                               \
+                    ? RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT                  \
+                    : RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT))
 
 
 typedef enum {
@@ -81,6 +85,13 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_COMMIT_LATENCY_MAX,
         RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_consumer_metric_name_t;
+
+typedef enum {
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX,
+        RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
+} rd_kafka_telemetry_share_consumer_metric_name_t;
 
 typedef union {
         int64_t int_value;
@@ -294,6 +305,38 @@ static const rd_kafka_telemetry_metric_info_t RD_KAFKA_TELEMETRY_CONSUMER_METRIC
              .is_int      = rd_true,
              .is_per_broker = rd_false,
              .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+};
+
+static const rd_kafka_telemetry_metric_info_t
+    RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO
+        [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
+                {.name          = "consumer.share.poll.idle.ratio.avg",
+                 .description   = "The average fraction of time the consumer's "
+                                  "poll() is idle as opposed to waiting for the "
+                                  "user code to process records.",
+                 .unit          = "1",
+                 .is_int        = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG] =
+                {.name = "consumer.share.time.between.poll.avg",
+                 .description =
+                     "The average delay between invocations of poll() in "
+                     "milliseconds.",
+                 .unit          = "ms",
+                 .is_int        = rd_false,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
+                {.name = "consumer.share.time.between.poll.max",
+                 .description =
+                     "The max delay between invocations of poll() in "
+                     "milliseconds.",
+                 .unit          = "ms",
+                 .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };
 
 rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk);

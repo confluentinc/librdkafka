@@ -4142,10 +4142,11 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
                                        "authentication "
                                        "when `query` isn't set";
                         rd_free(query);
-                } else if (conf->sasl.oauthbearer.metadata_authentication.type ==
-                        RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AWS_IAM) {
+                } else if (
+                    conf->sasl.oauthbearer.metadata_authentication.type ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AWS_IAM) {
                         /* AWS IAM uses region url for metadata authentication,
-                        * so the OIDC token endpoint URL is unused. */
+                         * so the OIDC token endpoint URL is unused. */
                 } else {
                         return errstr;
                 }

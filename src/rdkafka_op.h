@@ -888,7 +888,7 @@ struct rd_kafka_op_s {
                         rd_kafka_share_partition_offsets_list_t *partitions;
                         /* Callback is looked up from rk->rk_rkshare at
                          * invoke time. */
-                } share_ack_commit;
+                } share_ack_commit_cb_execute;
 
                 /** Share acknowledgement callback registration op.
                  *  Sent from app thread to main thread when the runtime
@@ -896,7 +896,7 @@ struct rd_kafka_op_s {
                 struct {
                         rd_bool_t
                             registered; /**< true=register, false=unregister */
-                } share_ack_cb_register;
+                } share_ack_commit_cb_register;
 
         } rko_u;
 };

@@ -752,9 +752,6 @@ static void test_poll_callback_piggybacked_acks(void) {
         const char *topic;
         const char *group = "share-poll-callback";
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_conf_t *conf;
-        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
-        char errstr[512];
         int consumed              = 0, attempts;
         test_ack_cb_state_t state = {0};
 
@@ -762,18 +759,8 @@ static void test_poll_callback_piggybacked_acks(void) {
         TEST_SAY(
             "=== Poll callback test (piggybacked acks on ShareFetch) ===\n");
 
-        /* Create consumer without callback in config */
-        test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "implicit",
-                          errstr, sizeof(errstr));
-
-        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
-
-        /* Register acknowledgement callback at runtime */
-        rd_kafka_share_set_acknowledgement_cb(consumer, test_share_ack_cb,
-                                              &state);
+        consumer =
+            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
 
         /* Create topic and produce messages */
         topic = test_mk_topic_name("0171-poll-cb", 1);
@@ -781,7 +768,7 @@ static void test_poll_callback_piggybacked_acks(void) {
         test_produce_msgs_simple(common_producer, topic, 0, 100);
 
         /* Configure group */
-        test_alter_group_configurations(group, grp_conf, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
 
         /* Subscribe */
         subs = rd_kafka_topic_partition_list_new(1);
@@ -814,20 +801,7 @@ static void test_poll_callback_piggybacked_acks(void) {
         TEST_ASSERT(consumed > 0, "Expected to consume some messages");
 
         /* Second poll: this sends piggybacked acks from first batch */
-        attempts = 10;
-        while (attempts-- > 0 && state.callback_cnt == 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
-
-                err =
-                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
-                if (err)
-                        rd_kafka_error_destroy(err);
-
-                for (m = 0; m < rcvd; m++)
-                        rd_kafka_message_destroy(batch[m]);
-        }
+        test_wait_for_cb_with_poll(&state, consumer, 1, 20000);
 
         TEST_SAY("Callback count=%d, total_offsets=%zu\n", state.callback_cnt,
                  state.total_offsets);
@@ -836,8 +810,8 @@ static void test_poll_callback_piggybacked_acks(void) {
             state.callback_cnt >= 1,
             "Expected at least 1 callback from piggybacked acks, got %d",
             state.callback_cnt);
-        TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %zu",
+        TEST_ASSERT(state.total_offsets == (size_t)consumed,
+                    "Expected %d offsets in callback, got %zu", consumed,
                     state.total_offsets);
 
         TEST_SAY("SUCCESS: Poll callback received %d callbacks, %zu offsets\n",

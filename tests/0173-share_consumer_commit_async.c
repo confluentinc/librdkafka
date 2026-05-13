@@ -1590,7 +1590,7 @@ static void do_test_commit_async_callback(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed              = 0;
+        size_t consumed           = 0;
         int attempts              = 0;
         test_ack_cb_state_t state = {0};
 
@@ -1642,8 +1642,8 @@ static void do_test_commit_async_callback(void) {
         TEST_ASSERT(state.callback_cnt == 1,
                     "Expected callback to be invoked once, got %d",
                     state.callback_cnt);
-        TEST_ASSERT(state.total_offsets > 0,
-                    "Expected offsets in callback, got %zu",
+        TEST_ASSERT(state.total_offsets == consumed,
+                    "Expected %zu offsets in callback, got %zu", consumed,
                     state.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);

@@ -3065,11 +3065,12 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
  * and returns an error so the API can reject the call.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR if not in callback, or
- *          RD_KAFKA_RESP_ERR__STATE if called from within callback.
+ *          RD_KAFKA_RESP_ERR__STATE if rkshare is NULL or the call is made
+ *          from within the callback.
  */
 rd_kafka_resp_err_t rd_kafka_share_check_reentrancy(rd_kafka_share_t *rkshare) {
         if (unlikely(!rkshare))
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                return RD_KAFKA_RESP_ERR__STATE;
         if (unlikely(rkshare->rkshare_in_callback))
                 return RD_KAFKA_RESP_ERR__STATE;
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -3084,15 +3085,17 @@ rd_kafka_resp_err_t rd_kafka_share_check_reentrancy(rd_kafka_share_t *rkshare) {
  *
  * @locality main thread
  */
-static rd_kafka_op_res_t rd_kafka_share_ack_cb_register_op(rd_kafka_t *rk,
-                                                           rd_kafka_q_t *rkq,
-                                                           rd_kafka_op_t *rko) {
+static rd_kafka_op_res_t
+rd_kafka_share_ack_commit_cb_register_op(rd_kafka_t *rk,
+                                         rd_kafka_q_t *rkq,
+                                         rd_kafka_op_t *rko) {
         if (rk->rk_rkshare) {
                 rk->rk_rkshare->rkshare_acknowledgement_callback_registered =
-                    rko->rko_u.share_ack_cb_register.registered;
+                    rko->rko_u.share_ack_commit_cb_register.registered;
                 rd_kafka_dbg(
                     rk, CGRP, "SHAREACK", "Share ack callback %sregistered",
-                    rko->rko_u.share_ack_cb_register.registered ? "" : "un");
+                    rko->rko_u.share_ack_commit_cb_register.registered ? ""
+                                                                       : "un");
         }
         return RD_KAFKA_OP_RES_HANDLED;
 }
@@ -3118,8 +3121,7 @@ rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
 
         rk = rkshare->rkshare_rk;
 
-        /* These fields are owned by app thread only - no lock needed.
-         * They are read by rd_kafka_poll_cb() which also runs on app thread. */
+        /* These fields are owned by app thread only - no lock needed. */
         was_set = (rkshare->rkshare_acknowledgement_cb != NULL);
         now_set = (acknowledgement_cb != NULL);
 
@@ -3128,16 +3130,12 @@ rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
 
         /* Send op to main thread ONLY if registration state transitions
          * (set ↔ unset). Changing callback from A→B doesn't need an op
-         * since the registered flag is already true on the main thread.
-         *
-         * Async: this function returns immediately. There is a brief window
-         * before the main thread processes the op where the new registration
-         * state isn't visible. */
+         * since the registered flag is already true on the main thread. */
         if (was_set != now_set) {
                 rd_kafka_op_t *rko = rd_kafka_op_new_cb(
                     rk, RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER,
-                    rd_kafka_share_ack_cb_register_op);
-                rko->rko_u.share_ack_cb_register.registered = now_set;
+                    rd_kafka_share_ack_commit_cb_register_op);
+                rko->rko_u.share_ack_commit_cb_register.registered = now_set;
                 rd_kafka_q_enq(rk->rk_ops, rko);
         }
 
@@ -5856,13 +5854,14 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rd_kafka_share_t *rkshare = rk->rk_rkshare;
                 /* Lookup callback at invoke time.
                  * Locality: app thread */
-                if (!rkshare || !rkshare->rkshare_acknowledgement_cb)
+                if (!rkshare ||
+                    !rkshare->rkshare_acknowledgement_callback_registered)
                         return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
                 /* Set reentrancy flag so share consumer APIs called from
                  * within the callback can detect and reject the call. */
                 rkshare->rkshare_in_callback = rd_true;
                 rkshare->rkshare_acknowledgement_cb(
-                    rkshare, rko->rko_u.share_ack_commit.partitions,
+                    rkshare, rko->rko_u.share_ack_commit_cb_execute.partitions,
                     rko->rko_err, rkshare->rkshare_acknowledgement_opaque);
                 rkshare->rkshare_in_callback = rd_false;
                 break;

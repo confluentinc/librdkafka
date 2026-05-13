@@ -439,8 +439,9 @@ static int ut_case_error_gap_record(rd_kafka_share_t *rkshare,
 /**
  * @brief Test error case - Invalid parameters (NULL).
  *
- * Verifies that NULL rkshare, message, or topic parameters return
- * RD_KAFKA_RESP_ERR__INVALID_ARG error.
+ * Verifies that a NULL rkshare returns RD_KAFKA_RESP_ERR__STATE (rejected
+ * by the reentrancy guard), and that NULL message or topic parameters
+ * return RD_KAFKA_RESP_ERR__INVALID_ARG.
  */
 static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
                                          rd_kafka_topic_t *rkt) {
@@ -448,8 +449,8 @@ static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
 
         /* Test NULL rkshare */
         rd_kafka_resp_err_t err = rd_kafka_share_acknowledge(NULL, msg);
-        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                     "expected INVALID_ARG for NULL rkshare, got %s",
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                     "expected STATE for NULL rkshare, got %s",
                      rd_kafka_err2str(err));
 
         /* Test NULL message */

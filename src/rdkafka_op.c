@@ -313,9 +313,9 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
                 sizeof(rko->rko_u.share_fetch_response),
             [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE] =
-                sizeof(rko->rko_u.share_ack_commit),
+                sizeof(rko->rko_u.share_ack_commit_cb_execute),
             [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER] =
-                sizeof(rko->rko_u.share_ack_cb_register),
+                sizeof(rko->rko_u.share_ack_commit_cb_register),
             [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
                 sizeof(rko->rko_u.share_commit_async_fanout),
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT] =
@@ -590,7 +590,7 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
         }
 
         case RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE:
-                RD_IF_FREE(rko->rko_u.share_ack_commit.partitions,
+                RD_IF_FREE(rko->rko_u.share_ack_commit_cb_execute.partitions,
                            rd_kafka_share_partition_offsets_list_destroy);
                 break;
 

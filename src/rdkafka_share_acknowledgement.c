@@ -746,6 +746,11 @@ rd_kafka_resp_err_t
 rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
                                 rd_kafka_share_AcknowledgeType_t type) {
+        rd_kafka_resp_err_t err;
+
+        if (unlikely((err = rd_kafka_share_check_reentrancy(rkshare))))
+                return err;
+
         if (!rkmessage)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
@@ -918,9 +923,8 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
         partitions = rd_kafka_share_build_partition_offsets_list(batches);
 
         cb_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE);
-        cb_rko->rko_err                           = err;
-        cb_rko->rko_u.share_ack_commit.partitions = partitions;
-        /* Callback is looked up from rk->rk_rkshare at invoke time. */
+        cb_rko->rko_err                                      = err;
+        cb_rko->rko_u.share_ack_commit_cb_execute.partitions = partitions;
 
         rd_kafka_q_enq(rk->rk_rep, cb_rko);
 }

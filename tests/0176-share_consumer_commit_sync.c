@@ -1991,9 +1991,9 @@ static void do_test_commit_sync_callback(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        ack_cb_state_t state;
+        int consumed         = 0;
+        int attempts         = 0;
+        ack_cb_state_t state = {0};
 
         SUB_TEST();
 

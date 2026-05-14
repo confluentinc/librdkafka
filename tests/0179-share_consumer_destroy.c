@@ -51,19 +51,20 @@ static rd_kafka_t *common_admin;
 static rd_kafka_share_t *
 new_share_consumer_for_mock_test(const char *bootstraps,
                                  const char *group_id,
-                                 rd_bool_t explicit_ack) {
+                                 rd_bool_t explicit_ack,
+                                 int socket_timeout_ms) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *consumer;
+        char buf[32];
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
-        /* Bump socket.timeout.ms (default 60s) so per-buffer timeouts
-         * don't fire on intentionally-delayed in-flight ShareAck
-         * requests before the test's broker-decommission path can
-         * surface the expected non-timeout error code. */
-        test_conf_set(conf, "socket.timeout.ms", "300000");
+        if (socket_timeout_ms > 0) {
+                rd_snprintf(buf, sizeof(buf), "%d", socket_timeout_ms);
+                test_conf_set(conf, "socket.timeout.ms", buf);
+        }
         if (explicit_ack)
                 test_conf_set(conf, "share.acknowledgement.mode", "explicit");
 
@@ -185,8 +186,8 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
                                  "bootstrap.servers", bootstraps, NULL);
 
         TEST_SAY("Creating share consumer with explicit ack\n");
-        rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   rd_true /* explicit */);
+        rkshare =
+            new_share_consumer_for_mock_test(bootstraps, group, rd_true, 0);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Consuming messages (up to %d attempts)\n",
@@ -456,8 +457,12 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
          * the 5s ShareAck delay. */
         TEST_SAY("Creating share consumer (%s ack)\n",
                  explicit_ack ? "explicit" : "implicit");
-        rkshare =
-            new_share_consumer_for_mock_test(bootstraps, group, explicit_ack);
+        /* Bump socket.timeout.ms so the intentionally-delayed
+         * ShareAcknowledge (broker_delay_ms = 300000) doesn't fail
+         * client-side via per-buffer timeout before the metadata-driven
+         * broker decommission has a chance to surface __DESTROY_BROKER. */
+        rkshare = new_share_consumer_for_mock_test(bootstraps, group,
+                                                   explicit_ack, 300000);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Consuming up to %d messages (max %d attempts)\n", TEST_MSGS,
@@ -667,7 +672,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
          * client picks up the target broker's removal during the 5s
          * ShareFetch delay. */
         TEST_SAY("Creating share consumer (implicit ack)\n");
-        rkshare = new_share_consumer_for_mock_test(bootstraps, group, rd_false);
+        rkshare = new_share_consumer_for_mock_test(
+            bootstraps, group, rd_false, 0 /* default socket tmout */);
         subscribe_topics(rkshare, &topic, 1);
 
         /* Drain both partitions. We loop one extra empty round after
@@ -845,7 +851,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 300000;
+        const int broker_delay_ms       = 5000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;
@@ -890,8 +896,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
          * ShareAck delay. */
         TEST_SAY("Creating share consumer (%s ack)\n",
                  explicit_ack ? "explicit" : "implicit");
-        rkshare =
-            new_share_consumer_for_mock_test(bootstraps, group, explicit_ack);
+        rkshare = new_share_consumer_for_mock_test(bootstraps, group,
+                                                   explicit_ack, 0);
         subscribe_topics(rkshare, &topic, 1);
 
         /* Drain both partitions WITHOUT a trailing empty flush — the
@@ -1030,7 +1036,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 300000;
+        const int broker_delay_ms       = 5000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;
@@ -1075,8 +1081,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
          * ShareAck delay. */
         TEST_SAY("Creating share consumer (%s ack)\n",
                  explicit_ack ? "explicit" : "implicit");
-        rkshare =
-            new_share_consumer_for_mock_test(bootstraps, group, explicit_ack);
+        rkshare = new_share_consumer_for_mock_test(bootstraps, group,
+                                                   explicit_ack, 0);
         subscribe_topics(rkshare, &topic, 1);
 
         /* Drain both partitions WITHOUT a trailing empty flush — the
@@ -1332,8 +1338,8 @@ static void test_destroy_during_rebalance(int destroy_flags) {
         test_produce_msgs_easy_v(topic, 0, 0, 0, 10, 16, "bootstrap.servers",
                                  bootstraps, NULL);
 
-        rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   rd_false /* implicit ack */);
+        rkshare = new_share_consumer_for_mock_test(
+            bootstraps, group, rd_false /* implicit ack */, 0);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Waiting for first batch (signals assignment is live)\n");
@@ -1447,7 +1453,7 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
                                  "bootstrap.servers", bootstraps, NULL);
 
         rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   rd_true /* explicit */);
+                                                   rd_true /* explicit */, 0);
         rk      = test_share_consumer_get_rk(rkshare);
         subscribe_topics(rkshare, &topic, 1);
 

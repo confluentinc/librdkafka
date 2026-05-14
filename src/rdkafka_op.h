@@ -213,7 +213,9 @@ typedef enum {
                                            *   from a single broker response. */
         RD_KAFKA_OP_SHARE_ACK_COMMIT_CB,  /**< Share acknowledgement callback
                                            *   reply: main -> app */
-
+        RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
+                                            to clear share session during broker
+                                            decommission */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -615,6 +617,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                 RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                                RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA,
                                 RD_KAFKA_MOCK_CMD_BROKER_ADD,
                                 RD_KAFKA_MOCK_CMD_COORD_SET,
                                 RD_KAFKA_MOCK_CMD_APIVERSION_SET,

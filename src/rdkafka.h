@@ -641,6 +641,8 @@ typedef enum {
         RD_KAFKA_RESP_ERR_PRINCIPAL_DESERIALIZATION_FAILURE = 97,
         /** Unknown Topic Id */
         RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID = 100,
+        /** The log's topic ID did not match the topic ID in the request */
+        RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID = 102,
         /** The member epoch is fenced by the group coordinator */
         RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH = 110,
         /** The instance ID is still used by another member in the

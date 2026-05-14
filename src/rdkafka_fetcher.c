@@ -1130,6 +1130,100 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
 
 
 /**
+ * @brief Handle a per-partition fetch error from a ShareFetch response.
+ *
+ * @locality broker thread
+ */
+static void rd_kafka_share_fetch_reply_handle_partition_error(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_toppar_t *rktp,
+    const rd_kafkap_str_t *topic,
+    int32_t partition,
+    rd_kafka_resp_err_t err,
+    const rd_kafkap_str_t *err_msg) {
+
+        /* TODO KIP-932: Verify whether the SURFACE-only arms below
+         * (CORRUPT_MESSAGE, default unknown err) should also emit an
+         * explicit warn-level log here. They currently rely on the
+         * downstream OP_CONSUMER_ERR being surfaced to the app via
+         * consume_batch. */
+        switch (err) {
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+        case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+        case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "%.*s [%" PRId32
+                           "]: ShareFetch failed: %s: %.*s: "
+                           "triggering metadata refresh",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                rd_kafka_toppar_leader_unavailable(rktp, "sharefetch", err);
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
+        case RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID:
+                rd_rkb_log(rkb, LOG_WARNING, "SHAREFETCH",
+                           "%.*s [%" PRId32
+                           "]: ShareFetch failed: %s: %.*s: "
+                           "triggering metadata refresh",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                rd_kafka_toppar_leader_unavailable(rktp, "sharefetch", err);
+                break;
+
+        case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                rd_rkb_log(rkb, LOG_WARNING, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: Not authorized to read: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           RD_KAFKAP_STR_PR(err_msg));
+                rd_kafka_consumer_err(
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
+                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
+                    "ShareFetch failed for %.*s [%" PRId32 "]: %.*s",
+                    RD_KAFKAP_STR_PR(topic), partition,
+                    RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH:
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: ShareFetch failed: %s: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN:
+                rd_rkb_log(rkb, LOG_WARNING, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: ShareFetch failed: %s: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_INVALID_MSG:
+                rd_kafka_consumer_err(rkb->rkb_rk->rk_cgrp->rkcg_q,
+                                      rd_kafka_broker_id(rkb), err, 0, NULL,
+                                      rktp, RD_KAFKA_OFFSET_INVALID,
+                                      "ShareFetch failed for %.*s [%" PRId32
+                                      "]: corrupt message: %.*s",
+                                      RD_KAFKAP_STR_PR(topic), partition,
+                                      RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        default:
+                rd_kafka_consumer_err(
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
+                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
+                    "ShareFetch failed for %.*s [%" PRId32 "]: %s: %.*s",
+                    RD_KAFKAP_STR_PR(topic), partition, rd_kafka_err2name(err),
+                    RD_KAFKAP_STR_PR(err_msg));
+                break;
+        }
+}
+
+
+/**
  * @brief Parse a partition from ShareFetch response and build inflight_acks.
  *
  * Creates rd_kafka_share_ack_batches_t directly with per-offset tracking.
@@ -1259,15 +1353,46 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 rd_kafka_topic_rdunlock(rkt);
         }
 
-        if (unlikely(!rkt || !rktp)) {
+        if (unlikely(!rkt || !rktp || PartitionFetchErrorCode)) {
                 int64_t tmp_first, tmp_last;
                 int16_t tmp_delivery;
-                rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
-                           "Received Fetch response (error %hu) for unknown "
-                           "topic %.*s [%" PRId32 "]: ignoring",
-                           PartitionFetchErrorCode, RD_KAFKAP_STR_PR(topic),
-                           PartitionId);
+
+                if (!rkt) {
+                        /* TODO KIP-932: Recheck this branch once the
+                         * topic-recreate session-bookkeeping bug is fixed
+                         * (broker session may stop carrying old topic_ids
+                         * that no longer match any local rkt). */
+                        rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
+                                   "Received Fetch response (error %hu) for "
+                                   "unknown topic %.*s [%" PRId32 "]: ignoring",
+                                   PartitionFetchErrorCode,
+                                   RD_KAFKAP_STR_PR(topic), PartitionId);
+                } else if (!rktp) {
+                        /* TODO KIP-932: Verify this handling against expected
+                         * behavior. librdkafka requires rktp to route records;
+                         * partitions with no local rktp are silently dropped.
+                         */
+                        rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
+                                   "Received Fetch response (error %hu) for "
+                                   "unknown partition %.*s [%" PRId32
+                                   "]: ignoring",
+                                   PartitionFetchErrorCode,
+                                   RD_KAFKAP_STR_PR(topic), PartitionId);
+                } else {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                   "%.*s [%" PRId32
+                                   "]: per-partition fetch error %s",
+                                   RD_KAFKAP_STR_PR(topic), PartitionId,
+                                   rd_kafka_err2name(PartitionFetchErrorCode));
+                        rd_kafka_share_fetch_reply_handle_partition_error(
+                            rkb, rktp, topic, PartitionId,
+                            PartitionFetchErrorCode, &PartitionFetchErrorStr);
+                }
+
                 rd_kafka_buf_skip(rkbuf, MessageSetSize);
+                /* TODO KIP-932: Consider tracking total byte size of the
+                 * AcquiredRecords array in the protocol to allow a single
+                 * rd_kafka_buf_skip() here instead of per-entry parsing. */
                 rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt,
                                            -1);  // AcquiredRecordsArrayCnt
                 for (i = 0; i < AcquiredRecordsArrayCnt; i++) {
@@ -1278,8 +1403,9 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                                               &tmp_delivery);  // DeliveryCount
                         rd_kafka_buf_skip_tags(rkbuf);  // AcquiredRecords tags
                 }
-                /* Initialize batches_out with NULL rktpar for unknown topic */
-                batches_out->rktpar = NULL;
+                /* No records to track for this partition. Leave
+                 * batches_out->rktpar as NULL so the caller skips
+                 * adding this batch to inflight_acks. */
                 rd_kafka_buf_skip_tags(rkbuf);
                 goto done;
         }

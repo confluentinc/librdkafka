@@ -61,6 +61,7 @@ new_share_consumer_for_mock_test(const char *bootstraps,
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        test_conf_set(conf, "debug", "broker,metadata,protocol,cgrp");
         if (socket_timeout_ms > 0) {
                 rd_snprintf(buf, sizeof(buf), "%d", socket_timeout_ms);
                 test_conf_set(conf, "socket.timeout.ms", buf);

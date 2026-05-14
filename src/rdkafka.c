@@ -2780,6 +2780,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                                                  0);
                         rd_atomic64_init(
                             &rk->rk_telemetry.acknowledgements_send_total, 0);
+                        rd_atomic64_init(&rk->rk_telemetry.heartbeat_total, 0);
                 } else {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_poll_idle_ratio,

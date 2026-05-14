@@ -746,6 +746,8 @@ struct rd_kafka_s {
                         int64_t share_fetch_total;
                         /** Total acknowledgements sent up to previous push */
                         int64_t acknowledgements_send_total;
+                        /** Total ShareGroupHeartbeat responses up to previous push */
+                        int64_t heartbeat_total;
                 } rk_historic_c;
 
                 struct {
@@ -790,6 +792,9 @@ struct rd_kafka_s {
 
                 /* Share consumer record-level acknowledgements sent counter */
                 rd_atomic64_t acknowledgements_send_total;
+
+                /* Share consumer ShareGroupHeartbeat response counter */
+                rd_atomic64_t heartbeat_total;
         } rk_telemetry;
 
         /* Test mocks */

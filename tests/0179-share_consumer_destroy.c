@@ -59,6 +59,11 @@ new_share_consumer_for_mock_test(const char *bootstraps,
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        /* Bump socket.timeout.ms (default 60s) so per-buffer timeouts
+         * don't fire on intentionally-delayed in-flight ShareAck
+         * requests before the test's broker-decommission path can
+         * surface the expected non-timeout error code. */
+        test_conf_set(conf, "socket.timeout.ms", "300000");
         if (explicit_ack)
                 test_conf_set(conf, "share.acknowledgement.mode", "explicit");
 
@@ -400,7 +405,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 30000;
+        const int broker_delay_ms       = 300000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;
@@ -840,7 +845,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 30000;
+        const int broker_delay_ms       = 300000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;
@@ -1025,7 +1030,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         int32_t target_broker_id        = -1;
         int32_t surviving_broker_id     = -1;
         int32_t target_partition        = -1;
-        const int broker_delay_ms       = 30000;
+        const int broker_delay_ms       = 300000;
         const int decommission_delay_ms = 200;
         size_t rcvd                     = 0;
         int attempts                    = 0;

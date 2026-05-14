@@ -1309,7 +1309,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
 
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
-                if (!mrkb->up)
+                if (!mrkb->up || !mrkb->in_metadata)
                         continue;
                 /* Response: Brokers.Nodeid */
                 rd_kafka_buf_write_i32(resp, mrkb->id);

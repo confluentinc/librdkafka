@@ -736,7 +736,7 @@ static void test_ack_invalid_type(void) {
                         rd_kafka_error_destroy(err);
         }
 
-        TEST_ASSERT(rcvd > 0, "Failed to consume message");
+        TEST_ASSERT(rcvd == 1, "Expected exactly 1 message, got %zu", rcvd);
 
         /* Try invalid type (99) */
         ack_err = rd_kafka_share_acknowledge_type(
@@ -943,7 +943,7 @@ static void test_change_ack_type_before_commit(void) {
         attempts = 30;
         while ((rcvd < 4 || state.callback_cnt < 1) && attempts-- > 0) {
                 size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
                                                    &batch_rcvd);
                 if (err)
                         rd_kafka_error_destroy(err);

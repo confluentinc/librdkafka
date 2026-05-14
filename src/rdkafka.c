@@ -2806,6 +2806,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                          0);
                         rd_atomic64_init(
                             &rk->rk_telemetry.acknowledgements_send_total, 0);
+                        rd_atomic64_init(&rk->rk_telemetry.heartbeat_total, 0);
                 }
 
                 if (!RD_KAFKA_IS_SHARE_CONSUMER(rk)) {

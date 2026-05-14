@@ -519,9 +519,12 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                     "thrd_create failed");
 
         /* Call commit_sync on the app thread; will block until the broker
-         * decommission fails the in-flight ack or the timeout fires. */
-        TEST_SAY("Calling commit_sync (timeout 10s)\n");
-        error = rd_kafka_share_commit_sync(rkshare, 10000, &result);
+         * decommission fails the in-flight ack or the timeout fires.
+         * Use a long timeout (60s) so under CI load the commit_sync
+         * timeout never wins the race against the metadata-driven
+         * decommission, which is the path that surfaces __DESTROY_BROKER. */
+        TEST_SAY("Calling commit_sync (timeout 60s)\n");
+        error = rd_kafka_share_commit_sync(rkshare, 60000, &result);
 
         /* Wait for the decommission thread before inspecting state. */
         thrd_join(decommission_thrd, NULL);

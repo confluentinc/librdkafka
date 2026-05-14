@@ -342,7 +342,7 @@ struct decommission_thread_args {
  */
 static int decommission_after_delay(void *arg) {
         struct decommission_thread_args *a = arg;
-        rd_usleep(a->delay_ms * 200, NULL);
+        rd_usleep(a->delay_ms * 1000, NULL);
 
         TEST_SAY("Background thread: moving partition %" PRId32
                  " leader from %" PRId32 " to %" PRId32 "\n",

@@ -268,6 +268,7 @@ struct rd_kafka_conf_s {
 #if WITH_SSL
                 SSL_CTX *ctx;
 #endif
+                char *tls13_ciphersuites;
                 char *cipher_suites;
                 char *curves_list;
                 char *sigalgs_list;

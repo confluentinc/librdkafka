@@ -67,15 +67,16 @@ static int exit_after            = 0;
 static int exit_eof              = 0;
 static FILE *stats_fp;
 static int dr_disp_div;
-static int verbosity        = 1;
-static int latency_mode     = 0;
-static FILE *latency_fp     = NULL;
-static int msgcnt           = -1;
-static int incremental_mode = 0;
-static int partition_cnt    = 0;
-static int eof_cnt          = 0;
-static int with_dr          = 1;
-static int read_hdrs        = 0;
+static int verbosity                 = 1;
+static int latency_mode              = 0;
+static FILE *latency_fp              = NULL;
+static int msgcnt                    = -1;
+static int incremental_mode          = 0;
+static int partition_cnt             = 0;
+static int eof_cnt                   = 0;
+static int with_dr                   = 1;
+static int read_hdrs                 = 0;
+static int is_group_protocol_classic = 1;
 
 
 static void stop(int sig) {
@@ -887,14 +888,13 @@ int main(int argc, char **argv) {
          * Try other values with: ... -X queued.min.messages=1000
          */
         rd_kafka_conf_set(conf, "queued.min.messages", "1000000", NULL, 0);
-        rd_kafka_conf_set(conf, "session.timeout.ms", "6000", NULL, 0);
         rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", NULL, 0);
 
         topics = rd_kafka_topic_partition_list_new(1);
 
         while ((opt = getopt(argc, argv,
                              "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                             "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
+                             "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:g:")) != -1) {
                 switch (opt) {
                 case 'G':
                         if (rd_kafka_conf_set(conf, "group.id", optarg, errstr,
@@ -921,6 +921,16 @@ int main(int argc, char **argv) {
 
                 case 'b':
                         brokers = optarg;
+                        break;
+                case 'g':
+                        if (rd_kafka_conf_set(conf, "group.protocol", optarg,
+                                              errstr, sizeof(errstr)) !=
+                            RD_KAFKA_CONF_OK) {
+                                fprintf(stderr, "%% %s\n", errstr);
+                                exit(1);
+                        }
+                        is_group_protocol_classic =
+                            strcmp(optarg, "classic") == 0;
                         break;
                 case 's':
                         msgsize = atoi(optarg);
@@ -1142,6 +1152,8 @@ int main(int argc, char **argv) {
                     "  -p <num>     Partition (defaults to random). "
                     "Multiple partitions are allowed in -C consumer mode.\n"
                     "  -M           Print consumer interval stats\n"
+                    "  -g <protocol> Group rebalance protocol to use. classic "
+                    "or consumer (defaults to classic)\n"
                     "  -b <brokers> Broker address list (host[:port],..)\n"
                     "  -s <size>    Message size (producer)\n"
                     "  -k <key>     Message key (producer)\n"
@@ -1201,6 +1213,11 @@ int main(int argc, char **argv) {
                 exit(1);
         }
 
+        if (is_group_protocol_classic) {
+                /** Session timeout is moved to broker side on the new consumer
+                 * group rebalance protocols */
+                rd_kafka_conf_set(conf, "session.timeout.ms", "6000", NULL, 0);
+        }
 
         dispintvl *= 1000; /* us */
 

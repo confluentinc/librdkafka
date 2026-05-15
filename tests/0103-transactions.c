@@ -165,7 +165,7 @@ static void do_test_basic_producer_txn(rd_bool_t enable_compression) {
         /* Wait for assignment to make sure consumer is fetching messages
          * below, so we can use the poll_no_msgs() timeout to
          * determine that messages were indeed aborted. */
-        test_consumer_wait_assignment(c, rd_true);
+        test_consumer_wait_assignment(c, rd_true, 1000);
 
         /* Init transactions */
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p, 30 * 1000));
@@ -1039,7 +1039,7 @@ static void do_test_empty_txn(rd_bool_t send_offsets, rd_bool_t do_commit) {
         test_conf_set(c_conf, "enable.auto.commit", "false");
         c = test_create_consumer(topic, NULL, c_conf, NULL);
         test_consumer_subscribe(c, topic);
-        test_consumer_wait_assignment(c, rd_false);
+        test_consumer_wait_assignment(c, rd_false, 1000);
 
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p, -1));
 

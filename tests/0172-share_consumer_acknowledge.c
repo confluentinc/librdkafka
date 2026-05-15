@@ -577,8 +577,28 @@ static int run_ack_test(ack_test_config_t *config) {
             rd_kafka_topic_partition_list_new(list_capacity);
 
         for (i = 0; i < config->consumer_cnt; i++) {
-                state.consumers[i] =
-                    test_create_share_consumer(state.group_name, "explicit");
+                /* TODO: temporarily enable debug logs for this
+                 * subtest only, which hangs on rd_kafka_share_destroy
+                 * on Apple Silicon (arm64). Remove once root-caused. */
+                if (!strcmp(config->test_name, "scale-15t-1p-10000msgs")) {
+                        rd_kafka_conf_t *conf;
+                        char errstr[512];
+                        test_conf_init(&conf, NULL, 0);
+                        rd_kafka_conf_set(conf, "group.id", state.group_name,
+                                          errstr, sizeof(errstr));
+                        rd_kafka_conf_set(conf, "enable.auto.commit", "false",
+                                          errstr, sizeof(errstr));
+                        rd_kafka_conf_set(conf, "share.acknowledgement.mode",
+                                          "explicit", errstr, sizeof(errstr));
+                        rd_kafka_conf_set(conf, "debug",
+                                          "all",
+                                          errstr, sizeof(errstr));
+                        state.consumers[i] = rd_kafka_share_consumer_new(
+                            conf, errstr, sizeof(errstr));
+                } else {
+                        state.consumers[i] = test_create_share_consumer(
+                            state.group_name, "explicit");
+                }
         }
 
         setup_topics_and_produce(config, &state);

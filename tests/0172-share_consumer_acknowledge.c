@@ -577,10 +577,13 @@ static int run_ack_test(ack_test_config_t *config) {
             rd_kafka_topic_partition_list_new(list_capacity);
 
         for (i = 0; i < config->consumer_cnt; i++) {
-                /* TODO: temporarily enable debug logs for this
-                 * subtest only, which hangs on rd_kafka_share_destroy
-                 * on Apple Silicon (arm64). Remove once root-caused. */
-                if (!strcmp(config->test_name, "scale-15t-1p-10000msgs")) {
+                /* TODO: temporarily enable debug logs for the scale
+                 * subtests (15+ toppars) which hang on
+                 * rd_kafka_share_destroy on Apple Silicon (arm64).
+                 * The race is exposed by any scale-* variant, so all
+                 * scale subtests need debug-enabled consumers until
+                 * the underlying refcnt/wakeup race is root-caused. */
+                if (strstr(config->test_name, "scale-") != NULL) {
                         rd_kafka_conf_t *conf;
                         char errstr[512];
                         test_conf_init(&conf, NULL, 0);

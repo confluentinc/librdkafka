@@ -4996,6 +4996,41 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         r += rd_kafka_broker_bufq_timeout_scan(
                             rkb, 0, &rkb->rkb_retrybufs, NULL, -1,
                             rd_kafka_broker_destroy_error(rk), 0, NULL, 0);
+                        /* TODO KIP-932: temporary printf to diagnose the
+                         * destroy hang on Apple Silicon with 15+ toppars
+                         * without going through the buffered/debug
+                         * logging infrastructure (which masks the race).
+                         * Remove once root-caused. */
+                        fprintf(stderr,
+                                "[BRKTERM] %s/%" PRId32
+                                ": state=%s refcnt=%d toppars=%d "
+                                "active=%d outbufs=%d waitresps=%d "
+                                "retrybufs=%d failed=%d ops_qlen=%d "
+                                "share{toppars_in_session=%d "
+                                "async_ack_details=%d "
+                                "pending_commit_sync=%d} src=%d\n",
+                                rkb->rkb_name, rkb->rkb_nodeid,
+                                rd_kafka_broker_state_names[rkb->rkb_state],
+                                rd_refcnt_get(&rkb->rkb_refcnt),
+                                rkb->rkb_toppar_cnt,
+                                rkb->rkb_active_toppar_cnt,
+                                (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
+                                (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
+                                (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs),
+                                r, rd_kafka_q_len(rkb->rkb_ops),
+                                rkb->rkb_share_fetch_session
+                                    .toppars_in_session_cnt,
+                                rkb->rkb_share_async_ack_details
+                                    ? (int)rd_list_cnt(
+                                          rkb->rkb_share_async_ack_details)
+                                    : -1,
+                                rkb->rkb_pending_commit_sync.sync_ack_details
+                                    ? (int)rd_list_cnt(
+                                          rkb->rkb_pending_commit_sync
+                                              .sync_ack_details)
+                                    : -1,
+                                (int)rkb->rkb_source);
+                        fflush(stderr);
                         rd_rkb_dbg(
                             rkb, BROKER, "TERMINATE",
                             "Handle is terminating in state %s: "

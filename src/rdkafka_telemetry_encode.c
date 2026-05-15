@@ -336,6 +336,24 @@ calculate_share_fetch_latency_max(rd_kafka_t *rk,
 }
 
 static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_size_avg(rd_kafka_t *rk,
+                               rd_kafka_broker_t *rkb_selected,
+                               rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t avg_share_fetch_size;
+        brokers_avg(rk, rkb_avg_share_fetch_size, 1, avg_share_fetch_size);
+        return avg_share_fetch_size;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_size_max(rd_kafka_t *rk,
+                               rd_kafka_broker_t *rkb_selected,
+                               rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t max_share_fetch_size;
+        brokers_max(rk, rkb_avg_share_fetch_size, 1, max_share_fetch_size);
+        return max_share_fetch_size;
+}
+
+static rd_kafka_telemetry_metric_value_t
 calculate_share_fetch_total(rd_kafka_t *rk,
                             rd_kafka_broker_t *rkb_selected,
                             rd_ts_t now_ns) {
@@ -572,6 +590,10 @@ static const rd_kafka_telemetry_metric_value_calculator_t
                 &calculate_share_heartbeat_total,
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE] =
                 &calculate_share_heartbeat_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG] =
+                &calculate_share_fetch_size_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX] =
+                &calculate_share_fetch_size_max,
 };
 
 static const char *get_client_rack(const rd_kafka_t *rk) {
@@ -999,6 +1021,12 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                                              .rkb_avg_share_fetch_latency,
                                         &rkb->rkb_telemetry.rd_avg_current
                                              .rkb_avg_share_fetch_latency);
+                        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
+                                            .rkb_avg_share_fetch_size);
+                        rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover
+                                             .rkb_avg_share_fetch_size,
+                                        &rkb->rkb_telemetry.rd_avg_current
+                                             .rkb_avg_share_fetch_size);
                 }
         }
 

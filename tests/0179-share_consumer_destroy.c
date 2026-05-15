@@ -33,11 +33,17 @@
 #define CONSUME_ARRAY        1000
 #define TEST_MSGS            100
 #define MAX_CONSUME_ATTEMPTS 30
+#define MAX_PARTITIONS       32
 
 /* Shared producer/admin handles for real-broker tests. Created in
  * main_0179_share_consumer_destroy and reused across sub-tests. */
 static rd_kafka_t *common_producer;
 static rd_kafka_t *common_admin;
+
+
+/****************************************************************************
+ * Acknowledgement Callback Tracking Helpers
+ ****************************************************************************/
 
 /**
  * @brief Create a share consumer for the mock-broker tests in this file.
@@ -48,29 +54,274 @@ static rd_kafka_t *common_admin;
  *        observes mock metadata changes quickly, and conditionally enables
  *        explicit ack mode.
  */
+/**
+ * @brief One per-partition entry from a share-ack callback invocation.
+ *        Each callback may report N partition entries; we record one
+ *        ack_receipt_t per (topic, partition) entry, carrying the
+ *        callback-level err and the offsets count for that partition.
+ */
+typedef struct {
+        char *topic;
+        int32_t partition;
+        int offset_cnt;
+        rd_kafka_resp_err_t err;
+} ack_receipt_t;
+
+typedef struct {
+        ack_receipt_t *receipts;
+        int receipt_cnt;
+        int receipt_capacity;
+        int callback_invocations;
+        mtx_t lock;
+} ack_receipts_t;
+
+static void ack_receipts_init(ack_receipts_t *r) {
+        memset(r, 0, sizeof(*r));
+        mtx_init(&r->lock, mtx_plain);
+}
+
+static void ack_receipts_destroy(ack_receipts_t *r) {
+        int i;
+        for (i = 0; i < r->receipt_cnt; i++)
+                rd_free(r->receipts[i].topic);
+        if (r->receipts)
+                rd_free(r->receipts);
+        mtx_destroy(&r->lock);
+}
+
+static void ack_receipts_add(ack_receipts_t *r,
+                             const char *topic,
+                             int32_t partition,
+                             int offset_cnt,
+                             rd_kafka_resp_err_t err) {
+        mtx_lock(&r->lock);
+        if (r->receipt_cnt == r->receipt_capacity) {
+                int new_cap =
+                    r->receipt_capacity ? r->receipt_capacity * 2 : 16;
+                r->receipts =
+                    rd_realloc(r->receipts, new_cap * sizeof(*r->receipts));
+                r->receipt_capacity = new_cap;
+        }
+        r->receipts[r->receipt_cnt].topic      = rd_strdup(topic);
+        r->receipts[r->receipt_cnt].partition  = partition;
+        r->receipts[r->receipt_cnt].offset_cnt = offset_cnt;
+        r->receipts[r->receipt_cnt].err        = err;
+        r->receipt_cnt++;
+        mtx_unlock(&r->lock);
+}
+
+/**
+ * @brief Share-ack callback that funnels each partition entry into
+ *        the provided ack_receipts_t (passed as opaque).
+ */
+static void record_share_ack_cb(rd_kafka_share_t *rkshare,
+                                rd_kafka_share_partition_offsets_list_t *parts,
+                                rd_kafka_resp_err_t err,
+                                void *opaque) {
+        ack_receipts_t *r = opaque;
+        size_t pcnt, p;
+
+        (void)rkshare;
+
+        mtx_lock(&r->lock);
+        r->callback_invocations++;
+        mtx_unlock(&r->lock);
+
+        pcnt = rd_kafka_share_partition_offsets_list_count(parts);
+        TEST_SAY("ack_cb invocation #%d: err=%s partitions=%zu\n",
+                 r->callback_invocations, rd_kafka_err2name(err), pcnt);
+
+        for (p = 0; p < pcnt; p++) {
+                const rd_kafka_share_partition_offsets_t *entry =
+                    rd_kafka_share_partition_offsets_list_get(parts, p);
+                const rd_kafka_topic_partition_t *tp;
+                int ocnt;
+                if (!entry)
+                        continue;
+                tp   = rd_kafka_share_partition_offsets_partition(entry);
+                ocnt = rd_kafka_share_partition_offsets_offsets_cnt(entry);
+                TEST_SAY("  %s [%" PRId32 "] offsets=%d err=%s\n", tp->topic,
+                         tp->partition, ocnt, rd_kafka_err2name(err));
+                ack_receipts_add(r, tp->topic, tp->partition, ocnt, err);
+        }
+}
+
+/**
+ * @brief One expected (topic, partition, err) group. The assertion
+ *        is: across all recorded receipts whose
+ *        (topic, partition, err) match this entry, the sum of
+ *        offset_cnt equals expected_offset_cnt. Multiple receipts
+ *        for the same (topic, partition, err) — possible if the
+ *        callback fires more than once for the same partition — are
+ *        summed.
+ *
+ *        Receipts that don't match any expected group cause a test
+ *        failure.
+ */
+typedef struct {
+        const char *topic;
+        int32_t partition;
+        rd_kafka_resp_err_t err;
+        int expected_offset_cnt;
+} expected_ack_t;
+
+static void verify_ack_receipts(ack_receipts_t *r,
+                                const expected_ack_t *expected,
+                                int expected_cnt,
+                                const char *label) {
+        int i, j;
+
+        mtx_lock(&r->lock);
+
+        TEST_SAY(
+            "Verifying ack receipts (%s): %d receipts from %d "
+            "invocation(s), %d expected (topic, partition, err) group(s)\n",
+            label, r->receipt_cnt, r->callback_invocations, expected_cnt);
+
+        /* Assert each expected group is satisfied. */
+        for (j = 0; j < expected_cnt; j++) {
+                int observed_offset_cnt = 0;
+                int matching_receipts   = 0;
+
+                for (i = 0; i < r->receipt_cnt; i++) {
+                        if (r->receipts[i].partition == expected[j].partition &&
+                            r->receipts[i].err == expected[j].err &&
+                            strcmp(r->receipts[i].topic, expected[j].topic) ==
+                                0) {
+                                observed_offset_cnt +=
+                                    r->receipts[i].offset_cnt;
+                                matching_receipts++;
+                        }
+                }
+
+                if (observed_offset_cnt != expected[j].expected_offset_cnt) {
+                        mtx_unlock(&r->lock);
+                        TEST_FAIL(
+                            "ack receipts (%s): expected %d offsets for "
+                            "%s [%" PRId32
+                            "] with err=%s, got %d (across "
+                            "%d receipt(s))",
+                            label, expected[j].expected_offset_cnt,
+                            expected[j].topic, expected[j].partition,
+                            rd_kafka_err2name(expected[j].err),
+                            observed_offset_cnt, matching_receipts);
+                }
+
+                TEST_SAY("  OK: %s [%" PRId32
+                         "] err=%s -> %d offsets across %d receipt(s)\n",
+                         expected[j].topic, expected[j].partition,
+                         rd_kafka_err2name(expected[j].err),
+                         observed_offset_cnt, matching_receipts);
+        }
+
+        /* Flag any receipt that didn't match any expected group. */
+        for (i = 0; i < r->receipt_cnt; i++) {
+                rd_bool_t matched = rd_false;
+                for (j = 0; j < expected_cnt; j++) {
+                        if (r->receipts[i].partition == expected[j].partition &&
+                            r->receipts[i].err == expected[j].err &&
+                            strcmp(r->receipts[i].topic, expected[j].topic) ==
+                                0) {
+                                matched = rd_true;
+                                break;
+                        }
+                }
+                if (!matched) {
+                        mtx_unlock(&r->lock);
+                        TEST_FAIL(
+                            "ack receipts (%s): unexpected receipt for "
+                            "%s [%" PRId32 "] err=%s offsets=%d",
+                            label, r->receipts[i].topic,
+                            r->receipts[i].partition,
+                            rd_kafka_err2name(r->receipts[i].err),
+                            r->receipts[i].offset_cnt);
+                }
+        }
+
+        mtx_unlock(&r->lock);
+}
+
+/**
+ * @brief Drain pending ack callbacks from rk_rep by polling.
+ *
+ * Polls in 1s ticks for up to \p max_seconds. Stops early if
+ * the callback invocation counter advances past
+ * \p expected_invocations.
+ */
+static void drain_ack_callbacks(rd_kafka_share_t *rkshare) {
+        int max_seconds = 10;
+        rd_kafka_t *rk  = test_share_consumer_get_rk(rkshare);
+        int waited;
+        for (waited = 0; waited < max_seconds; waited++) {
+                rd_kafka_poll(rk, 0);
+                rd_sleep(1);
+        }
+        /* One final poll for any callback that fired during the
+         * last sleep. */
+        rd_kafka_poll(rk, 0);
+}
+
+/****************************************************************************
+ * General Helpers
+ ****************************************************************************/
+
 static rd_kafka_share_t *
 new_share_consumer_for_mock_test(const char *bootstraps,
                                  const char *group_id,
                                  rd_bool_t explicit_ack,
-                                 int socket_timeout_ms) {
+                                 ack_receipts_t *receipts) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *consumer;
-        char buf[32];
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
-        test_conf_set(conf, "debug", "broker,metadata,protocol,cgrp");
-        if (socket_timeout_ms > 0) {
-                rd_snprintf(buf, sizeof(buf), "%d", socket_timeout_ms);
-                test_conf_set(conf, "socket.timeout.ms", buf);
-        }
         if (explicit_ack)
                 test_conf_set(conf, "share.acknowledgement.mode", "explicit");
 
+        if (receipts) {
+                rd_kafka_conf_set_share_acknowledgement_commit_cb(
+                    conf, record_share_ack_cb);
+                rd_kafka_conf_set_opaque(conf, receipts);
+        }
+
         consumer = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(consumer != NULL, "Failed to create share consumer");
+        return consumer;
+}
+
+
+/**
+ * @brief Create a share consumer for the real-broker tests in this file.
+ *
+ *        Like test_create_share_consumer but additionally wires the
+ *        ack-callback (record_share_ack_cb) when @p receipts is
+ *        non-NULL.
+ */
+static rd_kafka_share_t *
+new_share_consumer_for_real_test(const char *group_id,
+                                 const char *ack_mode,
+                                 ack_receipts_t *receipts) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *consumer;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
+                          sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
+                          sizeof(errstr));
+
+        if (receipts) {
+                rd_kafka_conf_set_share_acknowledgement_commit_cb(
+                    conf, record_share_ack_cb);
+                rd_kafka_conf_set_opaque(conf, receipts);
+        }
+
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
         return consumer;
 }
 
@@ -147,6 +398,29 @@ static void destroy_share_consumer(rd_kafka_share_t *rkshare,
 }
 
 /**
+ * @brief is_fatal_cb hook for test_broker_decommission_with_commit_sync.
+ *
+ * The decommission of a broker mid-flight produces __TRANSPORT and
+ * __ALL_BROKERS_DOWN errors as the connection is dropped and the client
+ * tries to reconnect. These are expected and should not fail the test.
+ */
+static int decommission_is_fatal_cb(rd_kafka_t *rk,
+                                    rd_kafka_resp_err_t err,
+                                    const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                TEST_SAY("Ignoring expected error: %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+                return 0;
+        }
+        return 1;
+}
+
+/****************************************************************************
+ * Test Cases
+ ****************************************************************************/
+
+/**
  * @brief This test uses mock brokers to simulate delayed broker responses and
  * makes commit* calls causing acknowledgements to get cached. Eventually, calls
  * destroy() to validate that it does not hang.
@@ -171,6 +445,9 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         int attempts              = 0;
         int i;
         rd_ts_t t_start, t_elapsed_ms;
+        ack_receipts_t receipts;
+
+        ack_receipts_init(&receipts);
 
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
@@ -187,8 +464,8 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
                                  "bootstrap.servers", bootstraps, NULL);
 
         TEST_SAY("Creating share consumer with explicit ack\n");
-        rkshare =
-            new_share_consumer_for_mock_test(bootstraps, group, rd_true, 0);
+        rkshare = new_share_consumer_for_mock_test(bootstraps, group, rd_true,
+                                                   &receipts);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Consuming messages (up to %d attempts)\n",
@@ -282,6 +559,8 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
                             "Destroy(NO_CONSUMER_CLOSE) took %" PRId64
                             " ms, expected < 2000 ms",
                             t_elapsed_ms);
+                verify_ack_receipts(&receipts, NULL, 0,
+                                    "cached-acks NO_CONSUMER_CLOSE");
         } else {
                 /* Full close: destroy waits for the existing commit
                  * async request and the session-leave request. Expect
@@ -291,105 +570,138 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
                             "Destroy took %" PRId64 " ms, expected <= %" PRId64
                             " ms",
                             t_elapsed_ms, expected_max_ms);
+                expected_ack_t expected[] = {
+                    {topic, 0, RD_KAFKA_RESP_ERR_NO_ERROR, 10},
+                };
+                verify_ack_receipts(&receipts, expected, 1,
+                                    "cached-acks full close");
         }
+
+        ack_receipts_destroy(&receipts);
 
         test_mock_cluster_destroy(mcluster);
         SUB_TEST_PASS();
 }
 
 /**
- * @brief is_fatal_cb hook for test_broker_decommission_with_commit_sync.
+ * @brief Stage a deterministic broker decommission so the next request
+ *        sent to \p target_broker_id (on ApiKey \p blocked_api_key) is
+ *        stamped with __DESTROY_BROKER.
  *
- * The decommission of a broker mid-flight produces __TRANSPORT and
- * __ALL_BROKERS_DOWN errors as the connection is dropped and the client
- * tries to reconnect. These are expected and should not fail the test.
- */
-static int decommission_is_fatal_cb(rd_kafka_t *rk,
-                                    rd_kafka_resp_err_t err,
-                                    const char *reason) {
-        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
-            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
-                TEST_SAY("Ignoring expected error: %s: %s\n",
-                         rd_kafka_err2name(err), reason);
-                return 0;
-        }
-        return 1;
-}
-
-struct decommission_thread_args {
-        rd_kafka_mock_cluster_t *mcluster;
-        const char *topic;
-        int32_t broker_id;     /**< Broker to decommission. */
-        int32_t new_leader_id; /**< Broker to migrate the partition to first. */
-        int32_t partition;     /**< Partition whose leader to migrate. */
-        int delay_ms;
-};
-
-/**
- * @brief Background thread: sleeps for delay_ms, then (1) migrates the
- *        partition leader off the target broker, (2) hides the target
- *        broker from metadata responses without dropping its TCP
- *        connections.
+ *        Caller invariants when calling this:
+ *          - Cluster has at least target_broker_id and surviving_broker_id.
+ *          - target_partition's leader in the mock is target_broker_id.
+ *          - No \p blocked_api_key request is currently in flight to
+ *            target_broker_id (the injected delay is consumed by the
+ *            NEXT one).
  *
- *        Step 2 uses rd_kafka_mock_broker_remove_from_metadata (instead of
- *        rd_kafka_mock_broker_decommission) so the in-flight ShareAck
- *        stays parked on the broker. The client's next metadata refresh
- *        (served by the surviving broker) sees the target broker is gone,
- *        triggers rd_kafka_broker_decommission() on the client side, and
- *        the OP_TERMINATE handler purges the parked ShareAck with
- *        __DESTROY_BROKER. This races deterministically in our favor —
- *        the connection drop never happens until the metadata-driven
- *        decommission has already fired.
+ *        After this returns:
+ *          - Mock state has target_partition's leader migrated to
+ *            surviving_broker_id and target_broker_id removed from
+ *            metadata.
+ *          - A 2s delay is queued on the next MetadataResponse from
+ *            BOTH brokers — the client has NOT yet observed the
+ *            topology change.
+ *          - A long (30s) delay is queued on the next
+ *            blocked_api_key response from target_broker_id.
+ *          - We've slept past one refresh tick, so the periodic
+ *            MetadataRequest is in flight (held by the mock).
+ *
+ *        Now when the caller invokes the action under test (which
+ *        will ship a blocked_api_key request to target_broker_id),
+ *        the timeline is:
+ *          - The request lands on target_broker_id and parks (30s).
+ *          - The held MetadataResponse fires (2s in), the client
+ *            sees target_broker_id is gone, runs
+ *            rd_kafka_broker_decommission(target_broker_id).
+ *          - target_broker_id's termination path runs
+ *            bufq_timeout_scan over its outbufs/waitresps and stamps
+ *            the parked request with __DESTROY_BROKER.
+ *
+ *        Implementation detail: the Metadata RTT injection only takes
+ *        effect because of the rd_kafka_mock_next_request_error() call
+ *        we added to the Metadata handler in rdkafka_mock_handlers.c.
+ *        Without that call, the mock ignores Metadata RTT injections.
  */
-static int decommission_after_delay(void *arg) {
-        struct decommission_thread_args *a = arg;
-        rd_usleep(a->delay_ms * 1000, NULL);
+static void stage_broker_decommission(rd_kafka_mock_cluster_t *mcluster,
+                                      const char *topic,
+                                      int32_t target_partition,
+                                      int32_t target_broker_id,
+                                      int32_t surviving_broker_id,
+                                      int16_t blocked_api_key) {
+        const int metadata_delay_ms    = 2000;
+        const int blocked_api_delay_ms = 30000;
+        const int refresh_settle_ms    = 700; /* > 500ms refresh interval */
 
-        TEST_SAY("Background thread: moving partition %" PRId32
-                 " leader from %" PRId32 " to %" PRId32 "\n",
-                 a->partition, a->broker_id, a->new_leader_id);
+        TEST_SAY("Staging decommission: target broker=%" PRId32
+                 ", surviving broker=%" PRId32 ", target partition=%" PRId32
+                 ", blocked ApiKey=%hd\n",
+                 target_broker_id, surviving_broker_id, target_partition,
+                 blocked_api_key);
+
+        /* Delay metadata responses from both brokers so the client
+         * doesn't observe the topology change until AFTER the caller's
+         * action has shipped its request to the target broker. */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, target_broker_id, RD_KAFKAP_Metadata, 1,
+            RD_KAFKA_RESP_ERR_NO_ERROR, metadata_delay_ms);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, surviving_broker_id, RD_KAFKAP_Metadata, 1,
+            RD_KAFKA_RESP_ERR_NO_ERROR, metadata_delay_ms);
+
+        /* Delay the blocked-API response on the target broker so the
+         * caller's request stays parked until decommission fires. */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, target_broker_id, blocked_api_key, 1,
+            RD_KAFKA_RESP_ERR_NO_ERROR, blocked_api_delay_ms);
+
+        /* Migrate the target partition's leader, then remove the
+         * target broker from metadata. Target broker's TCP connections
+         * stay alive; in-flight requests remain parked. */
         TEST_ASSERT(rd_kafka_mock_partition_set_leader(
-                        a->mcluster, a->topic, a->partition,
-                        a->new_leader_id) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to set partition leader");
+                        mcluster, topic, target_partition,
+                        surviving_broker_id) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to migrate partition %" PRId32 " leader",
+                    target_partition);
+        TEST_ASSERT(rd_kafka_mock_broker_remove_from_metadata(
+                        mcluster, target_broker_id) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to remove broker %" PRId32 " from metadata",
+                    target_broker_id);
 
-        TEST_SAY("Background thread: removing broker %" PRId32
-                 " from metadata (connections stay alive)\n",
-                 a->broker_id);
-        TEST_ASSERT(
-            rd_kafka_mock_broker_remove_from_metadata(
-                a->mcluster, a->broker_id) == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "Failed to remove broker %" PRId32 " from metadata", a->broker_id);
-        return 0;
+        /* Sleep past one refresh tick so the next periodic refresh
+         * fires (and parks behind the metadata delay we just injected). */
+        rd_usleep(refresh_settle_ms * 1000, NULL);
 }
 
 /**
- * @brief Test that commit_sync returns __DESTROY for partitions whose
- *        broker is decommissioned mid-flight
+ * @brief Test that commit_sync returns __DESTROY_BROKER for partitions
+ *        whose broker is decommissioned mid-flight.
  *
- *        Setup: 2-broker mock cluster, 2-partition topic with partition 0
- *        led by broker 1 and partition 1 led by broker 2.
+ *        Setup: 2-broker mock cluster, 2-partition topic with p0 led
+ *        by broker 1 and p1 led by broker 2.
  *
  *        Flow:
- *          1. Consume from both partitions in implicit-ack mode. After
- *             the first batch arrives, pick the OTHER broker
- *             as the target and inject the 5s ShareAck delay on it.
- *             Continue consuming until all messages are received.
- *          2. Spawn a background thread that, ~200ms after commit_sync
- *             starts:
- *             a. migrates the target partition's leader to the
- *                surviving broker,
- *             b. removes the target broker from cluster metadata (its
- *                TCP connection stays up so its outbuf still holds the
- *                parked ShareAck).
- *          3. On the app thread, call commit_sync. The target partition's
- *             ShareAck is parked on the target broker (5s delay).
- *          4. Periodic metadata refresh — routed via the surviving
- *             broker — sees the target broker missing, runs
- *             rd_kafka_broker_decommission() on it. The OP_TERMINATE
- *             handler purges the parked ShareAck with __DESTROY_BROKER.
- *          5. Reply handler stamps the target-partition entry in
- *             commit_sync_request as __DESTROY_BROKER.
+ *          1. Drain both partitions. The last batch's partition tells
+ *             us which broker is currently holding unacked records —
+ *             that's the broker we'll decommission.
+ *          2. Inject a 2s delay on the target broker's NEXT
+ *             MetadataResponse.
+ *          3. Synchronously update mock state: migrate target
+ *             partition's leader to the surviving broker, and remove
+ *             the target broker from metadata. Connection stays alive.
+ *          4. Sleep > topic.metadata.refresh.interval.ms (500ms) so the
+ *             periodic refresh tick fires and queues a MetadataRequest
+ *             on some broker. If it lands on the target broker, the
+ *             request sits in front of any subsequent ShareAck on the
+ *             same connection (response is held 2s by the injection).
+ *             If it lands on the surviving broker, the response comes
+ *             back quickly. Either way, the parsed response sees the
+ *             target broker missing and fires
+ *             rd_kafka_broker_decommission() against it.
+ *          5. commit_sync ships the unacked batch's ShareAck to the
+ *             target broker. The decommission's OP_TERMINATE handler
+ *             stamps the in-flight ShareAck with __DESTROY_BROKER.
  *
  *        Assertion: commit_sync result has 1 entry for the target
  *        partition with err == __DESTROY_BROKER.
@@ -403,17 +715,13 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         rd_kafka_topic_partition_list_t *result = NULL;
         const char *topic;
-        const char *group               = "0179-decommission-commit-sync";
-        int32_t target_broker_id        = -1;
-        int32_t surviving_broker_id     = -1;
-        int32_t target_partition        = -1;
-        const int broker_delay_ms       = 300000;
-        const int decommission_delay_ms = 200;
-        size_t rcvd                     = 0;
-        int attempts                    = 0;
+        const char *group           = "0179-decommission-commit-sync";
+        int32_t target_broker_id    = -1;
+        int32_t surviving_broker_id = -1;
+        int32_t target_partition    = -1;
+        size_t rcvd                 = 0;
+        int attempts                = 0;
         int i;
-        struct decommission_thread_args args;
-        thrd_t decommission_thrd;
 
         SUB_TEST_QUICK("destroy_flags=0x%x ack_mode=%s", destroy_flags,
                        explicit_ack ? "explicit" : "implicit");
@@ -427,17 +735,13 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
-        /* 2-partition topic: partition 0 led by broker 1 (surviving),
-         * partition 1 led by broker 2 (target). Consuming + acking from
-         * BOTH partitions establishes UP connections to both brokers,
-         * so when broker 2 is later blocked by the 5s ShareAck delay,
-         * broker 1 is already up and idle and free to serve metadata
-         * refresh requests. */
+        /* 2-partition topic: p0 led by broker 1, p1 led by broker 2.
+         * Consuming + acking from both partitions establishes UP
+         * connections to both brokers. */
         topic = test_mk_topic_name("0179-decommission-commit-sync", 1);
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 2, 2) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
-
         TEST_ASSERT(rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to set partition 0 leader to broker 1");
@@ -445,7 +749,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to set partition 1 leader to broker 2");
 
-        /* Produce TEST_MSGS/2 messages to each partition (TEST_MSGS total). */
+        /* Produce TEST_MSGS/2 messages to each partition. */
         TEST_SAY("Producing %d messages to each partition of topic %s\n",
                  TEST_MSGS / 2, topic);
         test_produce_msgs_easy_v(topic, 0, 0, 0, TEST_MSGS / 2, 16,
@@ -453,17 +757,10 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         test_produce_msgs_easy_v(topic, 0, 1, 0, TEST_MSGS / 2, 16,
                                  "bootstrap.servers", bootstraps, NULL);
 
-        /* Share consumer with fast metadata refresh so the client
-         * observes broker 2's removal from cluster metadata during
-         * the 5s ShareAck delay. */
         TEST_SAY("Creating share consumer (%s ack)\n",
                  explicit_ack ? "explicit" : "implicit");
-        /* Bump socket.timeout.ms so the intentionally-delayed
-         * ShareAcknowledge (broker_delay_ms = 300000) doesn't fail
-         * client-side via per-buffer timeout before the metadata-driven
-         * broker decommission has a chance to surface __DESTROY_BROKER. */
         rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   explicit_ack, 300000);
+                                                   explicit_ack, NULL);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Consuming up to %d messages (max %d attempts)\n", TEST_MSGS,
@@ -499,9 +796,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                  attempts);
 
         /* The last message of the last batch tells us which broker
-         * answered the second (and last) consume_batch — that's the
-         * broker holding the unacked records that commit_sync will ship
-         * to. Decommission that broker; the other survives. */
+         * holds the unacked records that commit_sync will ship to. */
         target_partition    = rkmessages[rcvd - 1]->partition;
         target_broker_id    = (target_partition == 0) ? 1 : 2;
         surviving_broker_id = (target_broker_id == 1) ? 2 : 1;
@@ -509,36 +804,12 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                  ", surviving broker = %" PRId32 "\n",
                  target_partition, target_broker_id, surviving_broker_id);
 
-        TEST_SAY(
-            "Injecting %dms delay on ShareAcknowledge for broker "
-            "%" PRId32 "\n",
-            broker_delay_ms, target_broker_id);
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, target_broker_id, RD_KAFKAP_ShareAcknowledge, 1,
-            RD_KAFKA_RESP_ERR_NO_ERROR, broker_delay_ms);
+        stage_broker_decommission(mcluster, topic, target_partition,
+                                  target_broker_id, surviving_broker_id,
+                                  RD_KAFKAP_ShareAcknowledge);
 
-        /* Schedule the broker takedown ~200ms after we call commit_sync,
-         * so the request is in flight when it happens. */
-        args.mcluster      = mcluster;
-        args.topic         = topic;
-        args.broker_id     = target_broker_id;
-        args.new_leader_id = surviving_broker_id;
-        args.partition     = target_partition;
-        args.delay_ms      = decommission_delay_ms;
-        TEST_ASSERT(thrd_create(&decommission_thrd, decommission_after_delay,
-                                &args) == thrd_success,
-                    "thrd_create failed");
-
-        /* Call commit_sync on the app thread; will block until the broker
-         * decommission fails the in-flight ack or the timeout fires.
-         * Use a long timeout (60s) so under CI load the commit_sync
-         * timeout never wins the race against the metadata-driven
-         * decommission, which is the path that surfaces __DESTROY_BROKER. */
         TEST_SAY("Calling commit_sync (timeout 60s)\n");
         error = rd_kafka_share_commit_sync(rkshare, 60000, &result);
-
-        /* Wait for the decommission thread before inspecting state. */
-        thrd_join(decommission_thrd, NULL);
 
         if (error) {
                 TEST_SAY("commit_sync returned error: %s\n",
@@ -550,11 +821,8 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                     "Expected commit_sync to return a non-NULL results list");
         TEST_SAY("commit_sync returned %d partition result(s)\n", result->cnt);
 
-        /* Only the last batch's acks reach commit_sync.
-         * So we expect commit_sync's
-         * results to contain only the target partition, whose ShareAck
-         * was sent to the target broker and failed with
-         * __DESTROY_BROKER → stamped as __DESTROY_BROKER here. */
+        /* Only the last batch's acks reach commit_sync, so we expect
+         * exactly one partition result: the target partition. */
         TEST_ASSERT(result->cnt == 1,
                     "Expected 1 partition result (partition %" PRId32
                     " only), got %d",
@@ -593,26 +861,26 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
 
 
 /**
- * @brief Test that a broker decommissioned mid-ShareFetch is handled
- *        gracefully: the in-flight ShareFetch fails internally with
- *        __DESTROY_BROKER, the consumer keeps polling the surviving
- *        broker, and the consumer continues to function for fetch +
- *        ack + destroy on the surviving broker.
+ * @brief Test that a broker decommissioned while a piggybacked
+ *        ShareAck is in flight is handled gracefully: no app-visible
+ *        error surfaces from consume_batch.
  *
  *        Setup mirrors test_broker_decommission_with_commit_sync —
- *        2-broker mock cluster, 2-partition topic with RF=2, fast
- *        metadata refresh, dynamic target-broker selection based on
- *        which broker answered the last consume_batch. The only
- *        differences:
- *           - We delay ShareFetch (not ShareAcknowledge).
- *           - We assert at the consume_batch API boundary: no error
- *             surfaces and no messages are returned (target broker is
- *             dead, surviving broker is idle).
- *           - We then produce more messages to the surviving broker's
- *             partition and verify they can still be fetched.
+ *        2-broker mock cluster, 2-partition topic with RF=2, drain
+ *        both partitions in implicit-ack mode. The last batch's
+ *        records stay ACQUIRED on whichever broker served them
+ *        (target broker, picked dynamically from the last batch's
+ *        partition). The next consume_batch piggybacks an implicit
+ *        ShareAck onto a ShareFetch sent to the target broker — that
+ *        request is what we want stamped __DESTROY_BROKER.
  *
- *        Note: this test does NOT validate leader-migration behavior
- *        for the orphaned partition — that's punted to a later change.
+ *        After staging the decommission, we call consume_batch again.
+ *        The fanout sends ShareFetch (with piggybacked ack) to the
+ *        target broker — parked behind the injected ShareAck delay.
+ *        When the metadata response triggers the decommission, the
+ *        parked request is stamped __DESTROY_BROKER via
+ *        bufq_timeout_scan. consume_batch returns no error and no
+ *        messages.
  */
 static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -621,22 +889,17 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         rd_kafka_error_t *error;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         const char *topic;
-        const char *group                 = "0179-decommission-consume-batch";
-        const int32_t target_broker_id    = 2;
-        const int32_t surviving_broker_id = 1;
-        const int32_t target_partition    = 1;
-        const int32_t surviving_partition = 0;
-        const int broker_delay_ms         = 5000;
-        const int decommission_delay_ms   = 200;
-        const int extra_msgs              = TEST_MSGS / 2;
-        size_t rcvd                       = 0;
-        size_t fetch_rcvd                 = 0;
-        size_t extra_rcvd                 = 0;
-        int attempts                      = 0;
-        rd_bool_t flushed                 = rd_false;
+        const char *group           = "0179-decommission-consume-batch";
+        int32_t target_broker_id    = -1;
+        int32_t surviving_broker_id = -1;
+        int32_t target_partition    = -1;
+        size_t rcvd                 = 0;
+        size_t fetch_rcvd           = 0;
+        int attempts                = 0;
         int i;
-        struct decommission_thread_args args;
-        thrd_t decommission_thrd;
+        ack_receipts_t receipts;
+
+        ack_receipts_init(&receipts);
 
         SUB_TEST_QUICK();
 
@@ -669,21 +932,17 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         test_produce_msgs_easy_v(topic, 0, 1, 0, TEST_MSGS / 2, 16,
                                  "bootstrap.servers", bootstraps, NULL);
 
-        /* Implicit-ack share consumer with fast metadata refresh so the
-         * client picks up the target broker's removal during the 5s
-         * ShareFetch delay. */
-        TEST_SAY("Creating share consumer (implicit ack)\n");
-        rkshare = new_share_consumer_for_mock_test(
-            bootstraps, group, rd_false, 0 /* default socket tmout */);
+        TEST_SAY("Creating share consumer (implicit ack) with ack_cb\n");
+        rkshare = new_share_consumer_for_mock_test(bootstraps, group, rd_false,
+                                                   &receipts);
         subscribe_topics(rkshare, &topic, 1);
 
-        /* Drain both partitions. We loop one extra empty round after
-         * rcvd reaches TEST_MSGS so the final batch's implicit acks get
-         * piggybacked on a trailing ShareFetch — otherwise the last
-         * batch's records stay ACQUIRED and could be replayed. */
+        /* Drain both partitions in implicit-ack mode. No trailing-empty
+         * flush — the last batch's records stay ACQUIRED on whichever
+         * broker served them. */
         TEST_SAY("Consuming up to %d messages (max %d attempts)\n", TEST_MSGS,
                  MAX_CONSUME_ATTEMPTS);
-        while (!flushed && attempts < MAX_CONSUME_ATTEMPTS) {
+        while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
 
                 error = rd_kafka_share_consume_batch(
@@ -697,59 +956,50 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
                         TEST_SAY("Attempt %d: consumed %d messages\n", attempts,
                                  (int)batch_rcvd);
                         rcvd += batch_rcvd;
-                } else if (rcvd >= TEST_MSGS) {
-                        /* All messages consumed and a trailing empty
-                         * batch fired the piggyback ack. */
-                        flushed = rd_true;
                 }
                 attempts++;
         }
-        TEST_ASSERT(rcvd >= TEST_MSGS && flushed,
-                    "Expected %d messages and trailing empty flush after "
-                    "%d attempts, got rcvd=%d flushed=%d",
-                    TEST_MSGS, MAX_CONSUME_ATTEMPTS, (int)rcvd, flushed);
+        TEST_ASSERT(rcvd >= TEST_MSGS,
+                    "Expected %d messages, got %d after %d attempts", TEST_MSGS,
+                    (int)rcvd, attempts);
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
                  attempts);
 
-        /* Inject 5s delay on the target broker's next ShareFetch so the
-         * consume_batch below has an in-flight ShareFetch parked when
-         * the decommission fires. */
-        TEST_SAY("Injecting %dms delay on ShareFetch for broker %" PRId32 "\n",
-                 broker_delay_ms, target_broker_id);
+        /* The last message of the last batch tells us which broker
+         * holds the unacked records — that's the broker the next
+         * consume_batch's piggybacked ShareAck will target. */
+        target_partition    = rkmessages[rcvd - 1]->partition;
+        target_broker_id    = (target_partition == 0) ? 1 : 2;
+        surviving_broker_id = (target_broker_id == 1) ? 2 : 1;
+        TEST_SAY("Target partition = %" PRId32 ", target broker = %" PRId32
+                 ", surviving broker = %" PRId32 "\n",
+                 target_partition, target_broker_id, surviving_broker_id);
+
+        for (i = 0; i < (int)rcvd; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+        rcvd = 0;
+
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, target_broker_id, RD_KAFKAP_ShareFetch, 1,
-            RD_KAFKA_RESP_ERR_NO_ERROR, broker_delay_ms);
+            RD_KAFKA_RESP_ERR_NO_ERROR, 30000);
 
-        /* Background thread: ~200ms later, migrate target partition's
-         * leader to the surviving broker and remove the target broker
-         * from mock metadata. The client's metadata refresh then runs
-         * rd_kafka_broker_decommission() on the target broker
-         * client-side, purging the parked ShareFetch with
-         * __DESTROY_BROKER. */
-        args.mcluster      = mcluster;
-        args.topic         = topic;
-        args.broker_id     = target_broker_id;
-        args.new_leader_id = surviving_broker_id;
-        args.partition     = target_partition;
-        args.delay_ms      = decommission_delay_ms;
-        TEST_ASSERT(thrd_create(&decommission_thrd, decommission_after_delay,
-                                &args) == thrd_success,
-                    "thrd_create failed");
+        stage_broker_decommission(mcluster, topic, target_partition,
+                                  target_broker_id, surviving_broker_id,
+                                  RD_KAFKAP_ShareAcknowledge);
 
-        /* Call consume_batch with a 3s timeout — the background thread
-         * fires the decommission ~200ms in, the in-flight ShareFetch on
-         * the target broker is purged with __DESTROY_BROKER, and the
-         * fanout retry skips the (now-terminating) target and polls the
-         * surviving broker, which has no new messages. consume_batch
-         * times out cleanly with 0 messages and no app-visible error. */
+        /* Call consume_batch — whichever request lands on the target
+         * broker (ShareFetch with piggybacked ack OR standalone
+         * ShareAcknowledge) parks behind its injected delay; when the
+         * metadata response triggers the decommission, the parked
+         * request is stamped __DESTROY_BROKER. The surviving broker
+         * has no new messages, so consume_batch times out cleanly
+         * with 0 messages and no app-visible error. */
         TEST_SAY(
-            "Calling consume_batch (timeout 3s) — expecting no "
-            "messages and no app-visible error\n");
+            "Calling consume_batch — expecting no messages and no "
+            "app-visible error\n");
         fetch_rcvd = CONSUME_ARRAY;
         error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages + rcvd,
                                              &fetch_rcvd);
-
-        thrd_join(decommission_thrd, NULL);
 
         TEST_ASSERT(error == NULL,
                     "Expected consume_batch to return NULL error, got %s",
@@ -760,58 +1010,39 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
                     "messages), got %d",
                     (int)fetch_rcvd);
 
-        /* Sanity check: the consumer must still be alive and able to
-         * fetch from the surviving broker. Produce extra messages to
-         * the surviving broker's partition and consume them. */
-        TEST_SAY("Producing %d messages to surviving partition %" PRId32 "\n",
-                 extra_msgs, surviving_partition);
-        test_produce_msgs_easy_v(topic, 0, surviving_partition, 0, extra_msgs,
-                                 16, "bootstrap.servers", bootstraps, NULL);
+        drain_ack_callbacks(rkshare);
 
-        TEST_SAY("Consuming up to %d additional messages (max %d attempts)\n",
-                 extra_msgs, MAX_CONSUME_ATTEMPTS);
-        attempts = 0;
-        while (extra_rcvd < (size_t)extra_msgs &&
-               attempts < MAX_CONSUME_ATTEMPTS) {
-                size_t batch_rcvd = CONSUME_ARRAY - rcvd - extra_rcvd;
-
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd + extra_rcvd, &batch_rcvd);
-
-                TEST_ASSERT(error == NULL,
-                            "Expected NULL error from sanity consume_batch, "
-                            "got %s",
-                            error ? rd_kafka_error_string(error) : "(null)");
-                if (batch_rcvd > 0) {
-                        size_t k;
-                        TEST_SAY("Sanity attempt %d: consumed %d messages\n",
-                                 attempts, (int)batch_rcvd);
-                        for (k = 0; k < batch_rcvd; k++) {
-                                rd_kafka_message_t *m =
-                                    rkmessages[rcvd + extra_rcvd + k];
-                                TEST_ASSERT(m->partition == surviving_partition,
-                                            "Sanity batch contained a "
-                                            "message from partition %" PRId32
-                                            ", expected only %" PRId32,
-                                            m->partition, surviving_partition);
-                        }
-                        extra_rcvd += batch_rcvd;
-                }
-                attempts++;
+        /* Assert ack callback receipts.
+         *
+         *   Drain loop: each batch from the SURVIVING partition gets
+         *   implicitly acked when the next ShareFetch on the surviving
+         *   broker piggybacks the ack — those records appear in the
+         *   callback with NO_ERROR. The TARGET partition's last batch
+         *   stays ACQUIRED (no further piggyback happens on that
+         *   broker before we stage the decommission).
+         *
+         *   Second consume_batch: the piggybacked ShareAck for the
+         *   target partition's ACQUIRED batch parks on the target
+         *   broker and gets stamped __DESTROY_BROKER when the
+         *   decommission fires.
+         *
+         *   surviving_partition: TEST_MSGS/2 offsets, NO_ERROR
+         *   target_partition:    TEST_MSGS/2 offsets, __DESTROY_BROKER */
+        {
+                int32_t surviving_part    = (target_partition == 0) ? 1 : 0;
+                expected_ack_t expected[] = {
+                    {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                     TEST_MSGS / 2},
+                    {topic, target_partition, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+                     TEST_MSGS / 2},
+                };
+                verify_ack_receipts(&receipts, expected, 2, "consume_batch");
         }
-        TEST_ASSERT(extra_rcvd >= (size_t)extra_msgs,
-                    "Expected %d sanity messages from surviving broker, "
-                    "got %d after %d attempts",
-                    extra_msgs, (int)extra_rcvd, attempts);
-
-        rcvd += extra_rcvd;
-
-        /* Cleanup */
-        for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
 
         destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
+
+        ack_receipts_destroy(&receipts);
 
         /* Restore the default fatal-error handler. */
         test_curr->is_fatal_cb = NULL;
@@ -848,17 +1079,16 @@ static void test_broker_decommission_during_close(int destroy_flags,
         rd_kafka_error_t *error;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         const char *topic;
-        const char *group               = "0179-decommission-close";
-        int32_t target_broker_id        = -1;
-        int32_t surviving_broker_id     = -1;
-        int32_t target_partition        = -1;
-        const int broker_delay_ms       = 5000;
-        const int decommission_delay_ms = 200;
-        size_t rcvd                     = 0;
-        int attempts                    = 0;
+        const char *group           = "0179-decommission-close";
+        int32_t target_broker_id    = -1;
+        int32_t surviving_broker_id = -1;
+        int32_t target_partition    = -1;
+        size_t rcvd                 = 0;
+        int attempts                = 0;
         int i;
-        struct decommission_thread_args args;
-        thrd_t decommission_thrd;
+        ack_receipts_t receipts;
+
+        ack_receipts_init(&receipts);
 
         SUB_TEST_QUICK("destroy_flags=0x%x ack_mode=%s", destroy_flags,
                        explicit_ack ? "explicit" : "implicit");
@@ -892,13 +1122,10 @@ static void test_broker_decommission_during_close(int destroy_flags,
         test_produce_msgs_easy_v(topic, 0, 1, 0, TEST_MSGS / 2, 16,
                                  "bootstrap.servers", bootstraps, NULL);
 
-        /* Implicit-ack share consumer with fast metadata refresh so the
-         * client picks up the target broker's removal during the 5s
-         * ShareAck delay. */
         TEST_SAY("Creating share consumer (%s ack)\n",
                  explicit_ack ? "explicit" : "implicit");
         rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   explicit_ack, 0);
+                                                   explicit_ack, &receipts);
         subscribe_topics(rkshare, &topic, 1);
 
         /* Drain both partitions WITHOUT a trailing empty flush — the
@@ -937,6 +1164,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
                  attempts);
 
+        drain_ack_callbacks(rkshare);
         /* The last message of the last batch tells us which broker
          * holds the unacked records — that's the broker close()'s
          * ShareAck will target. Decommission that broker; the other
@@ -948,48 +1176,68 @@ static void test_broker_decommission_during_close(int destroy_flags,
                  ", surviving broker = %" PRId32 "\n",
                  target_partition, target_broker_id, surviving_broker_id);
 
-        /* Inject 5s delay on the target broker's next ShareAcknowledge
-         * so close()'s ShareAck stays in flight long enough for the
-         * decommission to fire. */
-        TEST_SAY(
-            "Injecting %dms delay on ShareAcknowledge for broker "
-            "%" PRId32 "\n",
-            broker_delay_ms, target_broker_id);
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, target_broker_id, RD_KAFKAP_ShareAcknowledge, 1,
-            RD_KAFKA_RESP_ERR_NO_ERROR, broker_delay_ms);
+        stage_broker_decommission(mcluster, topic, target_partition,
+                                  target_broker_id, surviving_broker_id,
+                                  RD_KAFKAP_ShareAcknowledge);
 
-        /* Background thread: ~200ms after close() starts, migrate
-         * target partition's leader and remove the target broker from
-         * mock metadata. The client's metadata refresh then runs
-         * rd_kafka_broker_decommission() on the target broker
-         * client-side, purging the parked ShareAck with
-         * __DESTROY_BROKER. close() must absorb that gracefully. */
-        args.mcluster      = mcluster;
-        args.topic         = topic;
-        args.broker_id     = target_broker_id;
-        args.new_leader_id = surviving_broker_id;
-        args.partition     = target_partition;
-        args.delay_ms      = decommission_delay_ms;
-        TEST_ASSERT(thrd_create(&decommission_thrd, decommission_after_delay,
-                                &args) == thrd_success,
-                    "thrd_create failed");
-
-        /* Call close(). It will ship a ShareAck for the unacked batch
-         * to the target broker (which is the one parking the request),
-         * plus session-leave requests to both brokers. The target
-         * broker's ShareAck is purged with __DESTROY_BROKER mid-flight;
-         * close() must not surface this to the app. */
+        /* Call close(). It ships a ShareAck session leave
+         * request for the unacked batch to the target broker.
+         * The target broker's ShareAck is stamped __DESTROY_BROKER
+         * when the decommission fires; close() must not surface this to the
+         * app. */
         TEST_SAY(
             "Calling rd_kafka_share_consumer_close() — expecting "
             "NULL error\n");
         error = rd_kafka_share_consumer_close(rkshare);
 
-        thrd_join(decommission_thrd, NULL);
-
         TEST_ASSERT(error == NULL,
                     "Expected close() to return NULL error, got %s",
                     error ? rd_kafka_error_string(error) : "(null)");
+
+        /* Assert ack callback receipts.
+         *
+         * The first batch on each broker was piggyback-acked on the
+         * next ShareFetch during drain — those records appear in the
+         * callback with NO_ERROR. The LAST batch on each broker is
+         * still ACQUIRED at close time; close ships those acks
+         * differently in implicit vs explicit mode:
+         *
+         * Implicit ack: the close path only flushes already-converted
+         * (non-ACQUIRED) entries. ACQUIRED records on the last batch
+         * are silently dropped — no ShareAck for them goes on the
+         * wire, so no callback fires for target_partition's last
+         * batch (which would have been stamped __DESTROY_BROKER).
+         * Expectation: only surviving_partition NO_ERROR.
+         *
+         * Explicit ack: the drain loop explicitly acked every record.
+         * Those explicit acks are queued and shipped during close.
+         * The target broker's ack request parks behind the injected
+         * delay; when the decommission fires, the parked request is
+         * stamped __DESTROY_BROKER and the callback fires with that
+         * err. surviving_partition records that weren't piggyback-
+         * acked during drain are also shipped at close and succeed
+         * with NO_ERROR.
+         */
+        {
+                int32_t surviving_part = (target_partition == 0) ? 1 : 0;
+                if (explicit_ack) {
+                        expected_ack_t expected[] = {
+                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                             TEST_MSGS / 2},
+                            {topic, target_partition,
+                             RD_KAFKA_RESP_ERR__DESTROY_BROKER, TEST_MSGS / 2},
+                        };
+                        verify_ack_receipts(&receipts, expected, 2,
+                                            "close explicit");
+                } else {
+                        expected_ack_t expected[] = {
+                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                             TEST_MSGS / 2},
+                        };
+                        verify_ack_receipts(&receipts, expected, 1,
+                                            "close implicit");
+                }
+        }
 
         /* Cleanup */
         for (i = 0; i < (int)rcvd; i++)
@@ -997,6 +1245,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
 
         destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
+
+        ack_receipts_destroy(&receipts);
 
         /* Restore the default fatal-error handler. */
         test_curr->is_fatal_cb = NULL;
@@ -1021,9 +1271,6 @@ static void test_broker_decommission_during_close(int destroy_flags,
  *        Expectation: rd_kafka_share_commit_async() returns NULL (no
  *        error) and does not block on the in-flight ack.
  *        destroy() afterwards completes cleanly.
- *
- *        TODO KIP-932 destroy: add assertion for ack callback once it is
- *        implemented.
  */
 static void test_broker_decommission_with_commit_async(int destroy_flags,
                                                        rd_bool_t explicit_ack) {
@@ -1033,17 +1280,16 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         rd_kafka_error_t *error;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         const char *topic;
-        const char *group               = "0179-decommission-commit-async";
-        int32_t target_broker_id        = -1;
-        int32_t surviving_broker_id     = -1;
-        int32_t target_partition        = -1;
-        const int broker_delay_ms       = 5000;
-        const int decommission_delay_ms = 200;
-        size_t rcvd                     = 0;
-        int attempts                    = 0;
+        const char *group           = "0179-decommission-commit-async";
+        int32_t target_broker_id    = -1;
+        int32_t surviving_broker_id = -1;
+        int32_t target_partition    = -1;
+        size_t rcvd                 = 0;
+        int attempts                = 0;
         int i;
-        struct decommission_thread_args args;
-        thrd_t decommission_thrd;
+        ack_receipts_t receipts;
+
+        ack_receipts_init(&receipts);
 
         SUB_TEST_QUICK("destroy_flags=0x%x ack_mode=%s", destroy_flags,
                        explicit_ack ? "explicit" : "implicit");
@@ -1080,10 +1326,10 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         /* Implicit-ack share consumer with fast metadata refresh so the
          * client picks up the target broker's removal during the 5s
          * ShareAck delay. */
-        TEST_SAY("Creating share consumer (%s ack)\n",
+        TEST_SAY("Creating share consumer (%s ack) with ack_cb\n",
                  explicit_ack ? "explicit" : "implicit");
         rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   explicit_ack, 0);
+                                                   explicit_ack, &receipts);
         subscribe_topics(rkshare, &topic, 1);
 
         /* Drain both partitions WITHOUT a trailing empty flush — the
@@ -1122,6 +1368,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
                  attempts);
 
+        drain_ack_callbacks(rkshare);
         /* The last message of the last batch tells us which broker
          * holds the unacked records — that's the broker the
          * commit_async ShareAck will target. Decommission that broker;
@@ -1133,35 +1380,14 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
                  ", surviving broker = %" PRId32 "\n",
                  target_partition, target_broker_id, surviving_broker_id);
 
-        /* Inject 5s delay on the target broker's next ShareAcknowledge
-         * so the commit_async ShareAck stays in flight long enough for
-         * the decommission to fire. */
-        TEST_SAY(
-            "Injecting %dms delay on ShareAcknowledge for broker "
-            "%" PRId32 "\n",
-            broker_delay_ms, target_broker_id);
-        rd_kafka_mock_broker_push_request_error_rtts(
-            mcluster, target_broker_id, RD_KAFKAP_ShareAcknowledge, 1,
-            RD_KAFKA_RESP_ERR_NO_ERROR, broker_delay_ms);
-
-        /* Background thread: ~200ms after commit_async starts, migrate
-         * target partition's leader and remove the target broker from
-         * mock metadata. The client's metadata refresh then runs
-         * rd_kafka_broker_decommission() on the target broker
-         * client-side, purging the parked ShareAck with
-         * __DESTROY_BROKER. */
-        args.mcluster      = mcluster;
-        args.topic         = topic;
-        args.broker_id     = target_broker_id;
-        args.new_leader_id = surviving_broker_id;
-        args.partition     = target_partition;
-        args.delay_ms      = decommission_delay_ms;
-        TEST_ASSERT(thrd_create(&decommission_thrd, decommission_after_delay,
-                                &args) == thrd_success,
-                    "thrd_create failed");
+        stage_broker_decommission(mcluster, topic, target_partition,
+                                  target_broker_id, surviving_broker_id,
+                                  RD_KAFKAP_ShareAcknowledge);
 
         /* Call commit_async(). It should return immediately without
-         * blocking on the in-flight ack. */
+         * blocking on the in-flight ack. The parked ShareAck on the
+         * target broker will be stamped __DESTROY_BROKER when the
+         * decommission fires shortly after. */
         TEST_SAY(
             "Calling rd_kafka_share_commit_async() — expecting "
             "NULL error and no hang\n");
@@ -1171,17 +1397,46 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
                     "Expected commit_async() to return NULL error, got %s",
                     error ? rd_kafka_error_string(error) : "(null)");
 
-        /* TODO KIP-932 destroy: add assertion for ack callback once it is
-         *               implemented. */
-
-        thrd_join(decommission_thrd, NULL);
-
-        /* Cleanup */
+        /* Cleanup messages before destroy. */
         for (i = 0; i < (int)rcvd; i++)
                 rd_kafka_message_destroy(rkmessages[i]);
 
         destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
+
+        /* Assert ack callback receipts.
+         *
+         * Full close (destroy_flags=0): destroy waits for in-flight
+         * requests. The metadata-driven decommission fires within ~2s,
+         * stamping the parked ShareAck with __DESTROY_BROKER.
+         *
+         * NO_CONSUMER_CLOSE (destroy_flags=0x8): destroy short-
+         * circuits without waiting for the parked ShareAck. No
+         * callback fires for the target partition's records. Only the
+         * surviving partition's ack — which completed before —
+         * surfaces. */
+        {
+                int32_t surviving_part = (target_partition == 0) ? 1 : 0;
+                if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) {
+                        expected_ack_t expected[] = {
+                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                             TEST_MSGS / 2},
+                        };
+                        verify_ack_receipts(&receipts, expected, 1,
+                                            "commit_async NO_CONSUMER_CLOSE");
+                } else {
+                        expected_ack_t expected[] = {
+                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                             TEST_MSGS / 2},
+                            {topic, target_partition,
+                             RD_KAFKA_RESP_ERR__DESTROY_BROKER, TEST_MSGS / 2},
+                        };
+                        verify_ack_receipts(&receipts, expected, 2,
+                                            "commit_async full close");
+                }
+        }
+
+        ack_receipts_destroy(&receipts);
 
         /* Restore the default fatal-error handler. */
         test_curr->is_fatal_cb = NULL;
@@ -1340,7 +1595,7 @@ static void test_destroy_during_rebalance(int destroy_flags) {
                                  bootstraps, NULL);
 
         rkshare = new_share_consumer_for_mock_test(
-            bootstraps, group, rd_false /* implicit ack */, 0);
+            bootstraps, group, rd_false /* implicit ack */, NULL);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Waiting for first batch (signals assignment is live)\n");
@@ -1453,9 +1708,9 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
         test_produce_msgs_easy_v(topic, 0, 0, 0, total_msgs, 16,
                                  "bootstrap.servers", bootstraps, NULL);
 
-        rkshare = new_share_consumer_for_mock_test(bootstraps, group,
-                                                   rd_true /* explicit */, 0);
-        rk      = test_share_consumer_get_rk(rkshare);
+        rkshare = new_share_consumer_for_mock_test(
+            bootstraps, group, rd_true /* explicit */, NULL);
+        rk = test_share_consumer_get_rk(rkshare);
         subscribe_topics(rkshare, &topic, 1);
 
         TEST_SAY("Consuming %d msgs\n", total_msgs);
@@ -1537,31 +1792,49 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-        size_t rcvd = 0;
+        size_t rcvd               = 0;
+        size_t first_batch_cnt    = 0;
+        int32_t first_batch_part  = -1;
+        int32_t second_batch_part = -1;
         int i;
         int attempts = 0;
         int ack_cnt;
+        ack_receipts_t receipts;
+
+        ack_receipts_init(&receipts);
 
         SUB_TEST("destroy_flags=0x%x ack_half=%s", destroy_flags,
                  ack_half ? "true" : "false");
 
         topic = test_mk_topic_name("0179-destroy-explicit-ack", 1);
-        TEST_SAY("Creating topic %s\n", topic);
-        test_create_topic_wait_exists(common_admin, topic, 3, -1, 60 * 1000);
+        TEST_SAY("Creating 2-partition topic %s\n", topic);
+        test_create_topic_wait_exists(common_admin, topic, 2, -1, 60 * 1000);
 
-        TEST_SAY("Producing %d messages to topic %s\n", TEST_MSGS, topic);
-        test_produce_msgs_simple(common_producer, topic, RD_KAFKA_PARTITION_UA,
-                                 TEST_MSGS);
+        TEST_SAY("Producing %d messages to each partition of topic %s\n",
+                 TEST_MSGS / 2, topic);
+        test_produce_msgs_simple(common_producer, topic, 0, TEST_MSGS / 2);
+        test_produce_msgs_simple(common_producer, topic, 1, TEST_MSGS / 2);
 
         test_share_set_auto_offset_reset(group, "earliest");
 
-        TEST_SAY("Creating share consumer (explicit ack mode)\n");
-        rkshare = test_create_share_consumer(group, "explicit");
+        TEST_SAY("Creating share consumer (explicit ack mode) with ack_cb\n");
+        rkshare =
+            new_share_consumer_for_real_test(group, "explicit", &receipts);
         subscribe_topics(rkshare, &topic, 1);
 
-        TEST_SAY("Consuming messages (up to %d attempts)\n",
+        /* Consume + ack loop. Explicit ack mode requires acking the
+         * prior batch before the next consume_batch (otherwise it
+         * errors), so we ack inside the loop.
+         *
+         * 2-partition setup with TEST_MSGS/2 per partition: each
+         * non-empty consume_batch returns one partition's full
+         * payload (TEST_MSGS/2 records). The 1st non-empty batch is
+         * always acked in full; we break out once we've consumed all
+         * TEST_MSGS records (i.e., after the 2nd batch arrives —
+         * which we then ack outside the loop based on ack_half). */
+        TEST_SAY("Consuming %d messages (up to %d attempts)\n", TEST_MSGS,
                  MAX_CONSUME_ATTEMPTS);
-        while (rcvd < 10 && attempts < MAX_CONSUME_ATTEMPTS) {
+        while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
                 error             = rd_kafka_share_consume_batch(
                     rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
@@ -1573,27 +1846,103 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
                 } else if (batch_rcvd > 0) {
                         TEST_SAY("Attempt %d: consumed %d messages\n", attempts,
                                  (int)batch_rcvd);
+                        if (first_batch_cnt == 0) {
+                                size_t k;
+                                /* First non-empty batch: ack ALL. The
+                                 * next consume_batch will piggyback
+                                 * this ack on a ShareFetch. */
+                                first_batch_cnt = batch_rcvd;
+                                for (k = 0; k < batch_rcvd; k++)
+                                        rd_kafka_share_acknowledge(
+                                            rkshare, rkmessages[rcvd + k]);
+                        }
                         rcvd += batch_rcvd;
                 }
                 attempts++;
         }
 
-        TEST_ASSERT(rcvd >= 10,
-                    "Expected at least 10 messages after %d attempts, got %d",
+        TEST_ASSERT(rcvd >= TEST_MSGS,
+                    "Expected %d messages after %d attempts, got %d", TEST_MSGS,
                     MAX_CONSUME_ATTEMPTS, (int)rcvd);
-        TEST_SAY("Successfully consumed %d messages\n", (int)rcvd);
+        TEST_ASSERT(first_batch_cnt == TEST_MSGS / 2,
+                    "Expected first batch == TEST_MSGS/2 (%d), got %d",
+                    TEST_MSGS / 2, (int)first_batch_cnt);
 
-        ack_cnt = ack_half ? (int)(rcvd / 2) : (int)rcvd;
-        TEST_SAY("Acknowledging %d/%d messages (no commit)\n", ack_cnt,
-                 (int)rcvd);
-        for (i = 0; i < ack_cnt; i++)
-                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+        drain_ack_callbacks(rkshare);
+        first_batch_part  = rkmessages[0]->partition;
+        second_batch_part = (first_batch_part == 0) ? 1 : 0;
+        TEST_SAY("Consumed %d messages (first batch on partition %" PRId32
+                 ", second batch on partition %" PRId32 ")\n",
+                 (int)rcvd, first_batch_part, second_batch_part);
+
+        /* Ack the second batch (records rkmessages[first_batch_cnt..rcvd)):
+         *   ack_half=false: ack all TEST_MSGS/2 records.
+         *   ack_half=true:  ack TEST_MSGS/4 records (the first half).
+         * These acks won't be piggyback-flushed close runs — which is
+         * exactly what destroy_share_consumer does (with destroy_flags=0).
+         * With destroy_flags=0x8 these acks are dropped. */
+        {
+                int second_to_ack =
+                    ack_half ? (TEST_MSGS / 4) : (TEST_MSGS / 2);
+                int k;
+                for (k = 0; k < second_to_ack; k++)
+                        rd_kafka_share_acknowledge(
+                            rkshare, rkmessages[first_batch_cnt + k]);
+                ack_cnt = (int)first_batch_cnt + second_to_ack;
+                TEST_SAY(
+                    "Acked first batch (%d) + second batch (%d) = %d / "
+                    "%d total\n",
+                    (int)first_batch_cnt, second_to_ack, ack_cnt, (int)rcvd);
+        }
 
         /* Destroy all consumed messages (acked and unacked alike). */
         for (i = 0; i < (int)rcvd; i++)
                 rd_kafka_message_destroy(rkmessages[i]);
 
         destroy_share_consumer(rkshare, destroy_flags);
+
+        /* Assert ack callback receipts.
+         *
+         * Acks fired:
+         *   - First batch: always all TEST_MSGS/2 records on
+         *     first_batch_part (acked inside the loop, piggybacked on
+         *     the next ShareFetch — delivered before destroy).
+         *   - Second batch: TEST_MSGS/2 (if !ack_half) or TEST_MSGS/4
+         *     (if ack_half) records on second_batch_part. These acks
+         *     are queued internally and only flushed during close.
+         *
+         *   destroy_flags=0 (full close): close flushes the second
+         *   batch's acks. Both partitions appear.
+         *
+         *   destroy_flags=0x8 (NO_CONSUMER_CLOSE): destroy short-
+         *   circuits, so second-batch acks are dropped. Only
+         *   first_batch_part appears with TEST_MSGS/2. */
+        {
+                rd_bool_t no_close =
+                    (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
+                const char *label = no_close ? "explicit-ack NO_CONSUMER_CLOSE"
+                                             : "explicit-ack full close";
+
+                if (no_close) {
+                        expected_ack_t expected[] = {
+                            {topic, first_batch_part,
+                             RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2},
+                        };
+                        verify_ack_receipts(&receipts, expected, 1, label);
+                } else {
+                        int second_part_cnt =
+                            ack_half ? (TEST_MSGS / 4) : (TEST_MSGS / 2);
+                        expected_ack_t expected[] = {
+                            {topic, first_batch_part,
+                             RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2},
+                            {topic, second_batch_part,
+                             RD_KAFKA_RESP_ERR_NO_ERROR, second_part_cnt},
+                        };
+                        verify_ack_receipts(&receipts, expected, 2, label);
+                }
+        }
+
+        ack_receipts_destroy(&receipts);
 
         SUB_TEST_PASS();
 }
@@ -1616,29 +1965,46 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-        size_t rcvd = 0;
+        size_t rcvd               = 0;
+        size_t first_batch_cnt    = 0;
+        int32_t first_batch_part  = -1;
+        int32_t second_batch_part = -1;
         int i;
         int attempts = 0;
+        ack_receipts_t receipts;
+
+        ack_receipts_init(&receipts);
 
         SUB_TEST("destroy_flags=0x%x", destroy_flags);
 
         topic = test_mk_topic_name("0179-destroy-implicit-ack", 1);
-        TEST_SAY("Creating topic %s\n", topic);
-        test_create_topic_wait_exists(common_admin, topic, 3, -1, 60 * 1000);
+        TEST_SAY("Creating 2-partition topic %s\n", topic);
+        test_create_topic_wait_exists(common_admin, topic, 2, -1, 60 * 1000);
 
-        TEST_SAY("Producing %d messages to topic %s\n", TEST_MSGS, topic);
-        test_produce_msgs_simple(common_producer, topic, RD_KAFKA_PARTITION_UA,
-                                 TEST_MSGS);
+        /* Explicit produce: TEST_MSGS/2 to each partition. */
+        TEST_SAY("Producing %d messages to each partition of topic %s\n",
+                 TEST_MSGS / 2, topic);
+        test_produce_msgs_simple(common_producer, topic, 0, TEST_MSGS / 2);
+        test_produce_msgs_simple(common_producer, topic, 1, TEST_MSGS / 2);
 
         test_share_set_auto_offset_reset(group, "earliest");
 
-        TEST_SAY("Creating share consumer (implicit ack mode)\n");
-        rkshare = test_create_share_consumer(group, "implicit");
+        TEST_SAY("Creating share consumer (implicit ack mode) with ack_cb\n");
+        rkshare =
+            new_share_consumer_for_real_test(group, "implicit", &receipts);
         subscribe_topics(rkshare, &topic, 1);
 
-        TEST_SAY("Consuming messages (up to %d attempts)\n",
+        /* Consume loop. Implicit ack mode: records are auto-acked by
+         * the consumer when the next consume_batch's ShareFetch
+         * piggybacks them. The 2-partition setup with TEST_MSGS/2 per
+         * partition means each non-empty consume_batch returns one
+         * partition's full payload. After the 2nd consume_batch
+         * returns, we've consumed all TEST_MSGS records and the 1st
+         * batch's records' implicit-acks have already been
+         * piggybacked. The 2nd batch's records are still ACQUIRED. */
+        TEST_SAY("Consuming %d messages (up to %d attempts)\n", TEST_MSGS,
                  MAX_CONSUME_ATTEMPTS);
-        while (rcvd < 10 && attempts < MAX_CONSUME_ATTEMPTS) {
+        while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
                 error             = rd_kafka_share_consume_batch(
                     rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
@@ -1650,26 +2016,58 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
                 } else if (batch_rcvd > 0) {
                         TEST_SAY("Attempt %d: consumed %d messages\n", attempts,
                                  (int)batch_rcvd);
+                        if (first_batch_cnt == 0)
+                                first_batch_cnt = batch_rcvd;
                         rcvd += batch_rcvd;
                 }
                 attempts++;
         }
 
-        TEST_ASSERT(rcvd >= 10,
-                    "Expected at least 10 messages after %d attempts, got %d",
+        TEST_ASSERT(rcvd >= TEST_MSGS,
+                    "Expected %d messages after %d attempts, got %d", TEST_MSGS,
                     MAX_CONSUME_ATTEMPTS, (int)rcvd);
-        TEST_SAY(
-            "Successfully consumed %d messages (no follow-up poll, "
-            "so implicit ack never fires)\n",
-            (int)rcvd);
+        TEST_ASSERT(first_batch_cnt == TEST_MSGS / 2,
+                    "Expected first batch == TEST_MSGS/2 (%d), got %d",
+                    TEST_MSGS / 2, (int)first_batch_cnt);
+        first_batch_part  = rkmessages[0]->partition;
+        second_batch_part = (first_batch_part == 0) ? 1 : 0;
+        TEST_SAY("Consumed %d messages (first batch on partition %" PRId32
+                 ", second batch on partition %" PRId32 ")\n",
+                 (int)rcvd, first_batch_part, second_batch_part);
+
+        /* Drain pending ack callbacks: the first batch's piggybacked
+         * acks may still be in flight. */
+        drain_ack_callbacks(rkshare);
 
         /* Destroy all consumed messages before share_destroy. */
         for (i = 0; i < (int)rcvd; i++)
                 rd_kafka_message_destroy(rkmessages[i]);
 
-        /* Destroy consumer directly with un-acked records still held by
-         * the broker session. */
         destroy_share_consumer(rkshare, destroy_flags);
+
+        /* Assert ack callback receipts.
+         *
+         * In implicit-ack mode, the 2nd batch's records stay ACQUIRED
+         * at close/destroy time and are NOT shipped by either close
+         * path (full or NO_CONSUMER_CLOSE) — so they never surface
+         * in the callback. Only the 1st batch's piggybacked acks
+         * (flushed via the 2nd consume_batch's ShareFetch) reach the
+         * callback. Expectation is identical for both destroy_flags
+         * variants: TEST_MSGS/2 NO_ERROR on first_batch_part only. */
+        (void)second_batch_part;
+        {
+                rd_bool_t no_close =
+                    (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
+                const char *label = no_close ? "implicit-ack NO_CONSUMER_CLOSE"
+                                             : "implicit-ack full close";
+                expected_ack_t expected[] = {
+                    {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                     TEST_MSGS / 2},
+                };
+                verify_ack_receipts(&receipts, expected, 1, label);
+        }
+
+        ack_receipts_destroy(&receipts);
 
         SUB_TEST_PASS();
 }
@@ -1762,14 +2160,12 @@ int main_0179_share_consumer_destroy(int argc, char **argv) {
 int main_0179_share_consumer_destroy_local(int argc, char **argv) {
         /* Mock broker tests only (no real broker needed) */
         TEST_SKIP_MOCK_CLUSTER(0);
-        test_timeout_set(120);
+        test_timeout_set(480);
 
         test_destroy_with_fatal_error(0);
         test_destroy_with_cached_acks_and_delayed_broker(0);
         test_broker_decommission_with_commit_sync(0, rd_false);
         test_broker_decommission_with_commit_sync(0, rd_true);
-        /* TODO KIP-932 destroy: The below test case need to be debugged
-         * Broker thread gets stuck until destroy is called */
         test_broker_decommission_with_consume_batch(0);
         test_broker_decommission_during_close(0, rd_false);
         test_broker_decommission_during_close(0, rd_true);
@@ -1784,8 +2180,6 @@ int main_0179_share_consumer_destroy_local(int argc, char **argv) {
             RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE, rd_false);
         test_broker_decommission_with_commit_sync(
             RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE, rd_true);
-        /* TODO KIP-932 destroy: The below test case need to be debugged
-         * Broker thread gets stuck until destroy is called */
         test_broker_decommission_with_consume_batch(
             RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
         test_broker_decommission_during_close(

@@ -1001,10 +1001,20 @@ static void rd_kafka_toppar_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                     RD_KAFKA_ERR_ACTION_END);
 
 
-                if (actions & RD_KAFKA_ERR_ACTION_REFRESH)
-                        /* Metadata refresh is ongoing, so force it */
-                        rd_kafka_topic_leader_query0(rk, rktp->rktp_rkt, 1,
+                if (actions & RD_KAFKA_ERR_ACTION_REFRESH) {
+                        /* Metadata refresh is ongoing, so force it.
+                         * We currently hold toppar lock, and rd_kafka_topic_leader_query
+                         * will call rd_kafka_metadata_refresh_topics which will acquire
+                         * rk wrlock. This may happen at the same time as rd_kafka_broker_fail
+                         * calling rd_kafka_toppar_undelegate/rd_kafka_toppar_forget_leader,
+                         * which will try to acquire rk rdlock and then toppar lock, leading
+                         * to a deadlock. Release toppar lock temporarily here. */
+                        rd_kafka_topic_t *rkt = rktp->rktp_rkt;
+                        rd_kafka_toppar_unlock(rktp);
+                        rd_kafka_topic_leader_query0(rk, rkt, 1,
                                                      rd_true /* force */);
+                        rd_kafka_toppar_lock(rktp);
+                }
 
                 /* No need for refcnt on rktp for timer opaque
                  * since the timer resides on the rktp and will be

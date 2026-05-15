@@ -5,7 +5,7 @@ ARG UID
 RUN NEEDRESTART_MODE=a apt-get update && apt-get install -y \
     wget curl python3 git openjdk-21-jdk-headless python3-venv \
     python3-setuptools build-essential libssl-dev libcurl4-openssl-dev \
-    zlib1g-dev libsasl2-dev libzstd-dev clang-format-18 doxygen graphviz
+    zlib1g-dev libsasl2-dev libzstd-dev doxygen graphviz
 
 RUN wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb && \
     dpkg -i rapidjson-dev.deb && \

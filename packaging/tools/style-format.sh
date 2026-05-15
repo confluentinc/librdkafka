@@ -6,9 +6,9 @@
 
 
 
-# Requires clang-format version 18  (apt install clang-format-18).
-CLANG_FORMAT=${CLANG_FORMAT:-clang-format-18}
-CLANG_FORMAT_REQUIRED_VERSION=18
+# Requires clang-format version 18 (pip install clang-format==18.1.8).
+CLANG_FORMAT=${CLANG_FORMAT:-clang-format}
+CLANG_FORMAT_REQUIRED_VERSION=18.1.8
 
 set -e
 
@@ -27,9 +27,9 @@ else
     fix=0
 fi
 
-clang_format_version=$(${CLANG_FORMAT} --version | sed -Ee 's/.*version ([[:digit:]]+)\.[[:digit:]]+\.[[:digit:]]+.*/\1/')
+clang_format_version=$(${CLANG_FORMAT} --version | sed -Ee 's/.*version ([[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+).*/\1/')
 if [[ $clang_format_version != "$CLANG_FORMAT_REQUIRED_VERSION" ]] ; then
-    echo "$0: clang-format version ${CLANG_FORMAT_REQUIRED_VERSION}, '$clang_format_version' detected"
+    echo "$0: clang-format version ${CLANG_FORMAT_REQUIRED_VERSION} required, '$clang_format_version' detected"
     exit 1
 fi
 

@@ -281,11 +281,9 @@ typedef struct rd_kafkap_str_s {
 /* strndup() a Kafka string */
 #define RD_KAFKAP_STR_DUP(kstr) rd_strndup((kstr)->str, RD_KAFKAP_STR_LEN(kstr))
 
-#define RD_KAFKAP_STR_INITIALIZER                                              \
-        { .len = RD_KAFKAP_STR_LEN_NULL, .str = NULL }
+#define RD_KAFKAP_STR_INITIALIZER {.len = RD_KAFKAP_STR_LEN_NULL, .str = NULL}
 
-#define RD_KAFKAP_STR_INITIALIZER_EMPTY                                        \
-        { .len = 0, .str = "" }
+#define RD_KAFKAP_STR_INITIALIZER_EMPTY {.len = 0, .str = ""}
 /**
  * Frees a Kafka string previously allocated with `rd_kafkap_str_new()`
  */
@@ -661,8 +659,7 @@ typedef struct rd_kafka_pid_s {
         int16_t epoch; /**< Producer Epoch */
 } rd_kafka_pid_t;
 
-#define RD_KAFKA_PID_INITIALIZER                                               \
-        { -1, -1 }
+#define RD_KAFKA_PID_INITIALIZER {-1, -1}
 
 /**
  * @returns true if \p PID is valid

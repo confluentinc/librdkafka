@@ -626,6 +626,9 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_init(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_latency,
             RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+            RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2, rd_true);
 
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
@@ -638,6 +641,9 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_init(
             &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_share_fetch_latency,
             RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        rd_avg_init(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_share_fetch_size,
+            RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2, rd_true);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_produce_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_produce_latency,
@@ -738,6 +744,11 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_destroy(
             &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_share_fetch_latency);
 
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size);
+        rd_avg_destroy(
+            &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_share_fetch_size);
+
         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
         rd_avg_destroy(
             &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
@@ -836,6 +847,16 @@ void unit_test_telemetry_set_share_fetch_latency(rd_kafka_t *rk,
         rd_avg_add(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_latency,
             23000);
+}
+
+void unit_test_telemetry_set_share_fetch_size(rd_kafka_t *rk,
+                                              rd_kafka_broker_t *rkb) {
+        rd_avg_add(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size, 1024);
+        rd_avg_add(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size, 2048);
+        rd_avg_add(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size, 3072);
 }
 
 void unit_test_telemetry_set_poll_idle_ratio(rd_kafka_t *rk,
@@ -1173,6 +1194,23 @@ int unit_test_telemetry_gauge(void) {
             "The number of heartbeats per second.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
             unit_test_telemetry_set_heartbeat_total, 0, 42.0);
+        /* Samples (1024 + 2048 + 3072) / 3 = 2048 */
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.fetch.size.avg",
+            "The average number of bytes fetched per request.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
+            unit_test_telemetry_set_share_fetch_size, 0, 2048.0);
+        fails += unit_test_telemetry(
+            RD_KAFKA_CONSUMER,
+            RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX,
+            RD_KAFKA_TELEMETRY_METRIC_PREFIX
+            "consumer.share.fetch.manager.fetch.size.max",
+            "The maximum number of bytes fetched per request.",
+            RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
+            unit_test_telemetry_set_share_fetch_size, 3072, 0.0);
         return fails;
 }
 

@@ -6637,6 +6637,9 @@ void rd_kafka_cgrp_op(rd_kafka_cgrp_t *rkcg,
                       rd_kafka_resp_err_t err) {
         rd_kafka_op_t *rko;
 
+        if (!rkcg)
+                return;
+
         rko             = rd_kafka_op_new(type);
         rko->rko_err    = err;
         rko->rko_replyq = replyq;

@@ -190,6 +190,10 @@ int rd_unittest(void);
  * @{
  */
 
+void rd_ut_coverage(const char *file, const char *func, int line, int covnr);
+int64_t
+rd_ut_coverage_check(const char *file, const char *func, int line, int covnr);
+
 #if ENABLE_CODECOV
 
 /* @define When adding new code coverages, use the next value and increment
@@ -210,10 +214,6 @@ int rd_unittest(void);
 #define RD_UT_COVERAGE_CHECK(COVNR)                                            \
         rd_ut_coverage_check(__FILE__, __FUNCTION__, __LINE__, COVNR)
 
-
-void rd_ut_coverage(const char *file, const char *func, int line, int covnr);
-int64_t
-rd_ut_coverage_check(const char *file, const char *func, int line, int covnr);
 
 #else
 

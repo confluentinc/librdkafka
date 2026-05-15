@@ -155,13 +155,13 @@ typedef struct rd_kafka_msg_s {
                                                     *   protocol msg */
                         int32_t leader_epoch;      /**< Leader epoch at the time
                                                     *   the message was fetched. */
-                        int32_t wire_size; /**< wire-format size of this
-                                            *   record including the
-                                            *   length-prefix varint and all
-                                            *   per-record framing. 
-                                            *   Used by share consumer
-                                            *   fetch.size telemetry.
-                                            */
+                        int32_t wire_size;         /**< wire-format size of this
+                                                    *   record including the
+                                                    *   length-prefix varint and all
+                                                    *   per-record framing.
+                                                    *   Used by share consumer
+                                                    *   fetch.size telemetry.
+                                                    */
                         rd_kafka_share_internal_acknowledgement_type
                             ack_type; /**< Share consumer: acknowledgement
                                        *   type

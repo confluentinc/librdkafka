@@ -1556,10 +1556,9 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 }
         }
         /* Update bytes per fetch metrics */
-        rd_avg_add(
-            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
-            total_fetch_size_bytes);
-        
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                   total_fetch_size_bytes);
+
         /* Update total bytes consumed */
         rd_atomic64_add(&rkb->rkb_rk->rk_telemetry.share_bytes_consumed_total,
                         total_fetch_size_bytes);

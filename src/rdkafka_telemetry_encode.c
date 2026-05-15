@@ -603,43 +603,42 @@ static const rd_kafka_telemetry_metric_value_calculator_t
             &calculate_consumer_commit_latency_max,
 };
 
-static const rd_kafka_telemetry_metric_value_calculator_t
-    SHARE_CONSUMER_METRIC_VALUE_CALCULATORS
-        [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
-                &calculate_share_consumer_poll_idle_ratio_avg,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG] =
-                &calculate_share_time_between_poll_avg,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
-                &calculate_share_time_between_poll_max,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL] =
-                &calculate_share_fetch_total,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE] =
-                &calculate_share_fetch_rate,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG] =
-                &calculate_share_fetch_latency_avg,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX] =
-                &calculate_share_fetch_latency_max,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL] =
-                &calculate_share_acknowledgements_send_total,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE] =
-                &calculate_share_acknowledgements_send_rate,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG] =
-                &calculate_throttle_avg,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX] =
-                &calculate_throttle_max,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_TOTAL] =
-                &calculate_share_heartbeat_total,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE] =
-                &calculate_share_heartbeat_rate,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG] =
-                &calculate_share_fetch_size_avg,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX] =
-                &calculate_share_fetch_size_max,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL] =
-                &calculate_share_bytes_consumed_total,
-            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE] =
-                &calculate_share_bytes_consumed_rate,
+static const rd_kafka_telemetry_metric_value_calculator_t SHARE_CONSUMER_METRIC_VALUE_CALCULATORS
+    [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
+            &calculate_share_consumer_poll_idle_ratio_avg,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG] =
+            &calculate_share_time_between_poll_avg,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
+            &calculate_share_time_between_poll_max,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL] =
+            &calculate_share_fetch_total,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE] =
+            &calculate_share_fetch_rate,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG] =
+            &calculate_share_fetch_latency_avg,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX] =
+            &calculate_share_fetch_latency_max,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL] =
+            &calculate_share_acknowledgements_send_total,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE] =
+            &calculate_share_acknowledgements_send_rate,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG] =
+            &calculate_throttle_avg,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX] =
+            &calculate_throttle_max,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_TOTAL] =
+            &calculate_share_heartbeat_total,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE] =
+            &calculate_share_heartbeat_rate,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG] =
+            &calculate_share_fetch_size_avg,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX] =
+            &calculate_share_fetch_size_max,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL] =
+            &calculate_share_bytes_consumed_total,
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE] =
+            &calculate_share_bytes_consumed_rate,
 };
 
 static const char *get_client_rack(const rd_kafka_t *rk) {

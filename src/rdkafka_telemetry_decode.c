@@ -626,9 +626,8 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
         rd_avg_init(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_latency,
             RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
-        rd_avg_init(
-            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
-            RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2, rd_true);
+        rd_avg_init(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                    RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2, rd_true);
 
         rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_rtt,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
@@ -851,12 +850,12 @@ void unit_test_telemetry_set_share_fetch_latency(rd_kafka_t *rk,
 
 void unit_test_telemetry_set_share_fetch_size(rd_kafka_t *rk,
                                               rd_kafka_broker_t *rkb) {
-        rd_avg_add(
-            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size, 1024);
-        rd_avg_add(
-            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size, 2048);
-        rd_avg_add(
-            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size, 3072);
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                   1024);
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                   2048);
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                   3072);
 }
 
 void unit_test_telemetry_set_poll_idle_ratio(rd_kafka_t *rk,
@@ -1191,8 +1190,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.share.fetch.manager.fetch.throttle.time.avg",
             "The average throttle time in ms.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_true, rd_false,
-            unit_test_telemetry_set_throttle_time,
-            default_expected_value_int, default_expected_value_double);
+            unit_test_telemetry_set_throttle_time, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX,
@@ -1200,8 +1199,8 @@ int unit_test_telemetry_gauge(void) {
             "consumer.share.fetch.manager.fetch.throttle.time.max",
             "The maximum throttle time in ms.",
             RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE, rd_false, rd_false,
-            unit_test_telemetry_set_throttle_time,
-            default_expected_value_int, default_expected_value_double);
+            unit_test_telemetry_set_throttle_time, default_expected_value_int,
+            default_expected_value_double);
         fails += unit_test_telemetry(
             RD_KAFKA_CONSUMER,
             RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE,

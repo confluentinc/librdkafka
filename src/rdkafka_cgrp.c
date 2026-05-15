@@ -3919,7 +3919,8 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(
             NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
         rd_kafka_assert(
-            NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
+            NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0 ||
+                      rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk));
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1 /*lock*/);
@@ -6156,20 +6157,22 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 
         /* For share groups, we have to additionally close
          * sessions with all the brokers */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            !rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)) {
                 /* TODO KIP-932: the below code is similar to
                  * rd_kafka_share_segregate_and_dispatch_acks()
                  * Check if we can reduce code duplication */
                 rd_kafka_broker_t *rkb                             = NULL;
                 rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
-                rd_list_t *ack_batches =
-                    rko->rko_u.share_fetch_fanout.ack_batches;
-                if (ack_batches) {
-                        rd_kafka_share_segregate_acks_by_leader(rkcg->rkcg_rk,
-                                                                ack_batches);
+                if (rko->rko_u.share_fetch_fanout.ack_batches) {
+                        rd_kafka_share_segregate_acks_by_leader(
+                            rkcg->rkcg_rk,
+                            rko->rko_u.share_fetch_fanout.ack_batches);
                         /* Ownership of elements transferred to broker
                          * ack_details. Destroy the container. */
-                        rd_list_destroy(ack_batches);
+                        rd_list_destroy(
+                            rko->rko_u.share_fetch_fanout.ack_batches);
+                        rko->rko_u.share_fetch_fanout.ack_batches = NULL;
                 }
                 /* TODO KIP-932: See how we can avoid locking the handle */
                 rd_kafka_rdlock(rkcg->rkcg_rk);
@@ -6196,6 +6199,16 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                                                         rd_false, rd_true);
                 }
                 rd_kafka_rdunlock(rkcg->rkcg_rk);
+        } else if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+                   rko->rko_u.share_fetch_fanout.ack_batches) {
+                /* NO_CONSUMER_CLOSE: we skip dispatching the final ack
+                 * batches to brokers, but still take ownership of the
+                 * ack_batches list so the toppar refs held inside it
+                 * are released. */
+                /* TODO KIP-932: Check if we need to invoke ack callbacks here
+                 */
+                rd_list_destroy(rko->rko_u.share_fetch_fanout.ack_batches);
+                rko->rko_u.share_fetch_fanout.ack_batches = NULL;
         }
 
         rkcg->rkcg_ts_terminate = rd_clock();

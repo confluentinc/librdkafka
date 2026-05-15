@@ -5315,11 +5315,11 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                                  .rkb_avg_share_fetch_size,
                             RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2,
                             rk->rk_conf.enable_metrics_push);
-                rd_avg_init(&rkb->rkb_telemetry.rd_avg_current
-                                 .rkb_avg_share_fetch_size,
-                            RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2,
-                            rk->rk_conf.enable_metrics_push);
-        }  
+                rd_avg_init(
+                    &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                    RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2,
+                    rk->rk_conf.enable_metrics_push);
+        }
 
         rd_refcnt_init(&rkb->rkb_refcnt, 0);
         rd_kafka_broker_keep(rkb); /* rk_broker's refcount */

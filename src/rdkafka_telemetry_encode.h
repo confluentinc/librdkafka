@@ -102,6 +102,8 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG,
         RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE,
         RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_share_consumer_metric_name_t;
 
@@ -437,6 +439,21 @@ static const rd_kafka_telemetry_metric_info_t
                      "The maximum number of bytes fetched per request.",
                  .unit          = "bytes",
                  .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL] =
+                {.name = "consumer.share.fetch.manager.bytes.consumed.total",
+                 .description   = "The total number of bytes fetched.",
+                 .unit          = "bytes",
+                 .is_int        = rd_true,
+                 .is_per_broker = rd_false,
+                 .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE] =
+                {.name = "consumer.share.fetch.manager.bytes.consumed.rate",
+                 .description = "The average number of bytes fetched per "
+                                "second.",
+                 .unit          = "bytes",
+                 .is_int        = rd_false,
                  .is_per_broker = rd_false,
                  .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

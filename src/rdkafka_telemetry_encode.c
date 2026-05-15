@@ -336,6 +336,43 @@ calculate_share_fetch_latency_max(rd_kafka_t *rk,
 }
 
 static rd_kafka_telemetry_metric_value_t
+calculate_share_bytes_consumed_total(rd_kafka_t *rk,
+                                     rd_kafka_broker_t *rkb_selected,
+                                     rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t bytes_consumed_total;
+        int64_t current =
+            rd_atomic64_get(&rk->rk_telemetry.share_bytes_consumed_total);
+
+        if (!rk->rk_telemetry.delta_temporality)
+                bytes_consumed_total.int_value = current;
+        else
+                bytes_consumed_total.int_value =
+                    current -
+                    rk->rk_telemetry.rk_historic_c.share_bytes_consumed_total;
+
+        return bytes_consumed_total;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_bytes_consumed_rate(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb_selected,
+                                    rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t bytes_consumed_rate;
+        rd_ts_t ts_last = rk->rk_telemetry.rk_historic_c.ts_last;
+        int64_t delta =
+            rd_atomic64_get(&rk->rk_telemetry.share_bytes_consumed_total) -
+            rk->rk_telemetry.rk_historic_c.share_bytes_consumed_total;
+        double seconds = (now_ns - ts_last) / 1e9;
+
+        if (seconds > 1.0)
+                bytes_consumed_rate.double_value = (double)delta / seconds;
+        else
+                bytes_consumed_rate.double_value = (double)delta;
+
+        return bytes_consumed_rate;
+}
+
+static rd_kafka_telemetry_metric_value_t
 calculate_share_fetch_size_avg(rd_kafka_t *rk,
                                rd_kafka_broker_t *rkb_selected,
                                rd_ts_t now_ns) {
@@ -498,6 +535,9 @@ static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rk->rk_telemetry.rk_historic_c.share_fetch_total =
                     rd_atomic64_get(&rk->rk_telemetry.share_fetch_total);
+                rk->rk_telemetry.rk_historic_c.share_bytes_consumed_total =
+                    rd_atomic64_get(
+                        &rk->rk_telemetry.share_bytes_consumed_total);
                 rk->rk_telemetry.rk_historic_c.acknowledgements_send_total =
                     rd_atomic64_get(
                         &rk->rk_telemetry.acknowledgements_send_total);
@@ -594,6 +634,10 @@ static const rd_kafka_telemetry_metric_value_calculator_t
                 &calculate_share_fetch_size_avg,
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX] =
                 &calculate_share_fetch_size_max,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL] =
+                &calculate_share_bytes_consumed_total,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE] =
+                &calculate_share_bytes_consumed_rate,
 };
 
 static const char *get_client_rack(const rd_kafka_t *rk) {

@@ -498,6 +498,32 @@ static void do_message_timeout_linger_checks(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Verify behaviour of checking that message.timeout.ms fits within
+ *        configured transaction.timeout.ms. By jainruchir.
+ */
+static void do_message_timeout_transaction_timeout_checks(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        char errstr[512];
+        const char *transactional_id = "txnid";
+
+        SUB_TEST_QUICK();
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "transactional.id", transactional_id);
+
+        test_conf_set(conf, "message.timeout.ms", "10000");
+        test_conf_set(conf, "transaction.timeout.ms", "7000");
+        test_conf_set(conf, "client.id", test_curr->name);
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        if (rk)
+                TEST_FAIL(
+                    "rdkafka instance created. Expected it to fail: "
+                    "message.timeout.ms <= transaction.timeout.ms is not "
+                    "enforced");
+        rd_kafka_conf_destroy(conf);
+        SUB_TEST_PASS();
+}
 
 int main_0004_conf(int argc, char **argv) {
         rd_kafka_t *rk;
@@ -929,6 +955,8 @@ int main_0004_conf(int argc, char **argv) {
         do_test_default_topic_conf();
 
         do_message_timeout_linger_checks();
+
+        do_message_timeout_transaction_timeout_checks();
 
         return 0;
 }

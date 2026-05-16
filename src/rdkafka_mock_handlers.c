@@ -4630,6 +4630,9 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
         rd_bool_t ack_parse_err          = rd_false;
         rd_kafka_mock_sharegroup_t *sgrp = NULL;
         rd_list_t ack_entries;
+        rd_kafka_mock_broker_t *node_endpoints[64];
+        int node_endpoint_cnt = 0;
+        int k;
 
         (void)log_decode_errors;
 
@@ -4917,6 +4920,26 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                                     resp, -1); /* LeaderEpoch */
                                         /* CurrentLeader tags */
                                         rd_kafka_buf_write_tags_empty(resp);
+
+                                        if (mpart && mpart->leader) {
+                                                int found = 0;
+                                                int k;
+                                                for (k = 0;
+                                                     k < node_endpoint_cnt;
+                                                     k++) {
+                                                        if (node_endpoints[k] ==
+                                                            mpart->leader) {
+                                                                found = 1;
+                                                                break;
+                                                        }
+                                                }
+                                                if (!found &&
+                                                    node_endpoint_cnt < 64)
+                                                        node_endpoints
+                                                            [node_endpoint_cnt++] =
+                                                                mpart->leader;
+                                        }
+
                                         /* Partition tags */
                                         rd_kafka_buf_write_tags_empty(resp);
                                 }
@@ -4928,8 +4951,17 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                         }
                 }
 
-                /* NodeEndpoints (empty) */
-                rd_kafka_buf_write_arraycnt(resp, 0);
+                /* NodeEndpoints */
+                rd_kafka_buf_write_arraycnt(resp, node_endpoint_cnt);
+                for (k = 0; k < node_endpoint_cnt; k++) {
+                        rd_kafka_mock_broker_t *nb = node_endpoints[k];
+                        rd_kafka_buf_write_i32(resp, nb->id);
+                        rd_kafka_buf_write_str(resp, nb->advertised_listener,
+                                               -1);
+                        rd_kafka_buf_write_i32(resp, (int32_t)nb->port);
+                        rd_kafka_buf_write_str(resp, nb->rack, -1);
+                        rd_kafka_buf_write_tags_empty(resp);
+                }
                 /* Top-level tags */
                 rd_kafka_buf_write_tags_empty(resp);
 

@@ -1631,6 +1631,18 @@ rd_kafka_resp_err_t rd_kafka_mock_broker_add(rd_kafka_mock_cluster_t *mcluster,
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
 
+rd_kafka_resp_err_t
+rd_kafka_mock_broker_count_override(rd_kafka_mock_cluster_t *mcluster,
+                                    int broker_cnt) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_BROKER_COUNT_OVERRIDE;
+        rko->rko_u.mock.broker_id = broker_cnt;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
 
 /**
  * @brief Starts listening on the mock broker socket.
@@ -2620,6 +2632,11 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
 
                 rd_kafka_mock_cluster_reassign_partitions(mcluster);
                 break;
+
+        case RD_KAFKA_MOCK_CMD_BROKER_COUNT_OVERRIDE:
+                mcluster->broker_cnt_override = rko->rko_u.mock.broker_id;
+                break;
+
         case RD_KAFKA_MOCK_CMD_COORD_SET:
                 if (!rd_kafka_mock_coord_set(mcluster, rko->rko_u.mock.name,
                                              rko->rko_u.mock.str,
@@ -2818,6 +2835,7 @@ rd_kafka_mock_cluster_t *rd_kafka_mock_cluster_new(rd_kafka_t *rk,
                     (intptr_t)mcluster >> 2);
 
         TAILQ_INIT(&mcluster->brokers);
+        mcluster->broker_cnt_override = -1;
 
         for (i = 1; i <= broker_cnt; i++) {
                 if (!(mrkb = rd_kafka_mock_broker_new(mcluster, i, NULL))) {

@@ -3249,6 +3249,13 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                      rd_kafka_err2str(rko_orig->rko_err), should_fetch,
                      records_fetched, should_leave,
                      reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
+        fprintf(stderr,
+                "[SHAREFETCH] Share fetch reply: %s, should_fetch=%d, "
+                "records_fetched=%d, should_leave=%d, broker=%s\n",
+                rd_kafka_err2str(rko_orig->rko_err), should_fetch,
+                records_fetched, should_leave,
+                reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
+        fflush(stderr);
 
         /*
          * Step 1: Dispatch acknowledgement callbacks.

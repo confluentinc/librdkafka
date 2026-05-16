@@ -3303,6 +3303,11 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
+        fprintf(stderr, "[OPSERVE] %s/%" PRId32 ": rko_type=%s\n",
+                rkb->rkb_name, rkb->rkb_nodeid,
+                rd_kafka_op2str(rko->rko_type));
+        fflush(stderr);
+
         switch (rko->rko_type) {
         case RD_KAFKA_OP_NODE_UPDATE: {
                 rd_bool_t updated = rd_false;

@@ -791,6 +791,11 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_topic_by_id(
     const rd_kafka_topic_partition_list_t *rktparlist,
     rd_kafka_Uuid_t topic_id);
 
+rd_kafka_topic_partition_t *rd_kafka_topic_partition_list_find_sorted(
+    const rd_kafka_topic_partition_list_t *rktparlist,
+    const char *topic,
+    int32_t partition);
+
 void rd_kafka_topic_partition_list_sort_by_topic(
     rd_kafka_topic_partition_list_t *rktparlist);
 

@@ -57,21 +57,21 @@ affiliation with and is not endorsed by The Apache Software Foundation.
 On Mac OSX, install librdkafka with homebrew:
 
 ```bash
-$ brew install librdkafka
+brew install librdkafka
 ```
 
 On Debian and Ubuntu, install librdkafka from the Confluent APT repositories,
 see instructions [here](https://docs.confluent.io/current/installation/installing_cp/deb-ubuntu.html#get-the-software) and then install librdkafka:
 
  ```bash
- $ apt install librdkafka-dev
+ apt install librdkafka-dev
  ```
 
 On RedHat, CentOS, Fedora, install librdkafka from the Confluent YUM repositories,
 instructions [here](https://docs.confluent.io/current/installation/installing_cp/rhel-centos.html#get-the-software) and then install librdkafka:
 
 ```bash
-$ yum install librdkafka-devel
+yum install librdkafka-devel
 ```
 
 On Windows, reference [librdkafka.redist](https://www.nuget.org/packages/librdkafka.redist/) NuGet package in your Visual Studio project.
@@ -86,13 +86,13 @@ You can download and install librdkafka using the [vcpkg](https://github.com/Mic
 
 ```bash
 # Install vcpkg if not already installed
-$ git clone https://github.com/Microsoft/vcpkg.git
-$ cd vcpkg
-$ ./bootstrap-vcpkg.sh
-$ ./vcpkg integrate install
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+./bootstrap-vcpkg.sh
+./vcpkg integrate install
 
 # Install librdkafka
-$ vcpkg install librdkafka
+vcpkg install librdkafka
 ```
 
 The librdkafka package in vcpkg is kept up to date by Microsoft team members and community contributors.

@@ -917,7 +917,7 @@ The application does not need to free any config resources after a
 
     rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
     if (!rk) {
-        rd_kafka_conf_destroy(rk);
+        rd_kafka_conf_destroy(conf);
         fail("Failed to create producer: %s\n", errstr);
     }
 

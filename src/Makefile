@@ -64,6 +64,8 @@ SRCS=		rdkafka.c rdkafka_broker.c rdkafka_msg.c rdkafka_topic.c \
 		opentelemetry/metrics.pb.c opentelemetry/common.pb.c opentelemetry/resource.pb.c \
 		$(SRCS_y)
 
+SRCS_y += crc32c_pcl.c
+
 HDRS=		rdkafka.h rdkafka_mock.h
 
 OBJS=		$(SRCS:.c=.o)

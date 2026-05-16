@@ -76,6 +76,7 @@ static int partition_cnt    = 0;
 static int eof_cnt          = 0;
 static int with_dr          = 1;
 static int read_hdrs        = 0;
+static int warmup_cnt       = 0;
 
 
 static void stop(int sig) {
@@ -511,6 +512,27 @@ print_stats(rd_kafka_t *rk, int mode, int otype, const char *compression) {
         int extra_of = 0;
         *extra       = '\0';
 
+        if (warmup_cnt > 0) {
+                if ((int)cnt.msgs < warmup_cnt)
+                        return;
+
+                /* Warmup count reached: flush pending delivery reports
+                 * so that memset can cleanly zero all counters without
+                 * late-arriving warmup DRs polluting benchmark stats. */
+                if (mode == 'P' && rk)
+                        rd_kafka_flush(rk, 10000);
+                if (msgcnt != -1)
+                        msgcnt -= (int)cnt.msgs;
+                memset(&cnt, 0, sizeof(cnt));
+                cnt.t_start = rd_clock();
+                cnt.t_last  = cnt.t_start;
+                warmup_cnt  = 0;
+                if (verbosity >= 1)
+                        printf(
+                            "%% Warmup complete, collecting "
+                            "benchmark stats\n");
+        }
+
         if (!(otype & _OTYPE_FORCE) &&
             (((otype & _OTYPE_SUMMARY) && verbosity == 0) ||
              cnt.t_last + dispintvl > now))
@@ -894,7 +916,7 @@ int main(int argc, char **argv) {
 
         while ((opt = getopt(argc, argv,
                              "PCG:t:p:b:s:k:c:fi:MDd:m:S:x:"
-                             "R:a:z:o:X:B:eT:Y:qvIur:lA:OwNH:")) != -1) {
+                             "R:a:z:o:X:B:eT:Y:qvIur:w:lA:OwNH:")) != -1) {
                 switch (opt) {
                 case 'G':
                         if (rd_kafka_conf_set(conf, "group.id", optarg, errstr,
@@ -1098,6 +1120,15 @@ int main(int argc, char **argv) {
                         rate_sleep = (int)(1000000.0 / dtmp);
                         break;
 
+                case 'w':
+                        warmup_cnt = atoi(optarg);
+                        if (warmup_cnt <= 0) {
+                                fprintf(stderr, "%% Invalid warmup count: %s\n",
+                                        optarg);
+                                exit(1);
+                        }
+                        break;
+
                 case 'l':
                         latency_mode = 1;
                         break;
@@ -1178,6 +1209,8 @@ int main(int argc, char **argv) {
                     "  -v           Increase verbosity (default 1)\n"
                     "  -u           Output stats in table format\n"
                     "  -r <rate>    Producer msg/s limit\n"
+                    "  -w <cnt>     Warmup message count. The first <cnt>\n"
+                    "               messages are excluded from stats.\n"
                     "  -l           Latency measurement.\n"
                     "               Needs two matching instances, one\n"
                     "               consumer and one producer, both\n"
@@ -1330,6 +1363,16 @@ int main(int argc, char **argv) {
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% %s\n", errstr);
                 exit(1);
+        }
+
+        if (warmup_cnt > 0) {
+                if (msgcnt != -1)
+                        msgcnt += warmup_cnt;
+                if (verbosity >= 1)
+                        printf(
+                            "%% Warming up for %d messages before "
+                            "collecting benchmark stats\n",
+                            warmup_cnt);
         }
 
         if (mode == 'P') {

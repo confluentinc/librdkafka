@@ -63,6 +63,7 @@ static void do_test_idle(rd_bool_t set_idle) {
 
         test_conf_init(&conf, NULL, 10);
         test_conf_set(conf, "debug", "broker");
+        test_conf_set(conf, "enable.metrics.push", "false");
         test_conf_set(conf, "connections.max.idle.ms", set_idle ? "5000" : "0");
         rd_atomic32_init(&log_cnt, 0);
         rd_kafka_conf_set_log_cb(conf, log_cb);

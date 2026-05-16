@@ -130,7 +130,7 @@ void do_test_consumer(int64_t reauth_time, const char *topic) {
 
         p1 = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
 
-        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+        test_create_topic_wait_exists(p1, topic, 1, -1, 5000);
         TEST_SAY("Topic: %s is created\n", topic);
 
         test_conf_set(conf, "auto.offset.reset", "earliest");

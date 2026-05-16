@@ -241,6 +241,7 @@
     <ClCompile Include="..\..\tests\rusage.c" />
     <ClCompile Include="..\..\src\tinycthread.c" />
     <ClCompile Include="..\..\src\tinycthread_extra.c" />
+    <ClCompile Include="..\..\src\rdallocator.c" />
     <ClCompile Include="..\..\src\rdlist.c" />
   </ItemGroup>
   <ItemGroup>

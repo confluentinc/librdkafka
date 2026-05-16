@@ -227,6 +227,15 @@ rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
  */
 int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
 
+/**
+ * @brief Whether the leader cached for the partition has diverged
+ *        from the leader at which \p batch's records were acquired.
+ */
+rd_bool_t
+rd_kafka_share_ack_batch_leader_stale(rd_kafka_share_ack_batches_t *batch,
+                                      int32_t current_leader_id,
+                                      int32_t current_leader_epoch);
+
 
 /**
  * @struct rd_kafka_share_partition_offsets_s

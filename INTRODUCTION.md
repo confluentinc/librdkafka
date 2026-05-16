@@ -395,7 +395,7 @@ A retry by librdkafka at this point may cause duplicate messages.
 Broker errors ERR_REQUEST_TIMED_OUT, ERR_NOT_ENOUGH_REPLICAS,
 ERR_NOT_ENOUGH_REPLICAS_AFTER_APPEND.
 
-These errors are considered temporary and librdkafka is will retry them
+These errors are considered temporary and librdkafka will retry them
 if permitted by configuration.
 
 

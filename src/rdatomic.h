@@ -122,7 +122,7 @@ static RD_INLINE int32_t RD_UNUSED rd_atomic32_set(rd_atomic32_t *ra,
 #elif !HAVE_ATOMICS_32
         int32_t r;
         mtx_lock(&ra->lock);
-        r       = rd->val;
+        r       = ra->val;
         ra->val = v;
         mtx_unlock(&ra->lock);
         return r;

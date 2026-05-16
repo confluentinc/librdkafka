@@ -920,6 +920,7 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);
+        rd_kafka_flush(common_producer, 10000);
         rd_kafka_destroy(common_producer);
 
         return 0;

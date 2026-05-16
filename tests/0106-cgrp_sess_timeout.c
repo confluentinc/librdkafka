@@ -74,7 +74,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                         rd_sleep(1);
 
                         commit_err = rd_kafka_commit(
-                            rk, parts, !strcmp(commit_type, "async"));
+                            rk, parts, !strcmp(commit_type, "async"), -1);
 
                         if (!strcmp(commit_type, "async"))
                                 TEST_ASSERT(!commit_err,
@@ -279,7 +279,7 @@ static void do_test_commit_on_lost(void) {
 
         TEST_SAY("Assignment is lost, committing\n");
         /* Perform manual commit */
-        err = rd_kafka_commit(c, NULL, 0 /*sync*/);
+        err = rd_kafka_commit(c, NULL, 0 /*sync*/, -1 /*infinite*/);
         TEST_SAY("commit() returned: %s\n", rd_kafka_err2name(err));
         TEST_ASSERT(err, "expected commit to fail");
 

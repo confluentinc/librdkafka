@@ -157,7 +157,7 @@ static void do_test_offset_commit_error_during_rebalance(void) {
 
         /* This commit should fail (async) */
         TEST_SAY("Committing (should fail)\n");
-        err = rd_kafka_commit(c1, NULL, 0 /*sync*/);
+        err = rd_kafka_commit(c1, NULL, 0 /*sync*/, -1 /*infinite*/);
         TEST_SAY("Commit returned %s\n", rd_kafka_err2name(err));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_REBALANCE_IN_PROGRESS,
                     "Expected commit to fail with ERR_REBALANCE_IN_PROGRESS, "
@@ -234,7 +234,7 @@ static void do_test_offset_commit_request_timed_out(rd_bool_t auto_commit) {
                                           RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT);
 
         if (!auto_commit)
-                TEST_CALL_ERR__(rd_kafka_commit(c1, NULL, 0 /*sync*/));
+                TEST_CALL_ERR__(rd_kafka_commit(c1, NULL, 0 /*sync*/, -1 /*infinite*/));
 
         /* Rely on consumer_close() doing final commit
          * when auto commit is enabled */

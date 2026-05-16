@@ -37,6 +37,8 @@ mkl_toggle_option "Development" ENABLE_REFCNT_DEBUG "--enable-refcnt-debug" "Ena
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4-ext" "Enable external LZ4 library support (builtin version 1.9.4)" "y"
 mkl_toggle_option "Feature" ENABLE_LZ4_EXT "--enable-lz4" "Deprecated: alias for --enable-lz4-ext" "y"
 
+mkl_toggle_option "Feature" ENABLE_LIBDL "--enable-libdl" "Enable dynamically loaded plugins via dl_open()" "y"
+
 mkl_toggle_option "Feature" ENABLE_REGEX_EXT "--enable-regex-ext" "Enable external (libc) regex (else use builtin)" "y"
 
 # librdkafka with TSAN won't work with glibc C11 threads on Ubuntu 19.04.
@@ -84,8 +86,9 @@ void foo (void) {
 "
     fi
 
-    # Check if dlopen() is available
-    mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \
+    if [[ "$ENABLE_LIBDL" == "y" ]]; then
+        # Check if dlopen() is available
+        mkl_lib_check "libdl" "WITH_LIBDL" disable CC "-ldl" \
 "
 #include <stdlib.h>
 #include <dlfcn.h>
@@ -96,6 +99,7 @@ void foo (void) {
      p = NULL;
    dlclose(h);
 }"
+    fi
 
     if [[ $WITH_LIBDL == "y" ]]; then
         mkl_allvar_set WITH_PLUGINS WITH_PLUGINS y

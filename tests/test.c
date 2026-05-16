@@ -8003,6 +8003,7 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id,
 
         test_conf_init(&conf, NULL, 0);
 
+        rd_kafka_conf_set(conf, "client.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                           sizeof(errstr));
@@ -8276,6 +8277,7 @@ rd_kafka_share_t *test_create_share_consumer_with_cb(
         char errstr[512];
 
         test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "client.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
                           sizeof(errstr));

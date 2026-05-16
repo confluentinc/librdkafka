@@ -3303,8 +3303,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-        fprintf(stderr, "[OPSERVE] %s/%" PRId32 ": rko_type=%s\n",
-                rkb->rkb_name, rkb->rkb_nodeid,
+        fprintf(stderr, "[OPSERVE] rk=%s %s/%" PRId32 ": rko_type=%s\n",
+                rkb->rkb_rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
                 rd_kafka_op2str(rko->rko_type));
         fflush(stderr);
 
@@ -5007,13 +5007,14 @@ static int rd_kafka_broker_thread_main(void *arg) {
                          * logging infrastructure (which masks the race).
                          * Remove once root-caused. */
                         fprintf(stderr,
-                                "[BRKTERM] %s/%" PRId32
+                                "[BRKTERM] rk=%s %s/%" PRId32
                                 ": state=%s refcnt=%d toppars=%d "
                                 "active=%d outbufs=%d waitresps=%d "
                                 "retrybufs=%d failed=%d ops_qlen=%d "
                                 "share{toppars_in_session=%d "
                                 "async_ack_details=%d "
                                 "pending_commit_sync=%d} src=%d\n",
+                                rkb->rkb_rk->rk_name,
                                 rkb->rkb_name, rkb->rkb_nodeid,
                                 rd_kafka_broker_state_names[rkb->rkb_state],
                                 rd_refcnt_get(&rkb->rkb_refcnt),

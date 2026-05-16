@@ -6541,6 +6541,14 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                                   rd_kafka_broker_t *rkb,
                                   rd_list_t *wait_thrds) {
 
+        fprintf(stderr,
+                "[DECOMMISSION] rk=%s %s/%" PRId32
+                " source=%d tip=%d (entry)\n",
+                rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
+                (int)rkb->rkb_source,
+                rd_atomic32_get(&rkb->termination_in_progress));
+        fflush(stderr);
+
         if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
                 return;
 

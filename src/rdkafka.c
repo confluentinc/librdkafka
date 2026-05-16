@@ -1341,11 +1341,19 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_list_init(&brokers_to_decommission,
                      rd_atomic32_get(&rk->rk_broker_cnt), NULL);
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                rd_bool_t already =
+                    rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr) != NULL;
+                fprintf(stderr,
+                        "[DESTROY_INT_ITER] rk=%s %s/%" PRId32
+                        " source=%d already_decom=%d\n",
+                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
+                        (int)rkb->rkb_source, already ? 1 : 0);
+                fflush(stderr);
                 /* Don't try to decommission already decommissioning brokers
                  * otherwise they could be already destroyed when
                  * `rd_kafka_broker_decommission` is called below. */
-                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
-                                 rd_list_cmp_ptr) == NULL)
+                if (!already)
                         rd_list_add(&brokers_to_decommission, rkb);
         }
 

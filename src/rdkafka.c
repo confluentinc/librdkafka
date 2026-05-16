@@ -2372,6 +2372,18 @@ static int rd_kafka_thread_main(void *arg) {
                 /* Use ceiling division to avoid calling serve with a 0 ms
                  * timeout in a tight loop until 1 ms has passed. */
                 int timeout_ms = (sleeptime + 999) / 1000;
+                if (rd_kafka_terminating(rk)) {
+                        fprintf(stderr,
+                                "[MAINLOOP] rk=%s terminating=1 "
+                                "rk_ops_len=%d cgrp_state=%s\n",
+                                rk->rk_name,
+                                rd_kafka_q_len(rk->rk_ops),
+                                rk->rk_cgrp
+                                    ? rd_kafka_cgrp_state_names
+                                          [rk->rk_cgrp->rkcg_state]
+                                    : "no-cgrp");
+                        fflush(stderr);
+                }
                 rd_kafka_q_serve(rk->rk_ops, timeout_ms, 0,
                                  RD_KAFKA_Q_CB_CALLBACK, NULL, NULL);
                 if (rk->rk_cgrp) /* FIXME: move to timer-triggered */

@@ -624,6 +624,13 @@ int rd_kafka_q_serve0(rd_kafka_q_t *rkq,
                 rd_kafka_op_res_t res;
 
                 rd_kafka_q_deq0(&localq, rko);
+                if (rd_kafka_terminating(rk) && rkq == rk->rk_ops) {
+                        fprintf(stderr,
+                                "[QSERVE] rk=%s rk_ops op=%s\n",
+                                rk->rk_name,
+                                rd_kafka_op2str(rko->rko_type));
+                        fflush(stderr);
+                }
                 res = rd_kafka_op_handle(rk, &localq, rko, cb_type, opaque,
                                          callback);
                 /* op must have been handled */

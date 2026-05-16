@@ -1458,8 +1458,14 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         parpriv->topic_id             = topic_id;
         batches_out->rktpar->_private = parpriv;
 
-        batches_out->response_leader_id    = CurrentLeader.LeaderId;
-        batches_out->response_leader_epoch = CurrentLeader.LeaderEpoch;
+        /* Record the broker and leader epoch at the time records were
+         * acquired. The wire CurrentLeader hint is only set when the
+         * broker signals a leader change, so we use the responding
+         * broker and the partition's cached epoch instead.
+         * TODO KIP-932: remove response_leader_epoch field if the
+         * segregation check stays leader-id-only. */
+        batches_out->response_leader_id              = rkb->rkb_nodeid;
+        batches_out->response_leader_epoch           = rktp->rktp_leader_epoch;
         batches_out->response_acquired_offsets_count = 0;
         /* Pre-allocate capacity without re-initializing the list.
          * batches_out->entries was already initialized by
@@ -1914,6 +1920,24 @@ static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
 }
 
 /**
+ * @brief Whether \p err is a per-partition ShareAcknowledge error
+ *        whose CurrentLeader hint should trigger an inline metadata
+ *        update.
+ */
+static rd_bool_t
+rd_kafka_share_ack_err_is_leader_change(rd_kafka_resp_err_t err) {
+        switch (err) {
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
+                return rd_true;
+        default:
+                return rd_false;
+        }
+}
+
+/**
  * @brief Parse a ShareAcknowledge response.
  *
  * ShareAcknowledge response contains per-partition error codes for
@@ -1946,6 +1970,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
         int16_t ErrorCode           = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafkap_str_t ErrorStr    = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        rd_list_t *leader_changes     = NULL;
         NodeEndpoints.NodeEndpoints   = NULL;
         NodeEndpoints.NodeEndpointCnt = 0;
 
@@ -1980,6 +2005,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafkap_str_t PartErrorStr;
                         rd_kafkap_CurrentLeader_t CurrentLeader;
                         rd_kafka_share_ack_batches_t *batch;
+                        rd_kafkap_share_leader_change_t *lc;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
                         rd_kafka_buf_read_i16(rkbuf, &PartErrorCode);
@@ -2014,6 +2040,20 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                                            Partition,
                                            rd_kafka_err2name(PartErrorCode),
                                            RD_KAFKAP_STR_PR(&PartErrorStr));
+
+                                if (rd_kafka_share_ack_err_is_leader_change(
+                                        PartErrorCode) &&
+                                    CurrentLeader.LeaderId != -1 &&
+                                    CurrentLeader.LeaderEpoch != -1) {
+                                        if (!leader_changes)
+                                                leader_changes =
+                                                    rd_list_new(0, rd_free);
+                                        lc = rd_calloc(1, sizeof(*lc));
+                                        lc->topic_id       = topic_id;
+                                        lc->partition      = Partition;
+                                        lc->current_leader = CurrentLeader;
+                                        rd_list_add(leader_changes, lc);
+                                }
                         }
 
                         /* Partition tags */
@@ -2029,10 +2069,15 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
         /* Top level tags */
         rd_kafka_buf_skip_tags(rkbuf);
 
+        rd_kafkap_share_leader_changes_apply(rkb, leader_changes,
+                                             &NodeEndpoints);
+
+        RD_IF_FREE(leader_changes, rd_list_destroy);
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
+        RD_IF_FREE(leader_changes, rd_list_destroy);
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
         rd_rkb_dbg(rkb, MSG, "BADMSG",
                    "Bad ShareAcknowledge response (v%d): parse error",
@@ -3089,6 +3134,14 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                         return;
                 }
 
+                /* TODO KIP-932: add a defensive per-batch leader-stale
+                 * strip here (mirroring the segregation-time check) to
+                 * cover the window where the cached leader changes
+                 * between segregation on the main thread and this RPC
+                 * send on the broker thread. It must run AFTER the
+                 * epoch==0 check above so the local-only failure path
+                 * stays identical to the broker-roundtrip flow. */
+
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
                              "Sending ShareAcknowledge Request with"
                              " acknowledgements");
@@ -3134,6 +3187,13 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                 rko_orig->rko_u.share_fetch.ack_details = NULL;
                 has_ack_details                         = rd_false;
         }
+
+        /* TODO KIP-932: add a defensive per-batch leader-stale strip
+         * here (mirroring the segregation-time check) to cover the
+         * window where the cached leader changes between segregation
+         * on the main thread and this RPC send on the broker thread.
+         * It must run AFTER the epoch==0 strip above so the local-only
+         * failure path stays identical to the broker-roundtrip flow. */
 
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                      "Sending ShareFetch Request with%s%s%s fetching messages",

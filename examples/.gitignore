@@ -23,3 +23,5 @@ incremental_alter_configs
 user_scram
 list_offsets
 elect_leaders
+alter_client_quotas
+describe_client_quotas

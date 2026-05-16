@@ -100,7 +100,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
+        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
 
 
 /**
@@ -272,6 +272,7 @@ _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
+_TEST_DECL(0154_admin_quota_ut);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -540,6 +541,7 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
+    _TEST(0154_admin_quota_ut, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

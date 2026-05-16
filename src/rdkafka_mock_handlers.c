@@ -49,8 +49,9 @@ void rd_kafka_mock_Produce_reply_tags_partition_write(
     rd_kafka_mock_partition_t *mpart) {
         switch (tagtype) {
         case 0: /* CurrentLeader */
-                /* Leader id */
-                rd_kafka_buf_write_i32(rkbuf, mpart->leader->id);
+                /* Leader id: -1 when there is no current leader */
+                rd_kafka_buf_write_i32(rkbuf,
+                                       mpart->leader ? mpart->leader->id : -1);
                 /* Leader epoch */
                 rd_kafka_buf_write_i32(rkbuf, mpart->leader_epoch);
                 /* Field tags */
@@ -222,23 +223,37 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
 
                         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 10 &&
                             err == RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION) {
-                                int changed_leader_idx;
-                                /* See if this leader is already included */
-                                for (changed_leader_idx = 0;
-                                     changed_leader_idx < changed_leaders_cnt;
-                                     changed_leader_idx++) {
-                                        if (changed_leaders[changed_leader_idx]
-                                                ->id == mpart->leader->id)
-                                                break;
-                                }
-                                if (changed_leader_idx == changed_leaders_cnt) {
-                                        /* Add the new leader that wasn't
-                                         * present */
-                                        changed_leaders[changed_leaders_cnt] =
-                                            mpart->leader;
-                                        changed_leaders_cnt++;
+                                /* Only track the new leader in NodeEndpoints
+                                 * if there is one (leader may be -1 when the
+                                 * partition is transiently leaderless). */
+                                if (mpart->leader) {
+                                        int changed_leader_idx;
+                                        /* See if this leader is already
+                                         * included */
+                                        for (changed_leader_idx = 0;
+                                             changed_leader_idx <
+                                             changed_leaders_cnt;
+                                             changed_leader_idx++) {
+                                                if (changed_leaders
+                                                        [changed_leader_idx]
+                                                            ->id ==
+                                                    mpart->leader->id)
+                                                        break;
+                                        }
+                                        if (changed_leader_idx ==
+                                            changed_leaders_cnt) {
+                                                /* Add the new leader that
+                                                 * wasn't present */
+                                                changed_leaders
+                                                    [changed_leaders_cnt] =
+                                                        mpart->leader;
+                                                changed_leaders_cnt++;
+                                        }
                                 }
 
+                                /* Always write CurrentLeader partition tag so
+                                 * the client receives leader_id=-1 and can
+                                 * correctly undelegate the toppar. */
                                 partition_tags_to_write
                                     [partition_tags_to_write_cnt] =
                                         0 /* CurrentLeader */;

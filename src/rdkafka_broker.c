@@ -38,7 +38,7 @@
  * src/rd.h defines _POSIX_SOURCE to be 200809L, which corresponds to XPG7,
  * which itself is not compatible with _XOPEN_SOURCE on that platform.
  */
-#if !defined(_AIX) && !defined(__sun)
+#if !defined(_AIX) && !defined(__sun) && !defined(__QNXNTO__)
 #define _XOPEN_SOURCE
 #endif
 #include <signal.h>
@@ -78,6 +78,9 @@
 #include "rdendian.h"
 #include "rdunittest.h"
 
+#ifdef __QNXNTO__
+#define AI_ADDRCONFIG 0
+#endif
 
 static const int rd_kafka_max_block_ms = 1000;
 

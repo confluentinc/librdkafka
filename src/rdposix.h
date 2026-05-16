@@ -116,7 +116,7 @@ static RD_INLINE RD_UNUSED const char *rd_strerror(int err) {
         /* The r assignment is to catch the case where
          * _GNU_SOURCE is not defined but the GNU version is
          * picked up anyway. */
-        r = strerror_r(err, ret, sizeof(ret));
+        r = (int)strerror_r(err, ret, sizeof(ret));
         if (unlikely(r))
                 rd_snprintf(ret, sizeof(ret), "strerror_r(%d) failed (ret %d)",
                             err, r);

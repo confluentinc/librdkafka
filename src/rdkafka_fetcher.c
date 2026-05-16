@@ -1255,6 +1255,22 @@ rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rd_kafka_toppar_t *rktp) {
                 return rktp->rktp_offsets.fetch_pos;
 }
 
+
+int rd_kafka_all_queue_size(rd_kafka_t *rkt) { 
+        int size = 0;
+
+        rd_kafka_broker_t *rkb;
+        TAILQ_FOREACH(rkb, &rkt->rk_brokers, rkb_link) {
+
+                rd_kafka_toppar_t *tp;
+                TAILQ_FOREACH(tp, &rkb->rkb_toppars, rktp_rkblink) {
+                        size += rd_kafka_q_size(tp->rktp_fetchq);
+                }
+        }
+
+        return size;
+}
+
 /**
  * @brief Decide whether this toppar should be on the fetch list or not.
  *
@@ -1371,8 +1387,15 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                 ts_backoff = rd_kafka_toppar_fetch_backoff(
                     rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
                 should_fetch = 0;
-
-        } else if ((int64_t)rd_kafka_q_size(rktp->rktp_fetchq) >=
+        } else if (rkb->rkb_rk->rk_conf.queued_total_max_msg_kbytes != 0 &&
+                 rd_kafka_all_queue_size(rkb->rkb_rk) > rkb->rkb_rk->rk_conf.queued_total_max_msg_kbytes) {
+                /* Check total size of all queues */
+                reason     = "queue.max.messages.total.kbytes exceeded";
+                ts_backoff = rd_kafka_toppar_fetch_backoff(
+                    rkb, rktp, RD_KAFKA_RESP_ERR__QUEUE_FULL);
+                should_fetch = 0;
+        }
+        else if ((int64_t)rd_kafka_q_size(rktp->rktp_fetchq) >=
                    rkb->rkb_rk->rk_conf.queued_max_msg_bytes) {
                 reason     = "queued.max.messages.kbytes exceeded";
                 ts_backoff = rd_kafka_toppar_fetch_backoff(

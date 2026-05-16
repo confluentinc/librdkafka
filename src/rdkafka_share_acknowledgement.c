@@ -409,15 +409,46 @@ void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                 if (!rktp || !rktp->rktp_leader ||
                     rd_kafka_broker_or_instance_terminating(
                         rktp->rktp_leader)) {
+                        /* TODO KIP-932: surface UNKNOWN_TOPIC_OR_PART /
+                         * UNKNOWN_TOPIC_ID when !rktp; keep
+                         * LEADER_NOT_AVAILABLE only for the
+                         * !rktp_leader case. */
                         rd_kafka_dbg(rk, CGRP, "SHARE",
                                      "Ack batch for leader %" PRId32
                                      " dropped: toppar or leader not available "
                                      "or terminating",
                                      batch->response_leader_id);
+                        rd_kafka_share_enqueue_ack_commit_cb_op(
+                            rk, batch, RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE);
                         rd_kafka_share_ack_batches_destroy(batch);
                         continue;
                 }
                 leader_rkb = rktp->rktp_leader;
+
+                /* If the cached leader differs from the leader at which
+                 * records were acquired, the session for these records
+                 * lives on the original broker which no longer leads
+                 * the partition. Fail this batch locally instead of
+                 * sending a request that would be rejected. */
+                if (rd_kafka_share_ack_batch_leader_stale(
+                        batch, rktp->rktp_leader_id, rktp->rktp_leader_epoch)) {
+                        rd_kafka_dbg(
+                            rk, CGRP, "SHARE",
+                            "Async ack batch for %s [%" PRId32
+                            "] failed locally: leader changed "
+                            "since records were acquired "
+                            "(was %" PRId32 " epoch %" PRId32 ", now %" PRId32
+                            " epoch %" PRId32 ")",
+                            batch->rktpar->topic, batch->rktpar->partition,
+                            batch->response_leader_id,
+                            batch->response_leader_epoch, rktp->rktp_leader_id,
+                            rktp->rktp_leader_epoch);
+                        rd_kafka_share_enqueue_ack_commit_cb_op(
+                            rk, batch,
+                            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
+                        rd_kafka_share_ack_batches_destroy(batch);
+                        continue;
+                }
 
                 /* Allocate list on first use with incoming batch count
                  * as initial capacity hint */
@@ -664,6 +695,21 @@ int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b) {
         if (a->start_offset > b->start_offset)
                 return 1;
         return 0;
+}
+
+rd_bool_t
+rd_kafka_share_ack_batch_leader_stale(rd_kafka_share_ack_batches_t *batch,
+                                      int32_t current_leader_id,
+                                      int32_t current_leader_epoch) {
+        /* TODO KIP-932: verify whether the epoch needs to be checked
+         * here too. The response_leader_epoch from a successful
+         * ShareFetch carries the partition's cached epoch at fetch
+         * time, which may not reliably indicate a session-owning
+         * broker change on its own. */
+        if (batch->response_leader_id == -1)
+                return rd_false;
+
+        return current_leader_id != batch->response_leader_id;
 }
 
 /**

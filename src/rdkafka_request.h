@@ -160,6 +160,15 @@ typedef struct rd_kafkap_Fetch_reply_tags_s {
 
 /**@}*/
 
+/**
+ * @brief LeaveGroup memebr identity (for LeaveGroup version 3)
+ */
+typedef struct rd_kafka_leave_member_s {
+        rd_kafkap_str_t *member_id;
+        rd_kafkap_str_t *group_instance_id;
+} rd_kafka_leave_member_t;
+
+
 rd_kafka_topic_partition_list_t *rd_kafka_buf_read_topic_partitions(
     rd_kafka_buf_t *rkbuf,
     rd_bool_t use_topic_id,
@@ -326,7 +335,8 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
 
 void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
                                 const char *group_id,
-                                const char *member_id,
+                                const rd_kafka_leave_member_t *members,
+                                int member_cnt,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque);

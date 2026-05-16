@@ -7883,7 +7883,15 @@ typedef enum rd_kafka_ResourceType_t {
         RD_KAFKA_RESOURCE_GROUP            = 3, /**< Group */
         RD_KAFKA_RESOURCE_BROKER           = 4, /**< Broker */
         RD_KAFKA_RESOURCE_TRANSACTIONAL_ID = 5, /**< Transactional ID */
+        RD_KAFKA_RESOURCE_DELEGATION_TOKEN = 6, /**< Delegation Token */
+        RD_KAFKA_RESOURCE_USER             = 7, /**< User */
         RD_KAFKA_RESOURCE__CNT, /**< Number of resource types defined */
+
+/* FIXME: Split into two enums in next major version. */
+#define RD_KAFKA_RESOURCE_CONFIG_RESOURCE__START RD_KAFKA_RESOURCE_BROKER_LOGGER
+        RD_KAFKA_RESOURCE_BROKER_LOGGER  = 1000008,
+        RD_KAFKA_RESOURCE_CLIENT_METRICS = 1000016,
+        RD_KAFKA_RESOURCE_CONFIG_RESOURCE__END,
 } rd_kafka_ResourceType_t;
 
 /**

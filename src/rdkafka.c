@@ -1337,17 +1337,20 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         /* DIAGNOSTIC: sleep 30s with wrlock released to let any in-flight
          * topic_destroy_final / PARTITION_LEAVE processing on broker
          * threads complete before starting broker decommission. */
-        rd_kafka_wrunlock(rk);
-        fprintf(stderr,
-                "[DESTROY_SLEEP] rk=%s sleeping 30s before broker decommission\n",
-                rk->rk_name);
-        fflush(stderr);
-        rd_usleep(30 * 1000 * 1000, NULL);
-        fprintf(stderr,
-                "[DESTROY_SLEEP] rk=%s done sleeping, proceeding to broker decommission\n",
-                rk->rk_name);
-        fflush(stderr);
-        rd_kafka_wrlock(rk);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+            rd_kafka_wrunlock(rk);
+            fprintf(stderr,
+                    "[DESTROY_SLEEP] rk=%s sleeping 30s before broker decommission\n",
+                    rk->rk_name);
+            fflush(stderr);
+            rd_usleep(30 * 1000 * 1000, NULL);
+            fprintf(stderr,
+                    "[DESTROY_SLEEP] rk=%s done sleeping, proceeding to broker decommission\n",
+                    rk->rk_name);
+            fflush(stderr);
+            rd_kafka_wrlock(rk);
+        }
+
 
         /* Decommission brokers.
          * `rd_kafka_broker_decommission` releases and reacquires

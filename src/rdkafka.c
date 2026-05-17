@@ -729,6 +729,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "Broker: Request principal deserialization failed during "
               "forwarding"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID,
+              "Broker: The log's topic ID did not match the topic ID in the "
+              "request"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
               "Broker: The member epoch is fenced by the group coordinator"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
@@ -4079,6 +4082,10 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
 
                 rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
                 if (!rktp || !rktp->rktp_leader) {
+                        /* TODO KIP-932: surface UNKNOWN_TOPIC_OR_PART /
+                         * UNKNOWN_TOPIC_ID when !rktp; keep
+                         * LEADER_NOT_AVAILABLE only for the !rktp_leader
+                         * case. */
                         result_rktpar = rd_kafka_topic_partition_list_find(
                             rkcg->rkcg_commit_sync_request.results,
                             batch->rktpar->topic, batch->rktpar->partition);
@@ -4099,10 +4106,43 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
                                      "toppar or leader not available",
                                      batch->rktpar->topic,
                                      batch->rktpar->partition);
+                        rd_kafka_share_enqueue_ack_commit_cb_op(
+                            rk, batch, RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE);
                         rd_kafka_share_ack_batches_destroy(batch);
                         continue;
                 }
                 leader_rkb = rktp->rktp_leader;
+
+                /* If the cached leader differs from the leader at which
+                 * records were acquired, the session for these records
+                 * lives on the original broker which no longer leads
+                 * the partition. Fail this batch locally instead of
+                 * sending a request that would be rejected. */
+                if (rd_kafka_share_ack_batch_leader_stale(
+                        batch, rktp->rktp_leader_id, rktp->rktp_leader_epoch)) {
+                        result_rktpar = rd_kafka_topic_partition_list_find(
+                            rkcg->rkcg_commit_sync_request.results,
+                            batch->rktpar->topic, batch->rktpar->partition);
+                        if (result_rktpar)
+                                result_rktpar->err =
+                                    RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
+                        rd_kafka_dbg(
+                            rk, CGRP, "SHARE",
+                            "Sync ack batch for %s [%" PRId32
+                            "] failed locally: leader changed "
+                            "since records were acquired "
+                            "(was %" PRId32 " epoch %" PRId32 ", now %" PRId32
+                            " epoch %" PRId32 ")",
+                            batch->rktpar->topic, batch->rktpar->partition,
+                            batch->response_leader_id,
+                            batch->response_leader_epoch, rktp->rktp_leader_id,
+                            rktp->rktp_leader_epoch);
+                        rd_kafka_share_enqueue_ack_commit_cb_op(
+                            rk, batch,
+                            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
+                        rd_kafka_share_ack_batches_destroy(batch);
+                        continue;
+                }
 
                 /* Put all acks into pending_commit_sync */
                 if (!leader_rkb->rkb_pending_commit_sync.sync_ack_details)

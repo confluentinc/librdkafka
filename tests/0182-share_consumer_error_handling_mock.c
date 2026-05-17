@@ -58,14 +58,14 @@ typedef struct test_ctx_s {
         const char *bootstraps;
 } test_ctx_t;
 
-static test_ctx_t test_ctx_new(void) {
+static test_ctx_t test_ctx_new_n(int nbrok) {
         test_ctx_t ctx;
         rd_kafka_conf_t *conf;
         char errstr[512];
 
         memset(&ctx, 0, sizeof(ctx));
 
-        ctx.mcluster = test_mock_cluster_new(1, &ctx.bootstraps);
+        ctx.mcluster = test_mock_cluster_new(nbrok, &ctx.bootstraps);
 
         TEST_ASSERT(rd_kafka_mock_set_apiversion(
                         ctx.mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
@@ -88,6 +88,10 @@ static test_ctx_t test_ctx_new(void) {
                     errstr);
 
         return ctx;
+}
+
+static test_ctx_t test_ctx_new(void) {
+        return test_ctx_new_n(1);
 }
 
 static void test_ctx_destroy(test_ctx_t *ctx) {

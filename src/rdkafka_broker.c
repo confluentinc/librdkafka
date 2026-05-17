@@ -6626,30 +6626,11 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 "[DECOMMISSION_WRLOCK] rk=%s %s/%" PRId32 " before wrlock\n",
                 rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
         fflush(stderr);
-        /* Diagnostic: trylock + 1ms sleep loop instead of blocking wrlock to
-         * test whether pthread_rwlock_wrlock is failing to wake up the
-         * waiter (macOS ARM64 hang investigation). */
-        {
-                int _attempts = 0;
-                while (pthread_rwlock_trywrlock(&rk->rk_lock) != 0) {
-                        _attempts++;
-                        if ((_attempts % 1000) == 0) {
-                                fprintf(stderr,
-                                        "[DECOMMISSION_WRLOCK] rk=%s %s/%" PRId32
-                                        " still spinning attempts=%d\n",
-                                        rk->rk_name, rkb->rkb_name,
-                                        rkb->rkb_nodeid, _attempts);
-                                fflush(stderr);
-                        }
-                        rd_usleep(1000, NULL);
-                }
-                fprintf(stderr,
-                        "[DECOMMISSION_WRLOCK] rk=%s %s/%" PRId32
-                        " after wrlock (attempts=%d)\n",
-                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
-                        _attempts);
-                fflush(stderr);
-        }
+        rd_kafka_wrlock(rk);
+        fprintf(stderr,
+                "[DECOMMISSION_WRLOCK] rk=%s %s/%" PRId32 " after wrlock\n",
+                rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+        fflush(stderr);
 }
 
 /**

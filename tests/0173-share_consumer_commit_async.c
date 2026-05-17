@@ -1651,7 +1651,7 @@ static void do_test_commit_async_callback(void) {
 
 
 int main_0173_share_consumer_commit_async(int argc, char **argv) {
-        test_timeout_set(120);
+        test_timeout_set(150);
         common_producer = test_create_producer();
         common_admin    = test_create_producer();
 

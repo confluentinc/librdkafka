@@ -3303,8 +3303,11 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
         rd_kafka_assert(rkb->rkb_rk, thrd_is_current(rkb->rkb_thread));
 
-        fprintf(stderr, "[OPSERVE] rk=%s %s/%" PRId32 ": rko_type=%s\n",
-                rkb->rkb_rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
+        fprintf(stderr,
+                "[OPSERVE] rk=%s tid=%lu %s/%" PRId32 ": rko_type=%s\n",
+                rkb->rkb_rk->rk_name,
+                (unsigned long)(uintptr_t)thrd_current(),
+                rkb->rkb_name, rkb->rkb_nodeid,
                 rd_kafka_op2str(rko->rko_type));
         fflush(stderr);
 

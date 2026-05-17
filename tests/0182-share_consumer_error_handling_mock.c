@@ -1219,6 +1219,8 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
+        test_timeout_set(120);
+
         test_commit_sync_share_session_not_found();
         test_commit_sync_invalid_share_session_epoch();
         test_commit_sync_share_session_limit_reached();

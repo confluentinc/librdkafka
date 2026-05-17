@@ -89,30 +89,46 @@ static void test_ctx_destroy(test_ctx_t *ctx) {
         memset(ctx, 0, sizeof(*ctx));
 }
 
-static void subscribe_one(rd_kafka_share_t *rkshare, const char *topic) {
+static void subscribe_topics(rd_kafka_share_t *rkshare,
+                             const char **topics,
+                             int topic_cnt) {
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_resp_err_t err;
+        int i;
 
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        subs = rd_kafka_topic_partition_list_new(topic_cnt);
+        for (i = 0; i < topic_cnt; i++)
+                rd_kafka_topic_partition_list_add(subs, topics[i],
+                                                  RD_KAFKA_PARTITION_UA);
         err = rd_kafka_share_subscribe(rkshare, subs);
         TEST_ASSERT(!err, "subscribe failed: %s", rd_kafka_err2str(err));
         rd_kafka_topic_partition_list_destroy(subs);
 }
 
-static void mock_produce(rd_kafka_t *producer, const char *topic, int msgcnt) {
+static void subscribe_one(rd_kafka_share_t *rkshare, const char *topic) {
+        subscribe_topics(rkshare, &topic, 1);
+}
+
+static int mock_produce(rd_kafka_t *producer,
+                        const char *topic,
+                        int32_t partition,
+                        int msgcnt) {
         int i;
         for (i = 0; i < msgcnt; i++) {
                 char payload[64];
-                snprintf(payload, sizeof(payload), "%s-%d", topic, i);
+                snprintf(payload, sizeof(payload), "%s-p%" PRId32 "-%d", topic,
+                         partition, i);
                 TEST_ASSERT(rd_kafka_producev(
                                 producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_PARTITION(partition),
                                 RD_KAFKA_V_VALUE(payload, strlen(payload)),
                                 RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY),
                                 RD_KAFKA_V_END) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Produce failed");
+                            "Produce to %s [%" PRId32 "] failed", topic,
+                            partition);
         }
         rd_kafka_flush(producer, 5000);
+        return msgcnt;
 }
 
 static rd_bool_t is_share_ack_request(rd_kafka_mock_request_t *request,
@@ -188,7 +204,7 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "set initial leader to broker %d", broker1);
 
-        mock_produce(ctx.producer, topic, msgcnt);
+        mock_produce(ctx.producer, topic, RD_KAFKA_PARTITION_UA, msgcnt);
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
@@ -357,7 +373,7 @@ static void test_partition_not_leader_or_follower_silent(void) {
         /* Phase 1: produce and consume records from broker1.
          * auto.offset.reset=earliest (set by test_ctx_new) so the
          * share group starts from the beginning of the log. */
-        mock_produce(ctx.producer, topic, msgcnt);
+        mock_produce(ctx.producer, topic, RD_KAFKA_PARTITION_UA, msgcnt);
 
         /* Disable background metadata refresh so that the only metadata
          * refresh that fires is the one triggered by the per-partition
@@ -408,7 +424,7 @@ static void test_partition_not_leader_or_follower_silent(void) {
         /* Produce records that will be available on broker2. mock_produce
          * flushes before returning, so all records are committed to
          * broker2 before Phase 2 begins. */
-        mock_produce(ctx.producer, topic, msgcnt);
+        mock_produce(ctx.producer, topic, RD_KAFKA_PARTITION_UA, msgcnt);
 
         /* Phase 2: consume records after recovery. OP_CONSUMER_ERR
          * surfaces as a non-NULL return from consume_batch; silent
@@ -474,6 +490,344 @@ static void test_partition_not_leader_or_follower_silent(void) {
 }
 
 
+/**
+ * @brief Drive a consume loop until \p expected records have been read
+ *        or the attempt budget is exhausted. In implicit mode an extra
+ *        zero-timeout consume_batch flushes the last batch's auto-ack
+ *        before returning.
+ */
+static int consume_phase(rd_kafka_share_t *rkshare,
+                         rd_bool_t explicit_mode,
+                         rd_bool_t use_commit_sync,
+                         int expected,
+                         int post_first_batch_settle_ms,
+                         const char *phase_name) {
+        int consumed     = 0;
+        int attempts     = 0;
+        int max_attempts = expected * 3 + 60;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_topic_partition_list_t *flush_results = NULL;
+        rd_kafka_error_t *flush_err;
+        rd_bool_t first_batch = rd_true;
+
+        while (consumed < expected && attempts++ < max_attempts) {
+                size_t rcvd = 0;
+                rd_kafka_error_t *error;
+                size_t j;
+
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        TEST_SAY("%s: consume_batch err %s\n", phase_name,
+                                 rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err) {
+                                consumed++;
+                                if (explicit_mode)
+                                        rd_kafka_share_acknowledge(
+                                            rkshare, rkmessages[j]);
+                        }
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+
+                if (explicit_mode && rcvd > 0) {
+                        if (use_commit_sync) {
+                                rd_kafka_topic_partition_list_t *results = NULL;
+                                rd_kafka_error_t *cerr;
+                                cerr = rd_kafka_share_commit_sync(rkshare, 5000,
+                                                                  &results);
+                                if (cerr)
+                                        rd_kafka_error_destroy(cerr);
+                                RD_IF_FREE(
+                                    results,
+                                    rd_kafka_topic_partition_list_destroy);
+                        } else {
+                                rd_kafka_error_t *cerr =
+                                    rd_kafka_share_commit_async(rkshare);
+                                if (cerr)
+                                        rd_kafka_error_destroy(cerr);
+                        }
+                }
+
+                /* After the first consume_batch call, let any pending
+                 * metadata refresh and per-broker session
+                 * reconciliation triggered by the leader change settle
+                 * before the next consume_batch picks the next broker
+                 * in round-robin. Without this wait the next broker's
+                 * session is still stale, producing a redundant
+                 * NOT_LEADER_FOR_PARTITION and metadata refresh. */
+                if (first_batch && post_first_batch_settle_ms > 0) {
+                        rd_usleep(post_first_batch_settle_ms * 1000, NULL);
+                        first_batch = rd_false;
+                }
+        }
+
+        /* Flush before exiting: commit_sync auto-acks for implicit
+         * mode (via acknowledge_all_if_implicit) and drains pending
+         * acks for explicit mode. Using commit_sync for both modes
+         * avoids re-arming share_fetch_more_records via another
+         * consume_batch, which would keep the main-thread fetch loop
+         * spinning between phases. */
+        flush_err = rd_kafka_share_commit_sync(rkshare, 5000, &flush_results);
+        if (flush_err)
+                rd_kafka_error_destroy(flush_err);
+        RD_IF_FREE(flush_results, rd_kafka_topic_partition_list_destroy);
+
+        TEST_SAY("%s: consumed %d (expected == %d) in %d attempts\n",
+                 phase_name, consumed, expected, attempts);
+        return consumed;
+}
+
+
+/* ===================================================================
+ *  Test — produce / consume / leader-change / produce / consume on a
+ *         multi-topic, multi-partition mock cluster. Verifies that
+ *         the share consumer picks up the new leader either via the
+ *         Share RPC error path (refresh disabled) or via background
+ *         metadata refresh (refresh enabled).
+ *
+ *  Setup:
+ *    - 3 brokers, 2 topics ("recovery-a" with 2 partitions,
+ *      "recovery-b" with 5 partitions). Initial leaders round-robin.
+ *
+ *  Phase 1:
+ *    - Produce a random 10-20 records per partition.
+ *    - Consume them all, ack/commit per variant.
+ *
+ *  Leader change:
+ *    - Each partition's leader is rotated to a different broker
+ *      (chosen randomly).
+ *    - If \p wait_for_metadata_refresh is true the test sleeps long
+ *      enough for the configured 500 ms background refresh to fire.
+ *
+ *  Phase 2:
+ *    - Produce a random 10-20 records per partition.
+ *    - Consume them all.
+ *    - Assert the consumed count equals the Phase 2 production.
+ *
+ *  TODO KIP-932: once the ShareFetch response's per-partition
+ *  CurrentLeader / NodeEndpoints hints are applied inline to the
+ *  metadata cache (same approach as the ShareAcknowledge path), the
+ *  refresh-disabled variant must see 0 Metadata RPCs after the
+ *  leader change and the refresh-enabled variant must see >= 1
+ *  (background refresh). Today both variants see >= 1 because the
+ *  ShareFetch error path forces a metadata refresh RPC until the
+ *  inline update lands.
+ * =================================================================== */
+static void
+do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
+                                       rd_bool_t use_commit_sync,
+                                       rd_bool_t wait_for_metadata_refresh,
+                                       const char *variant_name) {
+        test_ctx_t ctx;
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        char *topic_a;
+        char *topic_b;
+        const char *topics[2];
+        const int part_a    = 2;
+        const int part_b    = 5;
+        const char *group   = "sg-0183-recovery";
+        int phase1_total    = 0;
+        int phase2_total    = 0;
+        int phase1_consumed = 0;
+        int phase2_consumed = 0;
+        int leader_before_a[2];
+        int leader_before_b[5];
+        size_t metadata_window1;
+        size_t metadata_window2;
+        int i;
+
+        SUB_TEST_QUICK("%s", variant_name);
+
+        topic_a   = rd_strdup(test_mk_topic_name("0183-recovery-a", 1));
+        topic_b   = rd_strdup(test_mk_topic_name("0183-recovery-b", 1));
+        topics[0] = topic_a;
+        topics[1] = topic_b;
+
+        ctx = test_ctx_new(3);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, part_a,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic a");
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_b, part_b,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic b");
+
+        for (i = 0; i < part_a; i++) {
+                leader_before_a[i] = (i % 3) + 1;
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(
+                                ctx.mcluster, topic_a, i, leader_before_a[i]) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set leader a[%d] -> %d", i, leader_before_a[i]);
+        }
+        for (i = 0; i < part_b; i++) {
+                leader_before_b[i] = (i % 3) + 1;
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(
+                                ctx.mcluster, topic_b, i, leader_before_b[i]) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set leader b[%d] -> %d", i, leader_before_b[i]);
+        }
+
+        srand(42);
+
+        for (i = 0; i < part_a; i++)
+                phase1_total +=
+                    mock_produce(ctx.producer, topic_a, i, 10 + (rand() % 11));
+        for (i = 0; i < part_b; i++)
+                phase1_total +=
+                    mock_produce(ctx.producer, topic_b, i, 10 + (rand() % 11));
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode",
+                      explicit_mode ? "explicit" : "implicit");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms",
+                      wait_for_metadata_refresh ? "10000" : "-1");
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "create share consumer");
+        subscribe_topics(rkshare, topics, 2);
+
+        phase1_consumed = consume_phase(rkshare, explicit_mode, use_commit_sync,
+                                        phase1_total, 0, "Phase 1");
+        TEST_ASSERT(phase1_consumed == phase1_total,
+                    "Phase 1: expected %d records, got %d", phase1_total,
+                    phase1_consumed);
+
+        /* Let initial offset queries (ListOffsetsRequest from the
+         * share consumer's reused fetch-state machine on partition
+         * assignment) complete before changing leaders. Without this
+         * settle window, an in-flight ListOffsets response could race
+         * with the leader change and bring in an extra metadata
+         * refresh that pollutes Window 1.
+         * TODO KIP-932: this wait can be removed once the share
+         * consumer no longer issues ListOffsetsRequests. */
+        rd_usleep(2000 * 1000, NULL);
+
+        /* Window 1 — track Metadata RPCs from the leader change
+         * through the wait sleep. Captures any background metadata
+         * refresh fired while the consumer was idle. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+
+        for (i = 0; i < part_a; i++) {
+                int new_leader = leader_before_a[i];
+                while (new_leader == leader_before_a[i])
+                        new_leader = 1 + (rand() % 3);
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(
+                                ctx.mcluster, topic_a, i, new_leader) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set leader a[%d] -> %d", i, new_leader);
+        }
+        for (i = 0; i < part_b; i++) {
+                int new_leader = leader_before_b[i];
+                while (new_leader == leader_before_b[i])
+                        new_leader = 1 + (rand() % 3);
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(
+                                ctx.mcluster, topic_b, i, new_leader) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set leader b[%d] -> %d", i, new_leader);
+        }
+
+        if (wait_for_metadata_refresh)
+                rd_usleep(11000 * 1000, NULL);
+
+        metadata_window1 = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_metadata_request, NULL);
+        TEST_SAY(
+            "%s: Window 1 (post leader change, pre Phase 2) "
+            "Metadata: %" PRIusz "\n",
+            variant_name, metadata_window1);
+
+        /* Pause tracking around Phase 2 produce so producer-driven
+         * metadata refreshes do not pollute the Window 2 count. */
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        for (i = 0; i < part_a; i++)
+                phase2_total +=
+                    mock_produce(ctx.producer, topic_a, i, 10 + (rand() % 11));
+        for (i = 0; i < part_b; i++)
+                phase2_total +=
+                    mock_produce(ctx.producer, topic_b, i, 10 + (rand() % 11));
+
+        /* Ensure all produces and their triggered metadata refreshes
+         * have settled before measuring Phase 2 consume. */
+        rd_kafka_flush(ctx.producer, 5000);
+
+        /* Window 2 — track Metadata RPCs strictly around Phase 2
+         * consume. Excludes producer activity from Phase 2 produce. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+
+        phase2_consumed = consume_phase(rkshare, explicit_mode, use_commit_sync,
+                                        phase2_total, 1000, "Phase 2");
+        TEST_ASSERT(phase2_consumed == phase2_total,
+                    "Phase 2: expected %d records after leader change, "
+                    "got %d",
+                    phase2_total, phase2_consumed);
+
+        metadata_window2 = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_metadata_request, NULL);
+        TEST_SAY("%s: Window 2 (Phase 2 consume) Metadata: %" PRIusz "\n",
+                 variant_name, metadata_window2);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        /* TODO KIP-932: the share consumer still runs the regular
+         * consumer's offset-query path. On leader change, the failed
+         * ListOffsets requests trigger extra metadata refreshes that
+         * inflate the wait-refresh window1 count and the no-refresh
+         * window2 count beyond the single refresh those windows are
+         * meant to capture. Once the offset-query path is removed
+         * from the share consumer, tighten the >= 1 checks below to
+         * == 1.
+         *
+         * TODO KIP-932: revisit these assertions when the ShareFetch
+         * response handler applies its per-partition CurrentLeader
+         * and NodeEndpoints hints inline to the metadata cache (same
+         * approach already taken for the ShareAcknowledge path). At
+         * that point the no-refresh variant must see 0 Metadata RPCs
+         * during Phase 2 consume — the cache is updated from the
+         * Share response, no separate Metadata RPC is needed — and
+         * the wait-refresh expectations stay as today. */
+        if (wait_for_metadata_refresh) {
+                TEST_ASSERT(metadata_window1 >= 1,
+                            "%s: expected >= 1 Metadata RPC during the "
+                            "wait window (background refresh), got %" PRIusz,
+                            variant_name, metadata_window1);
+                TEST_ASSERT(metadata_window2 == 0,
+                            "%s: expected 0 Metadata RPCs during Phase 2 "
+                            "consume (cache already updated, no error path), "
+                            "got %" PRIusz,
+                            variant_name, metadata_window2);
+        } else {
+                TEST_ASSERT(metadata_window1 == 0,
+                            "%s: expected 0 Metadata RPCs before Phase 2 "
+                            "(background refresh disabled, no error yet), "
+                            "got %" PRIusz,
+                            variant_name, metadata_window1);
+                TEST_ASSERT(metadata_window2 >= 1,
+                            "%s: expected >= 1 Metadata RPC during Phase 2 "
+                            "consume (ShareFetch error path triggered "
+                            "refresh), got %" PRIusz,
+                            variant_name, metadata_window2);
+        }
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+        rd_free(topic_a);
+        rd_free(topic_b);
+
+        SUB_TEST_PASS();
+}
+
+
 // /* ===================================================================
 //  *  Test — per-partition UNKNOWN_TOPIC_OR_PARTITION on ShareFetch is
 //  *         handled silently: no OP_CONSUMER_ERR is delivered after the
@@ -518,7 +872,7 @@ static void test_partition_not_leader_or_follower_silent(void) {
 //         /* Phase 1: produce and consume records to establish a share
 //          * session. auto.offset.reset=earliest (set by test_ctx_new) so
 //          * the share group starts from the beginning of the log. */
-//         mock_produce(ctx.producer, topic, msgcnt);
+//         mock_produce(ctx.producer, topic, RD_KAFKA_PARTITION_UA, msgcnt);
 
 //         /* Disable auto-create so the metadata handler does not recreate
 //          * the deleted topic, and disable the propagation wait so the
@@ -619,8 +973,23 @@ static void test_partition_not_leader_or_follower_silent(void) {
 // }
 
 int main_0183_share_consumer_leader_change_mock(int argc, char **argv) {
+        test_timeout_set(120);
+
         test_shareack_leader_change_reduces_rpcs();
         test_partition_not_leader_or_follower_silent();
         /* test_partition_unknown_topic_silent(); */
+
+        do_test_leader_change_consume_recovery(rd_false, rd_false, rd_false,
+                                               "implicit-no-refresh");
+        do_test_leader_change_consume_recovery(rd_false, rd_false, rd_true,
+                                               "implicit-wait-refresh");
+        do_test_leader_change_consume_recovery(rd_true, rd_false, rd_false,
+                                               "explicit-async-no-refresh");
+        do_test_leader_change_consume_recovery(rd_true, rd_false, rd_true,
+                                               "explicit-async-wait-refresh");
+        do_test_leader_change_consume_recovery(rd_true, rd_true, rd_false,
+                                               "explicit-sync-no-refresh");
+        do_test_leader_change_consume_recovery(rd_true, rd_true, rd_true,
+                                               "explicit-sync-wait-refresh");
         return 0;
 }

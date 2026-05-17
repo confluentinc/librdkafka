@@ -839,8 +839,32 @@ struct rd_kafka_share_s {
                         __LINE__);                                             \
                 fflush(stderr);                                                \
         } while (0)
-#define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
-#define rd_kafka_rdunlock(rk) rwlock_rdunlock(&(rk)->rk_lock)
+#define rd_kafka_rdlock(rk)                                                    \
+        do {                                                                   \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu rdlock REQ %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+                rwlock_rdlock(&(rk)->rk_lock);                                 \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu rdlock GOT %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+        } while (0)
+#define rd_kafka_rdunlock(rk)                                                  \
+        do {                                                                   \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu rdunlock %s:%d\n",             \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+                rwlock_rdunlock(&(rk)->rk_lock);                               \
+        } while (0)
 #define rd_kafka_wrunlock(rk)                                                  \
         do {                                                                   \
                 fprintf(stderr,                                                \

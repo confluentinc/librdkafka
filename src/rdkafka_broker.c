@@ -6557,7 +6557,17 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
             rkb->rkb_source == RD_KAFKA_LEARNED) {
                 int _enq_ret;
+                fprintf(stderr,
+                        "[DECOMMISSION_STEP] rk=%s %s/%" PRId32
+                        " before share_acks_clear\n",
+                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+                fflush(stderr);
                 rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
+                fprintf(stderr,
+                        "[DECOMMISSION_STEP] rk=%s %s/%" PRId32
+                        " after share_acks_clear\n",
+                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+                fflush(stderr);
                 _enq_ret = rd_kafka_q_enq(
                     rkb->rkb_ops,
                     rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
@@ -6610,7 +6620,15 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 fflush(stderr);
         }
 
+        fprintf(stderr,
+                "[DECOMMISSION_WRLOCK] rk=%s %s/%" PRId32 " before wrlock\n",
+                rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+        fflush(stderr);
         rd_kafka_wrlock(rk);
+        fprintf(stderr,
+                "[DECOMMISSION_WRLOCK] rk=%s %s/%" PRId32 " after wrlock\n",
+                rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+        fflush(stderr);
 }
 
 /**

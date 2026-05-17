@@ -6557,31 +6557,6 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
         rd_atomic32_add(&rkb->termination_in_progress, 1);
 
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
-            rkb->rkb_source == RD_KAFKA_LEARNED) {
-                int _enq_ret;
-                fprintf(stderr,
-                        "[DECOMMISSION_STEP] rk=%s %s/%" PRId32
-                        " before share_acks_clear\n",
-                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
-                fflush(stderr);
-                rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
-                fprintf(stderr,
-                        "[DECOMMISSION_STEP] rk=%s %s/%" PRId32
-                        " after share_acks_clear\n",
-                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
-                fflush(stderr);
-                _enq_ret = rd_kafka_q_enq(
-                    rkb->rkb_ops,
-                    rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
-                fprintf(stderr,
-                        "[DECOMMISSION_ENQ] rk=%s %s/%" PRId32
-                        " SHARE_SESSION_CLEAR enq_ret=%d qlen=%d\n",
-                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
-                        _enq_ret, rd_kafka_q_len(rkb->rkb_ops));
-                fflush(stderr);
-        }
-
         /* Add broker's thread to wait_thrds list for later joining */
         if (wait_thrds) {
                 thrd_t *thrd = rd_malloc(sizeof(*thrd));
@@ -6612,6 +6587,30 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         /* Send op to trigger queue/io wake-up.
          * Broker thread will destroy this thread reference.
          * WARNING: This is last time we can read from rkb in this thread! */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
+            rkb->rkb_source == RD_KAFKA_LEARNED) {
+                int _enq_ret;
+                fprintf(stderr,
+                        "[DECOMMISSION_STEP] rk=%s %s/%" PRId32
+                        " before share_acks_clear\n",
+                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+                fflush(stderr);
+                rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
+                fprintf(stderr,
+                        "[DECOMMISSION_STEP] rk=%s %s/%" PRId32
+                        " after share_acks_clear\n",
+                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid);
+                fflush(stderr);
+                _enq_ret = rd_kafka_q_enq(
+                    rkb->rkb_ops,
+                    rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
+                fprintf(stderr,
+                        "[DECOMMISSION_ENQ] rk=%s %s/%" PRId32
+                        " SHARE_SESSION_CLEAR enq_ret=%d qlen=%d\n",
+                        rk->rk_name, rkb->rkb_name, rkb->rkb_nodeid,
+                        _enq_ret, rd_kafka_q_len(rkb->rkb_ops));
+                fflush(stderr);
+        }
         {
                 int _enq_ret = rd_kafka_q_enq(
                     rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));

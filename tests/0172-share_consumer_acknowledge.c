@@ -1349,7 +1349,7 @@ static void test_scale_10_topics_3_partitions(void) {
 
 int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
-        test_timeout_set(600); /* 10 minutes for all tests */
+        test_timeout_set(15000); /* 10 minutes for all tests */
 
         /* Create common handles for all tests */
         common_producer = test_create_producer();

@@ -1334,19 +1334,29 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 rd_kafka_wrlock(rk);
         }
 
-        /* DIAGNOSTIC: sleep 30s with wrlock released to let any in-flight
-         * topic_destroy_final / PARTITION_LEAVE processing on broker
-         * threads complete before starting broker decommission. */
+        /* Wait for topic_destroy_final calls on broker threads to complete
+         * before starting broker decommission. Avoids writer contention on
+         * rk_lock that has triggered hangs on macOS ARM64.
+         * Adaptive: exits as soon as rk_topic_cnt reaches 0; capped at 30s
+         * to avoid infinite wait if something prevents the count from
+         * reaching zero. */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+            int _waited_ms      = 0;
+            int _initial_cnt    = rk->rk_topic_cnt;
             rd_kafka_wrunlock(rk);
             fprintf(stderr,
-                    "[DESTROY_SLEEP] rk=%s sleeping 30s before broker decommission\n",
-                    rk->rk_name);
+                    "[DESTROY_WAIT] rk=%s waiting for topic teardown "
+                    "(initial topic_cnt=%d)\n",
+                    rk->rk_name, _initial_cnt);
             fflush(stderr);
-            rd_usleep(30 * 1000 * 1000, NULL);
+            while (rk->rk_topic_cnt > 0 && _waited_ms < 30000) {
+                    rd_usleep(10 * 1000, NULL); /* 10ms */
+                    _waited_ms += 10;
+            }
             fprintf(stderr,
-                    "[DESTROY_SLEEP] rk=%s done sleeping, proceeding to broker decommission\n",
-                    rk->rk_name);
+                    "[DESTROY_WAIT] rk=%s topic teardown settled "
+                    "topic_cnt=%d waited=%dms\n",
+                    rk->rk_name, rk->rk_topic_cnt, _waited_ms);
             fflush(stderr);
             rd_kafka_wrlock(rk);
         }

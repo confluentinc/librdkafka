@@ -825,36 +825,30 @@ struct rd_kafka_share_s {
 
 #define rd_kafka_wrlock(rk)                                                    \
         do {                                                                   \
-                if (rd_kafka_terminating(rk)) {                                \
-                        fprintf(stderr,                                        \
-                                "[RKLOCK] rk=%s tid=%lu wrlock REQ %s:%d\n",   \
-                                (rk)->rk_name,                                 \
-                                (unsigned long)(uintptr_t)thrd_current(),      \
-                                __FILE__, __LINE__);                           \
-                        fflush(stderr);                                        \
-                }                                                              \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu wrlock REQ %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
                 rwlock_wrlock(&(rk)->rk_lock);                                 \
-                if (rd_kafka_terminating(rk)) {                                \
-                        fprintf(stderr,                                        \
-                                "[RKLOCK] rk=%s tid=%lu wrlock GOT %s:%d\n",   \
-                                (rk)->rk_name,                                 \
-                                (unsigned long)(uintptr_t)thrd_current(),      \
-                                __FILE__, __LINE__);                           \
-                        fflush(stderr);                                        \
-                }                                                              \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu wrlock GOT %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
         } while (0)
 #define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk) rwlock_rdunlock(&(rk)->rk_lock)
 #define rd_kafka_wrunlock(rk)                                                  \
         do {                                                                   \
-                if (rd_kafka_terminating(rk)) {                                \
-                        fprintf(stderr,                                        \
-                                "[RKLOCK] rk=%s tid=%lu wrunlock %s:%d\n",     \
-                                (rk)->rk_name,                                 \
-                                (unsigned long)(uintptr_t)thrd_current(),      \
-                                __FILE__, __LINE__);                           \
-                        fflush(stderr);                                        \
-                }                                                              \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu wrunlock %s:%d\n",             \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
                 rwlock_wrunlock(&(rk)->rk_lock);                               \
         } while (0)
 

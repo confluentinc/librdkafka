@@ -1056,10 +1056,6 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_kafka_assignment_destroy(rk);
                 if (rk->rk_consumer.q)
                         rd_kafka_q_destroy(rk->rk_consumer.q);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
 
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
@@ -1070,9 +1066,11 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                                             .rk_avg_share_time_between_poll);
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
                                             .rk_avg_share_time_between_poll);
-                }
-
-                if (!RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                } else {
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_poll_idle_ratio);
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
                                             .rk_avg_rebalance_latency);
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
@@ -2754,33 +2752,32 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rk->rk_consumer.q = rd_kafka_q_keep(rk->rk_rep);
                 }
 
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
-                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
-                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
-
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_share_poll_idle_ratio,
-                                    RD_AVG_GAUGE, 0, 1, 2,
+                                    RD_AVG_GAUGE, 0, 1000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
                         rd_avg_init(&rk->rk_telemetry.rd_avg_current
                                          .rk_avg_share_poll_idle_ratio,
-                                    RD_AVG_GAUGE, 0, 1, 2,
+                                    RD_AVG_GAUGE, 0, 1000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_share_time_between_poll,
-                                    RD_AVG_GAUGE, 0, 60 * 1000, 2,
+                                    RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
                         rd_avg_init(&rk->rk_telemetry.rd_avg_current
                                          .rk_avg_share_time_between_poll,
-                                    RD_AVG_GAUGE, 0, 60 * 1000, 2,
+                                    RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
-                }
-
-                if (!RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                } else {
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_poll_idle_ratio,
+                                    RD_AVG_GAUGE, 0, 1, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_poll_idle_ratio,
+                                    RD_AVG_GAUGE, 0, 1, 2,
+                                    rk->rk_conf.enable_metrics_push);
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_rebalance_latency,
                                     RD_AVG_GAUGE, 0, 500 * 1000, 2,
@@ -3741,7 +3738,12 @@ rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare) {
  *        the previous-poll-start timestamp.
  */
 static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
-        rd_ts_t now                          = rd_clock();
+        rd_ts_t now;
+
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
+
+        now                                  = rd_clock();
         rk->rk_telemetry.ts_share_poll_start = now;
 
         if (rk->rk_telemetry.ts_last_share_poll_start)
@@ -3750,9 +3752,12 @@ static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
         else
                 rk->rk_telemetry.time_since_last_share_poll = 0;
 
+        /* Store in microseconds; calculator scales to ms at read time.
+         * Storing in ms here would truncate sub-millisecond samples to 0
+         * (e.g., 999 μs / 1000 = 0), under-reporting at high poll rates. */
         rd_avg_add(
             &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
-            rk->rk_telemetry.time_since_last_share_poll / 1000); /* μs → ms */
+            rk->rk_telemetry.time_since_last_share_poll);
         rk->rk_telemetry.ts_last_share_poll_start = now;
 }
 
@@ -3760,11 +3765,17 @@ static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
  * @brief Record the end of a share consume batch for telemetry.
  *        Computes pollTime = now − pollStart, then idle ratio =
  *        pollTime / (pollTime + timeSinceLastPoll), and records the sample.
+ *        Mirrors Java's share consumer poll idle ratio formula.
  */
 static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
-        rd_ts_t end       = rd_clock();
-        rd_ts_t poll_time = end - rk->rk_telemetry.ts_share_poll_start;
-        rd_ts_t total = poll_time + rk->rk_telemetry.time_since_last_share_poll;
+        rd_ts_t end, poll_time, total;
+
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
+
+        end       = rd_clock();
+        poll_time = end - rk->rk_telemetry.ts_share_poll_start;
+        total     = poll_time + rk->rk_telemetry.time_since_last_share_poll;
         if (total > 0) {
                 int64_t poll_idle_ratio = poll_time * 1000000 / total;
                 rd_avg_add(&rk->rk_telemetry.rd_avg_current

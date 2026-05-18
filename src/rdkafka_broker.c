@@ -5137,7 +5137,8 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_avg_destroy(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_outbuf_latency);
 
-        if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
+        if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rkb->rkb_rk)) {
                 rd_avg_destroy(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency);
                 rd_avg_destroy(
@@ -5270,7 +5271,8 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                     RD_AVG_GAUGE, 0, 100 * 1000, 2,
                     rk->rk_conf.enable_metrics_push);
 
-        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_avg_init(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_fetch_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2,

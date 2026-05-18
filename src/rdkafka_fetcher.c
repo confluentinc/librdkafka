@@ -1202,21 +1202,25 @@ static void rd_kafka_share_fetch_reply_handle_partition_error(
                 break;
 
         case RD_KAFKA_RESP_ERR_INVALID_MSG:
-                rd_kafka_consumer_err(rkb->rkb_rk->rk_cgrp->rkcg_q,
-                                      rd_kafka_broker_id(rkb), err, 0, NULL,
-                                      rktp, RD_KAFKA_OFFSET_INVALID,
-                                      "ShareFetch failed for %.*s [%" PRId32
-                                      "]: corrupt message: %.*s",
-                                      RD_KAFKAP_STR_PR(topic), partition,
-                                      RD_KAFKAP_STR_PR(err_msg));
+                rd_kafka_consumer_err(
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
+                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
+                    "Encountered corrupt message when fetching "
+                    "topic-partition %.*s-%" PRId32 ": %.*s",
+                    RD_KAFKAP_STR_PR(topic), partition,
+                    RD_KAFKAP_STR_PR(err_msg));
                 break;
 
         default:
                 rd_kafka_consumer_err(
-                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
-                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
-                    "ShareFetch failed for %.*s [%" PRId32 "]: %s: %.*s",
-                    RD_KAFKAP_STR_PR(topic), partition, rd_kafka_err2name(err),
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb),
+                    RD_KAFKA_RESP_ERR__STATE, 0, NULL, rktp,
+                    RD_KAFKA_OFFSET_INVALID,
+                    "Unexpected error code %" PRId16
+                    " (%s) while fetching from topic-partition "
+                    "%.*s-%" PRId32 ": %.*s",
+                    (int16_t)err, rd_kafka_err2name(err),
+                    RD_KAFKAP_STR_PR(topic), partition,
                     RD_KAFKAP_STR_PR(err_msg));
                 break;
         }

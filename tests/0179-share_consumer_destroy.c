@@ -1432,109 +1432,107 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
 }
 
 
-// static void test_leader_migration_mid_session_destroy(int destroy_flags) {
-//         rd_kafka_mock_cluster_t *mcluster;
-//         const char *bootstraps;
-//         rd_kafka_share_t *rkshare;
-//         rd_kafka_error_t *error;
-//         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-//         const char *topic = "0179-leader-migration-mid-session";
-//         const char *group = "0179-leader-migration-mid-session";
-//         const int msgs_per_round = 5;
-//         size_t rcvd = 0;
-//         int attempts = 0;
-//         size_t i;
-//
-//         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
-//
-//         mcluster = test_mock_cluster_new(2, &bootstraps);
-//         enable_share_apis(mcluster);
-//         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
-//
-//         /* 1 partition, RF=2 so both brokers know about it. Initial
-//          * leader = broker 1. */
-//         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 2) ==
-//                         RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Failed to create mock topic");
-//         TEST_ASSERT(rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1)
-//         ==
-//                         RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Failed to set initial leader to broker 1");
-//
-//         /* Produce a first batch so the consumer can fetch from broker 1. */
-//         TEST_SAY("Producing %d messages to broker 1\n", msgs_per_round);
-//         test_produce_msgs_easy_v(topic, 0, 0, 0, msgs_per_round, 16,
-//                                  "bootstrap.servers", bootstraps, NULL);
-//
-//         rkshare = new_share_consumer_for_mock_test(
-//             bootstraps, group, rd_false /* implicit */);
-//         subscribe_topics(rkshare, &topic, 1);
-//
-//         /* Round 1: consume from broker 1. After this, the toppar is in
-//          * broker 1's toppars_in_session. */
-//         TEST_SAY("Round 1: consume from broker 1 (initial leader)\n");
-//         while (rcvd < (size_t)msgs_per_round &&
-//                attempts++ < MAX_CONSUME_ATTEMPTS) {
-//                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-//                 error = rd_kafka_share_consume_batch(
-//                     rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
-//                 if (error)
-//                         rd_kafka_error_destroy(error);
-//                 else
-//                         rcvd += batch_rcvd;
-//         }
-//         TEST_ASSERT(rcvd >= (size_t)msgs_per_round,
-//                     "Round 1: expected %d msgs, got %d", msgs_per_round,
-//                     (int)rcvd);
-//         TEST_SAY("Round 1: consumed %d messages\n", (int)rcvd);
-//
-//         /* Migrate the partition leader to broker 2. */
-//         TEST_SAY("Migrating partition leader from broker 1 to broker 2\n");
-//         TEST_ASSERT(rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2)
-//         ==
-//                         RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Failed to migrate leader to broker 2");
-//
-//         /* Produce a second batch so the consumer has something to fetch
-//          * from the new leader. */
-//         TEST_SAY("Producing %d more messages (now under broker 2)\n",
-//                  msgs_per_round);
-//         test_produce_msgs_easy_v(topic, 0, 0, 0, msgs_per_round, 16,
-//                                  "bootstrap.servers", bootstraps, NULL);
-//
-//         /* Round 2: consume from broker 2. The first ShareFetch reply
-//          * from broker 2 will TAILQ_INSERT_TAIL the toppar into broker
-//          * 2's toppars_in_session, reusing the same rktp_rkb_session_link
-//          * field that broker 1 was using. With the fix, broker 1's list
-//          * is cleared by PARTITION_LEAVE before this happens. */
-//         TEST_SAY("Round 2: consume from broker 2 (new leader)\n");
-//         attempts = 0;
-//         while (rcvd < (size_t)(2 * msgs_per_round) &&
-//                attempts++ < MAX_CONSUME_ATTEMPTS) {
-//                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-//                 error = rd_kafka_share_consume_batch(
-//                     rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
-//                 if (error)
-//                         rd_kafka_error_destroy(error);
-//                 else
-//                         rcvd += batch_rcvd;
-//         }
-//         TEST_ASSERT(rcvd >= (size_t)(2 * msgs_per_round),
-//                     "Round 2: expected %d total msgs, got %d",
-//                     2 * msgs_per_round, (int)rcvd);
-//         TEST_SAY("Round 2: consumed %d total messages\n", (int)rcvd);
-//
-//         for (i = 0; i < rcvd; i++)
-//                 rd_kafka_message_destroy(rkmessages[i]);
-//
-//         /* Close + destroy. Without the leader-migration fix, broker 1's
-//          * destroy_final would assert on non-empty toppars_in_session. */
-//         TEST_SAY("Calling destroy (flags 0x%x)\n", destroy_flags);
-//         destroy_share_consumer(rkshare, destroy_flags);
-//
-//         test_mock_cluster_destroy(mcluster);
-//         SUB_TEST_PASS();
-// }
+static void test_leader_migration_mid_session_destroy(int destroy_flags) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        const char *topic        = "0179-leader-migration-mid-session";
+        const char *group        = "0179-leader-migration-mid-session";
+        const int msgs_per_round = 5;
+        size_t rcvd              = 0;
+        int attempts             = 0;
+        size_t i;
+
+        SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        enable_share_apis(mcluster);
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
+
+        /* 1 partition, RF=2 so both brokers know about it. Initial
+         * leader = broker 1. */
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 2) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+        TEST_ASSERT(rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to set initial leader to broker 1");
+
+        /* Produce a first batch so the consumer can fetch from broker 1. */
+        TEST_SAY("Producing %d messages to broker 1\n", msgs_per_round);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgs_per_round, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        rkshare = new_share_consumer_for_mock_test(
+            bootstraps, group, rd_false /* implicit */, NULL);
+        subscribe_topics(rkshare, &topic, 1);
+
+        /* Round 1: consume from broker 1. After this, the toppar is in
+         * broker 1's toppars_in_session. */
+        TEST_SAY("Round 1: consume from broker 1 (initial leader)\n");
+        while (rcvd < (size_t)msgs_per_round &&
+               attempts++ < MAX_CONSUME_ATTEMPTS) {
+                size_t batch_rcvd = CONSUME_ARRAY - rcvd;
+                error             = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                else
+                        rcvd += batch_rcvd;
+        }
+        TEST_ASSERT(rcvd >= (size_t)msgs_per_round,
+                    "Round 1: expected %d msgs, got %d", msgs_per_round,
+                    (int)rcvd);
+        TEST_SAY("Round 1: consumed %d messages\n", (int)rcvd);
+
+        /* Migrate the partition leader to broker 2. */
+        TEST_SAY("Migrating partition leader from broker 1 to broker 2\n");
+        TEST_ASSERT(rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to migrate leader to broker 2");
+
+        /* Produce a second batch so the consumer has something to fetch
+         * from the new leader. */
+        TEST_SAY("Producing %d more messages (now under broker 2)\n",
+                 msgs_per_round);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, msgs_per_round, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        /* Round 2: consume from broker 2. The first ShareFetch reply
+         * from broker 2 will TAILQ_INSERT_TAIL the toppar into broker
+         * 2's toppars_in_session, reusing the same rktp_rkb_session_link
+         * field that broker 1 was using. With the fix, broker 1's list
+         * is cleared by PARTITION_LEAVE before this happens. */
+        TEST_SAY("Round 2: consume from broker 2 (new leader)\n");
+        attempts = 0;
+        while (rcvd < (size_t)(2 * msgs_per_round) &&
+               attempts++ < MAX_CONSUME_ATTEMPTS) {
+                size_t batch_rcvd = CONSUME_ARRAY - rcvd;
+                error             = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                else
+                        rcvd += batch_rcvd;
+        }
+        TEST_ASSERT(rcvd >= (size_t)(2 * msgs_per_round),
+                    "Round 2: expected %d total msgs, got %d",
+                    2 * msgs_per_round, (int)rcvd);
+        TEST_SAY("Round 2: consumed %d total messages\n", (int)rcvd);
+
+        for (i = 0; i < rcvd; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+
+        /* Close + destroy. Without the leader-migration fix, broker 1's
+         * destroy_final would assert on non-empty toppars_in_session. */
+        TEST_SAY("Calling destroy (flags 0x%x)\n", destroy_flags);
+        destroy_share_consumer(rkshare, destroy_flags);
+
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
 
 
 /**
@@ -2175,12 +2173,9 @@ int main_0179_share_consumer_destroy_local(int argc, char **argv) {
             RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE, rd_true);
         test_destroy_during_rebalance(RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
 
-        /* TODO KIP-932: The below test cases fail half the times
-         * due to a negative refcount issue in destroy_final
-         * Revisit them when working on leader migration */
-        // test_leader_migration_mid_session_destroy(0);
-        // test_leader_migration_mid_session_destroy(
-        //     RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+        test_leader_migration_mid_session_destroy(0);
+        test_leader_migration_mid_session_destroy(
+            RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
 
         return 0;
 }

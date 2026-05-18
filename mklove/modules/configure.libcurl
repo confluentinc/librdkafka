@@ -45,8 +45,8 @@ void foo (void) {
 function install_source {
     local name=$1
     local destdir=$2
-    local ver=8.20.0
-    local checksum="fc5819cad3f9f5482669adcdc49a782c15f36d2a0715b395b06d9173593d2dc0"
+    local ver=8.18.0
+    local checksum="e9274a5f8ab5271c0e0e6762d2fce194d5f98acc568e4ce816845b2dcc0cf88f"
 
     echo "### Installing $name $ver from source to $destdir"
     if [[ ! -f Makefile ]]; then

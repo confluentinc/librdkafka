@@ -1,8 +1,8 @@
 # Install (if necessary) and set up msys2.
 $ErrorActionPreference = "Stop"
 
-$url="https://github.com/msys2/msys2-installer/releases/download/2025-06-22/msys2-base-x86_64-20250622.sfx.exe"
-$sha256="df6c053891d0b87c9104c118c0ce22885c3bc350a7659958d6d97a6760ccfa76"
+$url="https://github.com/msys2/msys2-installer/releases/download/2025-12-13/msys2-base-x86_64-20251213.sfx.exe"
+$sha256="99f2fee9a7b1c344600ac97347e7be23a1f802d8d843b339ec7473a8ed8d49a6"
 $cacheKey = "msys2-$sha256-$Env:CACHE_TAG"
 $librdkafkaPath = Get-Location;
 

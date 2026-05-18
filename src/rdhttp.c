@@ -315,11 +315,11 @@ rd_http_req_init(rd_kafka_t *rk, rd_http_req_t *hreq, const char *url) {
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_PROTOCOLS,
                          CURLPROTO_HTTP | CURLPROTO_HTTPS);
 #endif
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_MAXREDIRS, 16);
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_TIMEOUT, 30);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_MAXREDIRS, 16L);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_TIMEOUT, 30L);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_ERRORBUFFER,
                          hreq->hreq_curl_errstr);
-        curl_easy_setopt(hreq->hreq_curl, CURLOPT_NOSIGNAL, 1);
+        curl_easy_setopt(hreq->hreq_curl, CURLOPT_NOSIGNAL, 1L);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_WRITEFUNCTION,
                          rd_http_req_write_cb);
         curl_easy_setopt(hreq->hreq_curl, CURLOPT_WRITEDATA, (void *)hreq);
@@ -430,7 +430,8 @@ rd_http_error_t *rd_http_get(rd_kafka_t *rk,
         }
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
         if (timeout_s > 0)
-                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+                curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT,
+                                 (long)timeout_s);
 
         for (i = 0; i <= retries; i++) {
                 if (rd_kafka_terminating(rk)) {
@@ -546,7 +547,7 @@ rd_http_error_t *rd_http_post_expect_json(rd_kafka_t *rk,
                 return herr;
 
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_HTTPHEADER, headers);
-        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, timeout_s);
+        curl_easy_setopt(hreq.hreq_curl, CURLOPT_TIMEOUT, (long)timeout_s);
 
         curl_easy_setopt(hreq.hreq_curl, CURLOPT_POSTFIELDSIZE,
                          post_fields_size);

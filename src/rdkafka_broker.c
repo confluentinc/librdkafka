@@ -5188,6 +5188,13 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
                                     .rkb_avg_produce_latency);
         }
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkb->rkb_rk)) {
+                rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
+                                    .rkb_avg_share_fetch_latency);
+                rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current
+                                    .rkb_avg_share_fetch_latency);
+        }
+
 
         mtx_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
@@ -5326,6 +5333,17 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                 rd_avg_init(
                     &rkb->rkb_telemetry.rd_avg_rollover.rkb_avg_produce_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+        }
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover
+                                 .rkb_avg_share_fetch_latency,
+                            RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                            rk->rk_conf.enable_metrics_push);
+                rd_avg_init(&rkb->rkb_telemetry.rd_avg_current
+                                 .rkb_avg_share_fetch_latency,
+                            RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                            rk->rk_conf.enable_metrics_push);
         }
 
         rd_refcnt_init(&rkb->rkb_refcnt, 0);

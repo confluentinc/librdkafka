@@ -406,7 +406,6 @@ rd_kafka_broker_t *rd_kafka_share_ack_batch_resolve_leader_or_fail_acks(
          * batch by the ShareFetch reply parser via toppar_keep, so
          * this branch should never fire. Trigger a cluster-wide
          * metadata refresh to recover if it ever does. */
-        rd_dassert(rktp != NULL);
         if (unlikely(!rktp)) {
                 rd_kafka_dbg(rk, CGRP, "SHARE",
                              "Ack batch for partition %" PRId32

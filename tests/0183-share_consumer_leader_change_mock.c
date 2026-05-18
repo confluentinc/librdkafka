@@ -333,8 +333,8 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
  *  ShareFetch lower bound is not reliable; >= 1 is the meaningful
  *  minimum.
  *
- *  TODO: Add a real-broker companion test that triggers a leader
- *  change on a multi-broker cluster.
+ *  TODO KIP-932: Add a real-broker companion test that triggers a
+ *  leader change on a multi-broker cluster.
  * =================================================================== */
 static void test_partition_not_leader_or_follower_silent(void) {
         test_ctx_t ctx;
@@ -840,8 +840,8 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 //  *  Wire-level verification: ShareFetch count is between 1 and 9
 //  *  (lower bound: error path fired; upper bound: no retry storm).
 //  *
-//  *  TODO: Add a real-broker companion test that deletes a live topic
-//  *  and verifies the same silent behaviour.
+//  *  TODO KIP-932: Add a real-broker companion test that deletes a
+//  *  live topic and verifies the same silent behaviour.
 //  * =================================================================== */
 // static void test_partition_unknown_topic_silent(void) {
 //         test_ctx_t ctx;

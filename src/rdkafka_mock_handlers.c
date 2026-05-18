@@ -3944,6 +3944,9 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_sharegroup_t *sgrp = NULL;
         rd_kafka_mock_sgrp_fetch_session_t *session = NULL;
         rd_list_t ack_entries;
+        rd_kafka_mock_broker_t *node_endpoints[64];
+        int node_endpoint_cnt = 0;
+        int k;
 
         (void)log_decode_errors;
 
@@ -4507,19 +4510,40 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         else
                                                 rd_kafka_buf_write_str(
                                                     resp, NULL, -1);
-                                        /* Response: CurrentLeader */
-                                        if (mpart && mpart->leader)
+                                        /* Response: CurrentLeader.
+                                         * Populated only when the
+                                         * per-partition error signals stale
+                                         * leader info. */
+                                        if (mpart && mpart->leader &&
+                                            (part_err ==
+                                                 RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER ||
+                                             part_err ==
+                                                 RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)) {
+                                                int found = 0;
                                                 rd_kafka_buf_write_i32(
                                                     resp, mpart->leader->id);
-                                        else
-                                                rd_kafka_buf_write_i32(resp,
-                                                                       -1);
-                                        if (mpart && mpart->leader)
                                                 rd_kafka_buf_write_i32(
                                                     resp, mpart->leader_epoch);
-                                        else
+                                                for (k = 0;
+                                                     k < node_endpoint_cnt;
+                                                     k++) {
+                                                        if (node_endpoints[k] ==
+                                                            mpart->leader) {
+                                                                found = 1;
+                                                                break;
+                                                        }
+                                                }
+                                                if (!found &&
+                                                    node_endpoint_cnt < 64)
+                                                        node_endpoints
+                                                            [node_endpoint_cnt++] =
+                                                                mpart->leader;
+                                        } else {
                                                 rd_kafka_buf_write_i32(resp,
                                                                        -1);
+                                                rd_kafka_buf_write_i32(resp,
+                                                                       -1);
+                                        }
                                         rd_kafka_buf_write_tags_empty(resp);
                                         /* Response: Records (all acquired
                                          * batches concatenated) */
@@ -4550,7 +4574,16 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 }
 
                 /* Response: NodeEndpoints */
-                rd_kafka_buf_write_arraycnt(resp, 0);
+                rd_kafka_buf_write_arraycnt(resp, node_endpoint_cnt);
+                for (k = 0; k < node_endpoint_cnt; k++) {
+                        rd_kafka_mock_broker_t *nb = node_endpoints[k];
+                        rd_kafka_buf_write_i32(resp, nb->id);
+                        rd_kafka_buf_write_str(resp, nb->advertised_listener,
+                                               -1);
+                        rd_kafka_buf_write_i32(resp, (int32_t)nb->port);
+                        rd_kafka_buf_write_str(resp, nb->rack, -1);
+                        rd_kafka_buf_write_tags_empty(resp);
+                }
                 /* Response: Top-level tags */
                 rd_kafka_buf_write_tags_empty(resp);
 
@@ -4914,25 +4947,19 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                         else
                                                 rd_kafka_buf_write_str(
                                                     resp, NULL, -1);
-                                        /* CurrentLeader */
-                                        if (mpart && mpart->leader)
+                                        /* CurrentLeader — populated only
+                                         * when the per-partition error
+                                         * signals stale leader info. */
+                                        if (mpart && mpart->leader &&
+                                            (part_err ==
+                                                 RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER ||
+                                             part_err ==
+                                                 RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH)) {
+                                                int found = 0;
                                                 rd_kafka_buf_write_i32(
                                                     resp, mpart->leader->id);
-                                        else
-                                                rd_kafka_buf_write_i32(
-                                                    resp, -1); /* LeaderId */
-                                        if (mpart && mpart->leader)
                                                 rd_kafka_buf_write_i32(
                                                     resp, mpart->leader_epoch);
-                                        else
-                                                rd_kafka_buf_write_i32(
-                                                    resp, -1); /* LeaderEpoch */
-                                        /* CurrentLeader tags */
-                                        rd_kafka_buf_write_tags_empty(resp);
-
-                                        if (mpart && mpart->leader) {
-                                                int found = 0;
-                                                int k;
                                                 for (k = 0;
                                                      k < node_endpoint_cnt;
                                                      k++) {
@@ -4947,7 +4974,14 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                                         node_endpoints
                                                             [node_endpoint_cnt++] =
                                                                 mpart->leader;
+                                        } else {
+                                                rd_kafka_buf_write_i32(
+                                                    resp, -1); /* LeaderId */
+                                                rd_kafka_buf_write_i32(
+                                                    resp, -1); /* LeaderEpoch */
                                         }
+                                        /* CurrentLeader tags */
+                                        rd_kafka_buf_write_tags_empty(resp);
 
                                         /* Partition tags */
                                         rd_kafka_buf_write_tags_empty(resp);

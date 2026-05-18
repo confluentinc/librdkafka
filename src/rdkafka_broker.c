@@ -6505,14 +6505,6 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
         rd_atomic32_add(&rkb->termination_in_progress, 1);
 
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
-            rkb->rkb_source == RD_KAFKA_LEARNED) {
-                rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
-                rd_kafka_q_enq(
-                    rkb->rkb_ops,
-                    rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
-        }
-
         /* Add broker's thread to wait_thrds list for later joining */
         if (wait_thrds) {
                 thrd_t *thrd = rd_malloc(sizeof(*thrd));
@@ -6540,6 +6532,15 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 rd_kafka_cgrp_coord_dead(rk->rk_cgrp,
                                          RD_KAFKA_RESP_ERR__DESTROY_BROKER,
                                          "Group coordinator decommissioned");
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
+            rkb->rkb_source == RD_KAFKA_LEARNED) {
+                rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
+                rd_kafka_q_enq(
+                    rkb->rkb_ops,
+                    rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
+        }
+
         /* Send op to trigger queue/io wake-up.
          * Broker thread will destroy this thread reference.
          * WARNING: This is last time we can read from rkb in this thread! */

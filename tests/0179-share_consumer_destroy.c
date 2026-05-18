@@ -72,12 +72,10 @@ typedef struct {
         int receipt_cnt;
         int receipt_capacity;
         int callback_invocations;
-        mtx_t lock;
 } ack_receipts_t;
 
 static void ack_receipts_init(ack_receipts_t *r) {
         memset(r, 0, sizeof(*r));
-        mtx_init(&r->lock, mtx_plain);
 }
 
 static void ack_receipts_destroy(ack_receipts_t *r) {
@@ -86,7 +84,6 @@ static void ack_receipts_destroy(ack_receipts_t *r) {
                 rd_free(r->receipts[i].topic);
         if (r->receipts)
                 rd_free(r->receipts);
-        mtx_destroy(&r->lock);
 }
 
 static void ack_receipts_add(ack_receipts_t *r,
@@ -94,7 +91,6 @@ static void ack_receipts_add(ack_receipts_t *r,
                              int32_t partition,
                              int offset_cnt,
                              rd_kafka_resp_err_t err) {
-        mtx_lock(&r->lock);
         if (r->receipt_cnt == r->receipt_capacity) {
                 int new_cap =
                     r->receipt_capacity ? r->receipt_capacity * 2 : 16;
@@ -107,7 +103,6 @@ static void ack_receipts_add(ack_receipts_t *r,
         r->receipts[r->receipt_cnt].offset_cnt = offset_cnt;
         r->receipts[r->receipt_cnt].err        = err;
         r->receipt_cnt++;
-        mtx_unlock(&r->lock);
 }
 
 /**
@@ -123,9 +118,7 @@ static void record_share_ack_cb(rd_kafka_share_t *rkshare,
 
         (void)rkshare;
 
-        mtx_lock(&r->lock);
         r->callback_invocations++;
-        mtx_unlock(&r->lock);
 
         pcnt = rd_kafka_share_partition_offsets_list_count(parts);
         TEST_SAY("ack_cb invocation #%d: err=%s partitions=%zu\n",
@@ -171,8 +164,6 @@ static void verify_ack_receipts(ack_receipts_t *r,
                                 const char *label) {
         int i, j;
 
-        mtx_lock(&r->lock);
-
         TEST_SAY(
             "Verifying ack receipts (%s): %d receipts from %d "
             "invocation(s), %d expected (topic, partition, err) group(s)\n",
@@ -195,7 +186,6 @@ static void verify_ack_receipts(ack_receipts_t *r,
                 }
 
                 if (observed_offset_cnt != expected[j].expected_offset_cnt) {
-                        mtx_unlock(&r->lock);
                         TEST_FAIL(
                             "ack receipts (%s): expected %d offsets for "
                             "%s [%" PRId32
@@ -227,7 +217,6 @@ static void verify_ack_receipts(ack_receipts_t *r,
                         }
                 }
                 if (!matched) {
-                        mtx_unlock(&r->lock);
                         TEST_FAIL(
                             "ack receipts (%s): unexpected receipt for "
                             "%s [%" PRId32 "] err=%s offsets=%d",
@@ -237,8 +226,6 @@ static void verify_ack_receipts(ack_receipts_t *r,
                             r->receipts[i].offset_cnt);
                 }
         }
-
-        mtx_unlock(&r->lock);
 }
 
 /**
@@ -789,7 +776,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                 }
                 attempts++;
         }
-        TEST_ASSERT(rcvd >= TEST_MSGS,
+        TEST_ASSERT(rcvd == TEST_MSGS,
                     "Expected %d messages, got %d after %d attempts", TEST_MSGS,
                     (int)rcvd, attempts);
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
@@ -959,7 +946,7 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
                 }
                 attempts++;
         }
-        TEST_ASSERT(rcvd >= TEST_MSGS,
+        TEST_ASSERT(rcvd == TEST_MSGS,
                     "Expected %d messages, got %d after %d attempts", TEST_MSGS,
                     (int)rcvd, attempts);
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
@@ -1158,7 +1145,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
                 }
                 attempts++;
         }
-        TEST_ASSERT(rcvd >= TEST_MSGS,
+        TEST_ASSERT(rcvd == TEST_MSGS,
                     "Expected %d messages, got %d after %d attempts", TEST_MSGS,
                     (int)rcvd, attempts);
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
@@ -1362,7 +1349,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
                 }
                 attempts++;
         }
-        TEST_ASSERT(rcvd >= TEST_MSGS,
+        TEST_ASSERT(rcvd == TEST_MSGS,
                     "Expected %d messages, got %d after %d attempts", TEST_MSGS,
                     (int)rcvd, attempts);
         TEST_SAY("Consumed %d msgs total in %d attempts\n", (int)rcvd,
@@ -1861,7 +1848,7 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
                 attempts++;
         }
 
-        TEST_ASSERT(rcvd >= TEST_MSGS,
+        TEST_ASSERT(rcvd == TEST_MSGS,
                     "Expected %d messages after %d attempts, got %d", TEST_MSGS,
                     MAX_CONSUME_ATTEMPTS, (int)rcvd);
         TEST_ASSERT(first_batch_cnt == TEST_MSGS / 2,
@@ -1917,29 +1904,27 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
          *   destroy_flags=0x8 (NO_CONSUMER_CLOSE): destroy short-
          *   circuits, so second-batch acks are dropped. Only
          *   first_batch_part appears with TEST_MSGS/2. */
-        {
-                rd_bool_t no_close =
-                    (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
-                const char *label = no_close ? "explicit-ack NO_CONSUMER_CLOSE"
-                                             : "explicit-ack full close";
+        rd_bool_t no_close =
+            (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
+        const char *label = no_close ? "explicit-ack NO_CONSUMER_CLOSE"
+                                     : "explicit-ack full close";
 
-                if (no_close) {
-                        expected_ack_t expected[] = {
-                            {topic, first_batch_part,
-                             RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2},
-                        };
-                        verify_ack_receipts(&receipts, expected, 1, label);
-                } else {
-                        int second_part_cnt =
-                            ack_half ? (TEST_MSGS / 4) : (TEST_MSGS / 2);
-                        expected_ack_t expected[] = {
-                            {topic, first_batch_part,
-                             RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2},
-                            {topic, second_batch_part,
-                             RD_KAFKA_RESP_ERR_NO_ERROR, second_part_cnt},
-                        };
-                        verify_ack_receipts(&receipts, expected, 2, label);
-                }
+        if (no_close) {
+                expected_ack_t expected[] = {
+                    {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                     TEST_MSGS / 2},
+                };
+                verify_ack_receipts(&receipts, expected, 1, label);
+        } else {
+                int second_part_cnt =
+                    ack_half ? (TEST_MSGS / 4) : (TEST_MSGS / 2);
+                expected_ack_t expected[] = {
+                    {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                     TEST_MSGS / 2},
+                    {topic, second_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+                     second_part_cnt},
+                };
+                verify_ack_receipts(&receipts, expected, 2, label);
         }
 
         ack_receipts_destroy(&receipts);
@@ -2023,7 +2008,7 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
                 attempts++;
         }
 
-        TEST_ASSERT(rcvd >= TEST_MSGS,
+        TEST_ASSERT(rcvd == TEST_MSGS,
                     "Expected %d messages after %d attempts, got %d", TEST_MSGS,
                     MAX_CONSUME_ATTEMPTS, (int)rcvd);
         TEST_ASSERT(first_batch_cnt == TEST_MSGS / 2,
@@ -2055,17 +2040,15 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
          * callback. Expectation is identical for both destroy_flags
          * variants: TEST_MSGS/2 NO_ERROR on first_batch_part only. */
         (void)second_batch_part;
-        {
-                rd_bool_t no_close =
-                    (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
-                const char *label = no_close ? "implicit-ack NO_CONSUMER_CLOSE"
+        rd_bool_t no_close =
+            (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
+        const char *label         = no_close ? "implicit-ack NO_CONSUMER_CLOSE"
                                              : "implicit-ack full close";
-                expected_ack_t expected[] = {
-                    {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                     TEST_MSGS / 2},
-                };
-                verify_ack_receipts(&receipts, expected, 1, label);
-        }
+        expected_ack_t expected[] = {
+            {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
+             TEST_MSGS / 2},
+        };
+        verify_ack_receipts(&receipts, expected, 1, label);
 
         ack_receipts_destroy(&receipts);
 

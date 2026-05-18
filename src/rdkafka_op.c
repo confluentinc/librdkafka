@@ -138,6 +138,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:SHARE_COMMIT_SYNC_FANOUT",
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
                 "REPLY:SHARE_COMMIT_SYNC_FANOUT_REPLY",
+            [RD_KAFKA_OP_SHARE_SESSION_CLEAR] = "REPLY:SHARE_SESSION_CLEAR",
         };
 
         if (type & RD_KAFKA_OP_REPLY)

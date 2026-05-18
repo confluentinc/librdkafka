@@ -138,6 +138,7 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
                 "REPLY:SHARE_COMMIT_SYNC_FANOUT",
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
                 "REPLY:SHARE_COMMIT_SYNC_FANOUT_REPLY",
+            [RD_KAFKA_OP_SHARE_SESSION_CLEAR] = "REPLY:SHARE_SESSION_CLEAR",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -317,6 +318,7 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
                 sizeof(rko->rko_u.share_commit_sync_fanout),
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
                 sizeof(rko->rko_u.share_commit_sync_fanout_reply),
+            [RD_KAFKA_OP_SHARE_SESSION_CLEAR] = _RD_KAFKA_OP_EMPTY,
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 

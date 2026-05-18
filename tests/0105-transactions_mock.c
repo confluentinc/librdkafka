@@ -3828,6 +3828,71 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
 }
 
 
+/**
+ * @brief Test that send_offsets_to_transaction() times out (rather than
+ *        blocking indefinitely) when the group coordinator is down.
+ */
+static void do_test_txn_send_offsets_timeout_coord_down(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        rd_kafka_error_t *error;
+        test_timing_t timing;
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, "txnid", 3, NULL);
+
+        rd_kafka_mock_topic_create(mcluster, "mytopic", 1, 1);
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", "txnid", 1);
+        rd_kafka_mock_coordinator_set(mcluster, "group", "mygroup", 2);
+        rd_kafka_mock_partition_set_leader(mcluster, "mytopic", 0, 3);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        /* Bring down the group coordinator */
+        rd_kafka_mock_broker_set_down(mcluster, 2);
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "mytopic", 0)->offset = 1;
+        cgmetadata = rd_kafka_consumer_group_metadata_new("mygroup");
+
+        /* send_offsets_to_transaction() should time out within ~2s,
+         * not block indefinitely. */
+        TIMING_START(&timing, "send_offsets_to_transaction(2000)");
+        error = rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata,
+                                                     2000);
+        TIMING_STOP(&timing);
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TIMING_ASSERT(&timing, 1500, 5000);
+
+        TEST_ASSERT(error != NULL,
+                    "Expected send_offsets_to_transaction to fail");
+        TEST_ASSERT(
+            rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
+            "Expected send_offsets_to_transaction to fail with timeout, "
+            "not %s: %s",
+            rd_kafka_error_name(error), rd_kafka_error_string(error));
+        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error),
+                    "Expected abortable error");
+        TEST_SAY("send_offsets_to_transaction failed as expected: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
+
+        /* Bring coordinator back up for clean shutdown */
+        rd_kafka_mock_broker_set_up(mcluster, 2);
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -3868,6 +3933,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txns_send_offsets_concurrent_is_retried();
 
         do_test_txns_send_offsets_non_eligible();
+
+        do_test_txn_send_offsets_timeout_coord_down();
 
         do_test_txn_coord_req_destroy();
 

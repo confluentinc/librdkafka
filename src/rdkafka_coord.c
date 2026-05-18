@@ -197,7 +197,7 @@ void rd_kafka_coord_cache_init(rd_kafka_coord_cache_t *cc,
 static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq);
 
 /**
- * @brief Timer callback for delayed coord requests.
+ * @brief Timer callback that re-enters the coord request FSM.
  */
 static void rd_kafka_coord_req_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         rd_kafka_coord_req_t *creq = arg;
@@ -217,7 +217,9 @@ static void rd_kafka_coord_req_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
  *
  * @param delay_ms If non-zero, delay scheduling of the coord request
  *                 for this long. The passed \p timeout_ms is automatically
- *                 adjusted to + \p delay_ms.
+ *                 adjusted to + \p delay_ms unless \p timeout_ms is
+ *                 RD_POLL_INFINITE, in which case the timeout remains
+ *                 infinite.
  *
  * Response, or error, is sent on \p replyq with callback \p rkbuf_cb.
  *
@@ -235,11 +237,15 @@ void rd_kafka_coord_req(rd_kafka_t *rk,
                         rd_kafka_resp_cb_t *resp_cb,
                         void *reply_opaque) {
         rd_kafka_coord_req_t *creq;
+        int total_timeout_ms;
 
+        total_timeout_ms        = timeout_ms == RD_POLL_INFINITE
+                                      ? RD_POLL_INFINITE
+                                      : delay_ms + timeout_ms;
         creq                    = rd_calloc(1, sizeof(*creq));
         creq->creq_coordtype    = coordtype;
         creq->creq_coordkey     = rd_strdup(coordkey);
-        creq->creq_ts_timeout   = rd_timeout_init(delay_ms + timeout_ms);
+        creq->creq_ts_timeout   = rd_timeout_init(total_timeout_ms);
         creq->creq_send_req_cb  = send_req_cb;
         creq->creq_rko          = rko;
         creq->creq_replyq       = replyq;
@@ -250,6 +256,12 @@ void rd_kafka_coord_req(rd_kafka_t *rk,
         rd_interval_init(&creq->creq_query_intvl);
 
         TAILQ_INSERT_TAIL(&rk->rk_coord_reqs, creq, creq_link);
+
+        if (total_timeout_ms > 0)
+                rd_kafka_timer_start_oneshot(&rk->rk_timers,
+                                             &creq->creq_timeout_tmr, rd_true,
+                                             (rd_ts_t)total_timeout_ms * 1000,
+                                             rd_kafka_coord_req_tmr_cb, creq);
 
         if (delay_ms)
                 rd_kafka_timer_start_oneshot(&rk->rk_timers, &creq->creq_tmr,
@@ -283,6 +295,8 @@ static rd_bool_t rd_kafka_coord_req_destroy(rd_kafka_t *rk,
                 creq->creq_done = rd_true;
 
                 rd_kafka_timer_stop(&rk->rk_timers, &creq->creq_tmr,
+                                    RD_DO_LOCK);
+                rd_kafka_timer_stop(&rk->rk_timers, &creq->creq_timeout_tmr,
                                     RD_DO_LOCK);
         }
 
@@ -463,6 +477,12 @@ static void rd_kafka_coord_req_fsm(rd_kafka_t *rk, rd_kafka_coord_req_t *creq) {
 
         if (unlikely(rd_kafka_terminating(rk))) {
                 rd_kafka_coord_req_fail(rk, creq, RD_KAFKA_RESP_ERR__DESTROY);
+                return;
+        }
+
+        /* Check if the request has timed out. */
+        if (rd_timeout_expired(rd_timeout_remains(creq->creq_ts_timeout))) {
+                rd_kafka_coord_req_fail(rk, creq, RD_KAFKA_RESP_ERR__TIMED_OUT);
                 return;
         }
 

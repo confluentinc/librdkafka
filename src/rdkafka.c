@@ -1119,6 +1119,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         mtx_destroy(&rk->rk_conf.sasl.lock);
         rwlock_destroy(&rk->rk_lock);
 
+        rd_free(rk->rk_rkshare);
         rd_free(rk);
         rd_kafka_global_cnt_decr();
 }
@@ -1201,6 +1202,19 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
                         rd_kafka_consumer_close(rk);
         }
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Destroy inflight acks map to release
+                 * toppar references held by topic_partition objects in the map.
+                 * Otherwise rd_kafka_destroy_internal() deadlocks: it joins
+                 * broker threads, which wait for refcnt <= 1, but the toppar
+                 * holds a broker ref via rktp_leader that is only released when
+                 * the toppar is destroyed, which requires refcnt 0, which
+                 * requires releasing the rktp ref held by the inflight_acks map
+                 * entry.
+                 */
+                RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
+        }
+
         /* Await telemetry termination. This method blocks until the last
          * PushTelemetry request is sent (if possible). */
         if (!(flags & RD_KAFKA_DESTROY_F_IMMEDIATE))
@@ -1258,21 +1272,15 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-
-        /* Destroy inflight acks map before rd_kafka_destroy() to release
-         * toppar references held by topic_partition objects in the map.
-         * Otherwise rd_kafka_destroy() deadlocks: it joins broker threads,
-         * which wait for refcnt <= 1, but the toppar holds a broker ref
-         * via rktp_leader that is only released when the toppar is destroyed,
-         * which requires refcnt 0, which requires releasing the rktp ref
-         * held by the inflight_acks map entry. */
-        RD_MAP_DESTROY(&rkshare->rkshare_inflight_acks);
         rd_kafka_destroy(rkshare->rkshare_rk);
-        rd_free(rkshare);
 }
 
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
+}
+
+void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags) {
+        rd_kafka_destroy_flags(rkshare->rkshare_rk, flags);
 }
 
 
@@ -1392,6 +1400,18 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
 
                 thrd  = rd_malloc(sizeof(*thrd));
                 *thrd = rk->rk_internal_rkb->rkb_thread;
+
+                /* TODO KIP-932: Clear any share-session state that may
+                 * have been populated on the internal broker during a
+                 * leader migration (PARTITION_JOIN runs on whichever
+                 * broker the toppar is transiently delegated to,
+                 * including :0/internal). Once the leader-migration
+                 * path is fixed to skip non-LEARNED brokers, this
+                 * SESSION_CLEAR enqueue can be removed. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                        rd_kafka_q_enq(
+                            rk->rk_internal_rkb->rkb_ops,
+                            rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
 
                 /* Send op to trigger queue wake-up.
                  * WARNING: This is last time we can read
@@ -3179,9 +3199,6 @@ rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                 rd_kafka_share_fetch_fanout_enqueue(rk, rko);
 }
 
-/* Forward declarations for commit_sync helpers used in reply handler */
-static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
-                                                      rd_kafka_cgrp_t *rkcg);
 static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
                                                rd_kafka_broker_t *rkb);
 rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
@@ -3214,14 +3231,49 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         rd_bool_t should_fetch    = rko_orig->rko_u.share_fetch.should_fetch;
         rd_bool_t records_fetched = rko_orig->rko_u.share_fetch.records_fetched;
         rd_bool_t should_leave    = rko_orig->rko_u.share_fetch.should_leave;
+        rd_list_t *ack_details    = rko_orig->rko_u.share_fetch.ack_details;
 
-        rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
+        /* The reply handler is expected to be invoked on the main thread,
+         * unless the client is terminating with NO_CONSUMER_CLOSE in which
+         * case it can be invoked on the replying's broker thread
+         * (main thread would have come out of its event loop by the time broker
+         * replies)
+         */
+        rd_dassert(thrd_is_current(rk->rk_thread) ||
+                   rko_orig->rko_err == RD_KAFKA_RESP_ERR__DESTROY);
         rd_kafka_dbg(rk, CGRP, "SHAREFETCH",
                      "Share fetch reply: %s, should_fetch=%d, "
                      "records_fetched=%d, should_leave=%d, broker=%s",
                      rd_kafka_err2str(rko_orig->rko_err), should_fetch,
                      records_fetched, should_leave,
                      reply_rkb ? rd_kafka_broker_name(reply_rkb) : "none");
+
+
+        /* Per-partition errors are carried on each batch's
+         * rktpar->err. The broker thread sets these on both
+         * success (per-partition error from response via parser)
+         * and top-level error (top-level err on each batch via
+         * rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err
+         * helper).
+         *
+         * Defensive: if the helper was bypassed (e.g. q_enq on
+         * a disabled rkb_ops queue at rdkafka_queue.h:440 falls
+         * through to rd_kafka_op_reply directly) the batch err
+         * is still _IN_PROGRESS from build_ack_details. Override
+         * with rko_err so the sentinel doesn't leak to the
+         * app. _IN_PROGRESS check is sufficient because the
+         * normal helper path overwrites _IN_PROGRESS first
+         * (buf callback init -> INVALID_RECORD_STATE -> per-
+         * partition err or top-level err). */
+        if (ack_details && rko_orig->rko_err) {
+                rd_kafka_share_ack_batches_t *batch;
+                int k;
+                RD_LIST_FOREACH(batch, ack_details, k) {
+                        if (batch->rktpar->err ==
+                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                batch->rktpar->err = rko_orig->rko_err;
+                }
+        }
 
         /*
          * Step 1: Dispatch acknowledgement callbacks.
@@ -3253,8 +3305,9 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
          * enqueue a session leave op on the replying broker thread and return
          */
         if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) {
-                rd_kafka_share_enqueue_fetch_op(rkcg->rkcg_rk, reply_rkb,
-                                                rd_false, rd_true);
+                if (!rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk))
+                        rd_kafka_share_enqueue_fetch_op(
+                            rkcg->rkcg_rk, reply_rkb, rd_false, rd_true);
                 return RD_KAFKA_OP_RES_HANDLED;
         }
 
@@ -3265,45 +3318,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         if (rko_orig->rko_u.share_fetch.commit_sync_request_id != 0 &&
             rko_orig->rko_u.share_fetch.commit_sync_request_id ==
                 rkcg->rkcg_commit_sync_request.id) {
-                rd_list_t *ack_details =
-                    rko_orig->rko_u.share_fetch.ack_details;
-
-                /* Per-partition errors are carried on each batch's
-                 * rktpar->err. The broker thread sets these on both
-                 * success (per-partition error from response via parser)
-                 * and top-level error (top-level err on each batch via
-                 * rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err
-                 * helper).
-                 *
-                 * Defensive: if the helper was bypassed (e.g. q_enq on
-                 * a disabled rkb_ops queue at rdkafka_queue.h:440 falls
-                 * through to rd_kafka_op_reply directly) the batch err
-                 * is still _IN_PROGRESS from build_ack_details. Override
-                 * with rko_err so the sentinel doesn't leak to the
-                 * app. _IN_PROGRESS check is sufficient because the
-                 * normal helper path overwrites _IN_PROGRESS first
-                 * (buf callback init -> INVALID_RECORD_STATE -> per-
-                 * partition err or top-level err). */
-                if (ack_details) {
-                        rd_kafka_share_ack_batches_t *batch;
-                        int k;
-                        RD_LIST_FOREACH(batch, ack_details, k) {
-                                rd_kafka_topic_partition_t *dst;
-                                if (rko_orig->rko_err &&
-                                    batch->rktpar->err ==
-                                        RD_KAFKA_RESP_ERR__IN_PROGRESS)
-                                        batch->rktpar->err = rko_orig->rko_err;
-                                dst = rd_kafka_topic_partition_list_find(
-                                    rkcg->rkcg_commit_sync_request.results,
-                                    batch->rktpar->topic,
-                                    batch->rktpar->partition);
-                                if (dst)
-                                        dst->err = batch->rktpar->err;
-                        }
-                }
-
-                rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt--;
-
                 rd_kafka_dbg(
                     rk, CGRP, "SHARE",
                     "Commit sync reply from broker %s: %s, "
@@ -3311,8 +3325,7 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                     rd_kafka_broker_name(reply_rkb),
                     rd_kafka_err2str(rko_orig->rko_err),
                     rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt);
-
-                rd_kafka_share_commit_sync_maybe_complete(rk, rkcg);
+                rd_kafka_share_commit_sync_apply_result(rk, rkcg, ack_details);
         }
 
         /*
@@ -3456,6 +3469,7 @@ void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
         rko_sf->rko_u.share_fetch.target_broker = rkb;
         rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
         rko_sf->rko_op_cb  = rd_kafka_share_fetch_reply_op_cb;
+        rko_sf->rko_rk     = rk;
 
         /* Set fetch guard flag to prevent multiple in-flight fetches to the
          * same broker.*/
@@ -3876,10 +3890,16 @@ static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
  *
  * @locality main thread
  */
-static void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
-                                                      rd_kafka_cgrp_t *rkcg) {
+void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
+                                               rd_kafka_cgrp_t *rkcg) {
         if (rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt > 0)
                 return;
+
+        rd_kafka_dbg(rk, CGRP, "SHARE",
+                     "Commit sync request %" PRId64
+                     " complete; all broker replies received, "
+                     "sending response",
+                     rkcg->rkcg_commit_sync_request.id);
 
         rd_kafka_timer_stop(&rk->rk_timers, &rkcg->rkcg_commit_sync_request.tmr,
                             1);
@@ -3982,6 +4002,7 @@ static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
         rko_sf->rko_u.share_fetch.target_broker = rkb;
         rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
         rko_sf->rko_op_cb  = rd_kafka_share_fetch_reply_op_cb;
+        rko_sf->rko_rk     = rk;
 
         rkb->rkb_share_fetch_enqueued = rd_true;
 

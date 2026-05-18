@@ -735,7 +735,13 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                 ? LOG_DEBUG
                 : 0;
         size_t message_end;
+        size_t record_start_pos;
         rd_kafka_fetch_pos_t msetr_pos;
+
+        /* Capture buffer position before reading length varint so we can
+         * compute the total wire-format size of this record (length varint
+         * size + body bytes) for share consumer fetch.size telemetry. */
+        record_start_pos = rd_slice_offset(&rkbuf->rkbuf_reader);
 
         rd_kafka_buf_read_varint(rkbuf, &hdr.Length);
         message_end =
@@ -954,6 +960,12 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                     msetr->msetr_v2_hdr->BaseTimestamp + hdr.TimestampDelta;
         }
 
+
+        /* Cache the wire-format size of this record (length varint +
+         * body) on the rkm.
+         * Used by share consumer fetch.size telemetry. */
+        rkm->rkm_u.consumer.wire_size =
+            (int32_t)(message_end - record_start_pos);
 
         /* Enqueue message on temporary queue */
         rd_kafka_q_enq(&msetr->msetr_rkq, rko);

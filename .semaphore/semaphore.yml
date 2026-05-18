@@ -4,7 +4,7 @@ agent:
   machine:
     type: s1-prod-ubuntu24-04-arm64-00
 execution_time_limit:
-  hours: 3
+  hours: 5
 
 auto_cancel:
   running:

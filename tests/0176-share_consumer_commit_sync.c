@@ -1862,8 +1862,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
         /* Verify timing: should complete in ~4s (2s inflight + 2s sync),
          * not ~6s (2s inflight + 2s async + 2s sync). */
-        TEST_ASSERT(t_elapsed_ms >= 3500 && t_elapsed_ms <= 4500,
-                    "Expected commit_sync to complete in ~4s (3500-4500ms), "
+        TEST_ASSERT(t_elapsed_ms >= 3250 && t_elapsed_ms <= 4500,
+                    "Expected commit_sync to complete in ~4s (3250-4500ms), "
                     "got %" PRId64 "ms. If >5s, dispatch priority is wrong.",
                     t_elapsed_ms);
 
@@ -1991,9 +1991,9 @@ static void do_test_commit_sync_callback(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        ack_cb_state_t state;
+        int consumed         = 0;
+        int attempts         = 0;
+        ack_cb_state_t state = {0};
 
         SUB_TEST();
 

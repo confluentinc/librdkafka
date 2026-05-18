@@ -30,6 +30,8 @@
 
 /* Forward declarations */
 typedef struct rd_kafka_op_s rd_kafka_op_t;
+typedef struct rd_kafka_broker_s rd_kafka_broker_t;
+typedef struct rd_kafka_cgrp_s rd_kafka_cgrp_t;
 
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED =
@@ -310,5 +312,53 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
  */
 void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
                                            rd_list_t *ack_details);
+
+
+/**
+ * @brief Clear cached share-ack state on a broker that is being
+ *        decommissioned.
+ *
+ * For each pending async ack batch on the broker, stamps
+ * SHARE_SESSION_NOT_FOUND on the batch and fires the share-ack
+ * callback so the application sees the failure. For sync acks
+ * (pending_commit_sync), stamps the same err and applies it to the
+ * in-flight commit_sync request (decrements awaiting count, completes
+ * sync if last broker outstanding).
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_acks_clear_during_broker_decommission(
+    rd_kafka_t *rk,
+    rd_kafka_broker_t *rkb);
+
+
+/**
+ * @brief Apply a broker's commit_sync result: copy each batch's
+ *        per-partition err onto the corresponding entry in
+ *        rkcg_commit_sync_request.results, decrement the count of
+ *        brokers still awaiting reply, and complete the commit_sync
+ *        if this was the last broker outstanding.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_apply_result(rd_kafka_t *rk,
+                                             rd_kafka_cgrp_t *rkcg,
+                                             rd_list_t *ack_batches);
+
+/**
+ * @brief Check if all broker results are in and send response if done.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
+                                               rd_kafka_cgrp_t *rkcg);
+
+/**
+ * @brief Send commit_sync response to the app thread and clear state.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg);
+
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

@@ -3534,6 +3534,13 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
                 rkb->rkb_toppar_cnt--;
                 rd_kafka_broker_share_session_toppar_remove(rkb, rktp);
+                /* TODO KIP-932: Verify this while working on leader migration.
+                 * Free rktp_rkb_session_link before the new leader broker
+                 * reuses it via TAILQ_INSERT_TAIL on its own
+                 * toppars_in_session; otherwise old broker's list head is
+                 * left dangling and destroy_final asserts. */
+                rd_kafka_broker_session_remove_partition_from_toppars_in_session(
+                    rkb, rktp);
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_broker_destroy(rktp->rktp_broker);
                 if (rktp->rktp_msgq_wakeup_q) {
@@ -3761,7 +3768,11 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
 
                 rd_kafka_broker_share_session_toppar_remove(rkb, rko->rko_rktp);
                 break;
-
+        case RD_KAFKA_OP_SHARE_SESSION_CLEAR:
+                rd_rkb_dbg(rkb, CGRP, "TERM",
+                           "Received SHARE_SESSION_CLEAR op");
+                rd_kafka_broker_share_fetch_session_clear(rkb);
+                break;
         default:
                 rd_kafka_assert(rkb->rkb_rk, !*"unhandled op type");
                 break;
@@ -4998,58 +5009,6 @@ static int rd_kafka_broker_thread_main(void *arg) {
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_outbufs),
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_waitresps),
                             (int)rd_kafka_bufq_cnt(&rkb->rkb_retrybufs), r);
-
-                        /**
-                         * TODO KIP-932: Remove the below destroy logic for the
-                         *               shared fetch session toppar information
-                         *               when the share_close() is properly
-                         * implemented.
-                         */
-                        rd_rkb_dbg(rkb, BROKER, "TERMINATE",
-                                   "Partitions in fetch session: %d",
-                                   rkb->rkb_share_fetch_session
-                                       .toppars_in_session_cnt);
-                        if (rkb->rkb_share_fetch_session.toppars_to_add)
-                                rd_rkb_dbg(
-                                    rkb, BROKER, "TERMINATE",
-                                    "Partitions to add to fetch session: %d",
-                                    rd_list_cnt(rkb->rkb_share_fetch_session
-                                                    .toppars_to_add));
-                        if (rkb->rkb_share_fetch_session.toppars_to_forget) {
-                                rd_rkb_dbg(
-                                    rkb, BROKER, "TERMINATE",
-                                    "Partitions to forget from fetch session: "
-                                    "%d",
-                                    rd_list_cnt(rkb->rkb_share_fetch_session
-                                                    .toppars_to_forget));
-                                rd_kafka_toppar_t *rktp;
-                                int i;
-                                RD_LIST_FOREACH(rktp,
-                                                rkb->rkb_share_fetch_session
-                                                    .toppars_to_forget,
-                                                i) {
-                                        rd_rkb_dbg(
-                                            rkb, BROKER, "TERMINATE",
-                                            "  - %.*s [%" PRId32 "]",
-                                            RD_KAFKAP_STR_PR(
-                                                rktp->rktp_rkt->rkt_topic),
-                                            rktp->rktp_partition);
-                                }
-                        }
-                        if (rkb->rkb_share_fetch_session.adding_toppars)
-                                rd_rkb_dbg(
-                                    rkb, BROKER, "TERMINATE",
-                                    "Partitions being added to fetch session: "
-                                    "%d",
-                                    rd_list_cnt(rkb->rkb_share_fetch_session
-                                                    .adding_toppars));
-                        if (rkb->rkb_share_fetch_session.forgetting_toppars)
-                                rd_rkb_dbg(
-                                    rkb, BROKER, "TERMINATE",
-                                    "Partitions being forgotten from fetch "
-                                    "session: %d",
-                                    rd_list_cnt(rkb->rkb_share_fetch_session
-                                                    .forgetting_toppars));
                 }
         }
 
@@ -5137,6 +5096,9 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_add);
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_forget);
         rd_assert(!rkb->rkb_share_async_ack_details);
+        rd_assert(!rkb->rkb_pending_commit_sync.sync_ack_details);
+        rd_assert(!rkb->rkb_share_fetch_session.adding_toppars);
+        rd_assert(!rkb->rkb_share_fetch_session.forgetting_toppars);
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
             (rkb->rkb_rk->rk_conf.security_protocol ==
@@ -6541,24 +6503,6 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         if (rd_atomic32_get(&rkb->termination_in_progress) > 0)
                 return;
 
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
-            rkb->rkb_source == RD_KAFKA_LEARNED) {
-                /* Clear pending ack details cached on this broker.
-                 * TODO KIP-932: Maybe move ack_details cleanup to clear
-                 *               through DESTROY err flow when main thread
-                 *               receives response from ongoing op. Problem
-                 *               with that approach is that broker_final
-                 *               might be called before reply for the op
-                 *               is processed. Check properly.
-                 * TODO KIP-932: Surface SHARE_SESSION_NOT_FOUND on the
-                 *               pending acks via the acknowledgement
-                 *               callback before discarding them. */
-                if (rkb->rkb_share_async_ack_details) {
-                        rd_list_destroy(rkb->rkb_share_async_ack_details);
-                        rkb->rkb_share_async_ack_details = NULL;
-                }
-        }
-
         rd_atomic32_add(&rkb->termination_in_progress, 1);
 
         /* Add broker's thread to wait_thrds list for later joining */
@@ -6588,6 +6532,15 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 rd_kafka_cgrp_coord_dead(rk->rk_cgrp,
                                          RD_KAFKA_RESP_ERR__DESTROY_BROKER,
                                          "Group coordinator decommissioned");
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
+            rkb->rkb_source == RD_KAFKA_LEARNED) {
+                rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);
+                rd_kafka_q_enq(
+                    rkb->rkb_ops,
+                    rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
+        }
+
         /* Send op to trigger queue/io wake-up.
          * Broker thread will destroy this thread reference.
          * WARNING: This is last time we can read from rkb in this thread! */

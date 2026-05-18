@@ -60,7 +60,7 @@ struct rd_kafka_q_s {
         struct rd_kafka_op_tailq rkq_q; /* TAILQ_HEAD(, rd_kafka_op_s) */
         int rkq_qlen;                   /* Number of entries in queue */
         int64_t rkq_qsize;              /* Size of all entries in queue */
-        rd_atomic32_t rkq_refcnt;
+        rd_refcnt_t rkq_refcnt;
         int rkq_flags;
 #define RD_KAFKA_Q_F_ALLOCATED 0x1 /* Allocated: rd_free on destroy */
 #define RD_KAFKA_Q_F_READY                                                     \
@@ -155,7 +155,7 @@ void rd_kafka_q_destroy_final(rd_kafka_q_t *rkq);
 #define rd_kafka_q_unlock(rkqu) mtx_unlock(&(rkqu)->rkq_lock)
 
 static RD_INLINE RD_UNUSED rd_kafka_q_t *rd_kafka_q_keep(rd_kafka_q_t *rkq) {
-        rd_atomic32_add(&rkq->rkq_refcnt, 1);
+        rd_refcnt_add(&rkq->rkq_refcnt);
         return rkq;
 }
 
@@ -221,7 +221,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_q_destroy0(rd_kafka_q_t *rkq,
                 rd_kafka_q_purge0(rkq, 1 /*lock*/);
         }
 
-        refcnt = rd_atomic32_sub(&rkq->rkq_refcnt, 1);
+        refcnt = rd_refcnt_sub(&rkq->rkq_refcnt);
         rd_kafka_assert(NULL, refcnt >= 0);
 
         if (unlikely(refcnt == 0))
@@ -358,7 +358,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_q_yield(rd_kafka_q_t *rkq) {
 
         mtx_lock(&rkq->rkq_lock);
 
-        rd_dassert(rd_atomic32_get(&rkq->rkq_refcnt) > 0);
+        rd_dassert(rd_refcnt_get(&rkq->rkq_refcnt) > 0);
 
         if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
                 /* Queue has been disabled */
@@ -425,7 +425,7 @@ static RD_INLINE RD_UNUSED int rd_kafka_q_enq1(rd_kafka_q_t *rkq,
         if (do_lock)
                 mtx_lock(&rkq->rkq_lock);
 
-        rd_dassert(rd_atomic32_get(&rkq->rkq_refcnt) > 0);
+        rd_dassert(rd_refcnt_get(&rkq->rkq_refcnt) > 0);
 
         if (unlikely(!(rkq->rkq_flags & RD_KAFKA_Q_F_READY))) {
                 /* Queue has been disabled, reply to and fail the rko. */

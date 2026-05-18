@@ -68,6 +68,7 @@ void rd_kafka_q_destroy_final(rd_kafka_q_t *rkq) {
         rd_kafka_q_disable0(rkq, 0 /*no-lock*/); /* for the non-devel case */
         rd_kafka_q_fwd_set0(rkq, NULL, 0 /*no-lock*/, 0 /*no-fwd-app*/);
         rd_kafka_q_purge0(rkq, 0 /*no-lock*/);
+        rd_refcnt_destroy(&rkq->rkq_refcnt);
         assert(!rkq->rkq_fwdq);
         mtx_unlock(&rkq->rkq_lock);
         mtx_destroy(&rkq->rkq_lock);
@@ -89,7 +90,7 @@ void rd_kafka_q_init0(rd_kafka_q_t *rkq,
                       int line) {
         rd_kafka_q_reset(rkq);
         rkq->rkq_fwdq = NULL;
-        rd_atomic32_init(&rkq->rkq_refcnt, 1);
+        rd_refcnt_init(&rkq->rkq_refcnt, 1);
         rkq->rkq_flags = RD_KAFKA_Q_F_READY;
         if (for_consume)
                 rkq->rkq_flags |= RD_KAFKA_Q_F_CONSUMER;
@@ -1177,9 +1178,10 @@ void rd_kafka_q_fix_offsets(rd_kafka_q_t *rkq,
 void rd_kafka_q_dump(FILE *fp, rd_kafka_q_t *rkq) {
         mtx_lock(&rkq->rkq_lock);
         fprintf(fp,
-                "Queue %p \"%s\" (refcnt %d, flags 0x%x, %d ops, "
+                "Queue %p \"%s\" (refcnt %" PRId32
+                ", flags 0x%x, %d ops, "
                 "%" PRId64 " bytes)\n",
-                rkq, rkq->rkq_name, rd_atomic32_get(&rkq->rkq_refcnt),
+                rkq, rkq->rkq_name, rd_refcnt_get(&rkq->rkq_refcnt),
                 rkq->rkq_flags, rkq->rkq_qlen, rkq->rkq_qsize);
 
         if (rkq->rkq_qio)

@@ -1300,6 +1300,15 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         size_t of_Brokers_cnt;
         int32_t response_Brokers_cnt = 0;
 
+        /* Consume the next pushed err+rtt for ApiKey=Metadata so an
+         * injected RTT (or __TRANSPORT close) on this connection takes
+         * effect. The returned err code is not propagated into the
+         * response body (Metadata's error reporting is per-topic and
+         * per-partition; tests that need to inject a topic-level
+         * MetadataResponse error should use the dedicated mock
+         * topic/partition error APIs). */
+        rd_kafka_mock_next_request_error(mconn, resp);
+
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
                 rd_kafka_buf_write_i32(resp, 0);
@@ -1309,7 +1318,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
 
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
-                if (!mrkb->up)
+                if (!mrkb->up || !mrkb->in_metadata)
                         continue;
                 /* Response: Brokers.Nodeid */
                 rd_kafka_buf_write_i32(resp, mrkb->id);

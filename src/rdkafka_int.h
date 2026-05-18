@@ -1331,7 +1331,6 @@ rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
  */
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
-
 void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,
                                      rd_bool_t should_fetch,

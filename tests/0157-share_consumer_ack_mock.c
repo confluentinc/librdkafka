@@ -1750,11 +1750,7 @@ static void do_test_not_leader_or_follower_redirect(void) {
 
 int main_0157_share_consumer_ack_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
-        /* This test suite has many subtests; set a generous timeout.
-         * When running in parallel with other test suites (e.g., 0155, 0156)
-         * the mock broker and consumer threads compete for CPU, which can
-         * slow individual subtests by 5x or more. Use 1500s to be safe. */
-        test_timeout_set(1500);
+        test_timeout_set(200);
 
         /* Positive scenarios */
         do_test_implicit_ack_no_redelivery();

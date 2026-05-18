@@ -570,10 +570,10 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(
             &rk->rk_telemetry.rd_avg_current.rk_avg_share_poll_idle_ratio,
-            RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+            RD_AVG_GAUGE, 0, 1000 * 1000, 2, rd_true);
         rd_avg_init(
             &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
-            RD_AVG_GAUGE, 0, 60 * 1000, 2, rd_true);
+            RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency,
@@ -583,10 +583,10 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(
             &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_poll_idle_ratio,
-            RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
+            RD_AVG_GAUGE, 0, 1000 * 1000, 2, rd_true);
         rd_avg_init(
             &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
-            RD_AVG_GAUGE, 0, 60 * 1000, 2, rd_true);
+            RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
                     RD_AVG_GAUGE, 0, 500 * 1000, 2, rd_true);
         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
@@ -836,13 +836,14 @@ void unit_test_telemetry_set_share_poll_idle_ratio(rd_kafka_t *rk,
 void unit_test_telemetry_set_time_between_poll(rd_kafka_t *rk,
                                                rd_kafka_broker_t *rkb) {
         rd_avg_add(
-            &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll, 5);
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+            5000);
         rd_avg_add(
             &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
-            25);
+            25000);
         rd_avg_add(
             &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
-            60);
+            60000);
 }
 
 void unit_test_telemetry_set_commit_latency(rd_kafka_t *rk,

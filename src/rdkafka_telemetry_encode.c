@@ -301,7 +301,8 @@ calculate_share_time_between_poll_avg(rd_kafka_t *rk,
                                       rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t time_between_poll_avg;
         time_between_poll_avg.double_value = calculate_avg(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll, 1);
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
+            THREE_ORDERS_MAGNITUDE);
         return time_between_poll_avg;
 }
 
@@ -311,7 +312,8 @@ calculate_share_time_between_poll_max(rd_kafka_t *rk,
                                       rd_ts_t now_ns) {
         rd_kafka_telemetry_metric_value_t time_between_poll_max;
         time_between_poll_max.int_value = calculate_max(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll, 1);
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
+            THREE_ORDERS_MAGNITUDE);
         return time_between_poll_max;
 }
 
@@ -838,41 +840,39 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         }
 
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
-                rd_avg_rollover(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
-        }
-
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
-                rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
-                                    .rk_avg_share_poll_idle_ratio);
-                rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
-                                     .rk_avg_share_poll_idle_ratio,
-                                &rk->rk_telemetry.rd_avg_current
-                                     .rk_avg_share_poll_idle_ratio);
-                rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
-                                    .rk_avg_share_time_between_poll);
-                rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
-                                     .rk_avg_share_time_between_poll,
-                                &rk->rk_telemetry.rd_avg_current
-                                     .rk_avg_share_time_between_poll);
-        }
-
-        if (rk->rk_type == RD_KAFKA_CONSUMER &&
-            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency);
-                rd_avg_rollover(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency);
-
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency);
-                rd_avg_rollover(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency);
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_share_poll_idle_ratio);
+                        rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                             .rk_avg_share_poll_idle_ratio,
+                                        &rk->rk_telemetry.rd_avg_current
+                                             .rk_avg_share_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_share_time_between_poll);
+                        rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                             .rk_avg_share_time_between_poll,
+                                        &rk->rk_telemetry.rd_avg_current
+                                             .rk_avg_share_time_between_poll);
+                } else {
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_poll_idle_ratio);
+                        rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                             .rk_avg_poll_idle_ratio,
+                                        &rk->rk_telemetry.rd_avg_current
+                                             .rk_avg_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_rebalance_latency);
+                        rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                             .rk_avg_rebalance_latency,
+                                        &rk->rk_telemetry.rd_avg_current
+                                             .rk_avg_rebalance_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_commit_latency);
+                        rd_avg_rollover(&rk->rk_telemetry.rd_avg_rollover
+                                             .rk_avg_commit_latency,
+                                        &rk->rk_telemetry.rd_avg_current
+                                             .rk_avg_commit_latency);
+                }
         }
 
         int resource_attributes_count =

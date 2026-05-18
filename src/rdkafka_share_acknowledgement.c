@@ -26,6 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include "rdkafka_int.h"
+#include "rdkafka_metadata.h"
 #include "rdkafka_share_acknowledgement.h"
 
 rd_kafka_share_ack_batch_entry_t *
@@ -380,6 +381,112 @@ void rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
 }
 
 /**
+ * @brief Resolve the leader broker for an ack batch, or fail the
+ *        batch locally with the appropriate error code.
+ *
+ *        Snapshots (rktp_leader, rktp_leader_id) under rktp_lock to
+ *        avoid racing with concurrent leader-state clearing on the
+ *        broker thread. On success, returns a kept broker handle;
+ *        the caller MUST rd_kafka_broker_destroy() it after use.
+ *        On failure returns NULL with \p *errp set.
+ *
+ * @locality main thread
+ */
+rd_kafka_broker_t *rd_kafka_share_ack_batch_resolve_leader_or_fail_acks(
+    rd_kafka_t *rk,
+    rd_kafka_share_ack_batches_t *batch,
+    rd_kafka_resp_err_t *errp) {
+        rd_kafka_toppar_t *rktp;
+        rd_kafka_broker_t *leader_rkb;
+        int32_t leader_id;
+
+        rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
+
+        /* Defensive: in production the rktp is always attached to the
+         * batch by the ShareFetch reply parser via toppar_keep, so
+         * this branch should never fire. Trigger a cluster-wide
+         * metadata refresh to recover if it ever does. */
+        if (unlikely(!rktp)) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "Ack batch for partition %" PRId32
+                             " dropped: toppar not found "
+                             "(should be unreachable)",
+                             batch->rktpar->partition);
+                rd_kafka_metadata_refresh_known_topics(
+                    rk, NULL, rd_false /*don't force*/,
+                    "shareack toppar not found");
+                *errp = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+                return NULL;
+        }
+
+        /* Snapshot (rktp_leader, rktp_leader_id) under rktp_lock to
+         * avoid racing with concurrent leader-state clearing on the
+         * broker thread. */
+        rd_kafka_toppar_lock(rktp);
+        leader_rkb = rktp->rktp_leader;
+        leader_id  = rktp->rktp_leader_id;
+        if (leader_rkb)
+                rd_kafka_broker_keep(leader_rkb);
+        rd_kafka_toppar_unlock(rktp);
+
+        /* No cached leader for this partition. Trigger a metadata
+         * refresh so the next request finds a leader, and surface
+         * LEADER_NOT_AVAILABLE. */
+        if (unlikely(!leader_rkb)) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "Ack batch for %s [%" PRId32
+                             "] dropped: no cached leader, "
+                             "triggering metadata refresh",
+                             batch->rktpar->topic, batch->rktpar->partition);
+                rd_kafka_toppar_leader_unavailable(
+                    rktp, "shareack", RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE);
+                *errp = RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+                return NULL;
+        }
+
+        /* Cached leader broker is being decommissioned or the
+         * instance is terminating. Surface NOT_LEADER_OR_FOLLOWER and
+         * trigger a metadata refresh so the next request finds the
+         * new leader. */
+        if (unlikely(rd_kafka_broker_or_instance_terminating(leader_rkb))) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "Ack batch for %s [%" PRId32
+                             "] dropped: broker %" PRId32
+                             " is terminating, "
+                             "triggering metadata refresh",
+                             batch->rktpar->topic, batch->rktpar->partition,
+                             batch->response_leader_id);
+                rd_kafka_toppar_leader_unavailable(
+                    rktp, "shareack", RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
+                rd_kafka_broker_destroy(leader_rkb);
+                *errp = RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
+                return NULL;
+        }
+
+        /* Cached leader differs from the leader at which records
+         * were acquired. The session for these records lives on the
+         * original broker which no longer leads this partition. No
+         * metadata refresh - the cached current leader is already
+         * the new one (that's how this check fired). */
+        if (unlikely(rd_kafka_share_ack_batch_leader_stale(batch, leader_id))) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "Ack batch for %s [%" PRId32
+                             "] dropped locally: leader changed "
+                             "since records were acquired "
+                             "(was %" PRId32 ", now %" PRId32 ")",
+                             batch->rktpar->topic, batch->rktpar->partition,
+                             batch->response_leader_id, leader_id);
+                rd_kafka_broker_destroy(leader_rkb);
+                *errp = RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
+                return NULL;
+        }
+
+        *errp = RD_KAFKA_RESP_ERR_NO_ERROR;
+        return leader_rkb;
+}
+
+
+/**
  * @brief Segregate ack batches from a FANOUT op by partition leader.
  *
  * For each ack batch, looks up the current leader broker via the
@@ -401,23 +508,19 @@ void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
         int batch_cnt = rd_list_cnt(ack_batches);
 
         while ((batch = rd_list_pop(ack_batches))) {
-                rd_kafka_toppar_t *rktp;
                 rd_kafka_broker_t *leader_rkb;
                 rd_kafka_share_ack_batches_t *existing;
+                rd_kafka_resp_err_t fail_err;
 
-                rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
-                if (!rktp || !rktp->rktp_leader ||
-                    rd_kafka_broker_or_instance_terminating(
-                        rktp->rktp_leader)) {
-                        rd_kafka_dbg(rk, CGRP, "SHARE",
-                                     "Ack batch for leader %" PRId32
-                                     " dropped: toppar or leader not available "
-                                     "or terminating",
-                                     batch->response_leader_id);
+                leader_rkb =
+                    rd_kafka_share_ack_batch_resolve_leader_or_fail_acks(
+                        rk, batch, &fail_err);
+                if (!leader_rkb) {
+                        rd_kafka_share_enqueue_ack_commit_cb_op(rk, batch,
+                                                                fail_err);
                         rd_kafka_share_ack_batches_destroy(batch);
                         continue;
                 }
-                leader_rkb = rktp->rktp_leader;
 
                 /* Allocate list on first use with incoming batch count
                  * as initial capacity hint */
@@ -446,6 +549,8 @@ void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                         rd_list_add(leader_rkb->rkb_share_async_ack_details,
                                     batch);
                 }
+
+                rd_kafka_broker_destroy(leader_rkb);
         }
 }
 
@@ -664,6 +769,12 @@ int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b) {
         if (a->start_offset > b->start_offset)
                 return 1;
         return 0;
+}
+
+rd_bool_t
+rd_kafka_share_ack_batch_leader_stale(rd_kafka_share_ack_batches_t *batch,
+                                      int32_t current_leader_id) {
+        return current_leader_id != batch->response_leader_id;
 }
 
 /**

@@ -3851,63 +3851,6 @@ static void rd_kafka_share_merge_ack_lists(rd_list_t *dst_list,
 }
 
 /**
- * @brief Send commit_sync response to the app thread and clear state.
- *
- * Creates a SHARE_COMMIT_SYNC_FANOUT reply op with the per-partition
- * results and enqueues it on the app thread's temp queue. Clears the
- * commit_sync request state.
- *
- * @param rkcg Consumer group handle.
- *
- * @locality main thread
- */
-static void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
-        rd_kafka_op_t *rko_reply;
-
-        rko_reply = rd_kafka_op_new(RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY);
-        rko_reply->rko_u.share_commit_sync_fanout_reply.results =
-            rkcg->rkcg_commit_sync_request.results;
-
-        rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
-        rd_kafka_q_destroy(rkcg->rkcg_commit_sync_request.replyq);
-
-        rkcg->rkcg_commit_sync_request.id                          = 0;
-        rkcg->rkcg_commit_sync_request.results                     = NULL;
-        rkcg->rkcg_commit_sync_request.replyq                      = NULL;
-        rkcg->rkcg_commit_sync_request.abs_timeout                 = 0;
-        rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt = 0;
-}
-
-/**
- * @brief Check if all broker results are in and send response if done.
- *
- * Called after each broker reply arrives. If brokers_awaiting_result_cnt
- * reaches zero, stops the timeout timer and sends the response op
- * to the app thread's temp queue.
- *
- * @param rk Client instance.
- * @param rkcg Consumer group handle.
- *
- * @locality main thread
- */
-void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
-                                               rd_kafka_cgrp_t *rkcg) {
-        if (rkcg->rkcg_commit_sync_request.brokers_awaiting_result_cnt > 0)
-                return;
-
-        rd_kafka_dbg(rk, CGRP, "SHARE",
-                     "Commit sync request %" PRId64
-                     " complete; all broker replies received, "
-                     "sending response",
-                     rkcg->rkcg_commit_sync_request.id);
-
-        rd_kafka_timer_stop(&rk->rk_timers, &rkcg->rkcg_commit_sync_request.tmr,
-                            1);
-
-        rd_kafka_share_commit_sync_send_response(rkcg);
-}
-
-/**
  * @brief Timeout callback for commit_sync.
  *
  * Fires when the commit_sync timeout expires. For each broker with

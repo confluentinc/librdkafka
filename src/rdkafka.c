@@ -729,6 +729,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "Broker: Request principal deserialization failed during "
               "forwarding"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID,
+              "Broker: The log's topic ID did not match the topic ID in the "
+              "request"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
               "Broker: The member epoch is fenced by the group coordinator"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
@@ -3983,19 +3986,20 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
         int batch_cnt = rd_list_cnt(ack_batches);
 
         while ((batch = rd_list_pop(ack_batches))) {
-                rd_kafka_toppar_t *rktp;
                 rd_kafka_broker_t *leader_rkb;
                 rd_kafka_share_ack_batches_t *existing;
                 rd_kafka_topic_partition_t *result_rktpar;
+                rd_kafka_resp_err_t fail_err;
 
-                rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
-                if (!rktp || !rktp->rktp_leader) {
+                leader_rkb =
+                    rd_kafka_share_ack_batch_resolve_leader_or_fail_acks(
+                        rk, batch, &fail_err);
+                if (!leader_rkb) {
                         result_rktpar = rd_kafka_topic_partition_list_find(
                             rkcg->rkcg_commit_sync_request.results,
                             batch->rktpar->topic, batch->rktpar->partition);
                         if (result_rktpar)
-                                result_rktpar->err =
-                                    RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
+                                result_rktpar->err = fail_err;
                         else
                                 rd_kafka_dbg(rk, CGRP, "SHARE",
                                              "Sync ack batch for %s [%" PRId32
@@ -4004,16 +4008,11 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
                                              batch->rktpar->topic,
                                              batch->rktpar->partition);
 
-                        rd_kafka_dbg(rk, CGRP, "SHARE",
-                                     "Sync ack batch for %s [%" PRId32
-                                     "] dropped: "
-                                     "toppar or leader not available",
-                                     batch->rktpar->topic,
-                                     batch->rktpar->partition);
+                        rd_kafka_share_enqueue_ack_commit_cb_op(rk, batch,
+                                                                fail_err);
                         rd_kafka_share_ack_batches_destroy(batch);
                         continue;
                 }
-                leader_rkb = rktp->rktp_leader;
 
                 /* Put all acks into pending_commit_sync */
                 if (!leader_rkb->rkb_pending_commit_sync.sync_ack_details)
@@ -4045,6 +4044,8 @@ static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
                 leader_rkb->rkb_pending_commit_sync.abs_timeout = abs_timeout;
                 leader_rkb->rkb_pending_commit_sync.commit_sync_request_id =
                     rkcg->rkcg_commit_sync_request.id;
+
+                rd_kafka_broker_destroy(leader_rkb);
         }
 
         rd_list_destroy(ack_batches);

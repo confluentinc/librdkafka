@@ -3496,7 +3496,11 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
     int64_t *acquired_bytes,
     int isolation_level) {
         int64_t offset;
-        int64_t upper_bound = pmeta->speo;
+        int64_t upper_bound       = pmeta->speo;
+        int64_t spso_at_entry     = pmeta->spso;
+        int64_t first_acquired    = -1;
+        int64_t last_acquired     = -1;
+        int acquired_in_this_call = 0;
 
         /* For read_committed, cap acquisition at LSO - 1.
          * When lso == 0 (open txn starts at offset 0), upper_bound
@@ -3591,11 +3595,26 @@ static void rd_kafka_mock_sgrp_acquire_available_offsets(
 
                 (*acquired_cnt)++;
                 *acquired_bytes += est_size;
+                if (first_acquired == -1)
+                        first_acquired = offset;
+                last_acquired = offset;
+                acquired_in_this_call++;
                 if (remaining_records && *remaining_records > 0)
                         (*remaining_records)--;
                 if (remaining_bytes && *remaining_bytes > 0)
                         (*remaining_bytes) -= est_size;
         }
+
+        if (acquired_in_this_call > 0)
+                rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCKSHARE",
+                             "acquire: %s [%" PRId32
+                             "] member %.*s acquired %d "
+                             "records [%" PRId64 ",%" PRId64 "] spso=%" PRId64
+                             " upper_bound=%" PRId64 " pmeta_acquired_cnt=%d",
+                             mpart->topic->name, mpart->id,
+                             RD_KAFKAP_STR_PR(member_id), acquired_in_this_call,
+                             first_acquired, last_acquired, spso_at_entry,
+                             upper_bound, pmeta->acquired_cnt);
 }
 
 static void rd_kafka_mock_sgrp_partmeta_prune_archived(
@@ -3764,10 +3783,21 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
         rd_kafka_resp_err_t err = RD_KAFKA_RESP_ERR_NO_ERROR;
         int64_t offset;
+        int64_t spso_before;
+        int applied_cnt = 0;
 
         pmeta = rd_kafka_mock_sgrp_partmeta_find(sgrp, topic_id, partition);
-        if (!pmeta)
+        if (!pmeta) {
+                rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCKSHARE",
+                             "apply_ack: partmeta NOT FOUND for partition "
+                             "%" PRId32 " (member %.*s, range [%" PRId64
+                             ",%" PRId64 "], ack_type=%" PRId8 ")",
+                             partition, RD_KAFKAP_STR_PR(member_id),
+                             first_offset, last_offset, ack_type);
                 return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        spso_before = pmeta->spso;
 
         /* Pass 1: Validate all offsets in the range.
          * Acks for a partition in a single request are atomic —
@@ -3795,6 +3825,16 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                 if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED ||
                     !state->owner_member_id ||
                     rd_kafkap_str_cmp_str(member_id, state->owner_member_id)) {
+                        rd_kafka_dbg(
+                            sgrp->cluster->rk, MOCK, "MOCKSHARE",
+                            "apply_ack: validation FAILED at offset "
+                            "%" PRId64 " for partition %" PRId32
+                            " (member %.*s): state=%d "
+                            "owner=%s — returning INVALID_RECORD_STATE",
+                            offset, partition, RD_KAFKAP_STR_PR(member_id),
+                            (int)state->state,
+                            state->owner_member_id ? state->owner_member_id
+                                                   : "(null)");
                         err = RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
                         break;
                 }
@@ -3821,6 +3861,7 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                                 rd_free(state->owner_member_id);
                                 state->owner_member_id = NULL;
                                 state->lock_expiry_ts  = 0;
+                                applied_cnt++;
                                 break;
                         case 0: /* GAP -> Archived */
                         case 3: /* REJECT -> Archived */
@@ -3830,10 +3871,12 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                                 rd_free(state->owner_member_id);
                                 state->owner_member_id = NULL;
                                 state->lock_expiry_ts  = 0;
+                                applied_cnt++;
                                 break;
                         case 2: /* RELEASE */
                                 rd_kafka_mock_sgrp_record_release(sgrp, pmeta,
                                                                   state);
+                                applied_cnt++;
                                 break;
                         default:
                                 break;
@@ -3853,6 +3896,17 @@ rd_kafka_mock_sgrp_apply_ack(rd_kafka_mock_sharegroup_t *sgrp,
                 state->state = RD_KAFKA_MOCK_SGRP_RECORD_ARCHIVED;
                 pmeta->spso++;
         }
+
+        rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCKSHARE",
+                     "apply_ack: partition %" PRId32
+                     " member %.*s "
+                     "range [%" PRId64 ",%" PRId64 "] ack_type=%" PRId8
+                     " applied=%d err=%s spso=%" PRId64 "->%" PRId64
+                     " speo=%" PRId64 " acquired_cnt=%d",
+                     partition, RD_KAFKAP_STR_PR(member_id), first_offset,
+                     last_offset, ack_type, applied_cnt,
+                     err ? rd_kafka_err2name(err) : "NONE", spso_before,
+                     pmeta->spso, pmeta->speo, pmeta->acquired_cnt);
 
         return err;
 }

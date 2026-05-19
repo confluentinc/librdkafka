@@ -729,6 +729,9 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "Broker: Request principal deserialization failed during "
               "forwarding"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID, "Broker: Unknown topic id"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID,
+              "Broker: The log's topic ID did not match the topic ID in the "
+              "request"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH,
               "Broker: The member epoch is fenced by the group coordinator"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
@@ -3957,97 +3960,6 @@ static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
             rko_sf->rko_u.share_fetch.commit_sync_request_id);
 
         rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
-}
-
-/**
- * @brief Segregate sync ack batches by partition leader into
- *        each broker's pending_commit_sync list.
- *
- * Phase 1 of sync dispatch: puts ALL acks into rkb_pending_commit_sync
- * regardless of whether the broker is free or busy. Updates the
- * commit_sync results for partitions with no available leader.
- *
- * @param rk Client instance.
- * @param rkcg Consumer group handle.
- * @param ack_batches List of ack batches from the SYNC_FANOUT op.
- *                    Elements are moved to broker lists; container destroyed.
- * @param abs_timeout Absolute timeout for the commit_sync request.
- *
- * @locality main thread
- */
-static void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
-                                                         rd_kafka_cgrp_t *rkcg,
-                                                         rd_list_t *ack_batches,
-                                                         rd_ts_t abs_timeout) {
-        rd_kafka_share_ack_batches_t *batch;
-        int batch_cnt = rd_list_cnt(ack_batches);
-
-        while ((batch = rd_list_pop(ack_batches))) {
-                rd_kafka_toppar_t *rktp;
-                rd_kafka_broker_t *leader_rkb;
-                rd_kafka_share_ack_batches_t *existing;
-                rd_kafka_topic_partition_t *result_rktpar;
-
-                rktp = rd_kafka_topic_partition_toppar(rk, batch->rktpar);
-                if (!rktp || !rktp->rktp_leader) {
-                        result_rktpar = rd_kafka_topic_partition_list_find(
-                            rkcg->rkcg_commit_sync_request.results,
-                            batch->rktpar->topic, batch->rktpar->partition);
-                        if (result_rktpar)
-                                result_rktpar->err =
-                                    RD_KAFKA_RESP_ERR_LEADER_NOT_AVAILABLE;
-                        else
-                                rd_kafka_dbg(rk, CGRP, "SHARE",
-                                             "Sync ack batch for %s [%" PRId32
-                                             "]: partition not found in "
-                                             "commit_sync results",
-                                             batch->rktpar->topic,
-                                             batch->rktpar->partition);
-
-                        rd_kafka_dbg(rk, CGRP, "SHARE",
-                                     "Sync ack batch for %s [%" PRId32
-                                     "] dropped: "
-                                     "toppar or leader not available",
-                                     batch->rktpar->topic,
-                                     batch->rktpar->partition);
-                        rd_kafka_share_ack_batches_destroy(batch);
-                        continue;
-                }
-                leader_rkb = rktp->rktp_leader;
-
-                /* Put all acks into pending_commit_sync */
-                if (!leader_rkb->rkb_pending_commit_sync.sync_ack_details)
-                        leader_rkb->rkb_pending_commit_sync.sync_ack_details =
-                            rd_list_new(
-                                batch_cnt,
-                                rd_kafka_share_ack_batches_destroy_free);
-
-                existing = rd_kafka_share_find_ack_batch(
-                    leader_rkb->rkb_pending_commit_sync.sync_ack_details,
-                    batch->rktpar);
-                if (existing) {
-                        rd_kafka_share_ack_batch_entry_t *entry;
-                        int j;
-                        RD_LIST_FOREACH(entry, &batch->entries, j) {
-                                rd_list_add(
-                                    &existing->entries,
-                                    rd_kafka_share_ack_batch_entry_copy(entry));
-                        }
-                        rd_list_sort(&existing->entries,
-                                     rd_kafka_share_ack_entries_sort_cmp_ptr);
-                        rd_kafka_share_ack_batches_destroy(batch);
-                } else {
-                        rd_list_add(leader_rkb->rkb_pending_commit_sync
-                                        .sync_ack_details,
-                                    batch);
-                }
-
-                leader_rkb->rkb_pending_commit_sync.abs_timeout = abs_timeout;
-                leader_rkb->rkb_pending_commit_sync.commit_sync_request_id =
-                    rkcg->rkcg_commit_sync_request.id;
-        }
-
-        rd_list_destroy(ack_batches);
 }
 
 /**

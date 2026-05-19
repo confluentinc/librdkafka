@@ -254,6 +254,7 @@ blocks:
             - name: ARTIFACT_KEY
               value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-all
           commands:
+            - export MKL_LIBCURL_PREV_VERSION=yes
             - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2026.05.07-2 artifacts/librdkafka.tgz
 
 

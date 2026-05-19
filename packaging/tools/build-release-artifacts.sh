@@ -62,7 +62,8 @@ fi
 
 if [ -n "$docker_image" ]; then
     # Running on the host, spin up the docker builder.
-    exec docker run $docker_platform -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
+    exec docker run $docker_platform -e MKL_LIBCURL_PREV_VERSION="$MKL_LIBCURL_PREV_VERSION" \
+        -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
     # Only reached on exec error
     exit $?
 fi
@@ -95,6 +96,10 @@ git config --system --add safe.directory '/librdkafka/.git'
 git clone /v /librdkafka
 
 cd /librdkafka
+
+if [ -n "$MKL_LIBCURL_PREV_VERSION" ]; then
+    echo "Configuring librdkafka with MKL_LIBCURL_PREV_VERSION=$MKL_LIBCURL_PREV_VERSION"
+fi
 
 # Build librdkafka
 ./configure \

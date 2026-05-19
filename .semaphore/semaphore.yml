@@ -243,7 +243,7 @@ blocks:
           - cd librdkafka
           - $msbuild = (& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe); & $msbuild win32\librdkafka.sln /p:Configuration=Release /p:Platform=$env:MSVC_PLATFORM /p:PlatformToolset=v142; if ($LASTEXITCODE -ne 0) { throw "Build failed" }
           - cache restore jdk21-msi-${env:CACHE_TAG}
-          - if (-not (Test-Path C:\jdk21.msi)) { Invoke-WebRequest -Uri "https://aka.ms/download-jdk/microsoft-jdk-21-windows-x64.msi" -OutFile C:\jdk21.msi -UseBasicParsing }
+          - if (Test-Path C:\jdk21.msi) { Write-Host "JDK MSI cache HIT" } else { Write-Host "JDK MSI cache MISS - downloading"; Invoke-WebRequest -Uri "https://aka.ms/download-jdk/microsoft-jdk-21-windows-x64.msi" -OutFile C:\jdk21.msi -UseBasicParsing }
           - cache store jdk21-msi-${env:CACHE_TAG} C:\jdk21.msi
           - Start-Process msiexec.exe -Wait -ArgumentList '/i', 'C:\jdk21.msi', '/quiet', 'ADDLOCAL=FeatureMain,FeatureEnvironment,FeatureJarFileRunWith,FeatureJavaHome'
           - $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User")
@@ -260,7 +260,7 @@ blocks:
               value: x64
           commands:
             - cache restore kafka-windows-${env:KAFKA_VERSION}-${env:CACHE_TAG}
-            - if (-not (Test-Path C:\kafka.tgz)) { Invoke-WebRequest -Uri "https://archive.apache.org/dist/kafka/${env:KAFKA_VERSION}/kafka_2.13-${env:KAFKA_VERSION}.tgz" -OutFile C:\kafka.tgz -UseBasicParsing }
+            - if (Test-Path C:\kafka.tgz) { Write-Host "Kafka tarball cache HIT" } else { Write-Host "Kafka tarball cache MISS - downloading"; Invoke-WebRequest -Uri "https://archive.apache.org/dist/kafka/${env:KAFKA_VERSION}/kafka_2.13-${env:KAFKA_VERSION}.tgz" -OutFile C:\kafka.tgz -UseBasicParsing }
             - cache store kafka-windows-${env:KAFKA_VERSION}-${env:CACHE_TAG} C:\kafka.tgz
             - tar -xzf C:\kafka.tgz -C C:\
             - Add-Content "C:\kafka_2.13-${env:KAFKA_VERSION}\config\server.properties" "`ngroup.share.min.record.lock.duration.ms=1000`ntransaction.state.log.replication.factor=1`ntransaction.state.log.min.isr=1"
@@ -273,7 +273,7 @@ blocks:
               value: Win32
           commands:
             - cache restore kafka-windows-${env:KAFKA_VERSION}-${env:CACHE_TAG}
-            - if (-not (Test-Path C:\kafka.tgz)) { Invoke-WebRequest -Uri "https://archive.apache.org/dist/kafka/${env:KAFKA_VERSION}/kafka_2.13-${env:KAFKA_VERSION}.tgz" -OutFile C:\kafka.tgz -UseBasicParsing }
+            - if (Test-Path C:\kafka.tgz) { Write-Host "Kafka tarball cache HIT" } else { Write-Host "Kafka tarball cache MISS - downloading"; Invoke-WebRequest -Uri "https://archive.apache.org/dist/kafka/${env:KAFKA_VERSION}/kafka_2.13-${env:KAFKA_VERSION}.tgz" -OutFile C:\kafka.tgz -UseBasicParsing }
             - cache store kafka-windows-${env:KAFKA_VERSION}-${env:CACHE_TAG} C:\kafka.tgz
             - tar -xzf C:\kafka.tgz -C C:\
             - Add-Content "C:\kafka_2.13-${env:KAFKA_VERSION}\config\server.properties" "`ngroup.share.min.record.lock.duration.ms=1000`ntransaction.state.log.replication.factor=1`ntransaction.state.log.min.isr=1"

@@ -649,8 +649,14 @@ err:
 static void
 rd_kafka_mock_partition_set_leader0(rd_kafka_mock_partition_t *mpart,
                                     rd_kafka_mock_broker_t *mrkb) {
-        mpart->leader = mrkb;
+        int32_t prev_id = mpart->leader ? mpart->leader->id : -1;
+        mpart->leader   = mrkb;
         mpart->leader_epoch++;
+        rd_kafka_dbg(mpart->topic->cluster->rk, MOCK, "MOCKSHARE",
+                     "set_leader0: %s [%" PRId32 "] leader %" PRId32
+                     "->%" PRId32 " new_epoch=%" PRId32,
+                     mpart->topic->name, mpart->id, prev_id,
+                     mrkb ? mrkb->id : -1, mpart->leader_epoch);
 }
 
 

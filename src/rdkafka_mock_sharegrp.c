@@ -900,6 +900,12 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
          *    fresh one. */
         if (SessionEpoch == 0) {
                 if (session) {
+                        rd_kafka_dbg(sgrp->cluster->rk, MOCK, "MOCKSHARE",
+                                     "fetch_session_get: epoch=0 destroy old "
+                                     "session for member %.*s on node %" PRId32
+                                     " (was epoch=%" PRId32 ")",
+                                     RD_KAFKAP_STR_PR(MemberId), NodeId,
+                                     session->session_epoch);
                         rd_kafka_mock_sgrp_release_member_locks(
                             sgrp, session->member_id);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
@@ -931,6 +937,15 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                          * The client handles this by resetting its
                          * per-broker epoch to 0 (opening a fresh session
                          * on the next fetch). */
+                        rd_kafka_dbg(
+                            sgrp->cluster->rk, MOCK, "MOCKSHARE",
+                            "fetch_session_get: EPOCH MISMATCH for member "
+                            "%.*s on node %" PRId32 ": client=%" PRId32
+                            " server=%" PRId32
+                            " — destroying session, returning "
+                            "INVALID_SHARE_SESSION_EPOCH",
+                            RD_KAFKAP_STR_PR(MemberId), NodeId, SessionEpoch,
+                            session->session_epoch);
                         rd_kafka_mock_sgrp_release_member_locks(
                             sgrp, session->member_id);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
@@ -984,6 +999,7 @@ void rd_kafka_mock_sgrp_record_release(
 void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                                              const char *member_id) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
+        int released_cnt = 0;
 
         TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
                 rd_kafka_mock_sgrp_record_state_t *state, *tmp;
@@ -996,8 +1012,15 @@ void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
                                 continue;
 
                         rd_kafka_mock_sgrp_record_release(mshgrp, pmeta, state);
+                        released_cnt++;
                 }
         }
+
+        if (released_cnt > 0)
+                rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCKSHARE",
+                             "release_member_locks: member %s released "
+                             "%d ACQUIRED records (forced back to AVAILABLE)",
+                             member_id, released_cnt);
 }
 
 /**
@@ -1041,6 +1064,10 @@ void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
         rd_kafka_mock_sgrp_fetch_session_t *session, *tmp;
         rd_ts_t now                       = rd_clock();
         rd_kafka_mock_cluster_t *mcluster = mshgrp->cluster;
+        rd_kafka_mock_sgrp_partmeta_t *pmeta;
+        int total_inflight      = 0;
+        int total_acquired_pre  = 0;
+        int total_acquired_post = 0;
 
         (void)rkts;
 
@@ -1052,6 +1079,14 @@ void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
                         (mshgrp->session_timeout_ms * 1000) >
                     now)
                         continue;
+
+                rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCKSHARE",
+                             "session_tmr: EXPIRING session for member "
+                             "%s on node %" PRId32 " (idle %" PRId64
+                             " us > %d ms)",
+                             session->member_id, session->node_id,
+                             now - session->ts_last_activity,
+                             mshgrp->session_timeout_ms);
 
                 /* Release all locks held by this member before
                  * destroying the session. */
@@ -1066,7 +1101,20 @@ void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
         /* 2. Proactively reclaim any expired acquisition locks.
          *    This catches records whose owning consumer crashed
          *    without closing its session cleanly. */
+        TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
+                total_inflight += pmeta->inflight_cnt;
+                total_acquired_pre += pmeta->acquired_cnt;
+        }
         rd_kafka_mock_sgrp_expire_locks(mshgrp, now);
+        TAILQ_FOREACH(pmeta, &mshgrp->partitions, link)
+        total_acquired_post += pmeta->acquired_cnt;
+        if (total_acquired_pre != total_acquired_post)
+                rd_kafka_dbg(mshgrp->cluster->rk, MOCK, "MOCKSHARE",
+                             "session_tmr: expire_locks released %d "
+                             "ACQUIRED records (pre=%d post=%d inflight=%d)",
+                             total_acquired_pre - total_acquired_post,
+                             total_acquired_pre, total_acquired_post,
+                             total_inflight);
 
         mtx_unlock(&mcluster->lock);
 }

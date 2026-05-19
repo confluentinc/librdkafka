@@ -481,6 +481,14 @@ rd_kafka_broker_t *rd_kafka_share_ack_batch_resolve_leader_or_fail_acks(
                 return NULL;
         }
 
+        rd_kafka_dbg(rk, CGRP, "SHAREACKROUTE",
+                     "Ack batch for %s [%" PRId32 "] routed to broker %" PRId32
+                     " (response_leader_id=%" PRId32
+                     ", current_leader_id=%" PRId32 ", entries=%d)",
+                     batch->rktpar->topic, batch->rktpar->partition, leader_id,
+                     batch->response_leader_id, leader_id,
+                     rd_list_cnt(&batch->entries));
+
         *errp = RD_KAFKA_RESP_ERR_NO_ERROR;
         return leader_rkb;
 }

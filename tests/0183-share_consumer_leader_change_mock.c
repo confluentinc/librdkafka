@@ -644,6 +644,16 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 
         SUB_TEST_QUICK("%s", variant_name);
 
+        /* Force TEST_DEBUG so the mock cluster (created by
+         * test_ctx_new below) picks up debug = mock,cgrp,fetch.
+         * Debug-branch-only instrumentation for 0183 Windows failure
+         * investigation. */
+#ifdef _WIN32
+        _putenv_s("TEST_DEBUG", "mock,cgrp,fetch");
+#else
+        setenv("TEST_DEBUG", "mock,cgrp,fetch", 1);
+#endif
+
         topic_a   = rd_strdup(test_mk_topic_name("0183-recovery-a", 1));
         topic_b   = rd_strdup(test_mk_topic_name("0183-recovery-b", 1));
         topics[0] = topic_a;
@@ -689,6 +699,8 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
                       explicit_mode ? "explicit" : "implicit");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms",
                       wait_for_metadata_refresh ? "10000" : "-1");
+        /* Debug capture for Windows-failure investigation on this branch. */
+        test_conf_set(conf, "debug", "cgrp,fetch,mock");
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "create share consumer");
         subscribe_topics(rkshare, topics, 2);

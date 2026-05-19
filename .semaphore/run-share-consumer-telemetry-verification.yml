@@ -3,7 +3,7 @@ name: share-consumer-telemetry-verification
 
 agent:
   machine:
-    type: s1-prod-ubuntu24-04-amd64-0
+    type: s1-prod-ubuntu24-04-amd64-1
 
 execution_time_limit:
   hours: 1

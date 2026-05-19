@@ -1,0 +1,34 @@
+version: v1.0
+name: share-consumer-telemetry-verification
+
+agent:
+  machine:
+    type: s1-prod-ubuntu24-04-amd64-1
+
+execution_time_limit:
+  hours: 1
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+      - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
+      - sem-version java 17
+      - sudo apt update
+      - sudo apt install -y wget docker-compose-plugin
+  env_vars:
+    - name: KAFKA_VERSION
+      value: '4.2.0'
+    - name: CACHE_TAG
+      value: '1'
+
+blocks:
+  - name: 'Share-consumer telemetry topic verification'
+    dependencies: []
+    task:
+      jobs:
+        - name: 'All consumer.share.* metric names present in topic'
+          commands:
+            - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/setup-telemetry-testing.sh
+            - cache store share-telemetry-${KAFKA_VERSION}-${CACHE_TAG} tests/share_telemetry_verify/.work

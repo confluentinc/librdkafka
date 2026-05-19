@@ -1503,9 +1503,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
 //                                  "bootstrap.servers", bootstraps, NULL);
 //
 //         /* Round 2: consume from broker 2. The first ShareFetch reply
-//          * from broker 2 will TAILQ_INSERT_TAIL the toppar into broker
-//          * 2's toppars_in_session, reusing the same rktp_rkb_session_link
-//          * field that broker 1 was using. With the fix, broker 1's list
+//          * from broker 2 will add the toppar into broker
+//          * 2's toppars_in_session. With the fix, broker 1's list
 //          * is cleared by PARTITION_LEAVE before this happens. */
 //         TEST_SAY("Round 2: consume from broker 2 (new leader)\n");
 //         attempts = 0;

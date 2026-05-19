@@ -1147,6 +1147,18 @@ static void rd_kafka_share_fetch_reply_handle_partition_error(
          * explicit warn-level log here. They currently rely on the
          * downstream OP_CONSUMER_ERR being surfaced to the app via
          * consume_batch. */
+        /* TODO KIP-932: write test cases for each per-partition error
+         * arm below once the mock cluster exposes a per-partition
+         * error-injection API (e.g.
+         * rd_kafka_mock_partition_push_share_fetch_error). Today only
+         * the leader-change errors are exercised via
+         * rd_kafka_mock_partition_set_leader; the remaining arms
+         * (KAFKA_STORAGE_ERROR, OFFSET_NOT_AVAILABLE,
+         * REPLICA_NOT_AVAILABLE, UNKNOWN_TOPIC_OR_PART,
+         * UNKNOWN_TOPIC_ID, INCONSISTENT_TOPIC_ID,
+         * TOPIC_AUTHORIZATION_FAILED, UNKNOWN_LEADER_EPOCH,
+         * UNKNOWN_SERVER_ERROR, CORRUPT_MESSAGE, and the default)
+         * have no deterministic mock trigger. */
         switch (err) {
         case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
         case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
@@ -2038,6 +2050,22 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         }
 
                         if (PartErrorCode) {
+                                /* TODO KIP-932: write test cases for each
+                                 * per-partition ShareAcknowledge error code
+                                 * once the mock cluster exposes a
+                                 * per-partition error-injection API for
+                                 * ShareAcknowledge responses. Today only
+                                 * NOT_LEADER_OR_FOLLOWER (via
+                                 * rd_kafka_mock_partition_set_leader) is
+                                 * deterministically reachable; the other
+                                 * leader-change errors
+                                 * (FENCED_LEADER_EPOCH,
+                                 * UNKNOWN_TOPIC_OR_PART,
+                                 * UNKNOWN_TOPIC_ID),
+                                 * INVALID_RECORD_STATE,
+                                 * INVALID_REQUEST, KAFKA_STORAGE_ERROR
+                                 * and the inline-leader-update path have
+                                 * no deterministic mock trigger. */
                                 rd_rkb_dbg(rkb, FETCH, "SHAREACK",
                                            "ShareAcknowledge partition %" PRId32
                                            " error %s: '%.*s'",

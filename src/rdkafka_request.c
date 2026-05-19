@@ -3761,6 +3761,12 @@ void rd_kafkap_share_leader_changes_apply(
             NodeEndpoints->NodeEndpointCnt == 0)
                 return;
 
+        rd_rkb_dbg(rkb, METADATA, "LEADER",
+                   "Applying inline metadata update from Share response: "
+                   "%d partition leader change(s), %" PRId32
+                   " node endpoint(s)",
+                   rd_list_cnt(leader_changes), NodeEndpoints->NodeEndpointCnt);
+
         partitions_per_topic =
             rd_calloc(rd_list_cnt(leader_changes), sizeof(int));
 

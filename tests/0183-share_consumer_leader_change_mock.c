@@ -160,16 +160,22 @@ static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
  *
  *  Loop (5 iterations):
  *    - Acknowledge 2 records from the held batch
- *    - commitSync → sends ShareAcknowledge to stale broker 1
+ *    - commit_sync → attempts to route the batch to the cached
+ *      leader. Round 1 routes to broker 1 (cache is stale);
+ *      rounds 2-5 are short-circuited locally (see Expected
+ *      behavior below).
  *
- *  Expected (after both fixes land):
- *    - Only 1 ShareAcknowledge RPC sent (first commitSync)
- *    - Remaining 4 commitSync fail locally (leader mismatch)
- *    - All 5 commitSync return NOT_LEADER_OR_FOLLOWER
- *
- *  Current behavior (no fix):
- *    - All 5 commitSync send ShareAcknowledge RPCs to broker 1
- *    - 5 RPCs wasted
+ *  Expected behavior with this PR:
+ *    - The first commit_sync sends a ShareAcknowledge to broker 1
+ *      (cache still says broker 1 is leader). The response carries
+ *      NOT_LEADER_OR_FOLLOWER plus a CurrentLeader hint and
+ *      NodeEndpoints; the inline metadata update applies the new
+ *      leader to the cache without a separate Metadata RPC.
+ *    - Rounds 2-5 are caught by the local leader-stale short-circuit
+ *      in rd_kafka_share_ack_batch_resolve_leader_or_fail_acks and
+ *      fail without sending an RPC.
+ *    - All 5 commit_sync return NOT_LEADER_OR_FOLLOWER.
+ *    - 1 ShareAcknowledge RPC total, 0 Metadata RPCs.
  * =================================================================== */
 static void test_shareack_leader_change_reduces_rpcs(void) {
         test_ctx_t ctx;

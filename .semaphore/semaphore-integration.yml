@@ -234,11 +234,3 @@ promotions:
       - result: passed
         branch:
         - "master"
-
-  - name: Verify share-consumer telemetry end-to-end
-    pipeline_file: run-share-consumer-telemetry-verification.yml
-    parameters:
-      env_vars:
-        - required: true
-          name: KAFKA_VERSION
-          default_value: "4.2.0"

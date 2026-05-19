@@ -567,10 +567,8 @@ promotions:
             - "x86_64,aarch64"
             - "x86_64"
             - "aarch64"
-  # Manual promotion only. Verifies that share-consumer KIP-714 telemetry
-  # metrics arrive at the OTel-Collector-fed Kafka topic end-to-end.
-  - name: Verify share-consumer telemetry end-to-end
-    pipeline_file: run-share-consumer-telemetry-verification.yml
+  - name: Share consumer metric end-to-end test
+    pipeline_file: run-share-consumer-metric-e2e-test.yml
     parameters:
       env_vars:
         - required: true

@@ -1,5 +1,5 @@
 version: v1.0
-name: share-consumer-telemetry-verification
+name: share-consumer-metric-e2e-test
 
 agent:
   machine:
@@ -23,12 +23,12 @@ global_job_config:
       value: '1'
 
 blocks:
-  - name: 'Share-consumer telemetry topic verification'
+  - name: 'Share consumer metric e2e test'
     dependencies: []
     task:
       jobs:
-        - name: 'All consumer.share.* metric names present in topic'
+        - name: 'Verify consumer.share.* metrics in topic'
           commands:
             - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
-            - ./packaging/tools/setup-telemetry-testing.sh
+            - ./packaging/tools/setup-share-telemetry-testing.sh
             - cache store share-telemetry-${KAFKA_VERSION}-${CACHE_TAG} tests/share_telemetry_verify/.work

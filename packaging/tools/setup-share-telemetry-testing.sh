@@ -74,7 +74,7 @@ docker rm -f otel-collector 2>/dev/null || true
 docker run -d --name otel-collector \
     --add-host=host.docker.internal:host-gateway \
     -p 4317:4317 \
-    -v ${VERIFY_DIR}/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml \
+    -v ${VERIFY_DIR}/share-otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml \
     otel/opentelemetry-collector-contrib
 
 echo "==> Starting Kafka broker"

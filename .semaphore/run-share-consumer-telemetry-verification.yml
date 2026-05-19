@@ -6,7 +6,7 @@ agent:
     type: s1-prod-ubuntu24-04-amd64-1
 
 execution_time_limit:
-  hours: 1
+  hours: 4
 
 global_job_config:
   prologue:

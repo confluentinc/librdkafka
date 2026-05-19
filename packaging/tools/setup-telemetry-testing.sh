@@ -124,11 +124,31 @@ SEEN=$(${KAFKA_DIR}/bin/kafka-console-consumer.sh \
     | strings | grep -oE 'consumer\.share\.[a-z0-9._]+' | sort -u)
 MISSING=$(comm -23 <(echo "${EXPECTED}") <(echo "${SEEN}"))
 
-if [ -n "${MISSING}" ]; then
-    echo "Missing metrics:"
-    echo "${MISSING}"
-    echo "FAIL"
-    exit 1
-fi
-echo "PASS"
+EXPECTED_CNT=$(echo "${EXPECTED}" | grep -c .)
+SEEN_CNT=$(echo "${SEEN}" | grep -c .)
+MISSING_CNT=$([ -z "${MISSING}" ] && echo 0 || echo "${MISSING}" | grep -c .)
+
+if [ -n "${MISSING}" ]; then VERDICT=FAIL; else VERDICT=PASS; fi
+
+{
+    echo "# Pipeline Report"
+    echo ""
+    echo "**Result:** ${VERDICT}"
+    echo ""
+    echo "| Metric | Found |"
+    echo "|---|:---:|"
+    while IFS= read -r metric; do
+        [ -z "${metric}" ] && continue
+        if echo "${SEEN}" | grep -qFx "${metric}"; then
+            echo "| \`${metric}\` | ✓ |"
+        else
+            echo "| \`${metric}\` | ✗ |"
+        fi
+    done <<< "${EXPECTED}"
+} > REPORT.md
+
+cat REPORT.md
+artifact push job -f -d .semaphore/REPORT.md REPORT.md || true
+
+[ "${VERDICT}" = PASS ] || exit 1
 exit 0

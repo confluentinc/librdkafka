@@ -167,15 +167,18 @@ enable.metrics.push=true
 EOF
 
 ###############################################################################
-# 9. Run the share-consumer tests (0170..0182) — these create share consumers
-#    with enable.metrics.push=true, which pushes telemetry every 5s
+# 9. Run a share-consumer test (0170 subscription) — creates a share consumer
+#    with enable.metrics.push=true, which triggers telemetry pushes every 5s.
+#    Test runner return code is tolerated; we care about the topic contents,
+#    not test-runner cleanup timing.
 ###############################################################################
 START_OFFSET=$(${KAFKA_DIR}/bin/kafka-get-offsets.sh \
     --bootstrap-server localhost:9092 --topic ${TOPIC} 2>/dev/null \
     | cut -d: -f3)
 START_OFFSET=${START_OFFSET:-0}
-echo "[run] starting share-consumer tests from topic offset ${START_OFFSET}..."
-(cd ${ROOT}/tests && TESTS_SKIP_BEFORE=0170 ./run-test.sh)
+echo "[run] starting share-consumer test 0170 from topic offset ${START_OFFSET}..."
+(cd ${ROOT}/tests && TESTS=0170 ./run-test.sh) || \
+    echo "[run] test runner exited non-zero; continuing to verification"
 
 ###############################################################################
 # 10. Wait for the final push interval + verify topic coverage

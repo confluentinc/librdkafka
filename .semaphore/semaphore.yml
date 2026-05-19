@@ -150,6 +150,7 @@ blocks:
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          - sem-version java 17
       jobs:
         - name: 'Build and run share consumer tests'
           commands:
@@ -158,6 +159,9 @@ blocks:
               ./packaging/tools/run-share-consumer-tests.sh
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+            - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/setup-share-telemetry-testing.sh
+            - cache store share-telemetry-${KAFKA_VERSION}-${CACHE_TAG} tests/share_telemetry_verify/.work
 
   - name: 'OSX arm64/m1: share consumer tests'
     dependencies: []
@@ -542,10 +546,3 @@ promotions:
             - "x86_64,aarch64"
             - "x86_64"
             - "aarch64"
-  - name: Share consumer metric end-to-end test
-    pipeline_file: run-share-consumer-metric-e2e-test.yml
-    parameters:
-      env_vars:
-        - required: true
-          name: KAFKA_VERSION
-          default_value: "4.2.0"

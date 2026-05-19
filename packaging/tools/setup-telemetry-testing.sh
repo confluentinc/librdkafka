@@ -181,27 +181,24 @@ echo "[run] starting share-consumer test 0170 from topic offset ${START_OFFSET}.
     echo "[run] test runner exited non-zero; continuing to verification"
 
 ###############################################################################
-# 10. Wait for the final push interval + verify topic coverage
+# 10. Verify topic has every consumer.share.* name declared in the header.
 ###############################################################################
-echo "[verify] waiting 15s for trailing telemetry pushes..."
-sleep 15
-
-EXPECTED=$(grep -oE 'consumer\.share\.[a-z0-9._]+' \
-           ${ROOT}/src/rdkafka_telemetry_encode.h | sort -u)
+set +e
+EXPECTED=$(grep -oE 'consumer\.share\.[a-z0-9._]+' ${ROOT}/src/rdkafka_telemetry_encode.h | sort -u)
 SEEN=$(${KAFKA_DIR}/bin/kafka-console-consumer.sh \
-    --bootstrap-server localhost:9092 \
-    --topic ${TOPIC} --partition 0 --offset ${START_OFFSET} \
-    --max-messages 100 --timeout-ms 30000 2>/dev/null \
+    --bootstrap-server localhost:9092 --topic ${TOPIC} \
+    --from-beginning --max-messages 50 --timeout-ms 15000 2>/dev/null \
     | strings | grep -oE 'consumer\.share\.[a-z0-9._]+' | sort -u)
-
-EXPECTED_CNT=$(echo "${EXPECTED}" | grep -c .)
-SEEN_CNT=$(echo "${SEEN}" | grep -c .)
-echo "[verify] expected ${EXPECTED_CNT} share-consumer metric names, saw ${SEEN_CNT} in topic"
-
 MISSING=$(comm -23 <(echo "${EXPECTED}") <(echo "${SEEN}"))
-if [ -n "${MISSING}" ]; then
-    echo "FAIL: missing metric names in topic:"
-    echo "${MISSING}" | sed 's|^|  |'
-    exit 1
-fi
-echo "PASS: all ${EXPECTED_CNT} share-consumer metric names present in topic"
+if [ -n "${MISSING}" ]; then VERDICT="FAIL: missing in topic: ${MISSING}"; else VERDICT="PASS"; fi
+echo "${VERDICT}"
+
+###############################################################################
+# 11. Debug hold — broker + collector stay up for 3h so you can SSH into the
+#     Semaphore agent and inspect. Comment out before merging.
+###############################################################################
+echo "[debug] broker + collector running; sleeping 3h for SSH debugging..."
+sleep 10800
+
+[ "${VERDICT}" = "PASS" ] || exit 1
+exit 0

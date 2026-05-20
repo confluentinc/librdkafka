@@ -820,26 +820,6 @@ static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
 }
 
 /**
- * @brief Enable the three Share APIs (Heartbeat, Fetch, Acknowledge) on the
- *        given mock cluster. Every share-consumer mock test in this file
- *        needs all three.
- */
-static void enable_share_apis(rd_kafka_mock_cluster_t *mcluster) {
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(
-                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareGroupHeartbeat");
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareFetch,
-                                                 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareFetch");
-        TEST_ASSERT(
-            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareAcknowledge,
-                                         1, 1) == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "Failed to enable ShareAck");
-}
-
-/**
  * @brief Common setup for 3-broker mock close-tests.
  *
  * Creates a 3-broker mock cluster, a topic with one partition per broker,
@@ -876,7 +856,6 @@ static void setup_3broker_share_consumer(const char *test_name,
         rd_snprintf(group, sizeof(group), "sg-%s", test_name);
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, partition_cnt,
@@ -1530,7 +1509,6 @@ static void test_close_with_broker_busy(void) {
 
         /* Cluster + APIs + topic */
         mcluster = test_mock_cluster_new(3, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, partition_cnt,
@@ -1707,7 +1685,6 @@ static void test_close_with_broker_down(void) {
         TEST_SAY("========================================\n\n");
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
@@ -1814,7 +1791,6 @@ static void test_api_calls_on_closed_consumer(void) {
         SUB_TEST_QUICK();
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1879,7 +1855,6 @@ static void test_api_calls_during_closing(void) {
         SUB_TEST_QUICK();
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,

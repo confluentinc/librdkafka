@@ -58,15 +58,6 @@ struct partition_data {
         int offsets_cnt;
 };
 
-static void pd_append(struct partition_data *pd, int64_t offset) {
-        if (pd->offsets_cnt >= BATCH_CAPACITY) {
-                fprintf(stderr, "offsets array full (%d) for %s[%" PRId32 "]\n",
-                        BATCH_CAPACITY, pd->topic, pd->partition);
-                return;
-        }
-        pd->offsets[pd->offsets_cnt++] = offset;
-}
-
 /* Per-batch accumulator indexed by topic+partition. */
 struct partition_bucket {
         struct partition_data items[MAX_PARTITIONS];
@@ -95,6 +86,15 @@ static void cleanup_and_exit(int rc) {
         exit(rc);
 }
 
+static void pd_append(struct partition_data *pd, int64_t offset) {
+        if (pd->offsets_cnt >= BATCH_CAPACITY) {
+                fprintf(stderr, "offsets array full (%d) for %s[%" PRId32 "]\n",
+                        BATCH_CAPACITY, pd->topic, pd->partition);
+                cleanup_and_exit(1);
+        }
+        pd->offsets[pd->offsets_cnt++] = offset;
+}
+
 static void pb_reset(struct partition_bucket *pb) {
         for (int i = 0; i < pb->cnt; i++)
                 pb->items[i].offsets_cnt = 0;
@@ -104,6 +104,7 @@ static void pb_reset(struct partition_bucket *pb) {
 static struct partition_data *pb_find_or_add(struct partition_bucket *pb,
                                              const char *topic,
                                              int32_t partition) {
+        struct partition_data *pd;
         for (int i = 0; i < pb->cnt; i++) {
                 if (pb->items[i].partition == partition &&
                     strcmp(pb->items[i].topic, topic) == 0)
@@ -116,7 +117,7 @@ static struct partition_data *pb_find_or_add(struct partition_bucket *pb,
                         MAX_PARTITIONS, topic, partition);
                 cleanup_and_exit(1);
         }
-        struct partition_data *pd = &pb->items[pb->cnt++];
+        pd = &pb->items[pb->cnt++];
         snprintf(pd->topic, sizeof(pd->topic), "%s", topic);
         pd->partition   = partition;
         pd->offsets_cnt = 0;
@@ -127,10 +128,11 @@ static struct partition_data *pb_find_or_add(struct partition_bucket *pb,
 
 static void emit_partitions_array(const struct partition_bucket *pb,
                                   int64_t total_count) {
+        const struct partition_data *pd;
         fprintf(stdout, ",\"count\":%" PRId64, total_count);
         fputs(",\"partitions\":[", stdout);
         for (int i = 0; i < pb->cnt; i++) {
-                const struct partition_data *pd = &pb->items[i];
+                pd = &pb->items[i];
                 if (i > 0)
                         fputc(',', stdout);
                 fputs("{\"topic\":", stdout);
@@ -189,12 +191,13 @@ static void emit_offset_reset_strategy_set(const char *strategy) {
 }
 
 static void emit_record_data(const rd_kafka_message_t *rkm) {
+        char *k, *v;
         stdout_lock();
         fputs("{\"name\":\"record_data\"", stdout);
         fprintf(stdout, ",\"timestamp\":%" PRId64, now_ms());
         fputs(",\"key\":", stdout);
         if (rkm->key) {
-                char *k = malloc(rkm->key_len + 1);
+                k = malloc(rkm->key_len + 1);
                 memcpy(k, rkm->key, rkm->key_len);
                 k[rkm->key_len] = '\0';
                 json_write_string(stdout, k);
@@ -203,7 +206,7 @@ static void emit_record_data(const rd_kafka_message_t *rkm) {
                 fputs("null", stdout);
         }
         fputs(",\"value\":", stdout);
-        char *v = malloc(rkm->len + 1);
+        v = malloc(rkm->len + 1);
         memcpy(v, rkm->payload, rkm->len);
         v[rkm->len] = '\0';
         json_write_string(stdout, v);
@@ -230,8 +233,16 @@ static int set_share_group_offset_reset(const char *bootstrap,
                                         char *errbuf,
                                         size_t errbuf_size) {
         char errstr[512];
-        rd_kafka_conf_t *admin_conf = rd_kafka_conf_new();
+        rd_kafka_conf_t *admin_conf;
+        rd_kafka_t *admin;
+        rd_kafka_queue_t *q;
+        rd_kafka_ConfigResource_t *res;
+        rd_kafka_error_t *e;
+        rd_kafka_event_t *ev;
+        rd_kafka_resp_err_t err;
+        int rc = 0;
 
+        admin_conf = rd_kafka_conf_new();
         if (rd_kafka_conf_set(admin_conf, "bootstrap.servers", bootstrap,
                               errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 snprintf(errbuf, errbuf_size, "admin bootstrap.servers: %s",
@@ -240,7 +251,7 @@ static int set_share_group_offset_reset(const char *bootstrap,
                 return -1;
         }
 
-        rd_kafka_t *admin =
+        admin =
             rd_kafka_new(RD_KAFKA_PRODUCER, admin_conf, errstr, sizeof(errstr));
         if (!admin) {
                 snprintf(errbuf, errbuf_size, "admin client: %s", errstr);
@@ -248,11 +259,10 @@ static int set_share_group_offset_reset(const char *bootstrap,
                 return -1;
         }
 
-        rd_kafka_queue_t *q = rd_kafka_queue_new(admin);
-        rd_kafka_ConfigResource_t *res =
-            rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group_id);
+        q   = rd_kafka_queue_new(admin);
+        res = rd_kafka_ConfigResource_new(RD_KAFKA_RESOURCE_GROUP, group_id);
 
-        rd_kafka_error_t *e = rd_kafka_ConfigResource_add_incremental_config(
+        e = rd_kafka_ConfigResource_add_incremental_config(
             res, "share.auto.offset.reset", RD_KAFKA_ALTER_CONFIG_OP_TYPE_SET,
             reset_value);
         if (e) {
@@ -268,14 +278,13 @@ static int set_share_group_offset_reset(const char *bootstrap,
         rd_kafka_IncrementalAlterConfigs(admin, &res, 1, NULL, q);
         rd_kafka_ConfigResource_destroy(res);
 
-        rd_kafka_event_t *ev = rd_kafka_queue_poll(q, 30000);
-        int rc               = 0;
+        ev = rd_kafka_queue_poll(q, 30000);
         if (!ev) {
                 snprintf(errbuf, errbuf_size,
                          "IncrementalAlterConfigs: timeout");
                 rc = -1;
         } else {
-                rd_kafka_resp_err_t err = rd_kafka_event_error(ev);
+                err = rd_kafka_event_error(ev);
                 if (err) {
                         snprintf(errbuf, errbuf_size,
                                  "IncrementalAlterConfigs: %s",

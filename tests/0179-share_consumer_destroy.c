@@ -1407,7 +1407,6 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 1 partition, RF=2 so both brokers know about it. Initial

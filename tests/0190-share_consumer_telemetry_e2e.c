@@ -48,17 +48,16 @@ static const char *TELEMETRY_TOPIC = "client-telemetry-metrics";
 
 /**
  * @brief Scan a raw byte buffer for every "consumer.share.<chars>"
- *        substring and add each unique one to @a names.
+ *        substring and add each unique one to the names list.
  *
  * The OTLP protobuf encoding leaves metric names as plain UTF-8 — the
  * field tag is binary but the string payload is uncompressed.
  */
-static void extract_share_metric_names(const void *data,
-                                       size_t len,
-                                       rd_list_t *names) {
-        const char *p   = (const char *)data;
-        const char *end = p + len;
-        const char prefix[] = "consumer.share.";
+static void
+extract_share_metric_names(const void *data, size_t len, rd_list_t *names) {
+        const char *p           = (const char *)data;
+        const char *end         = p + len;
+        const char prefix[]     = "consumer.share.";
         const size_t prefix_len = sizeof(prefix) - 1;
 
         while (p + prefix_len <= end) {
@@ -75,8 +74,8 @@ static void extract_share_metric_names(const void *data,
 
                 const char *name_end = match + prefix_len;
                 while (name_end < end &&
-                       (isalnum((unsigned char)*name_end) ||
-                        *name_end == '.' || *name_end == '_')) {
+                       (isalnum((unsigned char)*name_end) || *name_end == '.' ||
+                        *name_end == '_')) {
                         name_end++;
                 }
 
@@ -88,8 +87,7 @@ static void extract_share_metric_names(const void *data,
 
                         if (!rd_list_find(
                                 names, name,
-                                (int (*)(const void *,
-                                         const void *))strcmp)) {
+                                (int (*)(const void *, const void *))strcmp)) {
                                 rd_list_add(names, name);
                         } else {
                                 rd_free(name);
@@ -104,8 +102,7 @@ static void extract_share_metric_names(const void *data,
  * @brief Produce a batch of messages and drive a share consumer through
  *        the consume path so the telemetry sampling sites fire.
  */
-static void produce_and_share_consume(const char *topic,
-                                      const char *group_id) {
+static void produce_and_share_consume(const char *topic, const char *group_id) {
         rd_kafka_share_t *rkshare;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
@@ -143,8 +140,7 @@ static void produce_and_share_consume(const char *topic,
                 size_t rcvd = 0;
                 size_t i;
 
-                e = rd_kafka_share_consume_batch(rkshare, 1000, batch,
-                                                  &rcvd);
+                e = rd_kafka_share_consume_batch(rkshare, 1000, batch, &rcvd);
                 if (e) {
                         rd_kafka_error_destroy(e);
                         continue;
@@ -162,9 +158,9 @@ static void produce_and_share_consume(const char *topic,
 }
 
 /**
- * @brief Open a regular consumer on @a topic, drain it for up to
- *        @a seconds, returning a list of every distinct
- *        "consumer.share.*" metric name seen across all messages.
+ * @brief Open a regular consumer on the telemetry topic, drain it for
+ *        up to the given number of seconds, returning a list of every
+ *        distinct "consumer.share.*" metric name seen across all messages.
  */
 static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
         rd_kafka_t *rk;
@@ -217,8 +213,8 @@ static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
 }
 
 /**
- * @brief Compare @a seen against EXPECTED_METRICS and TEST_ASSERT
- *        that every expected name appears.
+ * @brief Compare the seen-names list against EXPECTED_METRICS and
+ *        TEST_ASSERT that every expected name appears.
  */
 static void verify_metrics(rd_list_t *seen) {
         int missing      = 0;
@@ -245,14 +241,13 @@ static void verify_metrics(rd_list_t *seen) {
                     "were not observed in topic '%s'",
                     missing, expected_cnt, TELEMETRY_TOPIC);
 
-        TEST_SAY(
-            "PASS: all %d expected share-consumer metric names observed\n",
-            expected_cnt);
+        TEST_SAY("PASS: all %d expected share-consumer metric names observed\n",
+                 expected_cnt);
 }
 
 
 /**
- * @brief Return 1 if @a topic exists on the broker, 0 otherwise.
+ * @brief Return 1 if the given topic exists on the broker, 0 otherwise.
  *
  * Used to decide whether the surrounding telemetry pipeline is set up.
  * If the OTel Collector is not running and producing into the topic,
@@ -296,9 +291,6 @@ static int telemetry_infra_available(const char *topic) {
  * over them so the telemetry sampling sites fire, then consumes from the
  * telemetry topic and asserts every expected share-consumer metric name
  * appears at least once.
- *
- * Skipped if the telemetry sink topic doesn't exist (i.e., the OTel
- * Collector / plugin pipeline isn't set up around this run).
  */
 static void do_test_produce_share_consume_verify_metrics(void) {
         const char *data_topic = test_mk_topic_name("0190-data", 1);
@@ -306,13 +298,6 @@ static void do_test_produce_share_consume_verify_metrics(void) {
         rd_list_t *seen;
 
         SUB_TEST();
-
-        if (!telemetry_infra_available(TELEMETRY_TOPIC)) {
-                SUB_TEST_SKIP(
-                    "telemetry topic '%s' not found — "
-                    "OTel/plugin pipeline not configured for this run\n",
-                    TELEMETRY_TOPIC);
-        }
 
         produce_and_share_consume(data_topic, group_id);
 
@@ -326,6 +311,14 @@ static void do_test_produce_share_consume_verify_metrics(void) {
 
 int main_0190_share_consumer_telemetry_e2e(int argc, char **argv) {
         test_timeout_set(180);
+
+        if (!telemetry_infra_available(TELEMETRY_TOPIC)) {
+                TEST_SKIP(
+                    "telemetry topic '%s' not found — "
+                    "OTel/plugin pipeline not configured for this run\n",
+                    TELEMETRY_TOPIC);
+                return 0;
+        }
 
         do_test_produce_share_consume_verify_metrics();
 

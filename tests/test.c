@@ -603,7 +603,8 @@ struct test tests[] = {
     _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
     _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0185_share_consumer_max_poll_interval_local, TEST_F_LOCAL),
-    _TEST(0190_share_consumer_telemetry_e2e, TEST_F_MANUAL,
+    _TEST(0190_share_consumer_telemetry_e2e,
+          TEST_F_MANUAL,
           TEST_BRKVER(0, 4, 0, 0)),
 
     /* Manual tests */

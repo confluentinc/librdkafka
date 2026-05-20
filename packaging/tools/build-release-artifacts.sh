@@ -45,7 +45,7 @@ fi
 
 docker_platform=""
 if [ "$1" = "--platform" ]; then
-    docker_platform="--platform=$2 -e QEMU_CPU=max"
+    docker_platform="--platform=$2"
     shift 2
 fi
 

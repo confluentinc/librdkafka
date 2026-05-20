@@ -112,43 +112,5 @@ security.protocol=plaintext
 enable.metrics.push=true
 EOF
 
-echo "==> Running share consumer test 0171"
-(cd ${ROOT}/tests && TESTS=0171 ./run-test.sh) || true
-
-echo "==> Verifying topic contents"
-set +e
-EXPECTED=$(grep -oE 'consumer\.share\.[a-z0-9._]+' ${ROOT}/src/rdkafka_telemetry_encode.h | sort -u)
-SEEN=$(${KAFKA_DIR}/bin/kafka-console-consumer.sh \
-    --bootstrap-server localhost:9092 --topic ${TOPIC} \
-    --from-beginning --max-messages 50 --timeout-ms 15000 2>/dev/null \
-    | strings | grep -oE 'consumer\.share\.[a-z0-9._]+' | sort -u)
-MISSING=$(comm -23 <(echo "${EXPECTED}") <(echo "${SEEN}"))
-
-EXPECTED_CNT=$(echo "${EXPECTED}" | grep -c .)
-SEEN_CNT=$(echo "${SEEN}" | grep -c .)
-MISSING_CNT=$([ -z "${MISSING}" ] && echo 0 || echo "${MISSING}" | grep -c .)
-
-if [ -n "${MISSING}" ]; then VERDICT=FAIL; else VERDICT=PASS; fi
-
-{
-    echo "# Pipeline Report"
-    echo ""
-    echo "**Result:** ${VERDICT}"
-    echo ""
-    echo "| Metric | Found |"
-    echo "|---|:---:|"
-    while IFS= read -r metric; do
-        [ -z "${metric}" ] && continue
-        if echo "${SEEN}" | grep -qFx "${metric}"; then
-            echo "| \`${metric}\` | ✓ |"
-        else
-            echo "| \`${metric}\` | ✗ |"
-        fi
-    done <<< "${EXPECTED}"
-} > REPORT.md
-
-cat REPORT.md
-artifact push job -f -d .semaphore/REPORT.md REPORT.md || true
-
-[ "${VERDICT}" = PASS ] || exit 1
-exit 0
+echo "==> Running share consumer telemetry e2e test (0190)"
+(cd ${ROOT}/tests && TESTS=0190 ./run-test.sh)

@@ -3534,13 +3534,6 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
                 rkb->rkb_toppar_cnt--;
                 rd_kafka_broker_share_session_toppar_remove(rkb, rktp);
-                /* TODO KIP-932: Verify this while working on leader migration.
-                 * Free rktp_rkb_session_link before the new leader broker
-                 * reuses it via TAILQ_INSERT_TAIL on its own
-                 * toppars_in_session; otherwise old broker's list head is
-                 * left dangling and destroy_final asserts. */
-                rd_kafka_broker_session_remove_partition_from_toppars_in_session(
-                    rkb, rktp);
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_broker_destroy(rktp->rktp_broker);
                 if (rktp->rktp_msgq_wakeup_q) {
@@ -4496,14 +4489,15 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
  * implementation.
  */
 // void rd_kafka_broker_update_share_fetch_session(rd_kafka_broker_t *rkb) {
-//         rd_kafka_toppar_t *rktp, *rktp_tmp;
+//         rd_kafka_toppar_t *rktp;
+//         int i;
 //         rd_bool_t needs_update = rd_false;
-
-//         TAILQ_FOREACH(rktp, &rkb->rkb_share_fetch_session.toppars_in_session,
-//         rktp_rkb_session_link) {
+//
+//         RD_LIST_FOREACH(rktp,
+//                         rkb->rkb_share_fetch_session.toppars_in_session, i) {
 //                 rd_kafka_toppar_is_valid_to_send_for_share_fetch(rktp);
 //         }
-
+//
 //         if (needs_update)
 //                 rd_kafka_toppar_share_fetch_session_update(rkb);
 // }
@@ -5091,14 +5085,15 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
         rd_assert(TAILQ_EMPTY(&rkb->rkb_waitresps.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_retrybufs.rkbq_bufs));
         rd_assert(TAILQ_EMPTY(&rkb->rkb_toppars));
-        rd_assert(
-            TAILQ_EMPTY(&rkb->rkb_share_fetch_session.toppars_in_session));
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_add);
         rd_assert(!rkb->rkb_share_fetch_session.toppars_to_forget);
         rd_assert(!rkb->rkb_share_async_ack_details);
         rd_assert(!rkb->rkb_pending_commit_sync.sync_ack_details);
         rd_assert(!rkb->rkb_share_fetch_session.adding_toppars);
         rd_assert(!rkb->rkb_share_fetch_session.forgetting_toppars);
+        rd_assert(
+            rd_list_empty(rkb->rkb_share_fetch_session.toppars_in_session));
+        rd_list_destroy(rkb->rkb_share_fetch_session.toppars_in_session);
 
         if (rkb->rkb_source != RD_KAFKA_INTERNAL &&
             (rkb->rkb_rk->rk_conf.security_protocol ==
@@ -5231,12 +5226,12 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
         mtx_init(&rkb->rkb_logname_lock, mtx_plain);
         rkb->rkb_logname = rd_strdup(rkb->rkb_name);
         TAILQ_INIT(&rkb->rkb_toppars);
-        TAILQ_INIT(&rkb->rkb_share_fetch_session.toppars_in_session);
-        rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
-        rkb->rkb_share_fetch_session.toppars_to_forget      = NULL;
-        rkb->rkb_share_fetch_session.toppars_to_add         = NULL;
-        rkb->rkb_share_async_ack_details                    = NULL;
-        rkb->rkb_share_fetch_enqueued                       = rd_false;
+        rkb->rkb_share_fetch_session.toppars_in_session =
+            rd_list_new(0, rd_kafka_toppar_destroy_free);
+        rkb->rkb_share_fetch_session.toppars_to_forget = NULL;
+        rkb->rkb_share_fetch_session.toppars_to_add    = NULL;
+        rkb->rkb_share_async_ack_details               = NULL;
+        rkb->rkb_share_fetch_enqueued                  = rd_false;
         CIRCLEQ_INIT(&rkb->rkb_active_toppars);
         TAILQ_INIT(&rkb->rkb_monitors);
         rd_kafka_bufq_init(&rkb->rkb_outbufs);

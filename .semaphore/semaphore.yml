@@ -242,12 +242,12 @@ blocks:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
       jobs:
-        - name: 'Build: centos8 glibc +gssapi'
-          env_vars:
-            - name: ARTIFACT_KEY
-              value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-std__extra-gssapi
-          commands:
-            - packaging/tools/build-release-artifacts.sh --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2026.05.07-2 artifacts/librdkafka.tgz
+        # - name: 'Build: centos8 glibc +gssapi'
+        #   env_vars:
+        #     - name: ARTIFACT_KEY
+        #       value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-std__extra-gssapi
+        #   commands:
+        #     - packaging/tools/build-release-artifacts.sh --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2026.05.07-2 artifacts/librdkafka.tgz
 
         - name: 'Build: centos8 glibc'
           env_vars:

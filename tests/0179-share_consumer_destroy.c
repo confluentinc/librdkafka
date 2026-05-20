@@ -312,28 +312,6 @@ new_share_consumer_for_real_test(const char *group_id,
         return consumer;
 }
 
-
-/**
- * @brief Enable the three Share APIs (Heartbeat, Fetch, Acknowledge) on
- *        the given mock cluster. Every share-consumer mock test in this
- *        file needs all three.
- */
-static void enable_share_apis(rd_kafka_mock_cluster_t *mcluster) {
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(
-                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareGroupHeartbeat");
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareFetch,
-                                                 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareFetch");
-        TEST_ASSERT(
-            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareAcknowledge,
-                                         1, 1) == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "Failed to enable ShareAcknowledge");
-}
-
-
 /**
  * @brief Subscribe to topics.
  */
@@ -439,7 +417,6 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
@@ -717,9 +694,8 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic: p0 led by broker 1, p1 led by broker 2.
@@ -896,9 +872,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic, RF=2: p0 led by broker 1, p1 led by broker 2. */
@@ -1085,9 +1060,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic, RF=2: p0 led by broker 1, p1 led by broker 2. */
@@ -1279,9 +1253,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic, RF=2: p0 led by broker 1, p1 led by broker 2. */
@@ -1418,7 +1391,6 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         SUB_TEST_PASS();
 }
 
-
 static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
@@ -1520,7 +1492,6 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         SUB_TEST_PASS();
 }
 
-
 /**
  * @brief Destroy while the consumer's cgrp is mid-rebalance.
  *
@@ -1552,7 +1523,6 @@ static void test_destroy_during_rebalance(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
@@ -1669,7 +1639,6 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==

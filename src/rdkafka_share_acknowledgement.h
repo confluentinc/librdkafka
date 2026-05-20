@@ -187,6 +187,17 @@ void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);
 
 /**
+ * @brief Segregate sync ack batches by partition leader into each
+ *        broker's pending_commit_sync list.
+ *
+ * @locality main thread
+ */
+void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
+                                                  rd_kafka_cgrp_t *rkcg,
+                                                  rd_list_t *ack_batches,
+                                                  rd_ts_t abs_timeout);
+
+/**
  * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
  *
  * Non-ACQUIRED offsets are collated into ack_details for sending.
@@ -226,7 +237,6 @@ rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
  * Used with rd_list_is_sorted().
  */
 int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
-
 
 /**
  * @struct rd_kafka_share_partition_offsets_s

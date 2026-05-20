@@ -139,7 +139,7 @@ blocks:
             - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG} ./packaging/tools/build-configurations-checks.sh
 
 
-  - name: 'Linux Ubuntu: share consumer tests'
+  - name: 'Linux Ubuntu amd64: share consumer tests'
     dependencies: []
     skip:
       when: "tag =~ '^v[0-9]\\.'"
@@ -150,10 +150,10 @@ blocks:
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          - sem-version java 17
       jobs:
         - name: 'Linux Ubuntu amd64: share consumer tests'
           commands:
-            - sem-version java 17
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG}
               ./packaging/tools/run-share-consumer-tests.sh
@@ -162,10 +162,20 @@ blocks:
             - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
             - ./packaging/tools/setup-share-telemetry-testing.sh
             - cache store share-telemetry-${KAFKA_VERSION}-${CACHE_TAG} tests/share_telemetry_verify/.work
+
+  - name: 'Linux Ubuntu aarch64: share consumer tests'
+    dependencies: []
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-arm64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+      jobs:
         - name: 'Linux Ubuntu aarch64: share consumer tests'
-          agent:
-            machine:
-              type: s1-prod-ubuntu24-04-arm64-1
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG}

@@ -981,12 +981,12 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
 
 err:
         if (ErrorCode)
-                rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                rd_kafka_dbg(rk, CGRP, "LEAVEGROUP",
                              "LeaveGroup response error in state %s: %s",
                              rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                              rd_kafka_err2str(ErrorCode));
         else
-                rd_kafka_dbg(rkb->rkb_rk, CGRP, "LEAVEGROUP",
+                rd_kafka_dbg(rk, CGRP, "LEAVEGROUP",
                              "LeaveGroup response received in state %s",
                              rd_kafka_cgrp_state_names[rkcg->rkcg_state]);
 

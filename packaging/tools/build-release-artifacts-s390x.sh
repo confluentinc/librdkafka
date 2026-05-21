@@ -33,7 +33,7 @@ if [[ "$ON_S390X" != "--on-s390x" ]]; then
         echo "Added $S390X_HOST to the list of known hosts"
     fi
 
-    DIR=$(mktemp -d)
+    DIR=$(mktemp -d --suffix=librdkafka)
     eval $SSH_COMMAND mkdir $DIR
     eval $SCP_COMMAND ./packaging/tools/build-release-artifacts-s390x.sh $SSH_USER_AT_HOST:$DIR/build-release-artifacts-s390x.sh
     echo "Running build on s390x"
@@ -64,6 +64,8 @@ export DEBIAN_FRONTEND=noninteractive
 CURRENT_TARGET=$2
 DIR=$(dirname $0)
 shift 2
+# Clean up stopped builds
+find /tmp -maxdepth 1 -name "tmp.*librdkafka" -mtime +1 -exec rm -rf {} +
 echo "ON S390x: Installing pre-requisites"
 sudo apt update
 sudo apt install -y git ca-certificates curl gnupg

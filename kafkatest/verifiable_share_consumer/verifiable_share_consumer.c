@@ -25,7 +25,12 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+/* Feature-test macros must be defined before any system header is
+ * included. rd.h transitively requires these; we set them at the top
+ * so our own includes (stdio.h, etc.) and rd.h see the same view. */
 #define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
+#define __need_IOV_MAX
 
 #include <getopt.h>
 #include <inttypes.h>
@@ -35,13 +40,14 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "rd.h"
 #include "rdkafka.h"
+#include "rdlist.h"
 
 #define POLL_TIMEOUT_MS   5000
 #define BATCH_CAPACITY    1024
 #define COMMIT_TIMEOUT_MS 60000
 #define MAX_TOPIC_LEN     256
-#define MAX_PARTITIONS    16
 
 /* These modes only control whether/how we commit; we leave
  * share.acknowledgement.mode unset (matches Java's verifiable consumer)
@@ -54,14 +60,7 @@ enum ack_mode { ACK_AUTO, ACK_SYNC, ACK_ASYNC };
 struct partition_data {
         char topic[MAX_TOPIC_LEN];
         int32_t partition;
-        int64_t offsets[BATCH_CAPACITY];
-        int offsets_cnt;
-};
-
-/* Per-batch accumulator indexed by topic+partition. */
-struct partition_bucket {
-        struct partition_data items[MAX_PARTITIONS];
-        int cnt;
+        rd_list_t offsets;        /* of int64_t * (heap-allocated) */
 };
 
 /* Module-level handle so cleanup_and_exit can be called from anywhere
@@ -86,88 +85,114 @@ static void cleanup_and_exit(int rc) {
         exit(rc);
 }
 
+/* rd_list free callback: destroy a partition_data's offsets list and
+ * then free the partition_data itself. */
+static void pd_free(void *ptr) {
+        struct partition_data *pd = ptr;
+        rd_list_destroy(&pd->offsets);
+        free(pd);
+}
+
 static void pd_append(struct partition_data *pd, int64_t offset) {
-        if (pd->offsets_cnt >= BATCH_CAPACITY) {
-                fprintf(stderr, "offsets array full (%d) for %s[%" PRId32 "]\n",
-                        BATCH_CAPACITY, pd->topic, pd->partition);
+        int64_t *o = malloc(sizeof(*o));
+        if (!o) {
+                fprintf(stderr, "pd_append: malloc failed\n");
                 cleanup_and_exit(1);
         }
-        pd->offsets[pd->offsets_cnt++] = offset;
+        *o = offset;
+        rd_list_add(&pd->offsets, o);
 }
 
-static void pb_reset(struct partition_bucket *pb) {
-        for (int i = 0; i < pb->cnt; i++)
-                pb->items[i].offsets_cnt = 0;
-        pb->cnt = 0;
-}
-
-static struct partition_data *pb_find_or_add(struct partition_bucket *pb,
-                                             const char *topic,
-                                             int32_t partition) {
+static struct partition_data *
+partitions_find_or_add(rd_list_t *partitions,
+                       const char *topic,
+                       int32_t partition) {
         struct partition_data *pd;
-        for (int i = 0; i < pb->cnt; i++) {
-                if (pb->items[i].partition == partition &&
-                    strcmp(pb->items[i].topic, topic) == 0)
-                        return &pb->items[i];
+        int i;
+
+        for (i = 0; i < rd_list_cnt(partitions); i++) {
+                pd = rd_list_elem(partitions, i);
+                if (pd->partition == partition &&
+                    strcmp(pd->topic, topic) == 0)
+                        return pd;
         }
-        if (pb->cnt >= MAX_PARTITIONS) {
-                fprintf(stderr,
-                        "partition bucket full (%d); cannot add %s[%" PRId32
-                        "]; terminating\n",
-                        MAX_PARTITIONS, topic, partition);
+
+        pd = malloc(sizeof(*pd));
+        if (!pd) {
+                fprintf(stderr, "partitions_find_or_add: malloc failed\n");
                 cleanup_and_exit(1);
         }
-        pd = &pb->items[pb->cnt++];
         snprintf(pd->topic, sizeof(pd->topic), "%s", topic);
-        pd->partition   = partition;
-        pd->offsets_cnt = 0;
+        pd->partition = partition;
+        rd_list_init(&pd->offsets, 256, free);
+        rd_list_add(partitions, pd);
         return pd;
 }
 
 /* -------------------- Event emission -------------------- */
 
-static void emit_partitions_array(const struct partition_bucket *pb,
+static void emit_partitions_array(const rd_list_t *partitions,
                                   int64_t total_count) {
         const struct partition_data *pd;
+        size_t off_cnt, j;
+        int i, items_cnt;
         fprintf(stdout, ",\"count\":%" PRId64, total_count);
         fputs(",\"partitions\":[", stdout);
-        for (int i = 0; i < pb->cnt; i++) {
-                pd = &pb->items[i];
+        items_cnt = rd_list_cnt(partitions);
+        for (i = 0; i < items_cnt; i++) {
+                pd      = rd_list_elem(partitions, i);
+                off_cnt = rd_list_cnt(&pd->offsets);
                 if (i > 0)
                         fputc(',', stdout);
                 fputs("{\"topic\":", stdout);
                 json_write_string(stdout, pd->topic);
                 fprintf(stdout, ",\"partition\":%" PRId32, pd->partition);
-                fprintf(stdout, ",\"count\":%d,\"offsets\":[", pd->offsets_cnt);
-                for (int j = 0; j < pd->offsets_cnt; j++) {
+                fprintf(stdout, ",\"count\":%zu,\"offsets\":[", off_cnt);
+                for (j = 0; j < off_cnt; j++) {
+                        const int64_t *o = rd_list_elem(&pd->offsets, (int)j);
                         if (j > 0)
                                 fputc(',', stdout);
-                        fprintf(stdout, "%" PRId64, pd->offsets[j]);
+                        fprintf(stdout, "%" PRId64, *o);
                 }
                 fputs("]}", stdout);
         }
         fputs("]", stdout);
 }
 
-static void emit_records_consumed(const struct partition_bucket *pb,
+static void emit_records_consumed(const rd_list_t *partitions,
                                   int64_t total_count) {
         stdout_lock();
         fputs("{\"name\":\"records_consumed\"", stdout);
         fprintf(stdout, ",\"timestamp\":%" PRId64, now_ms());
-        emit_partitions_array(pb, total_count);
+        emit_partitions_array(partitions, total_count);
         fputs("}\n", stdout);
         fflush(stdout);
         stdout_unlock();
 }
 
-static void emit_offsets_acknowledged(const struct partition_bucket *pb,
-                                      int64_t total_count,
+/* Emit offsets_acknowledged for a single partition's worth of offsets.
+ * librdkafka and Java both fan out the ack callback per partition, so a
+ * single partition_data is the natural input. */
+static void emit_offsets_acknowledged(const struct partition_data *pd,
                                       int success,
                                       const char *errmsg) {
+        size_t off_cnt = rd_list_cnt(&pd->offsets);
+        size_t j;
         stdout_lock();
         fputs("{\"name\":\"offsets_acknowledged\"", stdout);
         fprintf(stdout, ",\"timestamp\":%" PRId64, now_ms());
-        emit_partitions_array(pb, total_count);
+        fprintf(stdout, ",\"count\":%zu", off_cnt);
+        fputs(",\"partitions\":[{\"topic\":", stdout);
+        json_write_string(stdout, pd->topic);
+        fprintf(stdout, ",\"partition\":%" PRId32, pd->partition);
+        fprintf(stdout, ",\"count\":%zu,\"offsets\":[", off_cnt);
+        for (j = 0; j < off_cnt; j++) {
+                const int64_t *o = rd_list_elem(&pd->offsets, (int)j);
+                if (j > 0)
+                        fputc(',', stdout);
+                fprintf(stdout, "%" PRId64, *o);
+        }
+        fputs("]}]", stdout);
         fputs(",\"success\":", stdout);
         fputs(success ? "true" : "false", stdout);
         if (errmsg && *errmsg) {
@@ -308,11 +333,10 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
                          rd_kafka_share_partition_offsets_list_t *partitions,
                          rd_kafka_resp_err_t err,
                          void *opaque) {
-        struct partition_bucket pb = {0};
+        struct partition_data pd;
         const rd_kafka_share_partition_offsets_t *entry;
         const rd_kafka_topic_partition_t *tp;
         const int64_t *offsets;
-        struct partition_data *pd;
         const char *errmsg;
         size_t offsets_cnt, i;
         int success;
@@ -327,9 +351,11 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
         offsets     = rd_kafka_share_partition_offsets_offsets(entry);
         offsets_cnt = rd_kafka_share_partition_offsets_offsets_cnt(entry);
 
-        pd = pb_find_or_add(&pb, tp->topic, tp->partition);
+        snprintf(pd.topic, sizeof(pd.topic), "%s", tp->topic);
+        pd.partition = tp->partition;
+        rd_list_init(&pd.offsets, (int)offsets_cnt, free);
         for (i = 0; i < offsets_cnt; i++)
-                pd_append(pd, offsets[i]);
+                pd_append(&pd, offsets[i]);
 
         if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
                 success = 1;
@@ -339,10 +365,12 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
                 errmsg  = rd_kafka_err2str(err);
         }
 
-        emit_offsets_acknowledged(&pb, (int64_t)offsets_cnt, success, errmsg);
+        emit_offsets_acknowledged(&pd, success, errmsg);
 
         if (success)
                 total_acknowledged += (int64_t)offsets_cnt;
+
+        rd_list_destroy(&pd.offsets);
 }
 
 /* Run a synchronous commit. Acknowledgement events are emitted by
@@ -427,7 +455,7 @@ int main(int argc, char **argv) {
         size_t i, rcvd;
         int64_t consumed_in_batch;
         int fatal, retriable;
-        static struct partition_bucket consumed;
+        static rd_list_t consumed;
 
         static struct option long_opts[] = {
             {"topic", required_argument, 0, 't'},
@@ -512,6 +540,7 @@ int main(int argc, char **argv) {
         }
 
         install_signals();
+        rd_list_init(&consumed, 8, pd_free);
 
         conf = rd_kafka_conf_new();
 
@@ -591,7 +620,7 @@ int main(int argc, char **argv) {
                 if (rcvd == 0)
                         continue;
 
-                pb_reset(&consumed);
+                rd_list_clear(&consumed);
                 consumed_in_batch = 0;
 
                 for (i = 0; i < rcvd; i++) {
@@ -604,7 +633,8 @@ int main(int argc, char **argv) {
                         }
 
                         t    = rd_kafka_topic_name(rkm->rkt);
-                        pd_c = pb_find_or_add(&consumed, t, rkm->partition);
+                        pd_c = partitions_find_or_add(&consumed, t,
+                                                      rkm->partition);
                         pd_append(pd_c, rkm->offset);
                         consumed_in_batch++;
 

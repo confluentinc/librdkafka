@@ -979,6 +979,7 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 // }
 
 int main_0183_share_consumer_leader_change_mock(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
         test_timeout_set(120);
 
         test_shareack_leader_change_reduces_rpcs();

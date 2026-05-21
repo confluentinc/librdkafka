@@ -3026,17 +3026,6 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         }
 
         /**
-         * TODO KIP-932: Remove this property once we have removed offset
-         * management.
-         */
-        if (rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return NULL;
-        }
-
-        /**
          * TODO KIP-932: Try removing use of this property when improving share
          * consumer rebalancing logic in group management ticket.
          */

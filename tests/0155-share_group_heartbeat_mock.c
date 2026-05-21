@@ -1352,10 +1352,7 @@ static void do_test_group_max_size_reached_error(void) {
 
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Cleanup. share_c2 entered fatal state above
-         * (group max size reached), so its close returns a non-NULL
-         * error that we must destroy. The helper TEST_FAILs on
-         * non-NULL, so we can't use it for share_c2 here. */
+        /* Cleanup */
         test_share_consumer_close(share_c1);
         rd_kafka_error_t *c2_close_error =
             rd_kafka_share_consumer_close(share_c2);

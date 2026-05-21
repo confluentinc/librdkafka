@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Defaults. Override at trigger time by setting these as env vars.
-DURATION_SECONDS=${DURATION_SECONDS:-180}
+DURATION_SECONDS=${DURATION_SECONDS:-300}
 KAFKA_VERSION=${KAFKA_VERSION:-4.2.0}
 METRIC_NAMES=${METRIC_NAMES:-*}
 MSG_SIZE=${MSG_SIZE:-1000}
@@ -209,8 +209,16 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# Build list of metric names to query.
-ALL_NAMES=$(grep -oE '"consumer\.share\.[a-z0-9._]+"' ${ROOT}/src/rdkafka_telemetry_encode.h | tr -d '"' | sort -u)
+# Build list of metric names to query. Two entries in the header
+# (acknowledgements.send.{rate,total}) are split across lines using C string
+# concatenation, so we flatten the file and collapse adjacent string literals
+# before grepping.
+ALL_NAMES=$(
+    tr '\n' ' ' < ${ROOT}/src/rdkafka_telemetry_encode.h \
+        | sed 's/" *"//g' \
+        | grep -oE 'consumer\.share\.[a-z0-9._]+' \
+        | sort -u
+)
 if [ "${METRIC_NAMES}" = "*" ]; then
     NAMES="${ALL_NAMES}"
 else

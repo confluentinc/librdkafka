@@ -16,6 +16,11 @@ global_job_config:
       - sem-version java 17
       - sudo apt update
       - sudo apt install -y wget docker-compose-plugin jq python3 curl
+  env_vars:
+    - name: KAFKA_VERSION
+      value: '4.2.0'
+    - name: CACHE_TAG
+      value: '1'
 
 blocks:
   - name: 'Share consumer perf comparison'
@@ -24,4 +29,6 @@ blocks:
       jobs:
         - name: 'Java vs librdkafka share metrics'
           commands:
+            - cache restore share-perf-cmp-${KAFKA_VERSION}-${CACHE_TAG}
             - ./packaging/tools/run-share-perf-comparison.sh
+            - cache store share-perf-cmp-${KAFKA_VERSION}-${CACHE_TAG} tests/share_perf_compare/.work

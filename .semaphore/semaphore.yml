@@ -151,7 +151,7 @@ blocks:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       jobs:
-        - name: 'Build and run share consumer tests'
+        - name: 'Linux Ubuntu amd64: share consumer tests'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG}
@@ -159,25 +159,24 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
-  - name: 'OSX arm64/m1: share consumer tests'
+  - name: 'Share consumer telemetry e2e (Linux Ubuntu amd64)'
     dependencies: []
     skip:
       when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
-          type: s1-macos-15-arm64-8
+          type: s1-prod-ubuntu24-04-amd64-1
+      prologue:
+        commands:
+          - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
+          - sem-version java 17
       jobs:
-        - name: 'Build and run share consumer tests'
+        - name: 'Share consumer telemetry e2e (Linux Ubuntu amd64)'
           commands:
-            - brew install openjdk@21
-            - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
-            - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
-            - cd tests && python3 -m pip install -r requirements.txt && cd ..
-            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
-            - ./packaging/tools/run-share-consumer-tests.sh
-              ${KAFKA_VERSION} ${CP_VERSION}
-            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+            - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/setup-share-telemetry-testing.sh
+            - cache store share-telemetry-${KAFKA_VERSION}-${CACHE_TAG} tests/share_telemetry_verify/.work
 
   - name: 'Linux Ubuntu aarch64: share consumer tests'
     dependencies: []
@@ -191,11 +190,31 @@ blocks:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
       jobs:
-        - name: 'Build and run share consumer tests'
+        - name: 'Linux Ubuntu aarch64: share consumer tests'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - packaging/tools/run-in-docker.sh test-runner-arm64-${CACHE_TAG}
               ./packaging/tools/run-share-consumer-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION}
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+
+  - name: 'OSX arm64/m1: share consumer tests'
+    dependencies: []
+    skip:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-macos-15-arm64-8
+      jobs:
+        - name: 'OSX arm64/m1: share consumer tests'
+          commands:
+            - brew install openjdk@21
+            - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+            - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+            - cd tests && python3 -m pip install -r requirements.txt && cd ..
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/run-share-consumer-tests.sh
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
@@ -215,7 +234,7 @@ blocks:
           - make -j -C tests build
           - sem-version java 17
       jobs:
-        - name: 'Build and run share consumer tests'
+        - name: 'Linux Ubuntu amd64: Share Consumer Single Broker Tests'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - (cd tests && python3 -m trivup.clusters.KafkaCluster --kraft
@@ -250,7 +269,7 @@ blocks:
           commands:
             - try { Get-Process -Name java -ErrorAction Stop | Stop-Process -Force } catch {}
       jobs:
-        - name: 'Share consumer tests: x64'
+        - name: 'Windows x64: share consumer tests'
           env_vars:
             - name: triplet
               value: x64-windows
@@ -261,7 +280,7 @@ blocks:
             - tar -xzf C:\kafka.tgz -C C:\
             - Add-Content "C:\kafka_2.13-${env:KAFKA_VERSION}\config\server.properties" "`ngroup.share.min.record.lock.duration.ms=1000`ntransaction.state.log.replication.factor=1`ntransaction.state.log.min.isr=1"
             - $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("PATH", "User"); $env:KAFKA_CLUSTER_ID = & "C:\kafka_2.13-${env:KAFKA_VERSION}\bin\windows\kafka-storage.bat" random-uuid; & "C:\kafka_2.13-${env:KAFKA_VERSION}\bin\windows\kafka-storage.bat" format --standalone -t $env:KAFKA_CLUSTER_ID -c "C:\kafka_2.13-${env:KAFKA_VERSION}\config\server.properties"; Start-Job -Name kafka-broker -ScriptBlock { param($v) & "C:\kafka_2.13-$v\bin\windows\kafka-server-start.bat" "C:\kafka_2.13-$v\config\server.properties" } -ArgumentList $env:KAFKA_VERSION; Start-Sleep 15; cd tests; Set-Content test.conf "bootstrap.servers=localhost:9092`nbroker.address.family=v4"; Remove-Item Env:TESTS -ErrorAction SilentlyContinue; Remove-Item Env:TESTS_SKIP -ErrorAction SilentlyContinue; $env:RDKAFKA_TEST_CONF = "test.conf"; $env:TESTS_SKIP_BEFORE = "0170"; $env:TEST_BROKER_OS = "windows"; & ..\win32\outdir\v142\x64\Release\tests.exe; Stop-Job -Name kafka-broker
-        - name: 'Share consumer tests: x86'
+        - name: 'Windows x86: share consumer tests'
           env_vars:
             - name: triplet
               value: x86-windows

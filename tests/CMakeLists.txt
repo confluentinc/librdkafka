@@ -156,6 +156,7 @@ set(
     0177-share_consumer_transactions.c
     0178-share_consumer_close.c
     0182-share_consumer_error_handling_mock.c
+    0190-share_consumer_telemetry_e2e.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

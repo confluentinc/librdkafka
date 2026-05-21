@@ -970,7 +970,7 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
                 return 0;
         }
 
-        test_timeout_set(600);
+        test_timeout_set(300);
         do_test_produce_consumer_with_OIDC("client_credentials", conf);
         do_test_produce_share_consumer_with_OIDC("client_credentials", conf);
         do_test_produce_consumer_with_OIDC_should_fail_invalid_token_endpoint(

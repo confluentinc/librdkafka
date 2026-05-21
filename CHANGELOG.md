@@ -12,9 +12,8 @@ librdkafka v2.14.2 is a maintenance release:
 ## Security considerations
 
  * CVE-2025-15467 (OpenSSL): upgraded OpenSSL to 3.5.6 (LTS) or 3.6.2 with vcpkg as it usually doesn't provide LTS upgrades
- * CVE-2025-14017 (libcurl): solved through upgrading to CURL 8.20.0. s390x build
-  still ships 8.10.1 version because of compilation issues.
-  LDAP module isn't present in pre-built binary so this CVE doesn't affect librdkafka,
+ * CVE-2025-14017 (libcurl): solved through upgrading to CURL 8.20.0.
+  LDAP module isn't present in pre-built binary, so this CVE doesn't affect librdkafka
   but can still trigger automatic scanners.
 
 

@@ -48,16 +48,7 @@ function install_source {
     local ver=8.20.0
     local checksum="fc5819cad3f9f5482669adcdc49a782c15f36d2a0715b395b06d9173593d2dc0"
 
-
     echo "### Installing $name $ver from source to $destdir"
-
-    if [ "x$MKL_LIBCURL_PREV_VERSION" = "xyes" ]; then
-        # Temporary fix for s390x build
-        ver=8.10.1
-        checksum="d15ebab765d793e2e96db090f0e172d127859d78ca6f6391d7eafecfd894bbc0"
-        echo "### Using $name previous version $ver"
-    fi
-
     if [[ ! -f Makefile ]]; then
         mkl_download_archive \
             "https://curl.se/download/curl-${ver}.tar.gz" \
@@ -70,14 +61,8 @@ function install_source {
     # is outside the standard ld.so search path this runtime check will
     # fail due to missing libraries.
     # We patch curl's configure file to skip this check altogether.
-    if [ "x$MKL_LIBCURL_PREV_VERSION" = "xyes" ]; then
-        if ! mkl_patch libcurl 0001 ; then
-            return 1
-        fi
-    else
-        if ! mkl_patch libcurl 0000 ; then
-            return 1
-        fi
+    if ! mkl_patch libcurl 0000 ; then
+        return 1
     fi
 
     # Clear out LIBS to not interfer with lib detection process.

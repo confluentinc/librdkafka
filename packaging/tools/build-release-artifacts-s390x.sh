@@ -70,7 +70,7 @@ echo "ON S390x: Installing pre-requisites"
 sudo apt update
 sudo apt install -y git ca-certificates curl gnupg
 
-if [ -n "$(which docker)" ]; then
+if ! command -v docker >/dev/null 2>&1; then
     echo "Installing docker..."
     # Add Docker's official GPG key:
     sudo install -m 0755 -d /etc/apt/keyrings
@@ -88,7 +88,7 @@ Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 
     sudo apt update
-    sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
     sudo systemctl start docker || true
     sudo usermod -aG docker $USER
     echo "User added to docker group"

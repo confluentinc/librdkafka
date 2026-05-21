@@ -179,4 +179,9 @@ semaphore:
           - "x86_64,aarch64"
           - "x86_64"
           - "aarch64"
-      
+
+  - name: run-share-perf-comparison
+    branch: master
+    scheduled: false
+    pipeline_file: .semaphore/run-share-perf-comparison.yml
+

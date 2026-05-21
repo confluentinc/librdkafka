@@ -513,6 +513,12 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
           rd_atomic32_get(&(rk_cgrp)->rkcg_subscription_version) ==            \
               cgrp_subscription_version))
 
+void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_toppar_t *rktp);
+
+void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_toppar_t *rktp);
+
 void rd_kafka_cgrp_assigned_offsets_commit(
     rd_kafka_cgrp_t *rkcg,
     const rd_kafka_topic_partition_list_t *offsets,

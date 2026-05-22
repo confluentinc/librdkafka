@@ -15,7 +15,7 @@ exporters:
     brokers:
       - host.docker.internal:19092
     metrics:
-      topic: client-telemetry-metrics
+      topic: ${env:TELEMETRY_TOPIC}
       encoding: otlp_proto
   debug:
     verbosity: basic

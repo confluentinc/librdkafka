@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Defaults. Override at trigger time by setting these as env vars.
 DURATION_SECONDS=${DURATION_SECONDS:-300}
 KAFKA_VERSION=${KAFKA_VERSION:-4.2.0}
 METRIC_NAMES=${METRIC_NAMES:-*}
@@ -52,8 +51,6 @@ if [ ! -d "${KAFKA_DIR}" ]; then
     tar -C ${WORK_DIR} -xzf ${WORK_DIR}/kafka.tgz
 
     SP=${KAFKA_DIR}/config/server.properties
-    # No second listener needed — OTel Collector talks to the broker only via
-    # the OTLP gRPC receiver (port 4317), not as a Kafka client.
     sed -i.bak \
         -e "s|^log.dirs=/tmp/kraft-combined-logs|log.dirs=${KAFKA_DATA}|" \
         ${SP}
@@ -110,8 +107,6 @@ docker run -d --name perf-prometheus \
     -p 9090:9090 \
     -v ${PROM_CONFIG}:/etc/prometheus/prometheus.yml \
     prom/prometheus
-# The tutorials' prometheus.yml scrapes "otel-collector:8889" by service name;
-# the --network-alias above keeps that resolvable from Prometheus's container.
 
 echo "==> Starting Kafka broker"
 OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:4317 \
@@ -147,8 +142,6 @@ security.protocol=plaintext
 enable.metrics.push=true
 EOF
 
-# Unique group ids per run so we always start fresh and don't inherit
-# uncommitted offsets / stale members from a prior invocation.
 RUN_TAG=$(date +%s)
 LIBRDKAFKA_GROUP_ID=${LIBRDKAFKA_GROUP}-${RUN_TAG}
 JAVA_GROUP_ID=${JAVA_GROUP}-${RUN_TAG}
@@ -160,21 +153,14 @@ PERF_BIN=${ROOT}/examples/rdkafka_performance
 ${PERF_BIN} -P -t ${TOPIC} \
     -s ${MSG_SIZE} -r ${PRODUCER_RATE} \
     -X file=${ROOT}/tests/test.conf \
-    -X enable.metrics.push=true \
-    -d telemetry,broker \
     > ${WORK_DIR}/producer.log 2>&1 &
 PRODUCER_PID=$!
 echo "    producer PID=${PRODUCER_PID}"
 
 # (b) librdkafka share consumer
-# Note: deliberately do NOT override fetch.wait.max.ms here. Java's perf test
-# uses the default 500 ms, and overriding only on the librdkafka side would
-# skew fetch-latency / fetch-rate comparisons.
 ${PERF_BIN} -S ${LIBRDKAFKA_GROUP_ID} -t ${TOPIC} \
     -X file=${ROOT}/tests/test.conf \
     -X auto.offset.reset=earliest \
-    -X enable.metrics.push=true \
-    -d telemetry \
     > ${WORK_DIR}/librdkafka-share.log 2>&1 &
 LIBRDKAFKA_CONSUMER_PID=$!
 echo "    librdkafka share PID=${LIBRDKAFKA_CONSUMER_PID}"
@@ -184,8 +170,8 @@ ${KAFKA_DIR}/bin/kafka-share-consumer-perf-test.sh \
     --bootstrap-server localhost:9092 \
     --topic ${TOPIC} \
     --group ${JAVA_GROUP_ID} \
-    --num-records 1000000 \
-    --timeout 300000 \
+    --num-records 100000000 \
+    --timeout 30000000 \
     --reporting-interval 1000 \
     --show-detailed-stats \
     > ${WORK_DIR}/java-share.log 2>&1 &
@@ -197,8 +183,6 @@ sleep ${DURATION_SECONDS}
 echo "==> Stopping perf clients, waiting for trailing telemetry push"
 kill -TERM ${PRODUCER_PID} ${LIBRDKAFKA_CONSUMER_PID} ${JAVA_CONSUMER_PID} 2>/dev/null || true
 sleep 10
-
-echo "==> Waiting for Prometheus to scrape the final telemetry batch"
 for i in $(seq 1 30); do
     n=$(curl -s 'http://localhost:9090/api/v1/label/__name__/values' \
         | jq -r '.data | map(select(startswith("kip-714"))) | length' 2>/dev/null)
@@ -209,10 +193,6 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# Build list of metric names to query. Two entries in the header
-# (acknowledgements.send.{rate,total}) are split across lines using C string
-# concatenation, so we flatten the file and collapse adjacent string literals
-# before grepping.
 ALL_NAMES=$(
     tr '\n' ' ' < ${ROOT}/src/rdkafka_telemetry_encode.h \
         | sed 's/" *"//g' \
@@ -235,22 +215,40 @@ prom_query() {
 
 echo "==> Building report"
 REPORT_FILE=${ROOT}/REPORT.md
+
+compute_delta() {
+    local l=$1
+    local j=$2
+    awk -v l="${l}" -v j="${j}" 'BEGIN {
+        if (l == "—" || j == "—") { print "—"; exit }
+        if (l + 0 == l && j + 0 == j) {
+            if (j == 0) {
+                if (l == 0) { print "0%" } else { print "—" }
+                exit
+            }
+            printf "%+.2f%%", (l - j) / j * 100
+        } else {
+            print "—"
+        }
+    }'
+}
+
 {
     echo "# Share consumer perf comparison"
     echo ""
     echo "**Duration:** ${DURATION_SECONDS}s  |  **Kafka:** ${KAFKA_VERSION}  |  **Msg size:** ${MSG_SIZE}B  |  **Producer rate:** ${PRODUCER_RATE}/s"
     echo ""
-    echo "| Metric | librdkafka | Java |"
-    echo "|---|---:|---:|"
+    echo "Delta = (librdkafka − Java) / Java × 100 %"
+    echo ""
+    echo "| Metric | librdkafka | Java | Δ |"
+    echo "|---|---:|---:|---:|"
     while IFS= read -r metric; do
         [ -z "${metric}" ] && continue
-        # consumer.share.fetch.manager.fetch.rate
-        #   -> org.apache.kafka.consumer.share.fetch.manager.fetch.rate  (registry prefix)
-        #   -> kip-714_org_apache_kafka_consumer_share_fetch_manager_fetch_rate  (OTel namespace + dots->underscores)
         prom_name="kip-714_org_apache_kafka_$(echo "${metric}" | tr '.' '_')"
         librdkafka_val=$(prom_query "{__name__=\"${prom_name}\", client_software_name=\"librdkafka\"}")
         java_val=$(prom_query "{__name__=\"${prom_name}\", client_software_name=\"apache-kafka-java\"}")
-        printf '| `%s` | %s | %s |\n' "${metric}" "${librdkafka_val}" "${java_val}"
+        delta=$(compute_delta "${librdkafka_val}" "${java_val}")
+        printf '| `%s` | %s | %s | %s |\n' "${metric}" "${librdkafka_val}" "${java_val}" "${delta}"
     done <<< "${NAMES}"
 } > ${REPORT_FILE}
 

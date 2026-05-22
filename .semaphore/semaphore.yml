@@ -234,28 +234,26 @@ blocks:
       agent:
         machine:
           type: s1-prod-ubuntu24-04-amd64-1
+      env_vars:
+        - name: S390X_USER
+          value: "ubuntu"
+        - name: LOCAL_KEY
+          value: "./s390x.prv"
       prologue:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
-          - docker run --privileged --rm tonistiigi/binfmt --install s390x
       epilogue:
         commands:
           - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/ --destination artifacts/${ARTIFACT_KEY}/'
+          - if [[ "$LOCAL_KEY" =~ ^\./.*$ ]]; then rm -f $LOCAL_KEY; fi
       jobs:
-        - name: 'Build: centos8 glibc +gssapi'
-          env_vars:
-            - name: ARTIFACT_KEY
-              value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-std__extra-gssapi
-          commands:
-            - packaging/tools/build-release-artifacts.sh --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2026.05.07-2 artifacts/librdkafka.tgz
-
         - name: 'Build: centos8 glibc'
           env_vars:
             - name: ARTIFACT_KEY
               value: p-librdkafka__plat-linux__dist-centos8__arch-s390x__lnk-all
           commands:
-            - packaging/tools/build-release-artifacts.sh --disable-gssapi --platform linux/s390x quay.io/pypa/manylinux_2_28_s390x:2026.05.07-2 artifacts/librdkafka.tgz
-
+            - . vault-setup
+            - packaging/tools/build-release-artifacts-s390x.sh --disable-gssapi quay.io/pypa/manylinux_2_28_s390x:2026.05.07-2 artifacts/librdkafka.tgz
 
   - name: 'Windows x64: MinGW-w64'
     dependencies: []

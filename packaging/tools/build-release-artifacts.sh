@@ -62,7 +62,8 @@ fi
 
 if [ -n "$docker_image" ]; then
     # Running on the host, spin up the docker builder.
-    exec docker run $docker_platform -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
+    exec docker run --rm $docker_platform \
+        -v "$PWD:/v" $docker_image /v/packaging/tools/build-release-artifacts.sh $disable_gssapi --in-docker "/v/$output"
     # Only reached on exec error
     exit $?
 fi

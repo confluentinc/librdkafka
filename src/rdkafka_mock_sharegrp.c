@@ -56,8 +56,8 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         mcluster->defaults.sharegroup_session_timeout_ms      = 45000;
         mcluster->defaults.sharegroup_heartbeat_interval_ms   = 5000;
         mcluster->defaults.sharegroup_max_delivery_attempts   = 5;
-        mcluster->defaults.sharegroup_record_lock_duration_ms = 0;
-        mcluster->defaults.sharegroup_max_size                = 0;
+        mcluster->defaults.sharegroup_record_lock_duration_ms = 30000;
+        mcluster->defaults.sharegroup_max_size                = 200;
         mcluster->defaults.sharegroup_isolation_level         = 0;
         mcluster->defaults.sharegroup_max_fetch_sessions      = 2000;
         mcluster->defaults.sharegroup_max_record_locks        = 2000;

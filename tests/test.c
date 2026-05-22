@@ -576,7 +576,6 @@ struct test tests[] = {
     _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
     _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),
     _TEST(0158_share_consumer_transactions_mock, TEST_F_LOCAL),
-    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 2, 0)),

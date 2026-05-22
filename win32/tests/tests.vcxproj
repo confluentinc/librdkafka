@@ -246,7 +246,7 @@
     <ClCompile Include="..\..\tests\0177-share_consumer_transactions.c" />
     <ClCompile Include="..\..\tests\0178-share_consumer_close.c" />
     <ClCompile Include="..\..\tests\0182-share_consumer_error_handling_mock.c" />
-    <ClCompile Include="..\..\tests\0190-share_consumer_telemetry_e2e.c" />
+    <ClCompile Include="..\..\tests\0190-share_consumer_telemetry.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

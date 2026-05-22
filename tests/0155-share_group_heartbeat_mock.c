@@ -553,8 +553,14 @@ static void do_test_share_group_error_injection(void) {
         TEST_SAY("Consumer entered fatal state: %s (%s)\n",
                  rd_kafka_err2str(fatal_err), errstr);
 
-        /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
+        /* Cleanup. Consumer is in fatal state from the injected error
+         * above, so close is expected to return that fatal error. */
+        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        if (error) {
+                TEST_SAY("Close returned (expected fatal): %s\n",
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        }
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -1278,8 +1284,14 @@ static void do_test_group_authorization_failed_error(void) {
         TEST_SAY("Consumer entered fatal state: %s (%s)\n",
                  rd_kafka_err2str(fatal_err), errstr);
 
-        /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
+        /* Cleanup. Consumer is in fatal state from the injected error
+         * above, so close is expected to return that fatal error. */
+        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        if (error) {
+                TEST_SAY("Close returned (expected fatal): %s\n",
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        }
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -1348,9 +1360,16 @@ static void do_test_group_max_size_reached_error(void) {
 
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Cleanup */
+        /* Cleanup. share_c2 entered fatal state above (group max size
+         * reached), so close is expected to return that fatal error. */
         test_share_consumer_close(share_c1);
-        rd_kafka_share_consumer_close(share_c2);
+        rd_kafka_error_t *c2_close_error =
+            rd_kafka_share_consumer_close(share_c2);
+        if (c2_close_error) {
+                TEST_SAY("share_c2 close returned (expected fatal): %s\n",
+                         rd_kafka_error_string(c2_close_error));
+                rd_kafka_error_destroy(c2_close_error);
+        }
         test_share_destroy(share_c1);
         test_share_destroy(share_c2);
 
@@ -1787,6 +1806,8 @@ static void do_test_leave_heartbeat_completes_on_error(void) {
          * processed during leave. */
         TEST_SAY("Leave completed with: %s (didn't hang - correct)\n",
                  rd_kafka_error_name(error));
+        if (error)
+                rd_kafka_error_destroy(error);
 
         /* Cleanup */
         test_share_destroy(share_c);
@@ -1954,6 +1975,8 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
         /* Close consumer */
         error = rd_kafka_share_consumer_close(share_c);
         TEST_SAY("Close returned: %s\n", rd_kafka_error_name(error));
+        if (error)
+                rd_kafka_error_destroy(error);
 
         /* Cleanup */
         test_share_destroy(share_c);
@@ -2086,8 +2109,14 @@ static void do_test_invalid_request_error(void) {
         TEST_SAY("Consumer entered fatal state: %s (%s)\n",
                  rd_kafka_err2str(fatal_err), errstr);
 
-        /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
+        /* Cleanup. Consumer is in fatal state from the injected error
+         * above, so close is expected to return that fatal error. */
+        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        if (error) {
+                TEST_SAY("Close returned (expected fatal): %s\n",
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        }
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -2145,8 +2174,14 @@ static void do_test_unsupported_version_error(void) {
         TEST_SAY("Consumer entered fatal state: %s (%s)\n",
                  rd_kafka_err2str(fatal_err), errstr);
 
-        /* Cleanup */
-        rd_kafka_share_consumer_close(share_c);
+        /* Cleanup. Consumer is in fatal state from the injected error
+         * above, so close is expected to return that fatal error. */
+        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        if (error) {
+                TEST_SAY("Close returned (expected fatal): %s\n",
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        }
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -2496,6 +2531,8 @@ static void do_test_double_close(void) {
         error = rd_kafka_share_consumer_close(share_c);
         TEST_SAY("Second close returned: %s (no crash - correct)\n",
                  rd_kafka_error_name(error));
+        if (error)
+                rd_kafka_error_destroy(error);
 
         rd_kafka_topic_partition_list_destroy(subscription);
         test_share_destroy(share_c);

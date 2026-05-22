@@ -5,10 +5,6 @@ set -e
 ON_S390X="$1"
 
 if [[ "$ON_S390X" != "--on-s390x" ]]; then
-    if [ -z "$S390X_HOST" ]; then
-        echo "S390X_HOST not defined";
-        exit 1;
-    fi
     if [ -z "$S390X_USER" ]; then
         echo "S390X_USER not defined";
         exit 1;
@@ -18,18 +14,22 @@ if [[ "$ON_S390X" != "--on-s390x" ]]; then
         exit 1;
     fi
 
+    SSH_KEY_PATH="v1/devel/kv/cp-env/s390x-key/IBM-Cloud-S390x-key"
+    SSH_PRIVATE_KEY_FIELD="private_key"
+    SSH_IP_FIELD="ip"
+    SSH_KNOWN_HOST="known_host"
+    S390X_HOST=$(vault kv get -field=$SSH_IP_FIELD $SSH_KEY_PATH)
     SSH_USER_AT_HOST="$S390X_USER@$S390X_HOST"
     SSH_COMMAND="ssh -o ServerAliveInterval=60 -i ./$LOCAL_KEY $SSH_USER_AT_HOST"
     SCP_COMMAND="scp -i ./$LOCAL_KEY"
-    SSH_PRIVATE_KEY_PATH="v1/devel/kv/cp-env/s390x-key/IBM-Cloud-S390x-key"
-    SSH_PRIVATE_KEY_FIELD="private_key"
 
-    vault kv get -field=$SSH_PRIVATE_KEY_FIELD $SSH_PRIVATE_KEY_PATH > ./$LOCAL_KEY
+    vault kv get -field=$SSH_PRIVATE_KEY_FIELD $SSH_KEY_PATH > ./$LOCAL_KEY
     chmod go-rwx ./$LOCAL_KEY
     echo "SSH Key saved to $LOCAL_KEY"
 
     if [ -z "$(ssh-keygen -F $S390X_HOST)" ]; then
-        ssh-keyscan -H $S390X_HOST >> ~/.ssh/known_hosts;
+        S390X_KNOWN_HOST=$(vault kv get -field=$SSH_KNOWN_HOST $SSH_KEY_PATH)
+        echo "$S390X_KNOWN_HOST" >> ~/.ssh/known_hosts;
         echo "Added $S390X_HOST to the list of known hosts"
     fi
 

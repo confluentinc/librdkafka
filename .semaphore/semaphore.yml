@@ -235,8 +235,6 @@ blocks:
         machine:
           type: s1-prod-ubuntu24-04-amd64-1
       env_vars:
-        - name: S390X_HOST
-          value: "141.125.163.149"
         - name: S390X_USER
           value: "ubuntu"
         - name: LOCAL_KEY

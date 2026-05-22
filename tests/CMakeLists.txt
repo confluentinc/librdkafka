@@ -163,7 +163,7 @@ set(
     0182-share_consumer_error_handling_mock.c
     0183-share_consumer_leader_change_mock.c
     0185-share_consumer_max_poll_interval.c
-    0190-share_consumer_telemetry_e2e.c
+    0190-share_consumer_telemetry.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

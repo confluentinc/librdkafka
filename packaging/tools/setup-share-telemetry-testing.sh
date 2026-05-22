@@ -11,7 +11,7 @@ KAFKA_DATA=${WORK_DIR}/kafka-data
 TUTORIALS_REPO=${WORK_DIR}/tutorials
 PLUGIN_JAR=${WORK_DIR}/client-telemetry-reporter-plugin.jar
 
-TOPIC=client-telemetry-metrics
+export TELEMETRY_TOPIC=${TELEMETRY_TOPIC:-client-telemetry-metrics}
 SUBSCRIPTION_NAME=share-consumer-ci
 
 mkdir -p ${WORK_DIR}
@@ -56,9 +56,15 @@ ${KAFKA_DIR}/bin/kafka-storage.sh format --standalone \
     -t ${CLUSTER_ID} -c ${KAFKA_DIR}/config/server.properties
 
 TEST_CONF_BAK=${ROOT}/tests/test.conf.bak.$$
+LOG_DIR=${ROOT}/artifacts
 cleanup() {
     local rc=$?
     set +e
+    mkdir -p ${LOG_DIR}
+    docker logs otel-collector > ${LOG_DIR}/otel-collector.log 2>&1 || true
+    if [ -f ${KAFKA_DIR}/logs/server.log ]; then
+        cp ${KAFKA_DIR}/logs/server.log ${LOG_DIR}/kafka-server.log
+    fi
     ${KAFKA_DIR}/bin/kafka-server-stop.sh 2>/dev/null
     docker stop otel-collector 2>/dev/null
     docker rm otel-collector 2>/dev/null
@@ -73,6 +79,7 @@ echo "==> Starting OpenTelemetry Collector"
 docker rm -f otel-collector 2>/dev/null || true
 docker run -d --name otel-collector \
     --add-host=host.docker.internal:host-gateway \
+    -e TELEMETRY_TOPIC=${TELEMETRY_TOPIC} \
     -p 4317:4317 \
     -v ${VERIFY_DIR}/share-otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml \
     otel/opentelemetry-collector-contrib
@@ -82,17 +89,25 @@ OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:4317 \
     ${KAFKA_DIR}/bin/kafka-server-start.sh -daemon \
     ${KAFKA_DIR}/config/server.properties
 
+BROKER_UP=0
 for i in $(seq 1 60); do
     if ${KAFKA_DIR}/bin/kafka-broker-api-versions.sh \
         --bootstrap-server localhost:9092 > /dev/null 2>&1; then
+        BROKER_UP=1
         break
     fi
     sleep 1
 done
 
+if [ ${BROKER_UP} -eq 0 ]; then
+    echo "ERROR: Kafka broker did not come up within 60s on localhost:9092"
+    echo "  see kafka-server.log (uploaded as artifact) for details"
+    exit 1
+fi
+
 echo "==> Creating telemetry sink topic and metrics subscription"
 ${KAFKA_DIR}/bin/kafka-topics.sh --bootstrap-server localhost:9092 --create \
-    --topic ${TOPIC} --partitions 1 --replication-factor 1 --if-not-exists
+    --topic ${TELEMETRY_TOPIC} --partitions 1 --replication-factor 1 --if-not-exists
 ${KAFKA_DIR}/bin/kafka-client-metrics.sh --bootstrap-server localhost:9092 --alter \
     --name ${SUBSCRIPTION_NAME} \
     --metrics "org.apache.kafka.consumer.share." \
@@ -112,5 +127,14 @@ security.protocol=plaintext
 enable.metrics.push=true
 EOF
 
-echo "==> Running share consumer telemetry e2e test (0190)"
+echo "==> Pre-test infra sanity check"
+if ! ${KAFKA_DIR}/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+        --describe --topic ${TELEMETRY_TOPIC} > /dev/null 2>&1; then
+    echo "ERROR: telemetry topic '${TELEMETRY_TOPIC}' missing or broker unreachable"
+    echo "  broker may have died during the build phase"
+    echo "  see kafka-server.log / otel-collector.log artifacts"
+    exit 1
+fi
+
+echo "==> Running share consumer telemetry test (0190)"
 (cd ${ROOT}/tests && TESTS=0190 ./run-test.sh)

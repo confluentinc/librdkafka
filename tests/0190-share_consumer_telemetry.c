@@ -31,9 +31,13 @@
 #include "../src/rdkafka_telemetry_encode.h"
 
 #include <ctype.h>
+#include <stdlib.h>
 #include <string.h>
 
-static const char *TELEMETRY_TOPIC = "client-telemetry-metrics";
+static const char *telemetry_topic(void) {
+        const char *env = getenv("TELEMETRY_TOPIC");
+        return env && *env ? env : "client-telemetry-metrics";
+}
 
 /**
  * @name End-to-end share-consumer telemetry integration test.
@@ -239,7 +243,7 @@ static void verify_metrics(rd_list_t *seen) {
         TEST_ASSERT(missing == 0,
                     "%d of %d expected share-consumer metric name(s) "
                     "were not observed in topic '%s'",
-                    missing, expected_cnt, TELEMETRY_TOPIC);
+                    missing, expected_cnt, telemetry_topic());
 
         TEST_SAY("PASS: all %d expected share-consumer metric names observed\n",
                  expected_cnt);
@@ -251,7 +255,9 @@ static void verify_metrics(rd_list_t *seen) {
  *
  * Used to decide whether the surrounding telemetry pipeline is set up.
  * If the OTel Collector is not running and producing into the topic,
- * the topic itself won't exist and the test is skipped.
+ * the topic itself won't exist and the test is skipped. CI pipelines
+ * that intend to exercise the full path are expected to verify infra
+ * health themselves before invoking this test.
  */
 static int telemetry_infra_available(const char *topic) {
         rd_kafka_t *rk;
@@ -301,7 +307,7 @@ static void do_test_produce_share_consume_verify_metrics(void) {
 
         produce_and_share_consume(data_topic, group_id);
 
-        seen = consume_telemetry_topic(TELEMETRY_TOPIC, 30);
+        seen = consume_telemetry_topic(telemetry_topic(), 30);
         verify_metrics(seen);
         rd_list_destroy(seen);
 
@@ -309,14 +315,14 @@ static void do_test_produce_share_consume_verify_metrics(void) {
 }
 
 
-int main_0190_share_consumer_telemetry_e2e(int argc, char **argv) {
+int main_0190_share_consumer_telemetry(int argc, char **argv) {
         test_timeout_set(180);
 
-        if (!telemetry_infra_available(TELEMETRY_TOPIC)) {
+        if (!telemetry_infra_available(telemetry_topic())) {
                 TEST_SKIP(
                     "telemetry topic '%s' not found — "
                     "OTel/plugin pipeline not configured for this run\n",
-                    TELEMETRY_TOPIC);
+                    telemetry_topic());
                 return 0;
         }
 

@@ -159,7 +159,7 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
-  - name: 'Share consumer telemetry e2e (Linux Ubuntu amd64)'
+  - name: 'Share consumer telemetry (Linux Ubuntu amd64)'
     dependencies: []
     skip:
       when: "tag =~ '^v[0-9]\\.'"
@@ -171,8 +171,12 @@ blocks:
         commands:
           - '[[ -z $DOCKERHUB_APIKEY ]] || docker login --username $DOCKERHUB_USER --password $DOCKERHUB_APIKEY'
           - sem-version java 17
+      epilogue:
+        always:
+          commands:
+            - 'ls artifacts/ 2>/dev/null && artifact push job artifacts/ --destination telemetry-debug-${SEMAPHORE_JOB_ID}/ || true'
       jobs:
-        - name: 'Share consumer telemetry e2e (Linux Ubuntu amd64)'
+        - name: 'Share consumer telemetry (Linux Ubuntu amd64)'
           commands:
             - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
             - ./packaging/tools/setup-share-telemetry-testing.sh

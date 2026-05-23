@@ -1303,9 +1303,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         rd_kafka_buf_read_i16(rkbuf,
                               &PartitionFetchErrorCode);  // PartitionFetchError
         rd_kafka_buf_read_str(rkbuf, &PartitionFetchErrorStr);  // ErrorString
-        /* TODO KIP-932: We should reset (to INVALID) previous acknowledgement
-           information in the reply or maybe while sending the request itself?
-         */
         rd_kafka_buf_read_i16(
             rkbuf, &AcknowledgementErrorCode);  // AcknowledgementError
         rd_kafka_buf_read_str(
@@ -1616,11 +1613,6 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                            "ShareFetch response error %s: '%.*s'",
                            rd_kafka_err2name(ErrorCode),
                            RD_KAFKAP_STR_PR(&ErrorStr));
-                /* TODO KIP-932: Check if the response buffer still needs
-                 * to be parsed in some error cases. For example,
-                 * UNKNOWN_TOPIC_ID may require removing partitions from
-                 * the session, and acknowledgements for that topic id
-                 * should also be destroyed. */
                 return ErrorCode;
         }
 
@@ -3008,12 +3000,10 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         /* Update TopicArrayCnt */
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
-        /* TODO KIP-932: Check if commit_sync requests should use
-         * rko_orig->rko_u.share_fetch.abs_timeout instead of
-         * socket.timeout.ms. Currently the transport timeout is
-         * independent of the commit_sync timeout, so the broker
-         * request may outlive a timed-out commit_sync or time out
-         * at the transport level before the commit_sync timer fires. */
+        /* Wire RPC timeout is socket.timeout.ms, decoupled from any
+         * caller-side commit_sync deadline. Interactions covered by
+         * tests/0182-share_consumer_error_handling_mock.c
+         * (do_test_socket_timeout_full_ack_then_more). */
         rd_kafka_buf_set_timeout(rkbuf, rkb->rkb_rk->rk_conf.socket_timeout_ms,
                                  now);
 

@@ -1199,7 +1199,8 @@ void rd_kafka_toppar_broker_leave_for_remove(rd_kafka_toppar_t *rktp) {
          * on the new broker waiting for a offset reply from
          * this old broker (that might not come and thus need
          * to time out..slowly) */
-        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
                 rd_kafka_toppar_set_fetch_state(
                     rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 

@@ -683,7 +683,8 @@ void rd_kafka_toppar_desired_del(rd_kafka_toppar_t *rktp) {
                      "Removing (un)desired topic %s [%" PRId32 "]",
                      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
 
-        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN) {
+        if (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_UNKNOWN &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
                 /* If this partition does not exist in the cluster
                  * and is no longer desired, remove it. */
                 rd_kafka_toppar_broker_leave_for_remove(rktp);

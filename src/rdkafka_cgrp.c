@@ -4054,8 +4054,8 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
  *
  * @locks none
  */
-static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
-                                        rd_kafka_toppar_t *rktp) {
+void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTADD",
                      "Group \"%s\": add %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
@@ -4091,8 +4091,8 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
  *
  * @locks none
  */
-static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
-                                        rd_kafka_toppar_t *rktp) {
+void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
                      "Group \"%s\": delete %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,

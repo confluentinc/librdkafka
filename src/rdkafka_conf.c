@@ -4333,6 +4333,38 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         }
                 }
 
+                /* Share-consumer-specific config validation.
+                 * Share consumers are broker-driven (ShareGroupHeartbeat);
+                 * the application does not control partition assignment, so
+                 * the rebalance callback / event has no semantics here.
+                 * Auto-commit also doesn't apply — share consumers don't
+                 * track offsets locally. */
+                if (conf->share.is_share_consumer) {
+                        if (conf->rebalance_cb)
+                                return "`rebalance_cb` is not supported "
+                                       "for share consumers";
+
+                        /**
+                         * TODO KIP-932: We might want to enable this event
+                         * for share consumers. Lets come back to this after
+                         * understanding.
+                         */
+                        if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
+                                return "`RD_KAFKA_EVENT_REBALANCE` event is "
+                                       "not supported for share consumers";
+
+                        /* Reject explicit enable.auto.commit=true; silently
+                         * force the default to false otherwise. */
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "enable.auto.commit")) {
+                                if (conf->enable_auto_commit)
+                                        return "`enable.auto.commit` must be "
+                                               "false for share consumers";
+                        } else {
+                                conf->enable_auto_commit = 0;
+                        }
+                }
+
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
                  * unless set by user. */

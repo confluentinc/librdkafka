@@ -4339,6 +4339,11 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                  * the rebalance callback / event has no semantics here.
                  * Auto-commit also doesn't apply — share consumers don't
                  * track offsets locally. */
+                /**
+                 * TODO KIP-932: We will need to remove this property as we
+                 * dont want user to set this. The below properties should
+                 * be checked in rd_kafka_share_consumer_new() function.
+                 */
                 if (conf->share.is_share_consumer) {
                         if (conf->rebalance_cb)
                                 return "`rebalance_cb` is not supported "

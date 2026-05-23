@@ -349,6 +349,7 @@ static void rd_kafka_share_assignment_serve_removals(rd_kafka_t *rk) {
                 /* Detach the partition from the cgrp directly. This sends
                  * SHARE_SESSION_PARTITION_REMOVE to the partition's broker
                  * so it queues a forget on the next ShareFetch. */
+                rd_dassert(rktp->rktp_cgrp);
                 rd_kafka_cgrp_partition_del(rktp->rktp_cgrp, rktp);
 
                 /* desired_del requires both topic_wrlock and toppar_lock. */

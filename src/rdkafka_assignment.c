@@ -349,7 +349,6 @@ static void rd_kafka_share_assignment_serve_removals(rd_kafka_t *rk) {
                 /* Detach the partition from the cgrp directly. This sends
                  * SHARE_SESSION_PARTITION_REMOVE to the partition's broker
                  * so it queues a forget on the next ShareFetch. */
-                rd_dassert(rktp->rktp_cgrp);
                 rd_kafka_cgrp_partition_del(rktp->rktp_cgrp, rktp);
 
                 /* desired_del requires both topic_wrlock and toppar_lock. */
@@ -490,9 +489,7 @@ static void rd_kafka_share_assignment_serve_pending(rd_kafka_t *rk) {
                              "] to assignment",
                              rktpar->topic, rktpar->partition);
 
-                rd_kafka_toppar_lock(rktp);
                 rktp->rktp_cgrp = rk->rk_cgrp;
-                rd_kafka_toppar_unlock(rktp);
 
                 rd_kafka_cgrp_partition_add(rktp->rktp_cgrp, rktp);
                 rd_kafka_topic_partition_list_del_by_idx(
@@ -872,11 +869,6 @@ rd_kafka_share_assignment_add(rd_kafka_t *rk,
                 rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
         }
 
-        for (i = 0; i < partitions->cnt; i++) {
-                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
-                rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
-        }
-
         rd_kafka_topic_partition_list_add_list(rk->rk_consumer.assignment.all,
                                                partitions);
         if (!was_empty)
@@ -908,13 +900,11 @@ rd_kafka_share_assignment_add(rd_kafka_t *rk,
 rd_kafka_error_t *
 rd_kafka_assignment_add(rd_kafka_t *rk,
                         rd_kafka_topic_partition_list_t *partitions) {
-        rd_bool_t was_empty;
+        rd_bool_t was_empty = rk->rk_consumer.assignment.all->cnt == 0;
         int i;
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return rd_kafka_share_assignment_add(rk, partitions);
-
-        was_empty = rk->rk_consumer.assignment.all->cnt == 0;
 
         /* Make sure there are no duplicates, invalid partitions, or
          * invalid offsets in the input partitions. */
@@ -1212,6 +1202,14 @@ void rd_kafka_assignment_partition_stopped(rd_kafka_t *rk,
  * from either serve_removals() or serve_pending() above.
  */
 void rd_kafka_assignment_pause(rd_kafka_t *rk, const char *reason) {
+
+        /**
+         * TODO KIP-932: Check how can remove the invocation
+         * of this function altogether for share consumers.
+         */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                return;
+        }
 
         if (rk->rk_consumer.assignment.all->cnt == 0)
                 return;

@@ -4344,6 +4344,11 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`rebalance_cb` is not supported "
                                        "for share consumers";
 
+                        /**
+                         * TODO KIP-932: We might want to enable this event
+                         * for share consumers. Lets come back to this after
+                         * understanding.
+                         */
                         if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
                                 return "`RD_KAFKA_EVENT_REBALANCE` event is "
                                        "not supported for share consumers";

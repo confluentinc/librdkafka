@@ -3471,63 +3471,6 @@ rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
                                                       const char *username,
                                                       const char *password);
 
-
-/**
- * @brief Redirect the share consumer's main reply queue onto the underlying
- *        consumer-group queue so that main-queue events (errors, throttles,
- *        OAUTHBEARER authentication failures, etc.) are dispatched via the
- *        consumer-group queue returned by rd_kafka_share_queue_get_consumer().
- *
- * Share consumers wrap a regular RD_KAFKA_CONSUMER handle, so this is a
- * thin passthrough to rd_kafka_poll_set_consumer() on the underlying rk.
- *
- * @param rkshare Share consumer instance.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success;
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if rkshare is NULL or uninitialised;
- *          RD_KAFKA_RESP_ERR__UNKNOWN_GROUP if no consumer group is configured.
- *
- * @sa rd_kafka_poll_set_consumer()
- * @sa rd_kafka_share_queue_get_consumer()
- */
-RD_EXPORT
-rd_kafka_resp_err_t
-rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare);
-
-
-/**
- * @brief Returns a reference to this share consumer's underlying consumer-
- *        group queue. Bindings can poll this queue independently of
- *        rd_kafka_share_consume_batch() to drain main-queue events
- *        (errors, throttles, OAUTHBEARER authentication failures, etc.)
- *        without blocking on record consumption.
- *
- * Symmetric with rd_kafka_queue_get_consumer() for regular consumers and
- * intended to be paired with rd_kafka_share_poll_set_consumer() at
- * construction time.
- *
- * Use rd_kafka_queue_destroy() to release the reference.
- *
- * @param rkshare Share consumer instance.
- *
- * @returns A new reference to the consumer-group queue on success,
- *          NULL if rkshare is NULL/uninitialised or no consumer group is
- *          configured.
- *
- * @remark rd_kafka_queue_destroy() MUST be called on this queue prior to
- *         calling rd_kafka_share_destroy().
- * @remark Polling the returned queue counts as a consumer poll for
- *         max.poll.interval.ms purposes, exactly as for the regular
- *         consumer queue.
- *
- * @sa rd_kafka_queue_get_consumer()
- * @sa rd_kafka_share_poll_set_consumer()
- */
-RD_EXPORT
-rd_kafka_queue_t *
-rd_kafka_share_queue_get_consumer(rd_kafka_share_t *rkshare);
-
-
 /**
  * @brief Flags for rd_kafka_destroy_flags()
  */

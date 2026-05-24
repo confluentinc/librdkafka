@@ -1540,8 +1540,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "which indicates where this client is physically located. It "
      "corresponds with the broker config `broker.rack`.",
      .sdef = ""},
-    {_RK_GLOBAL | _RK_HIDDEN, "share.consumer", _RK_C_BOOL,
-     _RK(share.is_share_consumer), "tba description", 0, 1, 0},
     {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
      _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "share.acknowledgement.mode",
@@ -4291,6 +4289,55 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
 
+                /* Share-consumer-specific config validation.
+                 * Share consumers are broker-driven (ShareGroupHeartbeat); the
+                 * application does not control partition assignment, so the
+                 * rebalance callback / event has no semantics. Auto-commit
+                 * does not apply — share consumers don't track offsets
+                 * locally. The offset-reset policy is a broker-side share-
+                 * group property (`share.auto.offset.reset`) — the client
+                 * `auto.offset.reset` is not used. group.protocol is forced
+                 * to `consumer` and socket.max.fails is forced to 1 to keep
+                 * the broker share session in sync.
+                 *
+                 * Any explicit set of these properties is rejected. The
+                 * library-mandatory values are applied at the end of the
+                 * block, before the downstream group-protocol validation
+                 * runs so its CONSUMER-branch checks also apply to share
+                 * consumers. */
+                if (conf->share.is_share_consumer) {
+                        if (conf->rebalance_cb)
+                                return "`rebalance_cb` is not applicable "
+                                       "for share consumer";
+
+                        if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
+                                return "`RD_KAFKA_EVENT_REBALANCE` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "enable.auto.commit"))
+                                return "`enable.auto.commit` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "group.protocol"))
+                                return "`group.protocol` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "socket.max.fails"))
+                                return "`socket.max.fails` is not applicable "
+                                       "for share consumer";
+
+                        if (conf->topic_conf &&
+                            rd_kafka_topic_conf_is_modified(
+                                conf->topic_conf, "auto.offset.reset"))
+                                return "`auto.offset.reset` is not "
+                                       "applicable for share consumer";
+
+                        conf->enable_auto_commit = 0;
+                        conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
+                        conf->socket_max_fails = 1;
+                }
+
                 if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
                         if (conf->max_poll_interval_ms <
                             conf->group_session_timeout_ms)
@@ -4330,43 +4377,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                        "supported "
                                        "for `group.protocol=consumer`. It is "
                                        "defined broker side";
-                        }
-                }
-
-                /* Share-consumer-specific config validation.
-                 * Share consumers are broker-driven (ShareGroupHeartbeat);
-                 * the application does not control partition assignment, so
-                 * the rebalance callback / event has no semantics here.
-                 * Auto-commit also doesn't apply — share consumers don't
-                 * track offsets locally. */
-                /**
-                 * TODO KIP-932: We will need to remove this property as we
-                 * dont want user to set this. The below properties should
-                 * be checked in rd_kafka_share_consumer_new() function.
-                 */
-                if (conf->share.is_share_consumer) {
-                        if (conf->rebalance_cb)
-                                return "`rebalance_cb` is not supported "
-                                       "for share consumers";
-
-                        /**
-                         * TODO KIP-932: We might want to enable this event
-                         * for share consumers. Lets come back to this after
-                         * understanding.
-                         */
-                        if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
-                                return "`RD_KAFKA_EVENT_REBALANCE` event is "
-                                       "not supported for share consumers";
-
-                        /* Reject explicit enable.auto.commit=true; silently
-                         * force the default to false otherwise. */
-                        if (rd_kafka_conf_is_modified(conf,
-                                                      "enable.auto.commit")) {
-                                if (conf->enable_auto_commit)
-                                        return "`enable.auto.commit` must be "
-                                               "false for share consumers";
-                        } else {
-                                conf->enable_auto_commit = 0;
                         }
                 }
 

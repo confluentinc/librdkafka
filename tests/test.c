@@ -302,6 +302,7 @@ _TEST_DECL(0178_share_consumer_close);
 _TEST_DECL(0178_share_consumer_close_local);
 _TEST_DECL(0179_share_consumer_destroy);
 _TEST_DECL(0179_share_consumer_destroy_local);
+_TEST_DECL(0180_share_consumer_config);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
 _TEST_DECL(0183_share_consumer_leader_change_mock);
 
@@ -589,6 +590,7 @@ struct test tests[] = {
     _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
     _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
+    _TEST(0180_share_consumer_config, TEST_F_LOCAL),
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
     _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
 
@@ -8006,8 +8008,6 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id,
         test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
-                          sizeof(errstr));
 
         if (ack_mode) {
                 rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode,

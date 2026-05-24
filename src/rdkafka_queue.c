@@ -999,23 +999,6 @@ rd_kafka_queue_t *rd_kafka_queue_get_consumer(rd_kafka_t *rk) {
         return rd_kafka_queue_new0(rk, rk->rk_cgrp->rkcg_q);
 }
 
-
-rd_kafka_resp_err_t
-rd_kafka_share_poll_set_consumer(rd_kafka_share_t *rkshare) {
-        if (!rkshare || !rkshare->rkshare_rk)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-        return rd_kafka_poll_set_consumer(rkshare->rkshare_rk);
-}
-
-
-rd_kafka_queue_t *
-rd_kafka_share_queue_get_consumer(rd_kafka_share_t *rkshare) {
-        if (!rkshare || !rkshare->rkshare_rk)
-                return NULL;
-        return rd_kafka_queue_get_consumer(rkshare->rkshare_rk);
-}
-
-
 rd_kafka_queue_t *rd_kafka_queue_get_partition(rd_kafka_t *rk,
                                                const char *topic,
                                                int32_t partition) {

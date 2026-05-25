@@ -932,8 +932,16 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                                     delivery_count;
                         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rkm = &rko->rko_u.err.rkm;
-                                rkm->rkm_u.consumer.ack_type =
-                                    RD_KAFKA_SHARE_INTERNAL_ACK_REJECT;
+                                /* Set ack_type to REJECT only if not already
+                                 * set by rd_kafka_share_message_set_err_ops()
+                                 * (which sets REJECT for CRC/unsupported
+                                 * errors, RELEASE for decompression errors). */
+                                if (rkm->rkm_u.consumer.ack_type ==
+                                        RD_KAFKA_SHARE_INTERNAL_ACK_GAP ||
+                                    rkm->rkm_u.consumer.ack_type ==
+                                        RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED)
+                                        rkm->rkm_u.consumer.ack_type =
+                                            RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE;
                         }
 
                         /* Add to filtered messages list */
@@ -1094,17 +1102,17 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
 
-                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
+                        /* Forward the rko to the application only for
+                         * messages and per-message errors; GAP entries
+                         * are tracked in the per-offset ack-type table
+                         * above but not surfaced as rkmessages. */
+                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH ||
+                            msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rd_list_add(
                                     response_rko->rko_u.share_fetch_response
                                         .message_rkos,
                                     msg_rko);
                                 msg_cnt++;
-                        } else {
-                                /* RD_KAFKA_OP_CONSUMER_ERR: forward to
-                                 * consumer group queue */
-                                rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q,
-                                               msg_rko);
                         }
                 }
 

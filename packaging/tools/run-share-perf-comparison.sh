@@ -5,7 +5,7 @@ DURATION_SECONDS=${DURATION_SECONDS:-300}
 KAFKA_VERSION=${KAFKA_VERSION:-4.2.0}
 METRIC_NAMES=${METRIC_NAMES:-*}
 MSG_SIZE=${MSG_SIZE:-1000}
-PRODUCER_RATE=${PRODUCER_RATE:-1000}
+PRODUCER_RATE=${PRODUCER_RATE:-}
 
 ROOT=$(git rev-parse --show-toplevel)
 WORK_DIR=${ROOT}/tests/share_perf_compare/.work
@@ -28,7 +28,7 @@ echo "    DURATION_SECONDS = ${DURATION_SECONDS}"
 echo "    KAFKA_VERSION    = ${KAFKA_VERSION}"
 echo "    METRIC_NAMES     = ${METRIC_NAMES}"
 echo "    MSG_SIZE         = ${MSG_SIZE}"
-echo "    PRODUCER_RATE    = ${PRODUCER_RATE}"
+echo "    PRODUCER_RATE    = ${PRODUCER_RATE:-unlimited}"
 
 if [ ! -f "${PLUGIN_JAR}" ]; then
     echo "==> Building OTLP reporter plugin"
@@ -150,8 +150,10 @@ echo "==> Launching perf clients (duration ${DURATION_SECONDS}s)"
 PERF_BIN=${ROOT}/examples/rdkafka_performance
 
 # (a) librdkafka producer (continuous feed)
+PRODUCER_RATE_FLAG=""
+[ -n "${PRODUCER_RATE}" ] && PRODUCER_RATE_FLAG="-r ${PRODUCER_RATE}"
 ${PERF_BIN} -P -t ${TOPIC} \
-    -s ${MSG_SIZE} -r ${PRODUCER_RATE} \
+    -s ${MSG_SIZE} ${PRODUCER_RATE_FLAG} \
     -X file=${ROOT}/tests/test.conf \
     > ${WORK_DIR}/producer.log 2>&1 &
 PRODUCER_PID=$!
@@ -236,7 +238,7 @@ compute_delta() {
 {
     echo "# Share consumer perf comparison"
     echo ""
-    echo "**Duration:** ${DURATION_SECONDS}s  |  **Kafka:** ${KAFKA_VERSION}  |  **Msg size:** ${MSG_SIZE}B  |  **Producer rate:** ${PRODUCER_RATE}/s"
+    echo "**Duration:** ${DURATION_SECONDS}s  |  **Kafka:** ${KAFKA_VERSION}  |  **Msg size:** ${MSG_SIZE}B  |  **Producer rate:** ${PRODUCER_RATE:+${PRODUCER_RATE}/s}${PRODUCER_RATE:-unlimited}"
     echo ""
     echo "Delta = (librdkafka − Java) / Java × 100 %"
     echo ""

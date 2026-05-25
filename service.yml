@@ -197,6 +197,5 @@ semaphore:
 
       - name: PRODUCER_RATE
         required: false
-        default_value: "1000"
-        description: "Producer rate cap in messages per second."
+        description: "Producer rate cap in messages per second. Leave empty for unlimited."
 

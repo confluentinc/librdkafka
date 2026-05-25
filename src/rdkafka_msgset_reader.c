@@ -1111,21 +1111,22 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                          * continue with next message. */
                         if (!RD_KAFKA_IS_SHARE_CONSUMER(
                                 msetr->msetr_rkb->rkb_rk)) {
-                                        rd_kafka_consumer_err(
-                            &msetr->msetr_rkq, msetr->msetr_broker_id,
-                            RD_KAFKA_RESP_ERR__BAD_MSG,
-                            msetr->msetr_tver->version, NULL, rktp,
-                            hdr.BaseOffset,
-                            "MessageSet at offset %" PRId64 " (%" PRId32
-                            " bytes) "
-                            "failed CRC32C check "
-                            "(original 0x%" PRIx32
-                            " != "
-                            "calculated 0x%" PRIx32 ")",
-                            hdr.BaseOffset, hdr.Length, hdr.Crc, calc_crc);
-                        /* Skip to end of MessageSet */
-                        rd_kafka_buf_skip_to(rkbuf, crc_len);
-                                
+                                rd_kafka_consumer_err(
+                                    &msetr->msetr_rkq, msetr->msetr_broker_id,
+                                    RD_KAFKA_RESP_ERR__BAD_MSG,
+                                    msetr->msetr_tver->version, NULL, rktp,
+                                    hdr.BaseOffset,
+                                    "MessageSet at offset %" PRId64 " (%" PRId32
+                                    " bytes) "
+                                    "failed CRC32C check "
+                                    "(original 0x%" PRIx32
+                                    " != "
+                                    "calculated 0x%" PRIx32 ")",
+                                    hdr.BaseOffset, hdr.Length, hdr.Crc,
+                                    calc_crc);
+                                /* Skip to end of MessageSet */
+                                rd_kafka_buf_skip_to(rkbuf, crc_len);
+
                         } else {
                                 int16_t Attributes;
                                 int32_t LastOffsetDelta;
@@ -1152,9 +1153,10 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                     hdr.BaseOffset, LastOffset, hdr.Length,
                                     hdr.Crc, calc_crc);
                                 /* Skip to end of MessageSet */
-                                rd_kafka_buf_skip_to(rkbuf, len_start + hdr.Length);
+                                rd_kafka_buf_skip_to(rkbuf,
+                                                     len_start + hdr.Length);
                         }
-                
+
                         rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_err, 1);
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
@@ -1310,9 +1312,8 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                            rd_slice_size(&rkbuf->rkbuf_reader));
 
                 if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
-                        if (Offset >=
-                                msetr->msetr_rktp->rktp_offsets.fetch_pos
-                                    .offset &&
+                        if (Offset >= msetr->msetr_rktp->rktp_offsets.fetch_pos
+                                          .offset &&
                             !RD_KAFKA_IS_SHARE_CONSUMER(
                                 msetr->msetr_rkb->rkb_rk)) {
                                 rd_kafka_consumer_err(

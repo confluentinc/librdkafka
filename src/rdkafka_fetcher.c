@@ -1426,8 +1426,10 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 goto done;
         }
 
-        tver.rktp    = rktp;
-        tver.version = rktp->rktp_fetch_version;
+        tver.rktp = rktp;
+        /* There is no versioning/barrier of the records/partitions in
+         * share consumer case. */
+        tver.version = 0;
 
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;

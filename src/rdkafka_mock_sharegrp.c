@@ -32,11 +32,10 @@
  */
 
 
-#include <math.h>
-
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
+#include <math.h>
 
 /**
  * @brief Share group target assignment (manual)

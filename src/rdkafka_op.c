@@ -703,7 +703,7 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
  *
  * @sa rd_kafka_consumer_err()
  */
-void rd_kafka_share_consumer_err_range(
+void rd_kafka_share_message_set_err_ops(
     rd_kafka_q_t *rkq,
     int32_t broker_id,
     rd_kafka_resp_err_t err,

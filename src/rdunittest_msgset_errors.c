@@ -56,6 +56,29 @@
 
 
 /**
+ * @brief Alignment-safe big-endian writers.
+ *
+ * The msgset crafting helpers below write into a char buffer at arbitrary
+ * offsets. Casting `char *` to `int{16,32,64}_t *` triggers -Wcast-align
+ * on stricter targets (and is undefined behaviour even on x86 strictly
+ * speaking). Use memcpy() — the compiler lowers it to a single move on
+ * supported architectures.
+ */
+static RD_INLINE void ut_put_be16(void *p, int16_t v) {
+        int16_t be = htobe16(v);
+        memcpy(p, &be, sizeof(be));
+}
+static RD_INLINE void ut_put_be32(void *p, int32_t v) {
+        int32_t be = htobe32(v);
+        memcpy(p, &be, sizeof(be));
+}
+static RD_INLINE void ut_put_be64(void *p, int64_t v) {
+        int64_t be = htobe64(v);
+        memcpy(p, &be, sizeof(be));
+}
+
+
+/**
  * @name Test helpers
  * @{
  */
@@ -123,15 +146,15 @@ static void ut_write_msgset_v2_header(char *buf,
         size_t offset = 0;
 
         /* BaseOffset (int64) */
-        *(int64_t *)(buf + offset) = htobe64(BaseOffset);
+        ut_put_be64(buf + offset, BaseOffset);
         offset += 8;
 
         /* Length (int32) */
-        *(int32_t *)(buf + offset) = htobe32(Length);
+        ut_put_be32(buf + offset, Length);
         offset += 4;
 
         /* PartitionLeaderEpoch (int32) */
-        *(int32_t *)(buf + offset) = htobe32(PartitionLeaderEpoch);
+        ut_put_be32(buf + offset, PartitionLeaderEpoch);
         offset += 4;
 
         /* MagicByte (int8) */
@@ -139,39 +162,39 @@ static void ut_write_msgset_v2_header(char *buf,
         offset += 1;
 
         /* Crc (int32) */
-        *(int32_t *)(buf + offset) = htobe32(Crc);
+        ut_put_be32(buf + offset, Crc);
         offset += 4;
 
         /* Attributes (int16) */
-        *(int16_t *)(buf + offset) = htobe16(Attributes);
+        ut_put_be16(buf + offset, Attributes);
         offset += 2;
 
         /* LastOffsetDelta (int32) */
-        *(int32_t *)(buf + offset) = htobe32(LastOffsetDelta);
+        ut_put_be32(buf + offset, LastOffsetDelta);
         offset += 4;
 
         /* BaseTimestamp (int64) */
-        *(int64_t *)(buf + offset) = htobe64(BaseTimestamp);
+        ut_put_be64(buf + offset, BaseTimestamp);
         offset += 8;
 
         /* MaxTimestamp (int64) */
-        *(int64_t *)(buf + offset) = htobe64(MaxTimestamp);
+        ut_put_be64(buf + offset, MaxTimestamp);
         offset += 8;
 
         /* ProducerId (int64) */
-        *(int64_t *)(buf + offset) = htobe64(ProducerId);
+        ut_put_be64(buf + offset, ProducerId);
         offset += 8;
 
         /* ProducerEpoch (int16) */
-        *(int16_t *)(buf + offset) = htobe16(ProducerEpoch);
+        ut_put_be16(buf + offset, ProducerEpoch);
         offset += 2;
 
         /* BaseSequence (int32) */
-        *(int32_t *)(buf + offset) = htobe32(BaseSequence);
+        ut_put_be32(buf + offset, BaseSequence);
         offset += 4;
 
         /* RecordCount (int32) */
-        *(int32_t *)(buf + offset) = htobe32(RecordCount);
+        ut_put_be32(buf + offset, RecordCount);
         offset += 4;
 }
 
@@ -301,7 +324,7 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         }
 
         /* BaseOffset */
-        *(int64_t *)(buf + offset) = htobe64(base_offset);
+        ut_put_be64(buf + offset, base_offset);
         offset += 8;
 
         /* Length - will update later */
@@ -309,7 +332,7 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         offset += 4;
 
         /* PartitionLeaderEpoch */
-        *(int32_t *)(buf + offset) = htobe32(-1);
+        ut_put_be32(buf + offset, -1);
         offset += 4;
 
         /* MagicByte */
@@ -320,35 +343,35 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         offset += 4;
 
         /* Attributes (no compression) */
-        *(int16_t *)(buf + offset) = htobe16(0);
+        ut_put_be16(buf + offset, 0);
         offset += 2;
 
         /* LastOffsetDelta */
-        *(int32_t *)(buf + offset) = htobe32(last_offset_delta);
+        ut_put_be32(buf + offset, last_offset_delta);
         offset += 4;
 
         /* BaseTimestamp */
-        *(int64_t *)(buf + offset) = htobe64(0);
+        ut_put_be64(buf + offset, 0);
         offset += 8;
 
         /* MaxTimestamp */
-        *(int64_t *)(buf + offset) = htobe64(0);
+        ut_put_be64(buf + offset, 0);
         offset += 8;
 
         /* ProducerId */
-        *(int64_t *)(buf + offset) = htobe64(-1);
+        ut_put_be64(buf + offset, -1);
         offset += 8;
 
         /* ProducerEpoch */
-        *(int16_t *)(buf + offset) = htobe16(-1);
+        ut_put_be16(buf + offset, -1);
         offset += 2;
 
         /* BaseSequence */
-        *(int32_t *)(buf + offset) = htobe32(-1);
+        ut_put_be32(buf + offset, -1);
         offset += 4;
 
         /* RecordCount */
-        *(int32_t *)(buf + offset) = htobe32(record_count);
+        ut_put_be32(buf + offset, record_count);
         offset += 4;
 
         /* Copy records */
@@ -358,11 +381,11 @@ static size_t ut_build_valid_msgset_v2(char *buf,
 
         /* Calculate and write Length */
         int32_t length                 = (int32_t)(offset - len_offset - 4);
-        *(int32_t *)(buf + len_offset) = htobe32(length);
+        ut_put_be32(buf + len_offset, length);
 
         /* Calculate and write CRC (covers Attributes to end) */
         crc = rd_crc32c(0, buf + crc_offset + 4, offset - crc_offset - 4);
-        *(int32_t *)(buf + crc_offset) = htobe32(crc);
+        ut_put_be32(buf + crc_offset, crc);
 
         return offset;
 }
@@ -548,7 +571,7 @@ static int unittest_msgset_decompression_error_share_consumer(void) {
 
         /* Calculate CORRECT CRC so we pass CRC check but fail decompression */
         correct_crc = ut_calc_msgset_crc(msgset_data, attr_offset, msgset_size);
-        *(int32_t *)(msgset_data + crc_offset) = htobe32(correct_crc);
+        ut_put_be32(msgset_data + crc_offset, correct_crc);
 
         /* Create shadow buffer from raw data */
         rkbuf = rd_kafka_buf_new_shadow(msgset_data, msgset_size, rd_free);
@@ -869,7 +892,7 @@ static int unittest_msgset_mixed_crc_success_decomp(void) {
         /* Fix CRC for decompression error (CRC is valid, data is corrupt) */
         uint32_t crc = rd_crc32c(0, buffer + decomp_start + 21,
                                  49 + sizeof(corrupted_data) - 4 - 1 - 4);
-        *(int32_t *)(buffer + decomp_start + 17) = htobe32(crc);
+        ut_put_be32(buffer + decomp_start + 17, crc);
 
         /* Parse all MessageSets */
         rkbuf            = rd_kafka_buf_new_shadow(buffer, offset, rd_free);
@@ -1314,7 +1337,7 @@ static int unittest_msgset_all_error_types_with_valid(void) {
         /* Fix CRC for decompression error (CRC valid, data corrupt) */
         uint32_t crc = rd_crc32c(0, buffer + decomp_start + 21,
                                  49 + sizeof(corrupted_data) - 4 - 1 - 4);
-        *(int32_t *)(buffer + decomp_start + 17) = htobe32(crc);
+        ut_put_be32(buffer + decomp_start + 17, crc);
 
         /* MessageSet 4: Valid with 10 messages (offsets 30-39) */
         offset += ut_build_valid_msgset_v2(buffer + offset, 30, 10, values,

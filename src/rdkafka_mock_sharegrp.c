@@ -32,6 +32,8 @@
  */
 
 
+#include <math.h>
+
 #include "rdkafka_int.h"
 #include "rdbuf.h"
 #include "rdkafka_mock_int.h"
@@ -56,8 +58,8 @@ void rd_kafka_mock_sharegrps_init(rd_kafka_mock_cluster_t *mcluster) {
         mcluster->defaults.sharegroup_session_timeout_ms      = 45000;
         mcluster->defaults.sharegroup_heartbeat_interval_ms   = 5000;
         mcluster->defaults.sharegroup_max_delivery_attempts   = 5;
-        mcluster->defaults.sharegroup_record_lock_duration_ms = 0;
-        mcluster->defaults.sharegroup_max_size                = 0;
+        mcluster->defaults.sharegroup_record_lock_duration_ms = 30000;
+        mcluster->defaults.sharegroup_max_size                = 200;
         mcluster->defaults.sharegroup_isolation_level         = 0;
         mcluster->defaults.sharegroup_max_fetch_sessions      = 2000;
         mcluster->defaults.sharegroup_max_record_locks        = 2000;
@@ -461,9 +463,8 @@ void rd_kafka_mock_sharegroup_assign_topic_partitions(
     rd_list_t *subscribed_member_indices) {
         int member_count;
         int partition_cnt;
-        int partitions_per_member;
-        int extra_partitions;
         int partition_idx;
+        double precise;
         int i;
 
         member_count  = rd_list_cnt(subscribed_member_indices);
@@ -472,9 +473,8 @@ void rd_kafka_mock_sharegroup_assign_topic_partitions(
         if (member_count == 0 || partition_cnt == 0)
                 return;
 
-        partitions_per_member = partition_cnt / member_count;
-        extra_partitions      = partition_cnt % member_count;
-        partition_idx         = 0;
+        precise       = (double)partition_cnt / (double)member_count;
+        partition_idx = 0;
 
         for (i = 0; i < member_count; i++) {
                 int *member_idx_ptr =
@@ -492,8 +492,8 @@ void rd_kafka_mock_sharegroup_assign_topic_partitions(
                 if (!member)
                         continue;
 
-                num_partitions =
-                    partitions_per_member + (i < extra_partitions ? 1 : 0);
+                num_partitions = (int)ceil(precise * (double)(i + 1)) -
+                                 (int)ceil(precise * (double)i);
 
                 if (!member->assignment)
                         member->assignment =

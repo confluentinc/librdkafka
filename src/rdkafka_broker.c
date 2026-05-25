@@ -3496,8 +3496,11 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 }
                 rd_kafka_toppar_unlock(rktp);
 
-                /* Remove from fetcher list */
-                rd_kafka_toppar_fetch_decide(rktp, rkb, 1 /*force remove*/);
+                if (!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                        /* Remove from fetcher list */
+                        rd_kafka_toppar_fetch_decide(rktp, rkb,
+                                                     1 /*force remove*/);
+                }
 
                 if (rkb->rkb_rk->rk_type == RD_KAFKA_PRODUCER) {
                         /* Purge any ProduceRequests for this toppar
@@ -4009,7 +4012,10 @@ static void rd_kafka_broker_internal_serve(rd_kafka_broker_t *rkb,
         if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
                 /* Consumer */
                 do {
-                        rd_kafka_broker_consumer_toppars_serve(rkb);
+
+                        if (!RD_KAFKA_IS_SHARE_CONSUMER(rkb->rkb_rk)) {
+                                rd_kafka_broker_consumer_toppars_serve(rkb);
+                        }
 
                         wakeup = rd_kafka_broker_ops_io_serve(rkb, abs_timeout);
 

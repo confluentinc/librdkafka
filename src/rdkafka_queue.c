@@ -943,9 +943,18 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                             rko->rko_err, "%s",
                             rko->rko_u.err.errstr ? rko->rko_u.err.errstr : "");
                 }
+        } else {
+                /* Only OP_SHARE_FETCH_RESPONSE and OP_CONSUMER_ERR are
+                 * expected on the share consumer queue. Anything else
+                 * indicates a routing bug or unsupported API misuse;
+                 * abort in devel builds, drop silently in production. */
+                rd_kafka_dbg(rk, QUEUE, "SHAREQ",
+                             "Unexpected op %s (type %d) on share "
+                             "consumer queue; dropping",
+                             rd_kafka_op2str(rko->rko_type), rko->rko_type);
+                rd_dassert(!*"unexpected op on share consumer queue");
         }
 
-        /* Destroy other op types */
         rd_kafka_op_destroy(rko);
         rd_kafka_app_polled(rk, rkq);
         *rkmessages_size_out = cnt;

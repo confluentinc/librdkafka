@@ -263,7 +263,11 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         rktp->rktp_ops             = rd_kafka_q_new(rkt->rkt_rk);
         rktp->rktp_ops->rkq_serve  = rd_kafka_toppar_op_serve;
         rktp->rktp_ops->rkq_opaque = rktp;
-        rd_atomic32_init(&rktp->rktp_version, 1);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkt->rkt_rk)) {
+                rd_atomic32_init(&rktp->rktp_version, 0);
+        } else {
+                rd_atomic32_init(&rktp->rktp_version, 1);
+        }
         rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
 
         rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);

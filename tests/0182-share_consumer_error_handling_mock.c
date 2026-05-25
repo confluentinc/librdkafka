@@ -2941,6 +2941,91 @@ static void do_test_one_log_on_broker_down_during_active_empty_poll(void) {
 }
 
 
+/* A non-fatal OP_CONSUMER_ERR surfaced through
+ * rd_kafka_q_serve_share_rkmessages must be wrapped as a *retriable*
+ * rd_kafka_error_t (see src/rdkafka_queue.c:950-956). This is the
+ * generic branch — all share-consumer errors that are not the
+ * RD_KAFKA_RESP_ERR__FATAL sentinel and not a pre-constructed
+ * rko->rko_error reach it. Existing tests assert the error *code* but
+ * never assert the fatal/retriable flag, so a regression in the wrapper
+ * (e.g. switching to rd_kafka_error_new_with_props without setting the
+ * retriable bit) would not be caught.
+ *
+ * We use the metadata-driven TOPIC_AUTHORIZATION_FAILED surfacing path
+ * because it's the most predictable non-fatal share-consumer error and
+ * reuses the existing share_topic_err_* helpers. */
+static void test_consume_batch_retriable_error_is_flagged(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic = "0182-retriable-error-flagged";
+        const char *group = "sg-0182-retriable-error-flagged";
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_error_t *error = NULL;
+        size_t rcvd, j;
+        int attempts;
+        rd_bool_t saw_expected = rd_false;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+        mock_produce(ctx.producer, topic, 5);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+        share_topic_err_prime_assignment(rkshare);
+
+        rd_kafka_mock_topic_set_error(
+            ctx.mcluster, topic, RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+        share_topic_err_force_metadata(rkshare);
+
+        for (attempts = 0; attempts < 30 && !saw_expected; attempts++) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        if (code ==
+                            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED) {
+                                TEST_ASSERT(
+                                    rd_kafka_error_is_retriable(error),
+                                    "Expected TOPIC_AUTHORIZATION_FAILED "
+                                    "surfaced via consume_batch to be marked "
+                                    "retriable (per rdkafka_queue.c:950-956)");
+                                TEST_ASSERT(
+                                    !rd_kafka_error_is_fatal(error),
+                                    "Expected non-fatal share-consumer error "
+                                    "surfaced via consume_batch to NOT be "
+                                    "marked fatal (per "
+                                    "rdkafka_queue.c:950-956)");
+                                saw_expected = rd_true;
+                        }
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        TEST_ASSERT(saw_expected,
+                    "Expected consume_batch to surface "
+                    "TOPIC_AUTHORIZATION_FAILED within 30 attempts");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -2967,6 +3052,7 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_share_consumer_re_surfaces_after_recovery_topic_exception();
         test_share_consumer_resubscribe_re_emits_persistent_failure();
         test_share_consumer_does_not_surface_unknown_topic_or_part();
+        test_consume_batch_retriable_error_is_flagged();
 
         /* Socket timeout matrix (single broker).
          *

@@ -978,12 +978,175 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 //         SUB_TEST_PASS();
 // }
 
+/* ===================================================================
+ *  Regression test: records survive a leader-less partition transit.
+ * -------------------------------------------------------------------
+ *  Trigger: a partition becomes leader-less between two leader
+ *  changes (leader -> -1 -> new_leader). The leader-less period
+ *  makes the client briefly delegate the toppar to the :0/internal
+ *  pseudo-broker. Previously, that pseudo-broker thread ran the
+ *  regular-consumer fetch_decide path on the share-consumer rktp,
+ *  promoting rktp_fetch_version above 0. Subsequent share-fetch
+ *  parsing then stamped every parsed message rko with that
+ *  promoted version, after which the version-outdated filter
+ *  dropped them silently (because rktp_version had been bumped by
+ *  the initial fetch_start barrier).
+ *
+ *  Repro shape:
+ *    1. leader=1; produce phase 1; consume phase 1.
+ *    2. set leader=-1; consume again briefly so the consumer
+ *       processes the metadata change and migrates the toppar to
+ *       :0/internal. This is the step that historically promoted
+ *       rktp_fetch_version on the share-consumer rktp.
+ *    3. wait 3 s for the bad state to settle.
+ *    4. set leader=2 but DO NOT consume yet — let the migration
+ *       to broker 2 happen quietly.
+ *    5. produce phase 2 on the new leader.
+ *    6. consume phase 2 and verify every produced record reaches
+ *       the application.
+ *
+ *  Pre-fix: phase 2 consumed < phase 2 produced (parsed records
+ *  dropped by the version filter). Post-fix: phase 2 fully drained.
+ * =================================================================== */
+static void
+do_test_records_survive_leaderless_transit(rd_bool_t explicit_mode) {
+        test_ctx_t ctx;
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t drain_rcvd = 0;
+        char *topic;
+        const int part_cnt  = 1;
+        const char *group   = "sg-0183-leaderless-transit";
+        int phase1_total    = 0;
+        int phase2_total    = 0;
+        int phase1_consumed = 0;
+        int phase2_consumed = 0;
+        int i;
+
+        SUB_TEST_QUICK("%s", explicit_mode ? "explicit" : "implicit");
+
+        topic = rd_strdup(test_mk_topic_name("0183-leaderless-transit", 1));
+
+        ctx = test_ctx_new(3);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, part_cnt,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        /* All partitions start on broker 1. */
+        for (i = 0; i < part_cnt; i++)
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster,
+                                                               topic, i, 1) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set initial leader [%d] -> 1", i);
+
+        srand(42);
+        for (i = 0; i < part_cnt; i++)
+                phase1_total +=
+                    mock_produce(ctx.producer, topic, i, 20 + (rand() % 11));
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode",
+                      explicit_mode ? "explicit" : "implicit");
+        /* Short refresh interval so leader-change notifications
+         * land quickly. */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "2000");
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "create share consumer");
+        subscribe_one(rkshare, topic);
+
+        /* Phase 1: consume initial batch from broker 1. This warms
+         * up the consumer's view of leader=1 for every partition. */
+        phase1_consumed = consume_phase(rkshare, explicit_mode, rd_true,
+                                        phase1_total, 0, "Phase 1");
+        TEST_ASSERT(phase1_consumed == phase1_total,
+                    "Phase 1: expected %d, got %d", phase1_total,
+                    phase1_consumed);
+
+        /* First leader change: every partition becomes leader-less.
+         * The next consume call drives the share-fetch loop, which
+         * will hit broker 1, get NOT_LEADER_OR_FOLLOWER, refresh
+         * metadata, see leader_id=-1, and delegate the toppar to the
+         * :0/internal pseudo-broker — the exact bug-trigger. */
+        for (i = 0; i < part_cnt; i++)
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster,
+                                                               topic, i, -1) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set leader [%d] -> -1 (leader-less)", i);
+
+        /* Mid consume_batch: drive the internal fetch cycle so the
+         * consumer hits broker 1 with SHAREFETCH, gets
+         * NOT_LEADER_OR_FOLLOWER, refreshes metadata, sees
+         * leader_id=-1, and delegates the rktp to the :0/internal
+         * pseudo-broker. No records expected (leader-less). */
+        TEST_ASSERT(!rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
+                                                  &drain_rcvd),
+                    "mid consume_batch unexpected err");
+        TEST_ASSERT(drain_rcvd == 0,
+                    "mid consume_batch expected 0 records during the "
+                    "leader-less window, got %" PRIusz,
+                    drain_rcvd);
+
+        /* Settle: pre-fix, :0/internal's broker_internal_serve loop
+         * runs consumer_toppars_serve here, which calls fetch_decide
+         * on the share-consumer rktp and promotes
+         * rktp_fetch_version. After this point, any parsed
+         * share-fetch message gets stamped with the promoted
+         * version and dropped by the version-outdated filter. */
+        rd_usleep(3000 * 1000, NULL);
+
+        /* Second leader change: leader=2. The fast-query timer
+         * armed by the NOT_LEADER response is still active and will
+         * fire within ~1s (capped by retry_backoff_max_ms), find
+         * leader=2, and clear LEADER_UNAVAIL. No consume here — let
+         * the metadata refresh happen on its own. */
+        for (i = 0; i < part_cnt; i++)
+                TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster,
+                                                               topic, i, 2) ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "set leader [%d] -> 2", i);
+
+        /* Produce Phase 2 records on the new leader. */
+        for (i = 0; i < part_cnt; i++)
+                phase2_total +=
+                    mock_produce(ctx.producer, topic, i, 20 + (rand() % 11));
+        rd_kafka_flush(ctx.producer, 5000);
+
+        /* Phase 2: every record produced post-transit must reach the
+         * application. Pre-fix this assertion failed because parsed
+         * SHAREFETCH messages were stamped with the promoted
+         * fetch_version and then dropped by the version-outdated
+         * filter against the bumped rktp_version. */
+        phase2_consumed = consume_phase(rkshare, explicit_mode, rd_true,
+                                        phase2_total, 1500, "Phase 2");
+        TEST_ASSERT(phase2_consumed == phase2_total,
+                    "Phase 2: expected %d records after leader-less "
+                    "transit + new leader, got %d. If pre-fix: parsed "
+                    "records were silently dropped by the "
+                    "rktp_version filter on the share-consumer path.",
+                    phase2_total, phase2_consumed);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+        rd_free(topic);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0183_share_consumer_leader_change_mock(int argc, char **argv) {
         test_timeout_set(120);
 
         test_shareack_leader_change_reduces_rpcs();
         test_partition_not_leader_or_follower_silent();
         /* test_partition_unknown_topic_silent(); */
+
+        do_test_records_survive_leaderless_transit(rd_false);
+        do_test_records_survive_leaderless_transit(rd_true);
 
         do_test_leader_change_consume_recovery(rd_false, rd_false, rd_false,
                                                "implicit-no-refresh");

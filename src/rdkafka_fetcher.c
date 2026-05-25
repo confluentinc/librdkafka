@@ -1796,16 +1796,22 @@ static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb) {
 }
 
 static void rd_kafka_broker_session_update_epoch(rd_kafka_broker_t *rkb) {
-        if (rkb->rkb_share_fetch_session.epoch == -1) {
+        int32_t prev_epoch = rkb->rkb_share_fetch_session.epoch;
+        if (prev_epoch == -1) {
                 rd_kafka_dbg(
                     rkb->rkb_rk, MSG, "SHAREFETCH",
                     "Not updating next epoch for -1 as it should be -1 again.");
                 return;
         }
-        if (rkb->rkb_share_fetch_session.epoch == INT32_MAX)
+        if (prev_epoch == INT32_MAX)
                 rkb->rkb_share_fetch_session.epoch = 1;
         else
                 rkb->rkb_share_fetch_session.epoch++;
+        rd_rkb_dbg(rkb, FETCH, "SHARESESSION",
+                   "share-fetch session epoch %" PRId32 " -> %" PRId32
+                   " (wrap=%s)",
+                   prev_epoch, rkb->rkb_share_fetch_session.epoch,
+                   prev_epoch == INT32_MAX ? "yes" : "no");
 }
 
 static void rd_kafka_broker_session_add_partition_to_toppars_in_session(
@@ -1915,6 +1921,20 @@ rd_kafka_broker_session_update_removed_partitions(rd_kafka_broker_t *rkb) {
 }
 
 static void rd_kafka_broker_session_update_partitions(rd_kafka_broker_t *rkb) {
+        rd_rkb_dbg(
+            rkb, FETCH, "SHARESESSION",
+            "applying session updates: adding_toppars=%d "
+            "forgetting_toppars=%d toppars_in_session=%d epoch=%" PRId32,
+            rkb->rkb_share_fetch_session.adding_toppars
+                ? rd_list_cnt(rkb->rkb_share_fetch_session.adding_toppars)
+                : 0,
+            rkb->rkb_share_fetch_session.forgetting_toppars
+                ? rd_list_cnt(rkb->rkb_share_fetch_session.forgetting_toppars)
+                : 0,
+            rkb->rkb_share_fetch_session.toppars_in_session
+                ? rd_list_cnt(rkb->rkb_share_fetch_session.toppars_in_session)
+                : 0,
+            rkb->rkb_share_fetch_session.epoch);
         rd_kafka_broker_session_update_added_partitions(rkb);
         rd_kafka_broker_session_update_removed_partitions(rkb);
 }

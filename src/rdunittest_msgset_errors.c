@@ -380,7 +380,7 @@ static size_t ut_build_valid_msgset_v2(char *buf,
         rd_free(records_buf);
 
         /* Calculate and write Length */
-        int32_t length                 = (int32_t)(offset - len_offset - 4);
+        int32_t length = (int32_t)(offset - len_offset - 4);
         ut_put_be32(buf + len_offset, length);
 
         /* Calculate and write CRC (covers Attributes to end) */

@@ -1,0 +1,34 @@
+version: v1.0
+name: run-share-perf-comparison
+
+agent:
+  machine:
+    type: s1-prod-ubuntu24-04-amd64-1
+
+execution_time_limit:
+  hours: 1
+
+global_job_config:
+  prologue:
+    commands:
+      - checkout
+      - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
+      - sem-version java 17
+      - sudo apt update
+      - sudo apt install -y wget docker-compose-plugin jq python3 curl
+  env_vars:
+    - name: KAFKA_VERSION
+      value: '4.2.0'
+    - name: CACHE_TAG
+      value: '1'
+
+blocks:
+  - name: 'Share consumer perf comparison'
+    dependencies: []
+    task:
+      jobs:
+        - name: 'Java vs librdkafka share metrics'
+          commands:
+            - cache restore share-perf-cmp-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/run-share-perf-comparison.sh
+            - cache store share-perf-cmp-${KAFKA_VERSION}-${CACHE_TAG} tests/share_perf_compare/.work

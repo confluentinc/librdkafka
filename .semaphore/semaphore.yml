@@ -528,11 +528,8 @@ promotions:
         - required: true
           name: TEST_KAFKA_GIT_REF
           default_value: "4.2.0"
-        - required: true
-          name: TEST_SASL
+        - name: TEST_SASL
           default_value: "PLAIN"
-          options:
-            - "PLAIN"
         - required: true
           name: TEST_TYPE
           default_value: "plaintext,ssl"
@@ -554,11 +551,8 @@ promotions:
         - required: true
           name: TEST_KAFKA_GIT_REF
           default_value: "4.2.0"
-        - required: true
-          name: TEST_SASL
+        - name: TEST_SASL
           default_value: "OAUTHBEARER"
-          options:
-            - "OAUTHBEARER"
         - required: true
           name: TEST_TYPE
           default_value: "plaintext,ssl"

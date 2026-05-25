@@ -45,7 +45,7 @@
 #include "rdlist.h"
 
 #define POLL_TIMEOUT_MS   5000
-#define BATCH_CAPACITY    1024
+#define BATCH_CAPACITY    16384
 #define COMMIT_TIMEOUT_MS 60000
 #define MAX_TOPIC_LEN     256
 
@@ -60,7 +60,7 @@ enum ack_mode { ACK_AUTO, ACK_SYNC, ACK_ASYNC };
 struct partition_data {
         char topic[MAX_TOPIC_LEN];
         int32_t partition;
-        rd_list_t offsets;        /* of int64_t * (heap-allocated) */
+        rd_list_t offsets; /* of int64_t * (heap-allocated) */
 };
 
 /* Module-level handle so cleanup_and_exit can be called from anywhere
@@ -103,17 +103,15 @@ static void pd_append(struct partition_data *pd, int64_t offset) {
         rd_list_add(&pd->offsets, o);
 }
 
-static struct partition_data *
-partitions_find_or_add(rd_list_t *partitions,
-                       const char *topic,
-                       int32_t partition) {
+static struct partition_data *partitions_find_or_add(rd_list_t *partitions,
+                                                     const char *topic,
+                                                     int32_t partition) {
         struct partition_data *pd;
         int i;
 
         for (i = 0; i < rd_list_cnt(partitions); i++) {
                 pd = rd_list_elem(partitions, i);
-                if (pd->partition == partition &&
-                    strcmp(pd->topic, topic) == 0)
+                if (pd->partition == partition && strcmp(pd->topic, topic) == 0)
                         return pd;
         }
 

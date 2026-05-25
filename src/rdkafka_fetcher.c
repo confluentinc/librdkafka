@@ -933,7 +933,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rkm = &rko->rko_u.err.rkm;
                                 /* Set ack_type to REJECT only if not already
-                                 * set by rd_kafka_share_consumer_err_range()
+                                 * set by rd_kafka_share_message_set_err_ops()
                                  * (which sets REJECT for CRC/unsupported
                                  * errors, RELEASE for decompression errors). */
                                 if (rkm->rkm_u.consumer.ack_type ==
@@ -941,7 +941,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                                     rkm->rkm_u.consumer.ack_type ==
                                         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED)
                                         rkm->rkm_u.consumer.ack_type =
-                                            RD_KAFKA_SHARE_INTERNAL_ACK_REJECT;
+                                            RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE;
                         }
 
                         /* Add to filtered messages list */
@@ -1102,6 +1102,10 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
 
+                        /* Forward the rko to the application only for
+                         * messages and per-message errors; GAP entries
+                         * are tracked in the per-offset ack-type table
+                         * above but not surfaced as rkmessages. */
                         if (msg_rko->rko_type == RD_KAFKA_OP_FETCH ||
                             msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rd_list_add(

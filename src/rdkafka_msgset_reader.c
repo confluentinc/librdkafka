@@ -517,18 +517,24 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
 err:
         /* Enqueue error messsage:
          * Create op and push on temporary queue. */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk) &&
-            msetr->msetr_v2_hdr != NULL) {
-                /* For share consumer with MessageSet v2: report error for
-                 * entire batch with RELEASE acknowledgement (decompression
-                 * capability varies by consumer - another consumer might
-                 * succeed). */
-                int64_t LastOffset;
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk) ||
+            msetr->msetr_v2_hdr == NULL) {
+                /* Regular consumer, or v0/v1 MessageSet: single error. */
+                rd_kafka_consumer_err(
+                    &msetr->msetr_rkq, msetr->msetr_broker_id, err,
+                    msetr->msetr_tver->version, NULL, rktp, Offset,
+                    "Decompression (codec 0x%x) of message at %" PRIu64
+                    " of %" PRIusz " bytes failed: %s",
+                    codec, Offset, compressed_size, rd_kafka_err2str(err));
+        } else {
+                /* Share consumer with MessageSet v2: report error for
+                 * the entire batch with RELEASE acknowledgement —
+                 * decompression capability varies by consumer, so
+                 * another consumer might succeed on the same batch. */
+                int64_t LastOffset = msetr->msetr_v2_hdr->BaseOffset +
+                                     msetr->msetr_v2_hdr->LastOffsetDelta;
 
-                LastOffset = msetr->msetr_v2_hdr->BaseOffset +
-                             msetr->msetr_v2_hdr->LastOffsetDelta;
-
-                rd_kafka_share_consumer_err_range(
+                rd_kafka_share_message_set_err_ops(
                     &msetr->msetr_rkq, msetr->msetr_broker_id, err,
                     msetr->msetr_tver->version, rktp,
                     msetr->msetr_v2_hdr->BaseOffset, LastOffset,
@@ -537,14 +543,6 @@ err:
                     "%" PRId64 "-%" PRId64 " of %" PRIusz " bytes failed: %s",
                     codec, msetr->msetr_v2_hdr->BaseOffset, LastOffset,
                     compressed_size, rd_kafka_err2str(err));
-        } else {
-                /* Regular consumer or v0/v1 MessageSet: single error */
-                rd_kafka_consumer_err(
-                    &msetr->msetr_rkq, msetr->msetr_broker_id, err,
-                    msetr->msetr_tver->version, NULL, rktp, Offset,
-                    "Decompression (codec 0x%x) of message at %" PRIu64
-                    " of %" PRIusz " bytes failed: %s",
-                    codec, Offset, compressed_size, rd_kafka_err2str(err));
         }
 
         return err;
@@ -1111,8 +1109,24 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                 if (unlikely((uint32_t)hdr.Crc != calc_crc)) {
                         /* Propagate CRC error to application and
                          * continue with next message. */
-                        if (RD_KAFKA_IS_SHARE_CONSUMER(
+                        if (!RD_KAFKA_IS_SHARE_CONSUMER(
                                 msetr->msetr_rkb->rkb_rk)) {
+                                        rd_kafka_consumer_err(
+                            &msetr->msetr_rkq, msetr->msetr_broker_id,
+                            RD_KAFKA_RESP_ERR__BAD_MSG,
+                            msetr->msetr_tver->version, NULL, rktp,
+                            hdr.BaseOffset,
+                            "MessageSet at offset %" PRId64 " (%" PRId32
+                            " bytes) "
+                            "failed CRC32C check "
+                            "(original 0x%" PRIx32
+                            " != "
+                            "calculated 0x%" PRIx32 ")",
+                            hdr.BaseOffset, hdr.Length, hdr.Crc, calc_crc);
+                        /* Skip to end of MessageSet */
+                        rd_kafka_buf_skip_to(rkbuf, crc_len);
+                                
+                        } else {
                                 int16_t Attributes;
                                 int32_t LastOffsetDelta;
 
@@ -1122,7 +1136,7 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                 rd_kafka_buf_read_i32(rkbuf, &LastOffsetDelta);
                                 LastOffset = hdr.BaseOffset + LastOffsetDelta;
 
-                                rd_kafka_share_consumer_err_range(
+                                rd_kafka_share_message_set_err_ops(
                                     &msetr->msetr_rkq, msetr->msetr_broker_id,
                                     RD_KAFKA_RESP_ERR__BAD_MSG,
                                     msetr->msetr_tver->version, rktp,
@@ -1137,23 +1151,10 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                     "calculated 0x%" PRIx32 ")",
                                     hdr.BaseOffset, LastOffset, hdr.Length,
                                     hdr.Crc, calc_crc);
-                        } else {
-                                rd_kafka_consumer_err(
-                                    &msetr->msetr_rkq, msetr->msetr_broker_id,
-                                    RD_KAFKA_RESP_ERR__BAD_MSG,
-                                    msetr->msetr_tver->version, NULL, rktp,
-                                    hdr.BaseOffset,
-                                    "MessageSet at offset %" PRId64 " (%" PRId32
-                                    " bytes) "
-                                    "failed CRC32C check "
-                                    "(original 0x%" PRIx32
-                                    " != "
-                                    "calculated 0x%" PRIx32 ")",
-                                    hdr.BaseOffset, hdr.Length, hdr.Crc,
-                                    calc_crc);
+                                /* Skip to end of MessageSet */
+                                rd_kafka_buf_skip_to(rkbuf, len_start + hdr.Length);
                         }
-                        /* Skip to end of MessageSet */
-                        rd_kafka_buf_skip_to(rkbuf, len_start + hdr.Length);
+                
                         rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_err, 1);
                         return RD_KAFKA_RESP_ERR_NO_ERROR;
                 }
@@ -1308,50 +1309,12 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                            (int)*MagicBytep, Offset, read_offset,
                            rd_slice_size(&rkbuf->rkbuf_reader));
 
-                rd_kafka_buf_read_i32(rkbuf, &Length);
-
-                if (RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
-                        /* Share consumer: read LastOffsetDelta to determine
-                         * full range. Speculatively assume future MessageSet
-                         * versions maintain similar header structure. */
-                        size_t len_start;
-                        size_t bytes_read;
-                        size_t remaining;
-                        int32_t PartitionLeaderEpoch;
-                        int8_t MagicByteActual;
-                        int32_t Crc;
-                        int16_t Attributes;
-                        int32_t LastOffsetDelta;
-                        int64_t LastOffset;
-
-                        len_start = rd_slice_offset(&rkbuf->rkbuf_reader);
-
-                        rd_kafka_buf_read_i32(rkbuf, &PartitionLeaderEpoch);
-                        rd_kafka_buf_read_i8(rkbuf, &MagicByteActual);
-                        rd_kafka_buf_read_i32(rkbuf, &Crc);
-                        rd_kafka_buf_read_i16(rkbuf, &Attributes);
-                        rd_kafka_buf_read_i32(rkbuf, &LastOffsetDelta);
-
-                        LastOffset = Offset + LastOffsetDelta;
-
-                        rd_kafka_share_consumer_err_range(
-                            &msetr->msetr_rkq, msetr->msetr_broker_id,
-                            RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
-                            msetr->msetr_tver->version, rktp, Offset,
-                            LastOffset, RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
-                            "Unsupported Message(Set) MagicByte %d at offsets "
-                            "%" PRId64 "-%" PRId64,
-                            (int)MagicByteActual, Offset, LastOffset);
-
-                        /* Skip remaining bytes in MessageSet */
-                        bytes_read =
-                            rd_slice_offset(&rkbuf->rkbuf_reader) - len_start;
-                        remaining = Length - bytes_read;
-                        rd_kafka_buf_skip(rkbuf, remaining);
-                } else {
-                        /* Regular consumer: single error */
+                if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
                         if (Offset >=
-                            msetr->msetr_rktp->rktp_offsets.fetch_pos.offset) {
+                                msetr->msetr_rktp->rktp_offsets.fetch_pos
+                                    .offset &&
+                            !RD_KAFKA_IS_SHARE_CONSUMER(
+                                msetr->msetr_rkb->rkb_rk)) {
                                 rd_kafka_consumer_err(
                                     &msetr->msetr_rkq, msetr->msetr_broker_id,
                                     RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
@@ -1365,8 +1328,56 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                                     .offset = Offset + 1;
                         }
 
-                        /* Skip this Message(Set). */
+                        /* Skip this Message(Set).
+                         * If the message is malformed, the skip may trigger
+                         * err_parse and return ERR__BAD_MSG. */
+                        rd_kafka_buf_read_i32(rkbuf, &Length);
                         rd_kafka_buf_skip(rkbuf, Length);
+                } else {
+                        /* Share consumer: peek further into the MessageSet v2
+                         * header so we can compute the full offset range,
+                         * emit a REJECT range-error op, and skip the
+                         * remainder. Speculatively assumes the v2 header
+                         * layout is preserved for any future MessageSet
+                         * version above v2 (the only versions reaching this
+                         * branch — v0/v1 are filtered by the MagicByte
+                         * bounds check above). */
+                        size_t len_start;
+                        size_t bytes_read;
+                        size_t remaining;
+                        int32_t PartitionLeaderEpoch;
+                        int8_t MagicByteActual;
+                        int32_t Crc;
+                        int16_t Attributes;
+                        int32_t LastOffsetDelta;
+                        int64_t LastOffset;
+
+                        rd_kafka_buf_read_i32(rkbuf, &Length);
+
+                        len_start = rd_slice_offset(&rkbuf->rkbuf_reader);
+
+                        rd_kafka_buf_read_i32(rkbuf, &PartitionLeaderEpoch);
+                        rd_kafka_buf_read_i8(rkbuf, &MagicByteActual);
+                        rd_kafka_buf_read_i32(rkbuf, &Crc);
+                        rd_kafka_buf_read_i16(rkbuf, &Attributes);
+                        rd_kafka_buf_read_i32(rkbuf, &LastOffsetDelta);
+
+                        LastOffset = Offset + LastOffsetDelta;
+
+                        rd_kafka_share_message_set_err_ops(
+                            &msetr->msetr_rkq, msetr->msetr_broker_id,
+                            RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
+                            msetr->msetr_tver->version, rktp, Offset,
+                            LastOffset, RD_KAFKA_SHARE_INTERNAL_ACK_REJECT,
+                            "Unsupported Message(Set) MagicByte %d at offsets "
+                            "%" PRId64 "-%" PRId64,
+                            (int)MagicByteActual, Offset, LastOffset);
+
+                        /* Skip remaining bytes in MessageSet. */
+                        bytes_read =
+                            rd_slice_offset(&rkbuf->rkbuf_reader) - len_start;
+                        remaining = Length - bytes_read;
+                        rd_kafka_buf_skip(rkbuf, remaining);
                 }
 
                 return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;

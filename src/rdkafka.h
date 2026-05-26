@@ -4007,6 +4007,41 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
 
 
 /**
+ * @brief Forward a share consumer's internal log queue onto another queue
+ *        for serving with one of the ..poll() calls.
+ *
+ *        Thin wrapper around rd_kafka_set_log_queue() for use with
+ *        rd_kafka_share_t handles. Required when `log.queue=true` is
+ *        configured on a share consumer — without this call the share
+ *        consumer's internal log queue is never drained and log_cb never
+ *        fires.
+ *
+ * @param rkshare Share consumer instance.
+ * @param rkqu    Queue to forward logs to. If NULL the logs are forwarded
+ *                to the share consumer's internal rk_rep, which is drained
+ *                by rd_kafka_share_consume_batch() /
+ *                rd_kafka_share_commit_sync() / rd_kafka_share_commit_async()
+ *                on the application's poll thread.
+ *
+ * @remark The configuration property `log.queue` MUST also be set to true.
+ *
+ * @remark librdkafka maintains its own reference to the provided queue.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success;
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if rkshare is NULL or
+ *          uninitialized;
+ *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED when log.queue is not set to
+ *          true.
+ *
+ * @sa rd_kafka_set_log_queue
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_share_set_log_queue(rd_kafka_share_t *rkshare,
+                             rd_kafka_queue_t *rkqu);
+
+
+/**
  * @returns the current number of elements in queue.
  */
 RD_EXPORT

@@ -3131,6 +3131,7 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                          * above. */
                         rd_kafka_broker_destroy(leader);
                 }
+
                 rd_kafka_toppar_destroy(rktp);
 
                 if (selected_rkb)

@@ -515,6 +515,7 @@ static int consume_phase(rd_kafka_share_t *rkshare,
         rd_kafka_topic_partition_list_t *flush_results = NULL;
         rd_kafka_error_t *flush_err;
         rd_bool_t first_batch = rd_true;
+        int ri;
 
         while (consumed < expected && attempts++ < max_attempts) {
                 size_t rcvd = 0;
@@ -533,6 +534,13 @@ static int consume_phase(rd_kafka_share_t *rkshare,
                 for (j = 0; j < rcvd; j++) {
                         if (!rkmessages[j]->err) {
                                 consumed++;
+                                TEST_SAY(
+                                    "%s: record #%d: %s [%" PRId32
+                                    "] offset %" PRId64 "\n",
+                                    phase_name, consumed,
+                                    rd_kafka_topic_name(rkmessages[j]->rkt),
+                                    rkmessages[j]->partition,
+                                    rkmessages[j]->offset);
                                 if (explicit_mode)
                                         rd_kafka_share_acknowledge(
                                             rkshare, rkmessages[j]);
@@ -544,18 +552,30 @@ static int consume_phase(rd_kafka_share_t *rkshare,
                         if (use_commit_sync) {
                                 rd_kafka_topic_partition_list_t *results = NULL;
                                 rd_kafka_error_t *cerr;
+                                TEST_SAY(
+                                    "%s: calling commit_sync "
+                                    "(consumed %d)\n",
+                                    phase_name, consumed);
                                 cerr = rd_kafka_share_commit_sync(rkshare, 5000,
                                                                   &results);
-                                if (cerr)
+                                if (cerr) {
+                                        TEST_SAY("%s: commit_sync error: %s\n",
+                                                 phase_name,
+                                                 rd_kafka_error_string(cerr));
                                         rd_kafka_error_destroy(cerr);
+                                }
                                 RD_IF_FREE(
                                     results,
                                     rd_kafka_topic_partition_list_destroy);
                         } else {
                                 rd_kafka_error_t *cerr =
                                     rd_kafka_share_commit_async(rkshare);
-                                if (cerr)
+                                if (cerr) {
+                                        TEST_SAY("%s: commit_async error: %s\n",
+                                                 phase_name,
+                                                 rd_kafka_error_string(cerr));
                                         rd_kafka_error_destroy(cerr);
+                                }
                         }
                 }
 
@@ -578,10 +598,28 @@ static int consume_phase(rd_kafka_share_t *rkshare,
          * avoids re-arming share_fetch_more_records via another
          * consume_batch, which would keep the main-thread fetch loop
          * spinning between phases. */
+        TEST_SAY("%s: calling commit_sync flush (consumed %d/%d)\n", phase_name,
+                 consumed, expected);
         flush_err = rd_kafka_share_commit_sync(rkshare, 5000, &flush_results);
-        if (flush_err)
+        if (flush_err) {
+                TEST_SAY("%s: commit_sync flush error: %s\n", phase_name,
+                         rd_kafka_error_string(flush_err));
                 rd_kafka_error_destroy(flush_err);
-        RD_IF_FREE(flush_results, rd_kafka_topic_partition_list_destroy);
+        } else {
+                TEST_SAY("%s: commit_sync flush succeeded\n", phase_name);
+        }
+        if (flush_results) {
+                for (ri = 0; ri < flush_results->cnt; ri++) {
+                        rd_kafka_topic_partition_t *rp =
+                            &flush_results->elems[ri];
+                        TEST_SAY("%s: commit_sync result: %s [%" PRId32
+                                 "]: %s\n",
+                                 phase_name, rp->topic, rp->partition,
+                                 rd_kafka_err2str(rp->err));
+                }
+                rd_kafka_topic_partition_list_destroy(flush_results);
+                flush_results = NULL;
+        }
 
         TEST_SAY("%s: consumed %d (expected == %d) in %d attempts\n",
                  phase_name, consumed, expected, attempts);
@@ -647,6 +685,7 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
         size_t metadata_window1;
         size_t metadata_window2;
         int i;
+        int cnt;
 
         SUB_TEST_QUICK("%s", variant_name);
 
@@ -681,12 +720,22 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 
         srand(42);
 
-        for (i = 0; i < part_a; i++)
-                phase1_total +=
-                    mock_produce(ctx.producer, topic_a, i, 10 + (rand() % 11));
-        for (i = 0; i < part_b; i++)
-                phase1_total +=
-                    mock_produce(ctx.producer, topic_b, i, 10 + (rand() % 11));
+        for (i = 0; i < part_a; i++) {
+                cnt = 10 + (rand() % 11);
+                phase1_total += mock_produce(ctx.producer, topic_a, i, cnt);
+                TEST_SAY(
+                    "%s: Phase 1 produce: %s [%d] = %d records "
+                    "(offsets 0..%d)\n",
+                    variant_name, topic_a, i, cnt, cnt - 1);
+        }
+        for (i = 0; i < part_b; i++) {
+                cnt = 10 + (rand() % 11);
+                phase1_total += mock_produce(ctx.producer, topic_b, i, cnt);
+                TEST_SAY(
+                    "%s: Phase 1 produce: %s [%d] = %d records "
+                    "(offsets 0..%d)\n",
+                    variant_name, topic_b, i, cnt, cnt - 1);
+        }
 
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
@@ -695,6 +744,7 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
                       explicit_mode ? "explicit" : "implicit");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms",
                       wait_for_metadata_refresh ? "10000" : "-1");
+        test_conf_set(conf, "debug", "cgrp,fetch");
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "create share consumer");
         subscribe_topics(rkshare, topics, 2);
@@ -724,6 +774,9 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
                 int new_leader = leader_before_a[i];
                 while (new_leader == leader_before_a[i])
                         new_leader = 1 + (rand() % 3);
+                TEST_SAY("%s: leader change: %s [%d]: B%d -> B%d\n",
+                         variant_name, topic_a, i, leader_before_a[i],
+                         new_leader);
                 TEST_ASSERT(rd_kafka_mock_partition_set_leader(
                                 ctx.mcluster, topic_a, i, new_leader) ==
                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -733,6 +786,9 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
                 int new_leader = leader_before_b[i];
                 while (new_leader == leader_before_b[i])
                         new_leader = 1 + (rand() % 3);
+                TEST_SAY("%s: leader change: %s [%d]: B%d -> B%d\n",
+                         variant_name, topic_b, i, leader_before_b[i],
+                         new_leader);
                 TEST_ASSERT(rd_kafka_mock_partition_set_leader(
                                 ctx.mcluster, topic_b, i, new_leader) ==
                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -754,12 +810,22 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
         rd_kafka_mock_clear_requests(ctx.mcluster);
 
-        for (i = 0; i < part_a; i++)
-                phase2_total +=
-                    mock_produce(ctx.producer, topic_a, i, 10 + (rand() % 11));
-        for (i = 0; i < part_b; i++)
-                phase2_total +=
-                    mock_produce(ctx.producer, topic_b, i, 10 + (rand() % 11));
+        for (i = 0; i < part_a; i++) {
+                cnt = 10 + (rand() % 11);
+                phase2_total += mock_produce(ctx.producer, topic_a, i, cnt);
+                TEST_SAY(
+                    "%s: Phase 2 produce: %s [%d] = %d records "
+                    "(Phase 2 starts at offset after Phase 1)\n",
+                    variant_name, topic_a, i, cnt);
+        }
+        for (i = 0; i < part_b; i++) {
+                cnt = 10 + (rand() % 11);
+                phase2_total += mock_produce(ctx.producer, topic_b, i, cnt);
+                TEST_SAY(
+                    "%s: Phase 2 produce: %s [%d] = %d records "
+                    "(Phase 2 starts at offset after Phase 1)\n",
+                    variant_name, topic_b, i, cnt);
+        }
 
         /* Ensure all produces and their triggered metadata refreshes
          * have settled before measuring Phase 2 consume. */

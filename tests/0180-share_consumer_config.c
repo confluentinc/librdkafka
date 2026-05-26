@@ -37,10 +37,10 @@
  * then calls rd_kafka_share_consumer_new and asserts the call returns
  * NULL with an errstr containing expected_substr.
  */
-static void verify_share_consumer_conf_set_rejected(
-    const char *case_name,
-    void (*conf_setter)(rd_kafka_conf_t *),
-    const char *expected_substr) {
+static void
+verify_share_consumer_conf_set_rejected(const char *case_name,
+                                        void (*conf_setter)(rd_kafka_conf_t *),
+                                        const char *expected_substr) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
         char errstr[512];
@@ -48,7 +48,7 @@ static void verify_share_consumer_conf_set_rejected(
         conf = rd_kafka_conf_new();
         conf_setter(conf);
         errstr[0] = '\0';
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        rkshare   = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare == NULL,
                     "[%s] expected NULL share consumer, got non-NULL",
                     case_name);
@@ -78,7 +78,7 @@ static void verify_share_consumer_conf_prop_rejected(const char *prop_name,
                     "[%s=%s] precondition rd_kafka_conf_set failed: %s",
                     prop_name, value, errstr);
         errstr[0] = '\0';
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        rkshare   = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare == NULL,
                     "[%s=%s] expected NULL share consumer, got non-NULL",
                     prop_name, value);

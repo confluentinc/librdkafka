@@ -312,28 +312,6 @@ new_share_consumer_for_real_test(const char *group_id,
         return consumer;
 }
 
-
-/**
- * @brief Enable the three Share APIs (Heartbeat, Fetch, Acknowledge) on
- *        the given mock cluster. Every share-consumer mock test in this
- *        file needs all three.
- */
-static void enable_share_apis(rd_kafka_mock_cluster_t *mcluster) {
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(
-                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareGroupHeartbeat");
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareFetch,
-                                                 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareFetch");
-        TEST_ASSERT(
-            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareAcknowledge,
-                                         1, 1) == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "Failed to enable ShareAcknowledge");
-}
-
-
 /**
  * @brief Subscribe to topics.
  */
@@ -439,7 +417,6 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
@@ -717,9 +694,8 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic: p0 led by broker 1, p1 led by broker 2.
@@ -884,6 +860,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         size_t fetch_rcvd           = 0;
         int attempts                = 0;
         int i;
+        int32_t surviving_part;
+        expected_ack_t expected[2];
         ack_receipts_t receipts;
 
         ack_receipts_init(&receipts);
@@ -894,9 +872,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic, RF=2: p0 led by broker 1, p1 led by broker 2. */
@@ -1015,16 +992,13 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
          *
          *   surviving_partition: TEST_MSGS/2 offsets, NO_ERROR
          *   target_partition:    TEST_MSGS/2 offsets, __DESTROY_BROKER */
-        {
-                int32_t surviving_part    = (target_partition == 0) ? 1 : 0;
-                expected_ack_t expected[] = {
-                    {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                     TEST_MSGS / 2},
-                    {topic, target_partition, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
-                     TEST_MSGS / 2},
-                };
-                verify_ack_receipts(&receipts, expected, 2, "consume_batch");
-        }
+        surviving_part = (target_partition == 0) ? 1 : 0;
+        expected[0]    = (expected_ack_t) {
+            topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
+        expected[1] =
+            (expected_ack_t) {topic, target_partition,
+                              RD_KAFKA_RESP_ERR__DESTROY_BROKER, TEST_MSGS / 2};
+        verify_ack_receipts(&receipts, expected, 2, "consume_batch");
 
         destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
@@ -1073,6 +1047,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
         size_t rcvd                 = 0;
         int attempts                = 0;
         int i;
+        int32_t surviving_part;
+        expected_ack_t expected[2];
         ack_receipts_t receipts;
 
         ack_receipts_init(&receipts);
@@ -1084,9 +1060,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic, RF=2: p0 led by broker 1, p1 led by broker 2. */
@@ -1205,25 +1180,16 @@ static void test_broker_decommission_during_close(int destroy_flags,
          * acked during drain are also shipped at close and succeed
          * with NO_ERROR.
          */
-        {
-                int32_t surviving_part = (target_partition == 0) ? 1 : 0;
-                if (explicit_ack) {
-                        expected_ack_t expected[] = {
-                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                             TEST_MSGS / 2},
-                            {topic, target_partition,
-                             RD_KAFKA_RESP_ERR__DESTROY_BROKER, TEST_MSGS / 2},
-                        };
-                        verify_ack_receipts(&receipts, expected, 2,
-                                            "close explicit");
-                } else {
-                        expected_ack_t expected[] = {
-                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                             TEST_MSGS / 2},
-                        };
-                        verify_ack_receipts(&receipts, expected, 1,
-                                            "close implicit");
-                }
+        surviving_part = (target_partition == 0) ? 1 : 0;
+        expected[0]    = (expected_ack_t) {
+            topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
+        if (explicit_ack) {
+                expected[1] = (expected_ack_t) {
+                    topic, target_partition, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+                    TEST_MSGS / 2};
+                verify_ack_receipts(&receipts, expected, 2, "close explicit");
+        } else {
+                verify_ack_receipts(&receipts, expected, 1, "close implicit");
         }
 
         /* Cleanup */
@@ -1274,6 +1240,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         size_t rcvd                 = 0;
         int attempts                = 0;
         int i;
+        int32_t surviving_part;
+        expected_ack_t expected[2];
         ack_receipts_t receipts;
 
         ack_receipts_init(&receipts);
@@ -1285,9 +1253,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
          * fire when the target broker connection is dropped. */
         test_curr->is_fatal_cb = decommission_is_fatal_cb;
 
-        /* 2-broker mock cluster with all three Share APIs enabled. */
+        /* 2-broker mock cluster */
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 2-partition topic, RF=2: p0 led by broker 1, p1 led by broker 2. */
@@ -1402,25 +1369,18 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
          * callback fires for the target partition's records. Only the
          * surviving partition's ack — which completed before —
          * surfaces. */
-        {
-                int32_t surviving_part = (target_partition == 0) ? 1 : 0;
-                if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) {
-                        expected_ack_t expected[] = {
-                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                             TEST_MSGS / 2},
-                        };
-                        verify_ack_receipts(&receipts, expected, 1,
-                                            "commit_async NO_CONSUMER_CLOSE");
-                } else {
-                        expected_ack_t expected[] = {
-                            {topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                             TEST_MSGS / 2},
-                            {topic, target_partition,
-                             RD_KAFKA_RESP_ERR__DESTROY_BROKER, TEST_MSGS / 2},
-                        };
-                        verify_ack_receipts(&receipts, expected, 2,
-                                            "commit_async full close");
-                }
+        surviving_part = (target_partition == 0) ? 1 : 0;
+        expected[0]    = (expected_ack_t) {
+            topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
+        if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) {
+                verify_ack_receipts(&receipts, expected, 1,
+                                    "commit_async NO_CONSUMER_CLOSE");
+        } else {
+                expected[1] = (expected_ack_t) {
+                    topic, target_partition, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
+                    TEST_MSGS / 2};
+                verify_ack_receipts(&receipts, expected, 2,
+                                    "commit_async full close");
         }
 
         ack_receipts_destroy(&receipts);
@@ -1430,7 +1390,6 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
 
         SUB_TEST_PASS();
 }
-
 
 static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -1448,7 +1407,6 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(2, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         /* 1 partition, RF=2 so both brokers know about it. Initial
@@ -1533,7 +1491,6 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         SUB_TEST_PASS();
 }
 
-
 /**
  * @brief Destroy while the consumer's cgrp is mid-rebalance.
  *
@@ -1565,7 +1522,6 @@ static void test_destroy_during_rebalance(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
@@ -1682,7 +1638,6 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
         SUB_TEST_QUICK("destroy_flags=0x%x", destroy_flags);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
         rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
@@ -1783,6 +1738,8 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
         int i;
         int attempts = 0;
         int ack_cnt;
+        expected_ack_t expected[2];
+        int second_part_cnt;
         ack_receipts_t receipts;
 
         ack_receipts_init(&receipts);
@@ -1901,27 +1858,18 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
          *   destroy_flags=0x8 (NO_CONSUMER_CLOSE): destroy short-
          *   circuits, so second-batch acks are dropped. Only
          *   first_batch_part appears with TEST_MSGS/2. */
-        rd_bool_t no_close =
-            (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
-        const char *label = no_close ? "explicit-ack NO_CONSUMER_CLOSE"
-                                     : "explicit-ack full close";
-
-        if (no_close) {
-                expected_ack_t expected[] = {
-                    {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                     TEST_MSGS / 2},
-                };
-                verify_ack_receipts(&receipts, expected, 1, label);
+        expected[0] = (expected_ack_t) {
+            topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
+        if (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) {
+                verify_ack_receipts(&receipts, expected, 1,
+                                    "explicit-ack NO_CONSUMER_CLOSE");
         } else {
-                int second_part_cnt =
-                    ack_half ? (TEST_MSGS / 4) : (TEST_MSGS / 2);
-                expected_ack_t expected[] = {
-                    {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                     TEST_MSGS / 2},
-                    {topic, second_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-                     second_part_cnt},
-                };
-                verify_ack_receipts(&receipts, expected, 2, label);
+                second_part_cnt = ack_half ? (TEST_MSGS / 4) : (TEST_MSGS / 2);
+                expected[1]     = (expected_ack_t) {topic, second_batch_part,
+                                                    RD_KAFKA_RESP_ERR_NO_ERROR,
+                                                    second_part_cnt};
+                verify_ack_receipts(&receipts, expected, 2,
+                                    "explicit-ack full close");
         }
 
         ack_receipts_destroy(&receipts);
@@ -1953,6 +1901,7 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
         int32_t second_batch_part = -1;
         int i;
         int attempts = 0;
+        expected_ack_t expected[1];
         ack_receipts_t receipts;
 
         ack_receipts_init(&receipts);
@@ -2037,15 +1986,13 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
          * callback. Expectation is identical for both destroy_flags
          * variants: TEST_MSGS/2 NO_ERROR on first_batch_part only. */
         (void)second_batch_part;
-        rd_bool_t no_close =
-            (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) != 0;
-        const char *label         = no_close ? "implicit-ack NO_CONSUMER_CLOSE"
-                                             : "implicit-ack full close";
-        expected_ack_t expected[] = {
-            {topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR,
-             TEST_MSGS / 2},
-        };
-        verify_ack_receipts(&receipts, expected, 1, label);
+        expected[0] = (expected_ack_t) {
+            topic, first_batch_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
+        verify_ack_receipts(
+            &receipts, expected, 1,
+            (destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)
+                ? "implicit-ack NO_CONSUMER_CLOSE"
+                : "implicit-ack full close");
 
         ack_receipts_destroy(&receipts);
 

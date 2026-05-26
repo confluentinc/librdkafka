@@ -20,7 +20,7 @@ MKL_COPYRIGHT_SKIP?=^(tests|packaging|src/nanopb|src/opentelemetry)
 
 .PHONY:
 
-all: mklove-check libs CONFIGURATION.md check TAGS
+all: mklove-check libs CONFIGURATION.md check TAGS chaos
 
 include mklove/Makefile.base
 
@@ -54,6 +54,9 @@ uninstall: uninstall-subdirs doc-uninstall
 examples tests: .PHONY libs
 	$(MAKE) -C $@
 
+chaos: .PHONY libs
+	$(MAKE) -C tests/chaos
+
 docs:
 	doxygen Doxyfile
 	@echo "Documentation generated in staging-docs"
@@ -63,6 +66,7 @@ clean-docs:
 
 clean:
 	@$(MAKE) -C tests $@
+	@$(MAKE) -C tests/chaos $@
 	@$(MAKE) -C examples $@
 	@(for d in $(LIBSUBDIRS); do $(MAKE) -C $$d $@ ; done)
 

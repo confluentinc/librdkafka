@@ -1,0 +1,22 @@
+# Per-iteration report archives (verify.txt etc.) written by
+# chaos_until_fail.sh into runs/<run-id>/iter-NNN-<verdict>/. Grows
+# over time across runner invocations; not interesting to commit.
+runs/
+
+# Built binaries
+share_consume_verify
+
+# Per-run output captured by chaos_until_fail.sh; appended across
+# invocations.
+run-history.log
+run-history.tsv
+
+# Bug-evidence archive: hand-curated per-bug subdirs with full
+# artifact sets. Multi-MB each; lives outside the repo.
+bugs-found/
+
+# Stray run-narrative log. Maintained out-of-tree.
+run-log.md
+
+# Python bytecode cache.
+__pycache__/

@@ -3114,22 +3114,21 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                  * 2. A share-fetch op must not already be enqueued on it.
                  * 3. The broker or instance must not be terminating. */
                 if (leader) {
-                        if (!rd_kafka_broker_or_instance_terminating(leader)) {
-                                rd_kafka_broker_lock(leader);
-                                if (!leader->rkb_share_fetch_enqueued) {
-                                        rd_kafka_broker_keep(leader);
-                                        selected_rkb = leader;
-                                        rd_kafka_dbg(
-                                            rk, CGRP, "SHARE",
-                                            "Selected broker %s (%p) for share "
-                                            "fetch "
-                                            "for partition %s [%" PRId32 "]",
-                                            rd_kafka_broker_name(selected_rkb),
-                                            selected_rkb, partition->topic,
-                                            partition->partition);
-                                }
-                                rd_kafka_broker_unlock(leader);
+                        if (!rd_kafka_broker_or_instance_terminating(leader) &&
+                            !leader->rkb_share_fetch_enqueued) {
+                                rd_kafka_broker_keep(leader);
+                                selected_rkb = leader;
+                                rd_kafka_dbg(
+                                    rk, CGRP, "SHARE",
+                                    "Selected broker %s (%p) for share "
+                                    "fetch "
+                                    "for partition %s [%" PRId32 "]",
+                                    rd_kafka_broker_name(selected_rkb),
+                                    selected_rkb, partition->topic,
+                                    partition->partition);
                         }
+                        /* Release the snapshot reference taken under rktp lock
+                         * above. */
                         rd_kafka_broker_destroy(leader);
                 }
                 rd_kafka_toppar_destroy(rktp);

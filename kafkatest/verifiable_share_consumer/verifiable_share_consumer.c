@@ -564,6 +564,15 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        /* If the harness passes credentials via Java's JAAS login config
+         * (-Djava.security.auth.login.config=... in KAFKA_OPTS) rather
+         * than inlined into the properties file, extract them now. */
+        if (apply_jaas_from_kafka_opts(conf, errstr, sizeof(errstr)) == -1) {
+                fprintf(stderr, "%s\n", errstr);
+                rd_kafka_conf_destroy(conf);
+                return 1;
+        }
+
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         if (!rkshare) {
                 fprintf(stderr, "Failed to create share consumer: %s\n",

@@ -159,7 +159,7 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
-  - name: 'Share consumer telemetry (Linux Ubuntu amd64)'
+  - name: 'Linux Ubuntu amd64: share consumer telemetry'
     dependencies: []
     skip:
       when: "tag =~ '^v[0-9]\\.'"
@@ -176,7 +176,7 @@ blocks:
           commands:
             - 'ls artifacts/ 2>/dev/null && artifact push job artifacts/ --destination telemetry-debug-${SEMAPHORE_JOB_ID}/ || true'
       jobs:
-        - name: 'Share consumer telemetry (Linux Ubuntu amd64)'
+        - name: 'Linux Ubuntu amd64: share consumer telemetry'
           commands:
             - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
             - ./packaging/tools/setup-share-telemetry-testing.sh

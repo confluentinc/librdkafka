@@ -54,6 +54,14 @@ void emit_event(const char *name);
  * to stderr, destroys `conf`, and returns -1. Returns 0 on success. */
 int conf_set(rd_kafka_conf_t *conf, const char *key, const char *value);
 
+/* If KAFKA_OPTS contains -Djava.security.auth.login.config=<path>, parse
+ * that JAAS file's KafkaClient {} block and set sasl.username and
+ * sasl.password on `conf`. Returns 0 if applied or if no JAAS path was
+ * found; -1 if a JAAS path was found but parsing/setting failed. */
+int apply_jaas_from_kafka_opts(rd_kafka_conf_t *conf,
+                               char *errstr,
+                               size_t errstr_size);
+
 /* Parse a Java properties file and apply each key=value to `conf`.
  * Lines starting with '#' or '!' are comments; blank lines are skipped.
  * Splits on the first '=' or ':'.

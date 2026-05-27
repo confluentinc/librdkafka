@@ -1465,6 +1465,19 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                  * parse errors (which are partition-specific) */
         }
 
+        /**
+         * Only inner-record parsing errors (RD_KAFKA_RESP_ERR__BAD_MSG /
+         * RD_KAFKA_RESP_ERR__UNDERFLOW) propagate out of
+         * rd_kafka_share_msgset_parse for share consumers — per-batch
+         * codec / CRC / unsupported-MagicByte failures are handled
+         * inline by emitting per-offset RELEASE/REJECT ops and are
+         * swallowed by the v2 reader (msgset_reader.c). When a true
+         * parse error bubbles up the wire data is corrupt and we can no
+         * longer trust the buffer position or any per-batch metadata.
+         * Stop processing the rest of this ShareFetch response and
+         * propagate the error to the caller, which aborts the whole
+         * response handling.
+         */
         if (err)
                 goto done;
 

@@ -1355,25 +1355,27 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                          * version above v2 (the only versions reaching this
                          * branch — v0/v1 are filtered by the MagicByte
                          * bounds check above). */
-                        size_t len_start;
-                        size_t bytes_read;
-                        size_t remaining;
                         int32_t PartitionLeaderEpoch;
                         int8_t MagicByteActual;
                         int32_t Crc;
                         int16_t Attributes;
                         int32_t LastOffsetDelta;
                         int64_t LastOffset;
+                        /* Bytes consumed below from the MessageSet body
+                         * (everything counted by Length): PartitionLeaderEpoch
+                         * (4) + MagicByte (1) + Crc (4) + Attributes (2) +
+                         * LastOffsetDelta (4). */
+                        const size_t header_bytes_read = 4 + 1 + 4 + 2 + 4;
 
                         rd_kafka_buf_read_i32(rkbuf, &Length);
-
-                        len_start = rd_slice_offset(&rkbuf->rkbuf_reader);
-
                         rd_kafka_buf_read_i32(rkbuf, &PartitionLeaderEpoch);
                         rd_kafka_buf_read_i8(rkbuf, &MagicByteActual);
                         rd_kafka_buf_read_i32(rkbuf, &Crc);
                         rd_kafka_buf_read_i16(rkbuf, &Attributes);
                         rd_kafka_buf_read_i32(rkbuf, &LastOffsetDelta);
+
+                        /* Skip remaining bytes in MessageSet. */
+                        rd_kafka_buf_skip(rkbuf, Length - header_bytes_read);
 
                         LastOffset = Offset + LastOffsetDelta;
 
@@ -1385,12 +1387,6 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                             "Unsupported Message(Set) MagicByte %d at offsets "
                             "%" PRId64 "-%" PRId64,
                             (int)MagicByteActual, Offset, LastOffset);
-
-                        /* Skip remaining bytes in MessageSet. */
-                        bytes_read =
-                            rd_slice_offset(&rkbuf->rkbuf_reader) - len_start;
-                        remaining = Length - bytes_read;
-                        rd_kafka_buf_skip(rkbuf, remaining);
                 }
 
                 return RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED;
@@ -1555,19 +1551,35 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 } else if (!err && msetr->msetr_aborted_cnt == 0) {
-                        /*
-                         * TODO KIP-932: Check how to handle fetch_pos.offset
-                         * for share consumer.
-                         */
-                        rd_kafka_consumer_err(
-                            &msetr->msetr_rkq, msetr->msetr_broker_id,
-                            RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
-                            msetr->msetr_tver->version, NULL, rktp,
-                            rktp->rktp_offsets.fetch_pos.offset,
-                            "Message at offset %" PRId64
-                            " might be too large to fetch, try increasing "
-                            "receive.message.max.bytes",
-                            rktp->rktp_offsets.fetch_pos.offset);
+                        if (!RD_KAFKA_IS_SHARE_CONSUMER(
+                                msetr->msetr_rkb->rkb_rk)) {
+                                rd_kafka_consumer_err(
+                                    &msetr->msetr_rkq, msetr->msetr_broker_id,
+                                    RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
+                                    msetr->msetr_tver->version, NULL, rktp,
+                                    rktp->rktp_offsets.fetch_pos.offset,
+                                    "Message at offset %" PRId64
+                                    " might be too large to fetch, try "
+                                    "increasing receive.message.max.bytes",
+                                    rktp->rktp_offsets.fetch_pos.offset);
+                        } else {
+                                /* Share consumer: fetch_pos.offset is not
+                                 * meaningful, and the temp_fetchq
+                                 * acquired-range filter would drop any op
+                                 * without a valid offset. Enqueue the error
+                                 * directly onto the cgrp queue served by
+                                 * rd_kafka_share_consume_batch so the app
+                                 * sees the partition-level failure. */
+                                rd_kafka_consumer_err(
+                                    msetr->msetr_rkb->rkb_rk->rk_cgrp->rkcg_q,
+                                    msetr->msetr_broker_id,
+                                    RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE,
+                                    msetr->msetr_tver->version, NULL, rktp,
+                                    RD_KAFKA_OFFSET_INVALID,
+                                    "Message might be too large to fetch, "
+                                    "try increasing "
+                                    "receive.message.max.bytes");
+                        }
 
                 } else if (msetr->msetr_aborted_cnt > 0) {
                         /* Noop */
@@ -1586,9 +1598,6 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                     msetr->msetr_msgcnt > 0)
                         err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }
-
-        // printf(" +++++++++++++++++++ Received %d messages\n",
-        // msetr->msetr_msgcnt);
 
         rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
                    "Enqueue %i %smessage(s) (%" PRId64

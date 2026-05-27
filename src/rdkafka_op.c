@@ -648,6 +648,10 @@ void rd_kafka_q_op_err(rd_kafka_q_t *rkq,
  *
  * @sa rd_kafka_q_op_err()
  */
+/**
+ * TODO KIP-932 GA: Improve handling of this particular function
+ *  as we dont need most information available here.
+ */
 void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
                            int32_t broker_id,
                            rd_kafka_resp_err_t err,

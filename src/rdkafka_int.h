@@ -94,6 +94,10 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
+/**
+ * TODO KIP-932: Remove the check of RD_KAFKA_CONSUMER. Only
+ * checking for is_share_consumer should be sufficient.
+ */
 #define RD_KAFKA_IS_SHARE_CONSUMER(rk)                                         \
         ((rk)->rk_type == RD_KAFKA_CONSUMER &&                                 \
          (rk)->rk_conf.share.is_share_consumer)

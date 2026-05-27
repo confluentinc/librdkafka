@@ -3070,7 +3070,7 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
  */
 static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                                                        rd_kafka_cgrp_t *rkcg) {
-        rd_kafka_broker_t *selected_rkb = NULL;
+        rd_kafka_broker_t *selected_rkb = NULL, *leader = NULL;
         rd_kafka_topic_partition_list_t *partitions =
             rkcg->rkcg_current_assignment;
         //     rkcg->rkcg_toppars; /* TODO: use rkcg->rkcg_toppars instead. */
@@ -3103,30 +3103,33 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                 rktp = rd_kafka_toppar_get2(rk, partition->topic,
                                             partition->partition, 0, 1);
 
+                rd_kafka_toppar_lock(rktp);
+                leader = rktp->rktp_leader;
+                if (leader)
+                        rd_kafka_broker_keep(leader);
+                rd_kafka_toppar_unlock(rktp);
+
                 /* Criteria to choose a broker:
                  * 1. It should be the leader of a partition.
                  * 2. A share-fetch op must not already be enqueued on it.
                  * 3. The broker or instance must not be terminating. */
-                if (rktp->rktp_leader &&
-                    !rd_kafka_broker_or_instance_terminating(
-                        rktp->rktp_leader)) {
-                        /* TODO: We're only going to access
-                         * rkb_share_fetch_enqueued from the main thread, except
-                         * when it's being calloc'd and destroyed. Is it safe to
-                         * access it without a lock? */
-                        rd_kafka_broker_lock(rktp->rktp_leader);
-                        if (!rktp->rktp_leader->rkb_share_fetch_enqueued) {
-                                rd_kafka_broker_keep(rktp->rktp_leader);
-                                selected_rkb = rktp->rktp_leader;
+                if (leader) {
+                        if (!rd_kafka_broker_or_instance_terminating(leader) &&
+                            !leader->rkb_share_fetch_enqueued) {
+                                rd_kafka_broker_keep(leader);
+                                selected_rkb = leader;
                                 rd_kafka_dbg(
                                     rk, CGRP, "SHARE",
-                                    "Selected broker %s (%p) for share fetch "
+                                    "Selected broker %s (%p) for share "
+                                    "fetch "
                                     "for partition %s [%" PRId32 "]",
                                     rd_kafka_broker_name(selected_rkb),
                                     selected_rkb, partition->topic,
                                     partition->partition);
                         }
-                        rd_kafka_broker_unlock(rktp->rktp_leader);
+                        /* Release the snapshot reference taken under rktp lock
+                         * above. */
+                        rd_kafka_broker_destroy(leader);
                 }
 
                 rd_kafka_toppar_destroy(rktp);

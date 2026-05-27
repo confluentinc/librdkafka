@@ -1465,6 +1465,9 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                  * parse errors (which are partition-specific) */
         }
 
+        if (err)
+                goto done;
+
         rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt,
                                    -1);  // AcquiredRecordsArrayCnt
         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
@@ -1613,6 +1616,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_list_t *inflight_acks      = NULL;
         rd_kafka_op_t *rko_orig       = request->rkbuf_opaque;
         rd_kafka_op_t *response_rko   = NULL;
+        rd_kafka_resp_err_t err;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1657,12 +1661,14 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafka_share_ack_batches_t *batches =
                             rd_kafka_share_ack_batches_new_empty();
 
-                        if (rd_kafka_share_fetch_reply_handle_partition(
-                                rkb, &topic, topic_id, rkt, rkbuf, request,
-                                filtered_msgs, batches,
-                                rko_orig->rko_u.share_fetch.ack_details)) {
+                        err = rd_kafka_share_fetch_reply_handle_partition(
+                            rkb, &topic, topic_id, rkt, rkbuf, request,
+                            filtered_msgs, batches,
+                            rko_orig->rko_u.share_fetch.ack_details);
+
+                        if (err) {
                                 rd_kafka_share_ack_batches_destroy(batches);
-                                goto err_parse;
+                                goto done;
                         }
 
                         /* Skip unknown topics - don't add to inflight_acks */
@@ -1724,6 +1730,9 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
+        err = rkbuf->rkbuf_err;
+
+done:
         /* Free inflight_acks list on error (destructor handles cleanup) */
         rd_list_destroy(inflight_acks);
         rd_list_destroy(filtered_msgs);
@@ -1737,7 +1746,7 @@ err_parse:
                    "Bad message (Fetch v%d): "
                    "is broker.version.fallback incorrectly set?",
                    (int)request->rkbuf_reqhdr.ApiVersion);
-        return rkbuf->rkbuf_err;
+        return err;
 }
 
 

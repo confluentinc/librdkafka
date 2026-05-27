@@ -73,17 +73,17 @@ typedef struct {
  * @brief Shared state for concurrent test threads
  */
 typedef struct {
-        mtx_t lock;                      /**< Mutex for state access */
-        int total_produced;              /**< Total messages produced */
-        int total_consumed;              /**< Total messages consumed */
-        int expected_total;              /**< Expected total messages */
-        rd_bool_t producers_done;        /**< All producers finished */
-        int producers_remaining;         /**< Producer threads still running */
-        rd_bool_t test_failed;           /**< Test failure flag */
-        char *topics[MAX_TOPICS];        /**< Topic names */
-        int topic_cnt;                   /**< Number of topics */
-        const char *group_name;          /**< Share group name */
-        rd_bool_t explicit_ack;          /**< Use explicit acknowledgement */
+        mtx_t lock;               /**< Mutex for state access */
+        int total_produced;       /**< Total messages produced */
+        int total_consumed;       /**< Total messages consumed */
+        int expected_total;       /**< Expected total messages */
+        rd_bool_t producers_done; /**< All producers finished */
+        int producers_remaining;  /**< Producer threads still running */
+        rd_bool_t test_failed;    /**< Test failure flag */
+        char *topics[MAX_TOPICS]; /**< Topic names */
+        int topic_cnt;            /**< Number of topics */
+        const char *group_name;   /**< Share group name */
+        rd_bool_t explicit_ack;   /**< Use explicit acknowledgement */
 } concurrent_test_state_t;
 
 /**
@@ -297,75 +297,71 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Poll consumers from main thread while producers run */
         max_attempts = config->max_attempts > 0 ? config->max_attempts : 100;
-                rd_kafka_message_t *batch[BATCH_SIZE];
-                int attempts    = max_attempts;
-                int idle_rounds = 0;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        int attempts    = max_attempts;
+        int idle_rounds = 0;
 
-                TEST_SAY(
-                    "Starting consumption (producers running in background)\n");
+        TEST_SAY("Starting consumption (producers running in background)\n");
 
-                while (state.total_consumed < state.expected_total &&
-                       attempts-- > 0 && idle_rounds < 30) {
-                        int round_consumed = 0;
+        while (state.total_consumed < state.expected_total && attempts-- > 0 &&
+               idle_rounds < 30) {
+                int round_consumed = 0;
 
-                        /* Round-robin poll all consumers */
-                        for (c = 0; c < config->consumer_cnt; c++) {
-                                size_t rcvd = 0;
-                                size_t m;
-                                rd_kafka_error_t *err;
+                /* Round-robin poll all consumers */
+                for (c = 0; c < config->consumer_cnt; c++) {
+                        size_t rcvd = 0;
+                        size_t m;
+                        rd_kafka_error_t *err;
 
-                                err = rd_kafka_share_consume_batch(
-                                    consumers[c], 1000, batch, &rcvd);
-                                if (err) {
-                                        TEST_SAY(
-                                            "Consumer %d: "
-                                            "share_consume_batch "
-                                            "failed: %s\n",
-                                            c, rd_kafka_error_string(err));
-                                        rd_kafka_error_destroy(err);
-                                        continue;
-                                }
+                        err = rd_kafka_share_consume_batch(consumers[c], 1000,
+                                                           batch, &rcvd);
+                        if (err) {
+                                TEST_SAY(
+                                    "Consumer %d: "
+                                    "share_consume_batch "
+                                    "failed: %s\n",
+                                    c, rd_kafka_error_string(err));
+                                rd_kafka_error_destroy(err);
+                                continue;
+                        }
 
-                                for (m = 0; m < rcvd; m++) {
-                                        if (!batch[m]->err) {
-                                                if (config->explicit_ack) {
-                                                        rd_kafka_share_acknowledge_type(
-                                                            consumers[c],
-                                                            batch[m],
-                                                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-                                                }
-                                                state.total_consumed++;
+                        for (m = 0; m < rcvd; m++) {
+                                if (!batch[m]->err) {
+                                        if (config->explicit_ack) {
+                                                rd_kafka_share_acknowledge_type(
+                                                    consumers[c], batch[m],
+                                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                         }
-                                        rd_kafka_message_destroy(batch[m]);
+                                        state.total_consumed++;
                                 }
-                                round_consumed += (int)rcvd;
+                                rd_kafka_message_destroy(batch[m]);
                         }
-
-                        if (round_consumed > 0) {
-                                idle_rounds = 0;
-                        } else {
-                                idle_rounds++;
-                        }
-
-                        /* Apply consumer delay if configured */
-                        if (config->consumer_delay_ms > 0)
-                                rd_usleep(config->consumer_delay_ms * 1000,
-                                          NULL);
-
-                        /* Check if producers are done */
-                        mtx_lock(&state.lock);
-                        if (state.producers_done && idle_rounds >= 20) {
-                                mtx_unlock(&state.lock);
-                                break;
-                        }
-                        mtx_unlock(&state.lock);
-
-                        if (attempts % 10 == 0) {
-                                TEST_SAY("Progress: consumed %d/%d\n",
-                                         state.total_consumed,
-                                         state.expected_total);
-                        }
+                        round_consumed += (int)rcvd;
                 }
+
+                if (round_consumed > 0) {
+                        idle_rounds = 0;
+                } else {
+                        idle_rounds++;
+                }
+
+                /* Apply consumer delay if configured */
+                if (config->consumer_delay_ms > 0)
+                        rd_usleep(config->consumer_delay_ms * 1000, NULL);
+
+                /* Check if producers are done */
+                mtx_lock(&state.lock);
+                if (state.producers_done && idle_rounds >= 20) {
+                        mtx_unlock(&state.lock);
+                        break;
+                }
+                mtx_unlock(&state.lock);
+
+                if (attempts % 10 == 0) {
+                        TEST_SAY("Progress: consumed %d/%d\n",
+                                 state.total_consumed, state.expected_total);
+                }
+        }
 
         /* Wait for producer threads to finish */
         for (p = 0; p < config->producer_cnt; p++) {

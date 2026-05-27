@@ -54,7 +54,7 @@ typedef struct {
         const char *test_name;               /**< Test description */
         int max_attempts;                    /**< Max poll attempts */
         rd_bool_t produce_before_subscribe;  /**< Produce before subscribe */
-        int msgs_produce_after_subscribe;         /**< Messages after subscribe */
+        int msgs_produce_after_subscribe;    /**< Messages after subscribe */
 } groups_test_config_t;
 
 /**
@@ -430,9 +430,8 @@ static void test_groups_staggered_join(void) {
                 err = rd_kafka_share_consume_batch(consumer_a, 1000, batch,
                                                    &rcvd);
                 if (err) {
-                        TEST_SAY(
-                            "Group A: share_consume_batch failed: %s\n",
-                            rd_kafka_error_string(err));
+                        TEST_SAY("Group A: share_consume_batch failed: %s\n",
+                                 rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
                         continue;
                 }

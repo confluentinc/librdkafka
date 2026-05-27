@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2025, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,7 @@ typedef struct {
         const char *test_name;               /**< Test description */
         int max_attempts;                    /**< Max poll attempts */
         rd_bool_t produce_before_subscribe;  /**< Produce before subscribe */
-        int produce_after_subscribe;         /**< Messages after subscribe */
+        int msgs_produce_after_subscribe;         /**< Messages after subscribe */
 } groups_test_config_t;
 
 /**
@@ -173,6 +173,10 @@ static void consume_from_all_groups(groups_test_config_t *config,
                                 err = rd_kafka_share_consume_batch(
                                     state->consumers[g][c], 500, batch, &rcvd);
                                 if (err) {
+                                        TEST_SAY(
+                                            "Group %d consumer %d: "
+                                            "share_consume_batch failed: %s\n",
+                                            g, c, rd_kafka_error_string(err));
                                         rd_kafka_error_destroy(err);
                                         continue;
                                 }
@@ -259,7 +263,7 @@ static void run_groups_test(groups_test_config_t *config) {
         } else {
                 state.expected_per_group = 0;
         }
-        state.expected_per_group += config->produce_after_subscribe;
+        state.expected_per_group += config->msgs_produce_after_subscribe;
 
         /* Create consumers */
         create_group_consumers(config, &state);
@@ -275,16 +279,16 @@ static void run_groups_test(groups_test_config_t *config) {
         subscribe_all_consumers(config, &state);
 
         /* Produce after subscribe if configured */
-        if (config->produce_after_subscribe > 0) {
+        if (config->msgs_produce_after_subscribe > 0) {
                 int p;
                 int per_partition =
-                    config->produce_after_subscribe / config->partitions;
+                    config->msgs_produce_after_subscribe / config->partitions;
                 for (p = 0; p < config->partitions; p++) {
                         test_produce_msgs_easy(state.topic, 0, p,
                                                per_partition);
                 }
                 TEST_SAY("Produced %d messages after subscribe\n",
-                         config->produce_after_subscribe);
+                         config->msgs_produce_after_subscribe);
         }
 
         /* Consume from all groups */
@@ -426,6 +430,9 @@ static void test_groups_staggered_join(void) {
                 err = rd_kafka_share_consume_batch(consumer_a, 1000, batch,
                                                    &rcvd);
                 if (err) {
+                        TEST_SAY(
+                            "Group A: share_consume_batch failed: %s\n",
+                            rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
                         continue;
                 }
@@ -462,6 +469,10 @@ static void test_groups_staggered_join(void) {
                                         rd_kafka_message_destroy(batch[m]);
                                 }
                         } else {
+                                TEST_SAY(
+                                    "Group A: share_consume_batch failed: "
+                                    "%s\n",
+                                    rd_kafka_error_string(err));
                                 rd_kafka_error_destroy(err);
                         }
                 }
@@ -477,6 +488,10 @@ static void test_groups_staggered_join(void) {
                                         rd_kafka_message_destroy(batch[m]);
                                 }
                         } else {
+                                TEST_SAY(
+                                    "Group B: share_consume_batch failed: "
+                                    "%s\n",
+                                    rd_kafka_error_string(err));
                                 rd_kafka_error_destroy(err);
                         }
                 }

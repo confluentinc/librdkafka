@@ -33,8 +33,8 @@
  * @name Share Consumer Concurrency and Stress Tests
  *
  * Tests share consumer behavior under concurrent producer/consumer scenarios.
- * Each test uses config-based structure with producers and consumers running
- * in separate threads.
+ * Each test uses a config-based structure. Producers run in their own threads;
+ * all consumers are polled in a round-robin loop from the main test thread.
  */
 
 #define MAX_TOPICS     16
@@ -78,7 +78,7 @@ typedef struct {
         int total_consumed;              /**< Total messages consumed */
         int expected_total;              /**< Expected total messages */
         rd_bool_t producers_done;        /**< All producers finished */
-        rd_bool_t consumers_should_stop; /**< Signal consumers to stop */
+        int producers_remaining;         /**< Producer threads still running */
         rd_bool_t test_failed;           /**< Test failure flag */
         char *topics[MAX_TOPICS];        /**< Topic names */
         int topic_cnt;                   /**< Number of topics */
@@ -173,6 +173,8 @@ static int producer_thread_func(void *arg) {
 done:
         mtx_lock(&state->lock);
         state->total_produced += produced;
+        if (--state->producers_remaining == 0)
+                state->producers_done = rd_true;
         mtx_unlock(&state->lock);
 
         rd_kafka_destroy(producer);
@@ -212,9 +214,10 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Initialize state */
         mtx_init(&state.lock, mtx_plain);
-        state.topic_cnt    = config->topic_cnt;
-        state.group_name   = config->group_name;
-        state.explicit_ack = config->explicit_ack;
+        state.topic_cnt           = config->topic_cnt;
+        state.group_name          = config->group_name;
+        state.explicit_ack        = config->explicit_ack;
+        state.producers_remaining = config->producer_cnt;
 
         /* Calculate total expected messages */
         for (t = 0; t < config->topic_cnt; t++) {
@@ -242,13 +245,10 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         for (c = 0; c < config->consumer_cnt; c++) {
                 consumers[c] =
                     test_create_share_consumer(config->group_name, NULL);
-
-                /* Configure group on first consumer */
-                if (c == 0) {
-                        test_share_set_auto_offset_reset(config->group_name,
-                                                         "earliest");
-                }
         }
+
+        /* Configure group (broker-side config, do once) */
+        test_share_set_auto_offset_reset(config->group_name, "earliest");
 
         /* Subscribe all consumers to all topics */
         subs = rd_kafka_topic_partition_list_new(config->topic_cnt);
@@ -297,7 +297,6 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Poll consumers from main thread while producers run */
         max_attempts = config->max_attempts > 0 ? config->max_attempts : 100;
-        {
                 rd_kafka_message_t *batch[BATCH_SIZE];
                 int attempts    = max_attempts;
                 int idle_rounds = 0;
@@ -318,6 +317,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                 err = rd_kafka_share_consume_batch(
                                     consumers[c], 1000, batch, &rcvd);
                                 if (err) {
+                                        TEST_SAY(
+                                            "Consumer %d: "
+                                            "share_consume_batch "
+                                            "failed: %s\n",
+                                            c, rd_kafka_error_string(err));
                                         rd_kafka_error_destroy(err);
                                         continue;
                                 }
@@ -362,7 +366,6 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                          state.expected_total);
                         }
                 }
-        }
 
         /* Wait for producer threads to finish */
         for (p = 0; p < config->producer_cnt; p++) {
@@ -394,6 +397,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                 err = rd_kafka_share_consume_batch(
                                     consumers[c], 1000, batch, &rcvd);
                                 if (err) {
+                                        TEST_SAY(
+                                            "Consumer %d: "
+                                            "share_consume_batch "
+                                            "failed: %s\n",
+                                            c, rd_kafka_error_string(err));
                                         rd_kafka_error_destroy(err);
                                         continue;
                                 }
@@ -426,20 +434,29 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                 }
         }
 
+        /* Snapshot results under lock */
+        int final_produced;
+        int final_consumed;
+        rd_bool_t final_failed;
+        mtx_lock(&state.lock);
+        final_produced = state.total_produced;
+        final_consumed = state.total_consumed;
+        final_failed   = state.test_failed;
+        mtx_unlock(&state.lock);
+
         /* Verify results */
         TEST_SAY("Final: produced=%d, consumed=%d, expected=%d\n",
-                 state.total_produced, state.total_consumed,
-                 state.expected_total);
+                 final_produced, final_consumed, state.expected_total);
 
-        TEST_ASSERT(state.total_produced == state.expected_total,
+        TEST_ASSERT(final_produced == state.expected_total,
                     "Expected to produce %d, actually produced %d",
-                    state.expected_total, state.total_produced);
+                    state.expected_total, final_produced);
 
-        TEST_ASSERT(state.total_consumed == state.expected_total,
+        TEST_ASSERT(final_consumed == state.expected_total,
                     "Expected to consume %d, actually consumed %d",
-                    state.expected_total, state.total_consumed);
+                    state.expected_total, final_consumed);
 
-        TEST_ASSERT(!state.test_failed, "Test marked as failed");
+        TEST_ASSERT(!final_failed, "Test marked as failed");
 
         TEST_SAY("SUCCESS: %s\n", config->test_name);
 
@@ -766,10 +783,10 @@ static void test_slow_producers(void) {
             .producer_cnt       = 2,
             .topic_cnt          = 1,
             .partitions         = {2},
-            .msgs_per_partition = 10000,
+            .msgs_per_partition = 500,
             .group_name         = "share-conc-slow-producer",
             .test_name          = "Slow producers, fast consumers",
-            .producer_delay_ms  = 50,
+            .producer_delay_ms  = 10000,
             .max_attempts       = 200};
         run_concurrent_test(&config);
 }

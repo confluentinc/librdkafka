@@ -254,6 +254,7 @@
     <ClCompile Include="..\src\rdunittest.c" />
     <ClCompile Include="..\src\rdunittest_acknowledge.c" />
     <ClCompile Include="..\src\rdunittest_fetcher.c" />
+    <ClCompile Include="..\src\rdunittest_msgset_errors.c" />
     <ClCompile Include="..\src\rdvarint.c" />
     <ClCompile Include="..\src\rdmap.c" />
     <ClCompile Include="..\src\snappy.c" />

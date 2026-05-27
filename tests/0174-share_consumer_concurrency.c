@@ -75,7 +75,10 @@ typedef struct {
 typedef struct {
         mtx_t lock;               /**< Mutex for state access */
         int total_produced;       /**< Total messages produced */
-        int total_consumed;       /**< Total messages consumed */
+        int total_consumed;       /**< Total messages consumed
+                                   *   (includes redeliveries) */
+        int total_first_delivery; /**< Messages with delivery_count == 1 */
+        int total_duplicates;     /**< Messages with delivery_count > 1 */
         int expected_total;       /**< Expected total messages */
         rd_bool_t producers_done; /**< All producers finished */
         int producers_remaining;  /**< Producer threads still running */
@@ -207,6 +210,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         size_t m;
         int final_produced;
         int final_consumed;
+        int final_first_delivery;
+        int final_duplicates;
         rd_bool_t final_failed;
 
         TEST_SAY("\n");
@@ -311,8 +316,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         TEST_SAY("Starting consumption (producers running in background)\n");
 
-        while (state.total_consumed < state.expected_total && attempts-- > 0 &&
-               idle_rounds < 30) {
+        while (state.total_first_delivery < state.expected_total &&
+               attempts-- > 0 && idle_rounds < 30) {
                 round_consumed = 0;
 
                 /* Round-robin poll all consumers */
@@ -338,6 +343,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                                     consumers[c], batch[m],
                                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                         }
+                                        if (rd_kafka_message_delivery_count(
+                                                batch[m]) > 1)
+                                                state.total_duplicates++;
+                                        else
+                                                state.total_first_delivery++;
                                         state.total_consumed++;
                                 }
                                 rd_kafka_message_destroy(batch[m]);
@@ -364,8 +374,11 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                 mtx_unlock(&state.lock);
 
                 if (attempts % 10 == 0) {
-                        TEST_SAY("Progress: consumed %d/%d\n",
-                                 state.total_consumed, state.expected_total);
+                        TEST_SAY(
+                            "Progress: consumed %d/%d (first=%d, "
+                            "dup=%d)\n",
+                            state.total_consumed, state.expected_total,
+                            state.total_first_delivery, state.total_duplicates);
                 }
         }
 
@@ -380,13 +393,13 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         mtx_unlock(&state.lock);
 
         /* Continue consuming remaining messages after producers are done */
-        if (state.total_consumed < state.expected_total) {
+        if (state.total_first_delivery < state.expected_total) {
                 idle_rounds = 0;
 
                 TEST_SAY("Consuming remaining messages: %d/%d\n",
-                         state.total_consumed, state.expected_total);
+                         state.total_first_delivery, state.expected_total);
 
-                while (state.total_consumed < state.expected_total &&
+                while (state.total_first_delivery < state.expected_total &&
                        idle_rounds < 50) {
                         round_consumed = 0;
 
@@ -413,6 +426,13 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                                                             batch[m],
                                                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                                 }
+                                                if (rd_kafka_message_delivery_count(
+                                                        batch[m]) > 1)
+                                                        state
+                                                            .total_duplicates++;
+                                                else
+                                                        state
+                                                            .total_first_delivery++;
                                                 state.total_consumed++;
                                         }
                                         rd_kafka_message_destroy(batch[m]);
@@ -435,35 +455,37 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Snapshot results under lock */
         mtx_lock(&state.lock);
-        final_produced = state.total_produced;
-        final_consumed = state.total_consumed;
-        final_failed   = state.test_failed;
+        final_produced       = state.total_produced;
+        final_consumed       = state.total_consumed;
+        final_first_delivery = state.total_first_delivery;
+        final_duplicates     = state.total_duplicates;
+        final_failed         = state.test_failed;
         mtx_unlock(&state.lock);
 
         /* Verify results */
-        TEST_SAY("Final: produced=%d, consumed=%d, expected=%d\n",
-                 final_produced, final_consumed, state.expected_total);
+        TEST_SAY(
+            "Final: produced=%d, consumed=%d (first=%d, dup=%d), "
+            "expected=%d\n",
+            final_produced, final_consumed, final_first_delivery,
+            final_duplicates, state.expected_total);
 
         TEST_ASSERT(final_produced == state.expected_total,
                     "Expected to produce %d, actually produced %d",
                     state.expected_total, final_produced);
 
-        /* KIP-932 share consumers are at-least-once: a record can be
-         * redelivered if the broker-side acquisition lock expires before
-         * an ACCEPT arrives (e.g. delayed implicit-ack flush, scheduling
-         * jitter). Allow a small over-delivery margin (1% + 50) so the
-         * test is robust to normal redelivery; an unbounded ceiling
-         * would hide real regressions. */
-        TEST_ASSERT(final_consumed >= state.expected_total,
-                    "Expected to consume at least %d, actually consumed %d",
-                    state.expected_total, final_consumed);
-
-        TEST_ASSERT(final_consumed <=
-                        state.expected_total + state.expected_total / 100 + 50,
-                    "Excessive duplicate delivery: expected %d, "
-                    "actually consumed %d (%d duplicates)",
-                    state.expected_total, final_consumed,
-                    final_consumed - state.expected_total);
+        /* A record can be redelivered if the broker-side acquisition lock
+         * expires before an ACCEPT arrives. We distinguish first deliveries
+         * (delivery_count
+         * == 1) from redeliveries via rd_kafka_message_delivery_count(),
+         * and assert strict equality on first deliveries — every produced
+         * record must have been delivered at least once. Duplicates are
+         * tracked separately so a regression in delivery semantics still
+         * shows up in the diagnostic output. */
+        TEST_ASSERT(final_first_delivery == state.expected_total,
+                    "Expected %d first-time deliveries, got %d "
+                    "(consumed=%d, duplicates=%d)",
+                    state.expected_total, final_first_delivery, final_consumed,
+                    final_duplicates);
 
         TEST_ASSERT(!final_failed, "Test marked as failed");
 

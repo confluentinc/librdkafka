@@ -549,7 +549,13 @@ err:
                             msetr->msetr_v2_hdr->BaseOffset +
                             msetr->msetr_v2_hdr->LastOffsetDelta;
 
-                        rd_kafka_share_message_set_err_ops(
+                        /**
+                         * TODO KIP-932: Add a TODO to translate errors inside
+                         * this function. _BAD_COMPRESSION and _BAD_MSG should
+                         * be sent as INVALID_MSG, and _CRIT_SYS_RESOURCE should
+                         * be sent as _CRIT_SYS_RESOURCE.
+                         */
+                        rd_kafka_share_msgset_err_ops(
                             &msetr->msetr_rkq, msetr->msetr_broker_id, err,
                             msetr->msetr_tver->version, rktp,
                             msetr->msetr_v2_hdr->BaseOffset, LastOffset,
@@ -816,7 +822,11 @@ rd_kafka_msgset_reader_msg_v2(rd_kafka_msgset_reader_t *msetr) {
                 return RD_KAFKA_RESP_ERR_NO_ERROR; /* Continue with next msg */
         }
 
-        /* Handle control messages */
+        /**
+         * Handle control messages
+         * TODO KIP-932: GA: This branch shouldn't hit for share consumers,
+         * as we skip control messages for share consumers.
+         */
         if (msetr->msetr_v2_hdr->Attributes & RD_KAFKA_MSGSET_V2_ATTR_CONTROL) {
                 struct {
                         int64_t KeySize;
@@ -1151,6 +1161,25 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                     hdr.BaseOffset, hdr.Length, hdr.Crc,
                                     calc_crc);
                                 /* Skip to end of MessageSet */
+                                /**
+                                 * FIXME: `crc_len` is a byte *length*
+                                 * (Length - 4 - 1 - 4), but
+                                 * rd_kafka_buf_skip_to() interprets its
+                                 * argument as an absolute slice position.
+                                 * The current call leaves the reader 21
+                                 * bytes short of the end of the MessageSet
+                                 * (when the slice base offset is 0), and
+                                 * for any subsequent MessageSet within
+                                 * the same slice the size_t subtraction
+                                 * inside skip_to underflows and triggers
+                                 * a spurious __UNDERFLOW. The intended
+                                 * target is end-of-MessageSet, i.e.
+                                 * `len_start + hdr.Length` — see the
+                                 * share-consumer branch below which does
+                                 * this correctly. Replace with:
+                                 *     rd_kafka_buf_skip_to(rkbuf,
+                                 *         len_start + hdr.Length);
+                                 */
                                 rd_kafka_buf_skip_to(rkbuf, crc_len);
 
                         } else {
@@ -1163,7 +1192,7 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                 rd_kafka_buf_read_i32(rkbuf, &LastOffsetDelta);
                                 LastOffset = hdr.BaseOffset + LastOffsetDelta;
 
-                                rd_kafka_share_message_set_err_ops(
+                                rd_kafka_share_msgset_err_ops(
                                     &msetr->msetr_rkq, msetr->msetr_broker_id,
                                     RD_KAFKA_RESP_ERR__BAD_MSG,
                                     msetr->msetr_tver->version, rktp,
@@ -1266,7 +1295,8 @@ done:
          * to avoid getting stuck on compacted MessageSets where the last
          * Message in the MessageSet has an Offset < MessageSet header's
          * last offset.  See KAFKA-5443 */
-        msetr->msetr_next_offset = LastOffset + 1;
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk))
+                msetr->msetr_next_offset = LastOffset + 1;
 
         msetr->msetr_v2_hdr = NULL;
 
@@ -1354,7 +1384,10 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
                          * layout is preserved for any future MessageSet
                          * version above v2 (the only versions reaching this
                          * branch — v0/v1 are filtered by the MagicByte
-                         * bounds check above). */
+                         * bounds check above).
+                         * TODO KIP-932: Check if this handling is correct as
+                         * we dont know the magic byte, and we are assuming
+                         * its v2.*/
                         int32_t PartitionLeaderEpoch;
                         int8_t MagicByteActual;
                         int32_t Crc;
@@ -1379,7 +1412,7 @@ rd_kafka_msgset_reader_peek_msg_version(rd_kafka_msgset_reader_t *msetr,
 
                         LastOffset = Offset + LastOffsetDelta;
 
-                        rd_kafka_share_message_set_err_ops(
+                        rd_kafka_share_msgset_err_ops(
                             &msetr->msetr_rkq, msetr->msetr_broker_id,
                             RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
                             msetr->msetr_tver->version, rktp, Offset,

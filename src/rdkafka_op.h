@@ -945,7 +945,7 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
                            int64_t offset,
                            const char *fmt,
                            ...) RD_FORMAT(printf, 8, 9);
-void rd_kafka_share_message_set_err_ops(
+void rd_kafka_share_msgset_err_ops(
     rd_kafka_q_t *rkq,
     int32_t broker_id,
     rd_kafka_resp_err_t err,

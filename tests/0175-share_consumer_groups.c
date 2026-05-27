@@ -145,9 +145,16 @@ static void subscribe_all_consumers(groups_test_config_t *config,
 static void consume_from_all_groups(groups_test_config_t *config,
                                     groups_test_state_t *state) {
         rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *err;
         int attempts;
         int g, c;
         int idle_rounds = 0;
+        int round_consumed;
+        int all_done;
+        size_t rcvd;
+        size_t m;
+        char progress[256];
+        int pos;
 
         for (g = 0; g < config->group_cnt; g++) {
                 state->consumed[g] = 0;
@@ -156,8 +163,8 @@ static void consume_from_all_groups(groups_test_config_t *config,
         attempts = config->max_attempts > 0 ? config->max_attempts : 100;
 
         while (attempts-- > 0 && idle_rounds < 20) {
-                int round_consumed = 0;
-                int all_done       = 1;
+                round_consumed = 0;
+                all_done       = 1;
 
                 for (g = 0; g < config->group_cnt; g++) {
                         if (state->consumed[g] >= state->expected_per_group)
@@ -166,9 +173,7 @@ static void consume_from_all_groups(groups_test_config_t *config,
                         all_done = 0;
 
                         for (c = 0; c < config->consumers_per_group[g]; c++) {
-                                size_t rcvd = 0;
-                                size_t m;
-                                rd_kafka_error_t *err;
+                                rcvd = 0;
 
                                 err = rd_kafka_share_consume_batch(
                                     state->consumers[g][c], 500, batch, &rcvd);
@@ -196,8 +201,8 @@ static void consume_from_all_groups(groups_test_config_t *config,
                 if (round_consumed > 0) {
                         idle_rounds = 0;
                         if (attempts % 10 == 0) {
-                                char progress[256] = {0};
-                                int pos            = 0;
+                                memset(progress, 0, sizeof(progress));
+                                pos = 0;
                                 for (g = 0; g < config->group_cnt && pos < 200;
                                      g++) {
                                         pos += rd_snprintf(
@@ -245,6 +250,8 @@ static void cleanup_groups_test(groups_test_config_t *config,
 static void run_groups_test(groups_test_config_t *config) {
         groups_test_state_t state = {0};
         int g;
+        int p;
+        int per_partition;
         int total_msgs;
         char result[256] = {0};
         int pos          = 0;
@@ -280,8 +287,7 @@ static void run_groups_test(groups_test_config_t *config) {
 
         /* Produce after subscribe if configured */
         if (config->msgs_produce_after_subscribe > 0) {
-                int p;
-                int per_partition =
+                per_partition =
                     config->msgs_produce_after_subscribe / config->partitions;
                 for (p = 0; p < config->partitions; p++) {
                         test_produce_msgs_easy(state.topic, 0, p,
@@ -389,12 +395,15 @@ static void test_groups_staggered_join(void) {
         rd_kafka_share_t *consumer_a, *consumer_b;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *err;
         const char *topic;
         const char *group_a = "share-stagger-A";
         const char *group_b = "share-stagger-B";
         const int msg_cnt   = 100;
         int consumed_a = 0, consumed_b = 0;
         int attempts;
+        size_t rcvd;
+        size_t m;
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -423,9 +432,7 @@ static void test_groups_staggered_join(void) {
         /* Group A consumes half */
         attempts = 30;
         while (consumed_a < msg_cnt / 2 && attempts-- > 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
+                rcvd = 0;
 
                 err = rd_kafka_share_consume_batch(consumer_a, 1000, batch,
                                                    &rcvd);
@@ -454,9 +461,7 @@ static void test_groups_staggered_join(void) {
         attempts = 50;
         while ((consumed_a < msg_cnt || consumed_b < msg_cnt) &&
                attempts-- > 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
+                rcvd = 0;
 
                 if (consumed_a < msg_cnt) {
                         err = rd_kafka_share_consume_batch(consumer_a, 500,

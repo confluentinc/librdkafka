@@ -112,6 +112,8 @@ static int producer_thread_func(void *arg) {
         rd_kafka_t *producer;
         int produced = 0;
         int t, p;
+        rd_kafka_resp_err_t err;
+        char value[64];
 
         /* Restore test context for this thread (test_curr is TLS) */
         test_curr                = this_test;
@@ -130,9 +132,6 @@ static int producer_thread_func(void *arg) {
                         for (p = 0; p < args->partitions[t] &&
                                     produced < args->msgs_to_produce;
                              p++) {
-                                rd_kafka_resp_err_t err;
-                                char value[64];
-
                                 snprintf(value, sizeof(value), "prod%d-msg%d",
                                          args->producer_id, produced);
 
@@ -195,10 +194,20 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         thrd_t producer_threads[MAX_PRODUCERS];
         rd_kafka_share_t *consumers[MAX_CONSUMERS];
         rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *err;
         int t, c, p;
         int total_partitions = 0;
         int msgs_per_producer;
         int max_attempts;
+        int attempts;
+        int idle_rounds;
+        int round_consumed;
+        size_t rcvd;
+        size_t m;
+        int final_produced;
+        int final_consumed;
+        rd_bool_t final_failed;
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -297,21 +306,18 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Poll consumers from main thread while producers run */
         max_attempts = config->max_attempts > 0 ? config->max_attempts : 100;
-        rd_kafka_message_t *batch[BATCH_SIZE];
-        int attempts    = max_attempts;
-        int idle_rounds = 0;
+        attempts     = max_attempts;
+        idle_rounds  = 0;
 
         TEST_SAY("Starting consumption (producers running in background)\n");
 
         while (state.total_consumed < state.expected_total && attempts-- > 0 &&
                idle_rounds < 30) {
-                int round_consumed = 0;
+                round_consumed = 0;
 
                 /* Round-robin poll all consumers */
                 for (c = 0; c < config->consumer_cnt; c++) {
-                        size_t rcvd = 0;
-                        size_t m;
-                        rd_kafka_error_t *err;
+                        rcvd = 0;
 
                         err = rd_kafka_share_consume_batch(consumers[c], 1000,
                                                            batch, &rcvd);
@@ -375,20 +381,17 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Continue consuming remaining messages after producers are done */
         if (state.total_consumed < state.expected_total) {
-                rd_kafka_message_t *batch[BATCH_SIZE];
-                int idle_rounds = 0;
+                idle_rounds = 0;
 
                 TEST_SAY("Consuming remaining messages: %d/%d\n",
                          state.total_consumed, state.expected_total);
 
                 while (state.total_consumed < state.expected_total &&
                        idle_rounds < 50) {
-                        int round_consumed = 0;
+                        round_consumed = 0;
 
                         for (c = 0; c < config->consumer_cnt; c++) {
-                                size_t rcvd = 0;
-                                size_t m;
-                                rd_kafka_error_t *err;
+                                rcvd = 0;
 
                                 err = rd_kafka_share_consume_batch(
                                     consumers[c], 1000, batch, &rcvd);
@@ -431,9 +434,6 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         }
 
         /* Snapshot results under lock */
-        int final_produced;
-        int final_consumed;
-        rd_bool_t final_failed;
         mtx_lock(&state.lock);
         final_produced = state.total_produced;
         final_consumed = state.total_consumed;
@@ -448,9 +448,22 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                     "Expected to produce %d, actually produced %d",
                     state.expected_total, final_produced);
 
-        TEST_ASSERT(final_consumed == state.expected_total,
-                    "Expected to consume %d, actually consumed %d",
+        /* KIP-932 share consumers are at-least-once: a record can be
+         * redelivered if the broker-side acquisition lock expires before
+         * an ACCEPT arrives (e.g. delayed implicit-ack flush, scheduling
+         * jitter). Allow a small over-delivery margin (1% + 50) so the
+         * test is robust to normal redelivery; an unbounded ceiling
+         * would hide real regressions. */
+        TEST_ASSERT(final_consumed >= state.expected_total,
+                    "Expected to consume at least %d, actually consumed %d",
                     state.expected_total, final_consumed);
+
+        TEST_ASSERT(final_consumed <=
+                        state.expected_total + state.expected_total / 100 + 50,
+                    "Excessive duplicate delivery: expected %d, "
+                    "actually consumed %d (%d duplicates)",
+                    state.expected_total, final_consumed,
+                    final_consumed - state.expected_total);
 
         TEST_ASSERT(!final_failed, "Test marked as failed");
 

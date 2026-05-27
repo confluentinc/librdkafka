@@ -649,7 +649,7 @@ void rd_kafka_q_op_err(rd_kafka_q_t *rkq,
  * @sa rd_kafka_q_op_err()
  */
 /**
- * TODO KIP-932 GA: Improve handling of this particular function
+ * TODO KIP-932: GA: Improve handling of this particular function
  *  as we dont need most information available here.
  */
 void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
@@ -707,7 +707,7 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
  *
  * @sa rd_kafka_consumer_err()
  */
-void rd_kafka_share_message_set_err_ops(
+void rd_kafka_share_msgset_err_ops(
     rd_kafka_q_t *rkq,
     int32_t broker_id,
     rd_kafka_resp_err_t err,
@@ -720,15 +720,12 @@ void rd_kafka_share_message_set_err_ops(
     ...) {
         va_list ap;
         char buf[2048];
-        char *errstr;
         int64_t offset;
 
         /* Format error message once for all offsets */
         va_start(ap, fmt);
         rd_vsnprintf(buf, sizeof(buf), fmt, ap);
         va_end(ap);
-
-        errstr = rd_strdup(buf);
 
         /* Create one error op per offset in the range */
         for (offset = start_offset; offset <= end_offset; offset++) {
@@ -738,7 +735,7 @@ void rd_kafka_share_message_set_err_ops(
                 rko->rko_version = version;
                 rko->rko_err     = err;
                 rko->rko_u.err.offset            = offset;
-                rko->rko_u.err.errstr            = rd_strdup(errstr);
+                rko->rko_u.err.errstr            = rd_strdup(buf);
                 rko->rko_u.err.rkm.rkm_broker_id = broker_id;
 
                 /* Set acknowledgement type for share consumer */
@@ -749,8 +746,6 @@ void rd_kafka_share_message_set_err_ops(
 
                 rd_kafka_q_enq(rkq, rko);
         }
-
-        rd_free(errstr);
 }
 
 
@@ -1198,6 +1193,10 @@ rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
                     rko->rko_u.share_fetch_response.message_rkos, i);
 
                 /* Return message to application */
+                /**
+                 * TODO KIP-932: We need to expose the error string maybe
+                 * as rd_kafka_error_t in the message op.
+                 */
                 rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
         }
 

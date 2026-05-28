@@ -304,6 +304,8 @@ _TEST_DECL(0179_share_consumer_destroy);
 _TEST_DECL(0179_share_consumer_destroy_local);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
 _TEST_DECL(0183_share_consumer_leader_change_mock);
+_TEST_DECL(0189_share_client_instance_id);
+_TEST_DECL(0189_share_client_instance_id_errors);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -591,6 +593,8 @@ struct test tests[] = {
     _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
     _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
+    _TEST(0189_share_client_instance_id, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0189_share_client_instance_id_errors, 0, TEST_BRKVER(0, 4, 2, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

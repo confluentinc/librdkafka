@@ -474,7 +474,8 @@ static void do_test_regex_many_mock(const char *assignment_strategy,
                 /* Wait for an assignment to let the consumer catch up on
                  * all rebalancing. */
                 if (i % await_assignment_every == await_assignment_every - 1)
-                        test_consumer_wait_assignment(rk, rd_true /*poll*/);
+                        test_consumer_wait_assignment(rk, rd_true /*poll*/,
+                                                      1000);
                 else if (!lots_of_topics)
                         rd_usleep(100 * 1000, NULL);
         }
@@ -783,7 +784,7 @@ static void do_test_resubscribe_with_regex() {
 
         /* Subscribe to regex ^.*topic_regex.* and topic_a literal */
         TEST_SAY("Subscribing to regex ^.*topic_regex.* and topic_a\n");
-        test_consumer_subscribe_multi(rk, 2, "^.*topic_regex.*", topic_a);
+        test_consumer_subscribe_multi_va(rk, 2, "^.*topic_regex.*", topic_a);
         /* Wait for assignment */
         if (test_consumer_group_protocol_classic()) {
                 await_assignment("Assignment for topic1, topic2 and topic_a",

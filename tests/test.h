@@ -189,21 +189,33 @@ struct test {
 
 
 #define TEST_SAY0(...) fprintf(stderr, __VA_ARGS__)
-#define TEST_SAYL(LVL, ...)                                                    \
+#define TEST_SAY_COLOR(LVL, COLOR, ...)                                        \
         do {                                                                   \
                 if (test_level >= LVL) {                                       \
+                        char thread_name[32] = {0};                            \
+                        pthread_getname_np(pthread_self(), thread_name,        \
+                                           sizeof(thread_name));               \
+                        fprintf(stderr, "\033[%sm", COLOR);                    \
                         fprintf(                                               \
-                            stderr, "\033[36m[%-28s/%7.3fs] ",                 \
-                            test_curr->name,                                   \
+                            stderr, "[%-28s/%7.3fs/%s] ", test_curr->name,     \
                             test_curr->start                                   \
                                 ? ((float)(test_clock() - test_curr->start) /  \
                                    1000000.0f)                                 \
-                                : 0);                                          \
+                                : 0,                                           \
+                            thread_name);                                      \
                         fprintf(stderr, __VA_ARGS__);                          \
                         fprintf(stderr, "\033[0m");                            \
                 }                                                              \
         } while (0)
-#define TEST_SAY(...) TEST_SAYL(2, __VA_ARGS__)
+#define TEST_SAYL(LVL, ...)   TEST_SAY_COLOR(LVL, "36", __VA_ARGS__)
+#define TEST_SAY(...)         TEST_SAYL(2, __VA_ARGS__)
+#define TEST_SAY_RED(...)     TEST_SAY_COLOR(2, "31", __VA_ARGS__)
+#define TEST_SAY_GREEN(...)   TEST_SAY_COLOR(2, "32", __VA_ARGS__)
+#define TEST_SAY_YELLOW(...)  TEST_SAY_COLOR(2, "33", __VA_ARGS__)
+#define TEST_SAY_BLUE(...)    TEST_SAY_COLOR(2, "34", __VA_ARGS__)
+#define TEST_SAY_MAGENTA(...) TEST_SAY_COLOR(2, "35", __VA_ARGS__)
+#define TEST_SAY_CYAN(...)    TEST_SAY_COLOR(2, "36", __VA_ARGS__)
+#define TEST_SAY_WHITE(...)   TEST_SAY_COLOR(2, "37", __VA_ARGS__)
 
 /**
  * Append JSON object (as string) to this tests' report array.
@@ -592,7 +604,11 @@ void test_verify_rkmessage0(const char *func,
 
 void test_consumer_subscribe(rd_kafka_t *rk, const char *topic);
 
-void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...);
+void test_consumer_subscribe_multi(rd_kafka_t *rk,
+                                   const char **topics,
+                                   int topic_count);
+
+void test_consumer_subscribe_multi_va(rd_kafka_t *rk, int topic_count, ...);
 
 void test_consume_msgs_easy_mv0(const char *group_id,
                                 const char *topic,
@@ -666,7 +682,9 @@ int test_consumer_poll_timeout(const char *what,
                                test_msgver_t *mv,
                                int timeout_ms);
 
-void test_consumer_wait_assignment(rd_kafka_t *rk, rd_bool_t do_poll);
+void test_consumer_wait_assignment(rd_kafka_t *rk,
+                                   rd_bool_t do_poll,
+                                   int wait_interval_ms);
 void test_consumer_verify_assignment0(const char *func,
                                       int line,
                                       rd_kafka_t *rk,

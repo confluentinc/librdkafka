@@ -1348,6 +1348,15 @@ int main(int argc, char **argv) {
                                 "share consumer mode\n");
                         exit(1);
                 }
+
+                /* Match Java ShareConsumerPerformance defaults so the two
+                 * perf tools measure share consumers under the same client
+                 * settings. Users can still override via -X. */
+                rd_kafka_conf_set(conf, "fetch.max.bytes", "1048576",
+                                  NULL, 0); /* 1 MiB (--fetch-size) */
+                rd_kafka_conf_set(conf, "socket.receive.buffer.bytes",
+                                  "2097152", NULL, 0); /* 2 MiB
+                                                          (--socket-buffer-size) */
         }
 
         if (read_hdrs && mode == 'P') {

@@ -3397,6 +3397,36 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
                            rd_kafka_topic_partition_list_t **partitions);
 
 /**
+ * @brief Get the client's unique client instance ID used for telemetry.
+ *
+ * This ID is unique to this share consumer instance and will not change
+ * after it is initially generated. The ID is useful for correlating
+ * client operations with telemetry sent to the broker.
+ *
+ * If telemetry is enabled, this method may block up to \p timeout_ms
+ * waiting for the initial GetTelemetrySubscriptions round-trip with the
+ * broker to complete (if it has not already). Specifying \p timeout_ms
+ * of 0 means do not wait for the initial request to complete if it
+ * has not already.
+ *
+ * Client telemetry is controlled by the `enable.metrics.push`
+ * configuration property.
+ *
+ * @param rkshare Share consumer handle.
+ * @param timeout_ms Maximum time to wait for the client instance ID,
+ *                   in milliseconds. Must be non-negative.
+ * @param client_instance_id Out: the client instance ID on success.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t* on failure:
+ *          The returned error must be freed with rd_kafka_error_destroy().
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_share_client_instance_id(rd_kafka_share_t *rkshare,
+                                  int timeout_ms,
+                                  rd_kafka_Uuid_t **client_instance_id);
+
+/**
  * @brief Destroy Kafka handle.
  *
  * @remark This is a blocking operation.

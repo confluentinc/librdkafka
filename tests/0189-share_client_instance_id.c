@@ -120,10 +120,10 @@ static rd_bool_t telemetry_available(void) {
                 available = rd_true;
                 rd_kafka_Uuid_destroy(uuid);
         } else {
-                TEST_ASSERT(
-                    rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__TIMED_OUT,
-                    "Probe failed with unexpected error: %s",
-                    rd_kafka_error_string(error));
+                TEST_ASSERT(rd_kafka_error_code(error) ==
+                                RD_KAFKA_RESP_ERR__TIMED_OUT,
+                            "Probe failed with unexpected error: %s",
+                            rd_kafka_error_string(error));
                 available = rd_false;
                 rd_kafka_error_destroy(error);
         }
@@ -301,8 +301,8 @@ static void do_test_telemetry_disabled(void) {
         error = rd_kafka_share_client_instance_id(rkshare, 1000, &uuid);
         TEST_ASSERT(error, "Expected __STATE, got NULL (success)");
         TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
-                    "Expected __STATE, got %s: %s",
-                    rd_kafka_error_name(error), rd_kafka_error_string(error));
+                    "Expected __STATE, got %s: %s", rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
         TEST_ASSERT(uuid == NULL,
                     "Out-param should remain NULL on error, got %p",
                     (void *)uuid);
@@ -333,8 +333,8 @@ static void do_test_after_close(void) {
         TEST_ASSERT(error,
                     "Expected __STATE on closed consumer, got NULL (success)");
         TEST_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR__STATE,
-                    "Expected __STATE, got %s: %s",
-                    rd_kafka_error_name(error), rd_kafka_error_string(error));
+                    "Expected __STATE, got %s: %s", rd_kafka_error_name(error),
+                    rd_kafka_error_string(error));
         TEST_ASSERT(uuid == NULL,
                     "Out-param should remain NULL on error, got %p",
                     (void *)uuid);

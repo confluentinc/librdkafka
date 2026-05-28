@@ -113,6 +113,7 @@ static int producer_thread_func(void *arg) {
         producer_thread_args_t *args   = (producer_thread_args_t *)arg;
         concurrent_test_state_t *state = args->state;
         rd_kafka_t *producer;
+        rd_kafka_conf_t *conf;
         int produced = 0;
         int t, p;
         rd_kafka_resp_err_t err;
@@ -123,7 +124,18 @@ static int producer_thread_func(void *arg) {
         test_curr->exp_dr_status = (rd_kafka_msg_status_t)-1;
         test_curr->ignore_dr_err = rd_true;
 
-        producer = test_create_producer();
+        /* Enable idempotent producer so retries do not result in duplicate
+         * broker-side writes — without this, transient broker/network jitter
+         * under the heavy concurrent load these tests generate (e.g.
+         * test_max_concurrent with 10 producers × 5000 msgs) causes the
+         * broker to store extra records that the share consumer then
+         * receives as new offsets with delivery_count=1, inflating the
+         * consumed count above expected_total. Matches the Java client's
+         * default since Kafka 3.0 (KIP-679). */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "enable.idempotence", "true");
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
         TEST_SAY("Producer %d: starting, will produce %d messages\n",
                  args->producer_id, args->msgs_to_produce);

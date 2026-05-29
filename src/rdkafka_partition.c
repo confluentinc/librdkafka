@@ -2545,6 +2545,13 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
 
         rko->rko_u.err.errstr = rd_strdup(buf);
 
+        /* TODO KIP-932: share consumer does not forward rktp_fetchq to
+         * rkcg_q, so this OP_ERR gets stranded. Topic-level errors
+         * surfaced through this helper (UNKNOWN_TOPIC_OR_PART /
+         * UNKNOWN_PARTITION etc. from the metadata-refresh path in
+         * rdkafka_topic.c) may still be useful for share-consumer
+         * apps; verify and consider routing to rk_rep for share
+         * consumer instead. */
         rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 }
 

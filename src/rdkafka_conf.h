@@ -478,8 +478,13 @@ struct rd_kafka_conf_s {
         rd_kafkap_str_t *client_rack;
 
         struct {
-                int is_share_consumer; /**< Is this a share consumer? */
-                int max_poll_records;  /**< Max records returned per poll */
+                rd_bool_t is_share_consumer; /**< Is this a share consumer?
+                                              *   Set directly by
+                                              *   rd_kafka_share_consumer_new
+                                              *   on the conf before
+                                              *   rd_kafka_new is called.
+                                              *   No property table entry. */
+                int max_poll_records; /**< Max records returned per poll */
                 char *share_acknowledgement_mode; /**< "implicit" (default)
                                                    *   or "explicit" */
         } share;

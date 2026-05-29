@@ -2990,8 +2990,6 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                                               size_t errstr_size) {
         rd_kafka_share_t *rkshare;
         rd_kafka_t *rk;
-        char errstr_internal[512];
-        rd_kafka_conf_res_t res;
 
         if (conf == NULL) {
                 rd_snprintf(errstr, errstr_size,
@@ -3000,44 +2998,14 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
-        /**
-         * TODO KIP-932: Check if this way of defining share consumer needs to
-         * be changed.
-         */
-        res = rd_kafka_conf_set(conf, "share.consumer", "true", errstr_internal,
-                                sizeof(errstr_internal));
-        if (res != RD_KAFKA_CONF_OK) {
-                rd_snprintf(errstr, errstr_size,
-                            "rd_kafka_share_consumer_new(): "
-                            "Failed to set share.consumer=true: %s",
-                            errstr_internal);
-                return NULL;
-        }
-
-        /**
-         * TODO KIP-932: Remove this property once we have removed offset
-         * management.
-         */
-        if (rd_kafka_conf_set(conf, "auto.offset.reset", "earliest", errstr,
-                              sizeof(errstr)) != RD_KAFKA_CONF_OK) {
-                fprintf(stderr, "%s\n", errstr);
-                rd_kafka_conf_destroy(conf);
-                return NULL;
-        }
-
-        /**
-         * TODO KIP-932: Try removing use of this property when improving share
-         * consumer rebalancing logic in group management ticket.
-         */
-        res = rd_kafka_conf_set(conf, "group.protocol", "consumer",
-                                errstr_internal, sizeof(errstr_internal));
-        if (res != RD_KAFKA_CONF_OK) {
-                rd_snprintf(errstr, errstr_size,
-                            "rd_kafka_share_consumer_new(): "
-                            "Failed to set group.protocol=consumer: %s",
-                            errstr_internal);
-                return NULL;
-        }
+        /* Mark this conf as belonging to a share consumer. The field is
+         * library-internal (no property table entry); apps must construct
+         * share consumers via this function. The flag is read by
+         * rd_kafka_conf_finalize and RD_KAFKA_IS_SHARE_CONSUMER(rk).
+         * conf_finalize also rejects share-consumer-incompatible
+         * properties and applies the library-mandatory defaults for the
+         * rest. */
+        conf->share.is_share_consumer = rd_true;
 
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, errstr_size);
         if (!rk) {

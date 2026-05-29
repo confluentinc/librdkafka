@@ -5610,6 +5610,10 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x400000
 /** ElectLeaders_result_t */
 #define RD_KAFKA_EVENT_ELECTLEADERS_RESULT 0x800000
+/** AlterClientQuotas_result_t */
+#define RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT 0x1000000
+/** DescribeClientQuotas_result_t */
+#define RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT 0x2000000
 
 /**
  * @returns the event type for the given event.
@@ -5894,6 +5898,10 @@ typedef rd_kafka_event_t rd_kafka_AlterUserScramCredentials_result_t;
 typedef rd_kafka_event_t rd_kafka_ListOffsets_result_t;
 /*! ElectLeaders result type */
 typedef rd_kafka_event_t rd_kafka_ElectLeaders_result_t;
+/*! AlterClientQuotas result type */
+typedef rd_kafka_event_t rd_kafka_AlterClientQuotas_result_t;
+/*! DescribeClientQuotas result type */
+typedef rd_kafka_event_t rd_kafka_DescribeClientQuotas_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -6180,6 +6188,36 @@ rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_ElectLeaders_result_t *
 rd_kafka_event_ElectLeaders_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get AlterClientQuotas result.
+ *
+ * @returns \p rkev if \p rkev is of type
+ *          \c RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT, else NULL.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *  RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT
+ */
+RD_EXPORT const rd_kafka_AlterClientQuotas_result_t *
+rd_kafka_event_AlterClientQuotas_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get DescribeClientQuotas result.
+ *
+ * @returns \p rkev if \p rkev is of type
+ *          \c RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT, else NULL.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *  RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeClientQuotas_result_t *
+rd_kafka_event_DescribeClientQuotas_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -7114,11 +7152,13 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS,
         /** AlterUserScramCredentials */
         RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
-        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
-        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
-        RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
-        RD_KAFKA_ADMIN_OP_ELECTLEADERS,    /**< ElectLeaders */
-        RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,       /**< DescribeTopics */
+        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER,      /**< DescribeCluster */
+        RD_KAFKA_ADMIN_OP_LISTOFFSETS,          /**< ListOffsets */
+        RD_KAFKA_ADMIN_OP_ELECTLEADERS,         /**< ElectLeaders */
+        RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS,    /**< AlterClientQuotas */
+        RD_KAFKA_ADMIN_OP_DESCRIBECLIENTQUOTAS, /**< DescribeClientQuotas */
+        RD_KAFKA_ADMIN_OP__CNT                  /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -7869,7 +7909,6 @@ rd_kafka_ConfigEntry_is_synonym(const rd_kafka_ConfigEntry_t *entry);
 RD_EXPORT const rd_kafka_ConfigEntry_t **
 rd_kafka_ConfigEntry_synonyms(const rd_kafka_ConfigEntry_t *entry,
                               size_t *cntp);
-
 
 
 /**
@@ -10045,6 +10084,324 @@ RD_EXPORT void rd_kafka_DeleteAcls(rd_kafka_t *rk,
                                    rd_kafka_queue_t *rkqu);
 
 /**@}*/
+
+
+
+/**
+ * @name Admin API - Client Quota Operations
+ * @{
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Client Quota Entity
+ */
+typedef struct rd_kafka_ClientQuotaEntity_s rd_kafka_ClientQuotaEntity_t;
+
+/**
+ * @brief Get the type string of a ClientQuotaEntity (e.g. "user", "client-id").
+ */
+RD_EXPORT const char *
+rd_kafka_ClientQuotaEntity_type(const rd_kafka_ClientQuotaEntity_t *entity);
+
+/**
+ * @brief Get the name of a ClientQuotaEntity, or NULL for the default entity.
+ */
+RD_EXPORT const char *
+rd_kafka_ClientQuotaEntity_name(const rd_kafka_ClientQuotaEntity_t *entity);
+
+/**
+ * @brief Client Quota Operation
+ *
+ * This structure is used to define operations on client quotas, such as
+ * setting producer_byte_rate or removing request_percentage a quota for a
+ * specific entity.
+ */
+typedef struct rd_kafka_ClientQuotaOperation_s rd_kafka_ClientQuotaOperation_t;
+
+/**
+ * @brief Client Quota Entry
+ *
+ * This structure is used to combine the entities and the quota operations to
+ * enforce on them.
+ */
+typedef struct rd_kafka_ClientQuotaEntry_s rd_kafka_ClientQuotaEntry_t;
+
+/**
+ * @brief Create a new ClientQuotaEntry object.
+ *
+ * @returns a newly allocated ClientQuotaEntry object that must be freed
+ *          with rd_kafka_ClientQuotaEntry_destroy().
+ */
+RD_EXPORT rd_kafka_ClientQuotaEntry_t *rd_kafka_ClientQuotaEntry_new(void);
+
+/**
+ * @brief Destroy and free a ClientQuotaEntry object.
+ */
+RD_EXPORT void
+rd_kafka_ClientQuotaEntry_destroy(rd_kafka_ClientQuotaEntry_t *entry);
+
+/**
+ * @brief Add an entity to the ClientQuotaEntry.
+ *
+ * @param entry   The entry to add the entity to.
+ * @param type    Entity type string (e.g. "user", "client-id"). Must not be
+ *                NULL.
+ * @param name    Entity name, or NULL for the default entity.
+ * @param errstr  Human-readable error string on failure.
+ * @param errstr_size  Size of \p errstr.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ClientQuotaEntry_add_entity(rd_kafka_ClientQuotaEntry_t *entry,
+                                     const char *type,
+                                     const char *name,
+                                     char *errstr,
+                                     size_t errstr_size);
+
+/**
+ * @brief Add a quota operation to the ClientQuotaEntry.
+ *
+ * @param entry       The entry to add the operation to.
+ * @param key         Quota configuration key (e.g. "producer_byte_rate").
+ * @param value       Quota value. Ignored when \p remove is true.
+ * @param remove      If true, remove the quota for \p key.
+ * @param errstr      Human-readable error string on failure.
+ * @param errstr_size Size of \p errstr.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_ClientQuotaEntry_add_operation(rd_kafka_ClientQuotaEntry_t *entry,
+                                        const char *key,
+                                        double value,
+                                        int remove,
+                                        char *errstr,
+                                        size_t errstr_size);
+
+/**
+ * @brief Get the response error for a result entry.
+ *
+ * @returns the error object, or NULL if there was no error.
+ *
+ * @remark The lifetime of the returned error object is the same as the
+ *         \p entry object.
+ */
+RD_EXPORT const rd_kafka_error_t *
+rd_kafka_ClientQuotaEntry_error(const rd_kafka_ClientQuotaEntry_t *entry);
+
+/**
+ * @brief Get the entities for a result entry.
+ *
+ * @param entry The result entry.
+ * @param cntp  Updated to the number of elements in the returned array.
+ *
+ * @returns a pointer to an array of ClientQuotaEntity pointers.
+ *
+ * @remark The lifetime of the returned array is the same as the \p entry
+ *         object.
+ */
+RD_EXPORT const rd_kafka_ClientQuotaEntity_t **
+rd_kafka_ClientQuotaEntry_entities(const rd_kafka_ClientQuotaEntry_t *entry,
+                                   size_t *cntp);
+
+/**
+ * @brief Get the result entries from an AlterClientQuotas result event.
+ *
+ * @param result The result event (of type
+ *               \c RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT).
+ * @param cntp   Updated to the number of elements in the returned array.
+ *
+ * @returns a pointer to an array of ClientQuotaEntry pointers.
+ *
+ * @remark The lifetime of the returned memory is the same as the \p result
+ *         object.
+ */
+RD_EXPORT const rd_kafka_ClientQuotaEntry_t **
+rd_kafka_AlterClientQuotas_result_entries(
+    const rd_kafka_AlterClientQuotas_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Alter client quotas as specified by the \p entries array of
+ *        size \p entry_cnt.
+ *
+ * @param rk        Client instance.
+ * @param entries   Array of ClientQuotaEntry objects describing the desired
+ *                  quota alterations.
+ * @param entry_cnt Number of elements in \p entries.
+ * @param options   Optional admin options, or NULL for defaults.
+ * @param rkqu      Queue to emit result event on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT
+ */
+RD_EXPORT void
+rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
+                           rd_kafka_ClientQuotaEntry_t **entries,
+                           size_t entry_cnt,
+                           const rd_kafka_AdminOptions_t *options,
+                           rd_kafka_queue_t *rkqu);
+
+/**@}*/
+
+
+/**
+ * @name Admin API - DescribeClientQuotas
+ * @{
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Match type for DescribeClientQuotas filter components.
+ */
+typedef enum {
+        RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT = 0, /**< Exact name match */
+        RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT =
+            1,                               /**< Default (nameless) entity */
+        RD_KAFKA_CLIENT_QUOTA_MATCH_ANY = 2, /**< Any entity of this type */
+} rd_kafka_ClientQuotaMatchType_t;
+
+/**
+ * @brief Opaque filter component for DescribeClientQuotas.
+ */
+typedef struct rd_kafka_ClientQuotaFilterComponent_s
+    rd_kafka_ClientQuotaFilterComponent_t;
+
+/**
+ * @brief Opaque filter for DescribeClientQuotas.
+ */
+typedef struct rd_kafka_ClientQuotaFilter_s rd_kafka_ClientQuotaFilter_t;
+
+/**
+ * @brief A quota key/value pair in a DescribeClientQuotas result entry.
+ */
+typedef struct rd_kafka_ClientQuotaValue_s rd_kafka_ClientQuotaValue_t;
+
+/**
+ * @brief A single entry in a DescribeClientQuotas result.
+ */
+typedef struct rd_kafka_DescribeClientQuotas_result_entry_s
+    rd_kafka_DescribeClientQuotas_result_entry_t;
+
+/**
+ * @brief Create a new DescribeClientQuotas filter.
+ *
+ * @param strict If true, only return entries matching all components exactly.
+ *
+ * @returns a newly allocated filter that must be freed with
+ *          rd_kafka_ClientQuotaFilter_destroy().
+ */
+RD_EXPORT rd_kafka_ClientQuotaFilter_t *
+rd_kafka_ClientQuotaFilter_new(int strict);
+
+/**
+ * @brief Destroy a DescribeClientQuotas filter.
+ */
+RD_EXPORT void
+rd_kafka_ClientQuotaFilter_destroy(rd_kafka_ClientQuotaFilter_t *filter);
+
+/**
+ * @brief Add a component to a DescribeClientQuotas filter.
+ *
+ * @param filter     The filter to add the component to.
+ * @param entity_type  Entity type string (e.g. "user", "client-id"). Must not
+ *                     be NULL.
+ * @param match_type   One of \c RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT,
+ *                     \c RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT, or
+ *                     \c RD_KAFKA_CLIENT_QUOTA_MATCH_ANY.
+ * @param match        Entity name for EXACT match; must be NULL for DEFAULT
+ *                     and ANY (a non-NULL value will be sent to the broker
+ *                     and may result in an error).
+ * @param errstr       Human-readable error string on failure.
+ * @param errstr_size  Size of \p errstr.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, else an error code.
+ */
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_ClientQuotaFilter_add_component(
+    rd_kafka_ClientQuotaFilter_t *filter,
+    const char *entity_type,
+    rd_kafka_ClientQuotaMatchType_t match_type,
+    const char *match,
+    char *errstr,
+    size_t errstr_size);
+
+/**
+ * @brief Get the configuration key from a quota value.
+ */
+RD_EXPORT const char *
+rd_kafka_ClientQuotaValue_key(const rd_kafka_ClientQuotaValue_t *val);
+
+/**
+ * @brief Get the quota value as a double.
+ */
+RD_EXPORT double
+rd_kafka_ClientQuotaValue_value(const rd_kafka_ClientQuotaValue_t *val);
+
+/**
+ * @brief Get the entities from a DescribeClientQuotas result entry.
+ *
+ * @param entry  Result entry.
+ * @param cntp   Updated to the number of elements in the returned array.
+ *
+ * @returns a pointer to an array of ClientQuotaEntity pointers.
+ */
+RD_EXPORT const rd_kafka_ClientQuotaEntity_t **
+rd_kafka_DescribeClientQuotas_result_entry_entity(
+    const rd_kafka_DescribeClientQuotas_result_entry_t *entry,
+    size_t *cntp);
+
+/**
+ * @brief Get the quota values from a DescribeClientQuotas result entry.
+ *
+ * @param entry  Result entry.
+ * @param cntp   Updated to the number of elements in the returned array.
+ *
+ * @returns a pointer to an array of ClientQuotaValue pointers.
+ */
+RD_EXPORT const rd_kafka_ClientQuotaValue_t **
+rd_kafka_DescribeClientQuotas_result_entry_values(
+    const rd_kafka_DescribeClientQuotas_result_entry_t *entry,
+    size_t *cntp);
+
+/**
+ * @brief Get the result entries from a DescribeClientQuotas result.
+ *
+ * @param result  Result event of type
+ *                \c RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT.
+ * @param cntp    Updated to the number of entries in the returned array.
+ *
+ * @returns a pointer to an array of result entry pointers.
+ */
+RD_EXPORT const rd_kafka_DescribeClientQuotas_result_entry_t **
+rd_kafka_DescribeClientQuotas_result_entries(
+    const rd_kafka_DescribeClientQuotas_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Describe client quotas matching the given \p filter.
+ *
+ * @param rk       Client instance.
+ * @param filter   Filter specifying which quotas to describe.
+ * @param options  Optional admin options, or NULL for defaults.
+ * @param rkqu     Queue to emit result event on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT.
+ */
+RD_EXPORT void
+rd_kafka_DescribeClientQuotas(rd_kafka_t *rk,
+                              const rd_kafka_ClientQuotaFilter_t *filter,
+                              const rd_kafka_AdminOptions_t *options,
+                              rd_kafka_queue_t *rkqu);
+
+/**@}*/
+
 
 /**
  * @name Admin API - Elect Leaders

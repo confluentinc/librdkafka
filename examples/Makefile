@@ -14,6 +14,8 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	user_scram \
 	list_offsets \
 	elect_leaders \
+	alter_client_quotas \
+	describe_client_quotas \
 	misc
 
 all: $(EXAMPLES)
@@ -155,6 +157,14 @@ list_offsets: ../src/librdkafka.a list_offsets.c
 		../src/librdkafka.a $(LIBS)
 
 elect_leaders: ../src/librdkafka.a elect_leaders.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+alter_client_quotas: ../src/librdkafka.a alter_client_quotas.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_client_quotas: ../src/librdkafka.a describe_client_quotas.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

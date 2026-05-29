@@ -436,6 +436,80 @@ rd_kafka_ListOffsetsResultInfo_new(rd_kafka_topic_partition_t *rktpar,
 /**@}*/
 
 /**
+ * @name AlterClientQuotas
+ * @{
+ */
+
+/**
+ * @brief Client Quota Entity - Used in AlterClientQuotas.
+ */
+struct rd_kafka_ClientQuotaEntity_s {
+        /** The entity type, e.g., "user" or "client" */
+        char *type;
+
+        /** The entity name, e.g., "user1" or "client1" */
+        char *name;
+};
+
+/**
+ * @brief Client Quota Operation - Used in AlterClientQuotas.
+ *
+ * This structure is used to define operations on client quotas, such as
+ * setting producer_byte_rate or removing request_percentage a quota for a
+ * specific entity.
+ */
+struct rd_kafka_ClientQuotaOperation_s {
+        /** The configuration name, e.g., "producer_byte_rate",
+         * "request_percentage" */
+        char *name;
+
+        /** The quota value (IEEE 754 double, 64-bit). */
+        double value;
+
+        /** True if this is a delete operation. If this is set, the value field
+         * will be ignored */
+        rd_bool_t remove;
+};
+
+struct rd_kafka_ClientQuotaEntry_s {
+        rd_list_t entities;   /**< Type (rd_kafka_ClientQuotaEntity_t *) */
+        rd_list_t operations; /**< Type (rd_kafka_ClientQuotaOperation_t *) */
+        rd_kafka_error_t *error; /**< Response error, or NULL on success. */
+};
+
+/**
+ * @name DescribeClientQuotas
+ * @{
+ */
+
+/** Filter component for DescribeClientQuotas. */
+struct rd_kafka_ClientQuotaFilterComponent_s {
+        char *entity_type; /**< Entity type, e.g. "user", "client-id". */
+        int8_t match_type; /**< rd_kafka_ClientQuotaMatchType_t */
+        char *match;       /**< Match value; NULL for DEFAULT or ANY. */
+};
+
+/** Filter for DescribeClientQuotas (components + strict flag). */
+struct rd_kafka_ClientQuotaFilter_s {
+        rd_list_t components; /**< rd_kafka_ClientQuotaFilterComponent_t* */
+        int strict;           /**< If true, only return exact matches. */
+};
+
+/** A key/value quota pair returned in DescribeClientQuotas results. */
+struct rd_kafka_ClientQuotaValue_s {
+        char *key;    /**< Quota configuration key. */
+        double value; /**< Quota value (IEEE 754 double, 64-bit). */
+};
+
+/** A single entry in the DescribeClientQuotas result. */
+struct rd_kafka_DescribeClientQuotas_result_entry_s {
+        rd_list_t entity; /**< rd_kafka_ClientQuotaEntity_t* */
+        rd_list_t values; /**< rd_kafka_ClientQuotaValue_t* */
+};
+
+/**@}*/
+
+/**
  * @name CreateAcls
  * @{
  */

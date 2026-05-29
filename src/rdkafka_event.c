@@ -500,3 +500,21 @@ rd_kafka_event_ElectLeaders_result(rd_kafka_event_t *rkev) {
         else
                 return (const rd_kafka_ElectLeaders_result_t *)rkev;
 }
+
+const rd_kafka_AlterClientQuotas_result_t *
+rd_kafka_event_AlterClientQuotas_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_AlterClientQuotas_result_t *)rkev;
+}
+
+const rd_kafka_DescribeClientQuotas_result_t *
+rd_kafka_event_DescribeClientQuotas_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeClientQuotas_result_t *)rkev;
+}

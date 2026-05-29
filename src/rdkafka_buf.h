@@ -1285,6 +1285,39 @@ rd_kafka_buf_update_i64(rd_kafka_buf_t *rkbuf, size_t of, int64_t v) {
 }
 
 /**
+ * Read a float64 (IEEE 754 double) and store it in 'dstptr'.
+ * The value will be endian-swapped after read.
+ */
+#define rd_kafka_buf_read_float64(rkbuf, dstptr)                               \
+        do {                                                                   \
+                uint64_t _v;                                                   \
+                union {                                                        \
+                        uint64_t u;                                            \
+                        double d;                                              \
+                } _u;                                                          \
+                double *_vp = dstptr;                                          \
+                rd_kafka_buf_read(rkbuf, &_v, sizeof(_v));                     \
+                _u.u = be64toh(_v);                                            \
+                *_vp = _u.d;                                                   \
+        } while (0)
+
+/**
+ * Write float64 to buffer.
+ * The value will be endian-swapped before write.
+ */
+static RD_INLINE size_t rd_kafka_buf_write_float64(rd_kafka_buf_t *rkbuf,
+                                                   double v) {
+        union {
+                double d;
+                uint64_t u;
+        } u;
+
+        u.d = v;
+        u.u = htobe64(u.u);
+        return rd_kafka_buf_write(rkbuf, &u.u, sizeof(u.u));
+}
+
+/**
  * @brief Write standard (2-byte header) or KIP-482 COMPACT_STRING to buffer.
  *
  * @remark Copies the string.

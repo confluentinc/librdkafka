@@ -85,6 +85,7 @@ librdkafka v2.14.1 is a maintenance release:
 
 librdkafka v2.14.0 is a feature release:
 
+* [KIP-546](https://cwiki.apache.org/confluence/display/KAFKA/KIP-546%3A+Add+Client+Quota+APIs+to+the+Admin+Client) Add `DescribeClientQuotas` and `AlterClientQuotas` admin client APIs for managing per-client and per-user quota configurations.
 * [KIP-768](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=186877575#KIP768:ExtendSASL/OAUTHBEARERwithSupportforOIDC-ClientConfiguration) Extend SASL/OAUTHBEARER to support OIDC claim mapping beyond the default `sub` claim (#5336).
 
 

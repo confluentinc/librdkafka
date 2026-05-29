@@ -65,6 +65,12 @@ target_link_libraries(list_offsets PUBLIC rdkafka)
 add_executable(elect_leaders elect_leaders.c ${win32_sources})
 target_link_libraries(elect_leaders PUBLIC rdkafka)
 
+add_executable(alter_client_quotas alter_client_quotas.c ${win32_sources})
+target_link_libraries(alter_client_quotas PUBLIC rdkafka)
+
+add_executable(describe_client_quotas describe_client_quotas.c ${win32_sources})
+target_link_libraries(describe_client_quotas PUBLIC rdkafka)
+
 # The targets below has Unix include dirs and do not compile on Windows.
 if(NOT WIN32)
     add_executable(rdkafka_example rdkafka_example.c)

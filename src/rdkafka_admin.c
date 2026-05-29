@@ -5157,6 +5157,680 @@ void rd_kafka_DeleteConsumerGroupOffsets(
     rd_kafka_queue_t *rkqu);
 
 /**@}*/
+
+/**
+ * @name AlterClientQuotas
+ * @{
+ *
+ *
+ *
+ */
+rd_kafka_ClientQuotaEntity_t *
+rd_kafka_ClientQuotaEntity_new0(const char *type,
+                                const char *name,
+                                rd_kafka_resp_err_t err,
+                                const char *errstr) {
+        rd_kafka_ClientQuotaEntity_t *client_quota_entity;
+
+        client_quota_entity       = rd_calloc(1, sizeof(*client_quota_entity));
+        client_quota_entity->name = name != NULL ? rd_strdup(name) : NULL;
+        client_quota_entity->type = type != NULL ? rd_strdup(type) : NULL;
+        return client_quota_entity;
+}
+
+rd_kafka_ClientQuotaEntity_t *
+rd_kafka_ClientQuotaEntity_new(const char *type,
+                               const char *name,
+                               char *errstr,
+                               size_t errstr_size) {
+        if (!type) {
+                rd_snprintf(errstr, errstr_size, "Invalid entity type");
+                return NULL;
+        }
+        if (!name) {
+                rd_snprintf(errstr, errstr_size, "Invalid entity name");
+                return NULL;
+        }
+
+        return rd_kafka_ClientQuotaEntity_new0(
+            type, name, RD_KAFKA_RESP_ERR_NO_ERROR, NULL);
+}
+
+void rd_kafka_ClientQuotaEntity_destroy(
+    rd_kafka_ClientQuotaEntity_t *client_quota_entity) {
+        if (client_quota_entity->type)
+                rd_free(client_quota_entity->type);
+        if (client_quota_entity->name)
+                rd_free(client_quota_entity->name);
+        rd_free(client_quota_entity);
+}
+
+static void rd_kafka_ClientQuotaEntity_free(void *ptr) {
+        rd_kafka_ClientQuotaEntity_destroy(ptr);
+}
+
+const char *
+rd_kafka_ClientQuotaEntity_name(const rd_kafka_ClientQuotaEntity_t *entity) {
+        return entity->name;
+}
+
+const char *
+rd_kafka_ClientQuotaEntity_type(const rd_kafka_ClientQuotaEntity_t *entity) {
+        return entity->type;
+}
+
+rd_kafka_ClientQuotaOperation_t *
+rd_kafka_ClientQuotaOperation_new0(const char *name,
+                                   double value,
+                                   rd_bool_t remove) {
+        rd_kafka_ClientQuotaOperation_t *client_quota_operation;
+
+        client_quota_operation = rd_calloc(1, sizeof(*client_quota_operation));
+        client_quota_operation->name   = name != NULL ? rd_strdup(name) : NULL;
+        client_quota_operation->value  = value;
+        client_quota_operation->remove = remove;
+        return client_quota_operation;
+}
+
+rd_kafka_ClientQuotaOperation_t *
+rd_kafka_ClientQuotaOperation_new(const char *name,
+                                  double value,
+                                  rd_bool_t remove,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        if (!name) {
+                rd_snprintf(errstr, errstr_size, "Invalid entity name");
+                return NULL;
+        }
+
+        return rd_kafka_ClientQuotaOperation_new0(name, value, remove);
+}
+
+void rd_kafka_ClientQuotaOperation_destroy(
+    rd_kafka_ClientQuotaOperation_t *client_quota_operation) {
+        if (client_quota_operation->name)
+                rd_free(client_quota_operation->name);
+        rd_free(client_quota_operation);
+}
+
+static void rd_kafka_ClientQuotaOperation_free(void *ptr) {
+        rd_kafka_ClientQuotaOperation_destroy(ptr);
+}
+
+const char *rd_kafka_ClientQuotaOperation_name(
+    const rd_kafka_ClientQuotaOperation_t *operation) {
+        return operation->name;
+}
+
+double rd_kafka_ClientQuotaOperation_value(
+    const rd_kafka_ClientQuotaOperation_t *operation) {
+        return operation->value;
+}
+
+rd_bool_t rd_kafka_ClientQuotaOperation_remove(
+    const rd_kafka_ClientQuotaOperation_t *operation) {
+        return operation->remove;
+}
+
+/**
+ * @brief Allocate a new ClientQuotaOperation and make a copy of \p src
+ */
+static rd_kafka_ClientQuotaOperation_t *
+rd_kafka_ClientQuotaOperation_copy(const rd_kafka_ClientQuotaOperation_t *src) {
+        rd_kafka_ClientQuotaOperation_t *dst;
+
+        dst = rd_kafka_ClientQuotaOperation_new(src->name, src->value,
+                                                src->remove, NULL, 0);
+        rd_assert(dst);
+        return dst;
+}
+
+/**
+ * @brief Allocate a new ClientQuotaEntity and make a copy of \p src
+ */
+static rd_kafka_ClientQuotaEntity_t *
+rd_kafka_ClientQuotaEntity_copy(const rd_kafka_ClientQuotaEntity_t *src) {
+        /* Use _new0 directly to allow NULL name (default entity). */
+        return rd_kafka_ClientQuotaEntity_new0(src->type, src->name, 0, NULL);
+}
+
+/**
+ * @brief Create a new ClientQuotaEntry object.
+ */
+rd_kafka_ClientQuotaEntry_t *rd_kafka_ClientQuotaEntry_new(void) {
+        rd_kafka_ClientQuotaEntry_t *entry;
+
+        entry = rd_calloc(1, sizeof(*entry));
+        rd_list_init(&entry->entities, 0,
+                     (void (*)(void *))rd_kafka_ClientQuotaEntity_free);
+        rd_list_init(&entry->operations, 0,
+                     (void (*)(void *))rd_kafka_ClientQuotaOperation_free);
+        entry->error = NULL;
+        return entry;
+}
+
+/**
+ * @brief Destroy a ClientQuotaEntry object.
+ */
+void rd_kafka_ClientQuotaEntry_destroy(rd_kafka_ClientQuotaEntry_t *entry) {
+        rd_list_destroy(&entry->entities);
+        rd_list_destroy(&entry->operations);
+        if (entry->error)
+                rd_kafka_error_destroy(entry->error);
+        rd_free(entry);
+}
+
+static void rd_kafka_ClientQuotaEntry_free(void *ptr) {
+        rd_kafka_ClientQuotaEntry_destroy(ptr);
+}
+
+/**
+ * @brief Allocate a new ClientQuotaEntry and make a copy of \p src.
+ */
+static rd_kafka_ClientQuotaEntry_t *
+rd_kafka_ClientQuotaEntry_copy(const rd_kafka_ClientQuotaEntry_t *src) {
+        rd_kafka_ClientQuotaEntry_t *dst;
+        int i;
+        rd_kafka_ClientQuotaEntity_t *entity;
+        rd_kafka_ClientQuotaOperation_t *operation;
+
+        dst = rd_kafka_ClientQuotaEntry_new();
+
+        RD_LIST_FOREACH(entity, &src->entities, i)
+        rd_list_add(&dst->entities, rd_kafka_ClientQuotaEntity_copy(entity));
+
+        RD_LIST_FOREACH(operation, &src->operations, i)
+        rd_list_add(&dst->operations,
+                    rd_kafka_ClientQuotaOperation_copy(operation));
+
+        return dst;
+}
+
+/**
+ * @brief Add an entity to the ClientQuotaEntry.
+ */
+rd_kafka_resp_err_t
+rd_kafka_ClientQuotaEntry_add_entity(rd_kafka_ClientQuotaEntry_t *entry,
+                                     const char *type,
+                                     const char *name,
+                                     char *errstr,
+                                     size_t errstr_size) {
+        if (!type) {
+                rd_snprintf(errstr, errstr_size,
+                            "Entity type must not be NULL");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        rd_list_add(&entry->entities,
+                    rd_kafka_ClientQuotaEntity_new0(type, name, 0, NULL));
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Add a quota operation to the ClientQuotaEntry.
+ */
+rd_kafka_resp_err_t
+rd_kafka_ClientQuotaEntry_add_operation(rd_kafka_ClientQuotaEntry_t *entry,
+                                        const char *key,
+                                        double value,
+                                        int remove,
+                                        char *errstr,
+                                        size_t errstr_size) {
+        if (!key) {
+                rd_snprintf(errstr, errstr_size, "Quota key must not be NULL");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        rd_list_add(&entry->operations,
+                    rd_kafka_ClientQuotaOperation_new0(key, value, remove));
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Get the response error for a result entry.
+ */
+const rd_kafka_error_t *
+rd_kafka_ClientQuotaEntry_error(const rd_kafka_ClientQuotaEntry_t *entry) {
+        return entry->error;
+}
+
+/**
+ * @brief Get the entities for a result entry.
+ */
+const rd_kafka_ClientQuotaEntity_t **
+rd_kafka_ClientQuotaEntry_entities(const rd_kafka_ClientQuotaEntry_t *entry,
+                                   size_t *cntp) {
+        *cntp = rd_list_cnt(&entry->entities);
+        return (const rd_kafka_ClientQuotaEntity_t **)entry->entities.rl_elems;
+}
+
+/**
+ * @brief Parse AlterClientQuotasResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_AlterClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
+                                         rd_kafka_op_t **rko_resultp,
+                                         rd_kafka_buf_t *reply,
+                                         char *errstr,
+                                         size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
+        int32_t entry_cnt;
+        int i, j;
+
+        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_arraycnt(reply, &entry_cnt, 100000);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, entry_cnt,
+                     rd_kafka_ClientQuotaEntry_free);
+
+        for (i = 0; i < (int)entry_cnt; i++) {
+                int16_t error_code;
+                rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
+                int32_t entity_cnt;
+                rd_kafka_ClientQuotaEntry_t *entry;
+                char *entry_errstr = NULL;
+
+                rd_kafka_buf_read_i16(reply, &error_code);
+                rd_kafka_buf_read_str(reply, &error_msg);
+
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                entry_errstr =
+                                    (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&entry_errstr, &error_msg);
+                }
+
+                entry = rd_kafka_ClientQuotaEntry_new();
+                if (error_code)
+                        entry->error =
+                            rd_kafka_error_new(error_code, "%s", entry_errstr);
+
+                rd_kafka_buf_read_arraycnt(reply, &entity_cnt, 10000);
+                for (j = 0; j < (int)entity_cnt; j++) {
+                        rd_kafkap_str_t ktype, kname;
+                        char *etype, *ename = NULL;
+
+                        rd_kafka_buf_read_str(reply, &ktype);
+                        rd_kafka_buf_read_str(reply, &kname);
+                        RD_KAFKAP_STR_DUPA(&etype, &ktype);
+                        if (!RD_KAFKAP_STR_IS_NULL(&kname))
+                                RD_KAFKAP_STR_DUPA(&ename, &kname);
+                        rd_list_add(&entry->entities,
+                                    rd_kafka_ClientQuotaEntity_new0(
+                                        etype, ename, 0, NULL));
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                                rd_kafka_buf_skip_tags(reply);
+                }
+                if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                        rd_kafka_buf_skip_tags(reply);
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, i, entry);
+        }
+        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                rd_kafka_buf_skip_tags(reply);
+
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+        rd_snprintf(errstr, errstr_size,
+                    "AlterClientQuotas response parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+/**
+ * @brief Get the result entries from an AlterClientQuotas result event.
+ */
+const rd_kafka_ClientQuotaEntry_t **rd_kafka_AlterClientQuotas_result_entries(
+    const rd_kafka_AlterClientQuotas_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_ALTERCLIENTQUOTAS);
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_ClientQuotaEntry_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+
+/**
+ * @brief Alter client quotas.
+ */
+void rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
+                                rd_kafka_ClientQuotaEntry_t **entries,
+                                size_t entry_cnt,
+                                const rd_kafka_AdminOptions_t *options,
+                                rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        size_t i;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_AlterClientQuotasRequest,
+            rd_kafka_AlterClientQuotasResponse_parse};
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_ALTERCLIENTQUOTAS,
+            RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, (int)entry_cnt,
+                     rd_kafka_ClientQuotaEntry_free);
+
+        for (i = 0; i < entry_cnt; i++)
+                rd_list_add(&rko->rko_u.admin_request.args,
+                            rd_kafka_ClientQuotaEntry_copy(entries[i]));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+/**@}*/
+
+/**
+ * @name DescribeClientQuotas
+ * @{
+ *
+ *
+ *
+ */
+
+static rd_kafka_ClientQuotaFilterComponent_t *
+rd_kafka_ClientQuotaFilterComponent_new0(const char *entity_type,
+                                         int8_t match_type,
+                                         const char *match) {
+        rd_kafka_ClientQuotaFilterComponent_t *comp;
+        comp              = rd_calloc(1, sizeof(*comp));
+        comp->entity_type = rd_strdup(entity_type);
+        comp->match_type  = match_type;
+        comp->match       = match != NULL ? rd_strdup(match) : NULL;
+        return comp;
+}
+
+static void rd_kafka_ClientQuotaFilterComponent_destroy(
+    rd_kafka_ClientQuotaFilterComponent_t *comp) {
+        rd_free(comp->entity_type);
+        if (comp->match)
+                rd_free(comp->match);
+        rd_free(comp);
+}
+
+static void rd_kafka_ClientQuotaFilterComponent_free(void *ptr) {
+        rd_kafka_ClientQuotaFilterComponent_destroy(ptr);
+}
+
+static rd_kafka_ClientQuotaFilterComponent_t *
+rd_kafka_ClientQuotaFilterComponent_copy(
+    const rd_kafka_ClientQuotaFilterComponent_t *src) {
+        return rd_kafka_ClientQuotaFilterComponent_new0(
+            src->entity_type, src->match_type, src->match);
+}
+
+rd_kafka_ClientQuotaFilter_t *rd_kafka_ClientQuotaFilter_new(int strict) {
+        rd_kafka_ClientQuotaFilter_t *filter;
+        filter = rd_calloc(1, sizeof(*filter));
+        rd_list_init(&filter->components, 0,
+                     rd_kafka_ClientQuotaFilterComponent_free);
+        filter->strict = strict;
+        return filter;
+}
+
+void rd_kafka_ClientQuotaFilter_destroy(rd_kafka_ClientQuotaFilter_t *filter) {
+        rd_list_destroy(&filter->components);
+        rd_free(filter);
+}
+
+static void rd_kafka_ClientQuotaFilter_free(void *ptr) {
+        rd_kafka_ClientQuotaFilter_destroy(ptr);
+}
+
+static rd_kafka_ClientQuotaFilter_t *
+rd_kafka_ClientQuotaFilter_copy(const rd_kafka_ClientQuotaFilter_t *src) {
+        rd_kafka_ClientQuotaFilter_t *dst;
+        rd_kafka_ClientQuotaFilterComponent_t *comp;
+        int i;
+
+        dst = rd_kafka_ClientQuotaFilter_new(src->strict);
+
+        RD_LIST_FOREACH(comp, &src->components, i) {
+                rd_list_add(&dst->components,
+                            rd_kafka_ClientQuotaFilterComponent_copy(comp));
+        }
+
+        return dst;
+}
+
+rd_kafka_resp_err_t rd_kafka_ClientQuotaFilter_add_component(
+    rd_kafka_ClientQuotaFilter_t *filter,
+    const char *entity_type,
+    rd_kafka_ClientQuotaMatchType_t match_type,
+    const char *match,
+    char *errstr,
+    size_t errstr_size) {
+        if (!entity_type) {
+                rd_snprintf(errstr, errstr_size,
+                            "entity_type must not be NULL");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        rd_list_add(&filter->components,
+                    rd_kafka_ClientQuotaFilterComponent_new0(
+                        entity_type, (int8_t)match_type, match));
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_ClientQuotaValue_t *
+rd_kafka_ClientQuotaValue_new(const char *key, double value) {
+        rd_kafka_ClientQuotaValue_t *v;
+        v        = rd_calloc(1, sizeof(*v));
+        v->key   = rd_strdup(key);
+        v->value = value;
+        return v;
+}
+
+static void rd_kafka_ClientQuotaValue_destroy(rd_kafka_ClientQuotaValue_t *v) {
+        rd_free(v->key);
+        rd_free(v);
+}
+
+static void rd_kafka_ClientQuotaValue_free(void *ptr) {
+        rd_kafka_ClientQuotaValue_destroy(ptr);
+}
+
+const char *
+rd_kafka_ClientQuotaValue_key(const rd_kafka_ClientQuotaValue_t *v) {
+        return v->key;
+}
+
+double rd_kafka_ClientQuotaValue_value(const rd_kafka_ClientQuotaValue_t *v) {
+        return v->value;
+}
+
+static rd_kafka_DescribeClientQuotas_result_entry_t *
+rd_kafka_DescribeClientQuotas_result_entry_new(void) {
+        rd_kafka_DescribeClientQuotas_result_entry_t *entry;
+        entry = rd_calloc(1, sizeof(*entry));
+        rd_list_init(&entry->entity, 0,
+                     (void (*)(void *))rd_kafka_ClientQuotaEntity_free);
+        rd_list_init(&entry->values, 0, rd_kafka_ClientQuotaValue_free);
+        return entry;
+}
+
+static void rd_kafka_DescribeClientQuotas_result_entry_destroy(
+    rd_kafka_DescribeClientQuotas_result_entry_t *entry) {
+        rd_list_destroy(&entry->entity);
+        rd_list_destroy(&entry->values);
+        rd_free(entry);
+}
+
+static void rd_kafka_DescribeClientQuotas_result_entry_free(void *ptr) {
+        rd_kafka_DescribeClientQuotas_result_entry_destroy(ptr);
+}
+
+/**
+ * @brief Parse DescribeClientQuotasResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
+                                            rd_kafka_op_t **rko_resultp,
+                                            rd_kafka_buf_t *reply,
+                                            char *errstr,
+                                            size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        rd_kafka_op_t *rko_result   = NULL;
+        int16_t error_code;
+        rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
+        int32_t entry_cnt;
+        int i, j, k;
+
+        rd_kafka_buf_read_throttle_time(reply);
+
+        rd_kafka_buf_read_i16(reply, &error_code);
+        rd_kafka_buf_read_str(reply, &error_msg);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+
+        if (error_code) {
+                rko_result->rko_err = error_code;
+                if (!RD_KAFKAP_STR_IS_NULL(&error_msg) &&
+                    RD_KAFKAP_STR_LEN(&error_msg) > 0)
+                        rko_result->rko_u.admin_result.errstr =
+                            RD_KAFKAP_STR_DUP(&error_msg);
+                else
+                        rko_result->rko_u.admin_result.errstr =
+                            rd_strdup(rd_kafka_err2str(error_code));
+                rd_list_init(&rko_result->rko_u.admin_result.results, 0,
+                             rd_kafka_DescribeClientQuotas_result_entry_free);
+                *rko_resultp = rko_result;
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        rd_kafka_buf_read_arraycnt(reply, &entry_cnt, 100000);
+
+        rd_list_init(&rko_result->rko_u.admin_result.results, entry_cnt,
+                     rd_kafka_DescribeClientQuotas_result_entry_free);
+
+        for (i = 0; i < (int)entry_cnt; i++) {
+                int32_t entity_cnt;
+                int32_t value_cnt;
+                rd_kafka_DescribeClientQuotas_result_entry_t *entry;
+
+                entry = rd_kafka_DescribeClientQuotas_result_entry_new();
+
+                rd_kafka_buf_read_arraycnt(reply, &entity_cnt, 10000);
+                for (j = 0; j < (int)entity_cnt; j++) {
+                        rd_kafkap_str_t ktype, kname;
+                        char *etype, *ename = NULL;
+
+                        rd_kafka_buf_read_str(reply, &ktype);
+                        rd_kafka_buf_read_str(reply, &kname);
+                        RD_KAFKAP_STR_DUPA(&etype, &ktype);
+                        if (!RD_KAFKAP_STR_IS_NULL(&kname))
+                                RD_KAFKAP_STR_DUPA(&ename, &kname);
+                        rd_list_add(&entry->entity,
+                                    rd_kafka_ClientQuotaEntity_new0(
+                                        etype, ename, 0, NULL));
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                                rd_kafka_buf_skip_tags(reply);
+                }
+
+                rd_kafka_buf_read_arraycnt(reply, &value_cnt, 10000);
+                for (k = 0; k < (int)value_cnt; k++) {
+                        rd_kafkap_str_t kname;
+                        char *vname;
+                        double val;
+
+                        rd_kafka_buf_read_str(reply, &kname);
+                        rd_kafka_buf_read_float64(reply, &val);
+                        RD_KAFKAP_STR_DUPA(&vname, &kname);
+                        rd_list_add(&entry->values,
+                                    rd_kafka_ClientQuotaValue_new(vname, val));
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                                rd_kafka_buf_skip_tags(reply);
+                }
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                        rd_kafka_buf_skip_tags(reply);
+
+                rd_list_set(&rko_result->rko_u.admin_result.results, i, entry);
+        }
+
+        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                rd_kafka_buf_skip_tags(reply);
+
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeClientQuotas response parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+/**
+ * @brief Get result entries from a DescribeClientQuotas result event.
+ */
+const rd_kafka_DescribeClientQuotas_result_entry_t **
+rd_kafka_DescribeClientQuotas_result_entries(
+    const rd_kafka_DescribeClientQuotas_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBECLIENTQUOTAS);
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_DescribeClientQuotas_result_entry_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+
+const rd_kafka_ClientQuotaEntity_t **
+rd_kafka_DescribeClientQuotas_result_entry_entity(
+    const rd_kafka_DescribeClientQuotas_result_entry_t *entry,
+    size_t *cntp) {
+        *cntp = rd_list_cnt(&entry->entity);
+        return (const rd_kafka_ClientQuotaEntity_t **)entry->entity.rl_elems;
+}
+
+const rd_kafka_ClientQuotaValue_t **
+rd_kafka_DescribeClientQuotas_result_entry_values(
+    const rd_kafka_DescribeClientQuotas_result_entry_t *entry,
+    size_t *cntp) {
+        *cntp = rd_list_cnt(&entry->values);
+        return (const rd_kafka_ClientQuotaValue_t **)entry->values.rl_elems;
+}
+
+/**
+ * @brief Describe client quotas.
+ */
+void rd_kafka_DescribeClientQuotas(rd_kafka_t *rk,
+                                   const rd_kafka_ClientQuotaFilter_t *filter,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_DescribeClientQuotasRequest,
+            rd_kafka_DescribeClientQuotasResponse_parse,
+        };
+
+        rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBECLIENTQUOTAS,
+            RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT, &cbs, options,
+            rkqu->rkqu_q);
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1,
+                     rd_kafka_ClientQuotaFilter_free);
+
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    rd_kafka_ClientQuotaFilter_copy(filter));
+
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+/**@}*/
+
 /**
  * @name CreateAcls
  * @{

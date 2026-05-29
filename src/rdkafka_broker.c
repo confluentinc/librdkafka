@@ -3245,6 +3245,25 @@ static void rd_kafka_broker_share_session_toppar_add(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_share_session_add_remove_toppar(
                     &rkb->rkb_share_fetch_session.toppars_to_add,
                     &rkb->rkb_share_fetch_session.toppars_to_forget, rktp);
+                rd_rkb_dbg(
+                    rkb, FETCH | RD_KAFKA_DBG_CGRP, "SHARESESSION",
+                    "%s [%" PRId32 "]: queued for ADD on broker (epoch=%" PRId32
+                    ", toppars_to_add=%d, toppars_to_forget=%d, "
+                    "toppars_in_session=%d)",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    rkb->rkb_share_fetch_session.epoch,
+                    rkb->rkb_share_fetch_session.toppars_to_add
+                        ? rd_list_cnt(
+                              rkb->rkb_share_fetch_session.toppars_to_add)
+                        : 0,
+                    rkb->rkb_share_fetch_session.toppars_to_forget
+                        ? rd_list_cnt(
+                              rkb->rkb_share_fetch_session.toppars_to_forget)
+                        : 0,
+                    rkb->rkb_share_fetch_session.toppars_in_session
+                        ? rd_list_cnt(
+                              rkb->rkb_share_fetch_session.toppars_in_session)
+                        : 0);
         }
 }
 
@@ -3284,6 +3303,26 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_share_session_add_remove_toppar(
                     &rkb->rkb_share_fetch_session.toppars_to_forget,
                     &rkb->rkb_share_fetch_session.toppars_to_add, rktp);
+                rd_rkb_dbg(
+                    rkb, FETCH | RD_KAFKA_DBG_CGRP, "SHARESESSION",
+                    "%s [%" PRId32
+                    "]: queued for FORGET on broker (epoch=%" PRId32
+                    ", toppars_to_add=%d, toppars_to_forget=%d, "
+                    "toppars_in_session=%d)",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    rkb->rkb_share_fetch_session.epoch,
+                    rkb->rkb_share_fetch_session.toppars_to_add
+                        ? rd_list_cnt(
+                              rkb->rkb_share_fetch_session.toppars_to_add)
+                        : 0,
+                    rkb->rkb_share_fetch_session.toppars_to_forget
+                        ? rd_list_cnt(
+                              rkb->rkb_share_fetch_session.toppars_to_forget)
+                        : 0,
+                    rkb->rkb_share_fetch_session.toppars_in_session
+                        ? rd_list_cnt(
+                              rkb->rkb_share_fetch_session.toppars_in_session)
+                        : 0);
         }
 }
 
@@ -3433,6 +3472,12 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 TAILQ_INSERT_TAIL(&rkb->rkb_toppars, rktp, rktp_rkblink);
                 rkb->rkb_toppar_cnt++;
                 if (rd_kafka_toppar_is_on_cgrp(rktp, rd_false)) {
+                        rd_rkb_dbg(rkb, FETCH | RD_KAFKA_DBG_CGRP,
+                                   "SHARESESSION",
+                                   "%s [%" PRId32
+                                   "]: share session JOIN via PARTITION_JOIN",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition);
                         rd_kafka_broker_share_session_toppar_add(rkb, rktp);
                 }
                 rd_kafka_broker_unlock(rkb);
@@ -3536,6 +3581,14 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 rd_kafka_broker_lock(rkb);
                 TAILQ_REMOVE(&rkb->rkb_toppars, rktp, rktp_rkblink);
                 rkb->rkb_toppar_cnt--;
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rkb->rkb_rk))
+                        rd_rkb_dbg(rkb, FETCH | RD_KAFKA_DBG_CGRP,
+                                   "SHARESESSION",
+                                   "%s [%" PRId32
+                                   "]: share session LEAVE via "
+                                   "PARTITION_LEAVE",
+                                   rktp->rktp_rkt->rkt_topic->str,
+                                   rktp->rktp_partition);
                 rd_kafka_broker_share_session_toppar_remove(rkb, rktp);
                 rd_kafka_broker_unlock(rkb);
                 rd_kafka_broker_destroy(rktp->rktp_broker);
@@ -3748,9 +3801,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD:
                 rd_rkb_dbg(rkb, CGRP, "SHARESESSION",
                            "Received SHARE_SESSION_PARTITION_ADD op for "
-                           "topic %s [%" PRId32 "]",
+                           "topic %s [%" PRId32 "] (epoch=%" PRId32 ")",
                            rko->rko_rktp->rktp_rkt->rkt_topic->str,
-                           rko->rko_rktp->rktp_partition);
+                           rko->rko_rktp->rktp_partition,
+                           rkb->rkb_share_fetch_session.epoch);
 
                 rd_kafka_broker_share_session_toppar_add(rkb, rko->rko_rktp);
                 break;
@@ -3758,9 +3812,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
         case RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE:
                 rd_rkb_dbg(rkb, CGRP, "SHARESESSION",
                            "Received SHARE_SESSION_PARTITION_REMOVE op for "
-                           "topic %s [%" PRId32 "]",
+                           "topic %s [%" PRId32 "] (epoch=%" PRId32 ")",
                            rko->rko_rktp->rktp_rkt->rkt_topic->str,
-                           rko->rko_rktp->rktp_partition);
+                           rko->rko_rktp->rktp_partition,
+                           rkb->rkb_share_fetch_session.epoch);
 
                 rd_kafka_broker_share_session_toppar_remove(rkb, rko->rko_rktp);
                 break;

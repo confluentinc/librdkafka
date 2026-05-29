@@ -1216,6 +1216,766 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
         SUB_TEST_PASS();
 }
 
+/* ===================================================================
+ *  Wire-level socket timeout matrix.
+ *
+ *  Exercises commit_sync under a socket-timeout-induced connection
+ *  teardown. The two timer layers in the share-acknowledge path are
+ *  intentionally decoupled:
+ *
+ *    - The app-visible commit_sync(timeout_ms) deadline drives the
+ *      timeout cb that stamps REQUEST_TIMED_OUT on the per-partition
+ *      results.
+ *    - The wire RPC carries the broker connection's socket.timeout.ms
+ *      and tears the connection down (default socket.max.fails = 1)
+ *      when it fires.
+ *
+ *  Three (api_timeout_ms, socket_timeout_ms, rtt_ms) triples cover
+ *  the cases where api > socket, api == socket, and api < socket. In
+ *  all three, rtt_ms > socket_timeout_ms so the wire eventually times
+ *  out and the connection is torn down (broker drops the session as
+ *  a result of the TCP close).
+ *
+ *  Two flow variants build on the same setup:
+ *
+ *    full_ack_then_more   — Phase 1 commits all consumed records.
+ *      Phase 2 produces and consumes new records on a fresh session
+ *      and expects NO_ERROR on the second commit_sync.
+ *
+ *    partial_ack_then_remaining — Phase 1 commits only half. The
+ *      records left in the local inflight map were ACQUIRED on the
+ *      now-dropped session, so Phase 2's commit_sync surfaces an
+ *      INVALID_RECORD_STATE / SHARE_SESSION_NOT_FOUND /
+ *      INVALID_SHARE_SESSION_EPOCH-class error (when session-err
+ *      translation lands at the app-facing boundary this narrows
+ *      to INVALID_RECORD_STATE).
+ *
+ *  TODO KIP-932: add multi-broker variants once the single-broker
+ *  matrix is stable. Multi-broker exercises the case where only one
+ *  broker is slow — partitions on other brokers should commit
+ *  immediately without waiting for the slow broker's socket timer.
+ * =================================================================== */
+
+#define SOCKET_TIMEOUT_MATRIX_RECORD_LOCK_MS     600000
+#define SOCKET_TIMEOUT_MATRIX_PARTITIONS         3
+#define SOCKET_TIMEOUT_MATRIX_MSGS_PER_PARTITION 10
+
+/**
+ * @brief Create a share consumer with a custom socket.timeout.ms.
+ */
+static rd_kafka_share_t *create_share_consumer_socket_timeout(
+    const char *bootstraps,
+    const char *group_id,
+    const char *ack_mode,
+    int socket_timeout_ms,
+    test_ack_cb_state_t *cb_state,
+    void (*cb)(rd_kafka_share_t *,
+               rd_kafka_share_partition_offsets_list_t *,
+               rd_kafka_resp_err_t,
+               void *)) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        char buf[32];
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group_id);
+        test_conf_set(conf, "share.acknowledgement.mode", ack_mode);
+
+        rd_snprintf(buf, sizeof(buf), "%d", socket_timeout_ms);
+        test_conf_set(conf, "socket.timeout.ms", buf);
+
+        if (cb && cb_state) {
+                rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, cb);
+                rd_kafka_conf_set_opaque(conf, cb_state);
+        }
+
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+        return rkshare;
+}
+
+/**
+ * @brief Consume up to \p expected records (across one or more
+ *        consume_batch calls), acknowledging the first \p ack_first.
+ *
+ * Caller owns and must destroy every message in \p rkmessages.
+ * Asserts that exactly \p expected records were received within the
+ * polling budget. Used both for the pre-stage Phase 1 consume (broker
+ * has all records ready, typically arrives in a single batch) and for
+ * the post-teardown Phase 2 consume (records may trickle in across
+ * multiple batches as the new session warms up).
+ */
+static void consume_first_batch(rd_kafka_share_t *rkshare,
+                                rd_kafka_message_t **rkmessages,
+                                int expected) {
+        size_t rcvd  = 0;
+        int attempts = 0;
+        rd_kafka_error_t *error;
+        int j;
+
+        /* Spin until the first non-empty batch arrives. The test
+         * pre-stages the broker with all \p expected records so the
+         * batch we receive will contain exactly that many. */
+        while (rcvd == 0 && attempts++ < 30) {
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        TEST_SAY("consume_first_batch: err=%s rcvd=%zu\n",
+                                 rd_kafka_err2name(rd_kafka_error_code(error)),
+                                 rcvd);
+                        rd_kafka_error_destroy(error);
+                }
+        }
+
+        TEST_ASSERT((int)rcvd == expected,
+                    "Expected %d records in first batch, got %zu", expected,
+                    rcvd);
+
+        for (j = 0; j < (int)rcvd; j++)
+                TEST_ASSERT(!rkmessages[j]->err,
+                            "Unexpected per-record err: %s",
+                            rd_kafka_err2str(rkmessages[j]->err));
+}
+
+/**
+ * @brief Drain pending ack callbacks via commit_async until at least
+ *        \p min_callbacks have been observed, or \p timeout_ms elapses.
+ *
+ * commit_async's first step drains rk_rep for callbacks. With no
+ * pending acks to commit, the remainder is a no-op.
+ *
+ * @returns rd_true if min_callbacks observed within timeout.
+ */
+static rd_bool_t drain_callbacks_via_commit_async(rd_kafka_share_t *rkshare,
+                                                  test_ack_cb_state_t *cb_state,
+                                                  int min_callbacks,
+                                                  int timeout_ms) {
+        int elapsed_ms = 0;
+
+        while (elapsed_ms < timeout_ms) {
+                if (cb_state->callback_cnt >= min_callbacks)
+                        return rd_true;
+                rd_kafka_error_t *err = rd_kafka_share_commit_async(rkshare);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rd_usleep(50 * 1000, NULL);
+                elapsed_ms += 50;
+        }
+        return cb_state->callback_cnt >= min_callbacks;
+}
+
+/**
+ * @brief Test commit_sync under a wire-level socket timeout, then
+ *        consume + commit a fresh batch.
+ *
+ *  The three timer layers (api timeout A, RTT R, socket.timeout.ms S)
+ *  determine which event wins:
+ *    - A smallest: commit_sync timeout cb stamps REQUEST_TIMED_OUT
+ *      on results and returns at t=A. Wire request continues in
+ *      flight until either R completes or S fires; late callback
+ *      reflects the actual wire outcome (NO_ERROR if R < S,
+ *      __TIMED_OUT if S < R).
+ *    - S smallest: wire torn down at t=S. Reply handler stamps
+ *      __TIMED_OUT on batches and results; commit_sync returns at
+ *      ~t=S with __TIMED_OUT and callbacks fire with __TIMED_OUT.
+ *    - R smallest: broker reply arrives normally; commit_sync
+ *      returns NO_ERROR. Not exercised by this matrix.
+ *
+ *  Phase 1 measures the wait between commit_sync return and all ack
+ *  callbacks landing. That wait equals max(0, min(R, S) -
+ *  min(A, R, S)) and is asserted with tolerance.
+ *
+ *  Phase 2 produces N new records, consumes + acks + commits on the
+ *  (possibly reconnected) consumer. Expects NO_ERROR for every
+ *  partition and a fresh set of NO_ERROR callbacks.
+ *
+ *  TODO KIP-932: add multi-broker variant once single-broker matrix
+ *  is stable. Multi-broker exercises the case where only one broker
+ *  is slow.
+ *
+ *  TODO KIP-932: add partial-ack variant — Phase 1 acks only half
+ *  the records, Phase 2 acks the remaining. With session drop on
+ *  connection tear-down, the remaining records reference a dropped
+ *  session and Phase 2's commit_sync surfaces INVALID_RECORD_STATE.
+ */
+static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
+                                                      int socket_timeout_ms,
+                                                      int rtt_ms) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        char topic[128];
+        char group[128];
+        const int partitions_total = SOCKET_TIMEOUT_MATRIX_PARTITIONS;
+        const int msgcnt =
+            partitions_total * SOCKET_TIMEOUT_MATRIX_MSGS_PER_PARTITION;
+        rd_kafka_message_t **rkmessages;
+        test_ack_cb_state_t cb_state = {0};
+        rd_ts_t t_p1_end_us, t_callbacks_done_us;
+        int actual_wait_ms, expected_wait_ms;
+        int min_between_rtt_ms_socket_timeout_ms;
+        int min_between_api_timeout_ms_rtt_ms_socket_timeout_ms;
+        rd_kafka_resp_err_t expected_phase1_commit_err;
+        rd_kafka_resp_err_t expected_phase1_callback_err;
+        int prev_callback_cnt;
+        int i;
+        const int wait_tolerance_ms = 500;
+
+        SUB_TEST_QUICK("api_timeout_ms=%d socket_timeout_ms=%d rtt_ms=%d",
+                       api_timeout_ms, socket_timeout_ms, rtt_ms);
+
+        /* Derive expected outcomes from the ordering of three timers:
+         *
+         *   api_timeout_ms    -> commit_sync API's deadline parameter;
+         *                        upper bound on how long commit_sync
+         *                        can block before returning
+         *                        REQUEST_TIMED_OUT.
+         *   rtt_ms            -> mock-injected broker round-trip-time;
+         *                        time after which the broker's
+         *                        ShareAcknowledge response is allowed
+         *                        to leave the broker side (records are
+         *                        applied broker-side immediately on
+         *                        request receive — see
+         *                        rdkafka_mock_handlers.c:3811-3840).
+         *   socket_timeout_ms -> wire-level socket.timeout.ms; after
+         *                        this the connection is torn down and
+         *                        any in-flight request fails with
+         *                        __TIMED_OUT (default socket.max.fails
+         *                        of 1 makes a single failure terminal).
+         *
+         * The expected wait between commit_sync returning and the last
+         * ack callback landing equals
+         *   max(0, min_between(rtt_ms, socket_timeout_ms)
+         *          - min_between(api_timeout_ms, rtt_ms,
+         *                        socket_timeout_ms))
+         *
+         * The reasoning:
+         *
+         *   - commit_sync returns at
+         *     t_p1_end = min_between(api_timeout_ms, rtt_ms,
+         *                            socket_timeout_ms):
+         *       api_timeout_ms smallest: api timer cb fires, stamps
+         *         REQUEST_TIMED_OUT on the per-partition results;
+         *         send_response wakes commit_sync at ~t=api_timeout_ms.
+         *       socket_timeout_ms smallest: wire socket.timeout.ms
+         *         fires, broker thread reply path runs with
+         *         rko_err=__TIMED_OUT, callbacks dispatched, results
+         *         stamped via apply_result, commit_sync returns at
+         *         ~t=socket_timeout_ms.
+         *       rtt_ms smallest: broker reply arrives normally,
+         *         callbacks dispatched with broker's per-partition err,
+         *         results stamped, commit_sync returns at ~t=rtt_ms
+         *         (NO_ERROR for this happy path — not in our matrix).
+         *
+         *   - All Phase 1 callbacks have landed by
+         *     t_callbacks_done = min_between(rtt_ms, socket_timeout_ms):
+         *       When the wire request resolves the broker-thread reply
+         *       handler dispatches the per-partition callbacks. That
+         *       happens when broker actually replies (t=rtt_ms) OR
+         *       when socket.timeout.ms fires (t=socket_timeout_ms),
+         *       whichever comes first. For
+         *       api_timeout_ms < (rtt_ms, socket_timeout_ms) the
+         *       callbacks fire AFTER commit_sync returned; for
+         *       (rtt_ms or socket_timeout_ms) < api_timeout_ms the
+         *       callbacks already fired BEFORE commit_sync returned
+         *       and the wait is 0.
+         *
+         *   - Wait = t_callbacks_done - t_p1_end
+         *          = min_between(rtt_ms, socket_timeout_ms)
+         *            - min_between(api_timeout_ms, rtt_ms,
+         *                          socket_timeout_ms).
+         *
+         * The expected callback err depends on which layer resolved
+         * the wire:
+         *   - rtt_ms < socket_timeout_ms: broker actually replied —
+         *     callback gets broker's per-partition result (NO_ERROR,
+         *     the records were applied).
+         *   - socket_timeout_ms < rtt_ms: wire torn down before broker
+         *     could reply — helper stamps __TIMED_OUT on batches and
+         *     callbacks fire with __TIMED_OUT.
+         *
+         * The expected commit_sync result err comes from which layer
+         * stamped results first:
+         *   - api_timeout_ms < min_between(rtt_ms, socket_timeout_ms):
+         *     api timer cb wrote REQUEST_TIMED_OUT into results.
+         *   - socket_timeout_ms <= api_timeout_ms: broker-thread reply
+         *     path wrote __TIMED_OUT into results via apply_result. */
+        min_between_rtt_ms_socket_timeout_ms =
+            socket_timeout_ms < rtt_ms ? socket_timeout_ms : rtt_ms;
+        min_between_api_timeout_ms_rtt_ms_socket_timeout_ms = api_timeout_ms;
+        if (rtt_ms < min_between_api_timeout_ms_rtt_ms_socket_timeout_ms)
+                min_between_api_timeout_ms_rtt_ms_socket_timeout_ms = rtt_ms;
+        if (socket_timeout_ms <
+            min_between_api_timeout_ms_rtt_ms_socket_timeout_ms)
+                min_between_api_timeout_ms_rtt_ms_socket_timeout_ms =
+                    socket_timeout_ms;
+        expected_wait_ms = min_between_rtt_ms_socket_timeout_ms -
+                           min_between_api_timeout_ms_rtt_ms_socket_timeout_ms;
+
+        if (rtt_ms < api_timeout_ms && rtt_ms < socket_timeout_ms) {
+                /* rtt_ms smaller than both other timers: broker reply
+                 * lands before either timer fires. commit_sync sees
+                 * the broker's per-partition success and callbacks
+                 * fire with NO_ERROR. Happy path — included for
+                 * matrix completeness, not exercising any timeout
+                 * layer. */
+                expected_phase1_commit_err   = RD_KAFKA_RESP_ERR_NO_ERROR;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else if (socket_timeout_ms < api_timeout_ms) {
+                /* socket_timeout_ms < api_timeout_ms (and rtt_ms is
+                 * NOT strictly smallest by the first branch): socket
+                 * fires before api can. (At api == socket the race
+                 * outcome is non-deterministic across runs; that
+                 * boundary case is not in the matrix.)
+                 *
+                 * TODO KIP-932: when __TIMED_OUT is translated to
+                 * REQUEST_TIMED_OUT at the ack callback boundary,
+                 * both expected codes here become REQUEST_TIMED_OUT. */
+                expected_phase1_commit_err   = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        } else if (rtt_ms < socket_timeout_ms) {
+                /* api wins (api <= socket AND rtt < socket; api
+                 * fires no later than broker reply at rtt). Late
+                 * broker reply at rtt brings actual per-partition
+                 * outcome (NO_ERROR — broker did apply the ack) to
+                 * the callback. */
+                expected_phase1_commit_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                /* api wins (api <= socket AND rtt >= socket). Socket
+                 * fires before broker can reply, wire torn down;
+                 * callback fires with the wire-failure err.
+                 *
+                 * TODO KIP-932: when __TIMED_OUT is translated to
+                 * REQUEST_TIMED_OUT at the ack callback boundary,
+                 * the late callback err becomes REQUEST_TIMED_OUT. */
+                expected_phase1_commit_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        }
+
+        ctx = test_ctx_new();
+        rd_kafka_mock_sharegroup_set_record_lock_duration(
+            ctx.mcluster, SOCKET_TIMEOUT_MATRIX_RECORD_LOCK_MS);
+
+        rd_snprintf(topic, sizeof(topic), "0182-fullack-a%d-s%d",
+                    api_timeout_ms, socket_timeout_ms);
+        rd_snprintf(group, sizeof(group), "sg-0182-fullack-a%d-s%d",
+                    api_timeout_ms, socket_timeout_ms);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic,
+                                               partitions_total,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        for (i = 0; i < partitions_total; i++)
+                mock_produce_partition(
+                    ctx.producer, topic, i,
+                    SOCKET_TIMEOUT_MATRIX_MSGS_PER_PARTITION);
+
+        rkshare = create_share_consumer_socket_timeout(
+            ctx.bootstraps, group, "explicit", socket_timeout_ms, &cb_state,
+            test_share_ack_cb);
+        subscribe_one(rkshare, topic);
+
+        rkmessages = rd_calloc(msgcnt, sizeof(*rkmessages));
+
+        /* Phase 1: consume the first batch (all msgcnt records
+         * given the small partition count and broker readiness),
+         * acknowledge everyone, then inject RTT and commit_sync. */
+        consume_first_batch(rkshare, rkmessages, msgcnt);
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, -1, rtt_ms);
+
+        partitions = NULL;
+        error =
+            rd_kafka_share_commit_sync(rkshare, api_timeout_ms, &partitions);
+        t_p1_end_us = test_clock();
+
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 1: expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == partitions_total,
+                    "Phase 1: expected %d partition results, got %d",
+                    partitions_total, partitions->cnt);
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_SAY("Phase 1 commit_sync: %s [%" PRId32 "]: %s\n",
+                         rktpar->topic, rktpar->partition,
+                         rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == expected_phase1_commit_err,
+                            "Phase 1: expected %s, got %s",
+                            rd_kafka_err2name(expected_phase1_commit_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Drain ack callbacks via commit_async until we observe one
+         * per partition. For socket_timeout_ms-smallest orderings the
+         * callbacks fired before commit_sync returned so this returns
+         * immediately. For api_timeout_ms-smallest orderings the
+         * callbacks fire when the wire resolves (broker reply at
+         * t=rtt_ms OR socket timer at t=socket_timeout_ms). */
+        TEST_ASSERT(drain_callbacks_via_commit_async(rkshare, &cb_state,
+                                                     partitions_total, 30000),
+                    "Phase 1: expected %d ack callbacks within 30s, got %d",
+                    partitions_total, cb_state.callback_cnt);
+        t_callbacks_done_us = test_clock();
+
+        TEST_ASSERT(cb_state.last_err == expected_phase1_callback_err,
+                    "Phase 1: expected callback err %s, got %s",
+                    rd_kafka_err2name(expected_phase1_callback_err),
+                    rd_kafka_err2name(cb_state.last_err));
+
+        actual_wait_ms = (int)((t_callbacks_done_us - t_p1_end_us) / 1000);
+        TEST_SAY(
+            "Phase 1 wait t_callbacks_done - t_p1_end = %dms "
+            "(expected ~%dms, tolerance %dms)\n",
+            actual_wait_ms, expected_wait_ms, wait_tolerance_ms);
+        TEST_ASSERT(actual_wait_ms >= expected_wait_ms - wait_tolerance_ms &&
+                        actual_wait_ms <= expected_wait_ms + wait_tolerance_ms,
+                    "Phase 1 wait %dms outside expected %dms +/- %dms",
+                    actual_wait_ms, expected_wait_ms, wait_tolerance_ms);
+
+        prev_callback_cnt = cb_state.callback_cnt;
+
+        /* Phase 2: clear RTT (so Phase 2's broker response isn't
+         * delayed), produce more, consume + ack + commit. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, -1, 0);
+
+        for (i = 0; i < partitions_total; i++)
+                mock_produce_partition(
+                    ctx.producer, topic, i,
+                    SOCKET_TIMEOUT_MATRIX_MSGS_PER_PARTITION);
+
+        /* Free phase-1 messages. */
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+        memset(rkmessages, 0, msgcnt * sizeof(*rkmessages));
+
+        consume_first_batch(rkshare, rkmessages, msgcnt);
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 2: expected non-NULL partition results");
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_SAY("Phase 2: %s [%" PRId32 "]: %s\n", rktpar->topic,
+                         rktpar->partition, rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Phase 2: expected NO_ERROR on a fresh "
+                            "session, got %s",
+                            rd_kafka_err2name(rktpar->err));
+        }
+        TEST_ASSERT(partitions->cnt == partitions_total,
+                    "Phase 2: expected %d partition results, got %d",
+                    partitions_total, partitions->cnt);
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        TEST_ASSERT(cb_state.callback_cnt > prev_callback_cnt,
+                    "Phase 2: expected new ack callbacks; before=%d "
+                    "after=%d",
+                    prev_callback_cnt, cb_state.callback_cnt);
+
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+        rd_free(rkmessages);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Same Phase 1 as do_test_socket_timeout_full_ack_then_more, but
+ *        Phase 1 acks only half the consumed records. Phase 2 then
+ *        acks the remaining half (still in the client's local inflight
+ *        map) and runs commit_sync on those.
+ *
+ *  After the Phase 1 drain-callbacks step we clear RTT, so Phase 2's
+ *  commit_sync gets a prompt broker response (no second wire-level
+ *  timer to race).
+ *
+ *  Phase 2 outcome depends on whether the connection was torn down
+ *  during Phase 1, which is equivalent to socket_timeout_ms < rtt_ms:
+ *
+ *    Connection alive (rtt_ms < socket_timeout_ms): broker session
+ *      preserved; the remaining 15 records are still ACQUIRED for
+ *      this member on the same session. Phase 2's ShareAck advances
+ *      the session epoch normally; broker returns NO_ERROR per
+ *      partition.
+ *
+ *    Connection killed (socket_timeout_ms < rtt_ms): broker dropped
+ *      the session on TCP close. The remaining 15 records' ACQUIRED
+ *      state was released to AVAILABLE by `release_member_locks`.
+ *      Phase 2's broker-thread reconnects and sends ShareAck with
+ *      session epoch reset to 0 client-side. Broker rejects with
+ *      INVALID_SHARE_SESSION_EPOCH at top-level (no active session
+ *      for this member at epoch 0 outside of a ShareFetch). The
+ *      top-level err propagates to all partitions via the existing
+ *      `rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err`
+ *      helper.
+ *
+ *  TODO KIP-932: when SHARE_SESSION_NOT_FOUND /
+ *  INVALID_SHARE_SESSION_EPOCH are translated to
+ *  INVALID_RECORD_STATE at the app-facing boundary,
+ *  expected_phase2_commit_err for the killed branch becomes
+ *  INVALID_RECORD_STATE.
+ */
+static void
+do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
+                                                  int socket_timeout_ms,
+                                                  int rtt_ms) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        char topic[128];
+        char group[128];
+        const int partitions_total = SOCKET_TIMEOUT_MATRIX_PARTITIONS;
+        const int msgcnt =
+            partitions_total * SOCKET_TIMEOUT_MATRIX_MSGS_PER_PARTITION;
+        rd_kafka_message_t **rkmessages;
+        test_ack_cb_state_t cb_state = {0};
+        rd_ts_t t_p1_end_us, t_callbacks_done_us;
+        int actual_wait_ms, expected_wait_ms;
+        int min_between_rtt_ms_socket_timeout_ms;
+        int min_between_api_timeout_ms_rtt_ms_socket_timeout_ms;
+        rd_kafka_resp_err_t expected_phase1_commit_err;
+        rd_kafka_resp_err_t expected_phase1_callback_err;
+        rd_kafka_resp_err_t expected_phase2_commit_err;
+        rd_bool_t connection_killed;
+        int prev_callback_cnt;
+        int phase1_partition_cnt;
+        int i;
+        const int wait_tolerance_ms = 500;
+
+        SUB_TEST_QUICK("api_timeout_ms=%d socket_timeout_ms=%d rtt_ms=%d",
+                       api_timeout_ms, socket_timeout_ms, rtt_ms);
+
+        /* Phase 1 expected outcomes — same derivation as
+         * do_test_socket_timeout_full_ack_then_more. See the comment
+         * there for the full reasoning. */
+        min_between_rtt_ms_socket_timeout_ms =
+            socket_timeout_ms < rtt_ms ? socket_timeout_ms : rtt_ms;
+        min_between_api_timeout_ms_rtt_ms_socket_timeout_ms = api_timeout_ms;
+        if (rtt_ms < min_between_api_timeout_ms_rtt_ms_socket_timeout_ms)
+                min_between_api_timeout_ms_rtt_ms_socket_timeout_ms = rtt_ms;
+        if (socket_timeout_ms <
+            min_between_api_timeout_ms_rtt_ms_socket_timeout_ms)
+                min_between_api_timeout_ms_rtt_ms_socket_timeout_ms =
+                    socket_timeout_ms;
+        expected_wait_ms = min_between_rtt_ms_socket_timeout_ms -
+                           min_between_api_timeout_ms_rtt_ms_socket_timeout_ms;
+
+        if (rtt_ms < api_timeout_ms && rtt_ms < socket_timeout_ms) {
+                expected_phase1_commit_err   = RD_KAFKA_RESP_ERR_NO_ERROR;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else if (socket_timeout_ms < api_timeout_ms) {
+                /* TODO KIP-932: when __TIMED_OUT is translated to
+                 * REQUEST_TIMED_OUT at the ack callback boundary, both
+                 * expected codes here become REQUEST_TIMED_OUT. */
+                expected_phase1_commit_err   = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        } else if (rtt_ms < socket_timeout_ms) {
+                expected_phase1_commit_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        } else {
+                /* TODO KIP-932: when __TIMED_OUT is translated to
+                 * REQUEST_TIMED_OUT at the ack callback boundary, the
+                 * late callback err becomes REQUEST_TIMED_OUT. */
+                expected_phase1_commit_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+        }
+
+        /* Connection torn down iff socket fires before broker reply.
+         *
+         * TODO KIP-932: when SHARE_SESSION_NOT_FOUND /
+         * INVALID_SHARE_SESSION_EPOCH are translated to
+         * INVALID_RECORD_STATE at the app-facing boundary, the
+         * killed-branch expected err becomes INVALID_RECORD_STATE. */
+        connection_killed = socket_timeout_ms < rtt_ms;
+        expected_phase2_commit_err =
+            connection_killed ? RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH
+                              : RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        ctx = test_ctx_new();
+        rd_kafka_mock_sharegroup_set_record_lock_duration(
+            ctx.mcluster, SOCKET_TIMEOUT_MATRIX_RECORD_LOCK_MS);
+
+        rd_snprintf(topic, sizeof(topic), "0182-partial-a%d-s%d-r%d",
+                    api_timeout_ms, socket_timeout_ms, rtt_ms);
+        rd_snprintf(group, sizeof(group), "sg-0182-partial-a%d-s%d-r%d",
+                    api_timeout_ms, socket_timeout_ms, rtt_ms);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic,
+                                               partitions_total,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        for (i = 0; i < partitions_total; i++)
+                mock_produce_partition(
+                    ctx.producer, topic, i,
+                    SOCKET_TIMEOUT_MATRIX_MSGS_PER_PARTITION);
+
+        rkshare = create_share_consumer_socket_timeout(
+            ctx.bootstraps, group, "explicit", socket_timeout_ms, &cb_state,
+            test_share_ack_cb);
+        subscribe_one(rkshare, topic);
+
+        rkmessages = rd_calloc(msgcnt, sizeof(*rkmessages));
+
+        /* Phase 1: consume the first batch (all msgcnt records),
+         * then ack the first half of the batch in receive order.
+         * The exact set of partitions covered depends on broker-side
+         * record ordering; the assertions below adapt to whatever
+         * partitions appear in commit_sync's results. */
+        consume_first_batch(rkshare, rkmessages, msgcnt);
+        for (i = 0; i < msgcnt / 2; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, -1, rtt_ms);
+
+        partitions = NULL;
+        error =
+            rd_kafka_share_commit_sync(rkshare, api_timeout_ms, &partitions);
+        t_p1_end_us = test_clock();
+
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 1: expected non-NULL partition results");
+
+        /* The number of partitions reflects whichever ones had records
+         * in the first half of the batch — depends on broker-side
+         * record ordering. We assert each partition's err matches the
+         * expected code, and drain that many callbacks. */
+        phase1_partition_cnt = partitions->cnt;
+        TEST_ASSERT(phase1_partition_cnt > 0,
+                    "Phase 1: expected at least one partition result");
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_SAY("Phase 1 commit_sync: %s [%" PRId32 "]: %s\n",
+                         rktpar->topic, rktpar->partition,
+                         rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == expected_phase1_commit_err,
+                            "Phase 1: expected %s, got %s",
+                            rd_kafka_err2name(expected_phase1_commit_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        TEST_ASSERT(drain_callbacks_via_commit_async(
+                        rkshare, &cb_state, phase1_partition_cnt, 30000),
+                    "Phase 1: expected %d ack callbacks within 30s, got %d",
+                    phase1_partition_cnt, cb_state.callback_cnt);
+        t_callbacks_done_us = test_clock();
+
+        TEST_ASSERT(cb_state.last_err == expected_phase1_callback_err,
+                    "Phase 1: expected callback err %s, got %s",
+                    rd_kafka_err2name(expected_phase1_callback_err),
+                    rd_kafka_err2name(cb_state.last_err));
+
+        actual_wait_ms = (int)((t_callbacks_done_us - t_p1_end_us) / 1000);
+        TEST_SAY(
+            "Phase 1 wait t_callbacks_done - t_p1_end = %dms "
+            "(expected ~%dms, tolerance %dms)\n",
+            actual_wait_ms, expected_wait_ms, wait_tolerance_ms);
+        TEST_ASSERT(actual_wait_ms >= expected_wait_ms - wait_tolerance_ms &&
+                        actual_wait_ms <= expected_wait_ms + wait_tolerance_ms,
+                    "Phase 1 wait %dms outside expected %dms +/- %dms",
+                    actual_wait_ms, expected_wait_ms, wait_tolerance_ms);
+
+        prev_callback_cnt = cb_state.callback_cnt;
+
+        /* Phase 2: clear RTT and ack the remaining records (still in
+         * the local inflight map from Phase 1's consume — the second
+         * half per partition). No new consume_batch in this variant.
+         *
+         * Small settle delay so the consumer's broker thread can
+         * finish post-teardown bookkeeping (reconnect, session
+         * reset, broker decommission cleanup) before Phase 2's
+         * commit_sync probes the state. Without this perm 5/6/boundary
+         * cases racing the post-teardown handling can return
+         * __STATE from the FANOUT op instead of the expected
+         * INVALID_SHARE_SESSION_EPOCH from the local epoch-0 check. */
+        rd_kafka_mock_broker_set_rtt(ctx.mcluster, -1, 0);
+        rd_sleep(1);
+
+        /* Ack the remaining half of the batch in receive order. */
+        for (i = msgcnt / 2; i < msgcnt; i++)
+                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 2: expected non-NULL partition results");
+
+        /* As in Phase 1, the partition count reflects whichever
+         * partitions had records in the second half. Some partitions
+         * may appear in both phases (e.g., partition that had its
+         * first 5 records acked in Phase 1 and last 5 in Phase 2). */
+        TEST_ASSERT(partitions->cnt > 0,
+                    "Phase 2: expected at least one partition result");
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_SAY("Phase 2 commit_sync: %s [%" PRId32 "]: %s\n",
+                         rktpar->topic, rktpar->partition,
+                         rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == expected_phase2_commit_err,
+                            "Phase 2: expected %s, got %s",
+                            rd_kafka_err2name(expected_phase2_commit_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        TEST_ASSERT(
+            drain_callbacks_via_commit_async(
+                rkshare, &cb_state, prev_callback_cnt + partitions->cnt, 10000),
+            "Phase 2: expected %d new ack callbacks; before=%d "
+            "after=%d",
+            partitions->cnt, prev_callback_cnt, cb_state.callback_cnt);
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        TEST_ASSERT(cb_state.last_err == expected_phase2_commit_err,
+                    "Phase 2: expected last callback err %s, got %s",
+                    rd_kafka_err2name(expected_phase2_commit_err),
+                    rd_kafka_err2name(cb_state.last_err));
+
+        for (i = 0; i < msgcnt; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+        rd_free(rkmessages);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -1232,6 +1992,52 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error();
         test_consume_batch_at_epoch_zero_strips_piggyback_acks();
         test_strip_pre_set_survives_sharefetch_err();
+
+        /* Socket timeout matrix (single broker).
+         *
+         * Each call corresponds to a different ordering of the three
+         * timer layers (api_timeout_ms, socket_timeout_ms, rtt_ms).
+         * See the comment in do_test_socket_timeout_full_ack_then_more
+         * for the full analysis of what each ordering exercises.
+         * Arguments are (api_timeout_ms, socket_timeout_ms, rtt_ms). */
+
+        /* All 6 strict-inequality permutations. */
+        do_test_socket_timeout_full_ack_then_more(
+            1000, 5000, 3000); /* api < rtt < socket  */
+        do_test_socket_timeout_full_ack_then_more(
+            1000, 3000, 5000); /* api < socket < rtt  */
+        do_test_socket_timeout_full_ack_then_more(
+            3000, 5000, 1000); /* rtt < api < socket  */
+        do_test_socket_timeout_full_ack_then_more(
+            5000, 3000, 1000); /* rtt < socket < api  */
+        do_test_socket_timeout_full_ack_then_more(
+            3000, 1000, 5000); /* socket < api < rtt  */
+        do_test_socket_timeout_full_ack_then_more(
+            5000, 1000, 3000); /* socket < rtt < api  */
+        /* Boundary api == socket is intentionally skipped: the race
+         * between the api timer cb and the wire socket timer is
+         * non-deterministic in practice — both outcomes are
+         * observed across runs. */
+
+        /* Partial-ack variant of the matrix. Phase 1 acks only half
+         * the consumed records; Phase 2 acks the remaining half (still
+         * in client's inflight map). Phase 2 commit_sync surfaces
+         * INVALID_SHARE_SESSION_EPOCH when the session was dropped
+         * by the Phase 1 socket teardown (socket < rtt), NO_ERROR
+         * otherwise. */
+        do_test_socket_timeout_partial_ack_then_remaining(
+            1000, 5000, 3000); /* api < rtt < socket  */
+        do_test_socket_timeout_partial_ack_then_remaining(
+            1000, 3000, 5000); /* api < socket < rtt  */
+        do_test_socket_timeout_partial_ack_then_remaining(
+            3000, 5000, 1000); /* rtt < api < socket  */
+        do_test_socket_timeout_partial_ack_then_remaining(
+            5000, 3000, 1000); /* rtt < socket < api  */
+        do_test_socket_timeout_partial_ack_then_remaining(
+            3000, 1000, 5000); /* socket < api < rtt  */
+        do_test_socket_timeout_partial_ack_then_remaining(
+            5000, 1000, 3000); /* socket < rtt < api  */
+        /* Boundary api == socket skipped — see comment above. */
 
         return 0;
 }

@@ -421,6 +421,7 @@ struct rd_kafka_mock_cluster_s {
 
         TAILQ_HEAD(, rd_kafka_mock_broker_s) brokers;
         int broker_cnt;
+        int broker_cnt_override;
 
         TAILQ_HEAD(, rd_kafka_mock_topic_s) topics;
         int topic_cnt;

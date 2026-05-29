@@ -890,6 +890,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                            "No brokers or topics in metadata: should retry");
                 err = RD_KAFKA_RESP_ERR__PARTIAL;
                 goto err;
+        } else if (md->broker_cnt == 0) {
+                rd_rkb_dbg(rkb, METADATA, "METADATA",
+                           "No brokers in metadata: should re-bootstrap");
+                err = RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED;
+                goto err;
         }
 
         /* Update our list of brokers. */

@@ -1278,9 +1278,9 @@ static void do_test_mock_uses_share_acknowledge(void) {
  *  the ack when the delayed response arrives.
  *
  *  TODO KIP-932: Verify and maybe unify the timeout error
- *  returned by commit_sync. Java uses a single REQUEST_TIMED_OUT
- *  mapping; librdkafka can return either depending on which
- *  timer fires first.
+ *  returned by commit_sync. librdkafka can return either
+ *  REQUEST_TIMED_OUT or _TIMED_OUT depending on which timer
+ *  fires first.
  *
  *  Phase 2: Remove RTT, wait 5s for broker to finish processing.
  *  Second consumer should get 0 records (acks were processed).
@@ -2049,11 +2049,123 @@ static void do_test_commit_sync_callback(void) {
                     "Expected offsets in callback, got %zu",
                     state.base.total_offsets);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         SUB_TEST_PASS();
 }
+
+/* ===================================================================
+ *  commit_sync after subscribed topic deletion surfaces a per-partition
+ *  error.
+ *
+ *  Produce records, consume them, delete the subscribed topic, then
+ *  call commit_sync. The returned per-partition list should include the
+ *  deleted topic's partition with an error code (typically
+ *  UNKNOWN_TOPIC_OR_PART), not silent success.
+ * =================================================================== */
+static void do_test_commit_sync_after_topic_deletion(void) {
+        const char *topic_name;
+        char *topic_dup;
+        char *topics_for_delete[1];
+        const char *group = "commit-sync-deleted-topic";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_resp_err_t del_err;
+        size_t rcvd;
+        size_t j;
+        int consumed             = 0;
+        int attempts             = 0;
+        rd_bool_t topic_err_seen = rd_false;
+
+        SUB_TEST();
+
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping commit_sync-after-topic-deletion "
+                    "(broker on Windows)\n");
+                SUB_TEST_PASS();
+                return;
+        }
+
+        topic_name = test_mk_topic_name("0176-cs-deleted", 1);
+        topic_dup  = rd_strdup(topic_name);
+        test_create_topic_wait_exists(common_admin, topic_name, 1, -1,
+                                      60 * 1000);
+        test_produce_msgs_simple(common_producer, topic_name, 0, 5);
+
+        rkshare = create_share_consumer(group, "implicit");
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic_name, 1);
+
+        /* Consume records (so there's something to commit) */
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(consumed > 0, "Expected to consume records, got 0");
+
+        /* Delete the subscribed topic */
+        TEST_SAY("Deleting topic %s\n", topic_name);
+        topics_for_delete[0] = topic_dup;
+        del_err              = test_DeleteTopics_simple(common_admin, NULL,
+                                                        topics_for_delete, 1, NULL);
+        TEST_ASSERT(del_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "DeleteTopics failed: %s", rd_kafka_err2str(del_err));
+
+        /* Give metadata propagation a moment */
+        rd_sleep(3);
+
+        /* commit_sync should return per-partition results — at least one
+         * partition's err should indicate the deletion. */
+        error = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        TEST_SAY("commit_sync returned: error=%s, partitions=%p\n",
+                 error ? rd_kafka_error_string(error) : "NULL",
+                 (void *)partitions);
+
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        if (partitions) {
+                int i;
+                TEST_SAY("commit_sync returned %d partition entries\n",
+                         partitions->cnt);
+                for (i = 0; i < partitions->cnt; i++) {
+                        TEST_SAY("  %s [%" PRId32 "]: %s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 rd_kafka_err2name(partitions->elems[i].err));
+                        if (partitions->elems[i].err !=
+                            RD_KAFKA_RESP_ERR_NO_ERROR)
+                                topic_err_seen = rd_true;
+                }
+                rd_kafka_topic_partition_list_destroy(partitions);
+        }
+
+        TEST_ASSERT(topic_err_seen,
+                    "Expected commit_sync to surface a per-partition error "
+                    "after topic deletion");
+
+        rd_free(topic_dup);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
 
 int main_0176_share_consumer_commit_sync(int argc, char **argv) {
         test_timeout_set(120);
@@ -2072,6 +2184,9 @@ int main_0176_share_consumer_commit_sync(int argc, char **argv) {
 
         /* Callback test */
         do_test_commit_sync_callback();
+
+        /* commit_sync after subscribed topic was deleted */
+        do_test_commit_sync_after_topic_deletion();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

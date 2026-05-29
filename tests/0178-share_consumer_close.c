@@ -1054,7 +1054,7 @@ static void test_close_with_acknowledge(void) {
 
                 /* Close C2 */
                 TEST_SAY("C2: Closing consumer\n");
-                rd_kafka_share_consumer_close(c2);
+                test_share_consumer_close(c2);
                 TEST_SAY("C2: Closed successfully\n");
                 test_share_destroy(c2);
 
@@ -1176,7 +1176,7 @@ static void test_close_without_acknowledge() {
                                         "no-ack-close");
 
                 TEST_SAY("C2: Closing consumer\n");
-                rd_kafka_share_consumer_close(c2);
+                test_share_consumer_close(c2);
                 test_share_destroy(c2);
 
                 free_tracked_messages(tracked_msgs, tracked_cnt);
@@ -1763,7 +1763,7 @@ static void test_close_with_broker_down(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to set broker up");
 
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
         test_mock_cluster_destroy(mcluster);
 
         /* Restore default error-fatal behavior for subsequent tests. */
@@ -1925,6 +1925,114 @@ static void test_api_calls_during_closing(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that the share-ack callback fires for un-committed implicit
+ *        acks during close.
+ *
+ * In implicit mode, records consumed in the first poll are auto-acked via
+ * piggyback on the next ShareFetch. After polling twice (first to fetch,
+ * second to drive the piggyback ack) and closing without an explicit
+ * commit, the ack callback must have fired with the consumed offsets.
+ */
+static void test_implicit_ack_callback_fires_on_close(void) {
+        const char *topic_name;
+        const char *group;
+        char group_id[64];
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t batch[16];
+        rd_kafka_message_t *raw_batch[16];
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_error_t *error;
+        ack_receipts_t receipts;
+        size_t rcvd, j;
+        int consumed = 0;
+        int attempts = 0;
+
+        SUB_TEST();
+
+        ack_receipts_init(&receipts);
+
+        topic_name = test_mk_topic_name("0178-impl-ack-on-close", 1);
+        test_create_topic_wait_exists(common_admin, topic_name, 1, -1,
+                                      60 * 1000);
+        test_produce_msgs_simple(common_producer, topic_name, 0, 1);
+
+        rd_snprintf(group_id, sizeof(group_id),
+                    "0178-group-impl-ack-close-%" PRIu64, test_id_generate());
+        group = group_id;
+
+        test_share_set_auto_offset_reset(group, "earliest");
+        rkshare =
+            create_share_consumer_with_receipts(group, "implicit", &receipts);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic_name,
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* First poll: fetch the record (auto-ack pending for next poll) */
+        while (consumed < 1 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, raw_batch,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!raw_batch[j]->err) {
+                                batch[consumed] = *raw_batch[j];
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(raw_batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed == 1, "Expected 1 record, got %d", consumed);
+
+        /* Second poll: drives the piggybacked implicit ack to the broker */
+        attempts = 5;
+        while (attempts-- > 0) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 1000, raw_batch,
+                                                     &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++)
+                        rd_kafka_message_destroy(raw_batch[j]);
+        }
+
+        /* Close - any pending ack-completion callbacks must be flushed */
+        TEST_SAY("Closing share consumer without explicit commit\n");
+        error = rd_kafka_share_consumer_close(rkshare);
+        TEST_ASSERT(error == NULL, "close returned error: %s",
+                    rd_kafka_error_string(error));
+
+        TEST_SAY(
+            "After close: callback_invocations=%d, receipts=%d, "
+            "last_cb_err=%s\n",
+            receipts.callback_invocations, receipts.receipt_cnt,
+            rd_kafka_err2name(receipts.last_cb_err));
+
+        TEST_ASSERT(receipts.callback_invocations >= 1,
+                    "Expected ack callback to fire at least once "
+                    "by the time close returns, got %d invocations",
+                    receipts.callback_invocations);
+        TEST_ASSERT(receipts.receipt_cnt >= 1,
+                    "Expected at least 1 acked offset reported via "
+                    "the callback by close, got %d",
+                    receipts.receipt_cnt);
+        TEST_ASSERT(receipts.last_cb_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR in ack callback, got %s",
+                    rd_kafka_err2name(receipts.last_cb_err));
+
+        ack_receipts_destroy(&receipts);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0178_share_consumer_close(int argc, char **argv) {
         /* Set overall timeout for all tests */
         test_timeout_set(600);
@@ -1936,6 +2044,7 @@ int main_0178_share_consumer_close(int argc, char **argv) {
         /* Real broker tests */
         test_close_with_acknowledge();
         test_close_without_acknowledge();
+        test_implicit_ack_callback_fires_on_close();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

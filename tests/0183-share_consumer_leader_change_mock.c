@@ -744,7 +744,6 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
                       explicit_mode ? "explicit" : "implicit");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms",
                       wait_for_metadata_refresh ? "10000" : "-1");
-        test_conf_set(conf, "debug", "cgrp,fetch");
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "create share consumer");
         subscribe_topics(rkshare, topics, 2);

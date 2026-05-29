@@ -3002,10 +3002,9 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
          * library-internal (no property table entry); apps must construct
          * share consumers via this function. The flag is read by
          * rd_kafka_conf_finalize and RD_KAFKA_IS_SHARE_CONSUMER(rk).
-         * conf_finalize also rejects share-consumer-incompatible properties
-         * (rebalance_cb, RD_KAFKA_EVENT_REBALANCE, enable.auto.commit,
-         * group.protocol, socket.max.fails, auto.offset.reset) and applies
-         * the library-mandatory defaults for the rest. */
+         * conf_finalize also rejects share-consumer-incompatible
+         * properties and applies the library-mandatory defaults for the
+         * rest. */
         conf->share.is_share_consumer = rd_true;
 
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, errstr_size);

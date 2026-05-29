@@ -1726,15 +1726,6 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         /* Top level tags */
         rd_kafka_buf_skip_tags(rkbuf);
 
-
-        if (rd_kafka_buf_read_remain(rkbuf) != 0) {
-                rd_kafka_buf_parse_fail(rkbuf,
-                                        "Remaining data after message set "
-                                        "parse: %" PRIusz " bytes",
-                                        rd_kafka_buf_read_remain(rkbuf));
-                RD_NOTREACHED();
-        }
-
         /* Return response_rko to the caller instead of enqueueing here.
          * The caller enqueues it on rkcg_q AFTER sending the reply to
          * rk_ops, ensuring the main thread processes the reply (and

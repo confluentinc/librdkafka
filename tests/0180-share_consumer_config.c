@@ -192,6 +192,65 @@ static void test_auto_offset_reset_rejected_at_construction(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Share consumer forces group.protocol=consumer, so the
+ *        downstream consumer-protocol validation rejects
+ *        session.timeout.ms (defined broker side). Verify the
+ *        rejection surfaces for share consumer too.
+ */
+static void test_session_timeout_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("session.timeout.ms", "30000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Share consumer forces group.protocol=consumer, so the
+ *        downstream consumer-protocol validation rejects
+ *        partition.assignment.strategy. Verify the rejection
+ *        surfaces for share consumer too.
+ */
+static void test_partition_assignment_strategy_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected(
+            "partition.assignment.strategy", "range");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Share consumer forces group.protocol=consumer, so the
+ *        downstream consumer-protocol validation rejects
+ *        group.protocol.type. Verify the rejection surfaces for
+ *        share consumer too.
+ */
+static void test_group_protocol_type_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("group.protocol.type",
+                                                 "consumer");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Share consumer forces group.protocol=consumer, so the
+ *        downstream consumer-protocol validation rejects
+ *        heartbeat.interval.ms (defined broker side). Verify the
+ *        rejection surfaces for share consumer too.
+ */
+static void test_heartbeat_interval_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("heartbeat.interval.ms",
+                                                 "3000");
+
+        SUB_TEST_PASS();
+}
+
 int main_0180_share_consumer_config(int argc, char **argv) {
         test_rebalance_cb_rejected_at_construction();
         test_event_rebalance_rejected_at_construction();
@@ -199,5 +258,9 @@ int main_0180_share_consumer_config(int argc, char **argv) {
         test_group_protocol_rejected_at_construction();
         test_socket_max_fails_rejected_at_construction();
         test_auto_offset_reset_rejected_at_construction();
+        test_session_timeout_ms_rejected_at_construction();
+        test_partition_assignment_strategy_rejected_at_construction();
+        test_group_protocol_type_rejected_at_construction();
+        test_heartbeat_interval_ms_rejected_at_construction();
         return 0;
 }

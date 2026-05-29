@@ -4290,20 +4290,16 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         if (cltype == RD_KAFKA_CONSUMER) {
 
                 /* Share-consumer-specific config validation.
-                 * Share consumers are broker-driven (ShareGroupHeartbeat); the
-                 * application does not control partition assignment, so the
-                 * rebalance callback / event has no semantics. Auto-commit
-                 * does not apply — share consumers don't track offsets
-                 * locally. The offset-reset policy is a broker-side share-
-                 * group property (`share.auto.offset.reset`) — the client
-                 * `auto.offset.reset` is not used. group.protocol is forced
-                 * to `consumer` and socket.max.fails is forced to 1 to keep
-                 * the broker share session in sync.
                  *
-                 * Any explicit set of these properties is rejected. The
-                 * library-mandatory values are applied at the end of the
-                 * block, before the downstream group-protocol validation
-                 * runs so its CONSUMER-branch checks also apply to share
+                 * The share consumer is broker-driven
+                 * (ShareGroupHeartbeat), so a number of client-side
+                 * properties have no meaning or must take
+                 * library-mandatory values. The checks below reject
+                 * any explicit set of those properties; the
+                 * library-mandatory values are then applied at the
+                 * end of the block, before the downstream
+                 * group-protocol validation runs so its
+                 * CONSUMER-branch checks also apply to share
                  * consumers. */
                 if (conf->share.is_share_consumer) {
                         if (conf->rebalance_cb)
@@ -4324,8 +4320,14 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                        "for share consumer";
 
                         if (rd_kafka_conf_is_modified(conf, "socket.max.fails"))
-                                return "`socket.max.fails` is not applicable "
-                                       "for share consumer";
+                                return "`socket.max.fails` must be 1 for "
+                                       "share consumer; changing it is not "
+                                       "allowed";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "partition.assignment.strategy"))
+                                return "`partition.assignment.strategy` is "
+                                       "not applicable for share consumer";
 
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
@@ -4353,8 +4355,9 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (rd_kafka_conf_is_modified(conf,
                                                       "session.timeout.ms")) {
                                 return "`session.timeout.ms` is not supported "
-                                       "for `group.protocol=consumer`. It is "
-                                       "defined broker side";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer. It is defined broker "
+                                       "side";
                         }
 
                         if (rd_kafka_conf_is_modified(
@@ -4368,15 +4371,17 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (rd_kafka_conf_is_modified(conf,
                                                       "group.protocol.type")) {
                                 return "`group.protocol.type` is not supported "
-                                       "for `group.protocol=consumer`";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer";
                         }
 
                         if (rd_kafka_conf_is_modified(
                                 conf, "heartbeat.interval.ms")) {
                                 return "`heartbeat.interval.ms` is not "
                                        "supported "
-                                       "for `group.protocol=consumer`. It is "
-                                       "defined broker side";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer. It is defined broker "
+                                       "side";
                         }
                 }
 

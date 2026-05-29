@@ -401,7 +401,10 @@ struct test tests[] = {
 #endif
     _TEST(0050_subscribe_adds, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0051_assign_adds, 0, TEST_BRKVER(0, 9, 0, 0)),
-    _TEST(0052_msg_timestamps, 0, TEST_BRKVER(0, 10, 0, 0)),
+    _TEST(0052_msg_timestamps,
+          0,
+          /* Can Create topics with AdminClient */
+          TEST_BRKVER(0, 10, 2, 0)),
     _TEST(0053_stats_timing, TEST_F_LOCAL),
     _TEST(0053_stats, 0),
     _TEST(0054_offset_time, 0, TEST_BRKVER(0, 10, 1, 0)),
@@ -526,7 +529,7 @@ struct test tests[] = {
     _TEST(0136_resolve_cb, TEST_F_LOCAL),
     _TEST(0137_barrier_batch_consume, 0),
     _TEST(0138_admin_mock, TEST_F_LOCAL, TEST_BRKVER(2, 4, 0, 0)),
-    _TEST(0139_offset_validation_mock, 0),
+    _TEST(0139_offset_validation_mock, TEST_F_LOCAL),
     _TEST(0140_commit_metadata, 0),
     _TEST(0142_reauthentication, 0, TEST_BRKVER(2, 2, 0, 0)),
     _TEST(0143_exponential_backoff_mock, TEST_F_LOCAL),
@@ -536,7 +539,7 @@ struct test tests[] = {
     _TEST(0147_consumer_group_consumer_mock, TEST_F_LOCAL),
     _TEST(0148_offset_fetch_commit_error_mock, TEST_F_LOCAL),
     _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
-    _TEST(0150_telemetry_mock, 0),
+    _TEST(0150_telemetry_mock, TEST_F_LOCAL),
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
@@ -5755,15 +5758,10 @@ void test_report_add(struct test *test, const char *fmt, ...) {
  *
  * If \p skip is set TEST_SKIP() will be called with a helpful message.
  */
-int test_can_create_topics(int skip) {
+int test_can_kafka_cmd(int skip) {
 #ifndef _WIN32
         const char *bootstrap;
 #endif
-
-        /* Has AdminAPI */
-        if (test_broker_version >= TEST_BRKVER(0, 10, 2, 0))
-                return 1;
-
 #ifdef _WIN32
         if (skip)
                 TEST_SKIP("Cannot create topics on Win32\n");
@@ -5777,15 +5775,29 @@ int test_can_create_topics(int skip) {
         if (!test_getenv("KAFKA_PATH", NULL) || !test_getenv(bootstrap, NULL)) {
                 if (skip)
                         TEST_SKIP(
-                            "Cannot create topics "
+                            "Cannot execute command line tools "
                             "(set KAFKA_PATH and %s)\n",
                             bootstrap);
                 return 0;
         }
 
-
         return 1;
 #endif
+}
+
+/**
+ * If AdminAPI supports topic creation, returns 1.
+ * If not, calls test_can_kafka_cmd() to check if we can use
+ * the command line to create topics.
+ *
+ * If \p skip is set TEST_SKIP() will be called with a helpful message.
+ */
+int test_can_create_topics(int skip) {
+        /* Has AdminAPI */
+        if (test_broker_version >= TEST_BRKVER(0, 10, 2, 0))
+                return 1;
+
+        return test_can_kafka_cmd(skip);
 }
 
 
@@ -6599,7 +6611,7 @@ rd_kafka_resp_err_t test_CreateTopics_simple(rd_kafka_t *rk,
         for (i = 0; i < topic_cnt; i++) {
                 char errstr[512];
                 new_topics[i] = rd_kafka_NewTopic_new(
-                    topics[i], num_partitions, 1, errstr, sizeof(errstr));
+                    topics[i], num_partitions, -1, errstr, sizeof(errstr));
                 TEST_ASSERT(new_topics[i],
                             "Failed to NewTopic(\"%s\", %d) #%" PRIusz ": %s",
                             topics[i], num_partitions, i, errstr);
@@ -7134,7 +7146,7 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
  * @remark Fails the current test on failure.
  */
 
-rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
+rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *use_rk,
                                            rd_kafka_queue_t *useq,
                                            rd_kafka_AclBinding_t **acls,
                                            size_t acl_cnt,
@@ -7142,7 +7154,11 @@ rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
         rd_kafka_AdminOptions_t *options;
         rd_kafka_queue_t *q;
         rd_kafka_resp_err_t err;
+        rd_kafka_t *rk;
         const int tmout = 30 * 1000;
+
+        if (!(rk = use_rk))
+                rk = test_create_producer();
 
         options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_CREATEACLS);
         rd_kafka_AdminOptions_set_opaque(options, opaque);
@@ -7166,6 +7182,8 @@ rd_kafka_resp_err_t test_CreateAcls_simple(rd_kafka_t *rk,
                                            NULL, tmout + 5000);
 
         rd_kafka_queue_destroy(q);
+        if (!use_rk)
+                rd_kafka_destroy(rk);
 
         if (err)
                 TEST_FAIL("Failed to create %d acl(s): %s", (int)acl_cnt,

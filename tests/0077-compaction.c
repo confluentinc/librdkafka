@@ -172,8 +172,25 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
         int cnt           = 0;
         test_msgver_t mv;
         test_msgver_t mv_correct;
-        int msgcounter    = 0;
-        const int fillcnt = 20;
+        int msgcounter              = 0;
+        const int fillcnt           = 20;
+        const char *topic_configs[] = {
+            "cleanup.policy",
+            "compact",
+            "segment.ms",
+            "10000",
+            "segment.bytes",
+            "10000",
+            "min.cleanable.dirty.ratio",
+            "0.01",
+            "delete.retention.ms",
+            "86400",
+            "file.delete.delay.ms",
+            "10000",
+            "max.compaction.lag.ms",
+            "100",
+            NULL,
+        };
 
         testid = test_id_generate();
 
@@ -182,18 +199,7 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
             "Test compaction on topic %s with %s compression (%d messages)\n",
             topic, compression ? compression : "no", msgcnt);
 
-        test_kafka_topics(
-            "--create --topic \"%s\" "
-            "--partitions %d "
-            "--replication-factor 1 "
-            "--config cleanup.policy=compact "
-            "--config segment.ms=10000 "
-            "--config segment.bytes=10000 "
-            "--config min.cleanable.dirty.ratio=0.01 "
-            "--config delete.retention.ms=86400 "
-            "--config file.delete.delay.ms=10000 "
-            "--config max.compaction.lag.ms=100",
-            topic, partition + 1);
+        test_admin_create_topic(NULL, topic, partition + 1, -1, topic_configs);
         test_wait_topic_exists(NULL, topic, 5000);
 
         test_conf_init(&conf, NULL, 120);

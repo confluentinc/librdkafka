@@ -160,6 +160,7 @@ set(
     0179-share_consumer_destroy.c
     0182-share_consumer_error_handling_mock.c
     0183-share_consumer_leader_change_mock.c
+    0184-share_consumer_topic_recreate.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

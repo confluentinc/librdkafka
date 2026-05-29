@@ -94,6 +94,10 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
+/**
+ * TODO KIP-932: Remove the check of RD_KAFKA_CONSUMER. Only
+ * checking for is_share_consumer should be sufficient.
+ */
 #define RD_KAFKA_IS_SHARE_CONSUMER(rk)                                         \
         ((rk)->rk_type == RD_KAFKA_CONSUMER &&                                 \
          (rk)->rk_conf.share.is_share_consumer)
@@ -1379,16 +1383,9 @@ rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
  */
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
-
 void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,
                                      rd_bool_t should_fetch,
                                      rd_bool_t should_leave);
-
-void rd_kafka_share_commit_sync_apply_result(rd_kafka_t *rk,
-                                             rd_kafka_cgrp_t *rkcg,
-                                             rd_list_t *ack_batches);
-
-
 
 #endif /* _RDKAFKA_INT_H_ */

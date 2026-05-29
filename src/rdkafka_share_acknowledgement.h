@@ -31,6 +31,7 @@
 /* Forward declarations */
 typedef struct rd_kafka_op_s rd_kafka_op_t;
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
+typedef struct rd_kafka_cgrp_s rd_kafka_cgrp_t;
 
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED =
@@ -186,6 +187,17 @@ void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);
 
 /**
+ * @brief Segregate sync ack batches by partition leader into each
+ *        broker's pending_commit_sync list.
+ *
+ * @locality main thread
+ */
+void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
+                                                  rd_kafka_cgrp_t *rkcg,
+                                                  rd_list_t *ack_batches,
+                                                  rd_ts_t abs_timeout);
+
+/**
  * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
  *
  * Non-ACQUIRED offsets are collated into ack_details for sending.
@@ -225,7 +237,6 @@ rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
  * Used with rd_list_is_sorted().
  */
 int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
-
 
 /**
  * @struct rd_kafka_share_partition_offsets_s
@@ -329,6 +340,35 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
 void rd_kafka_share_acks_clear_during_broker_decommission(
     rd_kafka_t *rk,
     rd_kafka_broker_t *rkb);
+
+
+/**
+ * @brief Apply a broker's commit_sync result: copy each batch's
+ *        per-partition err onto the corresponding entry in
+ *        rkcg_commit_sync_request.results, decrement the count of
+ *        brokers still awaiting reply, and complete the commit_sync
+ *        if this was the last broker outstanding.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_apply_result(rd_kafka_t *rk,
+                                             rd_kafka_cgrp_t *rkcg,
+                                             rd_list_t *ack_batches);
+
+/**
+ * @brief Check if all broker results are in and send response if done.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
+                                               rd_kafka_cgrp_t *rkcg);
+
+/**
+ * @brief Send commit_sync response to the app thread and clear state.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg);
 
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

@@ -295,6 +295,8 @@ _TEST_DECL(0171_share_consumer_consume);
 _TEST_DECL(0172_share_consumer_acknowledge);
 _TEST_DECL(0173_share_consumer_commit_async_local);
 _TEST_DECL(0173_share_consumer_commit_async);
+_TEST_DECL(0174_share_consumer_concurrency);
+_TEST_DECL(0175_share_consumer_groups);
 _TEST_DECL(0176_share_consumer_commit_sync);
 _TEST_DECL(0176_share_consumer_commit_sync_local);
 _TEST_DECL(0177_share_consumer_transactions);
@@ -303,6 +305,7 @@ _TEST_DECL(0178_share_consumer_close_local);
 _TEST_DECL(0179_share_consumer_destroy);
 _TEST_DECL(0179_share_consumer_destroy_local);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
+_TEST_DECL(0183_share_consumer_leader_change_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -572,15 +575,16 @@ struct test tests[] = {
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
-    _TEST(0156_share_consumer_fetch_mock, TEST_F_MANUAL),
+    _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
     _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),
     _TEST(0158_share_consumer_transactions_mock, TEST_F_LOCAL),
-    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
     _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0173_share_consumer_commit_async_local, TEST_F_LOCAL),
     _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0174_share_consumer_concurrency, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0175_share_consumer_groups, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0176_share_consumer_commit_sync_local, TEST_F_LOCAL),
     _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 2, 0)),
@@ -589,6 +593,7 @@ struct test tests[] = {
     _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
+    _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -8003,7 +8008,6 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id,
 
         test_conf_init(&conf, NULL, 0);
 
-        rd_kafka_conf_set(conf, "client.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
                           sizeof(errstr));
@@ -8277,7 +8281,6 @@ rd_kafka_share_t *test_create_share_consumer_with_cb(
         char errstr[512];
 
         test_conf_init(&conf, NULL, 0);
-        rd_kafka_conf_set(conf, "client.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
                           sizeof(errstr));

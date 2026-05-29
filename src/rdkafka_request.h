@@ -703,6 +703,24 @@ void rd_kafkap_leader_discovery_set_CurrentLeader(
     int32_t partition_id,
     rd_kafkap_CurrentLeader_t *CurrentLeader);
 
+/**
+ * @brief Per-partition leader-change record collected from a Share*
+ *        response for inline metadata update.
+ *
+ * Populated by Share* response parsers and consumed by
+ * rd_kafkap_share_leader_changes_apply().
+ */
+typedef struct rd_kafkap_share_leader_change_s {
+        rd_kafka_Uuid_t topic_id;
+        int32_t partition;
+        rd_kafkap_CurrentLeader_t current_leader;
+} rd_kafkap_share_leader_change_t;
+
+void rd_kafkap_share_leader_changes_apply(
+    rd_kafka_broker_t *rkb,
+    rd_list_t *leader_changes,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints);
+
 rd_kafka_resp_err_t
 rd_kafka_GetTelemetrySubscriptionsRequest(rd_kafka_broker_t *rkb,
                                           char *errstr,

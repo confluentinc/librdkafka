@@ -1295,7 +1295,7 @@ void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags) {
 static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_kafka_topic_t *rkt, *rkt_tmp;
         rd_kafka_broker_t *rkb;
-        rd_list_t wait_thrds, brokers_to_decommission, topics_to_finalize;
+        rd_list_t wait_thrds, brokers_to_decommission; /*topics_to_finalize*/
         thrd_t *thrd;
         int i;
 
@@ -1330,24 +1330,24 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
         rd_kafka_wrlock(rk);
 
         rd_kafka_dbg(rk, ALL, "DESTROY", "Removing all topics");
-        /* Decommission all topics.
-         *
-         * Take an extra reference on each topic so that the final
-         * topic_destroy_final (which acquires the rk wrlock at
-         * rdkafka_topic.c) does NOT execute on a broker thread during
-         * destroy. Otherwise broker threads serving OP_PARTITION_LEAVE
-         * can race with the broker-decommission loop below for the rk
-         * wrlock, which has triggered hangs on macOS ARM64 due to
-         * writer-vs-writer contention.
-         *
-         * We hold these refs until after the broker decommission loop
-         * has finished and the outer rk wrunlock below. Then we drop
-         * them on the main thread, where topic_destroy_final runs without
-         * contention. */
-        rd_list_init(&topics_to_finalize, rk->rk_topic_cnt, NULL);
-        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
-                rd_list_add(&topics_to_finalize, rd_kafka_topic_keep(rkt));
-        }
+        // /* Decommission all topics.
+        //  *
+        //  * Take an extra reference on each topic so that the final
+        //  * topic_destroy_final (which acquires the rk wrlock at
+        //  * rdkafka_topic.c) does NOT execute on a broker thread during
+        //  * destroy. Otherwise broker threads serving OP_PARTITION_LEAVE
+        //  * can race with the broker-decommission loop below for the rk
+        //  * wrlock, which has triggered hangs on macOS ARM64 due to
+        //  * writer-vs-writer contention.
+        //  *
+        //  * We hold these refs until after the broker decommission loop
+        //  * has finished and the outer rk wrunlock below. Then we drop
+        //  * them on the main thread, where topic_destroy_final runs without
+        //  * contention. */
+        // rd_list_init(&topics_to_finalize, rk->rk_topic_cnt, NULL);
+        // TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+        //         rd_list_add(&topics_to_finalize, rd_kafka_topic_keep(rkt));
+        // }
         TAILQ_FOREACH_SAFE(rkt, &rk->rk_topics, rkt_link, rkt_tmp) {
                 rd_kafka_wrunlock(rk);
                 rd_kafka_topic_partitions_remove(rkt);
@@ -1405,16 +1405,16 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
 
         rd_kafka_wrunlock(rk);
 
-        /* Drop the extra topic refs taken before topic_partitions_remove.
-         * By now broker decommission has finished and broker threads either
-         * have terminated or are no longer dropping topic refs. The final
-         * topic_destroy_final calls triggered here run on this (main)
-         * thread, where the rk wrlock acquisition does not contend with
-         * any broker thread. */
-        RD_LIST_FOREACH(rkt, &topics_to_finalize, i) {
-                rd_kafka_topic_destroy0(rkt);
-        }
-        rd_list_destroy(&topics_to_finalize);
+        // /* Drop the extra topic refs taken before topic_partitions_remove.
+        //  * By now broker decommission has finished and broker threads either
+        //  * have terminated or are no longer dropping topic refs. The final
+        //  * topic_destroy_final calls triggered here run on this (main)
+        //  * thread, where the rk wrlock acquisition does not contend with
+        //  * any broker thread. */
+        // RD_LIST_FOREACH(rkt, &topics_to_finalize, i) {
+        //         rd_kafka_topic_destroy0(rkt);
+        // }
+        // rd_list_destroy(&topics_to_finalize);
 
         mtx_lock(&rk->rk_broker_state_change_lock);
         /* Purge broker state change waiters */

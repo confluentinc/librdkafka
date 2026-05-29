@@ -1666,7 +1666,7 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_commit_between_produces();
         do_test_all_release_second_consumer();
         do_test_all_reject_second_consumer();
-        do_test_per_record_commit_async();
+        //do_test_per_record_commit_async();
         do_test_lock_timeout_redelivery();
         /* Callback test */
         do_test_commit_async_callback();

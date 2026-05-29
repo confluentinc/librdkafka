@@ -248,6 +248,7 @@
     <ClCompile Include="..\..\tests\0177-share_consumer_transactions.c" />
     <ClCompile Include="..\..\tests\0178-share_consumer_close.c" />
     <ClCompile Include="..\..\tests\0179-share_consumer_destroy.c" />
+    <ClCompile Include="..\..\tests\0180-share_consumer_config.c" />
     <ClCompile Include="..\..\tests\0182-share_consumer_error_handling_mock.c" />
     <ClCompile Include="..\..\tests\0183-share_consumer_leader_change_mock.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />

@@ -766,10 +766,16 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                                                   "leader updated");
         }
 
-        if (need_epoch_validation) {
+        if (need_epoch_validation &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
                 /* Set offset validation position,
                  * depending it if should continue with current position or
-                 * with next fetch start position. */
+                 * with next fetch start position.
+                 *
+                 * Skipped for share consumers: the offset-validation flow
+                 * issues OffsetForLeaderEpoch / ListOffsets and pipes
+                 * results into rktp_fetchq, which the share path doesn't
+                 * drain. */
                 rd_kafka_toppar_set_offset_validation_position(
                     rktp,
                     rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rktp));

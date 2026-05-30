@@ -4310,6 +4310,16 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`RD_KAFKA_EVENT_REBALANCE` is not "
                                        "applicable for share consumer";
 
+                        /* TODO KIP-932: verify whether stats_cb should also
+                         * be rejected. Today we only reject the interval
+                         * because the test framework sets stats_cb
+                         * defensively; with interval=0 the callback is
+                         * never invoked, so the callback alone is inert. */
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "statistics.interval.ms"))
+                                return "`statistics.interval.ms` is not "
+                                       "applicable for share consumer";
+
                         if (rd_kafka_conf_is_modified(conf,
                                                       "enable.auto.commit"))
                                 return "`enable.auto.commit` is not "

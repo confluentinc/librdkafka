@@ -614,12 +614,7 @@ static void do_test_scenario(const test_scenario_t *scenario) {
         sub_test_state_t state;
         int op_idx;
 
-        TEST_SAY("\n");
-        TEST_SAY(
-            "============================================================\n");
-        TEST_SAY("=== %s ===\n", scenario->name);
-        TEST_SAY(
-            "============================================================\n");
+        SUB_TEST();
 
         state_init(&state, scenario);
 
@@ -677,7 +672,7 @@ static void do_test_scenario(const test_scenario_t *scenario) {
 
         state_cleanup(&state);
 
-        TEST_SAY("=== %s: PASSED ===\n", scenario->name);
+        SUB_TEST_PASS();
 }
 
 
@@ -802,12 +797,7 @@ static void do_test_multi_consumer_overlap(void) {
         int c0_cnt = 0, c1_cnt = 0;
         int attempts;
 
-        TEST_SAY("\n");
-        TEST_SAY(
-            "============================================================\n");
-        TEST_SAY("=== multi-consumer-overlapping-subscriptions ===\n");
-        TEST_SAY(
-            "============================================================\n");
+        SUB_TEST("multi-consumer-overlapping-subscriptions");
 
         /* Create topics */
         test_create_topic_wait_exists(NULL, shared, 1, -1, 30000);
@@ -862,7 +852,7 @@ static void do_test_multi_consumer_overlap(void) {
         rd_free(c0_only);
         rd_free(c1_only);
 
-        TEST_SAY("=== multi-consumer-overlapping-subscriptions: PASSED ===\n");
+        SUB_TEST_PASS();
 }
 
 
@@ -887,14 +877,7 @@ static void do_test_subscribe_15_topics(void) {
         int attempts;
         int t;
 
-        TEST_SAY("\n");
-        TEST_SAY(
-            "============================================================\n");
-        TEST_SAY(
-            "=== subscribe-15-topics (triggers multiple fetch responses) "
-            "===\n");
-        TEST_SAY(
-            "============================================================\n");
+        SUB_TEST("subscribe-15-topics");
 
         /* Create 15 topics */
         for (t = 0; t < topic_cnt; t++) {
@@ -962,8 +945,7 @@ static void do_test_subscribe_15_topics(void) {
                 rd_free(topics[t]);
         }
 
-        TEST_SAY("=== subscribe-15-topics: PASSED (%d messages) ===\n",
-                 consumed);
+        SUB_TEST_PASS();
 }
 
 
@@ -973,7 +955,7 @@ static void do_test_subscribe_15_topics(void) {
  * Verifies that with share.auto.offset.reset = earliest, consumer receives
  * all messages including those produced before subscription.
  */
-static void test_auto_offset_reset_earliest(void) {
+static void do_test_auto_offset_reset_earliest(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
         const char *topic;
@@ -983,12 +965,7 @@ static void test_auto_offset_reset_earliest(void) {
         int attempts;
         const int msg_cnt = 100;
 
-        TEST_SAY("\n");
-        TEST_SAY(
-            "============================================================\n");
-        TEST_SAY("=== share.auto.offset.reset = earliest ===\n");
-        TEST_SAY(
-            "============================================================\n");
+        SUB_TEST("share.auto.offset.reset=earliest");
 
         /* Create topic */
         topic = test_mk_topic_name("0170-offset-earliest", 1);
@@ -1044,6 +1021,8 @@ static void test_auto_offset_reset_earliest(void) {
         /* Cleanup */
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1052,7 +1031,7 @@ static void test_auto_offset_reset_earliest(void) {
  * Verifies that with default (latest) offset, consumer only receives
  * messages produced after subscription, not pre-existing messages.
  */
-static void test_auto_offset_reset_default_latest(void) {
+static void do_test_auto_offset_reset_default_latest(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
         const char *topic;
@@ -1063,12 +1042,7 @@ static void test_auto_offset_reset_default_latest(void) {
         const int initial_msgs = 100;
         const int later_msgs   = 50;
 
-        TEST_SAY("\n");
-        TEST_SAY(
-            "============================================================\n");
-        TEST_SAY("=== share.auto.offset.reset default (latest) ===\n");
-        TEST_SAY(
-            "============================================================\n");
+        SUB_TEST("share.auto.offset.reset=latest (default)");
 
         /* Create topic */
         topic = test_mk_topic_name("0170-offset-default", 1);
@@ -1162,6 +1136,194 @@ static void test_auto_offset_reset_default_latest(void) {
         /* Cleanup */
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief rd_kafka_share_subscribe input validation against a real
+ *        broker.
+ *
+ * Covers the share-subscribe API surface contract:
+ *   1. A topic name starting with '^' is treated as a literal — no
+ *      regex compilation, no rejection. The name is forwarded
+ *      verbatim to the broker via
+ *      ShareGroupHeartbeat.SubscribedTopicNames; the broker silently
+ *      drops names it cannot resolve.
+ *   2. Subscription list containing an empty topic name returns
+ *      INVALID_ARG.
+ *   3. Duplicate topic names return INVALID_ARG. (librdkafka enforces
+ *      dedup at the API; Java silently dedupes via Set — divergence
+ *      tracked as A6 in src/share-consumer-java-divergence.md.)
+ *
+ * Empty-list rejection is covered by the mock test
+ * do_test_empty_topic_list_subscription in
+ * 0155-share_group_heartbeat_mock.c.
+ */
+static void do_test_subscribe_input_validation(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_resp_err_t err;
+        const char *group = "share-subscribe-validation";
+
+        SUB_TEST();
+
+        /* Case 1: '^foo.*' is forwarded as a literal, not interpreted
+         * as a regex. */
+        consumer = test_create_share_consumer(group, NULL);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "^foo.*",
+                                          RD_KAFKA_PARTITION_UA);
+        err = rd_kafka_share_subscribe(consumer, subs);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected NO_ERROR for '^foo.*' literal topic, got: %s",
+                    rd_kafka_err2str(err));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        /* Case 2: entry with empty topic name. */
+        consumer = test_create_share_consumer(group, NULL);
+
+        subs = rd_kafka_topic_partition_list_new(2);
+        rd_kafka_topic_partition_list_add(subs, "valid-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_topic_partition_list_add(subs, "", RD_KAFKA_PARTITION_UA);
+        err = rd_kafka_share_subscribe(consumer, subs);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for empty topic name, got: %s",
+                    rd_kafka_err2str(err));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        /* Case 3: duplicate topic names. */
+        consumer = test_create_share_consumer(group, NULL);
+
+        subs = rd_kafka_topic_partition_list_new(2);
+        rd_kafka_topic_partition_list_add(subs, "duplicate-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_topic_partition_list_add(subs, "duplicate-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        err = rd_kafka_share_subscribe(consumer, subs);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for duplicate topic, got: %s",
+                    rd_kafka_err2str(err));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief End-to-end verification that '^'-prefixed entries are
+ *        forwarded as literals (no regex resolution).
+ *
+ * Creates a real topic, produces records to it, then:
+ *   Phase 1. Subscribes with a regex-shaped string '^<topic>$' that
+ *            would match the topic if treated as a regex. The broker
+ *            cannot resolve the literal name and silently drops it
+ *            from the assignment. The share consumer must receive
+ *            zero records.
+ *   Phase 2. Unsubscribes, resubscribes with the plain topic name.
+ *            The consumer must now receive all produced records.
+ */
+static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        const char *topic;
+        const char *group = "share-caret-literal-e2e";
+        const int msg_cnt = 50;
+        char caret_pattern[512];
+        size_t records_phase1 = 0;
+        size_t records_phase2 = 0;
+        int attempts;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0170-caret-literal", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_produce_msgs_easy(topic, 0, 0, msg_cnt);
+
+        consumer = test_create_share_consumer(group, NULL);
+
+        /* Phase 1: '^<topic>$' as a literal — broker drops, no records. */
+        rd_snprintf(caret_pattern, sizeof(caret_pattern), "^%s$", topic);
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, caret_pattern,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        TEST_SAY("Phase 1: subscribed with '%s' (literal); polling...\n",
+                 caret_pattern);
+        attempts = 10;
+        while (attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                records_phase1++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+        TEST_ASSERT(records_phase1 == 0,
+                    "Phase 1: expected 0 records for '%s' literal "
+                    "subscription, got %zu",
+                    caret_pattern, records_phase1);
+        TEST_SAY("Phase 1: received 0 records as expected\n");
+
+        /* Phase 2: resubscribe with the plain topic name — broker
+         * resolves it, consumer receives records. */
+        TEST_CALL_ERR__(rd_kafka_share_unsubscribe(consumer));
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        TEST_SAY("Phase 2: resubscribed with plain name '%s'; consuming...\n",
+                 topic);
+        attempts = 10;
+        while (records_phase2 < (size_t)msg_cnt && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                err =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err)
+                                records_phase2++;
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+        TEST_ASSERT(records_phase2 == (size_t)msg_cnt,
+                    "Phase 2: expected %d records, got %zu", msg_cnt,
+                    records_phase2);
+        TEST_SAY("Phase 2: received %zu/%d records\n", records_phase2, msg_cnt);
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 int main_0170_share_consumer_subscription(int argc, char **argv) {
@@ -1172,8 +1334,8 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         test_timeout_set(200);
 
         /* Auto offset reset tests */
-        test_auto_offset_reset_earliest();
-        test_auto_offset_reset_default_latest();
+        do_test_auto_offset_reset_earliest();
+        do_test_auto_offset_reset_default_latest();
 
         /* Basic subscription tests */
         do_test_scenario(&test_single_subscribe);
@@ -1209,6 +1371,10 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
 
         /* Scale tests (many topics) */
         do_test_subscribe_15_topics();
+
+        /* Input validation tests */
+        do_test_subscribe_input_validation();
+        do_test_subscribe_caret_treated_as_literal_e2e();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

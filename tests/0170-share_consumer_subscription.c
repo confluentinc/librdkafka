@@ -1152,13 +1152,7 @@ static void do_test_auto_offset_reset_default_latest(void) {
  *      drops names it cannot resolve.
  *   2. Subscription list containing an empty topic name returns
  *      INVALID_ARG.
- *   3. Duplicate topic names return INVALID_ARG. (librdkafka enforces
- *      dedup at the API; Java silently dedupes via Set — divergence
- *      tracked as A6 in src/share-consumer-java-divergence.md.)
- *
- * Empty-list rejection is covered by the mock test
- * do_test_empty_topic_list_subscription in
- * 0155-share_group_heartbeat_mock.c.
+ *   3. Duplicate topic names return INVALID_ARG.
  */
 static void do_test_subscribe_input_validation(void) {
         rd_kafka_share_t *consumer;
@@ -1262,6 +1256,18 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
         rd_kafka_topic_partition_list_destroy(subs);
 
+        /* rd_kafka_share_subscription must return the subscribed names
+         * verbatim (the '^' prefix is not stripped). */
+        subs = NULL;
+        TEST_CALL_ERR__(rd_kafka_share_subscription(consumer, &subs));
+        TEST_ASSERT(subs && subs->cnt == 1,
+                    "Phase 1: expected subscription cnt 1, got %d",
+                    subs ? subs->cnt : -1);
+        TEST_ASSERT(!strcmp(subs->elems[0].topic, caret_pattern),
+                    "Phase 1: expected subscription[0]='%s', got '%s'",
+                    caret_pattern, subs->elems[0].topic);
+        rd_kafka_topic_partition_list_destroy(subs);
+
         TEST_SAY("Phase 1: subscribed with '%s' (literal); polling...\n",
                  caret_pattern);
         attempts = 10;
@@ -1294,6 +1300,17 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
         subs = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* rd_kafka_share_subscription must now return the plain name. */
+        subs = NULL;
+        TEST_CALL_ERR__(rd_kafka_share_subscription(consumer, &subs));
+        TEST_ASSERT(subs && subs->cnt == 1,
+                    "Phase 2: expected subscription cnt 1, got %d",
+                    subs ? subs->cnt : -1);
+        TEST_ASSERT(!strcmp(subs->elems[0].topic, topic),
+                    "Phase 2: expected subscription[0]='%s', got '%s'", topic,
+                    subs->elems[0].topic);
         rd_kafka_topic_partition_list_destroy(subs);
 
         TEST_SAY("Phase 2: resubscribed with plain name '%s'; consuming...\n",

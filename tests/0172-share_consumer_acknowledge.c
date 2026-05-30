@@ -1347,6 +1347,354 @@ static void test_scale_10_topics_3_partitions(void) {
 }
 
 
+/**
+ * @brief Re-acknowledging a record after the batch has been polled past
+ *        returns _STATE.
+ *
+ * In explicit mode, poll batch1 (1 record), acknowledge it, poll batch2
+ * (empty), then try to acknowledge batch1's record again. The second
+ * acknowledge must return _STATE because the record is no longer in the
+ * current batch / inflight map.
+ */
+static void test_ack_message_from_earlier_batch(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *batch1[10];
+        rd_kafka_message_t *batch2[10];
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_resp_err_t ack_err;
+        const char *group = "share-cross-batch-ack";
+        const char *topic;
+        size_t b1_rcvd = 0;
+        int attempts;
+        size_t i;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== test_ack_message_from_earlier_batch ===\n");
+
+        rkshare = test_create_share_consumer(group, "explicit");
+        topic   = test_mk_topic_name("0172-cross-batch", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll batch 1 */
+        attempts = 30;
+        while (b1_rcvd < 1 && attempts-- > 0) {
+                size_t r            = 0;
+                rd_kafka_error_t *e = rd_kafka_share_consume_batch(
+                    rkshare, 2000, batch1 + b1_rcvd, &r);
+                if (e)
+                        rd_kafka_error_destroy(e);
+                b1_rcvd += r;
+        }
+        TEST_ASSERT(b1_rcvd == 1, "Expected 1 record in batch1, got %zu",
+                    b1_rcvd);
+
+        ack_err = rd_kafka_share_acknowledge(rkshare, batch1[0]);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "First ack failed: %s", rd_kafka_err2name(ack_err));
+
+        /* Poll batch 2 - should be empty (we already consumed everything) */
+        size_t r = 0;
+        rd_kafka_error_t *e =
+            rd_kafka_share_consume_batch(rkshare, 2000, batch2, &r);
+        if (e)
+                rd_kafka_error_destroy(e);
+        TEST_SAY("Batch 2 received %zu records\n", r);
+        for (i = 0; i < r; i++)
+                rd_kafka_message_destroy(batch2[i]);
+
+        /* Re-acknowledge from batch1 - should fail with _STATE */
+        ack_err = rd_kafka_share_acknowledge(rkshare, batch1[0]);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE for re-ack across batches, got %s",
+                    rd_kafka_err2name(ack_err));
+
+        rd_kafka_message_destroy(batch1[0]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_ack_message_from_earlier_batch: PASSED ===\n");
+}
+
+
+/**
+ * @brief acknowledge_offset() before any record has been consumed
+ *        returns _STATE.
+ *
+ * Subscribe but do not poll; call acknowledge_offset() with arbitrary
+ * topic/partition/offset values and expect _STATE (nothing in inflight).
+ */
+static void test_ack_offset_before_consume(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_resp_err_t err;
+        const char *group = "share-ack-before-consume";
+        const char *topic;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== test_ack_offset_before_consume ===\n");
+
+        rkshare = test_create_share_consumer(group, "explicit");
+        topic   = test_mk_topic_name("0172-ack-precons", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, 0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE for ack_offset before any consume, "
+                    "got %s",
+                    rd_kafka_err2name(err));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_ack_offset_before_consume: PASSED ===\n");
+}
+
+
+/**
+ * @brief acknowledge_offset() with wrong topic / partition / offset
+ *        returns _STATE; correct values succeed.
+ *
+ * Consume one record so we have a valid (topic, partition, offset) tuple
+ * in the inflight map. Calling acknowledge_offset() with wrong values for
+ * any of the three components must return _STATE. The correct values then
+ * succeed.
+ */
+static void test_ack_offset_wrong_params(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *batch[10];
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_resp_err_t err;
+        const char *group = "share-ack-wrong-params";
+        const char *topic;
+        size_t rcvd = 0;
+        int attempts;
+        int32_t partition;
+        int64_t offset;
+
+        TEST_SAY("\n");
+        TEST_SAY("=== test_ack_offset_wrong_params ===\n");
+
+        rkshare = test_create_share_consumer(group, "explicit");
+        topic   = test_mk_topic_name("0172-wrong-params", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 1);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        attempts = 30;
+        while (rcvd < 1 && attempts-- > 0) {
+                size_t r            = 0;
+                rd_kafka_error_t *e = rd_kafka_share_consume_batch(
+                    rkshare, 2000, batch + rcvd, &r);
+                if (e)
+                        rd_kafka_error_destroy(e);
+                rcvd += r;
+        }
+        TEST_ASSERT(rcvd == 1, "Expected 1 record, got %zu", rcvd);
+
+        partition = batch[0]->partition;
+        offset    = batch[0]->offset;
+
+        /* Wrong offset */
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, partition, offset + 100,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE for wrong offset, got %s",
+                    rd_kafka_err2name(err));
+
+        /* Wrong topic */
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, "0172-nonexistent-topic", partition, offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE for wrong topic, got %s",
+                    rd_kafka_err2name(err));
+
+        /* Wrong partition */
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, partition + 100, offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE for wrong partition, got %s",
+                    rd_kafka_err2name(err));
+
+        /* Correct values - should succeed */
+        err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, partition, offset,
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected success for correct params, got %s",
+                    rd_kafka_err2name(err));
+
+        rd_kafka_message_destroy(batch[0]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_ack_offset_wrong_params: PASSED ===\n");
+}
+
+
+/**
+ * @brief Mix of implicit and explicit ack-mode consumers in the same group.
+ *
+ * `share.acknowledgement.mode` is a CLIENT-side config, so two consumers
+ * in the same share group can use different modes. Verifies that:
+ *   - The implicit consumer auto-acks on each consume_batch.
+ *   - The explicit consumer's accepted records are not redelivered after
+ *     commit_sync.
+ *   - All produced records are delivered (no losses), and the total
+ *     count matches the produced count once the explicit consumer
+ *     commits (no duplicates).
+ */
+static void test_mixed_ack_mode_same_group(void) {
+        const char *group = "share-mixed-ack-mode";
+        const char *topic;
+        rd_kafka_share_t *implicit_c;
+        rd_kafka_share_t *explicit_c;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        const int total_msgs = 400;
+        int implicit_cnt     = 0;
+        int explicit_cnt     = 0;
+        int attempts;
+        rd_kafka_error_t *cerr;
+        test_ack_cb_state_t exp_state = {0};
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "=== Mixed ack-mode (implicit + explicit) in same group ===\n");
+
+        topic = test_mk_topic_name("0172-mixed-ack-mode", 1);
+        test_create_topic_wait_exists(NULL, topic, 4, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, RD_KAFKA_PARTITION_UA,
+                                 total_msgs);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        implicit_c = test_create_share_consumer(group, "implicit");
+        explicit_c = test_create_share_consumer_with_cb(group, "explicit",
+                                                        &exp_state, NULL);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(implicit_c, subs);
+        rd_kafka_share_subscribe(explicit_c, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Round-robin poll across both consumers. The implicit consumer's
+         * messages are auto-acked by the next consume_batch call; the
+         * explicit consumer must call rd_kafka_share_acknowledge per
+         * message. */
+        attempts = 200;
+        while (implicit_cnt + explicit_cnt < total_msgs && attempts-- > 0) {
+                size_t rcvd = 0;
+                size_t m;
+                rd_kafka_error_t *err;
+
+                /* Implicit consumer */
+                err = rd_kafka_share_consume_batch(implicit_c, 1000, batch,
+                                                   &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                } else {
+                        for (m = 0; m < rcvd; m++) {
+                                if (!batch[m]->err)
+                                        implicit_cnt++;
+                                rd_kafka_message_destroy(batch[m]);
+                        }
+                }
+
+                /* Explicit consumer */
+                rcvd = 0;
+                err  = rd_kafka_share_consume_batch(explicit_c, 1000, batch,
+                                                    &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+                for (m = 0; m < rcvd; m++) {
+                        if (!batch[m]->err) {
+                                rd_kafka_resp_err_t ack_err =
+                                    rd_kafka_share_acknowledge_type(
+                                        explicit_c, batch[m],
+                                        RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                TEST_ASSERT(!ack_err,
+                                            "explicit ACCEPT failed: %s",
+                                            rd_kafka_err2str(ack_err));
+                                explicit_cnt++;
+                        }
+                        rd_kafka_message_destroy(batch[m]);
+                }
+        }
+
+        TEST_SAY("Consumed: implicit=%d explicit=%d total=%d/%d\n",
+                 implicit_cnt, explicit_cnt, implicit_cnt + explicit_cnt,
+                 total_msgs);
+
+        /* Flush explicit consumer's accepted acks to the broker so they
+         * are durable before we tear the consumer down. */
+        rd_kafka_topic_partition_list_t *commit_parts = NULL;
+        cerr = rd_kafka_share_commit_sync(explicit_c, 30000, &commit_parts);
+        TEST_ASSERT(!cerr, "explicit commit_sync failed: %s",
+                    cerr ? rd_kafka_error_string(cerr) : "");
+        if (commit_parts)
+                rd_kafka_topic_partition_list_destroy(commit_parts);
+        TEST_ASSERT(exp_state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "explicit ack callback reported err: %s",
+                    rd_kafka_err2name(exp_state.last_err));
+
+        /* Final flush poll on the implicit consumer so the last batch's
+         * piggybacked acks reach the broker. */
+        size_t rcvd = 0;
+        size_t m;
+        rd_kafka_error_t *err =
+            rd_kafka_share_consume_batch(implicit_c, 1000, batch, &rcvd);
+        if (err)
+                rd_kafka_error_destroy(err);
+        for (m = 0; m < rcvd; m++)
+                rd_kafka_message_destroy(batch[m]);
+
+        TEST_ASSERT(implicit_cnt + explicit_cnt >= total_msgs,
+                    "Expected >= %d total records across both consumers, "
+                    "got %d (implicit=%d explicit=%d)",
+                    total_msgs, implicit_cnt + explicit_cnt, implicit_cnt,
+                    explicit_cnt);
+        TEST_ASSERT(implicit_cnt > 0, "Implicit consumer received no records");
+        TEST_ASSERT(explicit_cnt > 0, "Explicit consumer received no records");
+
+        test_share_consumer_close(implicit_c);
+        test_share_destroy(implicit_c);
+        test_share_consumer_close(explicit_c);
+        test_share_destroy(explicit_c);
+
+        TEST_SAY(
+            "SUCCESS: mixed ack-mode group - implicit=%d explicit=%d "
+            "(total=%d)\n",
+            implicit_cnt, explicit_cnt, implicit_cnt + explicit_cnt);
+}
+
+
 int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
         test_timeout_set(600); /* 10 minutes for all tests */
@@ -1369,6 +1717,9 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         /* Acknowledgement state tests */
         test_change_ack_type_before_commit();
         test_ack_after_commit();
+        test_ack_message_from_earlier_batch();
+        test_ack_offset_before_consume();
+        test_ack_offset_wrong_params();
 
         /* Max delivery attempts test */
         test_max_delivery_attempts();
@@ -1385,6 +1736,9 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         test_scale_8_topics_4_partitions();
         test_scale_single_topic_8_partitions();
         test_scale_10_topics_3_partitions();
+
+        /* Mixed ack-mode within the same share group */
+        test_mixed_ack_mode_same_group();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

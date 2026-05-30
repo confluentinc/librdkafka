@@ -1138,8 +1138,13 @@ static void rd_kafka_toppar_broker_migrate(rd_kafka_toppar_t *rktp,
          * prior to leaving the broker to avoid stalling
          * on the new broker waiting for a offset reply from
          * this old broker (that might not come and thus need
-         * to time out..slowly) */
-        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+         * to time out..slowly).
+         *
+         * Share consumers never enter OFFSET_WAIT so this branch is
+         * unreachable for them today; guard regardless so the offset
+         * machinery stays out of the share leader-change path. */
+        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
                 rd_kafka_toppar_offset_retry(rktp, 500,
                                              "migrating to new broker");
 
@@ -1582,6 +1587,13 @@ static void rd_kafka_toppar_offset_retry(rd_kafka_toppar_t *rktp,
                                          const char *reason) {
         rd_ts_t tmr_next;
         int restart_tmr;
+
+        /* Share consumers never use the offset-query state machine.
+         * Callers must guard; this early-return is belt-and-suspenders
+         * so a stray future call doesn't arm the offset-query timer
+         * for a share-assigned rktp. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+                return;
 
         /* (Re)start timer if not started or the current timeout
          * is larger than \p backoff_ms. */
@@ -2545,14 +2557,18 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
 
         rko->rko_u.err.errstr = rd_strdup(buf);
 
-        /* TODO KIP-932: share consumer does not forward rktp_fetchq to
-         * rkcg_q, so this OP_ERR gets stranded. Topic-level errors
-         * surfaced through this helper (UNKNOWN_TOPIC_OR_PART /
-         * UNKNOWN_PARTITION etc. from the metadata-refresh path in
-         * rdkafka_topic.c) may still be useful for share-consumer
-         * apps; verify and consider routing to rk_rep for share
-         * consumer instead. */
-        rd_kafka_q_enq(rktp->rktp_fetchq, rko);
+        /* Share consumers don't drain rktp_fetchq — route topic-level
+         * errors (UNKNOWN_TOPIC_OR_PART / UNKNOWN_PARTITION etc.
+         * surfaced from the metadata-refresh path in rdkafka_topic.c)
+         * to the cgrp queue so they reach the app via consume_batch. */
+        {
+                rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+                rd_kafka_q_t *rkq =
+                    RD_KAFKA_IS_SHARE_CONSUMER(rk) && rk->rk_cgrp
+                        ? rk->rk_cgrp->rkcg_q
+                        : rktp->rktp_fetchq;
+                rd_kafka_q_enq(rkq, rko);
+        }
 }
 
 

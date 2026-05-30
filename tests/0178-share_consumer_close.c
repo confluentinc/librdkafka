@@ -1939,7 +1939,6 @@ static void test_implicit_ack_callback_fires_on_close(void) {
         const char *group;
         char group_id[64];
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t batch[16];
         rd_kafka_message_t *raw_batch[16];
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_error_t *error;
@@ -1981,10 +1980,8 @@ static void test_implicit_ack_callback_fires_on_close(void) {
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!raw_batch[j]->err) {
-                                batch[consumed] = *raw_batch[j];
+                        if (!raw_batch[j]->err)
                                 consumed++;
-                        }
                         rd_kafka_message_destroy(raw_batch[j]);
                 }
         }

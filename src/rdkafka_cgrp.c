@@ -5799,23 +5799,39 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
 
         if (rkcg->rkcg_subscription) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
-                if (rd_kafka_topic_partition_list_regex_cnt(
-                        rkcg->rkcg_subscription) > 0)
-                        rkcg->rkcg_flags |=
-                            RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
 
-                if (rkcg->rkcg_group_protocol ==
-                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                        rkcg->rkcg_subscription_regex =
-                            rd_kafka_topic_partition_list_combine_regexes(
-                                rkcg->rkcg_subscription);
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                        /* Share consumer has no regex subscription: feed the
+                         * full subscription list to the heartbeat as
+                         * SubscribedTopicNames; let the broker reject any
+                         * invalid topic names. */
                         rkcg->rkcg_subscription_topics =
-                            rd_kafka_topic_partition_list_remove_regexes(
+                            rd_kafka_topic_partition_list_copy(
                                 rkcg->rkcg_subscription);
                         rkcg->rkcg_consumer_flags |=
                             RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
                             RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
                         rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(rkcg);
+                } else {
+                        if (rd_kafka_topic_partition_list_regex_cnt(
+                                rkcg->rkcg_subscription) > 0)
+                                rkcg->rkcg_flags |=
+                                    RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
+
+                        if (rkcg->rkcg_group_protocol ==
+                            RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                                rkcg->rkcg_subscription_regex =
+                                    rd_kafka_topic_partition_list_combine_regexes(
+                                        rkcg->rkcg_subscription);
+                                rkcg->rkcg_subscription_topics =
+                                    rd_kafka_topic_partition_list_remove_regexes(
+                                        rkcg->rkcg_subscription);
+                                rkcg->rkcg_consumer_flags |=
+                                    RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
+                                    RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
+                                rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(
+                                    rkcg);
+                        }
                 }
         } else {
                 rkcg->rkcg_subscription_regex  = NULL;

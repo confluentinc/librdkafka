@@ -5133,9 +5133,13 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  *         an error on unavailable topics.
  *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains invalid
- *          topics or regexes or duplicate entries,
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains empty
+ *          topic names, or duplicate entries,
  *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
+ *
+ * @remark Topic names are forwarded verbatim to the broker via the share
+ *         group heartbeat. The broker validates them and rejects invalid
+ *         topic names.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,

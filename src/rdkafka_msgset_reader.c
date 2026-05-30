@@ -1187,7 +1187,23 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                 int32_t LastOffsetDelta;
 
                                 /* Read LastOffsetDelta to
-                                 * determine full offset range.  */
+                                 * determine full offset range.
+                                 *
+                                 * TODO KIP-932: These bytes come from
+                                 * within the CRC-covered region of the
+                                 * MessageSet body, and the CRC has
+                                 * just failed — so `Attributes` and
+                                 * `LastOffsetDelta` may be corrupt. A
+                                 * garbage `LastOffsetDelta` can:
+                                 *  - be huge → fan-out emits millions of
+                                 *    error ops for offsets that don't
+                                 *    exist (memory/queue blowup);
+                                 *  - be negative → `LastOffset <
+                                 *    BaseOffset`, fan-out loop is a
+                                 *    silent no-op (no error surfaced);
+                                 *  - look valid but be off → REJECT ops
+                                 *    issued for the wrong offset range.
+                                 */
                                 rd_kafka_buf_read_i16(rkbuf, &Attributes);
                                 rd_kafka_buf_read_i32(rkbuf, &LastOffsetDelta);
                                 LastOffset = hdr.BaseOffset + LastOffsetDelta;

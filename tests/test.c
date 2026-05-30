@@ -8247,6 +8247,32 @@ void test_share_destroy(rd_kafka_share_t *rkshare) {
  * Tracks callback invocations, offsets acknowledged, and errors.
  * Opaque must be a pointer to test_ack_cb_state_t.
  */
+void test_ack_cb_state_push_err(test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err) {
+        state->errs = rd_realloc(state->errs, sizeof(*state->errs) *
+                                                  (state->callback_cnt + 1));
+        state->errs[state->callback_cnt] = err;
+        state->callback_cnt++;
+}
+
+void test_ack_cb_state_destroy(test_ack_cb_state_t *state) {
+        if (state->errs)
+                rd_free(state->errs);
+        state->errs          = NULL;
+        state->callback_cnt  = 0;
+        state->total_offsets = 0;
+}
+
+rd_kafka_resp_err_t
+test_ack_cb_state_first_err(const test_ack_cb_state_t *state) {
+        int i;
+        for (i = 0; i < state->callback_cnt; i++) {
+                if (state->errs[i] != RD_KAFKA_RESP_ERR_NO_ERROR)
+                        return state->errs[i];
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 void test_share_ack_cb(rd_kafka_share_t *rkshare,
                        rd_kafka_share_partition_offsets_list_t *partitions,
                        rd_kafka_resp_err_t err,
@@ -8256,8 +8282,7 @@ void test_share_ack_cb(rd_kafka_share_t *rkshare,
 
         (void)rkshare;
 
-        state->callback_cnt++;
-        state->last_err = err;
+        test_ack_cb_state_push_err(state, err);
 
         entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
         if (entry)
@@ -8284,12 +8309,13 @@ rd_kafka_share_t *test_create_share_consumer_with_cb(
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
                           sizeof(errstr));
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(
-            conf, cb ? cb : test_share_ack_cb);
-        rd_kafka_conf_set_opaque(conf, state);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+
+        /* Register acknowledgement callback at runtime */
+        rd_kafka_share_set_acknowledgement_cb(
+            rkshare, cb ? cb : test_share_ack_cb, state);
         return rkshare;
 }
 

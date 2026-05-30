@@ -4310,6 +4310,15 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`RD_KAFKA_EVENT_REBALANCE` is not "
                                        "applicable for share consumer";
 
+                        if (conf->stats_cb)
+                                return "`stats_cb` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "statistics.interval.ms"))
+                                return "`statistics.interval.ms` is not "
+                                       "applicable for share consumer";
+
                         if (rd_kafka_conf_is_modified(conf,
                                                       "enable.auto.commit"))
                                 return "`enable.auto.commit` is not "

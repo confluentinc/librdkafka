@@ -105,6 +105,17 @@ static void setter_event_rebalance(rd_kafka_conf_t *conf) {
         rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 }
 
+/* Unused stub used only as a non-NULL function-pointer value for
+ * rd_kafka_conf_set_stats_cb in the rejection test. */
+static int
+unused_stats_cb(rd_kafka_t *rk, char *json, size_t json_len, void *opaque) {
+        return 0;
+}
+
+static void setter_stats_cb(rd_kafka_conf_t *conf) {
+        rd_kafka_conf_set_stats_cb(conf, unused_stats_cb);
+}
+
 /**
  * @brief Share consumer has no rebalance callback semantics; the
  *        factory rejects rebalance_cb at construction so an app's
@@ -129,6 +140,34 @@ static void test_event_rebalance_rejected_at_construction(void) {
         verify_share_consumer_conf_set_rejected("RD_KAFKA_EVENT_REBALANCE set",
                                                 setter_event_rebalance,
                                                 "RD_KAFKA_EVENT_REBALANCE");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Share consumer does not emit periodic stats; setting a
+ *        stats_cb is rejected so an app's handler can never silently
+ *        never-fire.
+ */
+static void test_stats_cb_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_set_rejected("stats_cb set", setter_stats_cb,
+                                                "stats_cb");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Companion to test_stats_cb_rejected_at_construction: the
+ *        property-string form is also rejected so the user can't
+ *        request periodic stats indirectly.
+ */
+static void test_statistics_interval_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("statistics.interval.ms",
+                                                 "1000");
 
         SUB_TEST_PASS();
 }
@@ -254,6 +293,8 @@ static void test_heartbeat_interval_ms_rejected_at_construction(void) {
 int main_0180_share_consumer_config(int argc, char **argv) {
         test_rebalance_cb_rejected_at_construction();
         test_event_rebalance_rejected_at_construction();
+        test_stats_cb_rejected_at_construction();
+        test_statistics_interval_ms_rejected_at_construction();
         test_enable_auto_commit_rejected_at_construction();
         test_group_protocol_rejected_at_construction();
         test_socket_max_fails_rejected_at_construction();

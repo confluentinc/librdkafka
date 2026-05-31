@@ -1143,8 +1143,8 @@ static void rd_kafka_toppar_broker_migrate(rd_kafka_toppar_t *rktp,
          * Share consumers never enter OFFSET_WAIT so this branch is
          * unreachable for them today; guard regardless so the offset
          * machinery stays out of the share leader-change path. */
-        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT &&
-            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
+            rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
                 rd_kafka_toppar_offset_retry(rktp, 500,
                                              "migrating to new broker");
 
@@ -2537,6 +2537,81 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 }
 
 
+/**
+ * @brief Enqueue an RD_KAFKA_OP_CONSUMER_ERR on the share consumer's
+ *        cgrp queue so the error surfaces through consume_batch.
+ *
+ * @remark No-op if the share consumer's cgrp hasn't been initialised yet.
+ */
+static void rd_kafka_share_toppar_enq_consumer_err(rd_kafka_toppar_t *rktp,
+                                                   rd_kafka_resp_err_t err,
+                                                   const char *errstr) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+        rd_kafka_op_t *rko;
+
+        if (!rk->rk_cgrp)
+                return;
+
+        rko                   = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+        rko->rko_err          = err;
+        rko->rko_rktp         = rd_kafka_toppar_keep(rktp);
+        rko->rko_u.err.errstr = rd_strdup(errstr);
+
+        rd_kafka_q_enq(rk->rk_cgrp->rkcg_q, rko);
+}
+
+
+/**
+ * @brief Share-consumer variant of rd_kafka_toppar_enq_error.
+ *
+ * Surfaces TOPIC_EXCEPTION and TOPIC_AUTHORIZATION_FAILED to the
+ * application via the cgrp queue (as RD_KAFKA_OP_CONSUMER_ERR). Other
+ * topic-level errors (UNKNOWN_TOPIC, UNKNOWN_TOPIC_OR_PART,
+ * UNKNOWN_TOPIC_ID, UNKNOWN_PARTITION) describe transient metadata
+ * drift that the library recovers from internally; they are logged and
+ * not delivered to the app.
+ */
+static void rd_kafka_share_toppar_enq_error(rd_kafka_toppar_t *rktp,
+                                            rd_kafka_resp_err_t err,
+                                            const char *reason) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+        char buf[512];
+
+        rd_snprintf(buf, sizeof(buf), "%.*s [%" PRId32 "]: %s (%s)",
+                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                    rktp->rktp_partition, reason, rd_kafka_err2str(err));
+
+        switch (err) {
+        case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
+        case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                rd_kafka_share_toppar_enq_consumer_err(rktp, err, buf);
+                return;
+
+        case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
+        case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+                rd_kafka_log(rk, LOG_WARNING, "TOPICERR",
+                             "Received unknown topic or partition error "
+                             "for partition %.*s [%" PRId32 "]",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition);
+                return;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
+                rd_kafka_log(rk, LOG_WARNING, "TOPICERR",
+                             "Received unknown topic ID error "
+                             "for partition %.*s [%" PRId32 "]",
+                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                             rktp->rktp_partition);
+                return;
+
+        default:
+                rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
+                             "Unhandled topic-level error: %s", buf);
+                return;
+        }
+}
+
 
 /**
  * Propagate error for toppar
@@ -2546,6 +2621,11 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
                                const char *reason) {
         rd_kafka_op_t *rko;
         char buf[512];
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_share_toppar_enq_error(rktp, err, reason);
+                return;
+        }
 
         rko           = rd_kafka_op_new(RD_KAFKA_OP_ERR);
         rko->rko_err  = err;
@@ -2557,18 +2637,7 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
 
         rko->rko_u.err.errstr = rd_strdup(buf);
 
-        /* Share consumers don't drain rktp_fetchq — route topic-level
-         * errors (UNKNOWN_TOPIC_OR_PART / UNKNOWN_PARTITION etc.
-         * surfaced from the metadata-refresh path in rdkafka_topic.c)
-         * to the cgrp queue so they reach the app via consume_batch. */
-        {
-                rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-                rd_kafka_q_t *rkq =
-                    RD_KAFKA_IS_SHARE_CONSUMER(rk) && rk->rk_cgrp
-                        ? rk->rk_cgrp->rkcg_q
-                        : rktp->rktp_fetchq;
-                rd_kafka_q_enq(rkq, rko);
-        }
+        rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 }
 
 

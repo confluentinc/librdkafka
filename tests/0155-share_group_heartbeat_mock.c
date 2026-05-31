@@ -51,28 +51,40 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
 }
 
 /**
- * @brief Wait until rd_kafka_fatal_error() returns a non-NO_ERROR
- *        value, or \p timeout_ms elapses.
+ * @brief Poll rd_kafka_share_consume_batch() until it returns a fatal
+ *        error or \p timeout_ms elapses.
  *
- * @param errstr Buffer to store the fatal error string (caller-provided).
- * @param errstr_size Size of \p errstr buffer.
- * @return The fatal error code (NO_ERROR if timeout expired).
+ * While waiting for the fatal error no records are expected, and any
+ * error returned must be fatal; both are asserted.
+ *
+ * @return The fatal rd_kafka_error_t* (caller owns it and must destroy it),
+ *         or NULL if the timeout elapsed without any error.
  */
-static rd_kafka_resp_err_t wait_fatal_error(rd_kafka_share_t *share_c,
-                                            int timeout_ms,
-                                            char *errstr,
-                                            size_t errstr_size) {
+static rd_kafka_error_t *wait_fatal_error(rd_kafka_share_t *share_c,
+                                          int timeout_ms) {
         int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
+        rd_kafka_message_t *rkmessages[10];
+        size_t rcvd;
+        rd_kafka_error_t *error;
 
-        errstr[0] = '\0';
         while (test_clock() < deadline) {
-                rd_kafka_resp_err_t err = rd_kafka_fatal_error(
-                    test_share_consumer_get_rk(share_c), errstr, errstr_size);
-                if (err != RD_KAFKA_RESP_ERR_NO_ERROR)
-                        return err;
-                rd_usleep(100 * 1000, 0);
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(share_c, 100, rkmessages,
+                                                     &rcvd);
+
+                TEST_ASSERT(rcvd == 0,
+                            "Expected no records while waiting for fatal "
+                            "error, got %d",
+                            (int)rcvd);
+
+                if (error) {
+                        TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                                    "Expected a fatal error, got non-fatal %s",
+                                    rd_kafka_error_name(error));
+                        return error;
+                }
         }
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return NULL;
 }
 
 static int count_topic_partitions(rd_kafka_topic_partition_list_t *assignment,
@@ -513,8 +525,7 @@ static void do_test_share_group_error_injection(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t fatal_err;
-        char errstr[256];
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-errors";
 
@@ -545,17 +556,21 @@ static void do_test_share_group_error_injection(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
-        /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 7000, errstr, sizeof(errstr));
-        TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_INVALID_REQUEST,
-                    "Expected INVALID_REQUEST fatal state, got %s",
-                    rd_kafka_err2name(fatal_err));
-        TEST_SAY("Consumer entered fatal state: %s (%s)\n",
-                 rd_kafka_err2str(fatal_err), errstr);
+        /* Wait for the fatal error to propagate via consume_batch. */
+        error = wait_fatal_error(share_c, 7000);
+        TEST_ASSERT(error != NULL,
+                    "Expected a fatal error but none received within timeout");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_INVALID_REQUEST,
+                    "Expected INVALID_REQUEST fatal error, got %s",
+                    rd_kafka_error_name(error));
+        TEST_SAY("Consumer entered fatal state: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         /* Cleanup. Consumer is in fatal state, so close is expected
          * to return the stored fatal error. */
-        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        error = rd_kafka_share_consumer_close(share_c);
         TEST_ASSERT(rd_kafka_error_code(error) ==
                         RD_KAFKA_RESP_ERR_INVALID_REQUEST,
                     "Expected close to return INVALID_REQUEST, got %s",
@@ -1246,8 +1261,7 @@ static void do_test_group_authorization_failed_error(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t fatal_err;
-        char errstr[256];
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-auth-failed";
 
@@ -1276,17 +1290,21 @@ static void do_test_group_authorization_failed_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED, 0);
 
-        /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
-        TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
-                    "Expected GROUP_AUTHORIZATION_FAILED fatal state, got %s",
-                    rd_kafka_err2name(fatal_err));
-        TEST_SAY("Consumer entered fatal state: %s (%s)\n",
-                 rd_kafka_err2str(fatal_err), errstr);
+        /* Wait for the fatal error to propagate via consume_batch. */
+        error = wait_fatal_error(share_c, 5000);
+        TEST_ASSERT(error != NULL,
+                    "Expected a fatal error but none received within timeout");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
+                    "Expected GROUP_AUTHORIZATION_FAILED fatal error, got %s",
+                    rd_kafka_error_name(error));
+        TEST_SAY("Consumer entered fatal state: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         /* Cleanup. Consumer is in fatal state, so close is expected
          * to return the stored fatal error. */
-        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        error = rd_kafka_share_consumer_close(share_c);
         TEST_ASSERT(rd_kafka_error_code(error) ==
                         RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
                     "Expected close to return GROUP_AUTHORIZATION_FAILED, "
@@ -1312,8 +1330,7 @@ static void do_test_group_max_size_reached_error(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c1, *share_c2;
-        rd_kafka_resp_err_t fatal_err;
-        char errstr[256];
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-max-size";
 
@@ -1350,14 +1367,17 @@ static void do_test_group_max_size_reached_error(void) {
         share_c2 = create_share_consumer(bootstraps, group);
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c2, subscription));
 
-        /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c2, 5000, errstr, sizeof(errstr));
-        TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED,
-                    "Expected GROUP_MAX_SIZE_REACHED fatal state, got %s",
-                    rd_kafka_err2name(fatal_err));
-        TEST_SAY(
-            "share consumer 2 correctly rejected with fatal error: %s (%s)\n",
-            rd_kafka_err2str(fatal_err), errstr);
+        /* Wait for the fatal error to propagate via consume_batch. */
+        error = wait_fatal_error(share_c2, 5000);
+        TEST_ASSERT(error != NULL,
+                    "Expected a fatal error but none received within timeout");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED,
+                    "Expected GROUP_MAX_SIZE_REACHED fatal error, got %s",
+                    rd_kafka_error_name(error));
+        TEST_SAY("share consumer 2 correctly rejected with fatal error: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         rd_kafka_topic_partition_list_destroy(subscription);
 
@@ -1995,72 +2015,75 @@ static void do_test_group_id_not_found_while_unsubscribed(void) {
  * When an active member (epoch > 0) receives GROUP_ID_NOT_FOUND,
  * it should be treated as a fatal error (group unexpectedly deleted).
  */
-// static void do_test_group_id_not_found_while_stable_is_fatal(void) {
-//         rd_kafka_mock_cluster_t *mcluster;
-//         const char *bootstraps;
-//         rd_kafka_topic_partition_list_t *subscription, *assignment;
-//         rd_kafka_share_t *share_c;
-//         rd_kafka_resp_err_t fatal_err;
-//         char errstr[256];
-//         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-//         const char *group = "test-share-group-id-not-found-stable";
+static void do_test_group_id_not_found_while_stable_is_fatal(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *subscription, *assignment;
+        rd_kafka_share_t *share_c;
+        rd_kafka_error_t *error;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        const char *group = "test-share-group-id-not-found-stable";
 
-//         SUB_TEST_QUICK();
+        SUB_TEST_QUICK();
 
-//         /* Setup */
-//         mcluster = test_mock_cluster_new(1, &bootstraps);
-//         rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
+        /* Setup */
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 3, 1);
 
-//         share_c = create_share_consumer(bootstraps, group);
+        share_c = create_share_consumer(bootstraps, group);
 
-//         subscription = rd_kafka_topic_partition_list_new(1);
-//         rd_kafka_topic_partition_list_add(subscription, topic,
-//                                           RD_KAFKA_PARTITION_UA);
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
 
-//         rd_kafka_mock_start_request_tracking(mcluster);
-//         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c, subscription));
-//         rd_kafka_topic_partition_list_destroy(subscription);
+        rd_kafka_mock_start_request_tracking(mcluster);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
 
-//         /* Wait for initial join and assignment */
-//         wait_share_heartbeats(mcluster, 1, 1000);
-//         rd_usleep(500 * 1000, 0);
+        /* Wait for initial join and assignment */
+        wait_share_heartbeats(mcluster, 1, 1000);
+        rd_usleep(500 * 1000, 0);
 
-//         /* Verify initial assignment - member is in stable state */
-//         TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
-//                                             &assignment));
-//         TEST_ASSERT(assignment->cnt == 3,
-//                     "Expected 3 partitions initially, got %d",
-//                     assignment->cnt);
-//         rd_kafka_topic_partition_list_destroy(assignment);
+        /* Verify initial assignment - member is in stable state */
+        TEST_CALL_ERR__(rd_kafka_assignment(test_share_consumer_get_rk(share_c),
+                                            &assignment));
+        TEST_ASSERT(assignment->cnt == 3,
+                    "Expected 3 partitions initially, got %d", assignment->cnt);
+        rd_kafka_topic_partition_list_destroy(assignment);
 
-//         /* Inject GROUP_ID_NOT_FOUND for an active/stable member.
-//          * This should be treated as fatal (group unexpectedly deleted). */
-//         rd_kafka_mock_broker_push_request_error_rtts(
-//             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
-//             RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
+        /* Inject GROUP_ID_NOT_FOUND for an active/stable member.
+         * This should be treated as fatal (group unexpectedly deleted). */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
+            RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
 
-//         /* Wait for fatal error to trigger */
-//         rd_usleep(500 * 1000, 0);
+        /* Wait for the fatal error to propagate via consume_batch. */
+        error = wait_fatal_error(share_c, 5000);
+        TEST_ASSERT(error != NULL,
+                    "Expected a fatal error but none received within timeout");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND,
+                    "Expected GROUP_ID_NOT_FOUND fatal error, got %s",
+                    rd_kafka_error_name(error));
+        TEST_SAY("Consumer entered fatal state: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
-//         /* Verify consumer entered fatal state */
-//         fatal_err =
-//         rd_kafka_fatal_error(test_share_consumer_get_rk(share_c),
-//                                          errstr, sizeof(errstr));
-//         TEST_ASSERT(fatal_err != RD_KAFKA_RESP_ERR_NO_ERROR,
-//                     "Expected consumer to be in fatal state after "
-//                     "GROUP_ID_NOT_FOUND while stable");
-//         TEST_SAY("Consumer entered fatal state: %s (%s)\n",
-//                  rd_kafka_err2str(fatal_err), errstr);
+        /* Cleanup. Consumer is in fatal state, so close is expected
+         * to return the stored fatal error. */
+        error = rd_kafka_share_consumer_close(share_c);
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND,
+                    "Expected close to return GROUP_ID_NOT_FOUND, got %s",
+                    rd_kafka_err2name(rd_kafka_error_code(error)));
+        rd_kafka_error_destroy(error);
+        test_share_destroy(share_c);
 
-//         /* Cleanup */
-//         test_share_consumer_close(share_c);
-//         test_share_destroy(share_c);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        test_mock_cluster_destroy(mcluster);
 
-//         rd_kafka_mock_stop_request_tracking(mcluster);
-//         test_mock_cluster_destroy(mcluster);
-
-//         SUB_TEST_PASS();
-// }
+        SUB_TEST_PASS();
+}
 
 /**
  * @brief INVALID_REQUEST error handling.
@@ -2073,8 +2096,7 @@ static void do_test_invalid_request_error(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t fatal_err;
-        char errstr[256];
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-invalid-request";
 
@@ -2103,17 +2125,21 @@ static void do_test_invalid_request_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_INVALID_REQUEST, 0);
 
-        /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
-        TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_INVALID_REQUEST,
-                    "Expected INVALID_REQUEST fatal state, got %s",
-                    rd_kafka_err2name(fatal_err));
-        TEST_SAY("Consumer entered fatal state: %s (%s)\n",
-                 rd_kafka_err2str(fatal_err), errstr);
+        /* Wait for the fatal error to propagate via consume_batch. */
+        error = wait_fatal_error(share_c, 5000);
+        TEST_ASSERT(error != NULL,
+                    "Expected a fatal error but none received within timeout");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_INVALID_REQUEST,
+                    "Expected INVALID_REQUEST fatal error, got %s",
+                    rd_kafka_error_name(error));
+        TEST_SAY("Consumer entered fatal state: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         /* Cleanup. Consumer is in fatal state, so close is expected
          * to return the stored fatal error. */
-        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        error = rd_kafka_share_consumer_close(share_c);
         TEST_ASSERT(rd_kafka_error_code(error) ==
                         RD_KAFKA_RESP_ERR_INVALID_REQUEST,
                     "Expected close to return INVALID_REQUEST, got %s",
@@ -2138,8 +2164,7 @@ static void do_test_unsupported_version_error(void) {
         const char *bootstraps;
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_share_t *share_c;
-        rd_kafka_resp_err_t fatal_err;
-        char errstr[256];
+        rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-unsupported-version";
 
@@ -2168,17 +2193,21 @@ static void do_test_unsupported_version_error(void) {
             mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
             RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION, 0);
 
-        /* Wait for the fatal error to propagate. */
-        fatal_err = wait_fatal_error(share_c, 5000, errstr, sizeof(errstr));
-        TEST_ASSERT(fatal_err == RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
-                    "Expected UNSUPPORTED_VERSION fatal state, got %s",
-                    rd_kafka_err2name(fatal_err));
-        TEST_SAY("Consumer entered fatal state: %s (%s)\n",
-                 rd_kafka_err2str(fatal_err), errstr);
+        /* Wait for the fatal error to propagate via consume_batch. */
+        error = wait_fatal_error(share_c, 5000);
+        TEST_ASSERT(error != NULL,
+                    "Expected a fatal error but none received within timeout");
+        TEST_ASSERT(rd_kafka_error_code(error) ==
+                        RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
+                    "Expected UNSUPPORTED_VERSION fatal error, got %s",
+                    rd_kafka_error_name(error));
+        TEST_SAY("Consumer entered fatal state: %s\n",
+                 rd_kafka_error_string(error));
+        rd_kafka_error_destroy(error);
 
         /* Cleanup. Consumer is in fatal state, so close is expected
          * to return the stored fatal error. */
-        rd_kafka_error_t *error = rd_kafka_share_consumer_close(share_c);
+        error = rd_kafka_share_consumer_close(share_c);
         TEST_ASSERT(rd_kafka_error_code(error) ==
                         RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
                     "Expected close to return UNSUPPORTED_VERSION, got %s",
@@ -2676,8 +2705,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         do_test_empty_topic_list_subscription();
 
         do_test_group_id_not_found_while_unsubscribed();
-        /* TODO KIP-932: Re-enable when GROUP_ID_NOT_FOUND is fatal */
-        /* do_test_group_id_not_found_while_stable_is_fatal(); */
+        do_test_group_id_not_found_while_stable_is_fatal();
 
         return 0;
 }

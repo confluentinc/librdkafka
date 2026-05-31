@@ -885,6 +885,8 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         rd_ts_t abs_timeout;
         rd_kafka_error_t *error = NULL;
         unsigned int cnt        = 0;
+        rd_kafka_resp_err_t fatal_err;
+        char fatal_errstr[512];
 
         *rkmessages_size_out = 0;
 
@@ -935,11 +937,22 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                     rd_false;
         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                 /* Return error */
-                if (rko->rko_error) {
+                if (unlikely(rko->rko_err == RD_KAFKA_RESP_ERR__FATAL)) {
+                        /* Never surface the generic __FATAL sentinel naked:
+                         * the specific fatal code + message are set before
+                         * this op is enqueued (and never cleared), so fetch
+                         * them and return a fatal-flagged error. */
+                        fatal_err = rd_kafka_fatal_error(rk, fatal_errstr,
+                                                         sizeof(fatal_errstr));
+                        error     = rd_kafka_error_new_fatal(fatal_err, "%s",
+                                                             fatal_errstr);
+                } else if (unlikely(rko->rko_error != NULL)) {
                         error          = rko->rko_error;
                         rko->rko_error = NULL;
                 } else {
-                        error = rd_kafka_error_new(
+                        /* Non-fatal share-consumer errors are retriable: the
+                         * app can retry the consume_batch call. */
+                        error = rd_kafka_error_new_retriable(
                             rko->rko_err, "%s",
                             rko->rko_u.err.errstr ? rko->rko_u.err.errstr : "");
                 }

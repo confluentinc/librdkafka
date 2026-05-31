@@ -3241,6 +3241,10 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
  * in case the creation of a new handle fails. In which case the function
  * returns NULL.
  *
+ * TODO KIP-932: understand whether all share consumer APIs need to be gated
+ * once a fatal error has been raised on the handle, and check what the Java
+ * client does in the fatal-error case.
+ *
  * @param conf Configuration. The \p conf object is freed by this function
  *             on success and must not be used or destroyed by the application
  *             subsequently.

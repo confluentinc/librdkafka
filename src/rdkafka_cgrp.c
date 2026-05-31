@@ -3381,6 +3381,10 @@ err:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
+        /* FIXME: GROUP_ID_NOT_FOUND on a non-leave heartbeat indicates the
+         * coordinator no longer knows the group and should be treated as a
+         * fatal error here; it currently falls through to the default action.
+         */
         default:
                 actions = rd_kafka_err_action(
                     rkb, err, request,
@@ -3663,6 +3667,7 @@ err:
                 break;
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+        case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
                              "ShareGroupHeartbeat failed due to: %s: "
                              "will rejoin the group",
@@ -3676,9 +3681,15 @@ err:
         case RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
 
+        /* TODO KIP-932: unrecognized error codes currently fall through to
+         * the generic action (retried if retriable, otherwise logged and
+         * ignored) and the consumer keeps heartbeating. Consider treating an
+         * unexpected code as fatal so a protocol mismatch surfaces to the
+         * application instead of looping silently. */
         default:
                 actions = rd_kafka_err_action(
                     rkb, err, request,

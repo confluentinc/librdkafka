@@ -7257,8 +7257,15 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
         case RD_KAFKA_OP_PARTITION_JOIN:
                 rd_kafka_cgrp_partition_add(rkcg, rktp);
 
-                /* If terminating tell the partition to leave */
-                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
+                /* If terminating tell the partition to leave.
+                 *
+                 * Skipped for share consumers: op_fetch_stop bumps the
+                 * version barrier, touches rktp_offset_query_tmr, and
+                 * calls offset_store_stop — none of which should fire
+                 * for a share-assigned rktp that never started a
+                 * regular fetch. */
+                if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
+                    !RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
                         rd_kafka_toppar_op_fetch_stop(rktp, RD_KAFKA_NO_REPLYQ);
                 break;
 

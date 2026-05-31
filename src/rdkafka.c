@@ -939,6 +939,10 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
          * consumer error so it is returned from consumer_poll(),
          * while for all other client types (the producer) we propagate to
          * the standard error handler (typically error_cb). */
+        /* TODO KIP-932: when a fatal error has been raised, check what the
+         * Java client does in the fatal-error case and decide whether we
+         * should still close the share session and send the leave-group
+         * heartbeat during consumer close. */
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp)
                 rd_kafka_consumer_err(
                     rk->rk_cgrp->rkcg_q, RD_KAFKA_NODEID_UA,
@@ -3694,6 +3698,11 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          * well-defined. */
         *rkmessages_size = 0;
 
+        /* TODO KIP-932: the non-fatal errors returned from the other paths
+         * below (consumer-group-not-initialized, consumer-closed, and the
+         * not-all-acknowledged guard) should be marked retriable so the app
+         * knows it can retry the consume_batch call, consistent with the
+         * retriable errors built in rd_kafka_q_serve_share_rkmessages(). */
         if (unlikely(!(rkcg = rd_kafka_cgrp_get(rk))))
                 return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
                                           "rd_kafka_share_consume_batch(): "
@@ -5039,8 +5048,10 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
                      NULL))
                 return error;
 
-        /* TODO KIP-932: Check fatal error handling
-         * while implementing destroy */
+        /* TODO KIP-932: when a fatal error has been raised, check what the
+         * Java client does in the fatal-error case and decide whether we
+         * should still close the share session and send the leave-group
+         * heartbeat during consumer close. */
         rk                                = rkshare->rkshare_rk;
         rkshare->rkshare_consumer_closing = rd_true;
         error                             = rd_kafka_consumer_close0(rk);
@@ -5749,6 +5760,9 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 break;
 
 
+        /*
+         * TODO KIP-932: Remove this op handling as we don't send this anymore.
+         */
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
                 rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
                 res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);

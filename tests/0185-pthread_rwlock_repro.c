@@ -78,8 +78,10 @@ int main_0185_pthread_rwlock_repro(int argc, char **argv) {
 #define RW_TEST_TIMEOUT_MS  60000 /* abort after 60s if not wedged */
 
 typedef struct rw_slot_s {
-        pthread_rwlock_t rwl;
-        rd_atomic32_t    wedged; /* set by watchdog when wedge detected */
+        /* Heap-allocate the rwlock so its address has the same alignment
+         * characteristics as one embedded in a malloc()'d rd_kafka_t. */
+        pthread_rwlock_t *rwl;
+        rd_atomic32_t     wedged; /* set by watchdog when wedge detected */
 } rw_slot_t;
 
 typedef struct rw_state_s {
@@ -89,7 +91,7 @@ typedef struct rw_state_s {
 } rw_state_t;
 
 static void rw_dump_wedged(rw_state_t *st, int idx) {
-        pthread_rwlock_t        *rwl = &st->slots[idx].rwl;
+        pthread_rwlock_t        *rwl = st->slots[idx].rwl;
         const unsigned char     *bytes = (const unsigned char *)rwl;
         size_t                   sz    = sizeof(*rwl);
         size_t                   i;
@@ -145,18 +147,30 @@ static int rw_driver_thread(void *arg) {
          * started: ascending atomic counter modulo number of locks. */
         my_n     = (int)rd_atomic32_add(&st->next_idx, 1) - 1;
         lock_idx = (my_n / RW_DRIVERS_PER_LOCK) % RW_NUM_LOCKS;
-        rwl      = &st->slots[lock_idx].rwl;
+        rwl      = st->slots[lock_idx].rwl;
 
         for (i = 0; i < RW_ITERATIONS; i++) {
-                /* Pattern matching librdkafka's broker_decommission():
-                 * release at 6574, immediately reacquire at 6615. */
-                if (pthread_rwlock_wrlock(rwl) != 0)
-                        return -1;
-                pthread_rwlock_unlock(rwl);
+                /* Mix in ~10% rdlock acquires to match librdkafka, which
+                 * has continuous broker-thread rdlock traffic interleaved
+                 * with the destroy-path wrlock acquires. */
+                if (i % 10 == 0) {
+                        if (pthread_rwlock_rdlock(rwl) != 0)
+                                return -1;
+                        pthread_rwlock_unlock(rwl);
+                        if (pthread_rwlock_rdlock(rwl) != 0)
+                                return -1;
+                        pthread_rwlock_unlock(rwl);
+                } else {
+                        /* Pattern matching librdkafka's broker_decommission():
+                         * release at 6574, immediately reacquire at 6615. */
+                        if (pthread_rwlock_wrlock(rwl) != 0)
+                                return -1;
+                        pthread_rwlock_unlock(rwl);
 
-                if (pthread_rwlock_wrlock(rwl) != 0)
-                        return -1;
-                pthread_rwlock_unlock(rwl);
+                        if (pthread_rwlock_wrlock(rwl) != 0)
+                                return -1;
+                        pthread_rwlock_unlock(rwl);
+                }
 
                 rd_atomic64_add(&st->acquires_done, 2);
 
@@ -191,7 +205,7 @@ static int rw_watchdog_thread(void *arg) {
 
                 /* No progress for >=3s — probe every lock. */
                 for (i = 0; i < RW_NUM_LOCKS; i++) {
-                        pthread_rwlock_t *rwl = &st->slots[i].rwl;
+                        pthread_rwlock_t *rwl = st->slots[i].rwl;
                         int w, r;
 
                         w = pthread_rwlock_trywrlock(rwl);
@@ -228,7 +242,10 @@ int main_0185_pthread_rwlock_repro(int argc, char **argv) {
         rd_atomic64_init(&st.acquires_done, 0);
         rd_atomic32_init(&st.next_idx, 0);
         for (i = 0; i < RW_NUM_LOCKS; i++) {
-                if (pthread_rwlock_init(&st.slots[i].rwl, NULL) != 0)
+                st.slots[i].rwl = malloc(sizeof(pthread_rwlock_t));
+                if (!st.slots[i].rwl)
+                        TEST_FAIL("malloc(pthread_rwlock_t) failed");
+                if (pthread_rwlock_init(st.slots[i].rwl, NULL) != 0)
                         TEST_FAIL("pthread_rwlock_init failed");
                 rd_atomic32_init(&st.slots[i].wedged, 0);
         }
@@ -256,7 +273,7 @@ int main_0185_pthread_rwlock_repro(int argc, char **argv) {
                 if (rd_atomic32_get(&st.slots[i].wedged)) {
                         wedge_found++;
                         TEST_SAY("Lock %d (rwl=%p) reported wedged\n",
-                                 i, (void *)&st.slots[i].rwl);
+                                 i, (void *)st.slots[i].rwl);
                 }
         }
 
@@ -265,9 +282,11 @@ int main_0185_pthread_rwlock_repro(int argc, char **argv) {
 
         for (i = 0; i < RW_NUM_LOCKS; i++) {
                 /* Don't pthread_rwlock_destroy a wedged lock — it may
-                 * itself hang. Leak it intentionally. */
-                if (!rd_atomic32_get(&st.slots[i].wedged))
-                        pthread_rwlock_destroy(&st.slots[i].rwl);
+                 * itself hang. Leak it (and its malloc) intentionally. */
+                if (!rd_atomic32_get(&st.slots[i].wedged)) {
+                        pthread_rwlock_destroy(st.slots[i].rwl);
+                        free(st.slots[i].rwl);
+                }
         }
 
         if (wedge_found > 0)

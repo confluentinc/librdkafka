@@ -203,7 +203,10 @@ typedef struct rwlock_t {
 
 
 #else
-typedef pthread_rwlock_t rwlock_t;
+/* Diagnostic: back rwlock_t with a plain pthread_mutex_t so rdlock and wrlock
+ * collapse to mutual exclusion. Used to test whether destroy hangs on macOS
+ * arm64 require pthread_rwlock semantics. */
+typedef pthread_mutex_t rwlock_t;
 
 int rwlock_init(rwlock_t *rwl);
 int rwlock_destroy(rwlock_t *rwl);

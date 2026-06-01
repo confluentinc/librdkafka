@@ -214,30 +214,43 @@ static int rwlock_diag_watchdog(void *arg) {
                                 30 * 1000000LL)
                                 continue;
 
-                        int try_r = pthread_rwlock_trywrlock(e->rwl);
-                        int try_errno = errno;
+                        /* Probe BOTH trywrlock and tryrdlock to identify
+                         * which internal state the pthread_rwlock is wedged
+                         * in. We unlock immediately after either succeeds so
+                         * the legitimate waiter can take the lock. */
+                        int try_w = pthread_rwlock_trywrlock(e->rwl);
+                        if (try_w == 0)
+                                pthread_rwlock_unlock(e->rwl);
+                        int try_r = pthread_rwlock_tryrdlock(e->rwl);
+                        if (try_r == 0)
+                                pthread_rwlock_unlock(e->rwl);
+
+                        const char *verdict;
+                        if (try_w == 0 && try_r == 0)
+                                verdict = "FREE (both trywrlock+tryrdlock OK; "
+                                          "wrlock waiter wedged on a free "
+                                          "lock)";
+                        else if (try_w == EBUSY && try_r == 0)
+                                verdict = "READERS-ONLY (counter wedged; new "
+                                          "readers allowed but writer blocked)";
+                        else if (try_w == EBUSY && try_r == EBUSY)
+                                verdict = "WRITER-FLAG-WEDGED (both readers "
+                                          "and writers blocked)";
+                        else if (try_w == 0 && try_r == EBUSY)
+                                verdict = "INCONSISTENT (trywrlock OK but "
+                                          "tryrdlock EBUSY — state machine "
+                                          "broken)";
+                        else
+                                verdict = "OTHER-ERROR";
+
                         fprintf(stderr,
                                 "[RWLOCK_DIAG] rwl=%p waiter_tid=%lu "
-                                "blocked_ms=%lld trywrlock=%d errno=%d "
+                                "blocked_ms=%lld trywrlock=%d tryrdlock=%d "
                                 "(EBUSY=%d) -> %s\n",
                                 (void *)e->rwl, e->waiter_tid,
                                 (long long)(blocked_us / 1000),
-                                try_r, try_errno, EBUSY,
-                                try_r == 0
-                                    ? "WEDGED-FREE-LOCK (pthread_rwlock_wrlock "
-                                      "blocked on a lock that trywrlock could "
-                                      "acquire)"
-                                    : (try_r == EBUSY
-                                           ? "GENUINELY-HELD (someone else has "
-                                             "the lock)"
-                                           : "OTHER-ERROR"));
+                                try_w, try_r, EBUSY, verdict);
                         fflush(stderr);
-                        if (try_r == 0) {
-                                /* We accidentally acquired the lock. Release
-                                 * it immediately so the legitimate waiter has
-                                 * a chance to take it. */
-                                pthread_rwlock_unlock(e->rwl);
-                        }
                         e->diag_count++;
                 }
                 mtx_unlock(&g_rwl_diag_mtx);

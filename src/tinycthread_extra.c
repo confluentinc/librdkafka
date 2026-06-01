@@ -160,148 +160,16 @@ int cnd_timedwait_abs(cnd_t *cnd, mtx_t *mtx, rd_ts_t abs_timeout) {
 
 /**
  * @name Read-write locks
+ *
+ * Diagnostic workaround for the macOS arm64 pthread_rwlock wedge bug:
+ * rwlock_t is backed by a plain pthread_mutex_t. rdlock and wrlock both
+ * map to mutex_lock; rdunlock and wrunlock map to mutex_unlock. This
+ * serializes readers but avoids the rwlock state machine entirely.
  * @{
  */
 #ifndef _WIN32
-
-/* Diagnostic watchdog for wrlock waits.
- *
- * Goal: prove or disprove the macOS pthread_rwlock wedged-state hypothesis.
- *
- * Mechanism: every thread that calls rwlock_wrlock registers a waiter entry
- * before calling pthread_rwlock_wrlock, and unregisters after the call
- * returns. A single background watchdog thread walks the waiter list every
- * few seconds; for any waiter blocked >30s, it calls pthread_rwlock_trywrlock
- * on the same lock from outside, and logs the result:
- *   - try_r == 0   : lock was free, but original wrlock was blocked.
- *                    pthread state machine is wedged on a free lock.
- *   - try_r == EBUSY: lock is genuinely held by someone we did not log.
- *
- * Diagnostic only. Remove after the destroy hang is root-caused. */
-
-struct rwlock_wait_entry {
-        rwlock_t                  *rwl;
-        unsigned long              waiter_tid;
-        rd_ts_t                    start_us;
-        int                        diag_count;
-        struct rwlock_wait_entry  *next;
-};
-
-static mtx_t                      g_rwl_diag_mtx;
-static struct rwlock_wait_entry  *g_rwl_diag_head;
-static thrd_t                     g_rwl_diag_thread;
-static int                        g_rwl_diag_started; /* protected by g_rwl_diag_mtx */
-static int                        g_rwl_diag_initialized; /* set once at process start */
-
-static int rwlock_diag_watchdog(void *arg) {
-        (void)arg;
-        for (;;) {
-                struct timespec sleep_ts = { 5, 0 };
-                nanosleep(&sleep_ts, NULL);
-
-                rd_ts_t now_us = rd_clock();
-                mtx_lock(&g_rwl_diag_mtx);
-                struct rwlock_wait_entry *e;
-                for (e = g_rwl_diag_head; e; e = e->next) {
-                        rd_ts_t blocked_us = now_us - e->start_us;
-                        if (blocked_us < 30 * 1000000LL)
-                                continue;
-
-                        /* Re-throttle subsequent prints to every 30s per
-                         * waiter, not every 5s. */
-                        if (e->diag_count > 0 &&
-                            blocked_us - (rd_ts_t)e->diag_count * 30 * 1000000LL <
-                                30 * 1000000LL)
-                                continue;
-
-                        /* Probe BOTH trywrlock and tryrdlock to identify
-                         * which internal state the pthread_rwlock is wedged
-                         * in. We unlock immediately after either succeeds so
-                         * the legitimate waiter can take the lock. */
-                        int try_w = pthread_rwlock_trywrlock(e->rwl);
-                        if (try_w == 0)
-                                pthread_rwlock_unlock(e->rwl);
-                        int try_r = pthread_rwlock_tryrdlock(e->rwl);
-                        if (try_r == 0)
-                                pthread_rwlock_unlock(e->rwl);
-
-                        const char *verdict;
-                        if (try_w == 0 && try_r == 0)
-                                verdict = "FREE (both trywrlock+tryrdlock OK; "
-                                          "wrlock waiter wedged on a free "
-                                          "lock)";
-                        else if (try_w == EBUSY && try_r == 0)
-                                verdict = "READERS-ONLY (counter wedged; new "
-                                          "readers allowed but writer blocked)";
-                        else if (try_w == EBUSY && try_r == EBUSY)
-                                verdict = "WRITER-FLAG-WEDGED (both readers "
-                                          "and writers blocked)";
-                        else if (try_w == 0 && try_r == EBUSY)
-                                verdict = "INCONSISTENT (trywrlock OK but "
-                                          "tryrdlock EBUSY — state machine "
-                                          "broken)";
-                        else
-                                verdict = "OTHER-ERROR";
-
-                        fprintf(stderr,
-                                "[RWLOCK_DIAG] rwl=%p waiter_tid=%lu "
-                                "blocked_ms=%lld trywrlock=%d tryrdlock=%d "
-                                "(EBUSY=%d) -> %s\n",
-                                (void *)e->rwl, e->waiter_tid,
-                                (long long)(blocked_us / 1000),
-                                try_w, try_r, EBUSY, verdict);
-                        fflush(stderr);
-
-                        /* Byte dump of the opaque pthread_rwlock_t (192 bytes
-                         * on LP64). Lets us distinguish WRITER-HELD (EBIT
-                         * leaked) from READERS-WITH-WRITER-WAITING (reader
-                         * count leaked) offline. Both produce trywrlock=EBUSY
-                         * and tryrdlock=EBUSY, but the lcntval/ucntval bytes
-                         * differ.
-                         *
-                         * libpthread layout (LP64): the seqaddr is
-                         * 16-byte-aligned within rw_seq[4]. Printing the full
-                         * structure as 32-bit words; one of the triples
-                         * around offset 32 (lcntval/rw_seq/ucntval) tells us
-                         * the wedged state. */
-                        {
-                                const unsigned char *bytes =
-                                    (const unsigned char *)e->rwl;
-                                fprintf(stderr,
-                                        "[RWLOCK_BYTES] rwl=%p sizeof=%zu words=",
-                                        (void *)e->rwl,
-                                        sizeof(pthread_rwlock_t));
-                                size_t i;
-                                for (i = 0; i + 4 <= sizeof(pthread_rwlock_t);
-                                     i += 4) {
-                                        uint32_t w;
-                                        memcpy(&w, bytes + i, 4);
-                                        fprintf(stderr, "%s%08x",
-                                                i == 0 ? "" : ",", w);
-                                }
-                                fprintf(stderr, "\n");
-                                fflush(stderr);
-                        }
-                        e->diag_count++;
-                }
-                mtx_unlock(&g_rwl_diag_mtx);
-        }
-        return 0;
-}
-
-void rwlock_diag_init(void) {
-        if (g_rwl_diag_initialized)
-                return;
-        g_rwl_diag_initialized = 1;
-        mtx_init(&g_rwl_diag_mtx, mtx_plain);
-        g_rwl_diag_head = NULL;
-        if (thrd_create(&g_rwl_diag_thread, rwlock_diag_watchdog, NULL) ==
-            thrd_success)
-                g_rwl_diag_started = 1;
-}
-
 int rwlock_init(rwlock_t *rwl) {
-        int r = pthread_rwlock_init(rwl, NULL);
+        int r = pthread_mutex_init(rwl, NULL);
         if (r) {
                 errno = r;
                 return thrd_error;
@@ -310,7 +178,7 @@ int rwlock_init(rwlock_t *rwl) {
 }
 
 int rwlock_destroy(rwlock_t *rwl) {
-        int r = pthread_rwlock_destroy(rwl);
+        int r = pthread_mutex_destroy(rwl);
         if (r) {
                 errno = r;
                 return thrd_error;
@@ -319,56 +187,28 @@ int rwlock_destroy(rwlock_t *rwl) {
 }
 
 int rwlock_rdlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_rdlock(rwl);
+        int r = pthread_mutex_lock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
 int rwlock_wrlock(rwlock_t *rwl) {
-        /* Register as a pending writer so the watchdog can probe this lock
-         * if we end up blocked >30s. */
-        struct rwlock_wait_entry entry;
-        entry.rwl        = rwl;
-        entry.waiter_tid = (unsigned long)(uintptr_t)pthread_self();
-        entry.start_us   = rd_clock();
-        entry.diag_count = 0;
-        entry.next       = NULL;
-
-        if (g_rwl_diag_started) {
-                mtx_lock(&g_rwl_diag_mtx);
-                entry.next      = g_rwl_diag_head;
-                g_rwl_diag_head = &entry;
-                mtx_unlock(&g_rwl_diag_mtx);
-        }
-
-        int r = pthread_rwlock_wrlock(rwl);
-
-        if (g_rwl_diag_started) {
-                mtx_lock(&g_rwl_diag_mtx);
-                struct rwlock_wait_entry **pp = &g_rwl_diag_head;
-                while (*pp && *pp != &entry)
-                        pp = &(*pp)->next;
-                if (*pp == &entry)
-                        *pp = entry.next;
-                mtx_unlock(&g_rwl_diag_mtx);
-        }
-
+        int r = pthread_mutex_lock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
 int rwlock_rdunlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_unlock(rwl);
+        int r = pthread_mutex_unlock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
 int rwlock_wrunlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_unlock(rwl);
+        int r = pthread_mutex_unlock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 /**@}*/
 
-
-#endif /* !_MSC_VER */
+#endif /* !_WIN32 */

@@ -200,9 +200,6 @@ static void rd_kafka_global_init0(void) {
 #if WITH_CURL
         rd_http_global_init();
 #endif
-
-        /* Diagnostic: start the rwlock wedged-state watchdog. */
-        rwlock_diag_init();
 }
 
 /**

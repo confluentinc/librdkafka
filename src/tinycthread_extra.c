@@ -251,6 +251,37 @@ static int rwlock_diag_watchdog(void *arg) {
                                 (long long)(blocked_us / 1000),
                                 try_w, try_r, EBUSY, verdict);
                         fflush(stderr);
+
+                        /* Byte dump of the opaque pthread_rwlock_t (192 bytes
+                         * on LP64). Lets us distinguish WRITER-HELD (EBIT
+                         * leaked) from READERS-WITH-WRITER-WAITING (reader
+                         * count leaked) offline. Both produce trywrlock=EBUSY
+                         * and tryrdlock=EBUSY, but the lcntval/ucntval bytes
+                         * differ.
+                         *
+                         * libpthread layout (LP64): the seqaddr is
+                         * 16-byte-aligned within rw_seq[4]. Printing the full
+                         * structure as 32-bit words; one of the triples
+                         * around offset 32 (lcntval/rw_seq/ucntval) tells us
+                         * the wedged state. */
+                        {
+                                const unsigned char *bytes =
+                                    (const unsigned char *)e->rwl;
+                                fprintf(stderr,
+                                        "[RWLOCK_BYTES] rwl=%p sizeof=%zu words=",
+                                        (void *)e->rwl,
+                                        sizeof(pthread_rwlock_t));
+                                size_t i;
+                                for (i = 0; i + 4 <= sizeof(pthread_rwlock_t);
+                                     i += 4) {
+                                        uint32_t w;
+                                        memcpy(&w, bytes + i, 4);
+                                        fprintf(stderr, "%s%08x",
+                                                i == 0 ? "" : ",", w);
+                                }
+                                fprintf(stderr, "\n");
+                                fflush(stderr);
+                        }
                         e->diag_count++;
                 }
                 mtx_unlock(&g_rwl_diag_mtx);

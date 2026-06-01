@@ -1,3 +1,12 @@
+# librdkafka v2.15.0
+
+### Consumer fixes
+
+* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
+  is unavailable during consumer close. The error logging path dereferenced
+  a potentially NULL broker pointer. Happening since 1.x.
+
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:
@@ -59,12 +68,6 @@ zstd 1.5.6 → 1.5.7; cJSON 1.7.14 → 1.7.19.
 * Issues: #5082.
   Fix data race in timers. The callback and its argument could have been modified after the lock is released.
   Happening since 1.x (#5089).
-
-### Consumer fixes
-
-* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
-  is unavailable during consumer close. The error logging path dereferenced
-  a potentially NULL broker pointer. Happening since 1.x.
 
 ### Admin client fixes
 

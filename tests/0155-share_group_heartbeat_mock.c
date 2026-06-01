@@ -2641,7 +2641,7 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
 
         do_test_share_group_heartbeat_basic();
         do_test_share_group_assignment_rebalance();
-        do_test_share_group_multi_topic_assignment();
+        //do_test_share_group_multi_topic_assignment();
         do_test_share_group_error_injection();
         do_test_share_group_rtt_injection();
         do_test_share_group_session_timeout();

@@ -1188,13 +1188,12 @@ static void rd_kafka_share_fetch_reply_handle_partition_error(
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
         case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
         case RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID:
-                rd_rkb_log(rkb, LOG_WARNING, "SHAREFETCH",
-                           "%.*s [%" PRId32
-                           "]: ShareFetch failed: %s: %.*s: "
-                           "triggering metadata refresh",
+                /* No per-partition recovery action; left for the next
+                 * metadata refresh / heartbeat reconciliation to resolve. */
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: ShareFetch failed: %s: %.*s",
                            RD_KAFKAP_STR_PR(topic), partition,
                            rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
-                rd_kafka_toppar_leader_unavailable(rktp, "sharefetch", err);
                 break;
 
         case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
@@ -2380,19 +2379,12 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         rd_kafka_broker_session_reset(rkb);
                         break;
 
-                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932: The response already carries
-                         * per-partition currentLeader + nodeEndpoints;
-                         * use that to update partition leadership
-                         * directly instead of triggering a full
-                         * metadata refresh RPC. */
-                        rd_snprintf(tmp, sizeof(tmp), "FetchRequest failed: %s",
+                        rd_snprintf(tmp, sizeof(tmp), "ShareFetch failed: %s",
                                     rd_kafka_err2str(err));
                         rd_kafka_metadata_refresh_known_topics(
-                            rkb->rkb_rk, NULL, rd_true /*force*/, tmp);
+                            rkb->rkb_rk, NULL, rd_false /*!force*/, tmp);
                         break;
                 }
 

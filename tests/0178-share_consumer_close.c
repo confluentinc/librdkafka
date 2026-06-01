@@ -1239,13 +1239,16 @@ static void test_close_with_slow_broker_response(void) {
                 setup_3broker_share_consumer(config->test_name, 0, &mcluster,
                                              &consumer);
 
-                /* Inject RTT delay on the specified brokers; this delays
-                 * responses (including the session-close request). */
+                /* Inject RTT delay for ShareAck request on specified brokers;
+                 * the session-close request */
                 for (i = 0; i < config->delayed_broker_cnt; i++) {
-                        TEST_SAY("Injecting %dms RTT delay on broker %d\n",
-                                 rtt_delay_ms, config->delayed_brokers[i]);
-                        rd_kafka_mock_broker_set_rtt(
-                            mcluster, config->delayed_brokers[i], rtt_delay_ms);
+                        TEST_ASSERT(
+                            rd_kafka_mock_broker_push_request_error_rtts(
+                                mcluster, config->delayed_brokers[i],
+                                RD_KAFKAP_ShareAcknowledge, 1,
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                rtt_delay_ms) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Failed to inject ShareAcknowledge delay");
                 }
 
                 TEST_SAY(

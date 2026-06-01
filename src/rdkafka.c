@@ -2385,19 +2385,14 @@ static int rd_kafka_thread_main(void *arg) {
                         rd_kafka_cgrp_serve(rk->rk_cgrp);
 
                 /* KIP-932: If share_fetch_more_records is set but no fetch
-                 * op is in-flight and assignments exist, re-trigger
-                 * the fetch flow by selecting a broker directly.
-                 * TODO: KIP-932: Check if rkcg_current_assignment is
-                 * correct here or if
-                 * rkcg->rkcg_rk->rk_consumer.assignment.all should
-                 * be used instead. */
+                 * op is in-flight and partitions are assigned, re-trigger
+                 * the fetch flow by selecting a broker directly. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk) && rk->rk_cgrp &&
                     !(rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
                     rk->rk_cgrp->rkcg_share.share_fetch_more_records &&
                     rk->rk_cgrp->rkcg_share
                             .share_should_fetch_ops_in_flight_cnt == 0 &&
-                    rk->rk_cgrp->rkcg_current_assignment &&
-                    rk->rk_cgrp->rkcg_current_assignment->cnt > 0) {
+                    rd_list_cnt(&rk->rk_cgrp->rkcg_toppars) > 0) {
                         rd_kafka_broker_t *rkb_sel;
 
                         rkb_sel = rd_kafka_share_select_broker(rk, rk->rk_cgrp);
@@ -3043,37 +3038,30 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
 static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                                                        rd_kafka_cgrp_t *rkcg) {
         rd_kafka_broker_t *selected_rkb = NULL, *leader = NULL;
-        rd_kafka_topic_partition_list_t *partitions =
-            rkcg->rkcg_current_assignment;
-        //     rkcg->rkcg_toppars; /* TODO: use rkcg->rkcg_toppars instead. */
+        rd_list_t *toppars = &rkcg->rkcg_toppars;
+        int toppar_cnt     = rd_list_cnt(toppars);
         size_t i;
-        rd_kafka_topic_partition_t *partition;
 
-        if (!partitions || partitions->cnt == 0) {
-                // rd_kafka_dbg(rk, CGRP, "SHARE",
-                //              "No partitions assigned to consumer, "
-                //              "cannot select broker for share fetch");
+        if (toppar_cnt == 0)
                 return NULL;
-        }
 
         /* Look through all partitions in order, find the first one which
          * has a leader. */
         rd_kafka_dbg(rk, CGRP, "SHARE",
                      "Selecting broker for share fetch from %d assigned "
                      "partitions, last picked index = %" PRIusz,
-                     partitions->cnt, rkcg->rkcg_share.last_partition_picked);
+                     toppar_cnt, rkcg->rkcg_share.last_partition_picked);
 
-        for (i = 0; i < (size_t)partitions->cnt; i++) {
+        for (i = 0; i < (size_t)toppar_cnt; i++) {
                 rd_kafka_toppar_t *rktp;
                 rkcg->rkcg_share.last_partition_picked += 1;
                 if (rkcg->rkcg_share.last_partition_picked >=
-                    (size_t)partitions->cnt)
+                    (size_t)toppar_cnt)
                         rkcg->rkcg_share.last_partition_picked = 0;
-                partition =
-                    &partitions->elems[rkcg->rkcg_share.last_partition_picked];
 
-                rktp = rd_kafka_toppar_get2(rk, partition->topic,
-                                            partition->partition, 0, 1);
+                rktp = rd_list_elem(
+                    toppars, (int)rkcg->rkcg_share.last_partition_picked);
+                rd_kafka_toppar_keep(rktp);
 
                 rd_kafka_toppar_lock(rktp);
                 leader = rktp->rktp_leader;
@@ -3096,8 +3084,9 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                                     "fetch "
                                     "for partition %s [%" PRId32 "]",
                                     rd_kafka_broker_name(selected_rkb),
-                                    selected_rkb, partition->topic,
-                                    partition->partition);
+                                    selected_rkb,
+                                    rktp->rktp_rkt->rkt_topic->str,
+                                    rktp->rktp_partition);
                         }
                         /* Release the snapshot reference taken under rktp lock
                          * above. */

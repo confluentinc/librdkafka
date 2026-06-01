@@ -159,6 +159,7 @@ set(
     0178-share_consumer_close.c
     0179-share_consumer_destroy.c
     0180-share_consumer_config.c
+    0181-share_consumer_topic_delete.c
     0182-share_consumer_error_handling_mock.c
     0183-share_consumer_leader_change_mock.c
     8000-idle.cpp

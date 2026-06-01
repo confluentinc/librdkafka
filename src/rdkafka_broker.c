@@ -3185,22 +3185,37 @@ static rd_kafka_resp_err_t rd_kafka_broker_destroy_error(rd_kafka_t *rk) {
  * @locks broker lock
  */
 static void
-rd_kafka_broker_share_session_add_remove_toppar(rd_list_t **toppars_add_list,
+rd_kafka_broker_share_session_add_remove_toppar(rd_kafka_broker_t *rkb,
+                                                rd_list_t **toppars_add_list,
                                                 rd_list_t **toppars_remove_list,
-                                                rd_kafka_toppar_t *rktp) {
+                                                rd_kafka_toppar_t *rktp,
+                                                const char *add_list_name) {
         if (!*toppars_add_list) {
                 *toppars_add_list =
                     rd_list_new(1, rd_kafka_toppar_destroy_free);
         }
 
-        if (!rd_list_find(*toppars_add_list, rktp, rd_list_cmp_ptr))
+        if (!rd_list_find(*toppars_add_list, rktp, rd_list_cmp_ptr)) {
                 rd_list_add(*toppars_add_list, rd_kafka_toppar_keep(rktp));
+                rd_rkb_dbg(rkb, FETCH, "SHARESESSION",
+                           "Added %.*s [%" PRId32 "] to %s (now %d entries)",
+                           RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                           rktp->rktp_partition, add_list_name,
+                           rd_list_cnt(*toppars_add_list));
+        }
 
         /* Remove from removing toppars if present there. */
         if (*toppars_remove_list) {
                 rd_kafka_toppar_t *removed_rktp =
                     rd_list_remove(*toppars_remove_list, rktp);
                 if (removed_rktp) {
+                        rd_rkb_dbg(rkb, FETCH, "SHARESESSION",
+                                   "Removed %.*s [%" PRId32
+                                   "] from list opposite to %s while adding "
+                                   "(opposite list now %d entries)",
+                                   RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                                   rktp->rktp_partition, add_list_name,
+                                   rd_list_cnt(*toppars_remove_list));
                         rd_kafka_toppar_destroy(removed_rktp);
                         if (rd_list_empty(*toppars_remove_list)) {
                                 rd_list_destroy(*toppars_remove_list);
@@ -3243,8 +3258,9 @@ static void rd_kafka_broker_share_session_toppar_add(rd_kafka_broker_t *rkb,
                 }
 
                 rd_kafka_broker_share_session_add_remove_toppar(
-                    &rkb->rkb_share_fetch_session.toppars_to_add,
-                    &rkb->rkb_share_fetch_session.toppars_to_forget, rktp);
+                    rkb, &rkb->rkb_share_fetch_session.toppars_to_add,
+                    &rkb->rkb_share_fetch_session.toppars_to_forget, rktp,
+                    "toppars_to_add");
                 rd_rkb_dbg(
                     rkb, FETCH | RD_KAFKA_DBG_CGRP, "SHARESESSION",
                     "%s [%" PRId32 "]: queued for ADD on broker (epoch=%" PRId32
@@ -3301,8 +3317,9 @@ rd_kafka_broker_share_session_toppar_remove(rd_kafka_broker_t *rkb,
                 }
 
                 rd_kafka_broker_share_session_add_remove_toppar(
-                    &rkb->rkb_share_fetch_session.toppars_to_forget,
-                    &rkb->rkb_share_fetch_session.toppars_to_add, rktp);
+                    rkb, &rkb->rkb_share_fetch_session.toppars_to_forget,
+                    &rkb->rkb_share_fetch_session.toppars_to_add, rktp,
+                    "toppars_to_forget");
                 rd_rkb_dbg(
                     rkb, FETCH | RD_KAFKA_DBG_CGRP, "SHARESESSION",
                     "%s [%" PRId32

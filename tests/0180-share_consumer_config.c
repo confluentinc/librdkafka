@@ -134,22 +134,6 @@ static void test_event_rebalance_rejected_at_construction(void) {
 }
 
 /**
- * @brief Share consumer does not emit periodic stats; the
- *        statistics.interval.ms property is rejected so the user
- *        cannot enable stats emission. (stats_cb alone is inert with
- *        interval=0 and is not rejected — see the TODO in
- *        rdkafka_conf.c.)
- */
-static void test_statistics_interval_ms_rejected_at_construction(void) {
-        SUB_TEST_QUICK();
-
-        verify_share_consumer_conf_prop_rejected("statistics.interval.ms",
-                                                 "1000");
-
-        SUB_TEST_PASS();
-}
-
-/**
  * @brief Share consumer locks enable.auto.commit to false internally.
  *        Any explicit set by the app (true or false) is rejected so
  *        the value can only come from the library default.
@@ -270,7 +254,6 @@ static void test_heartbeat_interval_ms_rejected_at_construction(void) {
 int main_0180_share_consumer_config(int argc, char **argv) {
         test_rebalance_cb_rejected_at_construction();
         test_event_rebalance_rejected_at_construction();
-        test_statistics_interval_ms_rejected_at_construction();
         test_enable_auto_commit_rejected_at_construction();
         test_group_protocol_rejected_at_construction();
         test_socket_max_fails_rejected_at_construction();

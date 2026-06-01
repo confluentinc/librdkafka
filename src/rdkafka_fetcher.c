@@ -1858,6 +1858,14 @@ static void rd_kafka_broker_session_add_partition_to_toppars_in_session(
                              "%s [%" PRId32 "]: already in ShareFetch session",
                              rktp->rktp_rkt->rkt_topic->str,
                              rktp->rktp_partition);
+                rd_rkb_dbg(
+                    rkb, FETCH, "SHARESESSION",
+                    "Skipping add of %.*s [%" PRId32
+                    "] to toppars_in_session: already present (size %d)",
+                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                    rktp->rktp_partition,
+                    rd_list_cnt(
+                        rkb->rkb_share_fetch_session.toppars_in_session));
                 return;
         }
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
@@ -1865,6 +1873,11 @@ static void rd_kafka_broker_session_add_partition_to_toppars_in_session(
                      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         rd_kafka_toppar_keep(rktp);
         rd_list_add(rkb->rkb_share_fetch_session.toppars_in_session, rktp);
+        rd_rkb_dbg(
+            rkb, FETCH, "SHARESESSION",
+            "Added %.*s [%" PRId32 "] to toppars_in_session (now %d entries)",
+            RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic), rktp->rktp_partition,
+            rd_list_cnt(rkb->rkb_share_fetch_session.toppars_in_session));
 }
 
 void rd_kafka_broker_session_remove_partition_from_toppars_in_session(
@@ -1879,6 +1892,14 @@ void rd_kafka_broker_session_remove_partition_from_toppars_in_session(
                     rkb->rkb_rk, MSG, "SHAREFETCH",
                     "%s [%" PRId32 "]: removed from ShareFetch session",
                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+                rd_rkb_dbg(
+                    rkb, FETCH, "SHARESESSION",
+                    "Removed %.*s [%" PRId32
+                    "] from toppars_in_session (now %d entries)",
+                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
+                    rktp->rktp_partition,
+                    rd_list_cnt(
+                        rkb->rkb_share_fetch_session.toppars_in_session));
         } else {
                 rd_kafka_dbg(
                     rkb->rkb_rk, MSG, "SHAREFETCH",
@@ -1937,6 +1958,12 @@ static void rd_kafka_broker_session_update_toppars_list(
                         }
                 }
         }
+        rd_rkb_dbg(
+            rkb, FETCH, "SHARESESSION",
+            "ShareFetch response handling done: clearing %d toppars from "
+            "%s",
+            rd_list_cnt(request_toppars),
+            add ? "adding_toppars" : "forgetting_toppars");
         rd_list_destroy(request_toppars);
         *request_toppars_ptr = NULL;
 }
@@ -2875,14 +2902,27 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
          * just before sending. On response, session_update() will move
          * adding_toppars into toppars_in_session and remove from
          * toppars_to_add. */
-        if (rkb->rkb_share_fetch_session.toppars_to_add)
+        if (rkb->rkb_share_fetch_session.toppars_to_add) {
                 rkb->rkb_share_fetch_session.adding_toppars =
                     rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_add,
                                  rd_kafka_toppar_list_copy, NULL);
-        if (rkb->rkb_share_fetch_session.toppars_to_forget)
+                rd_rkb_dbg(
+                    rkb, FETCH, "SHARESESSION",
+                    "Built ShareFetch request: moved %d toppars from "
+                    "toppars_to_add -> adding_toppars",
+                    rd_list_cnt(rkb->rkb_share_fetch_session.adding_toppars));
+        }
+        if (rkb->rkb_share_fetch_session.toppars_to_forget) {
                 rkb->rkb_share_fetch_session.forgetting_toppars =
                     rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_forget,
                                  rd_kafka_toppar_list_copy, NULL);
+                rd_rkb_dbg(
+                    rkb, FETCH, "SHARESESSION",
+                    "Built ShareFetch request: moved %d toppars from "
+                    "toppars_to_forget -> forgetting_toppars",
+                    rd_list_cnt(
+                        rkb->rkb_share_fetch_session.forgetting_toppars));
+        }
 
         rkb->rkb_fetching = 1;
         rd_kafka_dbg(

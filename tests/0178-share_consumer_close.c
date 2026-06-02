@@ -937,7 +937,7 @@ static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
  * Verifies that acknowledged messages are not redelivered to a second
  consumer.
  */
-static void test_close_with_acknowledge(void) {
+static void do_test_close_with_acknowledge(void) {
         /**
          * @brief Test configuration for close with acknowledge scenarios
          */
@@ -985,11 +985,19 @@ static void test_close_with_acknowledge(void) {
                 tracked_msg_t tracked_msgs[BATCH_SIZE];
                 int tracked_cnt = 0;
                 ack_receipts_t receipts;
+                char unique_group[128];
 
                 ack_receipts_init(&receipts);
 
+                /* Per-subtest unique group id so iterations and re-runs
+                 * never share share-group state on the broker. */
+                rd_snprintf(unique_group, sizeof(unique_group),
+                            "0178-group-%s-rnd%" PRIx64, config->test_name,
+                            test_id_generate());
+
                 TEST_SAY("\n========================================\n");
-                TEST_SAY("Test: %s\n", config->test_name);
+                TEST_SAY("Test: %s [group=%s]\n", config->test_name,
+                         unique_group);
                 TEST_SAY("Topology: %d topic(s), partitions: [",
                          config->topic_cnt);
                 for (int j = 0; j < config->topic_cnt; j++) {
@@ -1001,7 +1009,7 @@ static void test_close_with_acknowledge(void) {
                          commit_mode_str(config->commit_mode));
                 TEST_SAY("========================================\n\n");
 
-                ctx.group_id = "0178-group";
+                ctx.group_id = unique_group;
                 setup_topics_and_produce(&ctx, config->topic_cnt,
                                          config->partitions,
                                          config->msgs_per_partition);
@@ -1087,7 +1095,7 @@ static void test_close_with_acknowledge(void) {
  *
  * Tests multiple topologies: 1t1p, 1t3p, 3t1p, 2t2p
  */
-static void test_close_without_acknowledge() {
+static void do_test_close_without_acknowledge() {
         /**
          * @brief Test configuration for close without acknowledge scenarios
          */
@@ -1207,7 +1215,7 @@ static void test_close_without_acknowledge() {
  * In each case, close() should wait for the response and complete
  * successfully after the delay.
  */
-static void test_close_with_slow_broker_response(void) {
+static void do_test_close_with_slow_broker_response(void) {
         typedef struct {
                 const char *test_name;
                 int delayed_broker_cnt;
@@ -1297,7 +1305,7 @@ static void test_close_with_slow_broker_response(void) {
  * 2. Brokers 1 and 2 have delayed responses
  * 3. All 3 brokers have delayed responses
  */
-static void test_close_respects_socket_timeout(void) {
+static void do_test_close_respects_socket_timeout(void) {
         typedef struct {
                 const char *test_name;
                 int delayed_broker_cnt;
@@ -1400,7 +1408,7 @@ static void test_close_respects_socket_timeout(void) {
  * 2. Brokers 1 and 2 return the error
  * 3. All 3 brokers return the error
  */
-static void test_close_with_broker_error_response(void) {
+static void do_test_close_with_broker_error_response(void) {
         typedef struct {
                 const char *test_name;
                 int erroring_broker_cnt;
@@ -1482,7 +1490,7 @@ static void test_close_with_broker_error_response(void) {
  *    and verify it receives 0 messages over up to 5 fetch attempts. If
  *    any message is delivered, close() failed to send the acks.
  */
-static void test_close_with_broker_busy(void) {
+static void do_test_close_with_broker_busy(void) {
         const char *test_name        = "close-broker-busy";
         const int partition_cnt      = 3;
         const int msgs_per_partition = 10;
@@ -1656,7 +1664,7 @@ static void test_close_with_broker_busy(void) {
  *   broker down and call close().
  * - close() should return immediately and return NULL (no error).
  */
-static void test_close_with_broker_down(void) {
+static void do_test_close_with_broker_down(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_share_t *consumer;
@@ -1781,7 +1789,7 @@ static void test_close_with_broker_down(void) {
  * Verifies every guarded API returns RD_KAFKA_RESP_ERR__STATE with
  * "closed" in the error string.
  */
-static void test_api_calls_on_closed_consumer(void) {
+static void do_test_api_calls_on_closed_consumer(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_conf_t *conf;
@@ -1843,7 +1851,7 @@ static void test_api_calls_on_closed_consumer(void) {
  * completes later), giving us a deterministic window to exercise every
  * guarded API.
  */
-static void test_api_calls_during_closing(void) {
+static void do_test_api_calls_during_closing(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_conf_t *conf;
@@ -1937,7 +1945,7 @@ static void test_api_calls_during_closing(void) {
  * second to drive the piggyback ack) and closing without an explicit
  * commit, the ack callback must have fired with the consumed offsets.
  */
-static void test_implicit_ack_callback_fires_on_close(void) {
+static void do_test_implicit_ack_callback_fires_on_close(void) {
         const char *topic_name;
         const char *group;
         char group_id[64];
@@ -2042,9 +2050,9 @@ int main_0178_share_consumer_close(int argc, char **argv) {
         common_admin    = test_create_producer();
 
         /* Real broker tests */
-        test_close_with_acknowledge();
-        test_close_without_acknowledge();
-        test_implicit_ack_callback_fires_on_close();
+        do_test_close_with_acknowledge();
+        do_test_close_without_acknowledge();
+        do_test_implicit_ack_callback_fires_on_close();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);
@@ -2058,12 +2066,12 @@ int main_0178_share_consumer_close_local(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         test_timeout_set(300);
 
-        test_close_with_slow_broker_response();
-        test_close_respects_socket_timeout();
-        test_close_with_broker_error_response();
-        test_close_with_broker_busy();
-        test_close_with_broker_down();
-        test_api_calls_on_closed_consumer();
-        test_api_calls_during_closing();
+        do_test_close_with_slow_broker_response();
+        do_test_close_respects_socket_timeout();
+        do_test_close_with_broker_error_response();
+        do_test_close_with_broker_busy();
+        do_test_close_with_broker_down();
+        do_test_api_calls_on_closed_consumer();
+        do_test_api_calls_during_closing();
         return 0;
 }

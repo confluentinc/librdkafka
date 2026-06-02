@@ -255,6 +255,24 @@ static void run_groups_test(groups_test_config_t *config) {
         int total_msgs;
         char result[256] = {0};
         int pos          = 0;
+        char unique_suffix[64];
+        char unique_test_name[256];
+        char unique_group_names[MAX_GROUPS][128];
+
+        /* Per-invocation unique suffix; appended to the test name and
+         * to every group name so re-runs / parallel runs get fresh
+         * share-groups on the broker. */
+        rd_snprintf(unique_suffix, sizeof(unique_suffix), "rnd%" PRIx64,
+                    test_id_generate());
+        rd_snprintf(unique_test_name, sizeof(unique_test_name), "%s [%s]",
+                    config->test_name, unique_suffix);
+        config->test_name = unique_test_name;
+        for (g = 0; g < config->group_cnt; g++) {
+                rd_snprintf(unique_group_names[g],
+                            sizeof(unique_group_names[g]), "%s-%s",
+                            config->group_names[g], unique_suffix);
+                config->group_names[g] = unique_group_names[g];
+        }
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -337,7 +355,7 @@ static void run_groups_test(groups_test_config_t *config) {
 /**
  * @brief Two groups consuming same topic independently
  */
-static void test_two_groups_same_topic(void) {
+static void do_test_two_groups_same_topic(void) {
         groups_test_config_t config = {
             .group_cnt                = 2,
             .consumers_per_group      = {1, 1},
@@ -354,7 +372,7 @@ static void test_two_groups_same_topic(void) {
 /**
  * @brief Three groups with 2 consumers each
  */
-static void test_three_groups_concurrent(void) {
+static void do_test_three_groups_concurrent(void) {
         groups_test_config_t config = {
             .group_cnt           = 3,
             .consumers_per_group = {2, 2, 2},
@@ -372,7 +390,7 @@ static void test_three_groups_concurrent(void) {
 /**
  * @brief Five groups consuming same topic
  */
-static void test_five_groups_same_topic(void) {
+static void do_test_five_groups_same_topic(void) {
         groups_test_config_t config = {
             .group_cnt           = 5,
             .consumers_per_group = {1, 1, 1, 1, 1},
@@ -391,7 +409,7 @@ static void test_five_groups_same_topic(void) {
 /**
  * @brief Groups joining at staggered times
  */
-static void test_groups_staggered_join(void) {
+static void do_test_groups_staggered_join(void) {
         rd_kafka_share_t *consumer_a, *consumer_b;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_message_t *batch[BATCH_SIZE];
@@ -521,14 +539,14 @@ static void test_groups_staggered_join(void) {
 int main_0175_share_consumer_groups(int argc, char **argv) {
 
         /* Basic multiple groups tests */
-        test_two_groups_same_topic();
-        test_three_groups_concurrent();
+        do_test_two_groups_same_topic();
+        do_test_three_groups_concurrent();
 
         /* Scale tests */
-        test_five_groups_same_topic();
+        do_test_five_groups_same_topic();
 
         /* Timing tests */
-        test_groups_staggered_join();
+        do_test_groups_staggered_join();
 
         return 0;
 }

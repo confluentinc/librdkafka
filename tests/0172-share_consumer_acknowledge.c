@@ -557,6 +557,17 @@ static int run_ack_test(ack_test_config_t *config) {
         ack_test_state_t state = {0};
         int i;
         int list_capacity;
+        char unique_suffix[64];
+        char unique_test_name[256];
+
+        /* Append a per-invocation unique suffix to the test name; the
+         * group name is derived from it below, so this guarantees a
+         * fresh share-group on the broker for each run. */
+        rd_snprintf(unique_suffix, sizeof(unique_suffix), "rnd%" PRIx64,
+                    test_id_generate());
+        rd_snprintf(unique_test_name, sizeof(unique_test_name), "%s-%s",
+                    config->test_name, unique_suffix);
+        config->test_name = unique_test_name;
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -600,7 +611,7 @@ static int run_ack_test(ack_test_config_t *config) {
 /**
  * @brief RELEASE causes redelivery
  */
-static void test_release_redelivery(void) {
+static void do_test_release_redelivery(void) {
         ack_test_config_t config = {
             .test_name          = "release-redelivery",
             .topic_cnt          = 1,
@@ -614,7 +625,7 @@ static void test_release_redelivery(void) {
 /**
  * @brief REJECT prevents redelivery
  */
-static void test_reject_no_redelivery(void) {
+static void do_test_reject_no_redelivery(void) {
         ack_test_config_t config = {.test_name  = "reject-no-redelivery",
                                     .topic_cnt  = 1,
                                     .partitions = {1},
@@ -628,7 +639,7 @@ static void test_reject_no_redelivery(void) {
 /**
  * @brief ACCEPT prevents redelivery
  */
-static void test_accept_no_redelivery(void) {
+static void do_test_accept_no_redelivery(void) {
         ack_test_config_t config = {.test_name  = "accept-no-redelivery",
                                     .topic_cnt  = 1,
                                     .partitions = {1},
@@ -647,7 +658,7 @@ static void test_accept_no_redelivery(void) {
 /**
  * @brief Acknowledge with NULL message
  */
-static void test_ack_null_message(void) {
+static void do_test_ack_null_message(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_resp_err_t err;
         const char *group = "share-null-msg-test";
@@ -675,7 +686,7 @@ static void test_ack_null_message(void) {
 /**
  * @brief Acknowledge with NULL rkshare
  */
-static void test_ack_null_rkshare(void) {
+static void do_test_ack_null_rkshare(void) {
         rd_kafka_resp_err_t err;
         rd_kafka_message_t fake_msg = {0};
 
@@ -704,7 +715,7 @@ static void test_ack_null_rkshare(void) {
 /**
  * @brief Acknowledge with invalid type
  */
-static void test_ack_invalid_type(void) {
+static void do_test_ack_invalid_type(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch[10];
         rd_kafka_error_t *err;
@@ -766,7 +777,7 @@ static void test_ack_invalid_type(void) {
 /**
  * @brief RELEASE then REJECT - final type is REJECT (no redelivery)
  */
-static void test_release_then_reject_no_redelivery(void) {
+static void do_test_release_then_reject_no_redelivery(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch[100];
         rd_kafka_error_t *err;
@@ -867,7 +878,7 @@ static void test_release_then_reject_no_redelivery(void) {
  *
  * Verifies that acknowledgement type can be changed before commit completes.
  */
-static void test_change_ack_type_before_commit(void) {
+static void do_test_change_ack_type_before_commit(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch[10];
         rd_kafka_error_t *err;
@@ -994,7 +1005,7 @@ static void test_change_ack_type_before_commit(void) {
  * After commit completes, acknowledged messages are removed from
  * inflight_acks map. Attempting to acknowledge again should fail with _STATE.
  */
-static void test_ack_after_commit(void) {
+static void do_test_ack_after_commit(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch[10];
         rd_kafka_error_t *err;
@@ -1089,7 +1100,7 @@ static void test_ack_after_commit(void) {
  * Default share.record.lock.partition.limit is 5. After 5 RELEASE attempts,
  * the broker should not attempt any redelivery.
  */
-static void test_max_delivery_attempts(void) {
+static void do_test_max_delivery_attempts(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch[100];
         rd_kafka_error_t *err;
@@ -1207,7 +1218,7 @@ static void test_max_delivery_attempts(void) {
  * 5000 messages on 1 topic with 1 partition.
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
-static void test_random_ack_single_topic_single_partition(void) {
+static void do_test_random_ack_single_topic_single_partition(void) {
         ack_test_config_t config = {.test_name    = "random-ack-1t-1p-5000msgs",
                                     .topic_cnt    = 1,
                                     .partitions   = {1},
@@ -1223,7 +1234,7 @@ static void test_random_ack_single_topic_single_partition(void) {
  * 5000 messages across 4 topics, 1 partition each (~1250 msgs per topic).
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
-static void test_random_ack_multiple_topics_single_partition(void) {
+static void do_test_random_ack_multiple_topics_single_partition(void) {
         ack_test_config_t config = {.test_name    = "random-ack-4t-1p-5000msgs",
                                     .topic_cnt    = 4,
                                     .partitions   = {1, 1, 1, 1},
@@ -1239,7 +1250,7 @@ static void test_random_ack_multiple_topics_single_partition(void) {
  * 5000 messages on 1 topic with 4 partitions (~1250 msgs per partition).
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
-static void test_random_ack_single_topic_multiple_partitions(void) {
+static void do_test_random_ack_single_topic_multiple_partitions(void) {
         ack_test_config_t config = {.test_name    = "random-ack-1t-4p-5000msgs",
                                     .topic_cnt    = 1,
                                     .partitions   = {4},
@@ -1255,7 +1266,7 @@ static void test_random_ack_single_topic_multiple_partitions(void) {
  * 5000 messages across 2 topics, 2 partitions each (~1250 msgs per partition).
  * Random ACCEPT/REJECT/RELEASE for each message.
  */
-static void test_random_ack_multiple_topics_multiple_partitions(void) {
+static void do_test_random_ack_multiple_topics_multiple_partitions(void) {
         ack_test_config_t config = {.test_name    = "random-ack-2t-2p-5000msgs",
                                     .topic_cnt    = 2,
                                     .partitions   = {2, 2},
@@ -1270,7 +1281,7 @@ static void test_random_ack_multiple_topics_multiple_partitions(void) {
  *
  * ~666 messages per topic. Tests handling many topics with random acks.
  */
-static void test_scale_15_topics_single_partition(void) {
+static void do_test_scale_15_topics_single_partition(void) {
         ack_test_config_t config = {
             .test_name       = "scale-15t-1p-10000msgs",
             .topic_cnt       = 15,
@@ -1287,7 +1298,7 @@ static void test_scale_15_topics_single_partition(void) {
  * ~333 messages per partition (30 partitions total).
  * Tests handling many topics with multiple partitions.
  */
-static void test_scale_15_topics_multiple_partitions(void) {
+static void do_test_scale_15_topics_multiple_partitions(void) {
         ack_test_config_t config = {
             .test_name       = "scale-15t-2p-10000msgs",
             .topic_cnt       = 15,
@@ -1304,7 +1315,7 @@ static void test_scale_15_topics_multiple_partitions(void) {
  * ~250 messages per partition (32 partitions total).
  * Tests high partition count scenario.
  */
-static void test_scale_8_topics_4_partitions(void) {
+static void do_test_scale_8_topics_4_partitions(void) {
         ack_test_config_t config = {.test_name       = "scale-8t-4p-8000msgs",
                                     .topic_cnt       = 8,
                                     .partitions      = {4, 4, 4, 4, 4, 4, 4, 4},
@@ -1319,7 +1330,7 @@ static void test_scale_8_topics_4_partitions(void) {
  *
  * 1250 messages per partition. Tests single topic with many partitions.
  */
-static void test_scale_single_topic_8_partitions(void) {
+static void do_test_scale_single_topic_8_partitions(void) {
         ack_test_config_t config = {.test_name       = "scale-1t-8p-10000msgs",
                                     .topic_cnt       = 1,
                                     .partitions      = {8},
@@ -1335,7 +1346,7 @@ static void test_scale_single_topic_8_partitions(void) {
  * 500 messages per partition (30 partitions total).
  * Large scale test for acknowledgement infrastructure.
  */
-static void test_scale_10_topics_3_partitions(void) {
+static void do_test_scale_10_topics_3_partitions(void) {
         ack_test_config_t config = {
             .test_name       = "scale-10t-3p-15000msgs",
             .topic_cnt       = 10,
@@ -1356,7 +1367,7 @@ static void test_scale_10_topics_3_partitions(void) {
  * acknowledge must return _STATE because the record is no longer in the
  * current batch / inflight map.
  */
-static void test_ack_message_from_earlier_batch(void) {
+static void do_test_ack_message_from_earlier_batch(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch1[10];
         rd_kafka_message_t *batch2[10];
@@ -1431,7 +1442,7 @@ static void test_ack_message_from_earlier_batch(void) {
  * Subscribe but do not poll; call acknowledge_offset() with arbitrary
  * topic/partition/offset values and expect _STATE (nothing in inflight).
  */
-static void test_ack_offset_before_consume(void) {
+static void do_test_ack_offset_before_consume(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_resp_err_t err;
@@ -1474,7 +1485,7 @@ static void test_ack_offset_before_consume(void) {
  * any of the three components must return _STATE. The correct values then
  * succeed.
  */
-static void test_ack_offset_wrong_params(void) {
+static void do_test_ack_offset_wrong_params(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_message_t *batch[10];
         rd_kafka_topic_partition_list_t *subs;
@@ -1567,7 +1578,7 @@ static void test_ack_offset_wrong_params(void) {
  *     count matches the produced count once the explicit consumer
  *     commits (no duplicates).
  */
-static void test_mixed_ack_mode_same_group(void) {
+static void do_test_mixed_ack_mode_same_group(void) {
         const char *group = "share-mixed-ack-mode";
         const char *topic;
         rd_kafka_share_t *implicit_c;
@@ -1704,41 +1715,41 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
         common_admin    = test_create_producer();
 
         /* Core tests */
-        test_release_redelivery();
-        test_reject_no_redelivery();
-        test_accept_no_redelivery();
+        do_test_release_redelivery();
+        do_test_reject_no_redelivery();
+        do_test_accept_no_redelivery();
 
         /* Error handling tests */
-        test_ack_null_message();
-        test_ack_null_rkshare();
-        test_ack_invalid_type();
-        test_release_then_reject_no_redelivery();
+        do_test_ack_null_message();
+        do_test_ack_null_rkshare();
+        do_test_ack_invalid_type();
+        do_test_release_then_reject_no_redelivery();
 
         /* Acknowledgement state tests */
-        test_change_ack_type_before_commit();
-        test_ack_after_commit();
-        test_ack_message_from_earlier_batch();
-        test_ack_offset_before_consume();
-        test_ack_offset_wrong_params();
+        do_test_change_ack_type_before_commit();
+        do_test_ack_after_commit();
+        do_test_ack_message_from_earlier_batch();
+        do_test_ack_offset_before_consume();
+        do_test_ack_offset_wrong_params();
 
         /* Max delivery attempts test */
-        test_max_delivery_attempts();
+        do_test_max_delivery_attempts();
 
         /* High-intensity random acknowledgement tests */
-        test_random_ack_single_topic_single_partition();
-        test_random_ack_multiple_topics_single_partition();
-        test_random_ack_single_topic_multiple_partitions();
-        test_random_ack_multiple_topics_multiple_partitions();
+        do_test_random_ack_single_topic_single_partition();
+        do_test_random_ack_multiple_topics_single_partition();
+        do_test_random_ack_single_topic_multiple_partitions();
+        do_test_random_ack_multiple_topics_multiple_partitions();
 
         /* Scale tests - high topic/partition counts with many messages */
-        test_scale_15_topics_single_partition();
-        test_scale_15_topics_multiple_partitions();
-        test_scale_8_topics_4_partitions();
-        test_scale_single_topic_8_partitions();
-        test_scale_10_topics_3_partitions();
+        do_test_scale_15_topics_single_partition();
+        do_test_scale_15_topics_multiple_partitions();
+        do_test_scale_8_topics_4_partitions();
+        do_test_scale_single_topic_8_partitions();
+        do_test_scale_10_topics_3_partitions();
 
         /* Mixed ack-mode within the same share group */
-        test_mixed_ack_mode_same_group();
+        do_test_mixed_ack_mode_same_group();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

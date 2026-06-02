@@ -301,14 +301,14 @@ do_test_commit_sync_top_level_err(const char *test_name,
 /* Top-level session error: SHARE_SESSION_NOT_FOUND on ShareAcknowledge
  * is propagated to every partition in commit_sync results (no
  * _IN_PROGRESS leak). */
-static void test_commit_sync_share_session_not_found(void) {
+static void do_test_commit_sync_share_session_not_found(void) {
         do_test_commit_sync_top_level_err(
             "session-not-found", RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND);
 }
 
 /* Same path with a different session error code — confirms
  * propagation isn't tied to a specific err. */
-static void test_commit_sync_invalid_share_session_epoch(void) {
+static void do_test_commit_sync_invalid_share_session_epoch(void) {
         do_test_commit_sync_top_level_err(
             "invalid-session-epoch",
             RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH);
@@ -327,20 +327,20 @@ static void test_commit_sync_share_session_limit_reached(void) {
 /* GROUP_AUTHORIZATION_FAILED on ShareAcknowledge propagates through
  * the default-case path (previously hit `default: break` with no ack
  * propagation). */
-static void test_commit_sync_group_authorization_failed(void) {
+static void do_test_commit_sync_group_authorization_failed(void) {
         do_test_commit_sync_top_level_err(
             "group-auth-failed", RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED);
 }
 
 /* Same default-case path as group-auth-failed with a different err. */
-static void test_commit_sync_topic_authorization_failed(void) {
+static void do_test_commit_sync_topic_authorization_failed(void) {
         do_test_commit_sync_top_level_err(
             "topic-auth-failed", RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
 }
 
 /* Generic protocol error to confirm unknown / fatal codes also
  * propagate through the default-case path. */
-static void test_commit_sync_invalid_request(void) {
+static void do_test_commit_sync_invalid_request(void) {
         do_test_commit_sync_top_level_err("invalid-request",
                                           RD_KAFKA_RESP_ERR_INVALID_REQUEST);
 }
@@ -358,7 +358,7 @@ static void test_commit_sync_invalid_request(void) {
  *  top-level error to all partitions in the ack_details list, not
  *  just the first one.
  * =================================================================== */
-static void test_commit_sync_multi_partition_top_level_error(void) {
+static void do_test_commit_sync_multi_partition_top_level_error(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -491,7 +491,7 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
  *  Verifies that the acknowledgement callback is invoked with the
  *  error for all partitions that had piggybacked acks.
  * =================================================================== */
-static void test_consume_batch_multi_partition_top_level_error(void) {
+static void do_test_consume_batch_multi_partition_top_level_error(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
@@ -642,7 +642,7 @@ static rd_bool_t is_share_ack_request(rd_kafka_mock_request_t *request,
 }
 
 static void
-test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
+do_test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -840,7 +840,7 @@ static rd_bool_t is_share_fetch_request(rd_kafka_mock_request_t *request,
         return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_ShareFetch;
 }
 
-static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
+static void do_test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -1036,7 +1036,7 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
  *  Test — strip + ShareFetch response top-level err: callback err
  *         remains INVALID_SHARE_SESSION_EPOCH (not the response err).
  *
- *  Same flow as test_consume_batch_at_epoch_zero_strips_piggyback_acks
+ *  Same flow as do_test_consume_batch_at_epoch_zero_strips_piggyback_acks
  *  but in Phase 2 we ALSO inject a top-level err on the
  *  session-establish ShareFetch response. The buf-callback's helper
  *  (rd_kafka_share_fetch_op_reply_with_err) will be called with that
@@ -1050,7 +1050,7 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
  *      INVALID_SHARE_SESSION_EPOCH (NOT the injected response err)
  *      for each stripped batch.
  * =================================================================== */
-static void test_strip_pre_set_survives_sharefetch_err(void) {
+static void do_test_strip_pre_set_survives_sharefetch_err(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *partitions = NULL;
@@ -2191,14 +2191,14 @@ static void do_test_share_topic_err_surfaces(const char *topic_suffix,
 }
 
 
-static void test_share_consumer_surfaces_topic_exception(void) {
+static void do_test_share_consumer_surfaces_topic_exception(void) {
         do_test_share_topic_err_surfaces("surfaces-topic-exception",
                                          RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION,
                                          RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION);
 }
 
 
-static void test_share_consumer_surfaces_topic_authorization_failed(void) {
+static void do_test_share_consumer_surfaces_topic_authorization_failed(void) {
         do_test_share_topic_err_surfaces(
             "surfaces-topic-auth-failed",
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
@@ -2209,7 +2209,7 @@ static void test_share_consumer_surfaces_topic_authorization_failed(void) {
 /* TOPIC_AUTHORIZATION_FAILED is surfaced once; a second metadata
  * refresh that sees the same error on the same topic must not surface
  * a duplicate. */
-static void test_share_consumer_dedupes_repeated_auth_failed(void) {
+static void do_test_share_consumer_dedupes_repeated_auth_failed(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic = "0182-dedupe-auth-failed";
@@ -2354,7 +2354,7 @@ static void test_share_consumer_two_topics_dedupe_independently(void) {
 /* Two topics fail with the same error in one metadata cycle: both
  * surface once, and neither re-surfaces on the next refresh while
  * both stay failing. */
-static void test_share_consumer_two_topics_dedupe_independently(void) {
+static void do_test_share_consumer_two_topics_dedupe_independently(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic_a = "0182-multi-topic-a";
@@ -2452,7 +2452,7 @@ static void test_share_consumer_two_topics_dedupe_independently(void) {
 /* The same topic failing with a different error code must surface a
  * fresh op for the new code rather than being deduped against the
  * previous one. */
-static void test_share_consumer_re_emits_when_err_code_changes(void) {
+static void do_test_share_consumer_re_emits_when_err_code_changes(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic = "0182-err-code-change";
@@ -2500,7 +2500,7 @@ static void test_share_consumer_re_emits_when_err_code_changes(void) {
 
 /* A topic that surfaces AUTH_FAILED, then recovers, then fails again
  * with the same code must surface the error a second time. */
-static void test_share_consumer_re_surfaces_after_recovery(void) {
+static void do_test_share_consumer_re_surfaces_after_recovery(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic = "0182-re-surface-after-recovery";
@@ -2556,7 +2556,7 @@ static void test_share_consumer_re_surfaces_after_recovery(void) {
 /* After a topic surfaces an error, unsubscribing must stop subsequent
  * metadata refreshes from delivering the same error. Run for both
  * app-facing codes. */
-static void do_test_share_consumer_unsubscribe_drops_errored_topic(
+static void do_test_share_consumer_unsubscribe_drops_errored_topic_for_err(
     rd_kafka_resp_err_t inject_err) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
@@ -2605,10 +2605,10 @@ static void do_test_share_consumer_unsubscribe_drops_errored_topic(
         SUB_TEST_PASS();
 }
 
-static void test_share_consumer_unsubscribe_drops_errored_topic(void) {
-        do_test_share_consumer_unsubscribe_drops_errored_topic(
+static void do_test_share_consumer_unsubscribe_drops_errored_topic(void) {
+        do_test_share_consumer_unsubscribe_drops_errored_topic_for_err(
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
-        do_test_share_consumer_unsubscribe_drops_errored_topic(
+        do_test_share_consumer_unsubscribe_drops_errored_topic_for_err(
             RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION);
 }
 
@@ -2663,8 +2663,8 @@ do_test_share_consumer_multi_partition_dedupe(rd_kafka_resp_err_t inject_err) {
         SUB_TEST_PASS();
 }
 
-static void test_share_consumer_multi_partition_dedupe(void) {
-        do_test_share_consumer_multi_partition_dedupe(
+static void do_test_share_consumer_multi_partition_dedupe(void) {
+        do_test_share_consumer_multi_partition_dedupe_for_err(
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
 }
 
@@ -2672,7 +2672,7 @@ static void test_share_consumer_multi_partition_dedupe(void) {
 /* A topic that surfaces TOPIC_EXCEPTION, then recovers, then fails
  * again with the same code must surface the error a second time. */
 static void
-test_share_consumer_re_surfaces_after_recovery_topic_exception(void) {
+do_test_share_consumer_re_surfaces_after_recovery_topic_exception(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic = "0182-re-surface-topic-exception";
@@ -2726,7 +2726,7 @@ test_share_consumer_re_surfaces_after_recovery_topic_exception(void) {
 /* Subscribed to {A, B} with both failing and surfaced. Narrowing the
  * subscription to {A} must stop B from re-surfacing, while A (still
  * subscribed and still failing) must not re-emit either. */
-static void test_share_consumer_subscribe_change_drops_dropped_topic(void) {
+static void do_test_share_consumer_subscribe_change_drops_dropped_topic(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic_a = "0182-subchange-a";
@@ -2832,7 +2832,7 @@ static void test_share_consumer_subscribe_change_drops_dropped_topic(void) {
 /* Two topics fail and surface. One recovers while the other stays
  * failing. The still-failing topic must not re-surface, and the
  * recovered topic — if it fails again — must surface fresh. */
-static void test_share_consumer_partial_recovery_preserves_other(void) {
+static void do_test_share_consumer_partial_recovery_preserves_other(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic_a = "0182-partial-recovery-a";
@@ -2968,7 +2968,8 @@ static void test_share_consumer_partial_recovery_preserves_other(void) {
 /* A topic surfaces TOPIC_EXCEPTION, gets unsubscribed (no surface),
  * and is then re-subscribed while still failing. The error must
  * surface again on re-subscribe — not be permanently suppressed. */
-static void test_share_consumer_resubscribe_re_emits_persistent_failure(void) {
+static void
+do_test_share_consumer_resubscribe_re_emits_persistent_failure(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
         const char *topic = "0182-resubscribe-re-emit";
@@ -3106,7 +3107,8 @@ static void test_share_consumer_partial_refresh_preserves_other(void) {
 
 /* UNKNOWN_TOPIC_OR_PART is debug-logged only and must not reach the
  * app via consume_batch. */
-static void test_share_consumer_does_not_surface_unknown_topic_or_part(void) {
+static void
+do_test_share_consumer_does_not_surface_unknown_topic_or_part(void) {
         test_ctx_t ctx;
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
@@ -3159,17 +3161,17 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
 
         test_timeout_set(120);
 
-        test_commit_sync_share_session_not_found();
-        test_commit_sync_invalid_share_session_epoch();
-        test_commit_sync_share_session_limit_reached();
-        test_commit_sync_group_authorization_failed();
-        test_commit_sync_topic_authorization_failed();
-        test_commit_sync_invalid_request();
-        test_commit_sync_multi_partition_top_level_error();
-        test_consume_batch_multi_partition_top_level_error();
-        test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error();
-        test_consume_batch_at_epoch_zero_strips_piggyback_acks();
-        test_strip_pre_set_survives_sharefetch_err();
+        do_test_commit_sync_share_session_not_found();
+        do_test_commit_sync_invalid_share_session_epoch();
+        do_test_commit_sync_share_session_limit_reached();
+        do_test_commit_sync_group_authorization_failed();
+        do_test_commit_sync_topic_authorization_failed();
+        do_test_commit_sync_invalid_request();
+        do_test_commit_sync_multi_partition_top_level_error();
+        do_test_consume_batch_multi_partition_top_level_error();
+        do_test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error();
+        do_test_consume_batch_at_epoch_zero_strips_piggyback_acks();
+        do_test_strip_pre_set_survives_sharefetch_err();
 
         /* Topic-level metadata err surface + dedup. */
         test_share_consumer_surfaces_topic_exception();

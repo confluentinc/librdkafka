@@ -296,6 +296,9 @@ static int run_share_consumer_test(share_test_config_t *config) {
         int i;
         char dist_str[512] = {0};
         int pos            = 0;
+        char unique_suffix[64];
+        char unique_group[128];
+        char unique_test_name[256];
 
         /* Validate config */
         TEST_ASSERT(config->consumer_cnt > 0 &&
@@ -305,12 +308,25 @@ static int run_share_consumer_test(share_test_config_t *config) {
                     "topic_cnt must be 1-%d", MAX_TOPICS);
         TEST_ASSERT(config->group_name != NULL, "group_name is required");
 
+        /* Append a per-invocation unique suffix to the group name and
+         * displayed test name so re-runs / parallel runs on the same
+         * cluster can't collide on share-group state. */
+        rd_snprintf(unique_suffix, sizeof(unique_suffix), "rnd%" PRIx64,
+                    test_id_generate());
+        rd_snprintf(unique_group, sizeof(unique_group), "%s-%s",
+                    config->group_name, unique_suffix);
+        rd_snprintf(unique_test_name, sizeof(unique_test_name), "%s [%s]",
+                    config->test_name ? config->test_name
+                                      : "Share Consumer Test",
+                    unique_suffix);
+        config->group_name = unique_group;
+        config->test_name  = unique_test_name;
+
         /* Print test header */
         TEST_SAY("\n");
         TEST_SAY(
             "============================================================\n");
-        TEST_SAY("=== %s ===\n",
-                 config->test_name ? config->test_name : "Share Consumer Test");
+        TEST_SAY("=== %s ===\n", config->test_name);
         TEST_SAY("=== Consumers: %d, Topics: %d, Partitions: [",
                  config->consumer_cnt, config->topic_cnt);
         for (i = 0; i < config->topic_cnt; i++) {
@@ -351,7 +367,7 @@ static int run_share_consumer_test(share_test_config_t *config) {
 /**
  * @brief Single consumer, single topic, single partition
  */
-static void test_single_consumer_single_topic_single_partition(void) {
+static void do_test_single_consumer_single_topic_single_partition(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 1,
@@ -365,7 +381,7 @@ static void test_single_consumer_single_topic_single_partition(void) {
 /**
  * @brief Single consumer, single topic, multiple partitions
  */
-static void test_single_consumer_single_topic_multiple_partitions(void) {
+static void do_test_single_consumer_single_topic_multiple_partitions(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 1,
@@ -379,7 +395,7 @@ static void test_single_consumer_single_topic_multiple_partitions(void) {
 /**
  * @brief Single consumer, multiple topics, single partition each
  */
-static void test_single_consumer_multiple_topic_single_partition(void) {
+static void do_test_single_consumer_multiple_topic_single_partition(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 2,
@@ -393,7 +409,7 @@ static void test_single_consumer_multiple_topic_single_partition(void) {
 /**
  * @brief Single consumer, multiple topics, multiple partitions
  */
-static void test_single_consumer_multiple_topic_multiple_partitions(void) {
+static void do_test_single_consumer_multiple_topic_multiple_partitions(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 3,
@@ -407,7 +423,7 @@ static void test_single_consumer_multiple_topic_multiple_partitions(void) {
 /**
  * @brief Multiple consumers, single topic, single partition
  */
-static void test_multiple_consumers_single_topic_single_partition(void) {
+static void do_test_multiple_consumers_single_topic_single_partition(void) {
         share_test_config_t config = {
             .consumer_cnt       = 2,
             .topic_cnt          = 1,
@@ -421,7 +437,7 @@ static void test_multiple_consumers_single_topic_single_partition(void) {
 /**
  * @brief Multiple consumers, single topic, multiple partitions
  */
-static void test_multiple_consumers_single_topic_multiple_partitions(void) {
+static void do_test_multiple_consumers_single_topic_multiple_partitions(void) {
         share_test_config_t config = {
             .consumer_cnt       = 2,
             .topic_cnt          = 1,
@@ -435,7 +451,8 @@ static void test_multiple_consumers_single_topic_multiple_partitions(void) {
 /**
  * @brief Multiple consumers, multiple topics, multiple partitions
  */
-static void test_multiple_consumers_multiple_topics_multiple_partitions(void) {
+static void
+do_test_multiple_consumers_multiple_topics_multiple_partitions(void) {
         share_test_config_t config = {
             .consumer_cnt       = 3,
             .topic_cnt          = 2,
@@ -453,7 +470,7 @@ static void test_multiple_consumers_multiple_topics_multiple_partitions(void) {
 /**
  * @brief High volume test with 10k messages on single partition
  */
-static void test_high_volume_10k_messages(void) {
+static void do_test_high_volume_10k_messages(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 1,
@@ -468,7 +485,7 @@ static void test_high_volume_10k_messages(void) {
 /**
  * @brief High volume test with 50k messages across 5 partitions
  */
-static void test_high_volume_50k_multi_partition(void) {
+static void do_test_high_volume_50k_multi_partition(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 1,
@@ -487,7 +504,7 @@ static void test_high_volume_50k_multi_partition(void) {
 /**
  * @brief 15 topics to trigger multiple ShareFetch responses
  */
-static void test_many_topics_15(void) {
+static void do_test_many_topics_15(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 15,
@@ -502,7 +519,7 @@ static void test_many_topics_15(void) {
 /**
  * @brief 10 topics with 2 partitions each
  */
-static void test_many_topics_10_multi_partition(void) {
+static void do_test_many_topics_10_multi_partition(void) {
         share_test_config_t config = {
             .consumer_cnt       = 1,
             .topic_cnt          = 10,
@@ -521,7 +538,7 @@ static void test_many_topics_10_multi_partition(void) {
 /**
  * @brief Rapid produce/consume cycles - 20 rounds of 500 messages each
  */
-static void test_rapid_produce_consume_cycles(void) {
+static void do_test_rapid_produce_consume_cycles(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[BATCH_SIZE];
         const char *topic;
@@ -599,7 +616,7 @@ static void test_rapid_produce_consume_cycles(void) {
 /**
  * @brief Empty topic then produce - verify consumer handles transition
  */
-static void test_empty_then_produce(void) {
+static void do_test_empty_then_produce(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[BATCH_SIZE];
         const char *topic;
@@ -672,7 +689,7 @@ static void test_empty_then_produce(void) {
 /**
  * @brief Sparse partitions - produce only to some partitions
  */
-static void test_sparse_partitions(void) {
+static void do_test_sparse_partitions(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[BATCH_SIZE];
         const char *topic;
@@ -746,7 +763,7 @@ static void test_sparse_partitions(void) {
  * This test verifies that the callback is invoked when acks are
  * piggybacked on ShareFetch responses.
  */
-static void test_poll_callback_piggybacked_acks(void) {
+static void do_test_poll_callback_piggybacked_acks(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[BATCH_SIZE];
         const char *topic;
@@ -856,7 +873,7 @@ static void test_poll_callback_piggybacked_acks(void) {
  * Produce a single record with three headers and verify the share consumer
  * receives all of them with the correct values.
  */
-static void test_headers_preserved(void) {
+static void do_test_headers_preserved(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_message_t *batch[10];
         const char *topic;
@@ -954,7 +971,7 @@ static void test_headers_preserved(void) {
  * 1000 bytes each, set fetch.message.max.bytes=1500 (~1.5 messages per
  * fetch). Verify all 100 records are received.
  */
-static void test_fetch_max_bytes_small(void) {
+static void do_test_fetch_max_bytes_small(void) {
         const char *group = "share-small-fetch";
         const char *topic;
         rd_kafka_share_t *consumer;
@@ -1026,7 +1043,7 @@ static void test_fetch_max_bytes_small(void) {
  * and verify all records are still received (the consumer must grow the
  * buffer to fit the oversized record).
  */
-static void test_record_larger_than_fetch_max_bytes(void) {
+static void do_test_record_larger_than_fetch_max_bytes(void) {
         const char *group = "share-large-record";
         const char *topic;
         rd_kafka_share_t *consumer;
@@ -1101,7 +1118,7 @@ static void test_record_larger_than_fetch_max_bytes(void) {
  * close. The other consumers should eventually receive every record
  * (including the ones released by consumer 0).
  */
-static void test_consumer_close_releases_to_group(void) {
+static void do_test_consumer_close_releases_to_group(void) {
         const char *group = "share-close-releases";
         const char *topic;
         rd_kafka_share_t *consumers[4];
@@ -1216,7 +1233,7 @@ static void test_consumer_close_releases_to_group(void) {
  * Produce N records to {0,1} -> consume -> grow to 5 -> produce N to
  * {2,3,4} -> continue consuming -> expect 5*N total.
  */
-static void test_partition_increase_during_consume(void) {
+static void do_test_partition_increase_during_consume(void) {
         const char *group = "share-partition-increase";
         const char *topic;
         rd_kafka_share_t *consumer;
@@ -1345,7 +1362,7 @@ static void test_partition_increase_during_consume(void) {
  * Verifies that the share consumer correctly preserves zero-length
  * key/value buffers (len == 0, pointer non-NULL) and NULL key/value.
  */
-static void test_zero_byte_payload_and_key(void) {
+static void do_test_zero_byte_payload_and_key(void) {
         const char *group = "share-zero-byte";
         const char *topic;
         rd_kafka_share_t *consumer;
@@ -1475,7 +1492,7 @@ static void test_zero_byte_payload_and_key(void) {
  * increasing size leading up to the boundary, and verify all are
  * received via the share consumer.
  */
-static void test_message_at_max_bytes_boundary(void) {
+static void do_test_message_at_max_bytes_boundary(void) {
         const char *group = "share-max-bytes-boundary";
         const char *topic;
         rd_kafka_share_t *consumer;
@@ -1670,7 +1687,7 @@ static void do_test_compression_codec(const char *codec) {
  * @brief Run consume+ack roundtrip for every supported producer
  *        compression codec.
  */
-static void test_all_compression_codecs(void) {
+static void do_test_all_compression_codecs(void) {
         do_test_compression_codec("none");
         do_test_compression_codec("gzip");
         do_test_compression_codec("snappy");
@@ -1685,7 +1702,7 @@ static void test_all_compression_codecs(void) {
  * Verifies the share consumer preserves a large header count and large
  * per-header value sizes end-to-end.
  */
-static void test_many_and_large_headers(void) {
+static void do_test_many_and_large_headers(void) {
         const char *group = "share-many-headers";
         const char *topic;
         rd_kafka_share_t *consumer;
@@ -1857,24 +1874,24 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         test_timeout_set(600);
 
         /* Single-consumer tests */
-        test_single_consumer_single_topic_single_partition();      /* Single
+        do_test_single_consumer_single_topic_single_partition();      /* Single
                                                                       consumer,
                                                                       single topic,
                                                                       single
                                                                       partition */
-        test_single_consumer_single_topic_multiple_partitions();   /* Single
+        do_test_single_consumer_single_topic_multiple_partitions();   /* Single
                                                                       consumer,
                                                                       single
                                                                       topic, multi
                                                                       partitions
                                                                     */
-        test_single_consumer_multiple_topic_single_partition();    /* Single
+        do_test_single_consumer_multiple_topic_single_partition();    /* Single
                                                                       consumer,
                                                                       multi topic,
                                                                       single
                                                                       partition
                                                                       each */
-        test_single_consumer_multiple_topic_multiple_partitions(); /* Single
+        do_test_single_consumer_multiple_topic_multiple_partitions(); /* Single
                                                                       consumer,
                                                                       multi
                                                                       topics,
@@ -1883,56 +1900,56 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
                                                                       each */
 
         /* Multi-consumer tests */
-        test_multiple_consumers_single_topic_single_partition();       /* Multi
-                                                                          consumer
-                                                                          sharing
-                                                                          single
-                                                                          partition */
-        test_multiple_consumers_single_topic_multiple_partitions();    /* Multi
-                                                                          consumer,
-                                                                          multi
-                                                                          partition
-                                                                        */
-        test_multiple_consumers_multiple_topics_multiple_partitions(); /* Full
+        do_test_multiple_consumers_single_topic_single_partition();    /* Multi
+                                                                       consumer
+                                                                       sharing
+                                                                       single
+                                                                       partition */
+        do_test_multiple_consumers_single_topic_multiple_partitions(); /* Multi
+                                                                       consumer,
+                                                                       multi
+                                                                       partition
+                                                                     */
+        do_test_multiple_consumers_multiple_topics_multiple_partitions(); /* Full
                                                                           matrix:
                                                                           multi
                                                                           everything
                                                                         */
 
         /* High volume tests */
-        test_high_volume_10k_messages();
-        test_high_volume_50k_multi_partition();
+        do_test_high_volume_10k_messages();
+        do_test_high_volume_50k_multi_partition();
 
         /* Multi-topic tests (triggers multiple fetch responses) */
-        test_many_topics_15();
-        test_many_topics_10_multi_partition();
+        do_test_many_topics_15();
+        do_test_many_topics_10_multi_partition();
 
         /* Rapid produce/consume tests */
-        test_rapid_produce_consume_cycles();
+        do_test_rapid_produce_consume_cycles();
 
         /* Edge case tests */
-        test_empty_then_produce();
-        test_sparse_partitions();
+        do_test_empty_then_produce();
+        do_test_sparse_partitions();
 
         /* Callback tests */
-        test_poll_callback_piggybacked_acks();
+        do_test_poll_callback_piggybacked_acks();
 
         /* Headers and fetch byte-limit tests */
-        test_headers_preserved();
-        test_fetch_max_bytes_small();
-        test_record_larger_than_fetch_max_bytes();
+        do_test_headers_preserved();
+        do_test_fetch_max_bytes_small();
+        do_test_record_larger_than_fetch_max_bytes();
 
         /* Failing consumer releases to group */
-        test_consumer_close_releases_to_group();
+        do_test_consumer_close_releases_to_group();
 
         /* Topology change: grow partitions while consuming */
-        test_partition_increase_during_consume();
+        do_test_partition_increase_during_consume();
 
         /* Payload edge cases */
-        test_zero_byte_payload_and_key();
-        test_message_at_max_bytes_boundary();
-        test_all_compression_codecs();
-        test_many_and_large_headers();
+        do_test_zero_byte_payload_and_key();
+        do_test_message_at_max_bytes_boundary();
+        do_test_all_compression_codecs();
+        do_test_many_and_large_headers();
 
 
         /* Cleanup common handles */

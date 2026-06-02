@@ -570,8 +570,13 @@ static void state_init(sub_test_state_t *state,
 
         memset(state, 0, sizeof(*state));
 
-        rd_snprintf(state->group_name, sizeof(state->group_name), "share-%s",
-                    scenario->name);
+        /* Append a per-invocation unique suffix so each run gets a
+         * fresh share-group on the broker (avoids collisions across
+         * re-runs or parallel runs against the same cluster). */
+        rd_snprintf(state->group_name, sizeof(state->group_name),
+                    "share-%s-rnd%" PRIx64, scenario->name, test_id_generate());
+        TEST_SAY("Scenario '%s' using group '%s'\n", scenario->name,
+                 state->group_name);
 
         state->consumer_cnt =
             scenario->consumer_cnt > 0 ? scenario->consumer_cnt : 1;

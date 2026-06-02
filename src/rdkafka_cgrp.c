@@ -454,9 +454,9 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
-        if (rkcg->rkcg_share_topic_errored)
+        if (rkcg->rkcg_share_pending_errored)
                 rd_kafka_topic_partition_list_destroy(
-                    rkcg->rkcg_share_topic_errored);
+                    rkcg->rkcg_share_pending_errored);
         if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb &&
             rkcg->rkcg_assignor_state)
                 rkcg->rkcg_assignor->rkas_destroy_state_cb(
@@ -543,7 +543,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
-                rkcg->rkcg_share_topic_errored =
+                rkcg->rkcg_share_pending_errored =
                     rd_kafka_topic_partition_list_new(0);
 
         /* Create a logical group coordinator broker to provide
@@ -7591,6 +7591,14 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
         rd_bool_t changed;
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
+
+        /* Share consumers handle topic-level errors via the share
+         * variant; the classic rejoin path is not applicable since
+         * membership is driven by ShareGroupHeartbeat. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_share_metadata_update_check(rkcg);
+                return;
+        }
 
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 return;

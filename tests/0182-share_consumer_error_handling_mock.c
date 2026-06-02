@@ -316,6 +316,8 @@ static void test_commit_sync_invalid_share_session_epoch(void) {
 
 /* commit_sync surfaces a top-level SHARE_SESSION_LIMIT_REACHED from
  * ShareAcknowledge without any client-side special handling. */
+/* commit_sync surfaces a top-level SHARE_SESSION_LIMIT_REACHED from
+ * ShareAcknowledge without any client-side special handling. */
 static void test_commit_sync_share_session_limit_reached(void) {
         do_test_commit_sync_top_level_err(
             "session-limit-reached",
@@ -613,8 +615,12 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
 /* ===================================================================
  *  Test — commit_sync at session epoch 0 returns
  *         INVALID_SHARE_SESSION_EPOCH without sending a
+ *         INVALID_SHARE_SESSION_EPOCH without sending a
  *         ShareAcknowledge request.
  *
+ *  When the broker session epoch is 0 (new consumer or post-reset)
+ *  there is no session state to acknowledge against, so the client
+ *  must fail acks locally.
  *  When the broker session epoch is 0 (new consumer or post-reset)
  *  there is no session state to acknowledge against, so the client
  *  must fail acks locally.
@@ -1986,8 +1992,22 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
  *  These scenarios are hard to reproduce on a real broker — the mock
  *  cluster lets us inject the exact per-topic error byte in a metadata
  *  response on demand.
+ *  Verify that a share consumer surfaces topic-level errors from
+ *  metadata responses to the application as rd_kafka_error_t via
+ *  consume_batch. Only TOPIC_EXCEPTION and TOPIC_AUTHORIZATION_FAILED
+ *  reach the app; transient codes (UNKNOWN_TOPIC, UNKNOWN_TOPIC_OR_PART,
+ *  UNKNOWN_TOPIC_ID, UNKNOWN_PARTITION) are not delivered. Repeats of
+ *  the same (topic, err) are deduped; recovery, unsubscribe, and
+ *  re-subscribe each have well-defined behaviour exercised below.
+ *
+ *  These scenarios are hard to reproduce on a real broker — the mock
+ *  cluster lets us inject the exact per-topic error byte in a metadata
+ *  response on demand.
  * =================================================================== */
 
+/* Drive at least one successful consume_batch so the share assignment
+ * is fully materialised before the test injects an error. Records are
+ * ACKed inline because the consumer is in explicit-ack mode. */
 /* Drive at least one successful consume_batch so the share assignment
  * is fully materialised before the test injects an error. Records are
  * ACKed inline because the consumer is in explicit-ack mode. */
@@ -2230,6 +2250,107 @@ static void test_share_consumer_dedupes_repeated_auth_failed(void) {
 }
 
 
+/* Two topics fail with the same error in one metadata cycle: both
+ * surface once, and neither re-surfaces on the next refresh while
+ * both stay failing. */
+static void test_share_consumer_two_topics_dedupe_independently(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic_a = "0182-multi-topic-a";
+        const char *topic_b = "0182-multi-topic-b";
+        const char *group   = "sg-0182-multi-topic";
+        rd_kafka_topic_partition_list_t *subscription;
+        int got_a = 0, got_b = 0;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_error_t *error;
+        size_t rcvd, j;
+        int attempts;
+
+        SUB_TEST();
+
+        ctx = test_ctx_new();
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic A");
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_b, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic B");
+        mock_produce(ctx.producer, topic_a, 3);
+        mock_produce(ctx.producer, topic_b, 3);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+
+        subscription = rd_kafka_topic_partition_list_new(2);
+        rd_kafka_topic_partition_list_add(subscription, topic_a,
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_topic_partition_list_add(subscription, topic_b,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(rd_kafka_share_subscribe(rkshare, subscription) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "subscribe");
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        share_topic_err_prime_assignment(rkshare);
+
+        /* Inject AUTH_FAILED on both topics, refresh once. */
+        rd_kafka_mock_topic_set_error(
+            ctx.mcluster, topic_a,
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+        rd_kafka_mock_topic_set_error(
+            ctx.mcluster, topic_b,
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+        share_topic_err_force_metadata(rkshare);
+
+        /* Drain consume_batch until both topics have surfaced once.
+         * The error string carries the topic name, so distinguish A
+         * from B by strstr. */
+        for (attempts = 0; attempts < 60 && (!got_a || !got_b); attempts++) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        const char *errstr       = rd_kafka_error_string(error);
+                        if (code ==
+                            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED) {
+                                if (errstr && strstr(errstr, topic_a))
+                                        got_a = 1;
+                                else if (errstr && strstr(errstr, topic_b))
+                                        got_b = 1;
+                        }
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(got_a && got_b,
+                    "Both topics must surface AUTH_FAILED at least once");
+
+        /* Second refresh: neither should re-surface — both deduped. */
+        share_topic_err_force_metadata(rkshare);
+        share_topic_err_assert_no_err(rkshare, 10,
+                                      "neither topic must re-surface "
+                                      "AUTH_FAILED after the first emit "
+                                      "(multi-topic dedup must be "
+                                      "independent)");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/* The same topic failing with a different error code must surface a
+ * fresh op for the new code rather than being deduped against the
+ * previous one. */
 /* Two topics fail with the same error in one metadata cycle: both
  * surface once, and neither re-surfaces on the next refresh while
  * both stay failing. */
@@ -3003,6 +3124,9 @@ static void test_share_consumer_does_not_surface_unknown_topic_or_part(void) {
         /* Custom consumer with the metadata propagation defer window
          * disabled so the no-surface path is exercised on the first
          * metadata refresh rather than 30 s later. */
+        /* Custom consumer with the metadata propagation defer window
+         * disabled so the no-surface path is exercised on the first
+         * metadata refresh rather than 30 s later. */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         test_conf_set(conf, "group.id", group);
@@ -3053,6 +3177,13 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_share_consumer_dedupes_repeated_auth_failed();
         test_share_consumer_two_topics_dedupe_independently();
         test_share_consumer_re_emits_when_err_code_changes();
+        test_share_consumer_re_surfaces_after_recovery();
+        test_share_consumer_unsubscribe_drops_errored_topic();
+        test_share_consumer_multi_partition_dedupe();
+        test_share_consumer_re_surfaces_after_recovery_topic_exception();
+        test_share_consumer_subscribe_change_drops_dropped_topic();
+        test_share_consumer_partial_recovery_preserves_other();
+        test_share_consumer_resubscribe_re_emits_persistent_failure();
         test_share_consumer_re_surfaces_after_recovery();
         test_share_consumer_unsubscribe_drops_errored_topic();
         test_share_consumer_multi_partition_dedupe();

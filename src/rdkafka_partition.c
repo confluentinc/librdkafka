@@ -2539,6 +2539,7 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 
 /**
  * @brief Share-consumer variant of rd_kafka_toppar_enq_error.
+ * @brief Share-consumer variant of rd_kafka_toppar_enq_error.
  *
  *        Records the (topic, err) on the cgrp's per-cycle accumulator
  *        for delivery or logging at the end of the metadata cycle.

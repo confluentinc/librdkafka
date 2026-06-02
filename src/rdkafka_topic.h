@@ -231,6 +231,11 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
                                       int *existing,
                                       int do_lock);
 
+rd_kafka_topic_t *rd_kafka_topic_new_with_id(rd_kafka_t *rk,
+                                             const char *topic,
+                                             rd_kafka_Uuid_t topic_id,
+                                             int do_lock);
+
 rd_kafka_topic_t *rd_kafka_topic_find_fl(const char *func,
                                          int line,
                                          rd_kafka_t *rk,

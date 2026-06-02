@@ -34,6 +34,9 @@ global_job_config:
 blocks:
   - name: 'OSX arm64/m1'
     dependencies: []
+    # Temporarily disabled while validating the new OSX M1 integration job.
+    skip:
+      when: "true"
     task:
       agent:
         machine:
@@ -52,6 +55,9 @@ blocks:
 
   - name: 'OSX x64'
     dependencies: []
+    # Temporarily disabled while validating the new OSX M1 integration job.
+    skip:
+      when: "true"
     task:
       agent:
         machine:
@@ -69,6 +75,9 @@ blocks:
 
   - name: 'Linux Ubuntu amd64: integration tests'
     dependencies: []
+    # Temporarily disabled while validating the new OSX M1 integration job.
+    skip:
+      when: "true"
     task:
       agent:
         machine:
@@ -96,8 +105,38 @@ blocks:
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
 
+  - name: 'OSX arm64/m1: integration tests'
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-macos-15-arm64-8
+      prologue:
+        commands:
+          - brew install openjdk@21
+          - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+          - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+          - cd tests && python3 -m pip install -r requirements.txt && cd ..
+      jobs:
+        - name: 'Build and integration tests with "classic" protocol'
+          commands:
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/run-integration-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION} classic
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+        - name: 'Build and integration tests with "consumer" protocol'
+          commands:
+            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+            - ./packaging/tools/run-integration-tests.sh
+              ${KAFKA_VERSION} ${CP_VERSION} consumer
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+
+
   - name: 'Linux arm64: local quick tests'
     dependencies: []
+    # Temporarily disabled while validating the new OSX M1 integration job.
+    skip:
+      when: "true"
     task:
       agent:
         machine:
@@ -140,6 +179,9 @@ blocks:
 
   - name: 'Windows x64: MinGW-w64'
     dependencies: []
+    # Temporarily disabled while validating the new OSX M1 integration job.
+    skip:
+      when: "true"
     task:
       agent:
         machine:
@@ -173,6 +215,9 @@ blocks:
 
   - name: 'Windows x64: Windows SDK 10.0 / MSVC v142 / VS 2019'
     dependencies: []
+    # Temporarily disabled while validating the new OSX M1 integration job.
+    skip:
+      when: "true"
     task:
       agent:
         machine:

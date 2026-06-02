@@ -454,9 +454,9 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
-        if (rkcg->rkcg_share_pending_errored)
+        if (rkcg->rkcg_share_topic_errored)
                 rd_kafka_topic_partition_list_destroy(
-                    rkcg->rkcg_share_pending_errored);
+                    rkcg->rkcg_share_topic_errored);
         if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb &&
             rkcg->rkcg_assignor_state)
                 rkcg->rkcg_assignor->rkas_destroy_state_cb(
@@ -543,7 +543,7 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
-                rkcg->rkcg_share_pending_errored =
+                rkcg->rkcg_share_topic_errored =
                     rd_kafka_topic_partition_list_new(0);
 
         /* Create a logical group coordinator broker to provide
@@ -5728,11 +5728,11 @@ static void rd_kafka_share_metadata_update_check(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_topic_partition_list_t *to_surface;
         int i;
 
-        if (!rkcg->rkcg_share_pending_errored)
+        if (!rkcg->rkcg_share_topic_errored)
                 return;
 
-        pending                          = rkcg->rkcg_share_pending_errored;
-        rkcg->rkcg_share_pending_errored = rd_kafka_topic_partition_list_new(0);
+        pending                        = rkcg->rkcg_share_topic_errored;
+        rkcg->rkcg_share_topic_errored = rd_kafka_topic_partition_list_new(0);
 
         to_surface = rd_kafka_topic_partition_list_new(0);
         for (i = 0; i < pending->cnt; i++) {
@@ -5741,8 +5741,10 @@ static void rd_kafka_share_metadata_update_check(rd_kafka_cgrp_t *rkcg) {
                 switch (t->err) {
                 case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
                 case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
-                        rd_kafka_topic_partition_list_add(to_surface, t->topic,
-                                                          RD_KAFKA_PARTITION_UA)
+                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                            to_surface,
+                            rd_kafka_topic_partition_get_topic_id(t), t->topic,
+                            RD_KAFKA_PARTITION_UA)
                             ->err = t->err;
                         break;
 

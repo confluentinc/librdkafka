@@ -231,7 +231,7 @@ typedef struct rd_kafka_cgrp_s {
         /** Share-consumer per-metadata-cycle (topic, err) accumulator.
          *  Populated by rd_kafka_share_toppar_enq_error and drained
          *  by rd_kafka_share_metadata_update_check at cycle end. */
-        rd_kafka_topic_partition_list_t *rkcg_share_pending_errored;
+        rd_kafka_topic_partition_list_t *rkcg_share_topic_errored;
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
          *  completes. The waiting subscription is stored here. */

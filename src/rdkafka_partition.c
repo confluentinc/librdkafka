@@ -2549,20 +2549,22 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
  */
 static void rd_kafka_share_toppar_enq_error(rd_kafka_toppar_t *rktp,
                                             rd_kafka_resp_err_t err) {
-        rd_kafka_cgrp_t *rkcg = rktp->rktp_rkt->rkt_rk->rk_cgrp;
-        const char *topic     = rktp->rktp_rkt->rkt_topic->str;
+        rd_kafka_cgrp_t *rkcg    = rktp->rktp_rkt->rkt_rk->rk_cgrp;
+        rd_kafka_topic_t *rkt    = rktp->rktp_rkt;
+        const char *topic        = rkt->rkt_topic->str;
+        rd_kafka_Uuid_t topic_id = rkt->rkt_topic_id;
         rd_kafka_topic_partition_t *prev;
 
-        if (!rkcg || !rkcg->rkcg_share_pending_errored)
+        if (!rkcg || !rkcg->rkcg_share_topic_errored)
                 return;
 
-        prev = rd_kafka_topic_partition_list_find(
-            rkcg->rkcg_share_pending_errored, topic, RD_KAFKA_PARTITION_UA);
+        prev = rd_kafka_topic_partition_list_find_topic_by_id(
+            rkcg->rkcg_share_topic_errored, topic_id);
         if (prev) {
                 prev->err = err;
         } else {
-                rd_kafka_topic_partition_list_add(
-                    rkcg->rkcg_share_pending_errored, topic,
+                rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                    rkcg->rkcg_share_topic_errored, topic_id, topic,
                     RD_KAFKA_PARTITION_UA)
                     ->err = err;
         }

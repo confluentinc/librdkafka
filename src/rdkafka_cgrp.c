@@ -5710,6 +5710,37 @@ static void rd_kafka_propagate_consumer_topic_errors(
 
 
 /**
+ * @brief Clear a share-consumer's errored-topic entry by topic_id.
+ *
+ *        Called from rd_kafka_topic_set_exists on recovery so a
+ *        subsequent re-failure with the same code surfaces again,
+ *        independent of any wholesale-replace happening in
+ *        rd_kafka_propagate_consumer_topic_errors.
+ *
+ * @locality rdkafka main thread
+ */
+void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
+                                         rd_kafka_Uuid_t topic_id) {
+        int i;
+
+        if (!rkcg || !rkcg->rkcg_errored_topics)
+                return;
+
+        rd_dassert(thrd_is_current(rkcg->rkcg_rk->rk_thread));
+
+        for (i = 0; i < rkcg->rkcg_errored_topics->cnt; i++) {
+                if (rd_kafka_Uuid_cmp(rd_kafka_topic_partition_get_topic_id(
+                                          &rkcg->rkcg_errored_topics->elems[i]),
+                                      topic_id) == 0) {
+                        rd_kafka_topic_partition_list_del_by_idx(
+                            rkcg->rkcg_errored_topics, i);
+                        return;
+                }
+        }
+}
+
+
+/**
  * @brief Share-consumer variant of rd_kafka_cgrp_metadata_update_check.
  *
  *        Drains the per-cycle pending list: app-facing codes
@@ -5722,7 +5753,9 @@ static void rd_kafka_propagate_consumer_topic_errors(
  *
  * @locality rdkafka main thread
  */
-static void rd_kafka_share_metadata_update_check(rd_kafka_cgrp_t *rkcg) {
+static void
+rd_kafka_share_metadata_update_check(rd_kafka_cgrp_t *rkcg,
+                                     rd_bool_t should_merge_existing_errored) {
         rd_kafka_t *rk = rkcg->rkcg_rk;
         rd_kafka_topic_partition_list_t *pending;
         rd_kafka_topic_partition_list_t *to_surface;
@@ -5756,6 +5789,27 @@ static void rd_kafka_share_metadata_update_check(rd_kafka_cgrp_t *rkcg) {
                 }
         }
         rd_kafka_topic_partition_list_destroy(pending);
+
+        /* Partial-view drain: carry previously-known errored entries
+         * forward so propagate's wholesale-replace doesn't drop them. */
+        if (should_merge_existing_errored && rkcg->rkcg_errored_topics) {
+                int j;
+                for (j = 0; j < rkcg->rkcg_errored_topics->cnt; j++) {
+                        rd_kafka_topic_partition_t *existing =
+                            &rkcg->rkcg_errored_topics->elems[j];
+                        rd_kafka_Uuid_t existing_id =
+                            rd_kafka_topic_partition_get_topic_id(existing);
+
+                        if (rd_kafka_topic_partition_list_find_topic_by_id(
+                                to_surface, existing_id))
+                                continue; /* pending overrides existing */
+
+                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                            to_surface, existing_id, existing->topic,
+                            RD_KAFKA_PARTITION_UA)
+                            ->err = existing->err;
+                }
+        }
 
         rd_kafka_propagate_consumer_topic_errors(
             rkcg, to_surface, "Subscribed topic not available");
@@ -7507,9 +7561,18 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
 
         /* Share consumers handle topic-level errors via the share
          * variant; the classic rejoin path is not applicable since
-         * membership is driven by ShareGroupHeartbeat. */
+         * membership is driven by ShareGroupHeartbeat.
+         *
+         * For share, the share variant must additively merge previously-
+         * errored topics forward whenever this metadata response is a
+         * PARTIAL view of the subscription (i.e., the IF-branch
+         * gate in parse_Metadata0 was not taken and we entered this
+         * function via the share fallthrough). That gate's truth value
+         * is what `do_join` carries: do_join=true ↔ full-subscription
+         * view (no merge); do_join=false ↔ partial view (merge). */
         if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
-                rd_kafka_share_metadata_update_check(rkcg);
+                rd_kafka_share_metadata_update_check(
+                    rkcg, !do_join /*should_merge_existing_errored*/);
                 return;
         }
 

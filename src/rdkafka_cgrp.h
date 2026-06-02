@@ -508,6 +508,10 @@ void rd_kafka_cgrp_coord_dead(rd_kafka_cgrp_t *rkcg,
                               const char *reason);
 void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join);
+
+void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
+                                         rd_kafka_Uuid_t topic_id);
+
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 
 #define rd_kafka_cgrp_same_subscription_version(rk_cgrp,                       \

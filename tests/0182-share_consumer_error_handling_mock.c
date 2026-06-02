@@ -2035,6 +2035,25 @@ static void share_topic_err_force_metadata(rd_kafka_share_t *rkshare) {
                 rd_kafka_metadata_destroy(md);
 }
 
+/* Force a PARTIAL metadata refresh covering only `topic_name`.
+ *
+ * Uses rd_kafka_metadata(all_topics=0, only_rkt=...) which underneath
+ * sends a MetadataRequest with cgrp_update=false. This exercises the
+ * share_metadata_update_check partial-view drain path. */
+static void share_topic_err_force_partial_metadata(rd_kafka_share_t *rkshare,
+                                                   const char *topic_name) {
+        const rd_kafka_metadata_t *md = NULL;
+        rd_kafka_t *rk;
+        rd_kafka_topic_t *rkt;
+
+        rk  = test_share_consumer_get_rk(rkshare);
+        rkt = rd_kafka_topic_new(rk, topic_name, NULL);
+        (void)rd_kafka_metadata(rk, 0 /*all_topics*/, rkt, &md, 5000);
+        if (md)
+                rd_kafka_metadata_destroy(md);
+        rd_kafka_topic_destroy(rkt);
+}
+
 /* Drain consume_batch until either the expected err code surfaces (then
  * return rd_true) or `max_attempts` calls go by without it (return
  * rd_false). Records that arrive are destroyed. */
@@ -2934,6 +2953,80 @@ static void test_share_consumer_resubscribe_re_emits_persistent_failure(void) {
 }
 
 
+/* Topic A is failing and has surfaced. A partial metadata refresh that
+ * covers only topic B (a cgrp_update=false response) must NOT wipe A
+ * from rkcg_errored_topics — otherwise the next full refresh would
+ * spuriously re-emit A. Verified by asserting no error op arrives
+ * after the partial refresh while A is continuously failing. */
+static void test_share_consumer_partial_refresh_preserves_other(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic_a = "0182-partial-refresh-a";
+        const char *topic_b = "0182-partial-refresh-b";
+        const char *group   = "sg-0182-partial-refresh";
+        rd_kafka_topic_partition_list_t *subscription;
+
+        SUB_TEST();
+
+        ctx = test_ctx_new();
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_a, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create A");
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic_b, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create B");
+        mock_produce(ctx.producer, topic_a, 3);
+        mock_produce(ctx.producer, topic_b, 3);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+
+        subscription = rd_kafka_topic_partition_list_new(2);
+        rd_kafka_topic_partition_list_add(subscription, topic_a,
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_topic_partition_list_add(subscription, topic_b,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(rd_kafka_share_subscribe(rkshare, subscription) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "subscribe {A,B}");
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        share_topic_err_prime_assignment(rkshare);
+
+        /* Make A fail and surface. B remains healthy. */
+        rd_kafka_mock_topic_set_error(
+            ctx.mcluster, topic_a,
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
+        share_topic_err_force_metadata(rkshare);
+        TEST_ASSERT(
+            share_topic_err_wait_for_err(
+                rkshare, RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED, 30),
+            "First AUTH_FAILED for A must surface");
+
+        /* Trigger a PARTIAL metadata refresh covering only B (this is
+         * a cgrp_update=false request). The share fallthrough in
+         * parse_Metadata0 fires; share_metadata_update_check runs in
+         * partial-view mode and must MERGE A's existing entry forward
+         * rather than wholesale-replacing rkcg_errored_topics. */
+        share_topic_err_force_partial_metadata(rkshare, topic_b);
+
+        /* If A's entry was wiped by the partial refresh, the next full
+         * refresh (A still failing) would surface a spurious second
+         * emit. Assert that no error arrives — A is still deduped. */
+        share_topic_err_force_metadata(rkshare);
+        share_topic_err_assert_no_err(
+            rkshare, 10,
+            "A must not re-emit: partial-view drain must have preserved "
+            "its rkcg_errored_topics entry");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
 /* UNKNOWN_TOPIC_OR_PART is debug-logged only and must not reach the
  * app via consume_batch. */
 static void test_share_consumer_does_not_surface_unknown_topic_or_part(void) {
@@ -3013,6 +3106,7 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_share_consumer_partial_recovery_preserves_other();
         test_share_consumer_resubscribe_re_emits_persistent_failure();
         test_share_consumer_does_not_surface_unknown_topic_or_part();
+        test_share_consumer_partial_refresh_preserves_other();
 
         /* Socket timeout matrix (single broker).
          *

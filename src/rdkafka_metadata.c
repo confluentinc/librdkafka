@@ -1109,6 +1109,17 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                   rkb->rkb_rk->rk_cgrp, cgrp_subscription_version))))
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
+        else if (rk->rk_cgrp && RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                /* Share consumers: drain on every metadata response,
+                 * regardless of cgrp_update, so the heartbeat-driven
+                 * metadata-by-id path and other cgrp_update=false
+                 * responses surface errors promptly. The share variant
+                 * treats this as a "partial view" (do_join=rd_false)
+                 * and merges existing rkcg_errored_topics entries
+                 * forward, so previously-known errored topics are not
+                 * wiped by responses that didn't cover them. */
+                rd_kafka_cgrp_metadata_update_check(rk->rk_cgrp,
+                                                    rd_false /*do join*/);
 
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
             rk->rk_cgrp->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)

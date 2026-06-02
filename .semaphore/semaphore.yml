@@ -385,10 +385,10 @@ blocks:
 promotions:
   - name: Run local tests on all architectures and integration tests
     pipeline_file: semaphore-integration.yml
+    # Temporarily auto-promote on every branch (not just master) while
+    # validating the new OSX M1 integration job.
     auto_promote_on:
       - result: passed
-        branch:
-        - "master"
   # Manual promotion only, the auto promotion on master happens after 
   # integration tests pass.
   - name: Run all tests

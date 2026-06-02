@@ -2538,103 +2538,33 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 
 
 /**
- * @brief Per-(topic, err) dedup for share-consumer topic-level errors.
- *
- * Suppresses repeats of the same (topic, err); allows re-emission when
- * the err code changes.
- *
- * @returns rd_true if (topic, err) was already reported.
- *          rd_false otherwise — records the (topic, err) for future
- *          calls.
- */
-static rd_bool_t
-rd_kafka_share_topic_err_already_reported(rd_kafka_cgrp_t *rkcg,
-                                          const char *topic,
-                                          rd_kafka_resp_err_t err) {
-        rd_kafka_topic_partition_t *prev;
-
-        prev = rd_kafka_topic_partition_list_find(rkcg->rkcg_errored_topics,
-                                                  topic, RD_KAFKA_PARTITION_UA);
-
-        if (prev && prev->err == err)
-                return rd_true;
-
-        if (prev) {
-                /* Different err code for the same topic — refresh. */
-                prev->err = err;
-        } else {
-                rd_kafka_topic_partition_t *rktpar =
-                    rd_kafka_topic_partition_list_add(rkcg->rkcg_errored_topics,
-                                                      topic,
-                                                      RD_KAFKA_PARTITION_UA);
-                rktpar->err = err;
-        }
-
-        return rd_false;
-}
-
-
-/**
  * @brief Share-consumer variant of rd_kafka_toppar_enq_error.
  *
- * Surfaces TOPIC_EXCEPTION and TOPIC_AUTHORIZATION_FAILED to the
- * application via the cgrp queue (as RD_KAFKA_OP_CONSUMER_ERR). Other
- * topic-level errors (UNKNOWN_TOPIC, UNKNOWN_TOPIC_OR_PART,
- * UNKNOWN_TOPIC_ID, UNKNOWN_PARTITION) describe transient metadata
- * drift that the library recovers from internally; they are logged at
- * debug level only and not delivered to the app.
+ *        Records the (topic, err) on the cgrp's per-cycle accumulator
+ *        for delivery or logging at the end of the metadata cycle.
+ *        Multiple calls for the same topic in one cycle collapse to
+ *        a single entry.
  *
- * Repeats of the same (topic, err) are suppressed via rkcg_errored_topics
- * so the same error can't spam the queue or the log.
+ * @locality rdkafka main thread
  */
 static void rd_kafka_share_toppar_enq_error(rd_kafka_toppar_t *rktp,
-                                            rd_kafka_resp_err_t err,
-                                            const char *reason) {
-        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
-        char buf[512];
+                                            rd_kafka_resp_err_t err) {
+        rd_kafka_cgrp_t *rkcg = rktp->rktp_rkt->rkt_rk->rk_cgrp;
+        const char *topic     = rktp->rktp_rkt->rkt_topic->str;
+        rd_kafka_topic_partition_t *prev;
 
-        rd_snprintf(buf, sizeof(buf), "%.*s [%" PRId32 "]: %s (%s)",
-                    RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                    rktp->rktp_partition, reason, rd_kafka_err2str(err));
-
-        if (rk->rk_cgrp &&
-            rd_kafka_share_topic_err_already_reported(
-                rk->rk_cgrp, rktp->rktp_rkt->rkt_topic->str, err))
+        if (!rkcg || !rkcg->rkcg_share_pending_errored)
                 return;
 
-        switch (err) {
-        case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
-        case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
-                if (rk->rk_cgrp)
-                        rd_kafka_consumer_err(
-                            rk->rk_cgrp->rkcg_q, RD_KAFKA_NODEID_UA, err,
-                            0 /*version*/,
-                            rktp->rktp_rkt->rkt_topic->str /*topic*/,
-                            NULL /*rktp*/, RD_KAFKA_OFFSET_INVALID, "%s", buf);
-                return;
-
-        case RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC:
-        case RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION:
-        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
-                             "Received unknown topic or partition error "
-                             "for partition %.*s [%" PRId32 "]",
-                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                             rktp->rktp_partition);
-                return;
-
-        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
-                rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
-                             "Received unknown topic ID error "
-                             "for partition %.*s [%" PRId32 "]",
-                             RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
-                             rktp->rktp_partition);
-                return;
-
-        default:
-                rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
-                             "Unhandled topic-level error: %s", buf);
-                return;
+        prev = rd_kafka_topic_partition_list_find(
+            rkcg->rkcg_share_pending_errored, topic, RD_KAFKA_PARTITION_UA);
+        if (prev) {
+                prev->err = err;
+        } else {
+                rd_kafka_topic_partition_list_add(
+                    rkcg->rkcg_share_pending_errored, topic,
+                    RD_KAFKA_PARTITION_UA)
+                    ->err = err;
         }
 }
 
@@ -2649,7 +2579,7 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
         char buf[512];
 
         if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
-                rd_kafka_share_toppar_enq_error(rktp, err, reason);
+                rd_kafka_share_toppar_enq_error(rktp, err);
                 return;
         }
 

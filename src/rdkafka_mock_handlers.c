@@ -2877,6 +2877,16 @@ rd_kafka_mock_handle_ConsumerGroupHeartbeat(rd_kafka_mock_connection_t *mconn,
                         err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
         }
 
+        /* A member (re-)joining (MemberEpoch 0) must provide a
+         * RebalanceTimeoutMs and a subscription (topic names or regex),
+         * otherwise the coordinator rejects the request. This mirrors the
+         * broker-side validation and catches malformed (re-)join heartbeats. */
+        if (!err && MemberEpoch == 0 &&
+            (RebalanceTimeoutMs == -1 ||
+             (!SubscribedTopicNames &&
+              RD_KAFKAP_STR_IS_NULL(&SubscribedTopicRegex))))
+                err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+
         if (!err) {
                 mtx_lock(&mcluster->lock);
                 mcgrp = rd_kafka_mock_cgrp_consumer_get(mcluster, &GroupId);

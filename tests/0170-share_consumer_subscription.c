@@ -570,8 +570,13 @@ static void state_init(sub_test_state_t *state,
 
         memset(state, 0, sizeof(*state));
 
-        rd_snprintf(state->group_name, sizeof(state->group_name), "share-%s",
-                    scenario->name);
+        /* Append a per-invocation unique suffix so each run gets a
+         * fresh share-group on the broker (avoids collisions across
+         * re-runs or parallel runs against the same cluster). */
+        rd_snprintf(state->group_name, sizeof(state->group_name),
+                    "share-%s-rnd%" PRIx64, scenario->name, test_id_generate());
+        TEST_SAY("Scenario '%s' using group '%s'\n", scenario->name,
+                 state->group_name);
 
         state->consumer_cnt =
             scenario->consumer_cnt > 0 ? scenario->consumer_cnt : 1;
@@ -851,6 +856,145 @@ static void do_test_multi_consumer_overlap(void) {
         rd_free(shared);
         rd_free(c0_only);
         rd_free(c1_only);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Topic-level metadata-error policy: when a subscribed topic is
+ *        deleted mid-stream, the resulting metadata error
+ *        (UNKNOWN_TOPIC_OR_PART / UNKNOWN_TOPIC) is treated as a
+ *        transient code by the share consumer — logged internally and
+ *        not surfaced to the application via consume_batch.
+ *
+ * Subscribe to a valid topic, prime the share assignment so the rktp
+ * is on rkt_desp, delete the topic, allow metadata propagation, and
+ * verify that no topic-level err shows up in subsequent consume_batch
+ * calls.
+ */
+static void test_topic_deletion_does_not_surface_error(void) {
+        const char *topic;
+        const char *group = "share-topic-delete-no-surface";
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_error_t *error;
+        char errstr[512];
+        char *topic_dup;
+        char *topics_for_delete[1];
+        rd_kafka_resp_err_t del_err;
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        int post_attempts;
+        rd_bool_t surfaced_topic_err = rd_false;
+
+        SUB_TEST();
+
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping topic-deletion-does-not-surface-error "
+                    "(broker on Windows)\n");
+                SUB_TEST_PASS();
+                return;
+        }
+
+        topic     = test_mk_topic_name("0170-delete-no-surface", 1);
+        topic_dup = rd_strdup(topic);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        /* Custom consumer that disables the set_notexists defer window
+         * (default 30s) so the log-and-drop path runs on the first
+         * post-delete metadata refresh instead of being deferred. */
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
+                          errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "topic.metadata.propagation.max.ms", "0",
+                          errstr, sizeof(errstr));
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Prime the share assignment: consume + ACCEPT at least one
+         * record so the rktp materialises on rkt_desp (precondition
+         * for the metadata-error propagation path to fire). */
+        while (consumed < 1 && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                rd_kafka_share_acknowledge(consumer, batch[j]);
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed >= 1,
+                    "Pre-condition: expected to consume + ack at least one "
+                    "record before deleting the topic");
+
+        TEST_SAY("Deleting topic %s\n", topic);
+        topics_for_delete[0] = topic_dup;
+        del_err              = test_DeleteTopics_simple(common_admin, NULL,
+                                                        topics_for_delete, 1, NULL);
+        TEST_ASSERT(!del_err, "DeleteTopics failed: %s",
+                    rd_kafka_err2str(del_err));
+
+        /* Allow metadata propagation. */
+        rd_sleep(3);
+
+        /* Drain consume_batch and verify no topic-level error reaches
+         * the application. _STATE / generic timeouts are expected
+         * (no more records); only the metadata-derived topic codes
+         * must not surface. */
+        for (post_attempts = 0; post_attempts < 30; post_attempts++) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        TEST_SAY("Post-delete consume_batch: %s\n",
+                                 rd_kafka_err2name(code));
+                        if (code == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION ||
+                            code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
+                            code == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC ||
+                            code == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
+                            code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID ||
+                            code ==
+                                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
+                                surfaced_topic_err = rd_true;
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err)
+                                rd_kafka_share_acknowledge(consumer, batch[j]);
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+
+        TEST_ASSERT(!surfaced_topic_err,
+                    "Topic-level metadata errors must not surface to "
+                    "the application after the subscribed topic is "
+                    "deleted (transient codes are log-only)");
+
+        rd_free(topic_dup);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
 
         SUB_TEST_PASS();
 }
@@ -1343,6 +1487,316 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
         SUB_TEST_PASS();
 }
 
+
+/**
+ * @brief Test that a subscription change drives an implicit ack of the
+ *        previously-fetched batch, firing the share ack callback.
+ *
+ * Produce one record to t1 and one to t2. In implicit mode, subscribe to t1,
+ * fetch the t1 record (without explicitly acknowledging), then re-subscribe
+ * to t2. The subscription change should cause t1's outstanding record to be
+ * implicitly acknowledged, firing the ack commit callback for that
+ * partition.
+ */
+static void do_test_subscription_change_acks_pending(void) {
+        char *group;
+        char *t1;
+        char *t2;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[10];
+        rd_kafka_error_t *err;
+        test_ack_cb_state_t state = {0};
+        size_t rcvd               = 0;
+        size_t i;
+        int attempts;
+
+        /* rd_strdup each test_mk_topic_name() result because the helper
+         * returns a pointer to a single TLS static buffer that gets
+         * clobbered by the next call. */
+        group = rd_strdup(test_mk_topic_name("share-sub-change-ack", 1));
+        t1    = rd_strdup(test_mk_topic_name("0170-subchg-t1", 1));
+        t2    = rd_strdup(test_mk_topic_name("0170-subchg-t2", 1));
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY("=== subscription-change-drives-ack-callback ===\n");
+        TEST_SAY(
+            "============================================================\n");
+
+        test_create_topic_wait_exists(NULL, t1, 1, -1, 30000);
+        test_create_topic_wait_exists(NULL, t2, 1, -1, 30000);
+
+        test_produce_msgs_simple(common_producer, t1, 0, 1);
+        test_produce_msgs_simple(common_producer, t2, 0, 1);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        /* Subscribe to t1 only */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, t1, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll until the t1 record arrives */
+        attempts = 30;
+        while (rcvd < 1 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
+                                                   &batch_rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd += batch_rcvd;
+        }
+        TEST_ASSERT(rcvd == 1, "Expected 1 record from t1, got %zu", rcvd);
+        for (i = 0; i < rcvd; i++)
+                rd_kafka_message_destroy(batch[i]);
+
+        TEST_ASSERT(state.callback_cnt == 0,
+                    "Did not expect callback before subscription change, "
+                    "got %d",
+                    state.callback_cnt);
+
+        /* Re-subscribe to t2 only - this should drive an implicit ack of
+         * t1's outstanding batch. */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, t2, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll a few times to drive the callback and pick up the t2 record */
+        rcvd     = 0;
+        attempts = 30;
+        while ((rcvd < 1 || state.callback_cnt < 1) && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 1000, batch + rcvd,
+                                                   &batch_rcvd);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd += batch_rcvd;
+        }
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected ack callback to fire after subscription change, "
+                    "got %d callbacks",
+                    state.callback_cnt);
+        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected no error in callback, got %s",
+                    rd_kafka_err2name(state.last_err));
+
+        for (i = 0; i < rcvd; i++)
+                rd_kafka_message_destroy(batch[i]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        rd_free(t1);
+        rd_free(t2);
+        rd_free(group);
+
+        TEST_SAY("=== subscription-change-drives-ack-callback: PASSED ===\n");
+}
+
+
+/**
+ * @brief Test two share groups on the same topic with different
+ *        auto.offset.reset policies (earliest vs latest).
+ *
+ * Group A is configured for earliest, group B for latest. Records produced
+ * before either group joins are visible only to group A; records produced
+ * after both have joined are visible to both.
+ */
+static void do_test_two_groups_earliest_vs_latest(void) {
+        char *grpA;
+        char *grpB;
+        char *topic;
+        rd_kafka_share_t *consA, *consB;
+        rd_kafka_topic_partition_list_t *subs;
+        int countA = 0, countB = 0;
+        int attempts;
+
+        /* rd_strdup each test_mk_topic_name() result because the helper
+         * returns a pointer to a single TLS static buffer that gets
+         * clobbered by the next call. Without this, grpA, grpB and topic
+         * would all alias to the same buffer. */
+        grpA  = rd_strdup(test_mk_topic_name("share-grpA-earliest", 1));
+        grpB  = rd_strdup(test_mk_topic_name("share-grpB-latest", 1));
+        topic = rd_strdup(test_mk_topic_name("0170-evl", 1));
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY("=== two-groups-earliest-vs-latest ===\n");
+        TEST_SAY(
+            "============================================================\n");
+
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 30000);
+
+        /* Produce 5 records BEFORE the consumers join. These are the
+         * "original records present in the broker" that earliest fetches
+         * and latest skips. */
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        /* Match the working librdkafka ordering used by
+         * do_test_multi_consumer_overlap (0170) and 0171's
+         * test_poll_callback_piggybacked_acks:
+         *   produce -> create consumer -> set reset -> subscribe -> poll.
+         * Setting share.auto.offset.reset before any consumer exists at
+         * the broker doesn't take effect; setting it after consumer
+         * creation but before subscribe does. */
+        consA = test_create_share_consumer(grpA, NULL);
+        consB = test_create_share_consumer(grpB, NULL);
+
+        test_share_set_auto_offset_reset(grpA, "earliest");
+        test_share_set_auto_offset_reset(grpB, "latest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consA, subs);
+        rd_kafka_share_subscribe(consB, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* groupA (earliest) fetches the 5 pre-existing records;
+         * groupB (latest) skips them (HW=5 anchors the start). */
+        attempts = 30;
+        while (attempts-- > 0 && countA < 5) {
+                int batch_cnt = 0;
+                test_share_consume_batch(consA, 1000, NULL, 0, &batch_cnt);
+                countA += batch_cnt;
+
+                batch_cnt = 0;
+                test_share_consume_batch(consB, 500, NULL, 0, &batch_cnt);
+                countB += batch_cnt;
+        }
+        TEST_ASSERT(countA == 5, "groupA (earliest) expected 5 records, got %d",
+                    countA);
+        TEST_ASSERT(countB == 0,
+                    "groupB (latest) expected 0 records for pre-subscribe "
+                    "produce, got %d",
+                    countB);
+
+        /* Produce 3 more records AFTER both groups have joined - both
+         * groups should see these (earliest continues from HW=5, latest
+         * advances from HW=5 too). */
+        test_produce_msgs_simple(common_producer, topic, 0, 3);
+
+        attempts = 30;
+        while (attempts-- > 0 && countB < 3) {
+                int batch_cnt = 0;
+                test_share_consume_batch(consA, 500, NULL, 0, &batch_cnt);
+                countA += batch_cnt;
+
+                batch_cnt = 0;
+                test_share_consume_batch(consB, 1000, NULL, 0, &batch_cnt);
+                countB += batch_cnt;
+        }
+        TEST_ASSERT(countA == 8, "groupA expected 8 records total, got %d",
+                    countA);
+        TEST_ASSERT(countB == 3,
+                    "groupB expected 3 records (post-subscribe only), got %d",
+                    countB);
+
+        test_share_consumer_close(consA);
+        test_share_consumer_close(consB);
+        test_share_destroy(consA);
+        test_share_destroy(consB);
+
+        rd_free(grpA);
+        rd_free(grpB);
+        rd_free(topic);
+
+        TEST_SAY("=== two-groups-earliest-vs-latest: PASSED ===\n");
+}
+
+
+/**
+ * @brief Test that DeleteRecords advances the LSO and a new share group
+ *        with auto.offset.reset=earliest starts at the new LSO.
+ *
+ * Produce 10 records, DeleteRecords up to offset 5 (LSO -> 5), then create
+ * a new share group with earliest and verify exactly 5 records
+ * (offsets 5..9) are consumed.
+ */
+static void do_test_delete_records_advances_lso(void) {
+        char *group;
+        char *topic;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_resp_err_t err;
+        int consumed  = 0;
+        int batch_cnt = 0;
+        int attempts;
+
+        group = rd_strdup(test_mk_topic_name("share-lso-delete", 1));
+        topic = rd_strdup(test_mk_topic_name("0170-lso", 1));
+
+        TEST_SAY("\n");
+        TEST_SAY(
+            "============================================================\n");
+        TEST_SAY("=== delete-records-advances-lso ===\n");
+        TEST_SAY(
+            "============================================================\n");
+
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping delete-records scenario (broker on Windows)\n");
+                rd_free(group);
+                rd_free(topic);
+                return;
+        }
+
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 30000);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
+
+        /* DeleteRecords up to offset 5: deletes offsets 0..4, LSO moves to 5 */
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, topic, 0)->offset = 5;
+        err = test_DeleteRecords_simple(common_admin, NULL, offsets, NULL);
+        rd_kafka_topic_partition_list_destroy(offsets);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "DeleteRecords failed: %s", rd_kafka_err2name(err));
+
+        /* New share group with earliest should start at the new LSO */
+        test_share_set_auto_offset_reset(group, "earliest");
+        rkshare = test_create_share_consumer(group, NULL);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        attempts = 30;
+        while (consumed < 5 && attempts-- > 0) {
+                batch_cnt = 0;
+                test_share_consume_batch(rkshare, 2000, NULL, 0, &batch_cnt);
+                consumed += batch_cnt;
+        }
+        TEST_ASSERT(consumed == 5,
+                    "Expected 5 records (offsets 5..9) after DeleteRecords, "
+                    "consumed %d",
+                    consumed);
+
+        /* Verify no additional records show up */
+        batch_cnt = 0;
+        test_share_consume_batch(rkshare, 1000, NULL, 0, &batch_cnt);
+        TEST_ASSERT(batch_cnt == 0,
+                    "Did not expect more records after consuming 5, got %d",
+                    batch_cnt);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        rd_free(group);
+        rd_free(topic);
+
+        TEST_SAY("=== delete-records-advances-lso: PASSED ===\n");
+}
+
+
 int main_0170_share_consumer_subscription(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();
@@ -1380,6 +1834,10 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         else
                 do_test_scenario(&test_topic_deletion);
 
+        /* Verify that topic deletion does not surface a topic-level
+         * error code to consume_batch (transient codes are log-only). */
+        test_topic_deletion_does_not_surface_error();
+
         /* Stress tests */
         do_test_scenario(&test_rapid_updates);
 
@@ -1388,6 +1846,16 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
 
         /* Scale tests (many topics) */
         do_test_subscribe_15_topics();
+
+        /* Subscription change drives ack callback */
+        do_test_subscription_change_acks_pending();
+
+        /* Two groups with earliest vs latest offset reset */
+        do_test_two_groups_earliest_vs_latest();
+
+        /* DeleteRecords advances LSO; new group with earliest sees fewer
+         * records (skipped on Windows brokers). */
+        do_test_delete_records_advances_lso();
 
         /* Input validation tests */
         do_test_subscribe_input_validation();

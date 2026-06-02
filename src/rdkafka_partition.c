@@ -482,6 +482,65 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2(rd_kafka_t *rk,
 
 
 /**
+ * @brief Same as rd_kafka_toppar_get2() but looks up (or creates) the
+ *        topic by topic_id rather than by name.
+ *
+ *        Used by share-consumer paths where the heartbeat-derived
+ *        assignment is the source of truth and the topic id is the
+ *        canonical identity. Looking up by id avoids matching a
+ *        recreated topic's response to a different rkt that happens
+ *        to share its name.
+ *
+ *        topic_id must be non-zero; topic name may be NULL.
+ *
+ * @locality any
+ * @locks none
+ */
+rd_kafka_toppar_t *rd_kafka_toppar_get_by_id2(rd_kafka_t *rk,
+                                              const char *topic,
+                                              rd_kafka_Uuid_t topic_id,
+                                              int32_t partition,
+                                              int create_on_miss) {
+        rd_kafka_topic_t *rkt;
+        rd_kafka_toppar_t *rktp;
+
+        rd_dassert(!RD_KAFKA_UUID_IS_ZERO(topic_id));
+
+        rd_kafka_wrlock(rk);
+
+        rkt = rd_kafka_topic_find_by_topic_id(rk, topic_id);
+        if (unlikely(!rkt)) {
+                if (!create_on_miss) {
+                        rd_kafka_wrunlock(rk);
+                        return NULL;
+                }
+                rkt = rd_kafka_topic_new_with_id(rk, topic, topic_id,
+                                                 0 /*no-lock*/);
+                if (!rkt) {
+                        rd_kafka_wrunlock(rk);
+                        rd_kafka_log(rk, LOG_ERR, "TOPIC",
+                                     "Failed to create local topic \"%s\" "
+                                     "(id %s): %s",
+                                     topic ? topic : "(null)",
+                                     rd_kafka_Uuid_base64str(&topic_id),
+                                     rd_strerror(errno));
+                        return NULL;
+                }
+        }
+
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_topic_wrlock(rkt);
+        rktp = rd_kafka_toppar_desired_add(rkt, partition);
+        rd_kafka_topic_wrunlock(rkt);
+
+        rd_kafka_topic_destroy0(rkt);
+
+        return rktp;
+}
+
+
+/**
  * Returns a toppar if it is available in the cluster.
  * '*errp' is set to the error-code if lookup fails.
  *
@@ -3266,10 +3325,24 @@ rd_kafka_topic_partition_ensure_toppar(rd_kafka_t *rk,
 
         parpriv = rd_kafka_topic_partition_get_private(rktpar);
 
-        if (!parpriv->rktp)
+        if (parpriv->rktp)
+                return parpriv->rktp;
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Share consumer identifies topics by id; looking up
+                 * the topic by name risks matching a stale rkt that
+                 * a recreated topic shares its name with. */
+                rd_dassert(!RD_KAFKA_UUID_IS_ZERO(parpriv->topic_id));
+                if (RD_KAFKA_UUID_IS_ZERO(parpriv->topic_id))
+                        return NULL;
+                parpriv->rktp = rd_kafka_toppar_get_by_id2(
+                    rk, rktpar->topic, parpriv->topic_id, rktpar->partition,
+                    create_on_miss);
+        } else {
                 parpriv->rktp = rd_kafka_toppar_get2(
                     rk, rktpar->topic, rktpar->partition,
                     0 /* not ua on miss */, create_on_miss);
+        }
 
         return parpriv->rktp;
 }

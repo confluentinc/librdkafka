@@ -3499,7 +3499,8 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                     "finish before producing to "
                                     "new leader");
                         }
-                } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER) {
+                } else if (rkb->rkb_rk->rk_type == RD_KAFKA_CONSUMER &&
+                           !RD_KAFKA_IS_SHARE_CONSUMER(rkb->rkb_rk)) {
                         rktp->rktp_ts_fetch_backoff = 0;
                 }
 

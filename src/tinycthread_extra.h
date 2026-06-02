@@ -203,7 +203,10 @@ typedef struct rwlock_t {
 
 
 #else
-typedef pthread_rwlock_t rwlock_t;
+/* Diagnostic workaround for the macOS arm64 pthread_rwlock wedge bug:
+ * back rwlock_t with a plain pthread_mutex_t so rdlock and wrlock both
+ * collapse to mutual exclusion. */
+typedef pthread_mutex_t rwlock_t;
 
 int rwlock_init(rwlock_t *rwl);
 int rwlock_destroy(rwlock_t *rwl);

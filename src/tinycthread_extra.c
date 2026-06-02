@@ -163,8 +163,12 @@ int cnd_timedwait_abs(cnd_t *cnd, mtx_t *mtx, rd_ts_t abs_timeout) {
  * @{
  */
 #ifndef _WIN32
+/* Diagnostic: rwlock_t is now pthread_mutex_t. rdlock and wrlock both
+ * map to mutex_lock; rdunlock and wrunlock map to mutex_unlock. Used
+ * to verify the macOS arm64 destroy hang requires pthread_rwlock
+ * semantics. */
 int rwlock_init(rwlock_t *rwl) {
-        int r = pthread_rwlock_init(rwl, NULL);
+        int r = pthread_mutex_init(rwl, NULL);
         if (r) {
                 errno = r;
                 return thrd_error;
@@ -173,7 +177,7 @@ int rwlock_init(rwlock_t *rwl) {
 }
 
 int rwlock_destroy(rwlock_t *rwl) {
-        int r = pthread_rwlock_destroy(rwl);
+        int r = pthread_mutex_destroy(rwl);
         if (r) {
                 errno = r;
                 return thrd_error;
@@ -182,25 +186,25 @@ int rwlock_destroy(rwlock_t *rwl) {
 }
 
 int rwlock_rdlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_rdlock(rwl);
+        int r = pthread_mutex_lock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
 int rwlock_wrlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_wrlock(rwl);
+        int r = pthread_mutex_lock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
 int rwlock_rdunlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_unlock(rwl);
+        int r = pthread_mutex_unlock(rwl);
         assert(r == 0);
         return thrd_success;
 }
 
 int rwlock_wrunlock(rwlock_t *rwl) {
-        int r = pthread_rwlock_unlock(rwl);
+        int r = pthread_mutex_unlock(rwl);
         assert(r == 0);
         return thrd_success;
 }

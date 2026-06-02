@@ -769,10 +769,63 @@ struct rd_kafka_s {
         } rk_mock;
 };
 
-#define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
-#define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
-#define rd_kafka_rdunlock(rk) rwlock_rdunlock(&(rk)->rk_lock)
-#define rd_kafka_wrunlock(rk) rwlock_wrunlock(&(rk)->rk_lock)
+/* TODO: temporary instrumentation to diagnose the macOS arm64
+ * pthread_rwlock wedge bug. Each rk_lock acquire/release prints a
+ * [RKLOCK] line with REQ/GOT/UNLOCK + tid + file:line. Builds a ledger
+ * so we can see who holds the lock when a destroy hangs. Remove once
+ * root-caused. */
+#define rd_kafka_wrlock(rk)                                                    \
+        do {                                                                   \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu wrlock REQ %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+                rwlock_wrlock(&(rk)->rk_lock);                                 \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu wrlock GOT %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+        } while (0)
+#define rd_kafka_rdlock(rk)                                                    \
+        do {                                                                   \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu rdlock REQ %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+                rwlock_rdlock(&(rk)->rk_lock);                                 \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu rdlock GOT %s:%d\n",           \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+        } while (0)
+#define rd_kafka_rdunlock(rk)                                                  \
+        do {                                                                   \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu rdunlock %s:%d\n",             \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+                rwlock_rdunlock(&(rk)->rk_lock);                               \
+        } while (0)
+#define rd_kafka_wrunlock(rk)                                                  \
+        do {                                                                   \
+                fprintf(stderr,                                                \
+                        "[RKLOCK] rk=%s tid=%lu wrunlock %s:%d\n",             \
+                        (rk)->rk_name,                                         \
+                        (unsigned long)(uintptr_t)thrd_current(), __FILE__,    \
+                        __LINE__);                                             \
+                fflush(stderr);                                                \
+                rwlock_wrunlock(&(rk)->rk_lock);                               \
+        } while (0)
 
 
 /**

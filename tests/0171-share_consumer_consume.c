@@ -849,6 +849,81 @@ static void test_poll_callback_piggybacked_acks(void) {
 }
 
 
+/**
+ * @brief max.poll.interval.ms is enforced for a share consumer that stops
+ *        polling.
+ */
+static void test_max_poll_interval_exceeded(void) {
+        const char *topic = test_mk_topic_name("0171-share-max-poll", 1);
+        const char *group = "0171-share-max-poll-group";
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *consumer;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        char errstr[512];
+        int64_t deadline;
+        rd_bool_t raised = rd_false;
+
+        SUB_TEST_QUICK();
+
+        /* Create topic and produce a few messages. The presence of records
+         * is irrelevant to the poll-interval timer, but mirrors a real
+         * workload that simply stalls between polls. */
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        /* Short max.poll.interval.ms so the test finishes quickly.
+         * (session.timeout.ms / heartbeat.interval.ms are broker-side for
+         * share consumers and cannot be set here.) */
+        test_conf_init(&conf, NULL, 0);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "max.poll.interval.ms", "7000" /*7s*/, errstr,
+                          sizeof(errstr));
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Idle past max.poll.interval.ms without polling. */
+        TEST_SAY("Idling 10s without polling (max.poll.interval.ms=7s)\n");
+        rd_sleep(10);
+
+        /* Next poll(s) must deliver ERR__MAX_POLL_EXCEEDED. */
+        deadline = test_clock() + 10 * 1000000; /* 10s safety bound */
+        while (!raised && test_clock() < deadline) {
+                size_t rcvd = 0;
+
+                error = rd_kafka_share_consume_batch(consumer, 1000, batch,
+                                                     &rcvd);
+                TEST_ASSERT(rcvd == 0,
+                            "Expected no records after max.poll.interval.ms "
+                            "exceeded, got %d",
+                            (int)rcvd);
+                if (error) {
+                        if (rd_kafka_error_code(error) ==
+                            RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED)
+                                raised = rd_true;
+                        else
+                                TEST_FAIL("Expected MAX_POLL_EXCEEDED, got %s",
+                                          rd_kafka_error_name(error));
+                        rd_kafka_error_destroy(error);
+                }
+        }
+
+        TEST_ASSERT(raised, "Expected ERR__MAX_POLL_EXCEEDED to be delivered");
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
+}
+
 int main_0171_share_consumer_consume(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();
@@ -916,6 +991,9 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
 
         /* Callback tests */
         test_poll_callback_piggybacked_acks();
+
+        /* Poll-interval enforcement */
+        test_max_poll_interval_exceeded();
 
 
         /* Cleanup common handles */

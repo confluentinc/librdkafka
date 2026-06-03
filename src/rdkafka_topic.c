@@ -1318,14 +1318,6 @@ rd_bool_t rd_kafka_topic_set_exists(rd_kafka_topic_t *rkt,
 
         rd_kafka_topic_set_state(rkt, RD_KAFKA_TOPIC_S_EXISTS);
 
-        /* Share consumers: explicit recovery hook. Clear any prior
-         * (topic, err) dedup entry so a subsequent re-failure with
-         * the same code surfaces afresh, even on metadata responses
-         * that don't trigger the share metadata-cycle drain. */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkt->rkt_rk) && rkt->rkt_rk->rk_cgrp)
-                rd_kafka_share_clear_topic_err(rkt->rkt_rk->rk_cgrp,
-                                               rkt->rkt_topic_id);
-
         return rd_true;
 }
 

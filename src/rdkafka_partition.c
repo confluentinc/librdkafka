@@ -2555,16 +2555,16 @@ static void rd_kafka_share_toppar_enq_error(rd_kafka_toppar_t *rktp,
         rd_kafka_Uuid_t topic_id = rkt->rkt_topic_id;
         rd_kafka_topic_partition_t *prev;
 
-        if (!rkcg || !rkcg->rkcg_share_topic_errored)
+        if (!rkcg || !rkcg->rkcg_errored_topics)
                 return;
 
         prev = rd_kafka_topic_partition_list_find_topic_by_id(
-            rkcg->rkcg_share_topic_errored, topic_id);
+            rkcg->rkcg_errored_topics, topic_id);
         if (prev) {
                 prev->err = err;
         } else {
                 rd_kafka_topic_partition_list_add_with_topic_name_and_id(
-                    rkcg->rkcg_share_topic_errored, topic_id, topic,
+                    rkcg->rkcg_errored_topics, topic_id, topic,
                     RD_KAFKA_PARTITION_UA)
                     ->err = err;
         }

@@ -226,12 +226,19 @@ typedef struct rd_kafka_cgrp_s {
         /** The actual topics subscribed (after metadata+wildcard matching).
          *  Sorted. */
         rd_list_t *rkcg_subscribed_topics; /**< (rd_kafka_topic_info_t *) */
-        /** Subscribed topics that are errored/not available. */
+        /** Subscribed topics that are errored/not available.
+         *
+         *  Two roles share this field, exclusively per cgrp protocol:
+         *
+         *  - Classic consumer: cross-cycle dedup memo.
+         *    rd_kafka_propagate_consumer_topic_errors wholesale-replaces
+         *    it with the current cycle's errored set after emitting.
+         *
+         *  - Share consumer (KIP-932): per-metadata-cycle (topic, err)
+         *    accumulator. Populated by rd_kafka_share_toppar_enq_error
+         *    and drained (then re-emptied) by
+         *    rd_kafka_share_topic_err_propagate at cycle end. */
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
-        /** Share-consumer per-metadata-cycle (topic, err) accumulator.
-         *  Populated by rd_kafka_share_toppar_enq_error and drained
-         *  by rd_kafka_share_topic_err_propagate at cycle end. */
-        rd_kafka_topic_partition_list_t *rkcg_share_topic_errored;
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
          *  completes. The waiting subscription is stored here. */
@@ -510,13 +517,9 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join);
 
 /**
- * TODO KIP-932: Think of correct placing for these two functions
- *               when correcting this field.
+ * TODO KIP-932: Think of correct placing for this function.
  */
 void rd_kafka_share_topic_err_propagate(rd_kafka_cgrp_t *rkcg);
-
-void rd_kafka_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
-                                    rd_kafka_Uuid_t topic_id);
 
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 

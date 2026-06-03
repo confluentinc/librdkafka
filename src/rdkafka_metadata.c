@@ -1101,25 +1101,28 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * the request was from the partition assignor (!cgrp_update)
          * which may contain only a sub-set of the subscribed topics (namely
          * the effective subscription of available topics) as to not
-         * propagate non-included topics as non-existent. */
-        if (cgrp_update &&
+         * propagate non-included topics as non-existent.
+         *
+         * For share consumers, the same predicate also gates whether the
+         * share variant should merge pre-existing rkcg_errored_topics
+         * forward into this cycle's surface list (merge on partial view;
+         * skip on authoritative). Share goes through its dedicated entry
+         * point, not rd_kafka_cgrp_metadata_update_check. */
+        rd_bool_t cgrp_update_full_metadata_refresh =
+            cgrp_update &&
             (all_topics ||
              ((requested_topics || requested_topic_ids) &&
               rd_kafka_cgrp_same_subscription_version(
-                  rkb->rkb_rk->rk_cgrp, cgrp_subscription_version))))
+                  rkb->rkb_rk->rk_cgrp, cgrp_subscription_version)));
+
+        if (cgrp_update_full_metadata_refresh)
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
-        else if (rk->rk_cgrp && RD_KAFKA_IS_SHARE_CONSUMER(rk))
-                /* Share consumers: drain on every metadata response,
-                 * regardless of cgrp_update, so the heartbeat-driven
-                 * metadata-by-id path and other cgrp_update=false
-                 * responses surface errors promptly. The share variant
-                 * treats this as a "partial view" (do_join=rd_false)
-                 * and merges existing rkcg_errored_topics entries
-                 * forward, so previously-known errored topics are not
-                 * wiped by responses that didn't cover them. */
-                rd_kafka_cgrp_metadata_update_check(rk->rk_cgrp,
-                                                    rd_false /*do join*/);
+
+        if (rk->rk_cgrp && RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                rd_kafka_cgrp_share_metadata_update_check(
+                    rk->rk_cgrp, !cgrp_update_full_metadata_refresh
+                    /*should_merge_existing_errored*/);
 
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
             rk->rk_cgrp->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)

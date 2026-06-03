@@ -5741,7 +5741,8 @@ void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
 
 
 /**
- * @brief Share-consumer variant of rd_kafka_cgrp_metadata_update_check.
+ * @brief Share-consumer entry point for end-of-metadata-cycle error
+ *        propagation.
  *
  *        Drains the per-cycle pending list: app-facing codes
  *        (TOPIC_EXCEPTION, TOPIC_AUTHORIZATION_FAILED) are handed to
@@ -5751,11 +5752,17 @@ void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
  *        an empty surface list so recovered or unsubscribed topics
  *        are dropped from the dedup state.
  *
+ * @param should_merge_existing_errored true when this metadata response
+ *        is a partial view of the subscription and previously-known
+ *        errored topics must be carried forward to survive the
+ *        wholesale-replace in propagate. False on a full-subscription
+ *        view, where the response is authoritative.
+ *
  * @locality rdkafka main thread
  */
-static void
-rd_kafka_share_metadata_update_check(rd_kafka_cgrp_t *rkcg,
-                                     rd_bool_t should_merge_existing_errored) {
+void rd_kafka_cgrp_share_metadata_update_check(
+    rd_kafka_cgrp_t *rkcg,
+    rd_bool_t should_merge_existing_errored) {
         rd_kafka_t *rk = rkcg->rkcg_rk;
         rd_kafka_topic_partition_list_t *pending;
         rd_kafka_topic_partition_list_t *to_surface;
@@ -7558,23 +7565,6 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
         rd_bool_t changed;
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
-
-        /* Share consumers handle topic-level errors via the share
-         * variant; the classic rejoin path is not applicable since
-         * membership is driven by ShareGroupHeartbeat.
-         *
-         * For share, the share variant must additively merge previously-
-         * errored topics forward whenever this metadata response is a
-         * PARTIAL view of the subscription (i.e., the IF-branch
-         * gate in parse_Metadata0 was not taken and we entered this
-         * function via the share fallthrough). That gate's truth value
-         * is what `do_join` carries: do_join=true ↔ full-subscription
-         * view (no merge); do_join=false ↔ partial view (merge). */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
-                rd_kafka_share_metadata_update_check(
-                    rkcg, !do_join /*should_merge_existing_errored*/);
-                return;
-        }
 
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 return;

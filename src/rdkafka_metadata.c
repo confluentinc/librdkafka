@@ -1106,22 +1106,21 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
          * For share consumers, the same predicate also gates whether the
          * share variant should merge pre-existing rkcg_errored_topics
          * forward into this cycle's surface list (merge on partial view;
-         * skip on authoritative). Share goes through its dedicated entry
-         * point, not rd_kafka_cgrp_metadata_update_check. */
-        rd_bool_t cgrp_update_full_metadata_refresh =
+         * skip on full view). */
+        rd_bool_t cgrp_update_covers_subscription =
             cgrp_update &&
             (all_topics ||
              ((requested_topics || requested_topic_ids) &&
               rd_kafka_cgrp_same_subscription_version(
                   rkb->rkb_rk->rk_cgrp, cgrp_subscription_version)));
 
-        if (cgrp_update_full_metadata_refresh)
+        if (cgrp_update_covers_subscription)
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
 
         if (rk->rk_cgrp && RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 rd_kafka_cgrp_share_metadata_update_check(
-                    rk->rk_cgrp, !cgrp_update_full_metadata_refresh
+                    rk->rk_cgrp, !cgrp_update_covers_subscription
                     /*should_merge_existing_errored*/);
 
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&

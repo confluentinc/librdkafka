@@ -230,7 +230,7 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_topic_partition_list_t *rkcg_errored_topics;
         /** Share-consumer per-metadata-cycle (topic, err) accumulator.
          *  Populated by rd_kafka_share_toppar_enq_error and drained
-         *  by rd_kafka_share_topic_err_propogate at cycle end. */
+         *  by rd_kafka_share_topic_err_propagate at cycle end. */
         rd_kafka_topic_partition_list_t *rkcg_share_topic_errored;
         /** If a SUBSCRIBE op is received during a COOPERATIVE rebalance,
          *  actioning this will be postponed until after the rebalance
@@ -509,10 +509,14 @@ void rd_kafka_cgrp_coord_dead(rd_kafka_cgrp_t *rkcg,
 void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
                                          rd_bool_t do_join);
 
-void rd_kafka_share_topic_err_propogate(rd_kafka_cgrp_t *rkcg);
+/**
+ * TODO KIP-932: Think of correct placing for these two functions
+ *               when correcting this field.
+ */
+void rd_kafka_share_topic_err_propagate(rd_kafka_cgrp_t *rkcg);
 
-void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
-                                         rd_kafka_Uuid_t topic_id);
+void rd_kafka_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
+                                    rd_kafka_Uuid_t topic_id);
 
 #define rd_kafka_cgrp_get(rk) ((rk)->rk_cgrp)
 

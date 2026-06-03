@@ -5685,10 +5685,18 @@ static void rd_kafka_propagate_consumer_topic_errors(
                 if (topic->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
                         topic->err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
-                /* Check if this topic errored previously */
-                prev = rd_kafka_topic_partition_list_find(
-                    rkcg->rkcg_errored_topics, topic->topic,
-                    RD_KAFKA_PARTITION_UA);
+                /* Check if this topic errored previously. Share consumers
+                 * key the dedup memo by topic_id — the stable identifier the
+                 * share error flow uses throughout — whereas classic
+                 * consumers key by topic name. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
+                        prev = rd_kafka_topic_partition_list_find_topic_by_id(
+                            rkcg->rkcg_errored_topics,
+                            rd_kafka_topic_partition_get_topic_id(topic));
+                else
+                        prev = rd_kafka_topic_partition_list_find(
+                            rkcg->rkcg_errored_topics, topic->topic,
+                            RD_KAFKA_PARTITION_UA);
 
                 if (prev && prev->err == topic->err)
                         continue; /* This topic already reported same error */
@@ -5719,8 +5727,8 @@ static void rd_kafka_propagate_consumer_topic_errors(
  *
  * @locality rdkafka main thread
  */
-void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
-                                         rd_kafka_Uuid_t topic_id) {
+void rd_kafka_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
+                                    rd_kafka_Uuid_t topic_id) {
         int i;
 
         if (!rkcg || !rkcg->rkcg_errored_topics)
@@ -5755,11 +5763,16 @@ void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
  *        After propagate, entries whose rkt has transitioned to
  *        RD_KAFKA_TOPIC_S_NOTEXISTS are pruned from the dedup memo.
  *        Recovery (back to S_EXISTS) is handled separately by
- *        rd_kafka_cgrp_share_clear_topic_err on set_exists.
+ *        rd_kafka_share_clear_topic_err on set_exists.
+ *
+ * TODO KIP-932: GA: Refactor this function and maybe use a new function
+ *         instead of rd_kafka_propagate_consumer_topic_errors to avoid
+ *         the complexity of merging the pending list with existing
+ *         error topics.
  *
  * @locality rdkafka main thread
  */
-void rd_kafka_share_topic_err_propogate(rd_kafka_cgrp_t *rkcg) {
+void rd_kafka_share_topic_err_propagate(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_t *rk = rkcg->rkcg_rk;
         rd_kafka_topic_partition_list_t *pending;
         rd_kafka_topic_partition_list_t *to_surface;
@@ -5818,34 +5831,6 @@ void rd_kafka_share_topic_err_propogate(rd_kafka_cgrp_t *rkcg) {
 
         rd_kafka_propagate_consumer_topic_errors(
             rkcg, to_surface, "Subscribed topic not available");
-
-        /* Post-propagate cleanup: drop memo entries whose rkt has moved
-         * to S_NOTEXISTS. For those topics the client stops re-asking,
-         * so pending won't refill */
-        if (rkcg->rkcg_errored_topics) {
-                j = 0;
-                while (j < rkcg->rkcg_errored_topics->cnt) {
-                        rd_kafka_topic_partition_t *entry =
-                            &rkcg->rkcg_errored_topics->elems[j];
-                        rd_kafka_topic_t *rkt =
-                            rd_kafka_topic_find(rk, entry->topic, 1 /*lock*/);
-                        rd_bool_t drop = rd_false;
-
-                        if (rkt) {
-                                rd_kafka_topic_rdlock(rkt);
-                                drop = rkt->rkt_state ==
-                                       RD_KAFKA_TOPIC_S_NOTEXISTS;
-                                rd_kafka_topic_rdunlock(rkt);
-                                rd_kafka_topic_destroy0(rkt);
-                        }
-
-                        if (drop)
-                                rd_kafka_topic_partition_list_del_by_idx(
-                                    rkcg->rkcg_errored_topics, j);
-                        else
-                                j++;
-                }
-        }
 }
 
 

@@ -1111,7 +1111,7 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                                     rd_true /*do join*/);
 
         if (rk->rk_cgrp && RD_KAFKA_IS_SHARE_CONSUMER(rk))
-                rd_kafka_share_topic_err_propogate(rk->rk_cgrp);
+                rd_kafka_share_topic_err_propagate(rk->rk_cgrp);
 
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
             rk->rk_cgrp->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)

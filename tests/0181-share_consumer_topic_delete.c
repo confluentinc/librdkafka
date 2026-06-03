@@ -303,10 +303,7 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                     "Expected to drain exactly %d records from surviving "
                     "topic %s, got %d",
                     TD_KEEP_MSGS, topic_keep, keep_rcvd);
-        TEST_SAY("Phase 2 complete: drained %d record(s) from %s\n", keep_rcvd,
-                 topic_keep);
 
-        TEST_SAY("Closing share consumer\n");
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
 

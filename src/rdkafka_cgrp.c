@@ -454,6 +454,9 @@ void rd_kafka_cgrp_destroy_final(rd_kafka_cgrp_t *rkcg) {
         rd_list_destroy(&rkcg->rkcg_toppars);
         rd_list_destroy(rkcg->rkcg_subscribed_topics);
         rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
+        if (rkcg->rkcg_share_pending_errored)
+                rd_kafka_topic_partition_list_destroy(
+                    rkcg->rkcg_share_pending_errored);
         if (rkcg->rkcg_assignor && rkcg->rkcg_assignor->rkas_destroy_state_cb &&
             rkcg->rkcg_assignor_state)
                 rkcg->rkcg_assignor->rkas_destroy_state_cb(
@@ -539,6 +542,9 @@ rd_kafka_cgrp_t *rd_kafka_cgrp_new(rd_kafka_t *rk,
         rkcg->rkcg_next_target_assignment = NULL;
 
         rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                rkcg->rkcg_share_pending_errored =
+                    rd_kafka_topic_partition_list_new(0);
 
         /* Create a logical group coordinator broker to provide
          * a dedicated connection for group coordination.
@@ -5704,6 +5710,146 @@ static void rd_kafka_propagate_consumer_topic_errors(
 
 
 /**
+ * @brief Clear a share-consumer's errored-topic entry by topic_id.
+ *
+ *        Called from rd_kafka_topic_set_exists on recovery so a
+ *        subsequent re-failure with the same code surfaces again,
+ *        independent of any wholesale-replace happening in
+ *        rd_kafka_propagate_consumer_topic_errors.
+ *
+ * @locality rdkafka main thread
+ */
+void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
+                                         rd_kafka_Uuid_t topic_id) {
+        int i;
+
+        if (!rkcg || !rkcg->rkcg_errored_topics)
+                return;
+
+        rd_dassert(thrd_is_current(rkcg->rkcg_rk->rk_thread));
+
+        for (i = 0; i < rkcg->rkcg_errored_topics->cnt; i++) {
+                if (rd_kafka_Uuid_cmp(rd_kafka_topic_partition_get_topic_id(
+                                          &rkcg->rkcg_errored_topics->elems[i]),
+                                      topic_id) == 0) {
+                        rd_kafka_topic_partition_list_del_by_idx(
+                            rkcg->rkcg_errored_topics, i);
+                        return;
+                }
+        }
+}
+
+
+/**
+ * @brief Share-consumer entry point for end-of-metadata-cycle error
+ *        propagation.
+ *
+ *        Drains the per-cycle pending list: app-facing codes
+ *        (TOPIC_EXCEPTION, TOPIC_AUTHORIZATION_FAILED) are handed to
+ *        rd_kafka_propagate_consumer_topic_errors for delivery and
+ *        cross-cycle dedup; transient codes are debug-logged at most
+ *        once per (topic, err) per cycle. Existing rkcg_errored_topics
+ *        entries are always merged forward so propagate's wholesale-
+ *        replace cannot drop entries for topics absent from this cycle.
+ *
+ *        After propagate, entries whose rkt has transitioned to
+ *        RD_KAFKA_TOPIC_S_NOTEXISTS are pruned from the dedup memo.
+ *        Recovery (back to S_EXISTS) is handled separately by
+ *        rd_kafka_cgrp_share_clear_topic_err on set_exists.
+ *
+ * @locality rdkafka main thread
+ */
+void rd_kafka_share_topic_err_propogate(rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        rd_kafka_topic_partition_list_t *pending;
+        rd_kafka_topic_partition_list_t *to_surface;
+        int i, j;
+
+        if (!rkcg->rkcg_share_topic_errored)
+                return;
+
+        pending                        = rkcg->rkcg_share_topic_errored;
+        rkcg->rkcg_share_topic_errored = rd_kafka_topic_partition_list_new(0);
+
+        to_surface = rd_kafka_topic_partition_list_new(0);
+        for (i = 0; i < pending->cnt; i++) {
+                const rd_kafka_topic_partition_t *pending_errored_tp =
+                    &pending->elems[i];
+
+                switch (pending_errored_tp->err) {
+                case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
+                case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                            to_surface,
+                            rd_kafka_topic_partition_get_topic_id(
+                                pending_errored_tp),
+                            pending_errored_tp->topic, RD_KAFKA_PARTITION_UA)
+                            ->err = pending_errored_tp->err;
+                        break;
+
+                default:
+                        rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
+                                     "Topic %s: %s", pending_errored_tp->topic,
+                                     rd_kafka_err2str(pending_errored_tp->err));
+                        break;
+                }
+        }
+        rd_kafka_topic_partition_list_destroy(pending);
+
+        /* Carry previously-known errored entries forward so propagate's
+         * wholesale-replace doesn't drop them. */
+        if (rkcg->rkcg_errored_topics) {
+                for (j = 0; j < rkcg->rkcg_errored_topics->cnt; j++) {
+                        rd_kafka_topic_partition_t *existing =
+                            &rkcg->rkcg_errored_topics->elems[j];
+                        rd_kafka_Uuid_t existing_id =
+                            rd_kafka_topic_partition_get_topic_id(existing);
+
+                        if (rd_kafka_topic_partition_list_find_topic_by_id(
+                                to_surface, existing_id))
+                                continue; /* pending overrides existing */
+
+                        rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                            to_surface, existing_id, existing->topic,
+                            RD_KAFKA_PARTITION_UA)
+                            ->err = existing->err;
+                }
+        }
+
+        rd_kafka_propagate_consumer_topic_errors(
+            rkcg, to_surface, "Subscribed topic not available");
+
+        /* Post-propagate cleanup: drop memo entries whose rkt has moved
+         * to S_NOTEXISTS. For those topics the client stops re-asking,
+         * so pending won't refill */
+        if (rkcg->rkcg_errored_topics) {
+                j = 0;
+                while (j < rkcg->rkcg_errored_topics->cnt) {
+                        rd_kafka_topic_partition_t *entry =
+                            &rkcg->rkcg_errored_topics->elems[j];
+                        rd_kafka_topic_t *rkt =
+                            rd_kafka_topic_find(rk, entry->topic, 1 /*lock*/);
+                        rd_bool_t drop = rd_false;
+
+                        if (rkt) {
+                                rd_kafka_topic_rdlock(rkt);
+                                drop = rkt->rkt_state ==
+                                       RD_KAFKA_TOPIC_S_NOTEXISTS;
+                                rd_kafka_topic_rdunlock(rkt);
+                                rd_kafka_topic_destroy0(rkt);
+                        }
+
+                        if (drop)
+                                rd_kafka_topic_partition_list_del_by_idx(
+                                    rkcg->rkcg_errored_topics, j);
+                        else
+                                j++;
+                }
+        }
+}
+
+
+/**
  * @brief Work out the topics currently subscribed to that do not
  *        match any pattern in \p subscription.
  */
@@ -7268,8 +7414,15 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
         case RD_KAFKA_OP_PARTITION_JOIN:
                 rd_kafka_cgrp_partition_add(rkcg, rktp);
 
-                /* If terminating tell the partition to leave */
-                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
+                /* If terminating tell the partition to leave.
+                 *
+                 * Skipped for share consumers: op_fetch_stop bumps the
+                 * version barrier, touches rktp_offset_query_tmr, and
+                 * calls offset_store_stop — none of which should fire
+                 * for a share-assigned rktp that never started a
+                 * regular fetch. */
+                if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
+                    !RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
                         rd_kafka_toppar_op_fetch_stop(rktp, RD_KAFKA_NO_REPLYQ);
                 break;
 
@@ -7438,6 +7591,14 @@ void rd_kafka_cgrp_metadata_update_check(rd_kafka_cgrp_t *rkcg,
         rd_bool_t changed;
 
         rd_kafka_assert(NULL, thrd_is_current(rkcg->rkcg_rk->rk_thread));
+
+        /* Share consumers handle topic-level errors via the share
+         * variant; the classic rejoin path is not applicable since
+         * membership is driven by ShareGroupHeartbeat. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                rd_kafka_share_metadata_update_check(rkcg);
+                return;
+        }
 
         if (rkcg->rkcg_group_protocol != RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 return;

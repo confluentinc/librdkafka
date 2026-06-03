@@ -5704,6 +5704,60 @@ static void rd_kafka_propagate_consumer_topic_errors(
 
 
 /**
+ * @brief Share-consumer entry point for end-of-metadata-cycle error
+ *        propagation.
+ *
+ *        Drains the per-cycle pending list: app-facing codes
+ *        (TOPIC_EXCEPTION, TOPIC_AUTHORIZATION_FAILED) are emitted
+ *        directly to the application on next poll; transient codes are
+ *        debug-logged.
+ *
+ * @locality rdkafka main thread
+ */
+void rd_kafka_share_topic_err_propagate(rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        int i;
+
+        if (!rkcg->rkcg_errored_topics)
+                return;
+
+        for (i = 0; i < rkcg->rkcg_errored_topics->cnt; i++) {
+                const rd_kafka_topic_partition_t *pending_errored_tp =
+                    &rkcg->rkcg_errored_topics->elems[i];
+
+                switch (pending_errored_tp->err) {
+                case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
+                case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                        rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_TOPIC,
+                                     "TOPICERR",
+                                     "Subscribed topic not available: %s: %s",
+                                     pending_errored_tp->topic,
+                                     rd_kafka_err2str(pending_errored_tp->err));
+                        rd_kafka_consumer_err(
+                            rkcg->rkcg_q, RD_KAFKA_NODEID_UA,
+                            pending_errored_tp->err, 0,
+                            pending_errored_tp->topic, NULL,
+                            RD_KAFKA_OFFSET_INVALID,
+                            "Subscribed topic not available: %s: %s",
+                            pending_errored_tp->topic,
+                            rd_kafka_err2str(pending_errored_tp->err));
+                        break;
+
+                default:
+                        rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
+                                     "Topic %s: %s", pending_errored_tp->topic,
+                                     rd_kafka_err2str(pending_errored_tp->err));
+                        break;
+                }
+        }
+
+        /* Clear the per-cycle accumulator; next cycle starts fresh. */
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
+        rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
+}
+
+
+/**
  * @brief Work out the topics currently subscribed to that do not
  *        match any pattern in \p subscription.
  */
@@ -7268,8 +7322,15 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
         case RD_KAFKA_OP_PARTITION_JOIN:
                 rd_kafka_cgrp_partition_add(rkcg, rktp);
 
-                /* If terminating tell the partition to leave */
-                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
+                /* If terminating tell the partition to leave.
+                 *
+                 * Skipped for share consumers: op_fetch_stop bumps the
+                 * version barrier, touches rktp_offset_query_tmr, and
+                 * calls offset_store_stop — none of which should fire
+                 * for a share-assigned rktp that never started a
+                 * regular fetch. */
+                if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
+                    !RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
                         rd_kafka_toppar_op_fetch_stop(rktp, RD_KAFKA_NO_REPLYQ);
                 break;
 

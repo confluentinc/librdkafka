@@ -857,6 +857,145 @@ static void do_test_multi_consumer_overlap(void) {
 
 
 /**
+ * @brief Topic-level metadata-error policy: when a subscribed topic is
+ *        deleted mid-stream, the resulting metadata error
+ *        (UNKNOWN_TOPIC_OR_PART / UNKNOWN_TOPIC) is treated as a
+ *        transient code by the share consumer — logged internally and
+ *        not surfaced to the application via consume_batch.
+ *
+ * Subscribe to a valid topic, prime the share assignment so the rktp
+ * is on rkt_desp, delete the topic, allow metadata propagation, and
+ * verify that no topic-level err shows up in subsequent consume_batch
+ * calls.
+ */
+static void test_topic_deletion_does_not_surface_error(void) {
+        const char *topic;
+        const char *group = "share-topic-delete-no-surface";
+        rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_error_t *error;
+        char errstr[512];
+        char *topic_dup;
+        char *topics_for_delete[1];
+        rd_kafka_resp_err_t del_err;
+        size_t rcvd;
+        size_t j;
+        int consumed = 0;
+        int attempts = 0;
+        int post_attempts;
+        rd_bool_t surfaced_topic_err = rd_false;
+
+        SUB_TEST();
+
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping topic-deletion-does-not-surface-error "
+                    "(broker on Windows)\n");
+                SUB_TEST_PASS();
+                return;
+        }
+
+        topic     = test_mk_topic_name("0170-delete-no-surface", 1);
+        topic_dup = rd_strdup(topic);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+
+        /* Custom consumer that disables the set_notexists defer window
+         * (default 30s) so the log-and-drop path runs on the first
+         * post-delete metadata refresh instead of being deferred. */
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
+                          errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "topic.metadata.propagation.max.ms", "0",
+                          errstr, sizeof(errstr));
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Prime the share assignment: consume + ACCEPT at least one
+         * record so the rktp materialises on rkt_desp (precondition
+         * for the metadata-error propagation path to fire). */
+        while (consumed < 1 && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                rd_kafka_share_acknowledge(consumer, batch[j]);
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed >= 1,
+                    "Pre-condition: expected to consume + ack at least one "
+                    "record before deleting the topic");
+
+        TEST_SAY("Deleting topic %s\n", topic);
+        topics_for_delete[0] = topic_dup;
+        del_err              = test_DeleteTopics_simple(common_admin, NULL,
+                                                        topics_for_delete, 1, NULL);
+        TEST_ASSERT(!del_err, "DeleteTopics failed: %s",
+                    rd_kafka_err2str(del_err));
+
+        /* Allow metadata propagation. */
+        rd_sleep(3);
+
+        /* Drain consume_batch and verify no topic-level error reaches
+         * the application. _STATE / generic timeouts are expected
+         * (no more records); only the metadata-derived topic codes
+         * must not surface. */
+        for (post_attempts = 0; post_attempts < 30; post_attempts++) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        TEST_SAY("Post-delete consume_batch: %s\n",
+                                 rd_kafka_err2name(code));
+                        if (code == RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION ||
+                            code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART ||
+                            code == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC ||
+                            code == RD_KAFKA_RESP_ERR__UNKNOWN_PARTITION ||
+                            code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID ||
+                            code ==
+                                RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED)
+                                surfaced_topic_err = rd_true;
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err)
+                                rd_kafka_share_acknowledge(consumer, batch[j]);
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+
+        TEST_ASSERT(!surfaced_topic_err,
+                    "Topic-level metadata errors must not surface to "
+                    "the application after the subscribed topic is "
+                    "deleted (transient codes are log-only)");
+
+        rd_free(topic_dup);
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Test subscribing to 15 topics - triggers multiple fetch responses
  *
  * Creates 15 topics, subscribes to all of them, produces messages to each,
@@ -1379,6 +1518,10 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
                     "(broker on Windows)\n");
         else
                 do_test_scenario(&test_topic_deletion);
+
+        /* Verify that topic deletion does not surface a topic-level
+         * error code to consume_batch (transient codes are log-only). */
+        test_topic_deletion_does_not_surface_error();
 
         /* Stress tests */
         do_test_scenario(&test_rapid_updates);

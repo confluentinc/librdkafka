@@ -1063,18 +1063,33 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 rd_kafka_assignment_destroy(rk);
                 if (rk->rk_consumer.q)
                         rd_kafka_q_destroy(rk->rk_consumer.q);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency);
-                rd_avg_destroy(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency);
+
+                /* TODO: factor out a helper that destroys both the
+                 * rd_avg_current and rd_avg_rollover variants of a metric
+                 * in one call, to reduce the repetition below. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_share_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_share_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_share_time_between_poll);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_share_time_between_poll);
+                } else {
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_poll_idle_ratio);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_rebalance_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_commit_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_rebalance_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_commit_latency);
+                }
         }
 
         /* Purge op-queues */
@@ -2762,28 +2777,52 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rk->rk_consumer.q = rd_kafka_q_keep(rk->rk_rep);
                 }
 
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
-                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
-                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency,
-                    RD_AVG_GAUGE, 0, 900000 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
-                rd_avg_init(
-                    &rk->rk_telemetry.rd_avg_current.rk_avg_commit_latency,
-                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
-                    rk->rk_conf.enable_metrics_push);
+                /* TODO: factor out a helper that initializes both the
+                 * rd_avg_current and rd_avg_rollover variants of a metric
+                 * in one call, to reduce the repetition below. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_share_poll_idle_ratio,
+                                    RD_AVG_GAUGE, 0, 1000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_share_poll_idle_ratio,
+                                    RD_AVG_GAUGE, 0, 1000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_share_time_between_poll,
+                                    RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_share_time_between_poll,
+                                    RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                } else {
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_poll_idle_ratio,
+                                    RD_AVG_GAUGE, 0, 1, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_poll_idle_ratio,
+                                    RD_AVG_GAUGE, 0, 1, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_rebalance_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_rebalance_latency,
+                                    RD_AVG_GAUGE, 0, 900000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_commit_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_commit_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                }
 
         } else if (type == RD_KAFKA_PRODUCER) {
                 rk->rk_eos.transactional_id =
@@ -3668,6 +3707,61 @@ rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare) {
         return err;
 }
 
+/**
+ * @brief Record the start of a share consume batch for telemetry.
+ *        Captures the start timestamp, computes the interval since the
+ *        previous poll, records the time-between-poll sample, and updates
+ *        the previous-poll-start timestamp.
+ */
+static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
+        rd_ts_t now;
+
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
+
+        now                                          = rd_clock();
+        rk->rk_telemetry.rk_share_poll.ts_poll_start = now;
+
+        /* First poll has no previous timestamp to compare against, so the
+         * first sample contributes 0 to the average. */
+        if (rk->rk_telemetry.rk_share_poll.ts_last_poll_start)
+                rk->rk_telemetry.rk_share_poll.time_since_last_poll =
+                    now - rk->rk_telemetry.rk_share_poll.ts_last_poll_start;
+        else
+                rk->rk_telemetry.rk_share_poll.time_since_last_poll = 0;
+
+        /* Store in microseconds; calculator scales to ms at read time.
+         * Storing in ms here would truncate sub-millisecond samples to 0
+         * (e.g., 999 μs / 1000 = 0), under-reporting at high poll rates. */
+        rd_avg_add(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
+            rk->rk_telemetry.rk_share_poll.time_since_last_poll);
+        rk->rk_telemetry.rk_share_poll.ts_last_poll_start = now;
+}
+
+/**
+ * @brief Record the end of a share consume batch for telemetry.
+ *        Computes pollTime = now − pollStart, then idle ratio =
+ *        pollTime / (pollTime + timeSinceLastPoll), and records the sample.
+ *        Mirrors Java's share consumer poll idle ratio formula.
+ */
+static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
+        rd_ts_t end, poll_time, total;
+
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
+
+        end       = rd_clock();
+        poll_time = end - rk->rk_telemetry.rk_share_poll.ts_poll_start;
+        total = poll_time + rk->rk_telemetry.rk_share_poll.time_since_last_poll;
+        if (total > 0) {
+                int64_t poll_idle_ratio = poll_time * 1000000 / total;
+                rd_avg_add(&rk->rk_telemetry.rd_avg_current
+                                .rk_avg_share_poll_idle_ratio,
+                           poll_idle_ratio);
+        }
+}
+
 rd_kafka_error_t *rd_kafka_share_consume_batch(
     rd_kafka_share_t *rkshare,
     int timeout_ms,
@@ -3715,6 +3809,8 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         if (error)
                 return error;
 
+        rd_kafka_share_record_poll_start(rk);
+
         rd_list_t *ack_batches =
             rd_kafka_share_build_ack_details(rk->rk_rkshare);
 
@@ -3737,6 +3833,8 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         /* Drain rk_rep for callbacks again before returning */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
+
+        rd_kafka_share_record_poll_end(rk);
 
         return error;
 }

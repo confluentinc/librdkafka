@@ -1138,8 +1138,13 @@ static void rd_kafka_toppar_broker_migrate(rd_kafka_toppar_t *rktp,
          * prior to leaving the broker to avoid stalling
          * on the new broker waiting for a offset reply from
          * this old broker (that might not come and thus need
-         * to time out..slowly) */
-        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+         * to time out..slowly).
+         *
+         * Share consumers never enter OFFSET_WAIT so this branch is
+         * unreachable for them today; guard regardless so the offset
+         * machinery stays out of the share leader-change path. */
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
+            rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
                 rd_kafka_toppar_offset_retry(rktp, 500,
                                              "migrating to new broker");
 
@@ -1582,6 +1587,13 @@ static void rd_kafka_toppar_offset_retry(rd_kafka_toppar_t *rktp,
                                          const char *reason) {
         rd_ts_t tmr_next;
         int restart_tmr;
+
+        /* Share consumers never use the offset-query state machine.
+         * Callers must guard; this early-return is belt-and-suspenders
+         * so a stray future call doesn't arm the offset-query timer
+         * for a share-assigned rktp. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+                return;
 
         /* (Re)start timer if not started or the current timeout
          * is larger than \p backoff_ms. */
@@ -2525,6 +2537,39 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 }
 
 
+/**
+ * @brief Share-consumer variant of rd_kafka_toppar_enq_error.
+ *
+ *        Records the (topic, err) on the cgrp's per-cycle accumulator
+ *        for delivery or logging at the end of the metadata cycle.
+ *        Multiple calls for the same topic in one cycle collapse to
+ *        a single entry.
+ *
+ * @locality rdkafka main thread
+ */
+static void rd_kafka_share_toppar_enq_error(rd_kafka_toppar_t *rktp,
+                                            rd_kafka_resp_err_t err) {
+        rd_kafka_cgrp_t *rkcg    = rktp->rktp_rkt->rkt_rk->rk_cgrp;
+        rd_kafka_topic_t *rkt    = rktp->rktp_rkt;
+        const char *topic        = rkt->rkt_topic->str;
+        rd_kafka_Uuid_t topic_id = rkt->rkt_topic_id;
+        rd_kafka_topic_partition_t *prev;
+
+        if (!rkcg || !rkcg->rkcg_errored_topics)
+                return;
+
+        prev = rd_kafka_topic_partition_list_find_topic_by_id(
+            rkcg->rkcg_errored_topics, topic_id);
+        if (prev) {
+                prev->err = err;
+        } else {
+                rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                    rkcg->rkcg_errored_topics, topic_id, topic,
+                    RD_KAFKA_PARTITION_UA)
+                    ->err = err;
+        }
+}
+
 
 /**
  * Propagate error for toppar
@@ -2534,6 +2579,11 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
                                const char *reason) {
         rd_kafka_op_t *rko;
         char buf[512];
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_share_toppar_enq_error(rktp, err);
+                return;
+        }
 
         rko           = rd_kafka_op_new(RD_KAFKA_OP_ERR);
         rko->rko_err  = err;
@@ -2545,13 +2595,6 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
 
         rko->rko_u.err.errstr = rd_strdup(buf);
 
-        /* TODO KIP-932: share consumer does not forward rktp_fetchq to
-         * rkcg_q, so this OP_ERR gets stranded. Topic-level errors
-         * surfaced through this helper (UNKNOWN_TOPIC_OR_PART /
-         * UNKNOWN_PARTITION etc. from the metadata-refresh path in
-         * rdkafka_topic.c) may still be useful for share-consumer
-         * apps; verify and consider routing to rk_rep for share
-         * consumer instead. */
         rd_kafka_q_enq(rktp->rktp_fetchq, rko);
 }
 

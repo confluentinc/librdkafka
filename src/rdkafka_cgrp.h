@@ -126,6 +126,11 @@ typedef struct rd_kafka_cgrp_s {
         rd_kafka_q_t *rkcg_q;            /* Application poll queue */
         rd_kafka_q_t *rkcg_ops;          /* Manager ops queue */
         rd_kafka_q_t *rkcg_wait_coord_q; /* Ops awaiting coord */
+        /* TODO: rkcg_flags is written by the main thread (heartbeat
+         * builder/response handler) and read lock-free by the app thread on
+         * every poll via rd_kafka_app_polled(). TSAN flags this as a data
+         * race because the writer and reader are on different threads with
+         * no synchronization between them. */
         int rkcg_flags;
 #define RD_KAFKA_CGRP_F_TERMINATE 0x1 /* Terminate cgrp (async) */
 #define RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE                                 \

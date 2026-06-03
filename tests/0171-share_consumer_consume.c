@@ -899,8 +899,8 @@ static void test_max_poll_interval_exceeded(void) {
         while (!raised && test_clock() < deadline) {
                 size_t rcvd = 0;
 
-                error = rd_kafka_share_consume_batch(consumer, 1000, batch,
-                                                     &rcvd);
+                error =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
                 TEST_ASSERT(rcvd == 0,
                             "Expected no records after max.poll.interval.ms "
                             "exceeded, got %d",

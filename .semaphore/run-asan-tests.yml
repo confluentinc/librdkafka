@@ -52,5 +52,10 @@ blocks:
               --cpversion "${CP_VERSION}"
               --conf '["group.share.min.record.lock.duration.ms=1000"]'
               --cmd "TESTS_SKIP_BEFORE=0155 make 2>&1 | tee asan-share-tests.log") || true
+            - echo "=== ASAN log written by tee to tests/asan-share-tests.log ==="
+            - ls -la tests/asan-share-tests.log
             - cp tests/asan-share-tests.log artifacts/
+            - echo "=== Copied to artifacts/ — contents staged for upload ==="
+            - ls -la artifacts/
+            - echo "=== Epilogue will push artifacts/ to Semaphore at artifacts/asan/ ==="
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}

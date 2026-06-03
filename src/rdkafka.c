@@ -2776,8 +2776,8 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                     RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
 
-                         rd_atomic64_init(&rk->rk_telemetry.share_fetch_total,
-                                                                 0);
+                        rd_atomic64_init(&rk->rk_telemetry.share_fetch_total,
+                                         0);
                         rd_atomic64_init(
                             &rk->rk_telemetry.acknowledgements_send_total, 0);
                         rd_atomic64_init(&rk->rk_telemetry.heartbeat_total, 0);

@@ -2798,44 +2798,44 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
 
         test_timeout_set(1500);
 
-        // do_test_share_group_heartbeat_basic();
-        // do_test_share_group_assignment_rebalance();
-        // do_test_share_group_multi_topic_assignment();
-        // do_test_share_group_error_injection();
-        // do_test_share_group_rtt_injection();
-        // do_test_share_group_session_timeout();
-        // do_test_share_group_target_assignment();
-        // do_test_share_group_no_spurious_fencing();
-        // do_test_unknown_member_id_error();
+        do_test_share_group_heartbeat_basic();
+        do_test_share_group_assignment_rebalance();
+        do_test_share_group_multi_topic_assignment();
+        do_test_share_group_error_injection();
+        do_test_share_group_rtt_injection();
+        do_test_share_group_session_timeout();
+        do_test_share_group_target_assignment();
+        do_test_share_group_no_spurious_fencing();
+        do_test_unknown_member_id_error();
 
-        // do_test_fenced_member_epoch_error();
-        // do_test_coordinator_not_available_error();
-        // do_test_not_coordinator_error();
-        // do_test_group_authorization_failed_error();
-        // do_test_group_max_size_reached_error();
-        // do_test_invalid_request_error();
-        // do_test_unsupported_version_error();
-        // do_test_coordinator_load_in_progress_error();
+        do_test_fenced_member_epoch_error();
+        do_test_coordinator_not_available_error();
+        do_test_not_coordinator_error();
+        do_test_group_authorization_failed_error();
+        do_test_group_max_size_reached_error();
+        do_test_invalid_request_error();
+        do_test_unsupported_version_error();
+        do_test_coordinator_load_in_progress_error();
 
-        // do_test_member_rejoin_with_epoch_zero();
-        // do_test_leaving_member_bumps_group_epoch();
+        do_test_member_rejoin_with_epoch_zero();
+        do_test_leaving_member_bumps_group_epoch();
 
-        // do_test_partition_assignment_with_multiple_topics();
-        // do_test_multiple_members_partition_distribution();
+        do_test_partition_assignment_with_multiple_topics();
+        do_test_multiple_members_partition_distribution();
 
-        // do_test_leave_heartbeat_completes_successfully();
-        // do_test_leave_heartbeat_completes_on_error();
-        // do_test_graceful_shutdown_stable_state();
-        // do_test_consumer_leave_rebalance();
-        // do_test_double_close();
+        do_test_leave_heartbeat_completes_successfully();
+        do_test_leave_heartbeat_completes_on_error();
+        do_test_graceful_shutdown_stable_state();
+        do_test_consumer_leave_rebalance();
+        do_test_double_close();
 
-        // do_test_subscription_change();
-        // do_test_resubscribe_after_unsubscribe();
-        // do_test_empty_topic_subscription();
-        // do_test_empty_topic_list_subscription();
+        do_test_subscription_change();
+        do_test_resubscribe_after_unsubscribe();
+        do_test_empty_topic_subscription();
+        do_test_empty_topic_list_subscription();
 
-        // do_test_group_id_not_found_while_unsubscribed();
-        // do_test_group_id_not_found_while_stable_is_fatal();
+        do_test_group_id_not_found_while_unsubscribed();
+        do_test_group_id_not_found_while_stable_is_fatal();
 
         do_test_clusterid_mismatch_two_clusters();
 

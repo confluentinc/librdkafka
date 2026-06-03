@@ -157,6 +157,8 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
          * subscribes/joins, so the pre-produced records are read. */
         test_share_set_auto_offset_reset(group, "earliest");
         test_share_consumer_subscribe_multi(rkshare, 2, topic_del, topic_keep);
+        TEST_SAY("Subscribed to %s and %s; starting phase 1 drain\n", topic_del,
+                 topic_keep);
 
         /* Phase 1: drain all produced records. The partitions live on
          * different brokers and the share consumer fetches one broker per
@@ -168,6 +170,8 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                 error = rd_kafka_share_consume_batch(rkshare, 2000, batch, &n);
                 TEST_ASSERT(!error, "consume_batch failed: %s",
                             rd_kafka_error_string(error));
+                TEST_SAY("Phase 1: got %" PRIusz " record(s), total %d/%d\n", n,
+                         total + (int)n, TD_TOTAL);
                 for (m = 0; m < n; m++) {
                         TEST_ASSERT(!strcmp(rd_kafka_topic_name(batch[m]->rkt),
                                             topic_del),
@@ -195,8 +199,10 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                 TEST_ASSERT(part_cnt[p] == TD_PER_PART,
                             "Expected %d records from partition %d, got %d",
                             TD_PER_PART, p, part_cnt[p]);
+        TEST_SAY("Phase 1 complete: drained all %d records\n", TD_TOTAL);
 
         if (after_delete) {
+                TEST_SAY("Deleting topic %s before commit\n", topic_del);
                 del_err = test_DeleteTopics_simple(common_admin, NULL,
                                                    del_topics, 1, NULL);
                 TEST_ASSERT(!del_err, "DeleteTopics failed: %s",
@@ -207,7 +213,10 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
 
         /* Commit the acknowledgements; the per-partition results carry
          * the outcome for each partition. */
+        TEST_SAY("Calling commit_sync\n");
         error = rd_kafka_share_commit_sync(rkshare, 30 * 1000, &results);
+        TEST_SAY("commit_sync returned (error: %s)\n",
+                 error ? rd_kafka_error_string(error) : "none");
         if (error)
                 rd_kafka_error_destroy(error);
         TEST_ASSERT(results && results->cnt > 0,
@@ -229,9 +238,12 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                                     results->elems[i].partition,
                                     rd_kafka_err2name(perr));
         }
+        TEST_SAY("commit_sync results verified (%d partition(s))\n",
+                 results->cnt);
         rd_kafka_topic_partition_list_destroy(results);
 
         if (!after_delete) {
+                TEST_SAY("Deleting topic %s after commit\n", topic_del);
                 del_err = test_DeleteTopics_simple(common_admin, NULL,
                                                    del_topics, 1, NULL);
                 TEST_ASSERT(!del_err, "DeleteTopics failed: %s",
@@ -241,6 +253,7 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
         /* Phase 2: drain the surviving topic to empty and verify only its
          * records are returned (the deleted topic must contribute none). */
         test_produce_msgs_simple(common_producer, topic_keep, 0, TD_KEEP_MSGS);
+        TEST_SAY("Phase 2: draining surviving topic %s\n", topic_keep);
 
         /* TODO KIP-932: the deleted topic makes the broker fail the whole
          * session with a top-level UNKNOWN for a while, so we give the drain
@@ -253,6 +266,9 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                     rd_kafka_share_consume_batch(rkshare, 1000, batch, &got);
                 TEST_ASSERT(!error, "consume_batch failed: %s",
                             rd_kafka_error_string(error));
+                TEST_SAY("Phase 2: got %" PRIusz
+                         " record(s), kept %d/%d (idle %d)\n",
+                         got, keep_rcvd, TD_KEEP_MSGS, idle_polls);
                 if (got == 0) {
                         /* An empty poll counts as drained only after every
                          * record has arrived; earlier ones are the session
@@ -279,7 +295,10 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                     "Expected to drain exactly %d records from surviving "
                     "topic %s, got %d",
                     TD_KEEP_MSGS, topic_keep, keep_rcvd);
+        TEST_SAY("Phase 2 complete: drained %d record(s) from %s\n", keep_rcvd,
+                 topic_keep);
 
+        TEST_SAY("Closing share consumer\n");
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
 
@@ -294,6 +313,9 @@ int main_0181_share_consumer_topic_delete(int argc, char **argv) {
                 TEST_SKIP("Topic deletion not supported on Windows brokers\n");
                 return 0;
         }
+
+        /* Budget for all subtests (a timeout multiplier is applied on top). */
+        test_timeout_set(120);
 
         common_producer = test_create_producer();
         common_admin    = test_create_producer();

@@ -1476,15 +1476,13 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
 
         /* Count this successful ShareFetch response for
          * consumer.share.fetch.manager.fetch.{total,rate}.
-         * Fires only after handler.handleResponse() returns true */
+         * Fires only after top level error handling */
         rd_atomic64_add(&rkb->rkb_rk->rk_telemetry.share_fetch_total, 1);
 
-        /* Share fetch latency = now - request enqueue timestamp.
-         * Stored per broker, aggregated to per instance metric via
-         * brokers_avg/brokers_max in the calculators. */
+        /* rkbuf_ts_sent is already the request RTT here */
         rd_avg_add(
             &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_latency,
-            rd_clock() - request->rkbuf_ts_enq);
+            request->rkbuf_ts_sent);
 
         rd_kafka_buf_read_i32(rkbuf, &AcquisitionLockTimeoutMs);
 

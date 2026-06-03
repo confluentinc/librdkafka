@@ -286,6 +286,28 @@ calculate_consumer_poll_idle_ratio_avg(rd_kafka_t *rk,
 }
 
 static rd_kafka_telemetry_metric_value_t
+calculate_consumer_commit_latency_avg(rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb_selected,
+                                      rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t avg_commit_time;
+        avg_commit_time.double_value = calculate_avg(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
+            THREE_ORDERS_MAGNITUDE);
+        return avg_commit_time;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_consumer_commit_latency_max(rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb_selected,
+                                      rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t max_commit_time;
+        max_commit_time.int_value = calculate_max(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
+            THREE_ORDERS_MAGNITUDE);
+        return max_commit_time;
+}
+
+static rd_kafka_telemetry_metric_value_t
 calculate_share_consumer_poll_idle_ratio_avg(rd_kafka_t *rk,
                                              rd_kafka_broker_t *rkb_selected,
                                              rd_ts_t now_ns) {
@@ -315,28 +337,6 @@ calculate_share_time_between_poll_max(rd_kafka_t *rk,
             rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll,
             THREE_ORDERS_MAGNITUDE);
         return time_between_poll_max;
-}
-
-static rd_kafka_telemetry_metric_value_t
-calculate_consumer_commit_latency_avg(rd_kafka_t *rk,
-                                      rd_kafka_broker_t *rkb_selected,
-                                      rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t avg_commit_time;
-        avg_commit_time.double_value = calculate_avg(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-            THREE_ORDERS_MAGNITUDE);
-        return avg_commit_time;
-}
-
-static rd_kafka_telemetry_metric_value_t
-calculate_consumer_commit_latency_max(rd_kafka_t *rk,
-                                      rd_kafka_broker_t *rkb_selected,
-                                      rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t max_commit_time;
-        max_commit_time.int_value = calculate_max(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-            THREE_ORDERS_MAGNITUDE);
-        return max_commit_time;
 }
 
 static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
@@ -840,6 +840,9 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
         }
 
         if (rk->rk_type == RD_KAFKA_CONSUMER) {
+                /* TODO: factor out a helper that performs the destroy +
+                 * rollover of a metric's rd_avg_rollover/rd_avg_current pair
+                 * in one call, to reduce the repetition below. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
                                             .rk_avg_share_poll_idle_ratio);

@@ -1064,6 +1064,9 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                 if (rk->rk_consumer.q)
                         rd_kafka_q_destroy(rk->rk_consumer.q);
 
+                /* TODO: factor out a helper that destroys both the
+                 * rd_avg_current and rd_avg_rollover variants of a metric
+                 * in one call, to reduce the repetition below. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
                                             .rk_avg_share_poll_idle_ratio);
@@ -2790,6 +2793,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rk->rk_consumer.q = rd_kafka_q_keep(rk->rk_rep);
                 }
 
+                /* TODO: factor out a helper that initializes both the
+                 * rd_avg_current and rd_avg_rollover variants of a metric
+                 * in one call, to reduce the repetition below. */
                 if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_share_poll_idle_ratio,
@@ -3872,22 +3878,24 @@ static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
         if (!rk->rk_conf.enable_metrics_push)
                 return;
 
-        now                                  = rd_clock();
-        rk->rk_telemetry.ts_share_poll_start = now;
+        now                                          = rd_clock();
+        rk->rk_telemetry.rk_share_poll.ts_poll_start = now;
 
-        if (rk->rk_telemetry.ts_last_share_poll_start)
-                rk->rk_telemetry.time_since_last_share_poll =
-                    now - rk->rk_telemetry.ts_last_share_poll_start;
+        /* First poll has no previous timestamp to compare against, so the
+         * first sample contributes 0 to the average. */
+        if (rk->rk_telemetry.rk_share_poll.ts_last_poll_start)
+                rk->rk_telemetry.rk_share_poll.time_since_last_poll =
+                    now - rk->rk_telemetry.rk_share_poll.ts_last_poll_start;
         else
-                rk->rk_telemetry.time_since_last_share_poll = 0;
+                rk->rk_telemetry.rk_share_poll.time_since_last_poll = 0;
 
         /* Store in microseconds; calculator scales to ms at read time.
          * Storing in ms here would truncate sub-millisecond samples to 0
          * (e.g., 999 μs / 1000 = 0), under-reporting at high poll rates. */
         rd_avg_add(
             &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll,
-            rk->rk_telemetry.time_since_last_share_poll);
-        rk->rk_telemetry.ts_last_share_poll_start = now;
+            rk->rk_telemetry.rk_share_poll.time_since_last_poll);
+        rk->rk_telemetry.rk_share_poll.ts_last_poll_start = now;
 }
 
 /**
@@ -3903,8 +3911,8 @@ static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
                 return;
 
         end       = rd_clock();
-        poll_time = end - rk->rk_telemetry.ts_share_poll_start;
-        total     = poll_time + rk->rk_telemetry.time_since_last_share_poll;
+        poll_time = end - rk->rk_telemetry.rk_share_poll.ts_poll_start;
+        total = poll_time + rk->rk_telemetry.rk_share_poll.time_since_last_poll;
         if (total > 0) {
                 int64_t poll_idle_ratio = poll_time * 1000000 / total;
                 rd_avg_add(&rk->rk_telemetry.rd_avg_current

@@ -1632,20 +1632,38 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                         err = RD_KAFKA_RESP_ERR_NO_ERROR;
         }
 
-        rd_rkb_dbg(msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
-                   "Enqueue %i %smessage(s) (%" PRId64
-                   " bytes, %d ops) on %s [%" PRId32
-                   "] fetch queue (qlen %d, v%d, last_offset %" PRId64
-                   ", %d ctrl msgs, %d aborted msgsets, %s)",
-                   msetr->msetr_msgcnt, msetr->msetr_srcname,
-                   msetr->msetr_msg_bytes, rd_kafka_q_len(&msetr->msetr_rkq),
-                   rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
-                   rd_kafka_q_len(msetr->msetr_par_rkq),
-                   msetr->msetr_tver->version, last_offset,
-                   msetr->msetr_ctrl_cnt, msetr->msetr_aborted_cnt,
-                   msetr->msetr_compression
-                       ? rd_kafka_compression2str(msetr->msetr_compression)
-                       : "uncompressed");
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
+                rd_rkb_dbg(
+                    msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
+                    "Enqueue %i %smessage(s) (%" PRId64
+                    " bytes, %d ops) on %s [%" PRId32
+                    "] fetch queue (qlen %d, v%d, last_offset %" PRId64
+                    ", %d ctrl msgs, %d aborted msgsets, %s)",
+                    msetr->msetr_msgcnt, msetr->msetr_srcname,
+                    msetr->msetr_msg_bytes, rd_kafka_q_len(&msetr->msetr_rkq),
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    rd_kafka_q_len(msetr->msetr_par_rkq),
+                    msetr->msetr_tver->version, last_offset,
+                    msetr->msetr_ctrl_cnt, msetr->msetr_aborted_cnt,
+                    msetr->msetr_compression
+                        ? rd_kafka_compression2str(msetr->msetr_compression)
+                        : "uncompressed");
+        } else {
+                rd_rkb_dbg(
+                    msetr->msetr_rkb, MSG | RD_KAFKA_DBG_FETCH, "CONSUME",
+                    "Enqueue %i %smessage(s) (%" PRId64
+                    " bytes, %d ops) on %s [%" PRId32
+                    "] temp fetchq (qlen %d, last_offset %" PRId64
+                    ", %d ctrl msgs, %s)",
+                    msetr->msetr_msgcnt, msetr->msetr_srcname,
+                    msetr->msetr_msg_bytes, rd_kafka_q_len(&msetr->msetr_rkq),
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    rd_kafka_q_len(msetr->msetr_par_rkq), last_offset,
+                    msetr->msetr_ctrl_cnt,
+                    msetr->msetr_compression
+                        ? rd_kafka_compression2str(msetr->msetr_compression)
+                        : "uncompressed");
+        }
 
         /* Concat all messages&errors onto the parent's queue
          * (the partition's fetch queue) */

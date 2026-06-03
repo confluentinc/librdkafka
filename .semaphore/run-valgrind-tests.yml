@@ -49,6 +49,6 @@ blocks:
               --kraft
               --version "${KAFKA_VERSION}"
               --cpversion "${CP_VERSION}"
-              --conf '["group.share.min.record.lock.duration.ms=1000", "transaction.state.log.replication.factor=1", "transaction.state.log.min.isr=1"]'
+              --conf '["group.share.min.record.lock.duration.ms=1000"]'
               --cmd "TESTS_SKIP_BEFORE=0155 ./run-test.sh valgrind 2>&1 | tee ../artifacts/valgrind-share-tests.log") || true
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}

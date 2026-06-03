@@ -1643,8 +1643,513 @@ static void do_test_commit_async_callback(void) {
                     "Expected offsets in callback, got %zu",
                     state.total_offsets);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Partial-batch commit_async semantics.
+ *
+ *  In explicit mode, the next consume_batch must error while any record
+ *  from the previous batch is un-acked. After the remaining records are
+ *  acked and a second commit_async is issued, consume_batch can drive
+ *  the piggybacked acks and the commit callback fires for all offsets.
+ * =================================================================== */
+static void do_test_partial_batch_commit_async(void) {
+        const char *topic;
+        const char *group = "commit-async-partial-batch";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t ack_err;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_message_t *dummy[16];
+        size_t rcvd, total = 0, j;
+        test_ack_cb_state_t state = {0};
+        const int msg_cnt         = 5;
+        int attempts              = 0;
+        size_t to_ack_first;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-ca-partial", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, msg_cnt);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume all msg_cnt records (may take multiple polls) */
+        while (total < (size_t)msg_cnt && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000,
+                                                     rkmessages + total, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                total += rcvd;
+        }
+        TEST_ASSERT(total >= 3,
+                    "Expected at least 3 records to verify partial commit, "
+                    "got %zu",
+                    total);
+
+        /* Acknowledge first 3 records; leave the remainder un-acked. */
+        to_ack_first = total >= 3 ? 3 : total;
+        for (j = 0; j < to_ack_first; j++) {
+                ack_err = rd_kafka_share_acknowledge_type(
+                    rkshare, rkmessages[j],
+                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "First-half ACCEPT %zu failed: %s", j,
+                            rd_kafka_err2str(ack_err));
+        }
+
+        /* commit_async itself succeeds — it just schedules. */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "First commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* While un-acked records remain in the batch, consume_batch must
+         * return _STATE rather than proceed. */
+        size_t r = 0;
+        rd_kafka_error_t *e =
+            rd_kafka_share_consume_batch(rkshare, 1000, dummy, &r);
+        TEST_ASSERT(e != NULL,
+                    "Expected consume_batch to return _STATE while "
+                    "un-acked records remain, got NULL error");
+        TEST_ASSERT(rd_kafka_error_code(e) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected _STATE, got %s",
+                    rd_kafka_err2name(rd_kafka_error_code(e)));
+        TEST_SAY("Got expected _STATE from consume_batch: %s\n",
+                 rd_kafka_error_string(e));
+        rd_kafka_error_destroy(e);
+
+        /* Acknowledge the remaining records */
+        for (j = to_ack_first; j < total; j++) {
+                ack_err = rd_kafka_share_acknowledge_type(
+                    rkshare, rkmessages[j],
+                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                TEST_ASSERT(
+                    ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Second-half ACCEPT %zu (offset=%" PRId64 ") failed: %s", j,
+                    rkmessages[j]->offset, rd_kafka_err2str(ack_err));
+        }
+
+        /* Second commit_async commits the remaining acks */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "Second commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        /* Now consume_batch can proceed and drive piggybacked acks; the
+         * callback should fire at least once and report all acked
+         * offsets across the two commits. */
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 15000);
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected ack commit callback to fire after full batch "
+                    "ack + commit_async, got %d",
+                    state.callback_cnt);
+        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Callback errored: %s", rd_kafka_err2name(state.last_err));
+        TEST_ASSERT(state.total_offsets >= (size_t)total,
+                    "Expected callback to report %zu offsets, got %zu", total,
+                    state.total_offsets);
+        TEST_SAY("Partial commit callbacks=%d, total_offsets=%zu\n",
+                 state.callback_cnt, state.total_offsets);
+
+        for (j = 0; j < total; j++)
+                rd_kafka_message_destroy(rkmessages[j]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Implicit ack callback fires from next poll's piggybacked acks
+ *  without any explicit commit_async call.
+ * =================================================================== */
+static void do_test_implicit_callback_no_explicit_commit(void) {
+        const char *topic;
+        const char *group = "commit-async-implicit-no-commit";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd, j;
+        test_ack_cb_state_t state = {0};
+        int consumed              = 0;
+        int attempts              = 0;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-ca-impl-no-commit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 20);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "implicit", &state, NULL);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* First poll consumes records (implicit mode auto-tracks for ack) */
+        while (consumed < 10 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(consumed > 0, "Expected to consume some messages");
+
+        /* Subsequent polls without any commit_async — callback should still
+         * fire via piggybacked acks on the next ShareFetch. */
+        attempts = 10;
+        while (attempts-- > 0 && state.callback_cnt == 0) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++)
+                        rd_kafka_message_destroy(rkmessages[j]);
+        }
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected callback from implicit piggybacked acks (no "
+                    "explicit commit), got %d",
+                    state.callback_cnt);
+        TEST_ASSERT(state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Callback errored: %s", rd_kafka_err2name(state.last_err));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Lock-expiry surfaces an error in the ack commit callback.
+ *
+ *  Explicit mode + short lock duration: poll a record, acknowledge it,
+ *  sleep past the lock expiry, then commit_async. The broker should
+ *  reject the stale ack and the error must be reported via the
+ *  acknowledgement commit callback.
+ * =================================================================== */
+static void do_test_lock_expiry_callback_err(void) {
+        const char *topic;
+        const char *group = "commit-async-lock-expiry-cb";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t ack_err;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd, j;
+        size_t consumed           = 0;
+        int attempts              = 0;
+        test_ack_cb_state_t state = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-ca-lock-cb", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 3);
+
+        rkshare =
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
+        test_share_set_auto_offset_reset(group, "earliest");
+        set_group_lock_duration(group, "3000");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume records (acquires lock) */
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                consumed = rcvd;
+        }
+        TEST_ASSERT(consumed > 0, "Expected to consume records, got 0");
+
+        /* Acknowledge all consumed records explicitly */
+        for (j = 0; j < consumed; j++) {
+                ack_err = rd_kafka_share_acknowledge_type(
+                    rkshare, rkmessages[j],
+                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "ACCEPT failed: %s", rd_kafka_err2str(ack_err));
+        }
+
+        /* Sleep past acquisition-lock expiry (3s + buffer) */
+        TEST_SAY("Sleeping 4 s for lock expiry before commit_async...\n");
+        rd_sleep(4);
+
+        /* commit_async on stale acks - broker should reject them */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async returned error directly: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 15000);
+
+        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
+                 state.callback_cnt, state.total_offsets,
+                 rd_kafka_err2name(state.last_err));
+
+        TEST_ASSERT(state.callback_cnt >= 1,
+                    "Expected callback to fire for stale ack, got %d",
+                    state.callback_cnt);
+        TEST_ASSERT(state.last_err != RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected non-success err in callback after lock expiry, "
+                    "got %s",
+                    rd_kafka_err2name(state.last_err));
+
+        for (j = 0; j < consumed; j++)
+                rd_kafka_message_destroy(rkmessages[j]);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+typedef struct {
+        test_ack_cb_state_t base;
+        int saw_consumer_name;
+} k44_state_t;
+
+static void k44_safe_api_cb(rd_kafka_share_t *rkshare,
+                            rd_kafka_share_partition_offsets_list_t *partitions,
+                            rd_kafka_resp_err_t err,
+                            void *opaque) {
+        k44_state_t *st = opaque;
+        rd_kafka_t *rk;
+
+        /* Reuse base counters via the shared helper */
+        test_share_ack_cb(rkshare, partitions, err, &st->base);
+
+        /* Safely read consumer identity from within the callback */
+        rk = test_share_consumer_get_rk(rkshare);
+        if (rk && rd_kafka_name(rk))
+                st->saw_consumer_name = 1;
+}
+
+/* ===================================================================
+ *  Callback safely reads consumer state and the consumer keeps working
+ *  afterwards.
+ *
+ *  Implicit mode: poll a batch, commit_async to drive piggyback acks,
+ *  wait for the ack callback. The callback calls
+ *  test_share_consumer_get_rk()+rd_kafka_name() to prove that
+ *  consumer-state APIs are safe to invoke from within the callback.
+ *  After the callback runs, a second round of consume_batch must still
+ *  return records, proving the consumer is not wedged.
+ * =================================================================== */
+static void do_test_safe_api_from_callback(void) {
+        const char *topic;
+        const char *group = "commit-async-safe-api-cb";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd, j;
+        int consumed     = 0;
+        int second_round = 0;
+        int attempts     = 0;
+        k44_state_t st   = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-ca-safe-api-cb", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
+
+        rkshare = test_create_share_consumer_with_cb(
+            group, "implicit", (test_ack_cb_state_t *)&st, k44_safe_api_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* First-round consumption */
+        while (consumed < 5 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+
+        /* Drive piggyback acks - this fires the callback */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed");
+        test_wait_for_cb_with_poll(&st.base, rkshare, 1, 10000);
+
+        TEST_ASSERT(st.base.callback_cnt >= 1, "Expected callback, got %d",
+                    st.base.callback_cnt);
+        TEST_ASSERT(st.saw_consumer_name,
+                    "Callback should have read consumer name via "
+                    "test_share_consumer_get_rk + rd_kafka_name");
+
+        /* After callback has run, the consumer must still function. */
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        attempts = 0;
+        while (second_round < 5 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                second_round++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(second_round > 0,
+                    "Consumer stopped working after callback invocation");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+typedef struct {
+        test_ack_cb_state_t base;
+        int side_effect_runs;
+} k45_state_t;
+
+static void
+k45_side_effect_cb(rd_kafka_share_t *rkshare,
+                   rd_kafka_share_partition_offsets_list_t *partitions,
+                   rd_kafka_resp_err_t err,
+                   void *opaque) {
+        k45_state_t *st = opaque;
+
+        test_share_ack_cb(rkshare, partitions, err, &st->base);
+
+        /* Heavy-ish side effect: simulate user application work. */
+        st->side_effect_runs++;
+        rd_sleep(0); /* yield - safe no-op time pass */
+}
+
+/* ===================================================================
+ *  Application-side side effects in the ack callback do not crash or
+ *  hang the poll thread.
+ *
+ *  Implicit mode: poll one batch, commit_async, and wait for the
+ *  callback. The callback bumps a side-effect counter and yields
+ *  via rd_sleep(0) to simulate user work. We assert the side effect
+ *  ran and that the consumer is still healthy on a follow-up
+ *  consume_batch / commit_async round.
+ * =================================================================== */
+static void do_test_callback_side_effects_dont_break(void) {
+        const char *topic;
+        const char *group = "commit-async-side-effect-cb";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd, j;
+        int consumed   = 0;
+        int post_count = 0;
+        int attempts   = 0;
+        k45_state_t st = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0173-ca-side-effect-cb", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 10);
+
+        rkshare = test_create_share_consumer_with_cb(
+            group, "implicit", (test_ack_cb_state_t *)&st, k45_side_effect_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        /* Consume the produced records */
+        while (consumed < 10 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(consumed > 0, "Expected to consume records, got 0");
+
+        /* Drive the side-effect callback at least once via commit_async +
+         * wait_for_cb_with_poll. */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        test_wait_for_cb_with_poll(&st.base, rkshare, 1, 10000);
+
+        TEST_ASSERT(st.base.callback_cnt >= 1,
+                    "Expected callback to fire at least once, got %d",
+                    st.base.callback_cnt);
+        TEST_ASSERT(st.side_effect_runs >= 1,
+                    "Side-effect did not run inside callback (%d runs vs "
+                    "%d callbacks)",
+                    st.side_effect_runs, st.base.callback_cnt);
+        TEST_ASSERT(st.base.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Callback err: %s", rd_kafka_err2name(st.base.last_err));
+        TEST_SAY("consumed=%d, callbacks=%d, side_effects=%d\n", consumed,
+                 st.base.callback_cnt, st.side_effect_runs);
+
+        /* Consumer must still be usable after the side-effect callback ran:
+         * produce more records and verify poll still works. */
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        attempts = 0;
+        while (post_count == 0 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                post_count++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(post_count > 0,
+                    "Consumer stopped working after side-effect callback");
+        TEST_SAY("Post-callback poll returned %d msgs\n", post_count);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
 
         SUB_TEST_PASS();
 }
@@ -1670,6 +2175,13 @@ int main_0173_share_consumer_commit_async(int argc, char **argv) {
         do_test_lock_timeout_redelivery();
         /* Callback test */
         do_test_commit_async_callback();
+
+        /* Partial-batch / callback edge cases */
+        do_test_partial_batch_commit_async();
+        do_test_implicit_callback_no_explicit_commit();
+        do_test_lock_expiry_callback_err();
+        do_test_safe_api_from_callback();
+        do_test_callback_side_effects_dont_break();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

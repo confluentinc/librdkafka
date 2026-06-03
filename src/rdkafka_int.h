@@ -746,38 +746,40 @@ struct rd_kafka_s {
 
                 struct {
                         rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Current commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Current rebalance
+                                                       *   latency avg */
                         rd_avg_t rk_avg_share_poll_idle_ratio;
                         rd_avg_t
                             rk_avg_share_time_between_poll; /**< Current time
                                                                between two
                                                                share_consume_batch
                                                              */
-                        rd_avg_t rk_avg_commit_latency;     /**< Current commit
-                                                             *   latency avg */
-                        rd_avg_t
-                            rk_avg_rebalance_latency; /**< Current rebalance
-                                                       *   latency avg */
                 } rd_avg_current;
 
                 struct {
                         rd_avg_t rk_avg_poll_idle_ratio;
+                        rd_avg_t rk_avg_commit_latency; /**< Rolled over commit
+                                                         *   latency avg */
+                        rd_avg_t
+                            rk_avg_rebalance_latency; /**< Rolled over rebalance
+                                                       *   latency avg */
                         rd_avg_t rk_avg_share_poll_idle_ratio;
                         rd_avg_t
                             rk_avg_share_time_between_poll; /**< Rolled over
                                                                time between two
                                                                share_consume_batch
                                                              */
-                        rd_avg_t rk_avg_commit_latency; /**< Rolled over commit
-                                                         *   latency avg */
-                        rd_avg_t
-                            rk_avg_rebalance_latency; /**< Rolled over rebalance
-                                                       *   latency avg */
                 } rd_avg_rollover;
 
                 /* Share consumer poll/batch tracking */
-                rd_ts_t ts_last_share_poll_start;
-                rd_ts_t ts_share_poll_start;
-                rd_ts_t time_since_last_share_poll;
+                struct {
+                        rd_ts_t ts_last_poll_start;
+                        rd_ts_t ts_poll_start;
+                        rd_ts_t time_since_last_poll;
+                } rk_share_poll;
 
         } rk_telemetry;
 

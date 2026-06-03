@@ -5679,18 +5679,10 @@ static void rd_kafka_propagate_consumer_topic_errors(
                 if (topic->err == RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC)
                         topic->err = RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
 
-                /* Check if this topic errored previously. Share consumers
-                 * key the dedup memo by topic_id — the stable identifier the
-                 * share error flow uses throughout — whereas classic
-                 * consumers key by topic name. */
-                if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
-                        prev = rd_kafka_topic_partition_list_find_topic_by_id(
-                            rkcg->rkcg_errored_topics,
-                            rd_kafka_topic_partition_get_topic_id(topic));
-                else
-                        prev = rd_kafka_topic_partition_list_find(
-                            rkcg->rkcg_errored_topics, topic->topic,
-                            RD_KAFKA_PARTITION_UA);
+                /* Check if this topic errored previously */
+                prev = rd_kafka_topic_partition_list_find(
+                    rkcg->rkcg_errored_topics, topic->topic,
+                    RD_KAFKA_PARTITION_UA);
 
                 if (prev && prev->err == topic->err)
                         continue; /* This topic already reported same error */

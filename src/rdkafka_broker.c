@@ -3812,6 +3812,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                            rko->rko_rktp->rktp_partition,
                            rkb->rkb_share_fetch_session.epoch);
 
+                /* TODO KIP-932: Skip this from caller itself */
                 if (rkb->rkb_source != RD_KAFKA_INTERNAL)
                         rd_kafka_broker_share_session_toppar_add(rkb,
                                                                  rko->rko_rktp);
@@ -3825,6 +3826,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                            rko->rko_rktp->rktp_partition,
                            rkb->rkb_share_fetch_session.epoch);
 
+                /* TODO KIP-932: Skip this from caller itself */
                 if (rkb->rkb_source != RD_KAFKA_INTERNAL)
                         rd_kafka_broker_share_session_toppar_remove(
                             rkb, rko->rko_rktp);

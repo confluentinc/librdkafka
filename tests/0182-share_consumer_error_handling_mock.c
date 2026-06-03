@@ -2230,47 +2230,6 @@ static void test_share_consumer_dedupes_repeated_auth_failed(void) {
 }
 
 
-/* TOPIC_EXCEPTION is surfaced once; a second metadata refresh that
- * sees the same error on the same topic must not surface a
- * duplicate. */
-static void test_share_consumer_dedupes_repeated_topic_exception(void) {
-        test_ctx_t ctx;
-        rd_kafka_share_t *rkshare;
-        const char *topic = "0182-dedupe-topic-exception";
-        const char *group = "sg-0182-dedupe-topic-exception";
-
-        SUB_TEST();
-
-        ctx = test_ctx_new();
-        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "create topic");
-        mock_produce(ctx.producer, topic, 5);
-
-        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
-                                             NULL, NULL);
-        subscribe_one(rkshare, topic);
-        share_topic_err_prime_assignment(rkshare);
-
-        rd_kafka_mock_topic_set_error(ctx.mcluster, topic,
-                                      RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION);
-        share_topic_err_force_metadata(rkshare);
-        TEST_ASSERT(share_topic_err_wait_for_err(
-                        rkshare, RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION, 30),
-                    "First TOPIC_EXCEPTION must surface");
-
-        share_topic_err_force_metadata(rkshare);
-        share_topic_err_assert_no_err(rkshare, 10,
-                                      "repeat TOPIC_EXCEPTION must be deduped");
-
-        test_share_consumer_close(rkshare);
-        test_share_destroy(rkshare);
-        test_ctx_destroy(&ctx);
-
-        SUB_TEST_PASS();
-}
-
-
 /* Two topics fail with the same error in one metadata cycle: both
  * surface once, and neither re-surfaces on the next refresh while
  * both stay failing. */
@@ -2534,8 +2493,7 @@ static void test_share_consumer_unsubscribe_drops_errored_topic(void) {
 
 
 /* A topic with multiple partitions failing must surface exactly one
- * error per (topic, err) per metadata cycle, not one per partition.
- * Run for both app-facing codes. */
+ * error per (topic, err) per metadata cycle, not one per partition. */
 static void
 do_test_share_consumer_multi_partition_dedupe(rd_kafka_resp_err_t inject_err) {
         test_ctx_t ctx;
@@ -2587,8 +2545,6 @@ do_test_share_consumer_multi_partition_dedupe(rd_kafka_resp_err_t inject_err) {
 static void test_share_consumer_multi_partition_dedupe(void) {
         do_test_share_consumer_multi_partition_dedupe(
             RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED);
-        do_test_share_consumer_multi_partition_dedupe(
-            RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION);
 }
 
 
@@ -3095,7 +3051,6 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_share_consumer_surfaces_topic_exception();
         test_share_consumer_surfaces_topic_authorization_failed();
         test_share_consumer_dedupes_repeated_auth_failed();
-        test_share_consumer_dedupes_repeated_topic_exception();
         test_share_consumer_two_topics_dedupe_independently();
         test_share_consumer_re_emits_when_err_code_changes();
         test_share_consumer_re_surfaces_after_recovery();

@@ -5748,25 +5748,22 @@ void rd_kafka_cgrp_share_clear_topic_err(rd_kafka_cgrp_t *rkcg,
  *        (TOPIC_EXCEPTION, TOPIC_AUTHORIZATION_FAILED) are handed to
  *        rd_kafka_propagate_consumer_topic_errors for delivery and
  *        cross-cycle dedup; transient codes are debug-logged at most
- *        once per (topic, err) per cycle. propagate is called even on
- *        an empty surface list so recovered or unsubscribed topics
- *        are dropped from the dedup state.
+ *        once per (topic, err) per cycle. Existing rkcg_errored_topics
+ *        entries are always merged forward so propagate's wholesale-
+ *        replace cannot drop entries for topics absent from this cycle.
  *
- * @param should_merge_existing_errored true when this metadata response
- *        is a partial view of the subscription and previously-known
- *        errored topics must be carried forward to survive the
- *        wholesale-replace in propagate. False on a full-subscription
- *        view, where the response is authoritative.
+ *        After propagate, entries whose rkt has transitioned to
+ *        RD_KAFKA_TOPIC_S_NOTEXISTS are pruned from the dedup memo.
+ *        Recovery (back to S_EXISTS) is handled separately by
+ *        rd_kafka_cgrp_share_clear_topic_err on set_exists.
  *
  * @locality rdkafka main thread
  */
-void rd_kafka_cgrp_share_metadata_update_check(
-    rd_kafka_cgrp_t *rkcg,
-    rd_bool_t should_merge_existing_errored) {
+void rd_kafka_share_topic_err_propogate(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_t *rk = rkcg->rkcg_rk;
         rd_kafka_topic_partition_list_t *pending;
         rd_kafka_topic_partition_list_t *to_surface;
-        int i;
+        int i, j;
 
         if (!rkcg->rkcg_share_topic_errored)
                 return;
@@ -5776,31 +5773,32 @@ void rd_kafka_cgrp_share_metadata_update_check(
 
         to_surface = rd_kafka_topic_partition_list_new(0);
         for (i = 0; i < pending->cnt; i++) {
-                const rd_kafka_topic_partition_t *t = &pending->elems[i];
+                const rd_kafka_topic_partition_t *pending_errored_tp =
+                    &pending->elems[i];
 
-                switch (t->err) {
+                switch (pending_errored_tp->err) {
                 case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
                 case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
                         rd_kafka_topic_partition_list_add_with_topic_name_and_id(
                             to_surface,
-                            rd_kafka_topic_partition_get_topic_id(t), t->topic,
-                            RD_KAFKA_PARTITION_UA)
-                            ->err = t->err;
+                            rd_kafka_topic_partition_get_topic_id(
+                                pending_errored_tp),
+                            pending_errored_tp->topic, RD_KAFKA_PARTITION_UA)
+                            ->err = pending_errored_tp->err;
                         break;
 
                 default:
                         rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
-                                     "Topic %s: %s", t->topic,
-                                     rd_kafka_err2str(t->err));
+                                     "Topic %s: %s", pending_errored_tp->topic,
+                                     rd_kafka_err2str(pending_errored_tp->err));
                         break;
                 }
         }
         rd_kafka_topic_partition_list_destroy(pending);
 
-        /* Partial-view drain: carry previously-known errored entries
-         * forward so propagate's wholesale-replace doesn't drop them. */
-        if (should_merge_existing_errored && rkcg->rkcg_errored_topics) {
-                int j;
+        /* Carry previously-known errored entries forward so propagate's
+         * wholesale-replace doesn't drop them. */
+        if (rkcg->rkcg_errored_topics) {
                 for (j = 0; j < rkcg->rkcg_errored_topics->cnt; j++) {
                         rd_kafka_topic_partition_t *existing =
                             &rkcg->rkcg_errored_topics->elems[j];
@@ -5820,6 +5818,34 @@ void rd_kafka_cgrp_share_metadata_update_check(
 
         rd_kafka_propagate_consumer_topic_errors(
             rkcg, to_surface, "Subscribed topic not available");
+
+        /* Post-propagate cleanup: drop memo entries whose rkt has moved
+         * to S_NOTEXISTS. For those topics the client stops re-asking,
+         * so pending won't refill */
+        if (rkcg->rkcg_errored_topics) {
+                j = 0;
+                while (j < rkcg->rkcg_errored_topics->cnt) {
+                        rd_kafka_topic_partition_t *entry =
+                            &rkcg->rkcg_errored_topics->elems[j];
+                        rd_kafka_topic_t *rkt =
+                            rd_kafka_topic_find(rk, entry->topic, 1 /*lock*/);
+                        rd_bool_t drop = rd_false;
+
+                        if (rkt) {
+                                rd_kafka_topic_rdlock(rkt);
+                                drop = rkt->rkt_state ==
+                                       RD_KAFKA_TOPIC_S_NOTEXISTS;
+                                rd_kafka_topic_rdunlock(rkt);
+                                rd_kafka_topic_destroy0(rkt);
+                        }
+
+                        if (drop)
+                                rd_kafka_topic_partition_list_del_by_idx(
+                                    rkcg->rkcg_errored_topics, j);
+                        else
+                                j++;
+                }
+        }
 }
 
 

@@ -125,6 +125,7 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t del_err;
         char topic_del[512], topic_keep[512], group[160];
+        char del_base[128], keep_base[128];
         char *del_topics[1];
         int part_cnt[TD_NPART] = {0};
         size_t m;
@@ -138,10 +139,17 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
 
         SUB_TEST("mode=%s, %s", mode, ack_timing_name(timing));
 
+        /* Embed mode+timing in the base name so the subtests never share a
+         * topic even if test_mk_topic_name repeats its random suffix;
+         * otherwise a sibling's leftover records bleed into this drain. */
+        rd_snprintf(del_base, sizeof(del_base), "0181-td-del-%s-%s", mode,
+                    ack_timing_name(timing));
+        rd_snprintf(keep_base, sizeof(keep_base), "0181-td-keep-%s-%s", mode,
+                    ack_timing_name(timing));
         rd_snprintf(topic_del, sizeof(topic_del), "%s",
-                    test_mk_topic_name("0181-td-del", 1));
+                    test_mk_topic_name(del_base, 1));
         rd_snprintf(topic_keep, sizeof(topic_keep), "%s",
-                    test_mk_topic_name("0181-td-keep", 1));
+                    test_mk_topic_name(keep_base, 1));
         rd_snprintf(group, sizeof(group), "0181-td-%s-%s", mode,
                     ack_timing_name(timing));
         del_topics[0] = topic_del;

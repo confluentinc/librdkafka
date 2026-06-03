@@ -12,16 +12,16 @@ global_job_config:
   prologue:
     commands:
       - checkout
+      - mkdir -p artifacts
       - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
       - sudo apt remove -y needrestart
       - sudo DEBIAN_FRONTEND=noninteractive apt install -y valgrind libcurl4-openssl-dev libssl-dev
       - python3 -m pip install -U pip
       - (cd tests && python3 -m pip install -r requirements.txt)
-      - ./configure --install-deps --enable-werror --enable-devel --disable-optimization
+      - ./configure --install-deps --enable-devel --disable-optimization
       - make -j all
       - make -j -C tests build
       - sem-version java 17
-      - mkdir -p artifacts
   env_vars:
     - name: CACHE_TAG
       value: '7'

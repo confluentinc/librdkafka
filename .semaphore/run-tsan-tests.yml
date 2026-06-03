@@ -12,6 +12,11 @@ global_job_config:
   prologue:
     commands:
       - checkout
+      # TSAN's runtime aborts with "unexpected memory mapping" on Ubuntu 24.04
+      # because the kernel's default vm.mmap_rnd_bits=32 makes ASLR put
+      # allocations outside TSAN's expected shadow regions. Lower it to 28
+      # (TSAN's safe maximum) before any TSAN-instrumented binary runs.
+      - sudo sysctl -w vm.mmap_rnd_bits=28
       - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
       - sudo apt remove -y needrestart
       - sudo DEBIAN_FRONTEND=noninteractive apt install -y libcurl4-openssl-dev libssl-dev

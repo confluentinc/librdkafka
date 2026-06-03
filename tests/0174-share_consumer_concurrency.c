@@ -424,15 +424,28 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         int final_first_delivery;
         int final_duplicates;
         rd_bool_t final_failed;
+        char unique_suffix[64];
+        char unique_group[128];
+        char unique_test_name[256];
 
         TEST_ASSERT(config->consumer_cnt <= MAX_CONSUMERS,
                     "consumer_cnt %d exceeds MAX_CONSUMERS %d",
                     config->consumer_cnt, MAX_CONSUMERS);
 
+        /* Generate a per-invocation unique suffix and append it to both
+         * the group name and the displayed test name. Avoids collisions
+         * across re-runs / parallel runs that share the same broker. */
+        rd_snprintf(unique_suffix, sizeof(unique_suffix), "rnd%" PRIx64,
+                    test_id_generate());
+        rd_snprintf(unique_group, sizeof(unique_group), "%s-%s",
+                    config->group_name, unique_suffix);
+        rd_snprintf(unique_test_name, sizeof(unique_test_name), "%s [%s]",
+                    config->test_name, unique_suffix);
+
         TEST_SAY("\n");
         TEST_SAY(
             "============================================================\n");
-        TEST_SAY("=== %s ===\n", config->test_name);
+        TEST_SAY("=== %s ===\n", unique_test_name);
         TEST_SAY(
             "============================================================\n");
         TEST_SAY(
@@ -445,7 +458,7 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         /* Initialize state */
         mtx_init(&state.lock, mtx_plain);
         state.topic_cnt           = config->topic_cnt;
-        state.group_name          = config->group_name;
+        state.group_name          = unique_group;
         state.explicit_ack        = config->explicit_ack;
         state.producers_remaining = config->producer_cnt;
 
@@ -470,8 +483,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         /* Apply broker-side share group config (auto.offset.reset=earliest)
          * via a throwaway consumer registration so the alter sticks before
          * any worker subscribes. */
-        dummy_consumer = test_create_share_consumer(config->group_name, NULL);
-        test_share_set_auto_offset_reset(config->group_name, "earliest");
+        dummy_consumer = test_create_share_consumer(unique_group, NULL);
+        test_share_set_auto_offset_reset(unique_group, "earliest");
         test_share_consumer_close(dummy_consumer);
         test_share_destroy(dummy_consumer);
 
@@ -594,7 +607,7 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
                     final_duplicates);
         TEST_ASSERT(!final_failed, "Producer thread reported failure");
 
-        TEST_SAY("SUCCESS: %s\n", config->test_name);
+        TEST_SAY("SUCCESS: %s\n", unique_test_name);
 
         for (t = 0; t < config->topic_cnt; t++)
                 rd_free(state.topics[t]);
@@ -608,7 +621,7 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 /**
  * @brief Single producer, single consumer, single topic
  */
-static void test_1p_1c_1t_1part(void) {
+static void do_test_1p_1c_1t_1part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 1,
             .producer_cnt       = 1,
@@ -623,7 +636,7 @@ static void test_1p_1c_1t_1part(void) {
 /**
  * @brief Single producer, multiple consumers, single topic
  */
-static void test_1p_4c_1t_4part(void) {
+static void do_test_1p_4c_1t_4part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 1,
@@ -638,7 +651,7 @@ static void test_1p_4c_1t_4part(void) {
 /**
  * @brief Multiple producers, single consumer
  */
-static void test_4p_1c_1t_4part(void) {
+static void do_test_4p_1c_1t_4part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 1,
             .producer_cnt       = 4,
@@ -653,7 +666,7 @@ static void test_4p_1c_1t_4part(void) {
 /**
  * @brief Multiple producers, multiple consumers, single topic
  */
-static void test_4p_4c_1t_4part(void) {
+static void do_test_4p_4c_1t_4part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 4,
@@ -672,7 +685,7 @@ static void test_4p_4c_1t_4part(void) {
 /**
  * @brief Multiple topics with concurrent access
  */
-static void test_2p_2c_3t_2part(void) {
+static void do_test_2p_2c_3t_2part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 2,
             .producer_cnt       = 2,
@@ -688,7 +701,7 @@ static void test_2p_2c_3t_2part(void) {
 /**
  * @brief Many topics with single partition each
  */
-static void test_2p_2c_8t_1part(void) {
+static void do_test_2p_2c_8t_1part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 2,
             .producer_cnt       = 2,
@@ -708,7 +721,7 @@ static void test_2p_2c_8t_1part(void) {
 /**
  * @brief Many consumers competing for single partition
  */
-static void test_1p_8c_1t_1part(void) {
+static void do_test_1p_8c_1t_1part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 8,
             .producer_cnt       = 1,
@@ -724,7 +737,7 @@ static void test_1p_8c_1t_1part(void) {
 /**
  * @brief More consumers than partitions
  */
-static void test_2p_6c_1t_2part(void) {
+static void do_test_2p_6c_1t_2part(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 6,
             .producer_cnt       = 2,
@@ -744,7 +757,7 @@ static void test_2p_6c_1t_2part(void) {
 /**
  * @brief Concurrent with explicit acknowledgement
  */
-static void test_explicit_ack_4p_4c(void) {
+static void do_test_explicit_ack_4p_4c(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 4,
@@ -764,7 +777,7 @@ static void test_explicit_ack_4p_4c(void) {
 /**
  * @brief Consumers start before producers
  */
-static void test_staggered_start(void) {
+static void do_test_staggered_start(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 2,
             .producer_cnt       = 2,
@@ -784,7 +797,7 @@ static void test_staggered_start(void) {
 /**
  * @brief High volume concurrent test
  */
-static void test_high_volume_20k(void) {
+static void do_test_high_volume_20k(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 4,
@@ -800,7 +813,7 @@ static void test_high_volume_20k(void) {
 /**
  * @brief High volume with many partitions
  */
-static void test_high_volume_many_partitions(void) {
+static void do_test_high_volume_many_partitions(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 4,
@@ -820,7 +833,7 @@ static void test_high_volume_many_partitions(void) {
 /**
  * @brief Many producers, few consumers
  */
-static void test_8p_2c(void) {
+static void do_test_8p_2c(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 2,
             .producer_cnt       = 8,
@@ -835,7 +848,7 @@ static void test_8p_2c(void) {
 /**
  * @brief Few producers, many consumers
  */
-static void test_2p_8c(void) {
+static void do_test_2p_8c(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 8,
             .producer_cnt       = 2,
@@ -854,7 +867,7 @@ static void test_2p_8c(void) {
 /**
  * @brief Complex scenario with varied partition counts
  */
-static void test_complex_varied_partitions(void) {
+static void do_test_complex_varied_partitions(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 4,
@@ -870,7 +883,7 @@ static void test_complex_varied_partitions(void) {
 /**
  * @brief Maximum concurrent scenario
  */
-static void test_max_concurrent(void) {
+static void do_test_max_concurrent(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = MAX_CONSUMERS,
             .producer_cnt       = MAX_PRODUCERS,
@@ -890,7 +903,7 @@ static void test_max_concurrent(void) {
 /**
  * @brief Slow consumers with fast producers
  */
-static void test_slow_consumers(void) {
+static void do_test_slow_consumers(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 2,
             .producer_cnt       = 4,
@@ -907,7 +920,7 @@ static void test_slow_consumers(void) {
 /**
  * @brief Fast consumers with slow producers
  */
-static void test_slow_producers(void) {
+static void do_test_slow_producers(void) {
         concurrent_test_config_t config = {
             .consumer_cnt       = 4,
             .producer_cnt       = 2,
@@ -938,7 +951,7 @@ static void test_slow_producers(void) {
  * back to the group and re-delivered with delivery_count > 1 (counted as
  * duplicates, not first deliveries).
  */
-static void test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
+static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
         concurrent_test_state_t state         = {0};
         const concurrent_test_config_t config = {
             .consumer_cnt       = 4, /* informational; pool size below */
@@ -1282,46 +1295,46 @@ int main_0174_share_consumer_concurrency(int argc, char **argv) {
          * consumer. */
 
         /* Basic concurrency tests */
-        test_1p_1c_1t_1part(); /* Baseline: 1 producer, 1 consumer */
-        test_1p_4c_1t_4part(); /* Fan out: 1 producer, 4 consumers */
-        test_4p_1c_1t_4part(); /* Fan in: 4 producers, 1 consumer */
-        test_4p_4c_1t_4part(); /* Symmetric: 4 producers, 4 consumers */
+        do_test_1p_1c_1t_1part(); /* Baseline: 1 producer, 1 consumer */
+        do_test_1p_4c_1t_4part(); /* Fan out: 1 producer, 4 consumers */
+        do_test_4p_1c_1t_4part(); /* Fan in: 4 producers, 1 consumer */
+        do_test_4p_4c_1t_4part(); /* Symmetric: 4 producers, 4 consumers */
 
         /* Multi-topic tests */
-        test_2p_2c_3t_2part(); /* Multiple topics */
-        test_2p_2c_8t_1part(); /* Many topics */
+        do_test_2p_2c_3t_2part(); /* Multiple topics */
+        do_test_2p_2c_8t_1part(); /* Many topics */
 
         /* High contention tests */
-        test_1p_8c_1t_1part(); /* Many consumers, 1 partition */
-        test_2p_6c_1t_2part(); /* More consumers than partitions */
+        do_test_1p_8c_1t_1part(); /* Many consumers, 1 partition */
+        do_test_2p_6c_1t_2part(); /* More consumers than partitions */
 
         /* Explicit acknowledgement */
-        test_explicit_ack_4p_4c();
+        do_test_explicit_ack_4p_4c();
 
         /* Staggered start */
-        test_staggered_start();
+        do_test_staggered_start();
 
         /* High volume stress tests */
-        test_high_volume_20k();
-        test_high_volume_many_partitions();
+        do_test_high_volume_20k();
+        do_test_high_volume_many_partitions();
 
         /* Asymmetric configurations */
-        test_8p_2c(); /* Producer heavy */
-        test_2p_8c(); /* Consumer heavy */
+        do_test_8p_2c(); /* Producer heavy */
+        do_test_2p_8c(); /* Consumer heavy */
 
         /* Complex scenarios */
-        test_complex_varied_partitions();
-        test_max_concurrent();
+        do_test_complex_varied_partitions();
+        do_test_max_concurrent();
 
         /* Slow consumer/producer scenarios */
-        test_slow_consumers();
-        test_slow_producers();
+        do_test_slow_consumers();
+        do_test_slow_producers();
 
         /* Chaos test: consumer lifecycle churn during sustained production.
          * Run once with explicit acknowledgement and once with implicit
          * acknowledgement to cover both ack flows under churn. */
-        test_chaos_consumer_lifecycle(rd_true);
-        test_chaos_consumer_lifecycle(rd_false);
+        do_test_chaos_consumer_lifecycle(rd_true);
+        do_test_chaos_consumer_lifecycle(rd_false);
 
         return 0;
 }

@@ -56,5 +56,6 @@ blocks:
               --version "${KAFKA_VERSION}"
               --cpversion "${CP_VERSION}"
               --conf '["group.share.min.record.lock.duration.ms=1000"]'
-              --cmd "TESTS_SKIP_BEFORE=0155 make 2>&1 | tee ../artifacts/tsan-share-tests.log") || true
+              --cmd "TESTS_SKIP_BEFORE=0155 make 2>&1 | tee tsan-share-tests.log") || true
+            - cp tests/tsan-share-tests.log artifacts/
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}

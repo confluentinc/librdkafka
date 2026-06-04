@@ -2160,6 +2160,20 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
 err_parse:
         RD_IF_FREE(leader_changes, rd_list_destroy);
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
+        /* Wire-level parse failure: response framing is untrusted, so
+         * any per-partition PartErrorCode the parser may have written
+         * before failing could be a misaligned read. Override every
+         * batch in ack_details with INVALID_RECORD_STATE — same
+         * treatment as a partition omitted from a well-formed response
+         * — so the consumer treats these as "outcome unknown" and
+         * re-acquires. */
+        if (ack_details) {
+                rd_kafka_share_ack_batches_t *batch;
+                RD_LIST_FOREACH(batch, ack_details, i) {
+                        batch->rktpar->err =
+                            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
+                }
+        }
         rd_rkb_dbg(rkb, MSG, "BADMSG",
                    "Bad ShareAcknowledge response (v%d): parse error",
                    (int)request->rkbuf_reqhdr.ApiVersion);
@@ -2264,13 +2278,14 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                          * corruption, or version mismatch — log loudly so
                          * the user notices, since the LOG_INFO top-level
                          * log can be easy to miss in production output. */
-                        rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
-                                   "ShareFetch response parse failure: %s "
-                                   "(ApiVersion %hd) — broker bug, wire "
-                                   "corruption, or version mismatch; "
-                                   "this response is being dropped",
-                                   rd_kafka_err2str(err),
-                                   request->rkbuf_reqhdr.ApiVersion);
+                        rd_rkb_log(
+                            rkb, LOG_ERR, "SHAREACK",
+                            "ShareAcknowledge response parse failure: %s "
+                            "(ApiVersion %hd) — broker bug, wire "
+                            "corruption, or version mismatch; "
+                            "this response is being dropped",
+                            rd_kafka_err2str(err),
+                            request->rkbuf_reqhdr.ApiVersion);
                         break;
 
                 default:

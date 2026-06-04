@@ -258,6 +258,15 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                             rd_kafka_err2str(del_err));
         }
 
+        /* Let the topic delete propagate through the cluster and the
+         * share session reconcile (the consumer subscribed to both
+         * topics; the broker has to drop the deleted topic from the
+         * session before it will start serving the surviving one
+         * again). Without this, the produce + consume_batch loop below
+         * races the session-recovery window and Phase 2 drains 0
+         * records. */
+        rd_sleep(3);
+
         /* Phase 2: drain the surviving topic to empty and verify only its
          * records are returned (the deleted topic must contribute none). */
         test_produce_msgs_simple(common_producer, topic_keep, 0, TD_KEEP_MSGS);
@@ -267,7 +276,7 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
          * session with a top-level UNKNOWN for a while, so we give the drain
          * a larger budget and ignore empty polls until all records arrive.
          * Revert to a plain drain loop once the broker is fixed. */
-        attempts = 30;
+        attempts = 60;
         while (attempts-- > 0) {
                 size_t got = 0;
                 error =

@@ -375,12 +375,24 @@ struct rd_kafka_s {
                  *  @locality MAIN THREAD ONLY. */
                 rd_bool_t acknowledgement_callback_registered;
 
-                /** Single-thread access gate.
-                 *  Set to 1 via atomic test-and-set on entry to any public
-                 *  share API, reset to 0 on exit. A second thread observing
-                 *  1 is rejected with RD_KAFKA_RESP_ERR__STATE. */
-                rd_atomic32_t locked;
+                /** Single-thread access gate (re-entrant ownership).
+                 *  rd_kafka_share_acquire() claims ownership for the calling
+                 *  thread on entry to any public share API and bumps @c depth;
+                 *  rd_kafka_share_release() decrements @c depth and frees
+                 *  ownership at 0. A concurrent call from a *different* thread
+                 *  is rejected with RD_KAFKA_RESP_ERR__STATE; the owning thread
+                 *  may re-enter (nested share calls). @c guard_lock makes the
+                 *  check-and-claim atomic, since the gate is by definition
+                 *  touched from more than one thread in the case it guards
+                 *  against. */
+                mtx_t guard_lock; /**< Protects owner/owned/depth. */
+                thrd_t owner;     /**< Owning thread while @c owned. */
+                rd_bool_t owned;  /**< Gate currently held. */
+                int depth;        /**< Re-entrancy count for the owner. */
         } rk_share_consumer;
+        /**
+         * TODO KIP-932: Change to rk_share when interface is finalized.
+         */
 
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */
@@ -1378,14 +1390,16 @@ rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
  *
  * Public share APIs must call this on entry and pair it with
  * rd_kafka_share_release() on every return path. Rejects:
- *   - NULL rkshare
+ *   - NULL rkshare                         -> RD_KAFKA_RESP_ERR__STATE
  *   - Calls from inside the acknowledgement callback
- *     (rk_share_consumer.in_callback set)
- *   - Concurrent calls from another application thread (atomic gate
- *     already held)
+ *     (rk_share_consumer.in_callback set)  -> RD_KAFKA_RESP_ERR__STATE
+ *   - Concurrent calls from another application thread (gate owned by a
+ *     different thread)                     -> RD_KAFKA_RESP_ERR__CONFLICT
+ *     The owning thread may re-enter.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success,
- *          RD_KAFKA_RESP_ERR__STATE otherwise.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, RD_KAFKA_RESP_ERR__CONFLICT
+ *          on concurrent cross-thread access, or RD_KAFKA_RESP_ERR__STATE
+ *          otherwise.
  */
 rd_kafka_resp_err_t rd_kafka_share_acquire(rd_kafka_share_t *rkshare);
 

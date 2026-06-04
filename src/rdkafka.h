@@ -5224,9 +5224,16 @@ int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);
  * @brief Destroy the share consumer instance and free all associated resources.
  *
  * @param rkshare Share consumer instance.
+ *
+ * @returns NULL on success, or an error object if another thread is
+ *          concurrently using the share consumer (including a call made from
+ *          inside the acknowledgement callback). In the error case the instance
+ *          is NOT destroyed; the application must ensure no other thread is
+ *          using it and call destroy again. The returned error object must be
+ *          freed with rd_kafka_error_destroy().
  */
 RD_EXPORT
-void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
+rd_kafka_error_t *rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Destroy the share consumer instance according to specified destroy
@@ -5235,9 +5242,15 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
  * @param rkshare Share consumer instance.
  *
  * @param flags Destroy flags (see RD_KAFKA_DESTROY_F_* defines).
+ *
+ * @returns NULL on success, or an error object if another thread is
+ *          concurrently using the share consumer. In the error case the
+ *          instance is NOT destroyed. The returned error object must be freed
+ *          with rd_kafka_error_destroy().
  */
 RD_EXPORT
-void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags);
+rd_kafka_error_t *rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare,
+                                               int flags);
 /**@}*/
 
 

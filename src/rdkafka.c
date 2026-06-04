@@ -1220,6 +1220,7 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
                  * entry.
                  */
                 RD_MAP_DESTROY(&rk->rk_rkshare->rkshare_inflight_acks);
+                mtx_destroy(&rk->rk_share_consumer.guard_lock);
         }
 
         /* Await telemetry termination. This method blocks until the last
@@ -1274,20 +1275,56 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
         rd_kafka_destroy_app(rk, 0);
 }
 
-void rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
+rd_kafka_error_t *rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
+        rd_kafka_resp_err_t acq_err;
+
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
+        /* Claim the access gate for this thread so that, from here on, a share
+         * API call from any *other* thread is rejected for the duration of the
+         * teardown. Never released: the gate (and its mutex) is destroyed in
+         * rd_kafka_destroy_app(), and the owned/depth bookkeeping is never read
+         * again, so a release would be a no-op. The teardown re-enters the gate
+         * on this same thread via rd_kafka_share_consumer_close(), which the
+         * re-entrant depth count permits. A non-NO_ERROR acquire means another
+         * thread is concurrently inside a share API (or destroy was called from
+         * the ack callback): destroying now would be unsafe, so report the
+         * error and leave the instance intact for the application to retry. */
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) !=
+                     RD_KAFKA_RESP_ERR_NO_ERROR))
+                return rd_kafka_error_new(
+                    acq_err,
+                    "rd_kafka_share_destroy() called while another thread is "
+                    "using the share consumer; instance not destroyed");
+
         rd_kafka_destroy(rkshare->rkshare_rk);
+        return NULL;
 }
 
 void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
         rd_kafka_destroy_app(rk, flags);
 }
 
-void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags) {
+rd_kafka_error_t *rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare,
+                                               int flags) {
+        rd_kafka_resp_err_t acq_err;
+
+        /* See rd_kafka_share_destroy(): claim the gate to lock other threads
+         * out for the teardown. Never released (the gate is destroyed in
+         * rd_kafka_destroy_app()). On a non-NO_ERROR acquire another thread is
+         * using the consumer; report it and leave the instance intact. */
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) !=
+                     RD_KAFKA_RESP_ERR_NO_ERROR))
+                return rd_kafka_error_new(
+                    acq_err,
+                    "rd_kafka_share_destroy_flags() called while another "
+                    "thread "
+                    "is using the share consumer; instance not destroyed");
+
         rd_kafka_destroy_flags(rkshare->rkshare_rk, flags);
+        return NULL;
 }
 
 
@@ -3022,7 +3059,9 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         rk->rk_share_consumer.acknowledgement_opaque              = NULL;
         rk->rk_share_consumer.in_callback                         = rd_false;
         rk->rk_share_consumer.acknowledgement_callback_registered = rd_false;
-        rd_atomic32_init(&rk->rk_share_consumer.locked, 0);
+        mtx_init(&rk->rk_share_consumer.guard_lock, mtx_plain);
+        rk->rk_share_consumer.owned = rd_false;
+        rk->rk_share_consumer.depth = 0;
 
         /* Set backpointer from rk to rkshare for access in retry handlers */
         rk->rk_rkshare = rkshare;
@@ -3038,20 +3077,48 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
 
 
 rd_kafka_resp_err_t rd_kafka_share_acquire(rd_kafka_share_t *rkshare) {
+        rd_kafka_t *rk;
+
         if (unlikely(!rkshare))
                 return RD_KAFKA_RESP_ERR__STATE;
-        if (unlikely(rkshare->rkshare_rk->rk_share_consumer.in_callback))
+
+        rk = rkshare->rkshare_rk;
+
+        /* Reject calls from inside the acknowledgement callback *before*
+         * claiming the gate. The callback runs on the owning thread, which the
+         * owner check below would otherwise let re-enter (bumping depth);
+         * rejecting after the claim would leak that depth count. */
+        if (unlikely(rk->rk_share_consumer.in_callback))
                 return RD_KAFKA_RESP_ERR__STATE;
-        if (rd_atomic32_set(&rkshare->rkshare_rk->rk_share_consumer.locked,
-                            1) == 1)
-                return RD_KAFKA_RESP_ERR__STATE;
+
+        mtx_lock(&rk->rk_share_consumer.guard_lock);
+        if (rk->rk_share_consumer.owned &&
+            !thrd_equal(rk->rk_share_consumer.owner, thrd_current())) {
+                /* Gate held by a different thread: concurrent access, the
+                 * analog of Java's ConcurrentModificationException. */
+                mtx_unlock(&rk->rk_share_consumer.guard_lock);
+                return RD_KAFKA_RESP_ERR__CONFLICT;
+        }
+        rk->rk_share_consumer.owner = thrd_current();
+        rk->rk_share_consumer.owned = rd_true;
+        rk->rk_share_consumer.depth++;
+        mtx_unlock(&rk->rk_share_consumer.guard_lock);
+
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
 void rd_kafka_share_release(rd_kafka_share_t *rkshare) {
+        rd_kafka_t *rk;
+
         if (unlikely(!rkshare))
                 return;
-        rd_atomic32_set(&rkshare->rkshare_rk->rk_share_consumer.locked, 0);
+
+        rk = rkshare->rkshare_rk;
+        mtx_lock(&rk->rk_share_consumer.guard_lock);
+        if (rk->rk_share_consumer.depth > 0 &&
+            --rk->rk_share_consumer.depth == 0)
+                rk->rk_share_consumer.owned = rd_false;
+        mtx_unlock(&rk->rk_share_consumer.guard_lock);
 }
 
 
@@ -3090,9 +3157,14 @@ rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
         rd_kafka_t *rk;
         rd_bool_t was_set, now_set;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
 
         if (unlikely((err = rd_kafka_share_acquire(rkshare))))
                 return err;
+
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
+                return error->code;
 
         rk = rkshare->rkshare_rk;
 
@@ -3779,8 +3851,10 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         *rkmessages_size = 0;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare))))
-                return rd_kafka_error_new(acq_err, "%s",
-                                          rd_kafka_err2str(acq_err));
+                return rd_kafka_error_new(acq_err,
+                                          "rd_kafka_share_consume_batch() "
+                                          "called while another thread is "
+                                          "using the share consumer");
 
         /* TODO KIP-932: the non-fatal errors returned from the other paths
          * below (consumer-group-not-initialized, consumer-closed, and the
@@ -4170,8 +4244,10 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
         rd_kafka_resp_err_t acq_err;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare))))
-                return rd_kafka_error_new(acq_err, "%s",
-                                          rd_kafka_err2str(acq_err));
+                return rd_kafka_error_new(acq_err,
+                                          "rd_kafka_share_commit_async() "
+                                          "called while another thread is "
+                                          "using the share consumer");
 
         if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
                      NULL))
@@ -4246,8 +4322,10 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         *partitions = NULL;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare))))
-                return rd_kafka_error_new(acq_err, "%s",
-                                          rd_kafka_err2str(acq_err));
+                return rd_kafka_error_new(acq_err,
+                                          "rd_kafka_share_commit_sync() "
+                                          "called while another thread is "
+                                          "using the share consumer");
 
         if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
                      NULL))
@@ -5041,8 +5119,11 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
         rd_kafka_resp_err_t acq_err;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare))))
-                return rd_kafka_error_new(acq_err, "%s",
-                                          rd_kafka_err2str(acq_err));
+                return rd_kafka_error_new(
+                    acq_err,
+                    "rd_kafka_share_consumer_close_queue()"
+                    " called while another thread is "
+                    "using the share consumer");
 
         /* TODO KIP-932: Guard this with checks for rkshare
          * and rkshare->rkshare_rk */
@@ -5149,8 +5230,10 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
         rd_kafka_resp_err_t acq_err;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare))))
-                return rd_kafka_error_new(acq_err, "%s",
-                                          rd_kafka_err2str(acq_err));
+                return rd_kafka_error_new(acq_err,
+                                          "rd_kafka_share_consumer_close() "
+                                          "called while another thread is "
+                                          "using the share consumer");
 
         /* TODO KIP-932: Guard this with checks for rkshare and
          * rkshare->rkshare_rk. Check if this is needed for other APIs

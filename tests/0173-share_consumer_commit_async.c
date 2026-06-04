@@ -1625,7 +1625,7 @@ static void do_test_commit_async_callback(void) {
                 }
         }
 
-        TEST_SAY("Consumed %d messages\n", consumed);
+        TEST_SAY("Consumed %zu messages\n", consumed);
         TEST_ASSERT(consumed > 0, "Expected to consume some messages");
 
         /* Call commit_async to trigger callback */

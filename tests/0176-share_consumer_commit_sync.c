@@ -2000,7 +2000,7 @@ static void do_test_commit_sync_callback(void) {
                     "Expected callback to be invoked once, got %d",
                     state.callback_cnt);
         TEST_ASSERT(state.total_offsets == consumed,
-                    "Expected %d offsets in callback, got %zu", consumed,
+                    "Expected %zu offsets in callback, got %zu", consumed,
                     state.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);

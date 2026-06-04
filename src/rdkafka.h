@@ -2246,42 +2246,39 @@ RD_EXPORT size_t rd_kafka_share_partition_offsets_offsets_cnt(
     const rd_kafka_share_partition_offsets_t *partition_offsets);
 
 /**
- * @brief Set share acknowledgement commit callback.
+ * @brief Set acknowledgement commit callback at runtime.
  *
- * The share acknowledgement commit callback is called when share consumer
- * acknowledgements (from rd_kafka_share_acknowledge* calls followed by
- * rd_kafka_share_commit_async(), rd_kafka_share_consume_batch() or
- * rd_kafka_share_commit_sync()) complete.
+ * Sets a callback to be invoked when acknowledgements sent to the broker
+ * have been completed (either successfully or with an error).
+ *
+ * This callback can be changed at any time. The currently set callback
+ * will be used when processing acknowledgement responses, not the callback
+ * that was active when acknowledgements were sent.
  *
  * The callback is invoked once per partition with the acknowledgement result
  * for that partition.
  *
- * @param conf Configuration object.
- * @param share_acknowledgement_commit_cb Callback to set.
+ * @param rkshare Share consumer handle.
+ * @param acknowledgement_cb Callback function, or NULL to clear.
+ * @param opaque Application opaque passed to callback.
  *
- * The callback parameters are:
- *   - \p rkshare: Share consumer handle.
- *   - \p partitions: List containing exactly one partition with its
- *                    acknowledged offsets.
- *   - \p err: Error code for this partition (RD_KAFKA_RESP_ERR_NO_ERROR on
- *             success). This error applies to all offsets in the partition.
- *   - \p opaque: Application opaque set with rd_kafka_conf_set_opaque().
+ * @remark Cannot be called from within the acknowledgement callback itself.
+ * @remark Replaces any previously set callback.
+ * @remark Registration is asynchronous - there is a brief window after
+ *         calling this function during which the new registration state
+ *         is not yet visible to the main thread.
  *
- * The \p partitions list contains exactly one partition entry with an
- * array of acknowledged offsets accessible via
- * rd_kafka_share_partition_offsets_offsets().
- *
- * @remark The \p partitions list and its contents are only valid for the
- *         duration of the callback.
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or:
+ *          - RD_KAFKA_RESP_ERR__STATE if called from within the callback.
  */
-RD_EXPORT
-void rd_kafka_conf_set_share_acknowledgement_commit_cb(
-    rd_kafka_conf_t *conf,
-    void (*share_acknowledgement_commit_cb)(
+RD_EXPORT rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
+    rd_kafka_share_t *rkshare,
+    void (*acknowledgement_cb)(
         rd_kafka_share_t *rkshare,
         rd_kafka_share_partition_offsets_list_t *partitions,
         rd_kafka_resp_err_t err,
-        void *opaque));
+        void *opaque),
+    void *opaque);
 
 
 /**

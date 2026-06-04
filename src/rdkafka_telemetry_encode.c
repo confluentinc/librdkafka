@@ -385,6 +385,9 @@ calculate_share_fetch_rate(rd_kafka_t *rk,
                         rk->rk_telemetry.rk_historic_c.share_fetch_total;
         double seconds = (now_ns - ts_last) / 1e9;
 
+        /* For sub-second intervals (e.g. the first reading) report the raw
+         * delta instead of dividing, to avoid a tiny denominator massively
+         * overstating the rate. Same logic as the other rate metrics. */
         if (seconds > 1.0)
                 share_fetch_rate.double_value = (double)delta / seconds;
         else
@@ -422,6 +425,9 @@ calculate_share_acknowledgements_send_rate(rd_kafka_t *rk,
             rk->rk_telemetry.rk_historic_c.acknowledgements_send_total;
         double seconds = (now_ns - ts_last) / 1e9;
 
+        /* For sub-second intervals (e.g. the first reading) report the raw
+         * delta instead of dividing, to avoid a tiny denominator massively
+         * overstating the rate. Same logic as the other rate metrics. */
         if (seconds > 1.0)
                 acknowledgements_send_rate.double_value =
                     (double)delta / seconds;

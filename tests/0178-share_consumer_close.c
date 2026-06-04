@@ -191,12 +191,12 @@ create_share_consumer_with_receipts(const char *group_id,
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
                           sizeof(errstr));
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf,
-                                                          test_0178_ack_cb);
-        rd_kafka_conf_set_opaque(conf, receipts);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+
+        rd_kafka_share_set_acknowledgement_cb(rkshare, test_0178_ack_cb,
+                                              receipts);
         return rkshare;
 }
 

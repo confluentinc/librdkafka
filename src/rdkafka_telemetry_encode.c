@@ -339,6 +339,126 @@ calculate_share_time_between_poll_max(rd_kafka_t *rk,
         return time_between_poll_max;
 }
 
+static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_latency_avg(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb_selected,
+                                  rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t avg_share_fetch_latency;
+        brokers_avg(rk, rkb_avg_share_fetch_latency, THREE_ORDERS_MAGNITUDE,
+                    avg_share_fetch_latency);
+        return avg_share_fetch_latency;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_latency_max(rd_kafka_t *rk,
+                                  rd_kafka_broker_t *rkb_selected,
+                                  rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t max_share_fetch_latency;
+        brokers_max(rk, rkb_avg_share_fetch_latency, THREE_ORDERS_MAGNITUDE,
+                    max_share_fetch_latency);
+        return max_share_fetch_latency;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_total(rd_kafka_t *rk,
+                            rd_kafka_broker_t *rkb_selected,
+                            rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t share_fetch_total;
+        int64_t current = rd_atomic64_get(&rk->rk_telemetry.share_fetch_total);
+
+        if (!rk->rk_telemetry.delta_temporality)
+                share_fetch_total.int_value = current;
+        else
+                share_fetch_total.int_value =
+                    current - rk->rk_telemetry.rk_historic_c.share_fetch_total;
+
+        return share_fetch_total;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_fetch_rate(rd_kafka_t *rk,
+                           rd_kafka_broker_t *rkb_selected,
+                           rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t share_fetch_rate;
+        rd_ts_t ts_last = rk->rk_telemetry.rk_historic_c.ts_last;
+        int64_t delta   = rd_atomic64_get(&rk->rk_telemetry.share_fetch_total) -
+                        rk->rk_telemetry.rk_historic_c.share_fetch_total;
+        double seconds = (now_ns - ts_last) / 1e9;
+
+        /* For sub-second intervals (e.g. the first reading) report the raw
+         * delta instead of dividing, to avoid a tiny denominator massively
+         * overstating the rate. Same logic as the other rate metrics. */
+        if (seconds > 1.0)
+                share_fetch_rate.double_value = (double)delta / seconds;
+        else
+                share_fetch_rate.double_value = (double)delta;
+
+        return share_fetch_rate;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_acknowledgements_send_total(rd_kafka_t *rk,
+                                            rd_kafka_broker_t *rkb_selected,
+                                            rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t acknowledgements_send_total;
+        int64_t current =
+            rd_atomic64_get(&rk->rk_telemetry.acknowledgements_send_total);
+
+        if (!rk->rk_telemetry.delta_temporality)
+                acknowledgements_send_total.int_value = current;
+        else
+                acknowledgements_send_total.int_value =
+                    current -
+                    rk->rk_telemetry.rk_historic_c.acknowledgements_send_total;
+
+        return acknowledgements_send_total;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_share_acknowledgements_send_rate(rd_kafka_t *rk,
+                                           rd_kafka_broker_t *rkb_selected,
+                                           rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t acknowledgements_send_rate;
+        rd_ts_t ts_last = rk->rk_telemetry.rk_historic_c.ts_last;
+        int64_t delta =
+            rd_atomic64_get(&rk->rk_telemetry.acknowledgements_send_total) -
+            rk->rk_telemetry.rk_historic_c.acknowledgements_send_total;
+        double seconds = (now_ns - ts_last) / 1e9;
+
+        /* For sub-second intervals (e.g. the first reading) report the raw
+         * delta instead of dividing, to avoid a tiny denominator massively
+         * overstating the rate. Same logic as the other rate metrics. */
+        if (seconds > 1.0)
+                acknowledgements_send_rate.double_value =
+                    (double)delta / seconds;
+        else
+                acknowledgements_send_rate.double_value = (double)delta;
+
+        return acknowledgements_send_rate;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_consumer_commit_latency_avg(rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb_selected,
+                                      rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t avg_commit_time;
+        avg_commit_time.double_value = calculate_avg(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
+            THREE_ORDERS_MAGNITUDE);
+        return avg_commit_time;
+}
+
+static rd_kafka_telemetry_metric_value_t
+calculate_consumer_commit_latency_max(rd_kafka_t *rk,
+                                      rd_kafka_broker_t *rkb_selected,
+                                      rd_ts_t now_ns) {
+        rd_kafka_telemetry_metric_value_t max_commit_time;
+        max_commit_time.int_value = calculate_max(
+            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
+            THREE_ORDERS_MAGNITUDE);
+        return max_commit_time;
+}
+
 static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
         rd_kafka_broker_t *rkb;
 
@@ -351,6 +471,14 @@ static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
                 rkb->rkb_telemetry.rkb_historic_c.connects =
                     rd_atomic32_get(&rkb->rkb_c.connects);
+        }
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                rk->rk_telemetry.rk_historic_c.share_fetch_total =
+                    rd_atomic64_get(&rk->rk_telemetry.share_fetch_total);
+                rk->rk_telemetry.rk_historic_c.acknowledgements_send_total =
+                    rd_atomic64_get(
+                        &rk->rk_telemetry.acknowledgements_send_total);
         }
 }
 
@@ -418,6 +546,18 @@ static const rd_kafka_telemetry_metric_value_calculator_t
                 &calculate_share_time_between_poll_avg,
             [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
                 &calculate_share_time_between_poll_max,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL] =
+                &calculate_share_fetch_total,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE] =
+                &calculate_share_fetch_rate,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG] =
+                &calculate_share_fetch_latency_avg,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX] =
+                &calculate_share_fetch_latency_max,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL] =
+                &calculate_share_acknowledgements_send_total,
+            [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE] =
+                &calculate_share_acknowledgements_send_rate,
 };
 
 static const char *get_client_rack(const rd_kafka_t *rk) {
@@ -836,6 +976,15 @@ rd_buf_t *rd_kafka_telemetry_encode_metrics(rd_kafka_t *rk) {
                                              .rkb_avg_produce_latency,
                                         &rkb->rkb_telemetry.rd_avg_current
                                              .rkb_avg_produce_latency);
+                }
+
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                        rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
+                                            .rkb_avg_share_fetch_latency);
+                        rd_avg_rollover(&rkb->rkb_telemetry.rd_avg_rollover
+                                             .rkb_avg_share_fetch_latency,
+                                        &rkb->rkb_telemetry.rd_avg_current
+                                             .rkb_avg_share_fetch_latency);
                 }
         }
 

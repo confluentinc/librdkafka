@@ -5193,6 +5193,10 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
                                     .rkb_avg_share_fetch_latency);
                 rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current
                                     .rkb_avg_share_fetch_latency);
+                rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_rollover
+                                    .rkb_avg_share_fetch_size);
+                rd_avg_destroy(&rkb->rkb_telemetry.rd_avg_current
+                                    .rkb_avg_share_fetch_size);
         }
 
 
@@ -5344,6 +5348,14 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                                  .rkb_avg_share_fetch_latency,
                             RD_AVG_GAUGE, 0, 500 * 1000, 2,
                             rk->rk_conf.enable_metrics_push);
+                rd_avg_init(&rkb->rkb_telemetry.rd_avg_rollover
+                                 .rkb_avg_share_fetch_size,
+                            RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2,
+                            rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                    RD_AVG_GAUGE, 0, 100 * 1024 * 1024, 2,
+                    rk->rk_conf.enable_metrics_push);
         }
 
         rd_refcnt_init(&rkb->rkb_refcnt, 0);

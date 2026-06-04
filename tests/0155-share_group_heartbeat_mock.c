@@ -568,14 +568,11 @@ static void do_test_share_group_error_injection(void) {
                  rd_kafka_error_string(error));
         rd_kafka_error_destroy(error);
 
-        /* Cleanup. Consumer is in fatal state, so close is expected
-         * to return the stored fatal error. */
+        /* Cleanup. Consumer is in fatal state, but close() still flushes
+         * pending acks and leaves the share session, so it succeeds. */
         error = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(rd_kafka_error_code(error) ==
-                        RD_KAFKA_RESP_ERR_INVALID_REQUEST,
-                    "Expected close to return INVALID_REQUEST, got %s",
-                    rd_kafka_err2name(rd_kafka_error_code(error)));
-        rd_kafka_error_destroy(error);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -1302,15 +1299,11 @@ static void do_test_group_authorization_failed_error(void) {
                  rd_kafka_error_string(error));
         rd_kafka_error_destroy(error);
 
-        /* Cleanup. Consumer is in fatal state, so close is expected
-         * to return the stored fatal error. */
+        /* Cleanup. Consumer is in fatal state, but close() still flushes
+         * pending acks and leaves the share session, so it succeeds. */
         error = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(rd_kafka_error_code(error) ==
-                        RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
-                    "Expected close to return GROUP_AUTHORIZATION_FAILED, "
-                    "got %s",
-                    rd_kafka_err2name(rd_kafka_error_code(error)));
-        rd_kafka_error_destroy(error);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -1381,17 +1374,15 @@ static void do_test_group_max_size_reached_error(void) {
 
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Cleanup. share_c2 is in fatal state, so close is expected
-         * to return the stored fatal error. */
+        /* Cleanup. share_c2 is in fatal state, but close() no longer
+         * early-returns the stored fatal error, so it succeeds. */
         test_share_consumer_close(share_c1);
         rd_kafka_error_t *c2_close_error =
             rd_kafka_share_consumer_close(share_c2);
-        TEST_ASSERT(rd_kafka_error_code(c2_close_error) ==
-                        RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED,
-                    "Expected share_c2 close to return "
-                    "GROUP_MAX_SIZE_REACHED, got %s",
-                    rd_kafka_err2name(rd_kafka_error_code(c2_close_error)));
-        rd_kafka_error_destroy(c2_close_error);
+        TEST_ASSERT(!c2_close_error,
+                    "Expected share_c2 close to succeed, "
+                    "got %s",
+                    rd_kafka_error_name(c2_close_error));
         test_share_destroy(share_c1);
         test_share_destroy(share_c2);
 
@@ -2069,14 +2060,11 @@ static void do_test_group_id_not_found_while_stable_is_fatal(void) {
                  rd_kafka_error_string(error));
         rd_kafka_error_destroy(error);
 
-        /* Cleanup. Consumer is in fatal state, so close is expected
-         * to return the stored fatal error. */
+        /* Cleanup. Consumer is in fatal state, but close() still flushes
+         * pending acks and leaves the share session, so it succeeds. */
         error = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(rd_kafka_error_code(error) ==
-                        RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND,
-                    "Expected close to return GROUP_ID_NOT_FOUND, got %s",
-                    rd_kafka_err2name(rd_kafka_error_code(error)));
-        rd_kafka_error_destroy(error);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -2137,14 +2125,11 @@ static void do_test_invalid_request_error(void) {
                  rd_kafka_error_string(error));
         rd_kafka_error_destroy(error);
 
-        /* Cleanup. Consumer is in fatal state, so close is expected
-         * to return the stored fatal error. */
+        /* Cleanup. Consumer is in fatal state, but close() still flushes
+         * pending acks and leaves the share session, so it succeeds. */
         error = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(rd_kafka_error_code(error) ==
-                        RD_KAFKA_RESP_ERR_INVALID_REQUEST,
-                    "Expected close to return INVALID_REQUEST, got %s",
-                    rd_kafka_err2name(rd_kafka_error_code(error)));
-        rd_kafka_error_destroy(error);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);
@@ -2205,14 +2190,11 @@ static void do_test_unsupported_version_error(void) {
                  rd_kafka_error_string(error));
         rd_kafka_error_destroy(error);
 
-        /* Cleanup. Consumer is in fatal state, so close is expected
-         * to return the stored fatal error. */
+        /* Cleanup. Consumer is in fatal state, but close() still flushes
+         * pending acks and leaves the share session, so it succeeds. */
         error = rd_kafka_share_consumer_close(share_c);
-        TEST_ASSERT(rd_kafka_error_code(error) ==
-                        RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
-                    "Expected close to return UNSUPPORTED_VERSION, got %s",
-                    rd_kafka_err2name(rd_kafka_error_code(error)));
-        rd_kafka_error_destroy(error);
+        TEST_ASSERT(!error, "Expected close to succeed, got %s",
+                    rd_kafka_error_name(error));
         test_share_destroy(share_c);
 
         rd_kafka_mock_stop_request_tracking(mcluster);

@@ -384,11 +384,14 @@ struct rd_kafka_s {
                  *  may re-enter (nested share calls). @c guard_lock makes the
                  *  check-and-claim atomic, since the gate is by definition
                  *  touched from more than one thread in the case it guards
-                 *  against. */
-                mtx_t guard_lock; /**< Protects owner/owned/depth. */
-                thrd_t owner;     /**< Owning thread while @c owned. */
-                rd_bool_t owned;  /**< Gate currently held. */
-                int depth;        /**< Re-entrancy count for the owner. */
+                 *  against.
+                 *
+                 *  @c owner is a real per-thread identifier (from
+                 *  thrd_current_id()) rather than a @c thrd_t handle. */
+                mtx_t guard_lock;    /**< Protects owner/owned/depth. */
+                unsigned long owner; /**< Owning thread id while @c owned. */
+                rd_bool_t owned;     /**< Gate currently held. */
+                int depth;           /**< Re-entrancy count for the owner. */
         } rk_share_consumer;
         /**
          * TODO KIP-932: Change to rk_share when interface is finalized.

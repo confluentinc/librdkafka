@@ -3078,6 +3078,7 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
 
 rd_kafka_resp_err_t rd_kafka_share_acquire(rd_kafka_share_t *rkshare) {
         rd_kafka_t *rk;
+        unsigned long tid;
 
         if (unlikely(!rkshare))
                 return RD_KAFKA_RESP_ERR__STATE;
@@ -3091,15 +3092,19 @@ rd_kafka_resp_err_t rd_kafka_share_acquire(rd_kafka_share_t *rkshare) {
         if (unlikely(rk->rk_share_consumer.in_callback))
                 return RD_KAFKA_RESP_ERR__STATE;
 
+        /* Use thrd_current_id() (a real per-thread id) rather than
+         * thrd_current() — see rk_share_consumer.owner doc-comment for
+         * the Windows pseudo-handle rationale. */
+        tid = thrd_current_id();
+
         mtx_lock(&rk->rk_share_consumer.guard_lock);
-        if (rk->rk_share_consumer.owned &&
-            !thrd_equal(rk->rk_share_consumer.owner, thrd_current())) {
+        if (rk->rk_share_consumer.owned && rk->rk_share_consumer.owner != tid) {
                 /* Gate held by a different thread: concurrent access, the
                  * analog of Java's ConcurrentModificationException. */
                 mtx_unlock(&rk->rk_share_consumer.guard_lock);
                 return RD_KAFKA_RESP_ERR__CONFLICT;
         }
-        rk->rk_share_consumer.owner = thrd_current();
+        rk->rk_share_consumer.owner = tid;
         rk->rk_share_consumer.owned = rd_true;
         rk->rk_share_consumer.depth++;
         mtx_unlock(&rk->rk_share_consumer.guard_lock);

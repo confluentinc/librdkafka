@@ -29,7 +29,7 @@ global_job_config:
       value: '8.0.0'
 
 blocks:
-  - name: 'Share consumer tests under ASAN+LSAN'
+  - name: 'Share consumer tests (ASAN + LSAN)'
     dependencies: []
     task:
       agent:
@@ -40,7 +40,7 @@ blocks:
           commands:
             - artifact push workflow artifacts/ --destination artifacts/asan/
       jobs:
-        - name: 'ASAN+LSAN: TESTS_SKIP_BEFORE=0155'
+        - name: 'Share consumer suite (ASAN + LSAN)'
           env_vars:
             - name: ASAN_OPTIONS
               value: 'detect_leaks=1:halt_on_error=0:print_stacktrace=1:abort_on_error=0:symbolize=1'

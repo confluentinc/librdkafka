@@ -34,7 +34,7 @@ global_job_config:
       value: '8.0.0'
 
 blocks:
-  - name: 'Share consumer tests under TSAN'
+  - name: 'Share consumer tests (TSAN)'
     dependencies: []
     task:
       agent:
@@ -45,7 +45,7 @@ blocks:
           commands:
             - artifact push workflow artifacts/ --destination artifacts/tsan/
       jobs:
-        - name: 'TSAN: TESTS_SKIP_BEFORE=0155'
+        - name: 'Share consumer suite (TSAN)'
           env_vars:
             - name: TSAN_OPTIONS
               value: 'halt_on_error=0:second_deadlock_stack=1:history_size=7:symbolize=1'

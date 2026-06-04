@@ -31,7 +31,7 @@ global_job_config:
       value: '8.0.0'
 
 blocks:
-  - name: 'Share consumer tests under valgrind (memcheck)'
+  - name: 'Share consumer tests (Valgrind memcheck)'
     dependencies: []
     task:
       agent:
@@ -42,7 +42,7 @@ blocks:
           commands:
             - artifact push workflow artifacts/ --destination artifacts/valgrind/
       jobs:
-        - name: 'Valgrind memcheck: TESTS_SKIP_BEFORE=0155'
+        - name: 'Share consumer suite (Valgrind memcheck)'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - (cd tests && python3 -m trivup.clusters.KafkaCluster

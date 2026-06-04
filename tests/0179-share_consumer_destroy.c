@@ -360,6 +360,24 @@ static void destroy_share_consumer(rd_kafka_share_t *rkshare,
         TEST_SAY("Successfully destroyed share consumer\n");
 }
 
+/* Per-thread argument for destroy_watchdog_thread. Atomic `done` lets the
+ * main thread poll for completion without locking. */
+typedef struct destroy_watchdog_arg_s {
+        rd_kafka_share_t *rkshare;
+        int destroy_flags;
+        rd_atomic32_t done;
+} destroy_watchdog_arg_t;
+
+static int destroy_watchdog_thread(void *p) {
+        destroy_watchdog_arg_t *a = p;
+        if (a->destroy_flags)
+                rd_kafka_share_destroy_flags(a->rkshare, a->destroy_flags);
+        else
+                rd_kafka_share_destroy(a->rkshare);
+        rd_atomic32_set(&a->done, 1);
+        return 0;
+}
+
 /**
  * @brief is_fatal_cb hook for test_broker_decommission_with_commit_sync.
  *
@@ -2048,21 +2066,6 @@ static void do_test_destroy_with_subscribe_unsubscribe(int do_subscribe,
 }
 
 
-/* Per-thread argument for destroy_watchdog_thread. Atomic `done` lets the
- * main thread poll for completion without locking. */
-typedef struct destroy_watchdog_arg_s {
-        rd_kafka_share_t *rkshare;
-        rd_atomic32_t done;
-} destroy_watchdog_arg_t;
-
-static int destroy_watchdog_thread(void *p) {
-        destroy_watchdog_arg_t *a = p;
-        rd_kafka_share_destroy(a->rkshare);
-        rd_atomic32_set(&a->done, 1);
-        return 0;
-}
-
-
 /**
  * @brief Destroy a consumer that drove a mixed-ack chaos workload —
  *        ACCEPT/RELEASE/REJECT round-robin acks, with commit_async every
@@ -2070,7 +2073,7 @@ static int destroy_watchdog_thread(void *p) {
  *        watchdog thread so a hung destroy fails the test loudly instead
  *        of wedging the binary.
  */
-static void do_test_destroy_with_mixed_acks_and_commits(void) {
+static void do_test_destroy_with_mixed_acks_and_commits(int destroy_flags) {
         const char *topic;
         const char *group = "0179-destroy-mixed";
         rd_kafka_share_t *rkshare;
@@ -2084,7 +2087,7 @@ static void do_test_destroy_with_mixed_acks_and_commits(void) {
         const int target              = 30;
         const int DESTROY_DEADLINE_MS = 15000;
         rd_ts_t t_start;
-        int64_t t_close_ms;
+        int64_t t_close_ms = 0;
         int64_t t_destroy_ms;
         size_t rcvd;
         size_t j;
@@ -2093,8 +2096,10 @@ static void do_test_destroy_with_mixed_acks_and_commits(void) {
         int async_cnt = 0;
         int attempts  = 0;
         int wait_ok;
+        rd_bool_t do_close =
+            !(destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
 
-        SUB_TEST();
+        SUB_TEST("destroy_flags=0x%x", destroy_flags);
 
         ack_receipts_init(&receipts);
 
@@ -2181,21 +2186,28 @@ static void do_test_destroy_with_mixed_acks_and_commits(void) {
             "Calling close.\n",
             acked, sync_cnt, async_cnt, receipts.callback_invocations);
 
-        t_start    = test_clock();
-        close_err  = rd_kafka_share_consumer_close(rkshare);
-        t_close_ms = (test_clock() - t_start) / 1000;
-        TEST_SAY("close returned in %" PRId64
-                 " ms (err=%s) "
-                 "ack_cb_invocations=%d\n",
-                 t_close_ms,
-                 close_err ? rd_kafka_error_string(close_err) : "NULL",
-                 receipts.callback_invocations);
-        if (close_err)
-                rd_kafka_error_destroy(close_err);
+        if (do_close) {
+                t_start    = test_clock();
+                close_err  = rd_kafka_share_consumer_close(rkshare);
+                t_close_ms = (test_clock() - t_start) / 1000;
+                TEST_SAY("close returned in %" PRId64
+                         " ms (err=%s) "
+                         "ack_cb_invocations=%d\n",
+                         t_close_ms,
+                         close_err ? rd_kafka_error_string(close_err) : "NULL",
+                         receipts.callback_invocations);
+                if (close_err)
+                        rd_kafka_error_destroy(close_err);
+        } else {
+                TEST_SAY(
+                    "Skipping consumer_close (destroy_flags has "
+                    "NO_CONSUMER_CLOSE)\n");
+        }
 
         /* Run destroy on the watchdog thread; fail if it hangs past
          * DESTROY_DEADLINE_MS instead of wedging the binary. */
-        arg.rkshare = rkshare;
+        arg.rkshare       = rkshare;
+        arg.destroy_flags = destroy_flags;
         rd_atomic32_init(&arg.done, 0);
 
         TEST_ASSERT(thrd_create(&destroy_thr, destroy_watchdog_thread, &arg) ==
@@ -2266,7 +2278,9 @@ int main_0179_share_consumer_destroy(int argc, char **argv) {
                                           rd_true);
         do_test_destroy_with_implicit_ack(RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
 
-        do_test_destroy_with_mixed_acks_and_commits();
+        do_test_destroy_with_mixed_acks_and_commits(0);
+        do_test_destroy_with_mixed_acks_and_commits(
+            RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

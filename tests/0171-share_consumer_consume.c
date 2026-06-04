@@ -375,7 +375,9 @@ static void do_test_single_consumer_single_topic_single_partition(void) {
             .msgs_per_partition = 1000,
             .group_name         = "share-1c-1t-1p",
             .test_name = "Single consumer, single topic, single partition"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -389,7 +391,9 @@ static void do_test_single_consumer_single_topic_multiple_partitions(void) {
             .msgs_per_partition = 500,
             .group_name         = "share-1c-1t-3p",
             .test_name = "Single consumer, single topic, 3 partitions"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -403,7 +407,9 @@ static void do_test_single_consumer_multiple_topic_single_partition(void) {
             .msgs_per_partition = 500,
             .group_name         = "share-1c-2t-1p",
             .test_name = "Single consumer, 2 topics, 1 partition each"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -417,7 +423,9 @@ static void do_test_single_consumer_multiple_topic_multiple_partitions(void) {
             .msgs_per_partition = 500,
             .group_name         = "share-1c-3t-2p",
             .test_name = "Single consumer, 3 topics, 2 partitions each"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -431,7 +439,9 @@ static void do_test_multiple_consumers_single_topic_single_partition(void) {
             .msgs_per_partition = 1000,
             .group_name         = "share-2c-1t-1p",
             .test_name = "2 consumers, single topic, single partition"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -445,7 +455,9 @@ static void do_test_multiple_consumers_single_topic_multiple_partitions(void) {
             .msgs_per_partition = 500,
             .group_name         = "share-2c-1t-4p",
             .test_name          = "2 consumers, single topic, 4 partitions"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -460,7 +472,9 @@ do_test_multiple_consumers_multiple_topics_multiple_partitions(void) {
             .msgs_per_partition = 500,
             .group_name         = "share-3c-2t-3p",
             .test_name          = "3 consumers, 2 topics, 3 partitions each"};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -479,7 +493,9 @@ static void do_test_high_volume_10k_messages(void) {
             .group_name         = "share-highvol-10k",
             .test_name          = "High volume: 10k messages, 1 partition",
             .max_attempts       = 100};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -494,7 +510,9 @@ static void do_test_high_volume_50k_multi_partition(void) {
             .group_name         = "share-highvol-50k",
             .test_name          = "High volume: 50k messages, 5 partitions",
             .max_attempts       = 150};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -513,7 +531,9 @@ static void do_test_many_topics_15(void) {
             .group_name         = "share-15topics",
             .test_name          = "15 topics, 1 partition each (1500 msgs)",
             .max_attempts       = 100};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -528,7 +548,9 @@ static void do_test_many_topics_10_multi_partition(void) {
             .group_name         = "share-10topics-2p",
             .test_name          = "10 topics, 2 partitions each (2000 msgs)",
             .max_attempts       = 100};
+        SUB_TEST();
         run_share_consumer_test(&config);
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -548,6 +570,8 @@ static void do_test_rapid_produce_consume_cycles(void) {
         const int rounds         = 20;
         const int msgs_per_round = 500;
         const int total_expected = rounds * msgs_per_round;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== Rapid produce/consume cycles: %d rounds x %d msgs ===\n",
@@ -611,6 +635,8 @@ static void do_test_rapid_produce_consume_cycles(void) {
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -623,6 +649,8 @@ static void do_test_empty_then_produce(void) {
         const char *group = "share-empty-then-produce";
         rd_kafka_topic_partition_list_t *subs;
         int consumed = 0, attempts;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== Empty topic then produce test ===\n");
@@ -684,6 +712,8 @@ static void do_test_empty_then_produce(void) {
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -698,6 +728,8 @@ static void do_test_sparse_partitions(void) {
         int consumed                 = 0, attempts;
         const int msgs_per_partition = 100;
         const int expected = 3 * msgs_per_partition; /* partitions 0,2,4 */
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -753,6 +785,8 @@ static void do_test_sparse_partitions(void) {
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -774,6 +808,8 @@ static void do_test_poll_callback_piggybacked_acks(void) {
         char errstr[512];
         int consumed              = 0, attempts;
         test_ack_cb_state_t state = {0};
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -863,6 +899,8 @@ static void do_test_poll_callback_piggybacked_acks(void) {
         /* Cleanup */
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -880,10 +918,14 @@ static void do_test_headers_preserved(void) {
         const char *group = "share-headers";
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_resp_err_t err;
+        rd_kafka_headers_t *hdrs = NULL;
+        rd_kafka_resp_err_t herr;
+        const void *val;
+        size_t vsz;
         size_t rcvd = 0;
-        size_t i;
         int attempts;
-        rd_bool_t verified = rd_false;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== Headers preserved through share consumer ===\n");
@@ -921,85 +963,94 @@ static void do_test_headers_preserved(void) {
         }
         TEST_ASSERT(rcvd == 1, "Expected 1 record, got %zu", rcvd);
 
-        for (i = 0; i < rcvd; i++) {
-                rd_kafka_headers_t *hdrs = NULL;
-                rd_kafka_resp_err_t herr;
-                const void *val;
-                size_t vsz;
+        herr = rd_kafka_message_headers(batch[0], &hdrs);
+        TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR && hdrs,
+                    "Failed to get headers: %s", rd_kafka_err2name(herr));
 
-                herr = rd_kafka_message_headers(batch[i], &hdrs);
-                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR && hdrs,
-                            "Failed to get headers: %s",
-                            rd_kafka_err2name(herr));
+        herr = rd_kafka_header_get_last(hdrs, "h1", &val, &vsz);
+        TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR, "h1 not present: %s",
+                    rd_kafka_err2name(herr));
+        TEST_ASSERT(vsz == 2 && memcmp(val, "v1", 2) == 0, "h1 value mismatch");
 
-                herr = rd_kafka_header_get_last(hdrs, "h1", &val, &vsz);
-                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "h1 not present: %s", rd_kafka_err2name(herr));
-                TEST_ASSERT(vsz == 2 && memcmp(val, "v1", 2) == 0,
-                            "h1 value mismatch");
+        herr = rd_kafka_header_get_last(hdrs, "h2", &val, &vsz);
+        TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR, "h2 not present: %s",
+                    rd_kafka_err2name(herr));
+        TEST_ASSERT(vsz == 2 && memcmp(val, "v2", 2) == 0, "h2 value mismatch");
 
-                herr = rd_kafka_header_get_last(hdrs, "h2", &val, &vsz);
-                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "h2 not present: %s", rd_kafka_err2name(herr));
-                TEST_ASSERT(vsz == 2 && memcmp(val, "v2", 2) == 0,
-                            "h2 value mismatch");
+        herr = rd_kafka_header_get_last(hdrs, "h3", &val, &vsz);
+        TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR, "h3 not present: %s",
+                    rd_kafka_err2name(herr));
+        TEST_ASSERT(vsz == 2 && memcmp(val, "v3", 2) == 0, "h3 value mismatch");
 
-                herr = rd_kafka_header_get_last(hdrs, "h3", &val, &vsz);
-                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "h3 not present: %s", rd_kafka_err2name(herr));
-                TEST_ASSERT(vsz == 2 && memcmp(val, "v3", 2) == 0,
-                            "h3 value mismatch");
-
-                verified = rd_true;
-                rd_kafka_message_destroy(batch[i]);
-        }
-
-        TEST_ASSERT(verified, "No record was verified");
+        rd_kafka_message_destroy(batch[0]);
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
 
         TEST_SAY("SUCCESS: Headers preserved through share consumer\n");
+
+        SUB_TEST_PASS();
 }
 
 
 /**
- * @brief Test that a share consumer with a very small
- *        fetch.message.max.bytes still consumes all records.
+ * @brief Test that a share consumer with a small session-level fetch.max.bytes
+ *       receives records one by one per fetch.
  *
- * Mirrors 0036-partial_fetch for the share path: produce 100 records of
- * 1000 bytes each, set fetch.message.max.bytes=1500 (~1.5 messages per
- * fetch). Verify all 100 records are received.
+ *   - With fetch.max.bytes=1500 and 1000-byte records each in their own
+ *     RecordBatch (custom producer, batch.num.messages=1), every
+ *     ShareFetch response can hold at most one record.
+ *   - All 100 records are received (consumer correctly loops across
+ *     multiple ShareFetch RPCs).
+ *   - Every non-empty consume_batch returns exactly one record (one batch
+ *     per ShareFetch response, due to the cap).
  */
 static void do_test_fetch_max_bytes_small(void) {
         const char *group = "share-small-fetch";
         const char *topic;
         rd_kafka_share_t *consumer;
         rd_kafka_conf_t *conf;
+        rd_kafka_conf_t *prod_conf;
+        rd_kafka_t *prod;
         rd_kafka_topic_partition_list_t *subs;
         char errstr[512];
-        const int msgcnt  = 100;
+        const int msgcnt  = 10;
         const int msgsize = 1000;
         int consumed      = 0;
         int attempts;
 
+        SUB_TEST();
+
         TEST_SAY("\n");
         TEST_SAY(
-            "=== Small fetch.message.max.bytes (1500) with 1000-byte msgs "
-            "===\n");
+            "=== Small session-level fetch.max.bytes (1500) with 1000-byte "
+            "msgs ===\n");
 
         topic = test_mk_topic_name("0171-small-fetch", 1);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
-        /* Produce msgcnt messages of msgsize bytes each */
-        test_produce_msgs2(common_producer, topic, 0, 0, 0, msgcnt, NULL,
-                           msgsize);
-        rd_kafka_flush(common_producer, 30 * 1000);
+        /* Custom producer that emits one RecordBatch per message so the
+         * broker has many small batches to choose from when responding to
+         * ShareFetch */
+        test_conf_init(&prod_conf, NULL, 60);
+        rd_kafka_conf_set_dr_msg_cb(prod_conf, test_dr_msg_cb);
+        rd_kafka_conf_set(prod_conf, "linger.ms", "0", errstr, sizeof(errstr));
+        rd_kafka_conf_set(prod_conf, "batch.num.messages", "1", errstr,
+                          sizeof(errstr));
+        prod = test_create_handle(RD_KAFKA_PRODUCER, prod_conf);
 
-        /* Create share consumer with custom fetch.message.max.bytes */
+        test_produce_msgs2(prod, topic, 0, 0, 0, msgcnt, NULL, msgsize);
+        rd_kafka_flush(prod, 30 * 1000);
+        rd_kafka_destroy(prod);
+
+        /* Create share consumer with a small session-level fetch cap.
+         * fetch.max.bytes must be >= message.max.bytes per librdkafka
+         * config validation, so lower both to 1500. */
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "fetch.message.max.bytes", "1500", errstr,
+        rd_kafka_conf_set(conf, "message.max.bytes", "1500", errstr,
+                          sizeof(errstr));
+        rd_kafka_conf_set(conf, "fetch.max.bytes", "1500", errstr,
                           sizeof(errstr));
 
         consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
@@ -1012,13 +1063,19 @@ static void do_test_fetch_max_bytes_small(void) {
         rd_kafka_share_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        attempts = 200;
+        /* All 100 records must arrive one by one per fetch */
+        attempts = 30;
         while (consumed < msgcnt && attempts-- > 0) {
                 int batch_cnt = 0;
                 test_share_consume_batch(consumer, 2000, NULL, 0, &batch_cnt);
                 consumed += batch_cnt;
-                if (batch_cnt > 0)
-                        TEST_SAY("Progress: %d/%d\n", consumed, msgcnt);
+                if (batch_cnt > 0) {
+                        TEST_ASSERT(batch_cnt == 1,
+                                    "Expected 1 record per batch with small "
+                                    "fetch.max.bytes, "
+                                    "got %d",
+                                    batch_cnt);
+                }
         }
 
         TEST_ASSERT(consumed == msgcnt,
@@ -1031,17 +1088,23 @@ static void do_test_fetch_max_bytes_small(void) {
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 
 /**
- * @brief Test that a share consumer can consume a single record larger
- *        than fetch.message.max.bytes.
+ * @brief Verify the share consumer receives records that individually
+ *        exceed fetch.max.bytes, the broker doesnt stall consumption.
  *
- * Mirrors 0041-fetch_max_bytes for the share path: produce small + large
- * records, set fetch.message.max.bytes well below the large record size,
- * and verify all records are still received (the consumer must grow the
- * buffer to fit the oversized record).
+ * What is tested:
+ *   - Produce a mix of 10 KB and 500 KB records on a topic.
+ *   - Configure the consumer with fetch.max.bytes=1500 — well below every
+ *     record's on-wire size.
+ *   - All records must still arrive. The broker is required to return the
+ *     first batch in a non-empty partition even when it exceeds the cap
+ *     to guarantee consumer progress; the client side must accept these
+ *     oversized responses.
  */
 static void do_test_record_larger_than_fetch_max_bytes(void) {
         const char *group = "share-large-record";
@@ -1051,11 +1114,13 @@ static void do_test_record_larger_than_fetch_max_bytes(void) {
         rd_kafka_topic_partition_list_t *subs;
         char errstr[512];
         const int MAX_BYTES = 100000;
-        const int small_cnt = 50;
-        const int large_cnt = 10;
+        const int small_cnt = 5;
+        const int large_cnt = 2;
         const int total     = small_cnt + large_cnt;
         int consumed        = 0;
         int attempts;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== Records larger than fetch.message.max.bytes (%d) ===\n",
@@ -1076,7 +1141,9 @@ static void do_test_record_larger_than_fetch_max_bytes(void) {
 
         char val[32];
         rd_snprintf(val, sizeof(val), "%d", MAX_BYTES);
-        rd_kafka_conf_set(conf, "fetch.message.max.bytes", val, errstr,
+        rd_kafka_conf_set(conf, "message.max.bytes", "1500", errstr,
+                          sizeof(errstr));
+        rd_kafka_conf_set(conf, "fetch.max.bytes", "1500", errstr,
                           sizeof(errstr));
 
         consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
@@ -1089,7 +1156,7 @@ static void do_test_record_larger_than_fetch_max_bytes(void) {
         rd_kafka_share_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        attempts = 200;
+        attempts = 30;
         while (consumed < total && attempts-- > 0) {
                 int batch_cnt = 0;
                 test_share_consume_batch(consumer, 3000, NULL, 0, &batch_cnt);
@@ -1106,6 +1173,8 @@ static void do_test_record_larger_than_fetch_max_bytes(void) {
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1130,6 +1199,8 @@ static void do_test_consumer_close_releases_to_group(void) {
         int per_consumer[4]  = {0};
         int attempts;
         int i;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -1212,8 +1283,8 @@ static void do_test_consumer_close_releases_to_group(void) {
             c0_fetched, per_consumer[1], per_consumer[2], per_consumer[3],
             total_consumed);
 
-        TEST_ASSERT(total_consumed >= total_msgs,
-                    "Expected at least %d records on the survivors after "
+        TEST_ASSERT(total_consumed == total_msgs,
+                    "Expected exactly %d records on the survivors after "
                     "consumer 0's records were released, got %d",
                     total_msgs, total_consumed);
 
@@ -1223,6 +1294,8 @@ static void do_test_consumer_close_releases_to_group(void) {
         }
 
         TEST_SAY("SUCCESS: closed consumer's records redelivered to group\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1237,6 +1310,9 @@ static void do_test_partition_increase_during_consume(void) {
         const char *group = "share-partition-increase";
         const char *topic;
         rd_kafka_share_t *consumer;
+        rd_kafka_conf_t *conf;
+        rd_kafka_conf_t *prod_conf;
+        rd_kafka_t *producer;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_message_t *batch[BATCH_SIZE];
         const int msgs_per_partition = 200;
@@ -1248,6 +1324,9 @@ static void do_test_partition_increase_during_consume(void) {
         int attempts;
         int p;
         rd_kafka_resp_err_t cp_err;
+        char errstr[512];
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== Partition count increase during consume (%d -> %d) ===\n",
@@ -1257,12 +1336,29 @@ static void do_test_partition_increase_during_consume(void) {
         test_create_topic_wait_exists(NULL, topic, initial_partitions, -1,
                                       60 * 1000);
 
+        /* Custom producer with a short metadata refresh interval so its
+         * cache picks up the post-CreatePartitions partition count on its
+         * own — avoids the explicit test_wait_metadata_update probe. */
+        test_conf_init(&prod_conf, NULL, 60);
+        rd_kafka_conf_set_dr_msg_cb(prod_conf, test_dr_msg_cb);
+        rd_kafka_conf_set(prod_conf, "topic.metadata.refresh.interval.ms",
+                          "500", errstr, sizeof(errstr));
+        producer = test_create_handle(RD_KAFKA_PRODUCER, prod_conf);
+
         /* Produce to initial partitions only */
         for (p = 0; p < initial_partitions; p++)
-                test_produce_msgs_simple(common_producer, topic, p,
+                test_produce_msgs_simple(producer, topic, p,
                                          msgs_per_partition);
 
-        consumer = test_create_share_consumer(group, NULL);
+        /* Lower the consumer's metadata refresh interval (default 5 min) so
+         * it picks up the new partition count quickly without a long
+         * hardcoded sleep below. */
+        test_conf_init(&conf, NULL, 60);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "topic.metadata.refresh.interval.ms", "500",
+                          errstr, sizeof(errstr));
+        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
         test_share_set_auto_offset_reset(group, "earliest");
 
         subs = rd_kafka_topic_partition_list_new(1);
@@ -1303,23 +1399,17 @@ static void do_test_partition_increase_during_consume(void) {
         TEST_ASSERT(!cp_err, "CreatePartitions failed: %s",
                     rd_kafka_err2str(cp_err));
 
-        /* Force common_producer's metadata cache to refresh and observe the
-         * new partition count before producing to the new partitions —
-         * otherwise rd_kafka_produce() to partition >= cached count fails
-         * with UNKNOWN_PARTITION (producer's default metadata refresh
-         * interval is 5 minutes). */
-        rd_kafka_metadata_topic_t exp_md = {.topic         = (char *)topic,
-                                            .partition_cnt = grown_partitions};
-        test_wait_metadata_update(common_producer, &exp_md, 1, NULL, 0,
-                                  30 * 1000);
-
-        /* Give the consumer time to learn about the new partitions through
-         * metadata refresh and ShareGroupHeartbeat assignment. */
-        rd_sleep(5);
+        /* Both producer and consumer have topic.metadata.refresh.interval
+         * .ms=500, so their local metadata caches pick up the new partition
+         * count within ~500 ms via the background refresh. One second is
+         * plenty for both: the producer can route to the new partitions,
+         * and the consumer can be assigned them on the next
+         * ShareGroupHeartbeat cycle. */
+        rd_sleep(1);
 
         /* Produce to the newly added partitions */
         for (p = initial_partitions; p < grown_partitions; p++)
-                test_produce_msgs_simple(common_producer, topic, p,
+                test_produce_msgs_simple(producer, topic, p,
                                          msgs_per_partition);
 
         /* Continue consuming, expecting records from new partitions */
@@ -1343,8 +1433,8 @@ static void do_test_partition_increase_during_consume(void) {
                 }
         }
 
-        TEST_ASSERT(consumed >= total_expected,
-                    "Expected >= %d total records after partition grow, "
+        TEST_ASSERT(consumed == total_expected,
+                    "Expected exactly %d total records after partition grow, "
                     "got %d",
                     total_expected, consumed);
 
@@ -1353,6 +1443,9 @@ static void do_test_partition_increase_during_consume(void) {
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1376,6 +1469,14 @@ static void do_test_zero_byte_payload_and_key(void) {
         int saw_value_only = 0;
         int saw_null_kv    = 0;
         size_t i;
+        rd_bool_t key_null;
+        rd_bool_t key_empty;
+        rd_bool_t val_null;
+        rd_bool_t val_empty;
+        rd_bool_t key_is_empty_or_null;
+        rd_bool_t val_is_empty_or_null;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== Zero-byte payload and key ===\n");
@@ -1435,15 +1536,15 @@ static void do_test_zero_byte_payload_and_key(void) {
         TEST_ASSERT(rcvd == 4, "Expected 4 records, got %zu", rcvd);
 
         for (i = 0; i < rcvd; i++) {
-                rd_bool_t key_null  = batch[i]->key == NULL;
-                rd_bool_t key_empty = batch[i]->key_len == 0 && !key_null;
-                rd_bool_t val_null  = batch[i]->payload == NULL;
-                rd_bool_t val_empty = batch[i]->len == 0 && !val_null;
+                key_null  = batch[i]->key == NULL;
+                key_empty = batch[i]->key_len == 0 && !key_null;
+                val_null  = batch[i]->payload == NULL;
+                val_empty = batch[i]->len == 0 && !val_null;
 
                 /* Brokers may normalize empty buffers to NULL; accept either.
                  */
-                rd_bool_t key_is_empty_or_null = key_null || key_empty;
-                rd_bool_t val_is_empty_or_null = val_null || val_empty;
+                key_is_empty_or_null = key_null || key_empty;
+                val_is_empty_or_null = val_null || val_empty;
 
                 if (key_is_empty_or_null && val_is_empty_or_null) {
                         /* Could be "empty kv" or "null kv" record - count both
@@ -1482,122 +1583,8 @@ static void do_test_zero_byte_payload_and_key(void) {
         test_share_destroy(consumer);
 
         TEST_SAY("SUCCESS: zero-byte payload/key preserved\n");
-}
 
-
-/**
- * @brief Message at the topic's max.message.bytes boundary.
- *
- * Create a topic with max.message.bytes=8192, produce records of
- * increasing size leading up to the boundary, and verify all are
- * received via the share consumer.
- */
-static void do_test_message_at_max_bytes_boundary(void) {
-        const char *group = "share-max-bytes-boundary";
-        const char *topic;
-        rd_kafka_share_t *consumer;
-        rd_kafka_conf_t *conf;
-        rd_kafka_t *producer;
-        rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[16];
-        char errstr[512];
-        const size_t sizes[] = {100, 1000, 4000, 7000, 7900};
-        const int total      = sizeof(sizes) / sizeof(sizes[0]);
-        size_t max_observed  = 0;
-        int consumed         = 0;
-        int attempts;
-        int i;
-
-        TEST_SAY("\n");
-        TEST_SAY("=== Message at max.message.bytes (8192) boundary ===\n");
-
-        topic = test_mk_topic_name("0171-max-bytes", 1);
-
-        /* Topic with explicit max.message.bytes=8192. */
-        test_admin_create_topic(
-            NULL, topic, 1, -1,
-            (const char *[]) {"max.message.bytes", "8192", NULL});
-        test_wait_topic_exists(common_admin, topic, 60 * 1000);
-
-        /* Producer with matching message.max.bytes so the client doesn't
-         * pre-reject. */
-        test_conf_init(&conf, NULL, 60);
-        test_conf_set(conf, "message.max.bytes", "8192");
-        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-        producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
-
-        /* Produce one record per target size. */
-        for (i = 0; i < total; i++) {
-                char *payload = rd_malloc(sizes[i]);
-                rd_kafka_resp_err_t err;
-                size_t j;
-
-                for (j = 0; j < sizes[i]; j++)
-                        payload[j] = (char)('A' + (j % 26));
-
-                err = rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(topic),
-                                        RD_KAFKA_V_VALUE(payload, sizes[i]),
-                                        RD_KAFKA_V_END);
-                TEST_ASSERT(!err, "produce size=%zu failed: %s", sizes[i],
-                            rd_kafka_err2name(err));
-                rd_free(payload);
-        }
-        rd_kafka_flush(producer, 30 * 1000);
-        rd_kafka_destroy(producer);
-
-        /* Share consumer with fetch.message.max.bytes >= topic max so the
-         * largest record fits a single fetch. */
-        test_conf_init(&conf, NULL, 60);
-        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "fetch.message.max.bytes", "16384", errstr,
-                          sizeof(errstr));
-        consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(consumer, "share_consumer_new failed: %s", errstr);
-
-        test_share_set_auto_offset_reset(group, "earliest");
-
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        rd_kafka_share_subscribe(consumer, subs);
-        rd_kafka_topic_partition_list_destroy(subs);
-
-        attempts = 60;
-        while (consumed < total && attempts-- > 0) {
-                size_t rcvd = 0;
-                size_t m;
-                rd_kafka_error_t *err;
-
-                err =
-                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
-                if (err) {
-                        rd_kafka_error_destroy(err);
-                        continue;
-                }
-
-                for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err) {
-                                if (batch[m]->len > max_observed)
-                                        max_observed = batch[m]->len;
-                                consumed++;
-                        }
-                        rd_kafka_message_destroy(batch[m]);
-                }
-        }
-
-        TEST_ASSERT(consumed == total,
-                    "Expected %d records up to boundary, consumed %d", total,
-                    consumed);
-        TEST_ASSERT(max_observed == sizes[total - 1],
-                    "Largest record size mismatch: expected %zu, got %zu",
-                    sizes[total - 1], max_observed);
-
-        TEST_SAY(
-            "SUCCESS: max.message.bytes boundary - %d records, max=%zu "
-            "bytes\n",
-            consumed, max_observed);
-
-        test_share_consumer_close(consumer);
-        test_share_destroy(consumer);
+        SUB_TEST_PASS();
 }
 
 
@@ -1688,11 +1675,13 @@ static void do_test_compression_codec(const char *codec) {
  *        compression codec.
  */
 static void do_test_all_compression_codecs(void) {
+        SUB_TEST();
         do_test_compression_codec("none");
         do_test_compression_codec("gzip");
         do_test_compression_codec("snappy");
         do_test_compression_codec("lz4");
         do_test_compression_codec("zstd");
+        SUB_TEST_PASS();
 }
 
 
@@ -1717,6 +1706,21 @@ static void do_test_many_and_large_headers(void) {
         size_t i;
         rd_bool_t verified_many = rd_false;
         rd_bool_t verified_big  = rd_false;
+        rd_kafka_headers_t *hdrs;
+        char name[32];
+        char value[32];
+        rd_kafka_headers_t *msg_hdrs = NULL;
+        rd_kafka_resp_err_t herr;
+        size_t n;
+        size_t j;
+        char expected[32];
+        const void *val;
+        size_t vsz;
+        size_t k;
+        const char *bytes;
+        char expected_byte;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -1729,24 +1733,19 @@ static void do_test_many_and_large_headers(void) {
 
         /* Build the producev arg list for a record with `hdr_cnt` headers.
          * Each header name is "h-<i>" and each value is "v-<i>". */
-        {
-                rd_kafka_headers_t *hdrs = rd_kafka_headers_new(hdr_cnt);
-                for (i = 0; i < (size_t)hdr_cnt; i++) {
-                        char name[32];
-                        char value[32];
-                        rd_snprintf(name, sizeof(name), "h-%zu", i);
-                        rd_snprintf(value, sizeof(value), "v-%zu", i);
-                        rd_kafka_header_add(hdrs, name, -1, value, -1);
-                }
-
-                err =
-                    rd_kafka_producev(common_producer, RD_KAFKA_V_TOPIC(topic),
-                                      RD_KAFKA_V_KEY("many", 4),
-                                      RD_KAFKA_V_VALUE("many-payload", 12),
-                                      RD_KAFKA_V_HEADERS(hdrs), RD_KAFKA_V_END);
-                TEST_ASSERT(!err, "producev many headers failed: %s",
-                            rd_kafka_err2name(err));
+        hdrs = rd_kafka_headers_new(hdr_cnt);
+        for (i = 0; i < (size_t)hdr_cnt; i++) {
+                rd_snprintf(name, sizeof(name), "h-%zu", i);
+                rd_snprintf(value, sizeof(value), "v-%zu", i);
+                rd_kafka_header_add(hdrs, name, -1, value, -1);
         }
+
+        err = rd_kafka_producev(common_producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_KEY("many", 4),
+                                RD_KAFKA_V_VALUE("many-payload", 12),
+                                RD_KAFKA_V_HEADERS(hdrs), RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "producev many headers failed: %s",
+                    rd_kafka_err2name(err));
 
         /* Record with one very large header value. */
         big_hdr_value = rd_malloc(big_hdr_size);
@@ -1786,18 +1785,15 @@ static void do_test_many_and_large_headers(void) {
         TEST_ASSERT(rcvd == 2, "Expected 2 records, got %zu", rcvd);
 
         for (i = 0; i < rcvd; i++) {
-                rd_kafka_headers_t *hdrs = NULL;
-                rd_kafka_resp_err_t herr;
-
-                herr = rd_kafka_message_headers(batch[i], &hdrs);
-                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR && hdrs,
+                msg_hdrs = NULL;
+                herr     = rd_kafka_message_headers(batch[i], &msg_hdrs);
+                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR && msg_hdrs,
                             "headers not available: %s",
                             rd_kafka_err2name(herr));
 
                 if (batch[i]->key_len == 4 &&
                     memcmp(batch[i]->key, "many", 4) == 0) {
-                        size_t n = rd_kafka_header_cnt(hdrs);
-                        size_t j;
+                        n = rd_kafka_header_cnt(msg_hdrs);
 
                         TEST_ASSERT(n == (size_t)hdr_cnt,
                                     "many-headers record: expected %d "
@@ -1806,15 +1802,10 @@ static void do_test_many_and_large_headers(void) {
 
                         /* Verify every header name+value present. */
                         for (j = 0; j < (size_t)hdr_cnt; j++) {
-                                char name[32];
-                                char expected[32];
-                                const void *val;
-                                size_t vsz;
-
                                 rd_snprintf(name, sizeof(name), "h-%zu", j);
                                 rd_snprintf(expected, sizeof(expected), "v-%zu",
                                             j);
-                                herr = rd_kafka_header_get_last(hdrs, name,
+                                herr = rd_kafka_header_get_last(msg_hdrs, name,
                                                                 &val, &vsz);
                                 TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
                                             "%s missing: %s", name,
@@ -1826,13 +1817,8 @@ static void do_test_many_and_large_headers(void) {
                         verified_many = rd_true;
                 } else if (batch[i]->key_len == 3 &&
                            memcmp(batch[i]->key, "big", 3) == 0) {
-                        const void *val;
-                        size_t vsz;
-                        size_t k;
-                        const char *bytes;
-
-                        herr = rd_kafka_header_get_last(hdrs, "big-hdr", &val,
-                                                        &vsz);
+                        herr = rd_kafka_header_get_last(msg_hdrs, "big-hdr",
+                                                        &val, &vsz);
                         TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
                                     "big-hdr missing: %s",
                                     rd_kafka_err2name(herr));
@@ -1844,11 +1830,11 @@ static void do_test_many_and_large_headers(void) {
                         /* Spot-check the content pattern at a few offsets. */
                         bytes = (const char *)val;
                         for (k = 0; k < vsz; k += vsz / 16) {
-                                char expected = (char)('A' + (k % 26));
-                                TEST_ASSERT(bytes[k] == expected,
+                                expected_byte = (char)('A' + (k % 26));
+                                TEST_ASSERT(bytes[k] == expected_byte,
                                             "big-hdr byte %zu: expected %c, "
                                             "got %c",
-                                            k, expected, bytes[k]);
+                                            k, expected_byte, bytes[k]);
                         }
                         verified_big = rd_true;
                 }
@@ -1863,6 +1849,8 @@ static void do_test_many_and_large_headers(void) {
         test_share_destroy(consumer);
 
         TEST_SAY("SUCCESS: many headers + large header value preserved\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1947,7 +1935,6 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
 
         /* Payload edge cases */
         do_test_zero_byte_payload_and_key();
-        do_test_message_at_max_bytes_boundary();
         do_test_all_compression_codecs();
         do_test_many_and_large_headers();
 

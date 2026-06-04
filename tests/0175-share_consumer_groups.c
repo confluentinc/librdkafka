@@ -366,7 +366,11 @@ static void do_test_two_groups_same_topic(void) {
             .test_name                = "Two groups consuming same topic",
             .produce_before_subscribe = rd_true,
         };
+
+        SUB_TEST();
         run_groups_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -384,7 +388,11 @@ static void do_test_three_groups_concurrent(void) {
             .produce_before_subscribe = rd_true,
             .max_attempts             = 150,
         };
+
+        SUB_TEST();
         run_groups_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -403,7 +411,11 @@ static void do_test_five_groups_same_topic(void) {
             .produce_before_subscribe = rd_true,
             .max_attempts             = 150,
         };
+
+        SUB_TEST();
         run_groups_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -422,6 +434,8 @@ static void do_test_groups_staggered_join(void) {
         int attempts;
         size_t rcvd;
         size_t m;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -534,6 +548,8 @@ static void do_test_groups_staggered_join(void) {
         test_delete_topic(test_share_consumer_get_rk(consumer_a), topic);
         test_share_destroy(consumer_a);
         test_share_destroy(consumer_b);
+
+        SUB_TEST_PASS();
 }
 
 int main_0175_share_consumer_groups(int argc, char **argv) {

@@ -124,6 +124,8 @@ static void do_test_basic_implicit_commit_sync(void) {
         int consumed = 0;
         int attempts = 0;
 
+        SUB_TEST();
+
         topic = test_mk_topic_name("0176-cs-impl-basic", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -220,6 +222,8 @@ static void do_test_basic_implicit_commit_sync(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -241,6 +245,8 @@ static void do_test_basic_explicit_commit_sync(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-expl-basic", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -341,6 +347,8 @@ static void do_test_basic_explicit_commit_sync(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -356,6 +364,8 @@ static void do_test_no_pending_acks(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-no-pending", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -378,6 +388,8 @@ static void do_test_no_pending_acks(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -399,6 +411,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-no-redeliver", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -472,6 +486,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -495,6 +511,8 @@ static void do_test_mixed_ack_types(void) {
         int attempts = 0;
         int64_t released_offsets[3];
         int released_cnt = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-mixed-acks", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -646,6 +664,8 @@ static void do_test_mixed_ack_types(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -671,6 +691,8 @@ static void do_test_multiple_commit_sync_calls(void) {
         int attempts                = 0;
         int commit_cnt              = 0;
         int acked_since_last_commit = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-multi-calls", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -814,6 +836,8 @@ static void do_test_multiple_commit_sync_calls(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -863,6 +887,8 @@ static void do_test_multi_topic_partition(void) {
             MULTI_TP_TOPICS * MULTI_TP_PARTITIONS * MULTI_TP_MSGS_PER_PARTITION;
         int i, p;
         int16_t max_dc_seen = 0;
+
+        SUB_TEST();
 
         /* Create topics and produce 10 messages per partition */
         for (i = 0; i < MULTI_TP_TOPICS; i++) {
@@ -1020,6 +1046,8 @@ static void do_test_multi_topic_partition(void) {
 
         for (i = 0; i < MULTI_TP_TOPICS; i++)
                 rd_free(topics[i]);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1533,6 +1561,8 @@ static void do_test_mixed_commit_types(void) {
         rd_ts_t t_start, t_elapsed_ms;
         rd_ts_t max_sync_elapsed_ms = 0;
 
+        SUB_TEST();
+
         topic = test_mk_topic_name("0176-cs-mixed-types", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 50);
@@ -1701,6 +1731,8 @@ static void do_test_mixed_commit_types(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -2125,7 +2157,7 @@ static void do_test_commit_sync_after_topic_deletion(void) {
         TEST_ASSERT(del_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "DeleteTopics failed: %s", rd_kafka_err2str(del_err));
 
-        /* Give metadata propagation a moment */
+        /* Wait for the topic delete to propagate in the cluster. */
         rd_sleep(3);
 
         /* commit_sync should return per-partition results — at least one

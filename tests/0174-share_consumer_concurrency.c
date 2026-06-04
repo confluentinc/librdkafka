@@ -142,10 +142,13 @@ static int producer_thread_func(void *arg) {
         rd_kafka_resp_err_t err;
         char value[64];
 
-        /* Restore test context for this thread (test_curr is TLS) */
-        test_curr                = this_test;
-        test_curr->exp_dr_status = (rd_kafka_msg_status_t)-1;
-        test_curr->ignore_dr_err = rd_true;
+        /* Restore the TLS test_curr pointer for this thread. The
+         * exp_dr_status / ignore_dr_err fields on the struct itself are
+         * set once by the main thread before any worker spawns
+         * (see run_concurrent_test / do_test_chaos_consumer_lifecycle)
+         * — touching them here would race against every other producer
+         * thread that aliases the same global tests[] entry. */
+        test_curr = this_test;
 
         /* Enable idempotent producer so retries do not result in duplicate
          * broker-side writes — without this, transient broker/network jitter
@@ -455,6 +458,15 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
         /* Save test context for threads (test_curr is TLS) */
         this_test = test_curr;
 
+        /* Set the DR-callback expectations on the shared test struct
+         * ONCE on the main thread, before spawning any worker threads.
+         * test_curr is a TLS pointer but the struct it points at lives
+         * in the global tests[] array, so writing these fields from
+         * each producer thread (as it used to) is a benign-but-noisy
+         * data race that TSAN flags. */
+        test_curr->exp_dr_status = (rd_kafka_msg_status_t)-1;
+        test_curr->ignore_dr_err = rd_true;
+
         /* Initialize state */
         mtx_init(&state.lock, mtx_plain);
         state.topic_cnt           = config->topic_cnt;
@@ -630,7 +642,11 @@ static void do_test_1p_1c_1t_1part(void) {
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-1p1c1t1p",
             .test_name = "1 producer, 1 consumer, 1 topic, 1 partition"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -645,7 +661,11 @@ static void do_test_1p_4c_1t_4part(void) {
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-1p4c1t4p",
             .test_name = "1 producer, 4 consumers, 1 topic, 4 partitions"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -660,7 +680,11 @@ static void do_test_4p_1c_1t_4part(void) {
             .msgs_per_partition = 1250,
             .group_name         = "share-conc-4p1c1t4p",
             .test_name = "4 producers, 1 consumer, 1 topic, 4 partitions"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -675,7 +699,11 @@ static void do_test_4p_4c_1t_4part(void) {
             .msgs_per_partition = 5000,
             .group_name         = "share-conc-4p4c1t4p",
             .test_name = "4 producers, 4 consumers, 1 topic, 4 partitions"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -695,7 +723,11 @@ static void do_test_2p_2c_3t_2part(void) {
             .group_name         = "share-conc-2p2c3t2p",
             .test_name =
                 "2 producers, 2 consumers, 3 topics, 2 partitions each"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -711,7 +743,11 @@ static void do_test_2p_2c_8t_1part(void) {
             .group_name         = "share-conc-2p2c8t1p",
             .test_name = "2 producers, 2 consumers, 8 topics, 1 partition each",
             .max_attempts = 150};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -731,7 +767,11 @@ static void do_test_1p_8c_1t_1part(void) {
             .group_name         = "share-conc-1p8c1t1p",
             .test_name =
                 "1 producer, 8 consumers, 1 partition (high contention)"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -747,7 +787,11 @@ static void do_test_2p_6c_1t_2part(void) {
             .group_name         = "share-conc-2p6c1t2p",
             .test_name =
                 "2 producers, 6 consumers, 2 partitions (3:1 consumer ratio)"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -767,7 +811,11 @@ static void do_test_explicit_ack_4p_4c(void) {
             .group_name         = "share-conc-explicit-4p4c",
             .test_name          = "4 producers, 4 consumers, explicit ack",
             .explicit_ack       = rd_true};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -787,7 +835,11 @@ static void do_test_staggered_start(void) {
             .group_name         = "share-conc-staggered",
             .test_name          = "Staggered start: consumers before producers",
             .staggered_start    = rd_true};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -807,7 +859,11 @@ static void do_test_high_volume_20k(void) {
             .group_name         = "share-conc-highvol-20k",
             .test_name          = "High volume: 4p x 4c x 20k messages",
             .max_attempts       = 150};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -823,7 +879,11 @@ static void do_test_high_volume_many_partitions(void) {
             .group_name         = "share-conc-highvol-8p",
             .test_name    = "High volume: 8 partitions x 2.5k messages each",
             .max_attempts = 150};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -842,7 +902,11 @@ static void do_test_8p_2c(void) {
             .msgs_per_partition = 2500,
             .group_name         = "share-conc-8p2c",
             .test_name          = "8 producers, 2 consumers (producer heavy)"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -857,7 +921,11 @@ static void do_test_2p_8c(void) {
             .msgs_per_partition = 10000,
             .group_name         = "share-conc-2p8c",
             .test_name          = "2 producers, 8 consumers (consumer heavy)"};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -877,7 +945,11 @@ static void do_test_complex_varied_partitions(void) {
             .group_name         = "share-conc-complex-varied",
             .test_name    = "4 topics with 1,2,3,4 partitions respectively",
             .max_attempts = 150};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -893,7 +965,11 @@ static void do_test_max_concurrent(void) {
             .group_name         = "share-conc-max",
             .test_name    = "Maximum: 10 producers, 10 consumers, 4 topics",
             .max_attempts = 200};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -914,7 +990,11 @@ static void do_test_slow_consumers(void) {
             .test_name          = "Fast producers, slow consumers",
             .consumer_delay_ms  = 50,
             .max_attempts       = 200};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -931,7 +1011,11 @@ static void do_test_slow_producers(void) {
             .test_name          = "Slow producers, fast consumers",
             .producer_delay_ms  = 10000,
             .max_attempts       = 200};
+
+        SUB_TEST();
         run_concurrent_test(&config);
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -989,6 +1073,8 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
         rd_bool_t final_failed;
         rd_kafka_share_t *dummy_consumer;
 
+        SUB_TEST();
+
         TEST_ASSERT(CONSUMER_POOL <= MAX_CONSUMER_POOL,
                     "CONSUMER_POOL %d > MAX_CONSUMER_POOL", CONSUMER_POOL);
         TEST_ASSERT(ACTIVE_CONSUMERS <= CONSUMER_POOL, "ACTIVE > POOL");
@@ -1003,6 +1089,12 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
                  ACTIVE_CONSUMERS, CONSUMER_POOL, ITERATIONS, ITERATION_MS);
 
         this_test = test_curr;
+
+        /* See note in run_concurrent_test: set these on the main thread
+         * before spawning worker threads to avoid TSAN-flagged races on
+         * the shared test struct that test_curr aliases. */
+        test_curr->exp_dr_status = (rd_kafka_msg_status_t)-1;
+        test_curr->ignore_dr_err = rd_true;
 
         mtx_init(&state.lock, mtx_plain);
         state.topic_cnt           = config.topic_cnt;
@@ -1278,6 +1370,8 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
         for (t = 0; t < config.topic_cnt; t++)
                 rd_free(state.topics[t]);
         mtx_destroy(&state.lock);
+
+        SUB_TEST_PASS();
 }
 
 

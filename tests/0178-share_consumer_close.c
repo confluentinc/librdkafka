@@ -978,6 +978,8 @@ static void do_test_close_with_acknowledge(void) {
             {"close-2t2p-commit-sync", 2, {2, 2}, 10, COMMIT_MODE_SYNC, 20},
         };
 
+        SUB_TEST();
+
         for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
                 close_ack_test_config_t *config = &tests[i];
                 test_context_t ctx              = {0};
@@ -985,19 +987,11 @@ static void do_test_close_with_acknowledge(void) {
                 tracked_msg_t tracked_msgs[BATCH_SIZE];
                 int tracked_cnt = 0;
                 ack_receipts_t receipts;
-                char unique_group[128];
 
                 ack_receipts_init(&receipts);
 
-                /* Per-subtest unique group id so iterations and re-runs
-                 * never share share-group state on the broker. */
-                rd_snprintf(unique_group, sizeof(unique_group),
-                            "0178-group-%s-rnd%" PRIx64, config->test_name,
-                            test_id_generate());
-
                 TEST_SAY("\n========================================\n");
-                TEST_SAY("Test: %s [group=%s]\n", config->test_name,
-                         unique_group);
+                TEST_SAY("Test: %s\n", config->test_name);
                 TEST_SAY("Topology: %d topic(s), partitions: [",
                          config->topic_cnt);
                 for (int j = 0; j < config->topic_cnt; j++) {
@@ -1009,7 +1003,7 @@ static void do_test_close_with_acknowledge(void) {
                          commit_mode_str(config->commit_mode));
                 TEST_SAY("========================================\n\n");
 
-                ctx.group_id = unique_group;
+                ctx.group_id = "0178-group";
                 setup_topics_and_produce(&ctx, config->topic_cnt,
                                          config->partitions,
                                          config->msgs_per_partition);
@@ -1062,7 +1056,7 @@ static void do_test_close_with_acknowledge(void) {
 
                 /* Close C2 */
                 TEST_SAY("C2: Closing consumer\n");
-                test_share_consumer_close(c2);
+                rd_kafka_share_consumer_close(c2);
                 TEST_SAY("C2: Closed successfully\n");
                 test_share_destroy(c2);
 
@@ -1079,6 +1073,8 @@ static void do_test_close_with_acknowledge(void) {
                          config->test_name);
                 test_share_destroy(c1);
         }
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1121,6 +1117,8 @@ static void do_test_close_without_acknowledge() {
             /* Multiple topics, multiple partitions */
             {"close-no-ack-2t2p", 2, {2, 2}, 10, 5},
         };
+
+        SUB_TEST();
 
         for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
                 close_no_ack_test_config_t *config = &tests[i];
@@ -1184,7 +1182,7 @@ static void do_test_close_without_acknowledge() {
                                         "no-ack-close");
 
                 TEST_SAY("C2: Closing consumer\n");
-                test_share_consumer_close(c2);
+                rd_kafka_share_consumer_close(c2);
                 test_share_destroy(c2);
 
                 free_tracked_messages(tracked_msgs, tracked_cnt);
@@ -1198,6 +1196,8 @@ static void do_test_close_without_acknowledge() {
                          config->test_name);
                 test_share_destroy(c1);
         }
+
+        SUB_TEST_PASS();
 }
 
 /**

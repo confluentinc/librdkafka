@@ -619,7 +619,9 @@ static void do_test_release_redelivery(void) {
             .msgs_per_partition = 5,
             .consumer_cnt       = 1,
             .single_ack_type    = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -633,7 +635,9 @@ static void do_test_reject_no_redelivery(void) {
                                     .consumer_cnt       = 1,
                                     .single_ack_type =
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -647,7 +651,9 @@ static void do_test_accept_no_redelivery(void) {
                                     .consumer_cnt       = 1,
                                     .single_ack_type =
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 
@@ -662,6 +668,8 @@ static void do_test_ack_null_message(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_resp_err_t err;
         const char *group = "share-null-msg-test";
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_null_message ===\n");
@@ -681,6 +689,8 @@ static void do_test_ack_null_message(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_null_message: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -689,6 +699,8 @@ static void do_test_ack_null_message(void) {
 static void do_test_ack_null_rkshare(void) {
         rd_kafka_resp_err_t err;
         rd_kafka_message_t fake_msg = {0};
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_null_rkshare ===\n");
@@ -710,6 +722,8 @@ static void do_test_ack_null_rkshare(void) {
                     "Expected INVALID_ARG, got %s", rd_kafka_err2str(err));
 
         TEST_SAY("=== test_ack_null_rkshare: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -725,6 +739,9 @@ static void do_test_ack_invalid_type(void) {
         const char *topic;
         size_t rcvd = 0;
         int attempts;
+
+        SUB_TEST();
+
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_invalid_type ===\n");
 
@@ -772,6 +789,8 @@ static void do_test_ack_invalid_type(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_invalid_type: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -789,6 +808,9 @@ static void do_test_release_then_reject_no_redelivery(void) {
         size_t m;
         int attempts;
         int redelivered = 0;
+
+        SUB_TEST();
+
         TEST_SAY("\n");
         TEST_SAY("=== test_release_then_reject_no_redelivery ===\n");
 
@@ -869,6 +891,8 @@ static void do_test_release_then_reject_no_redelivery(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_release_then_reject_no_redelivery: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -889,6 +913,8 @@ static void do_test_change_ack_type_before_commit(void) {
         size_t rcvd = 0, i;
         int attempts;
         test_ack_cb_state_t state = {0};
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_change_ack_type_before_commit ===\n");
@@ -997,6 +1023,8 @@ static void do_test_change_ack_type_before_commit(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_change_ack_type_before_commit: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1019,6 +1047,8 @@ static void do_test_ack_after_commit(void) {
         int32_t saved_partition   = -1;
         int64_t saved_offset      = -1;
         test_ack_cb_state_t state = {0};
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_after_commit ===\n");
@@ -1088,6 +1118,8 @@ static void do_test_ack_after_commit(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_after_commit: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 /***************************************************************************
@@ -1111,6 +1143,9 @@ static void do_test_max_delivery_attempts(void) {
         int delivery_attempt;
         int attempts;
         const int max_deliveries = 5;
+
+        SUB_TEST();
+
         TEST_SAY("\n");
         TEST_SAY("=== test_max_delivery_attempts ===\n");
         TEST_SAY(
@@ -1201,6 +1236,8 @@ static void do_test_max_delivery_attempts(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_max_delivery_attempts: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1225,7 +1262,9 @@ static void do_test_random_ack_single_topic_single_partition(void) {
                                     .consumer_cnt = 1,
                                     .use_random_acks = rd_true,
                                     .total_msgs      = 5000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1241,7 +1280,9 @@ static void do_test_random_ack_multiple_topics_single_partition(void) {
                                     .consumer_cnt = 1,
                                     .use_random_acks = rd_true,
                                     .total_msgs      = 5000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1257,7 +1298,9 @@ static void do_test_random_ack_single_topic_multiple_partitions(void) {
                                     .consumer_cnt = 1,
                                     .use_random_acks = rd_true,
                                     .total_msgs      = 5000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1273,7 +1316,9 @@ static void do_test_random_ack_multiple_topics_multiple_partitions(void) {
                                     .consumer_cnt = 1,
                                     .use_random_acks = rd_true,
                                     .total_msgs      = 5000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1289,7 +1334,9 @@ static void do_test_scale_15_topics_single_partition(void) {
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
             .total_msgs      = 10000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1306,7 +1353,9 @@ static void do_test_scale_15_topics_multiple_partitions(void) {
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
             .total_msgs      = 10000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1322,7 +1371,9 @@ static void do_test_scale_8_topics_4_partitions(void) {
                                     .consumer_cnt    = 1,
                                     .use_random_acks = rd_true,
                                     .total_msgs      = 8000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1337,7 +1388,9 @@ static void do_test_scale_single_topic_8_partitions(void) {
                                     .consumer_cnt    = 1,
                                     .use_random_acks = rd_true,
                                     .total_msgs      = 10000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1354,7 +1407,9 @@ static void do_test_scale_10_topics_3_partitions(void) {
             .consumer_cnt    = 1,
             .use_random_acks = rd_true,
             .total_msgs      = 15000};
+        SUB_TEST();
         run_ack_test(&config);
+        SUB_TEST_PASS();
 }
 
 
@@ -1376,8 +1431,11 @@ static void do_test_ack_message_from_earlier_batch(void) {
         const char *group = "share-cross-batch-ack";
         const char *topic;
         size_t b1_rcvd = 0;
+        size_t r       = 0;
+        rd_kafka_error_t *e;
         int attempts;
-        size_t i;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_message_from_earlier_batch ===\n");
@@ -1396,9 +1454,9 @@ static void do_test_ack_message_from_earlier_batch(void) {
         /* Poll batch 1 */
         attempts = 30;
         while (b1_rcvd < 1 && attempts-- > 0) {
-                size_t r            = 0;
-                rd_kafka_error_t *e = rd_kafka_share_consume_batch(
-                    rkshare, 2000, batch1 + b1_rcvd, &r);
+                r = 0;
+                e = rd_kafka_share_consume_batch(rkshare, 2000,
+                                                 batch1 + b1_rcvd, &r);
                 if (e)
                         rd_kafka_error_destroy(e);
                 b1_rcvd += r;
@@ -1410,15 +1468,16 @@ static void do_test_ack_message_from_earlier_batch(void) {
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "First ack failed: %s", rd_kafka_err2name(ack_err));
 
-        /* Poll batch 2 - should be empty (we already consumed everything) */
-        size_t r = 0;
-        rd_kafka_error_t *e =
-            rd_kafka_share_consume_batch(rkshare, 2000, batch2, &r);
+        /* Poll batch 2 - must be empty (we already consumed and acked
+         * the only record). */
+        r = 0;
+        e = rd_kafka_share_consume_batch(rkshare, 2000, batch2, &r);
         if (e)
                 rd_kafka_error_destroy(e);
-        TEST_SAY("Batch 2 received %zu records\n", r);
-        for (i = 0; i < r; i++)
-                rd_kafka_message_destroy(batch2[i]);
+        TEST_ASSERT(r == 0,
+                    "Expected batch 2 to be empty after acking the only "
+                    "record, got %zu records",
+                    r);
 
         /* Re-acknowledge from batch1 - should fail with _STATE */
         ack_err = rd_kafka_share_acknowledge(rkshare, batch1[0]);
@@ -1432,6 +1491,8 @@ static void do_test_ack_message_from_earlier_batch(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_message_from_earlier_batch: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1448,6 +1509,8 @@ static void do_test_ack_offset_before_consume(void) {
         rd_kafka_resp_err_t err;
         const char *group = "share-ack-before-consume";
         const char *topic;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_offset_before_consume ===\n");
@@ -1473,6 +1536,8 @@ static void do_test_ack_offset_before_consume(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_offset_before_consume: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1496,6 +1561,8 @@ static void do_test_ack_offset_wrong_params(void) {
         int attempts;
         int32_t partition;
         int64_t offset;
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY("=== test_ack_offset_wrong_params ===\n");
@@ -1563,6 +1630,8 @@ static void do_test_ack_offset_wrong_params(void) {
         test_share_destroy(rkshare);
 
         TEST_SAY("=== test_ack_offset_wrong_params: PASSED ===\n");
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1591,6 +1660,8 @@ static void do_test_mixed_ack_mode_same_group(void) {
         int attempts;
         rd_kafka_error_t *cerr;
         test_ack_cb_state_t exp_state = {0};
+
+        SUB_TEST();
 
         TEST_SAY("\n");
         TEST_SAY(
@@ -1686,8 +1757,8 @@ static void do_test_mixed_ack_mode_same_group(void) {
         for (m = 0; m < rcvd; m++)
                 rd_kafka_message_destroy(batch[m]);
 
-        TEST_ASSERT(implicit_cnt + explicit_cnt >= total_msgs,
-                    "Expected >= %d total records across both consumers, "
+        TEST_ASSERT(implicit_cnt + explicit_cnt == total_msgs,
+                    "Expected exactly %d total records across both consumers, "
                     "got %d (implicit=%d explicit=%d)",
                     total_msgs, implicit_cnt + explicit_cnt, implicit_cnt,
                     explicit_cnt);
@@ -1703,6 +1774,8 @@ static void do_test_mixed_ack_mode_same_group(void) {
             "SUCCESS: mixed ack-mode group - implicit=%d explicit=%d "
             "(total=%d)\n",
             implicit_cnt, explicit_cnt, implicit_cnt + explicit_cnt);
+
+        SUB_TEST_PASS();
 }
 
 

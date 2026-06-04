@@ -36,18 +36,18 @@ blocks:
       epilogue:
         always:
           commands:
+            - cp tests/asan-share-tests.log artifacts/ || true
             - artifact push workflow artifacts/ --destination artifacts/asan/
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION} || true
       jobs:
         - name: 'Share consumer suite (ASAN + LSAN)'
           env_vars:
             - name: ASAN_OPTIONS
-              value: 'halt_on_error=0:abort_on_error=0:exitcode=0:print_stacktrace=1:symbolize=1'
+              value: 'halt_on_error=0:abort_on_error=0:print_stacktrace=1:symbolize=1'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - (cd tests && python3 -m trivup.clusters.KafkaCluster
               --kraft
               --version "${KAFKA_VERSION}"
               --conf '["group.share.min.record.lock.duration.ms=1000"]'
-              --cmd "TESTS_SKIP_BEFORE=0155 make 2>&1 | tee asan-share-tests.log") || true
-            - cp tests/asan-share-tests.log artifacts/
-            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+              --cmd "bash -c 'set -o pipefail; TESTS_SKIP_BEFORE=0155 make 2>&1 | tee asan-share-tests.log'")

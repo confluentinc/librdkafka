@@ -38,7 +38,9 @@ blocks:
       epilogue:
         always:
           commands:
+            - cp tests/valgrind-share-tests.log artifacts/ || true
             - artifact push workflow artifacts/ --destination artifacts/valgrind/
+            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION} || true
       jobs:
         - name: 'Share consumer suite (Valgrind memcheck)'
           commands:
@@ -47,6 +49,4 @@ blocks:
               --kraft
               --version "${KAFKA_VERSION}"
               --conf '["group.share.min.record.lock.duration.ms=1000"]'
-              --cmd "TESTS_SKIP_BEFORE=0155 ./run-test.sh valgrind 2>&1 | tee valgrind-share-tests.log") || true
-            - cp tests/valgrind-share-tests.log artifacts/
-            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+              --cmd "bash -c 'set -o pipefail; TESTS_SKIP_BEFORE=0155 ./run-test.sh valgrind 2>&1 | tee valgrind-share-tests.log'")

@@ -739,7 +739,7 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 }
                 rd_kafka_toppar_unlock(rktp);
 
-                /* TODO: rktp_leader_id and rktp_broker_id are read
+                /* TODO KIP-932: rktp_leader_id and rktp_broker_id are read
                  * here without holding rd_kafka_toppar_lock, but they are
                  * written under that lock by rd_kafka_toppar_leader_update
                  * on the main thread during metadata refresh.

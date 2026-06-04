@@ -937,7 +937,7 @@ static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
  * Verifies that acknowledged messages are not redelivered to a second
  consumer.
  */
-static void test_close_with_acknowledge(void) {
+static void do_test_close_with_acknowledge(void) {
         /**
          * @brief Test configuration for close with acknowledge scenarios
          */
@@ -977,6 +977,8 @@ static void test_close_with_acknowledge(void) {
             {"close-2t2p-commit-async", 2, {2, 2}, 10, COMMIT_MODE_ASYNC, 20},
             {"close-2t2p-commit-sync", 2, {2, 2}, 10, COMMIT_MODE_SYNC, 20},
         };
+
+        SUB_TEST();
 
         for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
                 close_ack_test_config_t *config = &tests[i];
@@ -1071,6 +1073,8 @@ static void test_close_with_acknowledge(void) {
                          config->test_name);
                 test_share_destroy(c1);
         }
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1087,7 +1091,7 @@ static void test_close_with_acknowledge(void) {
  *
  * Tests multiple topologies: 1t1p, 1t3p, 3t1p, 2t2p
  */
-static void test_close_without_acknowledge() {
+static void do_test_close_without_acknowledge() {
         /**
          * @brief Test configuration for close without acknowledge scenarios
          */
@@ -1113,6 +1117,8 @@ static void test_close_without_acknowledge() {
             /* Multiple topics, multiple partitions */
             {"close-no-ack-2t2p", 2, {2, 2}, 10, 5},
         };
+
+        SUB_TEST();
 
         for (size_t i = 0; i < sizeof(tests) / sizeof(tests[0]); i++) {
                 close_no_ack_test_config_t *config = &tests[i];
@@ -1190,6 +1196,8 @@ static void test_close_without_acknowledge() {
                          config->test_name);
                 test_share_destroy(c1);
         }
+
+        SUB_TEST_PASS();
 }
 
 /**
@@ -1207,7 +1215,7 @@ static void test_close_without_acknowledge() {
  * In each case, close() should wait for the response and complete
  * successfully after the delay.
  */
-static void test_close_with_slow_broker_response(void) {
+static void do_test_close_with_slow_broker_response(void) {
         typedef struct {
                 const char *test_name;
                 int delayed_broker_cnt;
@@ -1297,7 +1305,7 @@ static void test_close_with_slow_broker_response(void) {
  * 2. Brokers 1 and 2 have delayed responses
  * 3. All 3 brokers have delayed responses
  */
-static void test_close_respects_socket_timeout(void) {
+static void do_test_close_respects_socket_timeout(void) {
         typedef struct {
                 const char *test_name;
                 int delayed_broker_cnt;
@@ -1400,7 +1408,7 @@ static void test_close_respects_socket_timeout(void) {
  * 2. Brokers 1 and 2 return the error
  * 3. All 3 brokers return the error
  */
-static void test_close_with_broker_error_response(void) {
+static void do_test_close_with_broker_error_response(void) {
         typedef struct {
                 const char *test_name;
                 int erroring_broker_cnt;
@@ -1482,7 +1490,7 @@ static void test_close_with_broker_error_response(void) {
  *    and verify it receives 0 messages over up to 5 fetch attempts. If
  *    any message is delivered, close() failed to send the acks.
  */
-static void test_close_with_broker_busy(void) {
+static void do_test_close_with_broker_busy(void) {
         const char *test_name        = "close-broker-busy";
         const int partition_cnt      = 3;
         const int msgs_per_partition = 10;
@@ -1656,7 +1664,7 @@ static void test_close_with_broker_busy(void) {
  *   broker down and call close().
  * - close() should return immediately and return NULL (no error).
  */
-static void test_close_with_broker_down(void) {
+static void do_test_close_with_broker_down(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_share_t *consumer;
@@ -1766,7 +1774,7 @@ static void test_close_with_broker_down(void) {
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to set broker up");
 
-        rd_kafka_share_destroy(consumer);
+        test_share_destroy(consumer);
         test_mock_cluster_destroy(mcluster);
 
         /* Restore default error-fatal behavior for subsequent tests. */
@@ -1781,7 +1789,7 @@ static void test_close_with_broker_down(void) {
  * Verifies every guarded API returns RD_KAFKA_RESP_ERR__STATE with
  * "closed" in the error string.
  */
-static void test_api_calls_on_closed_consumer(void) {
+static void do_test_api_calls_on_closed_consumer(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_conf_t *conf;
@@ -1843,7 +1851,7 @@ static void test_api_calls_on_closed_consumer(void) {
  * completes later), giving us a deterministic window to exercise every
  * guarded API.
  */
-static void test_api_calls_during_closing(void) {
+static void do_test_api_calls_during_closing(void) {
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
         rd_kafka_conf_t *conf;
@@ -1928,6 +1936,111 @@ static void test_api_calls_during_closing(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Test that the share-ack callback fires for un-committed implicit
+ *        acks during close.
+ *
+ * In implicit mode, records consumed in the first poll are auto-acked via
+ * piggyback on the next ShareFetch. After polling twice (first to fetch,
+ * second to drive the piggyback ack) and closing without an explicit
+ * commit, the ack callback must have fired with the consumed offsets.
+ */
+static void do_test_implicit_ack_callback_fires_on_close(void) {
+        const char *topic_name;
+        const char *group;
+        char group_id[64];
+        rd_kafka_share_t *rkshare;
+        rd_kafka_message_t *raw_batch[16];
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_error_t *error;
+        ack_receipts_t receipts;
+        size_t rcvd, j;
+        int consumed = 0;
+        int attempts = 0;
+
+        SUB_TEST();
+
+        ack_receipts_init(&receipts);
+
+        topic_name = test_mk_topic_name("0178-impl-ack-on-close", 1);
+        test_create_topic_wait_exists(common_admin, topic_name, 1, -1,
+                                      60 * 1000);
+        test_produce_msgs_simple(common_producer, topic_name, 0, 1);
+
+        rd_snprintf(group_id, sizeof(group_id),
+                    "0178-group-impl-ack-close-%" PRIu64, test_id_generate());
+        group = group_id;
+
+        test_share_set_auto_offset_reset(group, "earliest");
+        rkshare =
+            create_share_consumer_with_receipts(group, "implicit", &receipts);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic_name,
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* First poll: fetch the record (auto-ack pending for next poll) */
+        while (consumed < 1 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 2000, raw_batch,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!raw_batch[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(raw_batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed == 1, "Expected 1 record, got %d", consumed);
+
+        /* Second poll: drives the piggybacked implicit ack to the broker */
+        attempts = 5;
+        while (attempts-- > 0) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 1000, raw_batch,
+                                                     &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++)
+                        rd_kafka_message_destroy(raw_batch[j]);
+        }
+
+        /* Close - any pending ack-completion callbacks must be flushed */
+        TEST_SAY("Closing share consumer without explicit commit\n");
+        error = rd_kafka_share_consumer_close(rkshare);
+        TEST_ASSERT(error == NULL, "close returned error: %s",
+                    rd_kafka_error_string(error));
+
+        TEST_SAY(
+            "After close: callback_invocations=%d, receipts=%d, "
+            "last_cb_err=%s\n",
+            receipts.callback_invocations, receipts.receipt_cnt,
+            rd_kafka_err2name(receipts.last_cb_err));
+
+        TEST_ASSERT(receipts.callback_invocations >= 1,
+                    "Expected ack callback to fire at least once "
+                    "by the time close returns, got %d invocations",
+                    receipts.callback_invocations);
+        TEST_ASSERT(receipts.receipt_cnt >= 1,
+                    "Expected at least 1 acked offset reported via "
+                    "the callback by close, got %d",
+                    receipts.receipt_cnt);
+        TEST_ASSERT(receipts.last_cb_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR in ack callback, got %s",
+                    rd_kafka_err2name(receipts.last_cb_err));
+
+        ack_receipts_destroy(&receipts);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0178_share_consumer_close(int argc, char **argv) {
         /* Set overall timeout for all tests */
         test_timeout_set(600);
@@ -1937,8 +2050,9 @@ int main_0178_share_consumer_close(int argc, char **argv) {
         common_admin    = test_create_producer();
 
         /* Real broker tests */
-        test_close_with_acknowledge();
-        test_close_without_acknowledge();
+        do_test_close_with_acknowledge();
+        do_test_close_without_acknowledge();
+        do_test_implicit_ack_callback_fires_on_close();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);
@@ -1952,12 +2066,12 @@ int main_0178_share_consumer_close_local(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         test_timeout_set(300);
 
-        test_close_with_slow_broker_response();
-        test_close_respects_socket_timeout();
-        test_close_with_broker_error_response();
-        test_close_with_broker_busy();
-        test_close_with_broker_down();
-        test_api_calls_on_closed_consumer();
-        test_api_calls_during_closing();
+        do_test_close_with_slow_broker_response();
+        do_test_close_respects_socket_timeout();
+        do_test_close_with_broker_error_response();
+        do_test_close_with_broker_busy();
+        do_test_close_with_broker_down();
+        do_test_api_calls_on_closed_consumer();
+        do_test_api_calls_during_closing();
         return 0;
 }

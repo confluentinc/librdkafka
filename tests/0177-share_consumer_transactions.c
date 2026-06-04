@@ -1079,6 +1079,643 @@ static void do_test_interval_abort_pattern(const char *isolation_level) {
 }
 
 
+/**
+ * @brief Produce exactly one transactional record carrying \p value, then
+ *        commit (\p commit=rd_true) or abort the transaction.
+ */
+static void produce_msg_txn(rd_kafka_t *producer,
+                            const char *topic,
+                            const char *value,
+                            rd_bool_t commit) {
+        rd_kafka_resp_err_t err;
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(producer));
+
+        if (!commit)
+                test_curr->ignore_dr_err = rd_true;
+
+        err = rd_kafka_producev(producer, RD_KAFKA_V_TOPIC(topic),
+                                RD_KAFKA_V_VALUE((void *)value, strlen(value)),
+                                RD_KAFKA_V_END);
+        TEST_ASSERT(!err, "producev failed: %s", rd_kafka_err2name(err));
+        rd_kafka_flush(producer, 30000);
+
+        if (commit)
+                TEST_CALL_ERROR__(rd_kafka_commit_transaction(producer, 30000));
+        else
+                TEST_CALL_ERROR__(rd_kafka_abort_transaction(producer, 30000));
+
+        test_curr->ignore_dr_err = rd_false;
+}
+
+
+/**
+ * @brief Test: dynamic isolation level change READ_COMMITTED ->
+ *        READ_UNCOMMITTED with RELEASE acknowledgement on a committed
+ *        record.
+ *
+ * Phase 1: produce committed Msg1, consume + ACCEPT.
+ * Phase 2: produce aborted Msg2 (no records visible in read_committed).
+ * Phase 3: produce committed Msg3, consume + RELEASE.
+ * Phase 4: produce aborted Msg4. Released Msg3 may reappear; keep RELEASE-ing
+ *          it so the broker can advance past the abort marker.
+ * Phase 5: alter isolation level to read_uncommitted.
+ * Phase 6: produce committed Msg5, aborted Msg6, aborted Msg7, committed Msg8.
+ * Phase 7: consume; the released Msg3 (offset 4) plus the four new messages
+ *          (offsets 8, 10, 12, 14) should all be visible -> 5 unique offsets.
+ *
+ * With one record per transaction, the offset layout is:
+ *   0  Msg1 (commit marker 1)
+ *   2  Msg2 (abort  marker 3)
+ *   4  Msg3 (commit marker 5)
+ *   6  Msg4 (abort  marker 7)
+ *   8  Msg5 (commit marker 9)
+ *  10  Msg6 (abort  marker 11)
+ *  12  Msg7 (abort  marker 13)
+ *  14  Msg8 (commit marker 15)
+ */
+static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
+        const char *topic;
+        const char *group  = "share-dynamic-c-to-uc-release";
+        const char *txn_id = "txn-dynamic-c-uc-release";
+        rd_kafka_t *producer;
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t ack_err;
+        size_t rcvd, j;
+        int attempts;
+        int consumed;
+        rd_bool_t seen[20]               = {0};
+        const int64_t expected_offsets[] = {4, 8, 10, 12, 14};
+        size_t i;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0177-dyn-c-uc-release", 1);
+        test_create_topic(NULL, topic, 1, -1);
+
+        producer = create_txn_producer(txn_id);
+
+        consumer = test_create_share_consumer(group, "explicit");
+        configure_share_group(group, "read_committed");
+        subscribe_share_consumer(consumer, topic);
+
+        /* Phase 1: committed Msg1 -> ACCEPT */
+        TEST_SAY("Phase 1: committed Msg1 with READ_COMMITTED\n");
+        produce_msg_txn(producer, topic, "Message 1", rd_true);
+        consumed = 0;
+        attempts = 0;
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                TEST_ASSERT(batch[j]->offset == 0,
+                                            "Phase 1: expected offset 0, "
+                                            "got %" PRId64,
+                                            batch[j]->offset);
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 1 ACCEPT failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed == 1, "Phase 1: expected 1 record, got %d",
+                    consumed);
+        error = rd_kafka_share_commit_async(consumer);
+        TEST_ASSERT(!error, "Phase 1 commit_async failed");
+
+        /* Phase 2: aborted Msg2 - read_committed should hide the record;
+         * the broker eventually advances past the abort marker. */
+        TEST_SAY("Phase 2: aborted Msg2 (read_committed hides it)\n");
+        produce_msg_txn(producer, topic, "Message 2", rd_false);
+        attempts = 10;
+        while (attempts-- > 0) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++) {
+                        TEST_ASSERT(batch[j]->err || batch[j]->offset != 2,
+                                    "Phase 2: aborted Msg2 leaked at "
+                                    "offset 2 in read_committed");
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+
+        /* Phase 3: committed Msg3 -> RELEASE */
+        TEST_SAY("Phase 3: committed Msg3 -> RELEASE\n");
+        produce_msg_txn(producer, topic, "Message 3", rd_true);
+        consumed = 0;
+        attempts = 0;
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                TEST_ASSERT(batch[j]->offset == 4,
+                                            "Phase 3: expected offset 4 "
+                                            "(Msg3), got %" PRId64,
+                                            batch[j]->offset);
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 3 RELEASE failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed == 1, "Phase 3: expected 1 record, got %d",
+                    consumed);
+        error = rd_kafka_share_commit_async(consumer);
+        TEST_ASSERT(!error, "Phase 3 commit_async failed");
+
+        /* Phase 4: aborted Msg4. Released Msg3 may re-appear; RELEASE it
+         * again so the next poll can advance. Keep this loop short: each
+         * RELEASE-and-redeliver bumps Msg3's delivery_count. The default
+         * share.delivery.count.limit is 5; Phase 3 already used one
+         * delivery and Phase 7's final ACCEPT will need one, so cap
+         * Phase 4 at 3 redeliveries to leave headroom and avoid the
+         * record being archived. */
+        TEST_SAY("Phase 4: aborted Msg4; Msg3 may redeliver -> RELEASE\n");
+        produce_msg_txn(producer, topic, "Message 4", rd_false);
+        attempts = 3;
+        while (attempts-- > 0) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                /* Should only be Msg3 (offset 4) re-delivered;
+                                 * Msg4 at offset 6 is aborted in
+                                 * read_committed.
+                                 */
+                                TEST_ASSERT(
+                                    batch[j]->offset == 4,
+                                    "Phase 4: unexpected offset %" PRId64,
+                                    batch[j]->offset);
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 4 RELEASE failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+                if (rcvd > 0) {
+                        error = rd_kafka_share_commit_async(consumer);
+                        if (error)
+                                rd_kafka_error_destroy(error);
+                }
+        }
+
+        /* Phase 5: alter isolation level to read_uncommitted */
+        TEST_SAY("Phase 5: alter share.isolation.level to read_uncommitted\n");
+        test_share_set_isolation_level(group, "read_uncommitted");
+
+        /* Phase 6: produce 4 more transactions */
+        TEST_SAY("Phase 6: produce Msg5..Msg8\n");
+        produce_msg_txn(producer, topic, "Message 5", rd_true);
+        produce_msg_txn(producer, topic, "Message 6", rd_false);
+        produce_msg_txn(producer, topic, "Message 7", rd_false);
+        produce_msg_txn(producer, topic, "Message 8", rd_true);
+
+        /* Phase 7: expect to see 5 unique offsets: 4 (released Msg3),
+         * 8, 10, 12, 14 (Msg5..Msg8). */
+        TEST_SAY("Phase 7: consume - expect offsets {4,8,10,12,14}\n");
+        attempts = 0;
+        while (attempts++ < 60) {
+                int new_acks = 0;
+                rd_bool_t all_seen;
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                int64_t off = batch[j]->offset;
+                                if (off >= 0 && off < 20)
+                                        seen[off] = rd_true;
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 7 ACCEPT failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                                new_acks++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+                if (new_acks > 0) {
+                        error = rd_kafka_share_commit_async(consumer);
+                        if (error)
+                                rd_kafka_error_destroy(error);
+                }
+
+                all_seen = rd_true;
+                for (i = 0;
+                     i < sizeof(expected_offsets) / sizeof(expected_offsets[0]);
+                     i++) {
+                        if (!seen[expected_offsets[i]]) {
+                                all_seen = rd_false;
+                                break;
+                        }
+                }
+                if (all_seen)
+                        break;
+        }
+
+        for (i = 0; i < sizeof(expected_offsets) / sizeof(expected_offsets[0]);
+             i++) {
+                TEST_ASSERT(seen[expected_offsets[i]],
+                            "Phase 7: expected offset %" PRId64
+                            " not seen after isolation change",
+                            expected_offsets[i]);
+        }
+
+        TEST_SAY(
+            "SUCCESS: dynamic READ_COMMITTED -> READ_UNCOMMITTED with "
+            "RELEASE\n");
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Test: dynamic isolation level change READ_COMMITTED ->
+ *        READ_UNCOMMITTED with REJECT acknowledgement on a committed
+ *        record.
+ *
+ * Same setup as the RELEASE variant, except Msg3 is REJECTed instead of
+ * RELEASEd. After the isolation level switch, Msg3 must NOT be redelivered;
+ * only the four new messages are expected -> 4 unique offsets.
+ */
+static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
+        const char *topic;
+        const char *group  = "share-dynamic-c-to-uc-reject";
+        const char *txn_id = "txn-dynamic-c-uc-reject";
+        rd_kafka_t *producer;
+        rd_kafka_share_t *consumer;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_error_t *error;
+        rd_kafka_resp_err_t ack_err;
+        size_t rcvd, j;
+        int attempts;
+        int consumed;
+        rd_bool_t seen[20]               = {0};
+        const int64_t expected_offsets[] = {8, 10, 12, 14};
+        size_t i;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0177-dyn-c-uc-reject", 1);
+        test_create_topic(NULL, topic, 1, -1);
+
+        producer = create_txn_producer(txn_id);
+
+        consumer = test_create_share_consumer(group, "explicit");
+        configure_share_group(group, "read_committed");
+        subscribe_share_consumer(consumer, topic);
+
+        /* Phase 1: committed Msg1 -> ACCEPT */
+        TEST_SAY("Phase 1: committed Msg1 with READ_COMMITTED\n");
+        produce_msg_txn(producer, topic, "Message 1", rd_true);
+        consumed = 0;
+        attempts = 0;
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                TEST_ASSERT(batch[j]->offset == 0,
+                                            "Phase 1: expected offset 0, "
+                                            "got %" PRId64,
+                                            batch[j]->offset);
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 1 ACCEPT failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed == 1, "Phase 1: expected 1 record, got %d",
+                    consumed);
+        error = rd_kafka_share_commit_async(consumer);
+        TEST_ASSERT(!error, "Phase 1 commit_async failed");
+
+        /* Phase 2: aborted Msg2 */
+        TEST_SAY("Phase 2: aborted Msg2 (read_committed hides it)\n");
+        produce_msg_txn(producer, topic, "Message 2", rd_false);
+        attempts = 10;
+        while (attempts-- > 0) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++) {
+                        TEST_ASSERT(batch[j]->err || batch[j]->offset != 2,
+                                    "Phase 2: aborted Msg2 leaked at "
+                                    "offset 2 in read_committed");
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+
+        /* Phase 3: committed Msg3 -> REJECT */
+        TEST_SAY("Phase 3: committed Msg3 -> REJECT\n");
+        produce_msg_txn(producer, topic, "Message 3", rd_true);
+        consumed = 0;
+        attempts = 0;
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                TEST_ASSERT(batch[j]->offset == 4,
+                                            "Phase 3: expected offset 4 "
+                                            "(Msg3), got %" PRId64,
+                                            batch[j]->offset);
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 3 REJECT failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                                consumed++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+        TEST_ASSERT(consumed == 1, "Phase 3: expected 1 record, got %d",
+                    consumed);
+        error = rd_kafka_share_commit_async(consumer);
+        TEST_ASSERT(!error, "Phase 3 commit_async failed");
+
+        /* Phase 4: aborted Msg4. Msg3 was REJECTed so it should not return.
+         * Just poll for a while to let the broker process the abort marker. */
+        TEST_SAY("Phase 4: aborted Msg4 (Msg3 was REJECTed)\n");
+        produce_msg_txn(producer, topic, "Message 4", rd_false);
+        attempts = 20;
+        while (attempts-- > 0) {
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                TEST_FAIL(
+                                    "Phase 4: unexpected record at "
+                                    "offset %" PRId64
+                                    " (Msg3 was REJECTed, Msg4 is "
+                                    "aborted in read_committed)",
+                                    batch[j]->offset);
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+        }
+
+        /* Phase 5: alter isolation level to read_uncommitted */
+        TEST_SAY("Phase 5: alter share.isolation.level to read_uncommitted\n");
+        test_share_set_isolation_level(group, "read_uncommitted");
+
+        /* Phase 6: produce 4 more transactions */
+        TEST_SAY("Phase 6: produce Msg5..Msg8\n");
+        produce_msg_txn(producer, topic, "Message 5", rd_true);
+        produce_msg_txn(producer, topic, "Message 6", rd_false);
+        produce_msg_txn(producer, topic, "Message 7", rd_false);
+        produce_msg_txn(producer, topic, "Message 8", rd_true);
+
+        /* Phase 7: expect offsets {8, 10, 12, 14}. Msg3 (offset 4) must NOT
+         * reappear because it was REJECTed. */
+        TEST_SAY("Phase 7: consume - expect offsets {8,10,12,14}, no Msg3\n");
+        attempts = 0;
+        while (attempts++ < 60) {
+                int new_acks = 0;
+                rd_bool_t all_seen;
+                rcvd = 0;
+                error =
+                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err) {
+                                int64_t off = batch[j]->offset;
+                                TEST_ASSERT(off != 4,
+                                            "Phase 7: Msg3 (offset 4) "
+                                            "should not be redelivered "
+                                            "after REJECT");
+                                if (off >= 0 && off < 20)
+                                        seen[off] = rd_true;
+                                ack_err = rd_kafka_share_acknowledge_type(
+                                    consumer, batch[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                TEST_ASSERT(ack_err ==
+                                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "Phase 7 ACCEPT failed: %s",
+                                            rd_kafka_err2name(ack_err));
+                                new_acks++;
+                        }
+                        rd_kafka_message_destroy(batch[j]);
+                }
+                if (new_acks > 0) {
+                        error = rd_kafka_share_commit_async(consumer);
+                        if (error)
+                                rd_kafka_error_destroy(error);
+                }
+
+                all_seen = rd_true;
+                for (i = 0;
+                     i < sizeof(expected_offsets) / sizeof(expected_offsets[0]);
+                     i++) {
+                        if (!seen[expected_offsets[i]]) {
+                                all_seen = rd_false;
+                                break;
+                        }
+                }
+                if (all_seen)
+                        break;
+        }
+
+        for (i = 0; i < sizeof(expected_offsets) / sizeof(expected_offsets[0]);
+             i++) {
+                TEST_ASSERT(seen[expected_offsets[i]],
+                            "Phase 7: expected offset %" PRId64
+                            " not seen after isolation change",
+                            expected_offsets[i]);
+        }
+        TEST_ASSERT(!seen[4],
+                    "Phase 7: Msg3 (offset 4) appeared but it was REJECTed");
+
+        TEST_SAY(
+            "SUCCESS: dynamic READ_COMMITTED -> READ_UNCOMMITTED with "
+            "REJECT\n");
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+        rd_kafka_destroy(producer);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Two share groups, different isolation levels, same topic.
+ *
+ * share.isolation.level is a BROKER-SIDE group config — consumers in
+ * the SAME group cannot have different isolation levels. This test
+ * exercises two distinct groups consuming the same topic concurrently
+ * with different isolation levels.
+ *
+ * Producer mix on the topic:
+ *   - txn-A committed: 100 records
+ *   - txn-B aborted:   100 records
+ *   - txn-C committed: 100 records
+ *
+ * Expected:
+ *   - Group G1 (read_committed):   sees 200 records (A+C only)
+ *   - Group G2 (read_uncommitted): sees 300 records (A+B+C)
+ */
+static void do_test_two_groups_different_isolation_levels(void) {
+        const char *topic;
+        const char *grp_committed   = "share-txn-twogroup-rc";
+        const char *grp_uncommitted = "share-txn-twogroup-ru";
+        rd_kafka_t *producer_a;
+        rd_kafka_t *producer_b;
+        rd_kafka_t *producer_c;
+        rd_kafka_share_t *c_committed;
+        rd_kafka_share_t *c_uncommitted;
+        const int msg_cnt     = 100;
+        const int expected_rc = 2 * msg_cnt;
+        const int expected_ru = 3 * msg_cnt;
+        int consumed_rc;
+        int consumed_ru;
+
+        SUB_TEST("two groups, different isolation levels");
+
+        topic = test_mk_topic_name("0177-twogroup-iso", 1);
+        test_create_topic(NULL, topic, 1, -1);
+
+        producer_a = create_txn_producer("twogroup-iso-A");
+        producer_b = create_txn_producer("twogroup-iso-B");
+        producer_c = create_txn_producer("twogroup-iso-C");
+
+        /* Subscribe both consumers BEFORE producing so they're ready to
+         * consume from the earliest offset. */
+        c_committed = test_create_share_consumer(grp_committed, NULL);
+        configure_share_group(grp_committed, "read_committed");
+        subscribe_share_consumer(c_committed, topic);
+
+        c_uncommitted = test_create_share_consumer(grp_uncommitted, NULL);
+        configure_share_group(grp_uncommitted, "read_uncommitted");
+        subscribe_share_consumer(c_uncommitted, topic);
+
+        /* txn-A: committed */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(producer_a));
+        test_produce_msgs2(producer_a, topic, test_id_generate(),
+                           RD_KAFKA_PARTITION_UA, 0, msg_cnt, NULL, 0);
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(producer_a, 30000));
+
+        /* txn-B: aborted */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(producer_b));
+        test_curr->ignore_dr_err = rd_true;
+        test_produce_msgs2(producer_b, topic, test_id_generate(),
+                           RD_KAFKA_PARTITION_UA, 0, msg_cnt, NULL, 0);
+        TEST_CALL_ERROR__(rd_kafka_abort_transaction(producer_b, 30000));
+        test_curr->ignore_dr_err = rd_false;
+
+        /* txn-C: committed */
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(producer_c));
+        test_produce_msgs2(producer_c, topic, test_id_generate(),
+                           RD_KAFKA_PARTITION_UA, 0, msg_cnt, NULL, 0);
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(producer_c, 30000));
+
+        /* Both groups consume the same topic concurrently. */
+        TEST_SAY("Consuming via read_committed group\n");
+        consumed_rc =
+            consume_share_messages(c_committed, expected_rc, 80, 3000);
+        TEST_SAY("Consuming via read_uncommitted group\n");
+        consumed_ru =
+            consume_share_messages(c_uncommitted, expected_ru, 80, 3000);
+
+        TEST_SAY(
+            "Result: read_committed=%d (expected %d), "
+            "read_uncommitted=%d (expected %d)\n",
+            consumed_rc, expected_rc, consumed_ru, expected_ru);
+
+        TEST_ASSERT(consumed_rc == expected_rc,
+                    "read_committed group expected %d records, got %d",
+                    expected_rc, consumed_rc);
+        TEST_ASSERT(consumed_ru == expected_ru,
+                    "read_uncommitted group expected %d records, got %d",
+                    expected_ru, consumed_ru);
+
+        test_share_consumer_close(c_committed);
+        test_share_destroy(c_committed);
+        test_share_consumer_close(c_uncommitted);
+        test_share_destroy(c_uncommitted);
+        rd_kafka_destroy(producer_a);
+        rd_kafka_destroy(producer_b);
+        rd_kafka_destroy(producer_c);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0177_share_consumer_transactions(int argc, char **argv) {
         /* Test both isolation levels */
         const char *isolation_levels[] = {"read_committed", "read_uncommitted"};
@@ -1124,6 +1761,11 @@ int main_0177_share_consumer_transactions(int argc, char **argv) {
         TEST_SAY("========================================\n");
 
         do_test_dynamic_uncommitted_to_committed();
+        do_test_dynamic_committed_to_uncommitted_with_release();
+        do_test_dynamic_committed_to_uncommitted_with_reject();
+
+        /* Two-groups, different isolation levels on the same topic */
+        do_test_two_groups_different_isolation_levels();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

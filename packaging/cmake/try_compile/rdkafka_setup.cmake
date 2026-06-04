@@ -48,6 +48,7 @@ try_compile(
 # Atomic 32 tests {
 set(LINK_ATOMIC NO)
 set(HAVE_ATOMICS_32 NO)
+set(HAVE_ATOMICS_32_ATOMIC NO)
 set(HAVE_ATOMICS_32_SYNC NO)
 
 try_compile(
@@ -58,6 +59,7 @@ try_compile(
 
 if(_atomics_32)
   set(HAVE_ATOMICS_32 YES)
+  set(HAVE_ATOMICS_32_ATOMIC YES)
 else()
   try_compile(
       _atomics_32_lib
@@ -67,6 +69,7 @@ else()
   )
   if(_atomics_32_lib)
     set(HAVE_ATOMICS_32 YES)
+    set(HAVE_ATOMICS_32_ATOMIC YES)
     set(LINK_ATOMIC YES)
   else()
     try_compile(
@@ -80,6 +83,7 @@ endif()
 
 # Atomic 64 tests {
 set(HAVE_ATOMICS_64 NO)
+set(HAVE_ATOMICS_64_ATOMIC NO)
 set(HAVE_ATOMICS_64_SYNC NO)
 
 try_compile(
@@ -90,6 +94,7 @@ try_compile(
 
 if(_atomics_64)
   set(HAVE_ATOMICS_64 YES)
+  set(HAVE_ATOMICS_64_ATOMIC YES)
 else()
   try_compile(
       _atomics_64_lib
@@ -99,6 +104,7 @@ else()
   )
   if(_atomics_64_lib)
     set(HAVE_ATOMICS_64 YES)
+    set(HAVE_ATOMICS_64_ATOMIC YES)
     set(LINK_ATOMIC YES)
   else()
     try_compile(

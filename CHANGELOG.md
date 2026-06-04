@@ -1,3 +1,28 @@
+# Unreleased
+
+librdkafka Unreleased is a maintenance release:
+
+* Fix compilation with CMake when CURL is disabled (#5136).
+* Fix `rd_atomic{32,64}_set` returning the new value in CMake builds, restoring the `ALL_BROKERS_DOWN` event (#5136).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5135.
+  Fix compilation with CMake when CURL is disabled.
+  The OAuthBearer OIDC code included `<curl/curl.h>` under `#ifdef WITH_OAUTHBEARER_OIDC`, but
+  CMake always defines that macro (to 0 or 1), so CURL was required even when it was turned off.
+  Happening since 2.11.0 (#5136).
+* Issues: #5282.
+  Fix `rd_atomic32_set`/`rd_atomic64_set` returning the new value instead of the previous one in CMake builds.
+  CMake never defined `HAVE_ATOMICS_{32,64}_ATOMIC`, so the setters used a non-atomic fallback that
+  returned the new value, which prevented the `ALL_BROKERS_DOWN` event from being raised under CMake.
+  Happening since 2.11.1 (#5136).
+
+
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:

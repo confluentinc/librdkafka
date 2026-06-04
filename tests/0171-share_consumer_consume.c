@@ -890,8 +890,8 @@ static void test_concurrent_thread_access_rejected(void) {
         rcvd = 0;
         err  = rd_kafka_share_consume_batch(consumer, 0, batch, &rcvd);
         TEST_ASSERT(
-            err && rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
-            "Expected __STATE from concurrent consume_batch while blocker "
+            err && rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__CONFLICT,
+            "Expected __CONFLICT from concurrent consume_batch while blocker "
             "thread holds the gate; got: %s",
             err ? rd_kafka_err2name(rd_kafka_error_code(err)) : "no error");
         rd_kafka_error_destroy(err);

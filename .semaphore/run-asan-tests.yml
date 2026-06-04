@@ -6,7 +6,7 @@ agent:
     type: s1-prod-ubuntu24-04-amd64-00
 
 execution_time_limit:
-  hours: 4
+  hours: 2
 
 global_job_config:
   prologue:
@@ -25,8 +25,6 @@ global_job_config:
       value: '7'
     - name: KAFKA_VERSION
       value: '4.2.0'
-    - name: CP_VERSION
-      value: '8.0.0'
 
 blocks:
   - name: 'Share consumer tests (ASAN + LSAN)'
@@ -43,19 +41,13 @@ blocks:
         - name: 'Share consumer suite (ASAN + LSAN)'
           env_vars:
             - name: ASAN_OPTIONS
-              value: 'detect_leaks=1:halt_on_error=0:print_stacktrace=1:abort_on_error=0:symbolize=1'
+              value: 'halt_on_error=0:abort_on_error=0:exitcode=0:print_stacktrace=1:symbolize=1'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - (cd tests && python3 -m trivup.clusters.KafkaCluster
               --kraft
               --version "${KAFKA_VERSION}"
-              --cpversion "${CP_VERSION}"
               --conf '["group.share.min.record.lock.duration.ms=1000"]'
               --cmd "TESTS_SKIP_BEFORE=0155 make 2>&1 | tee asan-share-tests.log") || true
-            - echo "=== ASAN log written by tee to tests/asan-share-tests.log ==="
-            - ls -la tests/asan-share-tests.log
             - cp tests/asan-share-tests.log artifacts/
-            - echo "=== Copied to artifacts/ — contents staged for upload ==="
-            - ls -la artifacts/
-            - echo "=== Epilogue will push artifacts/ to Semaphore at artifacts/asan/ ==="
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}

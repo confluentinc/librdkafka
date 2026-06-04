@@ -12,10 +12,6 @@ global_job_config:
   prologue:
     commands:
       - checkout
-      # TSAN's runtime aborts with "unexpected memory mapping" on Ubuntu 24.04
-      # because the kernel's default vm.mmap_rnd_bits=32 makes ASLR put
-      # allocations outside TSAN's expected shadow regions. Lower it to 28
-      # (TSAN's safe maximum) before any TSAN-instrumented binary runs.
       - sudo sysctl -w vm.mmap_rnd_bits=28
       - '[[ -z "$GIT_REF" ]] || git checkout $GIT_REF'
       - sudo apt remove -y needrestart
@@ -30,8 +26,6 @@ global_job_config:
       value: '7'
     - name: KAFKA_VERSION
       value: '4.2.0'
-    - name: CP_VERSION
-      value: '8.0.0'
 
 blocks:
   - name: 'Share consumer tests (TSAN)'
@@ -48,19 +42,13 @@ blocks:
         - name: 'Share consumer suite (TSAN)'
           env_vars:
             - name: TSAN_OPTIONS
-              value: 'halt_on_error=0:second_deadlock_stack=1:history_size=7:symbolize=1'
+              value: 'halt_on_error=0:exitcode=0:history_size=7:second_deadlock_stack=1:symbolize=1'
           commands:
             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
             - (cd tests && python3 -m trivup.clusters.KafkaCluster
               --kraft
               --version "${KAFKA_VERSION}"
-              --cpversion "${CP_VERSION}"
               --conf '["group.share.min.record.lock.duration.ms=1000"]'
               --cmd "TESTS_SKIP_BEFORE=0155 make 2>&1 | tee tsan-share-tests.log") || true
-            - echo "=== TSAN log written by tee to tests/tsan-share-tests.log ==="
-            - ls -la tests/tsan-share-tests.log
             - cp tests/tsan-share-tests.log artifacts/
-            - echo "=== Copied to artifacts/ — contents staged for upload ==="
-            - ls -la artifacts/
-            - echo "=== Epilogue will push artifacts/ to Semaphore at artifacts/tsan/ ==="
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}

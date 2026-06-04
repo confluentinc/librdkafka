@@ -5695,8 +5695,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rd_kafka_share_t *rkshare = rk->rk_rkshare;
                 /* Lookup callback at invoke time.
                  * Locality: app thread */
-                if (!rkshare ||
-                    !rk->rk_share_consumer.acknowledgement_callback_registered)
+                if (!rkshare || !rk->rk_share_consumer.acknowledgement_cb)
                         return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
                 /* Set reentrancy flag so share consumer APIs called from
                  * within the callback can detect and reject the call. */

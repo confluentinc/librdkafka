@@ -1282,13 +1282,11 @@ static rd_kafka_share_t *create_share_consumer_socket_timeout(
         rd_snprintf(buf, sizeof(buf), "%d", socket_timeout_ms);
         test_conf_set(conf, "socket.timeout.ms", buf);
 
-        if (cb && cb_state) {
-                rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, cb);
-                rd_kafka_conf_set_opaque(conf, cb_state);
-        }
-
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        if (cb && cb_state)
+                rd_kafka_share_set_acknowledgement_cb(rkshare, cb, cb_state);
         return rkshare;
 }
 
@@ -1627,10 +1625,11 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
                     partitions_total, cb_state.callback_cnt);
         t_callbacks_done_us = test_clock();
 
-        TEST_ASSERT(cb_state.last_err == expected_phase1_callback_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
+                        expected_phase1_callback_err,
                     "Phase 1: expected callback err %s, got %s",
                     rd_kafka_err2name(expected_phase1_callback_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
 
         actual_wait_ms = (int)((t_callbacks_done_us - t_p1_end_us) / 1000);
         TEST_SAY(
@@ -1889,10 +1888,11 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
                     phase1_partition_cnt, cb_state.callback_cnt);
         t_callbacks_done_us = test_clock();
 
-        TEST_ASSERT(cb_state.last_err == expected_phase1_callback_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
+                        expected_phase1_callback_err,
                     "Phase 1: expected callback err %s, got %s",
                     rd_kafka_err2name(expected_phase1_callback_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
 
         actual_wait_ms = (int)((t_callbacks_done_us - t_p1_end_us) / 1000);
         TEST_SAY(
@@ -1957,10 +1957,12 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
             partitions->cnt, prev_callback_cnt, cb_state.callback_cnt);
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        TEST_ASSERT(cb_state.last_err == expected_phase2_commit_err,
-                    "Phase 2: expected last callback err %s, got %s",
-                    rd_kafka_err2name(expected_phase2_commit_err),
-                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(
+            cb_state.errs[cb_state.callback_cnt - 1] ==
+                expected_phase2_commit_err,
+            "Phase 2: expected last callback err %s, got %s",
+            rd_kafka_err2name(expected_phase2_commit_err),
+            rd_kafka_err2name(cb_state.errs[cb_state.callback_cnt - 1]));
 
         for (i = 0; i < msgcnt; i++)
                 rd_kafka_message_destroy(rkmessages[i]);

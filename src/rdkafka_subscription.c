@@ -142,30 +142,39 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
         if (unlikely((err = rd_kafka_share_acquire(rkshare))))
                 return err;
         if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
-                return err;
+                goto done;
 
-        if (!(rkcg = rd_kafka_cgrp_get(rkshare->rkshare_rk)))
-                return RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+        if (!(rkcg = rd_kafka_cgrp_get(rkshare->rkshare_rk))) {
+                err = RD_KAFKA_RESP_ERR__UNKNOWN_GROUP;
+                goto done;
+        }
 
         /* Share consumer subscriptions are literal topic names only:
          * regex/wildcard entries are not supported. Reject empty entries;
          * pass everything else through to the broker via the heartbeat. */
-        if (topics->cnt == 0 || rd_kafka_topic_partition_list_sum(
-                                    topics, _share_invalid_topic_cb, NULL) > 0)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        if (topics->cnt == 0 ||
+            rd_kafka_topic_partition_list_sum(topics, _share_invalid_topic_cb,
+                                              NULL) > 0) {
+                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                goto done;
+        }
 
         topics_cpy = rd_kafka_topic_partition_list_copy(topics);
         if (rd_kafka_topic_partition_list_has_duplicates(
                 topics_cpy, rd_true /*ignore partition field*/)) {
                 rd_kafka_topic_partition_list_destroy(topics_cpy);
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                goto done;
         }
 
         rko                         = rd_kafka_op_new(RD_KAFKA_OP_SUBSCRIBE);
         rko->rko_u.subscribe.topics = topics_cpy;
 
-        return rd_kafka_op_err_destroy(
+        err = rd_kafka_op_err_destroy(
             rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+done:
+        rd_kafka_share_release(rkshare);
+        return err;
 }
 
 

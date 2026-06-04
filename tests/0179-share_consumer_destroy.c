@@ -267,14 +267,12 @@ new_share_consumer_for_mock_test(const char *bootstraps,
         if (explicit_ack)
                 test_conf_set(conf, "share.acknowledgement.mode", "explicit");
 
-        if (receipts) {
-                rd_kafka_conf_set_share_acknowledgement_commit_cb(
-                    conf, record_share_ack_cb);
-                rd_kafka_conf_set_opaque(conf, receipts);
-        }
-
         consumer = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(consumer != NULL, "Failed to create share consumer");
+
+        if (receipts)
+                rd_kafka_share_set_acknowledgement_cb(
+                    consumer, record_share_ack_cb, receipts);
         return consumer;
 }
 
@@ -299,14 +297,12 @@ new_share_consumer_for_real_test(const char *group_id,
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
                           sizeof(errstr));
 
-        if (receipts) {
-                rd_kafka_conf_set_share_acknowledgement_commit_cb(
-                    conf, record_share_ack_cb);
-                rd_kafka_conf_set_opaque(conf, receipts);
-        }
-
         consumer = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(consumer, "Failed to create share consumer: %s", errstr);
+
+        if (receipts)
+                rd_kafka_share_set_acknowledgement_cb(
+                    consumer, record_share_ack_cb, receipts);
         return consumer;
 }
 

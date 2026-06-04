@@ -825,18 +825,31 @@ static void test_poll_callback_piggybacked_acks(void) {
 
 
 /**
- * @brief Worker thread that blocks inside share_consume_batch on an empty
- *        topic, holding the share consumer access gate for the duration.
+ * @brief Worker-thread argument for the gate-conflict test.
+ *
+ * @c entering is set to 1 by the worker thread just before it calls
+ * share_consume_batch, so the main thread can wait for the worker to
+ * have started before probing. (entering=1 doesn't yet prove the gate
+ * is held — there's still a window between the atomic flip and the
+ * gate acquire inside consume_batch — so the main thread also retries
+ * its probe in a short polling loop below.)
  */
+typedef struct {
+        rd_kafka_share_t *consumer;
+        rd_atomic32_t entering;
+} blocker_arg_t;
+
 static int consume_blocker_thread(void *arg) {
-        rd_kafka_share_t *consumer = arg;
+        blocker_arg_t *ba = arg;
         rd_kafka_message_t *batch[1];
         size_t rcvd = 0;
         rd_kafka_error_t *err;
 
+        rd_atomic32_set(&ba->entering, 1);
+
         /* Blocks for ~5s waiting for messages that never arrive.
          * The share access gate is held for the full duration. */
-        err = rd_kafka_share_consume_batch(consumer, 5000, batch, &rcvd);
+        err = rd_kafka_share_consume_batch(ba->consumer, 5000, batch, &rcvd);
         if (err)
                 rd_kafka_error_destroy(err);
         return 0;
@@ -853,9 +866,12 @@ static void test_concurrent_thread_access_rejected(void) {
         const char *group = "share-concurrent-thread";
         rd_kafka_topic_partition_list_t *subs;
         thrd_t blocker;
+        blocker_arg_t ba;
         rd_kafka_message_t *batch[1];
-        size_t rcvd = 0;
-        rd_kafka_error_t *err;
+        size_t rcvd           = 0;
+        rd_kafka_error_t *err = NULL;
+        int probe_attempt;
+        const int probe_max_attempts = 50; /* 50 × 100ms = 5 s budget */
 
         TEST_SAY("\n");
         TEST_SAY("=== Concurrent thread access rejected ===\n");
@@ -873,26 +889,42 @@ static void test_concurrent_thread_access_rejected(void) {
 
         /* Spawn the blocker. It enters consume_batch, takes the gate,
          * and stays inside for ~5s on the empty topic. */
-        if (thrd_create(&blocker, consume_blocker_thread, consumer) !=
-            thrd_success)
+        ba.consumer = consumer;
+        rd_atomic32_init(&ba.entering, 0);
+        if (thrd_create(&blocker, consume_blocker_thread, &ba) != thrd_success)
                 TEST_FAIL("thrd_create failed");
 
-        /* Give the blocker time to enter consume_batch, run the non-blocking
-         * prelude, and park in cnd_timedwait_abs holding the gate. Without
-         * this, the main thread can race in first and acquire/release the
-         * gate in a tight loop, leaving no window for the blocker to enter;
-         * the blocker's single attempt then fails with __STATE and exits,
-         * and main never observes the gate being held by anyone else. */
-        rd_usleep(200 * 1000, NULL);
+        /* Wait until the blocker thread has at least reached the point
+         * just before its consume_batch call. */
+        while (rd_atomic32_get(&ba.entering) == 0)
+                rd_usleep(10 * 1000, NULL);
 
-        /* Blocker is now holding the gate. A concurrent call must be
-         * rejected with __STATE. */
-        rcvd = 0;
-        err  = rd_kafka_share_consume_batch(consumer, 0, batch, &rcvd);
+        /* The blocker has flipped its `entering` flag but may not yet
+         * have completed the gate acquire inside consume_batch. Probe
+         * in a short polling loop until we either observe __CONFLICT
+         * (gate is held by the blocker — the success case) or exhaust
+         * the budget. Without the loop, slow thread scheduling (e.g.,
+         * Windows CI) lets the main thread win the gate first and the
+         * single-shot assertion flakes. */
+        for (probe_attempt = 0; probe_attempt < probe_max_attempts;
+             probe_attempt++) {
+                rcvd = 0;
+                err  = rd_kafka_share_consume_batch(consumer, 0, batch, &rcvd);
+                if (err &&
+                    rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__CONFLICT)
+                        break; /* observed the conflict — done */
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        err = NULL;
+                }
+                rd_usleep(100 * 1000, NULL);
+        }
+
         TEST_ASSERT(
             err && rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__CONFLICT,
             "Expected __CONFLICT from concurrent consume_batch while blocker "
-            "thread holds the gate; got: %s",
+            "thread holds the gate after %d probe attempts; got: %s",
+            probe_attempt + 1,
             err ? rd_kafka_err2name(rd_kafka_error_code(err)) : "no error");
         rd_kafka_error_destroy(err);
 

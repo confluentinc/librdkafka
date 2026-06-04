@@ -1799,6 +1799,11 @@ static void do_test_delete_records_advances_lso(void) {
 
         SUB_TEST();
 
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows"))
+                SUB_TEST_SKIP(
+                    "delete-records scenario not supported (broker on "
+                    "Windows)\n");
+
         group = rd_strdup(test_mk_topic_name("share-lso-delete", 1));
         topic = rd_strdup(test_mk_topic_name("0170-lso", 1));
 
@@ -1808,14 +1813,6 @@ static void do_test_delete_records_advances_lso(void) {
         TEST_SAY("=== delete-records-advances-lso ===\n");
         TEST_SAY(
             "============================================================\n");
-
-        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
-                TEST_SAY(
-                    "Skipping delete-records scenario (broker on Windows)\n");
-                rd_free(group);
-                rd_free(topic);
-                return;
-        }
 
         test_create_topic_wait_exists(NULL, topic, 1, -1, 30000);
         test_produce_msgs_simple(common_producer, topic, 0, 10);

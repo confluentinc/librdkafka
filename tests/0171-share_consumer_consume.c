@@ -1387,7 +1387,7 @@ static void do_test_partition_increase_during_consume(void) {
                 }
         }
         TEST_SAY("Pre-grow consumed: %d/%d\n", consumed, initial_expected);
-        TEST_ASSERT(consumed >= initial_expected,
+        TEST_ASSERT(consumed == initial_expected,
                     "Expected >= %d msgs from initial partitions, got %d",
                     initial_expected, consumed);
 

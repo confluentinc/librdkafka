@@ -945,39 +945,24 @@ rd_kafka_share_find_ack_entry(rd_kafka_share_t *rkshare,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
-                           const rd_kafka_message_t *rkmessage) {
-        return rd_kafka_share_acknowledge_type(
-            rkshare, rkmessage, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
-                                const rd_kafka_message_t *rkmessage,
-                                rd_kafka_share_AcknowledgeType_t type) {
-        if (!rkmessage)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        if (!rkmessage->rkt)
-                return RD_KAFKA_RESP_ERR__STATE;
-
-        return rd_kafka_share_acknowledge_offset(
-            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
-            rkmessage->offset, type);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
-                                  const char *topic,
-                                  int32_t partition,
-                                  int64_t offset,
-                                  rd_kafka_share_AcknowledgeType_t type) {
+/**
+ * @brief Internal acknowledge-offset helper.
+ *
+ * Performs argument validation, inflight-map lookup, and type update.
+ * Does NOT take the share consumer access gate — callers must call
+ * rd_kafka_share_acquire() / rd_kafka_share_release() around this.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
+                                   const char *topic,
+                                   int32_t partition,
+                                   int64_t offset,
+                                   rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_share_ack_batch_entry_t *entry;
         int64_t idx;
         rd_kafka_resp_err_t err;
 
-        if (!rkshare || !topic || partition < 0 || offset < 0)
+        if (!topic || partition < 0 || offset < 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         /* Explicit acknowledge APIs require explicit acknowledgement mode */
@@ -1005,6 +990,59 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         rd_kafka_share_update_acknowledgement_type(rkshare, entry, idx, type);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
+                           const rd_kafka_message_t *rkmessage) {
+        return rd_kafka_share_acknowledge_type(
+            rkshare, rkmessage, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
+                                const rd_kafka_message_t *rkmessage,
+                                rd_kafka_share_AcknowledgeType_t type) {
+        rd_kafka_resp_err_t err;
+
+        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+                return err;
+
+        if (!rkmessage) {
+                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                goto done;
+        }
+
+        if (!rkmessage->rkt) {
+                err = RD_KAFKA_RESP_ERR__STATE;
+                goto done;
+        }
+
+        err = rd_kafka_share_acknowledge_offset0(
+            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
+            rkmessage->offset, type);
+
+done:
+        rd_kafka_share_release(rkshare);
+        return err;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
+                                  const char *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  rd_kafka_share_AcknowledgeType_t type) {
+        rd_kafka_resp_err_t err;
+
+        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+                return err;
+
+        err = rd_kafka_share_acknowledge_offset0(rkshare, topic, partition,
+                                                 offset, type);
+
+        rd_kafka_share_release(rkshare);
+        return err;
 }
 
 
@@ -1114,17 +1152,19 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
         rd_kafka_op_t *cb_rko;
         rd_kafka_share_partition_offsets_list_t *partitions;
 
-        if (!rk->rk_conf.share_acknowledgement_commit_cb)
+        /* Check if a runtime callback is registered.
+         * Locality: main thread - reads flag owned by main thread.
+         * No race because the flag is only modified by the main thread
+         * via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op handler. */
+        if (!rk->rk_rkshare ||
+            !rk->rk_share_consumer.acknowledgement_callback_registered)
                 return;
 
         partitions = rd_kafka_share_build_partition_offsets_list(batches);
 
-        cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB);
-        cb_rko->rko_err = err;
-        cb_rko->rko_u.share_ack_commit.partitions = partitions;
-        cb_rko->rko_u.share_ack_commit.cb =
-            rk->rk_conf.share_acknowledgement_commit_cb;
-        cb_rko->rko_u.share_ack_commit.opaque = rk->rk_conf.opaque;
+        cb_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE);
+        cb_rko->rko_err                                      = err;
+        cb_rko->rko_u.share_ack_commit_cb_execute.partitions = partitions;
 
         rd_kafka_q_enq(rk->rk_rep, cb_rko);
 }
@@ -1183,8 +1223,10 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
         rd_kafka_share_ack_batches_t *ack_batch;
         int k;
 
-        if (!rk->rk_conf.share_acknowledgement_commit_cb || !ack_details ||
-            rd_list_cnt(ack_details) == 0)
+        /* Locality: main thread - checks runtime-set registration flag. */
+        if (!rk->rk_rkshare ||
+            !rk->rk_share_consumer.acknowledgement_callback_registered ||
+            !ack_details || rd_list_cnt(ack_details) == 0)
                 return;
 
         /* Use per-partition error from each batch */

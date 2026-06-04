@@ -526,28 +526,6 @@ calculate_share_heartbeat_rate(rd_kafka_t *rk,
         return heartbeat_rate;
 }
 
-static rd_kafka_telemetry_metric_value_t
-calculate_consumer_commit_latency_avg(rd_kafka_t *rk,
-                                      rd_kafka_broker_t *rkb_selected,
-                                      rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t avg_commit_time;
-        avg_commit_time.double_value = calculate_avg(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-            THREE_ORDERS_MAGNITUDE);
-        return avg_commit_time;
-}
-
-static rd_kafka_telemetry_metric_value_t
-calculate_consumer_commit_latency_max(rd_kafka_t *rk,
-                                      rd_kafka_broker_t *rkb_selected,
-                                      rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t max_commit_time;
-        max_commit_time.int_value = calculate_max(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_commit_latency,
-            THREE_ORDERS_MAGNITUDE);
-        return max_commit_time;
-}
-
 static void reset_historical_metrics(rd_kafka_t *rk, rd_ts_t now_ns) {
         rd_kafka_broker_t *rkb;
 

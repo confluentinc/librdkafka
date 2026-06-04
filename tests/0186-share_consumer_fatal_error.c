@@ -200,9 +200,9 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         rd_kafka_error_t *error;
-        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = "sg-0186-close-flushes-acks";
-        const int msgcnt  = 10;
+        const char *topic            = test_mk_topic_name(__FUNCTION__, 0);
+        const char *group            = "sg-0186-close-flushes-acks";
+        const int msgcnt             = 10;
         test_ack_cb_state_t cb_state = {0};
         rd_kafka_t *rk;
         int consumed = 0;
@@ -221,8 +221,8 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
                                  "bootstrap.servers", bootstraps, NULL);
 
         /* Create an explicit-ack share consumer with a commit callback. */
-        rkshare = create_share_consumer(bootstraps, group, "explicit",
-                                        &cb_state);
+        rkshare =
+            create_share_consumer(bootstraps, group, "explicit", &cb_state);
         subscription = rd_kafka_topic_partition_list_new(1);
         rd_kafka_topic_partition_list_add(subscription, topic,
                                           RD_KAFKA_PARTITION_UA);

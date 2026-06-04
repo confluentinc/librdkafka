@@ -1408,18 +1408,6 @@ static void rd_kafka_destroy_internal(rd_kafka_t *rk) {
                 thrd  = rd_malloc(sizeof(*thrd));
                 *thrd = rk->rk_internal_rkb->rkb_thread;
 
-                /* TODO KIP-932: Clear any share-session state that may
-                 * have been populated on the internal broker during a
-                 * leader migration (PARTITION_JOIN runs on whichever
-                 * broker the toppar is transiently delegated to,
-                 * including :0/internal). Once the leader-migration
-                 * path is fixed to skip non-LEARNED brokers, this
-                 * SESSION_CLEAR enqueue can be removed. */
-                if (RD_KAFKA_IS_SHARE_CONSUMER(rk))
-                        rd_kafka_q_enq(
-                            rk->rk_internal_rkb->rkb_ops,
-                            rd_kafka_op_new(RD_KAFKA_OP_SHARE_SESSION_CLEAR));
-
                 /* Send op to trigger queue wake-up.
                  * WARNING: This is last time we can read
                  * from rk_internal_rkb in this thread! */

@@ -2246,42 +2246,44 @@ RD_EXPORT size_t rd_kafka_share_partition_offsets_offsets_cnt(
     const rd_kafka_share_partition_offsets_t *partition_offsets);
 
 /**
- * @brief Set share acknowledgement commit callback.
+ * @brief Set acknowledgement commit callback at runtime.
  *
- * The share acknowledgement commit callback is called when share consumer
- * acknowledgements (from rd_kafka_share_acknowledge* calls followed by
- * rd_kafka_share_commit_async(), rd_kafka_share_consume_batch() or
- * rd_kafka_share_commit_sync()) complete.
+ * Sets a callback to be invoked when acknowledgements sent to the broker
+ * have been completed (either successfully or with an error).
+ *
+ * This callback can be changed at any time. The currently set callback
+ * will be used when processing acknowledgement responses, not the callback
+ * that was active when acknowledgements were sent.
  *
  * The callback is invoked once per partition with the acknowledgement result
  * for that partition.
  *
- * @param conf Configuration object.
- * @param share_acknowledgement_commit_cb Callback to set.
+ * @param rkshare Share consumer handle.
+ * @param share_acknowledgement_commit_cb Callback function, or NULL to clear.
+ * @param opaque Application opaque passed to callback.
  *
- * The callback parameters are:
- *   - \p rkshare: Share consumer handle.
- *   - \p partitions: List containing exactly one partition with its
- *                    acknowledged offsets.
- *   - \p err: Error code for this partition (RD_KAFKA_RESP_ERR_NO_ERROR on
- *             success). This error applies to all offsets in the partition.
- *   - \p opaque: Application opaque set with rd_kafka_conf_set_opaque().
+ * @remark Cannot be called from within the acknowledgement callback itself.
+ * @remark Replaces any previously set callback.
+ * @remark Registration is asynchronous - there is a brief window after
+ *         calling this function during which the new registration state
+ *         is not yet visible to the main thread.
  *
- * The \p partitions list contains exactly one partition entry with an
- * array of acknowledged offsets accessible via
- * rd_kafka_share_partition_offsets_offsets().
- *
- * @remark The \p partitions list and its contents are only valid for the
- *         duration of the callback.
+ * @returns NULL on success, or an rd_kafka_error_t* on failure:
+ *          - RD_KAFKA_RESP_ERR__STATE if called from within the callback or
+ *            after the share consumer has been closed.
+ *          - RD_KAFKA_RESP_ERR__CONFLICT if another thread is concurrently
+ *            inside a share consumer API.
+ *          The caller must destroy the returned error with
+ *          rd_kafka_error_destroy().
  */
-RD_EXPORT
-void rd_kafka_conf_set_share_acknowledgement_commit_cb(
-    rd_kafka_conf_t *conf,
+RD_EXPORT rd_kafka_error_t *rd_kafka_share_set_acknowledgement_commit_cb(
+    rd_kafka_share_t *rkshare,
     void (*share_acknowledgement_commit_cb)(
         rd_kafka_share_t *rkshare,
         rd_kafka_share_partition_offsets_list_t *partitions,
         rd_kafka_resp_err_t err,
-        void *opaque));
+        void *opaque),
+    void *opaque);
 
 
 /**
@@ -5227,9 +5229,16 @@ int rd_kafka_share_consumer_closed(rd_kafka_share_t *rkshare);
  * @brief Destroy the share consumer instance and free all associated resources.
  *
  * @param rkshare Share consumer instance.
+ *
+ * @returns NULL on success, or an error object if another thread is
+ *          concurrently using the share consumer (including a call made from
+ *          inside the acknowledgement callback). In the error case the instance
+ *          is NOT destroyed; the application must ensure no other thread is
+ *          using it and call destroy again. The returned error object must be
+ *          freed with rd_kafka_error_destroy().
  */
 RD_EXPORT
-void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
+rd_kafka_error_t *rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
 
 /**
  * @brief Destroy the share consumer instance according to specified destroy
@@ -5238,9 +5247,15 @@ void rd_kafka_share_destroy(rd_kafka_share_t *rkshare);
  * @param rkshare Share consumer instance.
  *
  * @param flags Destroy flags (see RD_KAFKA_DESTROY_F_* defines).
+ *
+ * @returns NULL on success, or an error object if another thread is
+ *          concurrently using the share consumer. In the error case the
+ *          instance is NOT destroyed. The returned error object must be freed
+ *          with rd_kafka_error_destroy().
  */
 RD_EXPORT
-void rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare, int flags);
+rd_kafka_error_t *rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare,
+                                               int flags);
 /**@}*/
 
 

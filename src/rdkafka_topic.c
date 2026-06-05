@@ -2306,6 +2306,42 @@ void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
 
 
 /**
+ * @brief Populate \p topic_ids with the topic_ids (Uuid pointers) of all
+ *        locally known topics that have a non-zero topic_id.
+ *
+ *        Used by share-consumer periodic refresh: the broker's response
+ *        to a by-id Metadata request tells the client which local rkts
+ *        no longer correspond to a live cluster-side topic, driving
+ *        cleanup of stale rkts left behind by topic recreation.
+ *
+ * @remark \p rk lock MUST NOT be held
+ * @remark Elements are rd_kafka_Uuid_t * allocated via rd_kafka_Uuid_copy
+ *         and the caller must use rd_list_Uuid_destroy as the list's
+ *         free callback.
+ */
+void rd_kafka_local_topic_ids_to_list(rd_kafka_t *rk, rd_list_t *topic_ids) {
+        rd_kafka_topic_t *rkt;
+
+        rd_kafka_rdlock(rk);
+        rd_list_grow(topic_ids, rk->rk_topic_cnt);
+        /* TODO KIP-932: Consider skipping rkts in the non-existent state
+         * to avoid re-querying ids the broker has already told us are
+         * gone. Today the re-query is harmless (the resulting
+         * set_notexists is idempotent and the resulting error stays at
+         * debug-log level for the share consumer propagator), but it
+         * costs a few bytes per stale rkt per refresh. Keep in mind that
+         * including non-existent rkts also acts as a recovery path if a
+         * previously-absent id reappears in metadata. */
+        TAILQ_FOREACH(rkt, &rk->rk_topics, rkt_link) {
+                if (!RD_KAFKA_UUID_IS_ZERO(rkt->rkt_topic_id))
+                        rd_list_add(topic_ids,
+                                    rd_kafka_Uuid_copy(&rkt->rkt_topic_id));
+        }
+        rd_kafka_rdunlock(rk);
+}
+
+
+/**
  * @brief Unit test helper to set a topic's state to EXISTS
  *        with the given number of partitions.
  */

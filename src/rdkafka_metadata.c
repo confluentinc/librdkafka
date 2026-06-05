@@ -1528,6 +1528,84 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
 
 
 /**
+ * @brief Refresh metadata for topics identified by topic_id.
+ *
+ *        For consumer paths whose canonical identity is topic_id
+ *        (share consumer today): a by-id request lets the broker tell
+ *        us which of our locally known topic_ids no longer correspond
+ *        to a live topic, so stale rkts (e.g. those left behind by a
+ *        topic delete+recreate) can be marked as non-existent and
+ *        their broker-side share-session entries released.
+ *
+ *        No by-id cache hint / dedup is performed; every call sends
+ *        the request. Auto-creation, cgrp update, and subscription
+ *        version are not exposed: auto-creation requires a topic
+ *        name, and the cgrp-update hook is only consumed by the
+ *        classic consumer protocol.
+ *
+ * @param rk used to look up usable broker if \p rkb is NULL.
+ * @param rkb use this broker, unless NULL then any usable broker
+ *            from \p rk.
+ * @param topic_ids list of rd_kafka_Uuid_t * to query.
+ * @param reason reason of refresh, used in debug logs.
+ *
+ * @returns an error code; __UNKNOWN_TOPIC if topic_ids is empty;
+ *          __TRANSPORT if no broker is available.
+ *
+ * @locality any
+ * @locks none
+ */
+rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_topic_ids(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    const rd_list_t *topic_ids,
+                                    const char *reason) {
+        rd_list_t q_topic_ids;
+        int destroy_rkb = 0;
+
+        if (!rk) {
+                rd_assert(rkb);
+                rk = rkb->rkb_rk;
+        }
+
+        if (rd_list_cnt(topic_ids) == 0)
+                return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+
+        if (!rkb) {
+                if (!(rkb = rd_kafka_broker_any_usable(
+                          rk, RD_POLL_NOWAIT, RD_DO_LOCK, 0, reason))) {
+                        rd_kafka_dbg(rk, METADATA, "METADATA",
+                                     "Skipping metadata refresh of %d topic "
+                                     "id(s): %s: no usable brokers",
+                                     rd_list_cnt(topic_ids), reason);
+                        return RD_KAFKA_RESP_ERR__TRANSPORT;
+                }
+                destroy_rkb = 1;
+        }
+
+        rd_list_init(&q_topic_ids, rd_list_cnt(topic_ids),
+                     rd_list_Uuid_destroy);
+        rd_list_copy_to(&q_topic_ids, topic_ids, rd_list_Uuid_copy, NULL);
+
+        rd_kafka_dbg(rk, METADATA, "METADATA",
+                     "Requesting metadata for %d topic id(s): %s",
+                     rd_list_cnt(&q_topic_ids), reason);
+
+        rd_kafka_MetadataRequest(
+            rkb, NULL, &q_topic_ids, reason, rd_false /* allow_auto_create */,
+            rd_false /* cgrp_update */, -1 /* cgrp_subscription_version */,
+            rd_false /* force_racks */, NULL);
+
+        rd_list_destroy(&q_topic_ids);
+
+        if (destroy_rkb)
+                rd_kafka_broker_destroy(rkb);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
  * @brief Refresh metadata for known topics
  *
  * @param rk: used to look up usable broker if \p rkb is NULL.
@@ -1611,6 +1689,24 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                  * all topics in the cluster so that we can perform
                  * regexp matching. */
                 return rd_kafka_metadata_refresh_all(rk, rkb, reason);
+        }
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Share consumer identifies topics by id. Subscription
+                 * names are resolved server-side via
+                 * ShareGroupHeartbeat, so the only thing this
+                 * periodic path needs to do is status-check the
+                 * locally known topic ids. The broker's response
+                 * marks stale ids (e.g. those left behind by a
+                 * delete+recreate) as unknown, which drives cleanup
+                 * of the corresponding rkts. */
+                rd_list_t topic_ids;
+                rd_list_init(&topic_ids, 8, rd_list_Uuid_destroy);
+                rd_kafka_local_topic_ids_to_list(rk, &topic_ids);
+                err = rd_kafka_metadata_refresh_topic_ids(rk, rkb, &topic_ids,
+                                                          reason);
+                rd_list_destroy(&topic_ids);
+                return err;
         }
 
         rd_list_init(&topics, 8, rd_free);

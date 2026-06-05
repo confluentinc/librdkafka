@@ -348,33 +348,52 @@ rd_kafka_share_find_ack_batch_by_id(rd_list_t *ack_list,
  * @brief Reply to a SHARE_FETCH op with an error, propagating the
  *        error to each batch in ack_details.
  *
- * On top-level error (err != 0), set err on each batch since the
- * partition-level data was not parsed. On success (err == 0), the
- * per-partition errors have already been set by the response parser
- * and we leave ack_details untouched.
+ * On top-level error (err != 0):
+ *   - If err is BAD_MSG / __UNDERFLOW (wire-level parse failure):
+ *     override every batch with INVALID_RECORD_STATE so the consumer
+ *     treats these as "outcome unknown" and re-acquires; any
+ *     per-partition err the parser may have written before failing
+ *     could be a misaligned read and is no longer trustworthy.
+ *   - Otherwise: propagate err to each batch still at _IN_PROGRESS,
+ *     preserving any deliberately pre-set err and any per-partition
+ *     err already written by the parser.
+ *
+ * On success (err == 0), the per-partition errors have already been
+ * set by the response parser and we leave ack_details untouched.
  */
 void rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
     rd_kafka_op_t *rko,
     rd_kafka_resp_err_t err) {
-        /* Propagate top-level err to each batch in ack_details, but
-         * only override the _IN_PROGRESS sentinel. This preserves:
-         *   - Deliberately pre-set err (e.g. INVALID_SHARE_SESSION_EPOCH
-         *     from the epoch-0 strip path).
-         *   - Per-partition err already written by the parser.
-         *   - INVALID_RECORD_STATE from the post-parse "missing from
-         *     response" marker.
-         *
-         * Top-level err only ever needs to land on _IN_PROGRESS
-         * batches: the parser is skipped when there is a top-level
-         * err so no per-partition err / post-parse INVALID_RECORD_STATE
-         * exists when this helper is called with a non-zero err. */
         if (err && rko->rko_u.share_fetch.ack_details) {
                 rd_kafka_share_ack_batches_t *batch;
                 int i;
-                RD_LIST_FOREACH(batch, rko->rko_u.share_fetch.ack_details, i) {
-                        if (batch->rktpar->err ==
-                            RD_KAFKA_RESP_ERR__IN_PROGRESS)
+
+                if (likely(err != RD_KAFKA_RESP_ERR__BAD_MSG &&
+                           err != RD_KAFKA_RESP_ERR__UNDERFLOW)) {
+
+                        /* Propagate top-level err to each batch in
+                         * ack_details, but only override the _IN_PROGRESS
+                         * sentinel. This preserves:
+                         *   - Deliberately pre-set err (e.g.
+                         *     INVALID_SHARE_SESSION_EPOCH from the
+                         *     epoch-0 strip path).
+                         *   - Per-partition err already written by the
+                         *     parser. */
+                        RD_LIST_FOREACH(batch,
+                                        rko->rko_u.share_fetch.ack_details, i) {
+                                if (batch->rktpar->err ==
+                                    RD_KAFKA_RESP_ERR__IN_PROGRESS)
+                                        batch->rktpar->err = err;
+                        }
+                } else {
+                        /* Wire-level parse failure: response framing is
+                         * untrusted, so any per-partition err the parser
+                         * may have written before failing could be a
+                         * misaligned read. */
+                        RD_LIST_FOREACH(batch,
+                                        rko->rko_u.share_fetch.ack_details, i) {
                                 batch->rktpar->err = err;
+                        }
                 }
         }
         rd_kafka_op_reply(rko, err);
@@ -945,39 +964,24 @@ rd_kafka_share_find_ack_entry(rd_kafka_share_t *rkshare,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
-                           const rd_kafka_message_t *rkmessage) {
-        return rd_kafka_share_acknowledge_type(
-            rkshare, rkmessage, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
-                                const rd_kafka_message_t *rkmessage,
-                                rd_kafka_share_AcknowledgeType_t type) {
-        if (!rkmessage)
-                return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        if (!rkmessage->rkt)
-                return RD_KAFKA_RESP_ERR__STATE;
-
-        return rd_kafka_share_acknowledge_offset(
-            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
-            rkmessage->offset, type);
-}
-
-rd_kafka_resp_err_t
-rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
-                                  const char *topic,
-                                  int32_t partition,
-                                  int64_t offset,
-                                  rd_kafka_share_AcknowledgeType_t type) {
+/**
+ * @brief Internal acknowledge-offset helper.
+ *
+ * Performs argument validation, inflight-map lookup, and type update.
+ * Does NOT take the share consumer access gate — callers must call
+ * rd_kafka_share_acquire() / rd_kafka_share_release() around this.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
+                                   const char *topic,
+                                   int32_t partition,
+                                   int64_t offset,
+                                   rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_share_ack_batch_entry_t *entry;
         int64_t idx;
         rd_kafka_resp_err_t err;
 
-        if (!rkshare || !topic || partition < 0 || offset < 0)
+        if (!topic || partition < 0 || offset < 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         /* Explicit acknowledge APIs require explicit acknowledgement mode */
@@ -1005,6 +1009,67 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         rd_kafka_share_update_acknowledgement_type(rkshare, entry, idx, type);
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge(rd_kafka_share_t *rkshare,
+                           const rd_kafka_message_t *rkmessage) {
+        return rd_kafka_share_acknowledge_type(
+            rkshare, rkmessage, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
+                                const rd_kafka_message_t *rkmessage,
+                                rd_kafka_share_AcknowledgeType_t type) {
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err = NULL;
+
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
+                return err;
+        }
+
+        if (!rkmessage) {
+                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                goto done;
+        }
+
+        if (!rkmessage->rkt) {
+                err = RD_KAFKA_RESP_ERR__STATE;
+                goto done;
+        }
+
+        err = rd_kafka_share_acknowledge_offset0(
+            rkshare, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition,
+            rkmessage->offset, type);
+
+done:
+        rd_kafka_share_release(rkshare);
+        return err;
+}
+
+rd_kafka_resp_err_t
+rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
+                                  const char *topic,
+                                  int32_t partition,
+                                  int64_t offset,
+                                  rd_kafka_share_AcknowledgeType_t type) {
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err = NULL;
+
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
+                return err;
+        }
+
+        err = rd_kafka_share_acknowledge_offset0(rkshare, topic, partition,
+                                                 offset, type);
+
+        rd_kafka_share_release(rkshare);
+        return err;
 }
 
 
@@ -1114,17 +1179,19 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
         rd_kafka_op_t *cb_rko;
         rd_kafka_share_partition_offsets_list_t *partitions;
 
-        if (!rk->rk_conf.share_acknowledgement_commit_cb)
+        /* Check if a runtime callback is registered.
+         * Locality: main thread - reads flag owned by main thread.
+         * No race because the flag is only modified by the main thread
+         * via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op handler. */
+        if (!rk->rk_rkshare ||
+            !rk->rk_share_consumer.acknowledgement_commit_cb_registered)
                 return;
 
         partitions = rd_kafka_share_build_partition_offsets_list(batches);
 
-        cb_rko          = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB);
-        cb_rko->rko_err = err;
-        cb_rko->rko_u.share_ack_commit.partitions = partitions;
-        cb_rko->rko_u.share_ack_commit.cb =
-            rk->rk_conf.share_acknowledgement_commit_cb;
-        cb_rko->rko_u.share_ack_commit.opaque = rk->rk_conf.opaque;
+        cb_rko = rd_kafka_op_new(RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE);
+        cb_rko->rko_err                                      = err;
+        cb_rko->rko_u.share_ack_commit_cb_execute.partitions = partitions;
 
         rd_kafka_q_enq(rk->rk_rep, cb_rko);
 }
@@ -1183,8 +1250,10 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
         rd_kafka_share_ack_batches_t *ack_batch;
         int k;
 
-        if (!rk->rk_conf.share_acknowledgement_commit_cb || !ack_details ||
-            rd_list_cnt(ack_details) == 0)
+        /* Locality: main thread - checks runtime-set registration flag. */
+        if (!rk->rk_rkshare ||
+            !rk->rk_share_consumer.acknowledgement_commit_cb_registered ||
+            !ack_details || rd_list_cnt(ack_details) == 0)
                 return;
 
         /* Use per-partition error from each batch */

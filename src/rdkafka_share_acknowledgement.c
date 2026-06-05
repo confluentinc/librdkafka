@@ -1068,7 +1068,6 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         err = rd_kafka_share_acknowledge_offset0(rkshare, topic, partition,
                                                  offset, type);
 
-done:
         rd_kafka_share_release(rkshare);
         return err;
 }

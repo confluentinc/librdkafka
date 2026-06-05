@@ -1291,7 +1291,7 @@ rd_kafka_error_t *rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
          * thread is concurrently inside a share API (or destroy was called from
          * the ack callback): destroying now would be unsafe, so report the
          * error and leave the instance intact for the application to retry. */
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         rd_kafka_destroy(rkshare->rkshare_rk);
@@ -1310,7 +1310,7 @@ rd_kafka_error_t *rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare,
          * out for the teardown. Never released (the gate is destroyed in
          * rd_kafka_destroy_app()). On a non-NULL acquire another thread is
          * using the consumer; forward the error */
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         rd_kafka_destroy_flags(rkshare->rkshare_rk, flags);
@@ -3163,7 +3163,7 @@ rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
         rd_kafka_error_t *error;
         rd_kafka_error_t *acq_err;
 
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
                 err = rd_kafka_error_code(acq_err);
                 rd_kafka_error_destroy(acq_err);
                 return err;
@@ -3859,7 +3859,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
          * well-defined. */
         *rkmessages_size = 0;
 
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         /* TODO KIP-932: the non-fatal errors returned from the other paths
@@ -4248,7 +4248,7 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
         rd_list_t *ack_batches;
         rd_kafka_error_t *error;
 
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
@@ -4322,7 +4322,7 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
 
         *partitions = NULL;
 
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
@@ -5115,7 +5115,7 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
                                                       rd_kafka_queue_t *rkqu) {
         rd_kafka_error_t *error;
 
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         /* TODO KIP-932: Guard this with checks for rkshare
@@ -5221,7 +5221,7 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
         rd_kafka_error_t *error;
         rd_kafka_t *rk;
 
-        if (unlikely((error = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
         /* TODO KIP-932: Guard this with checks for rkshare and

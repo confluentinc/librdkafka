@@ -54,7 +54,7 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
                 err = rd_kafka_error_code(acq_err);
                 rd_kafka_error_destroy(acq_err);
                 return err;
@@ -144,7 +144,7 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
                 err = rd_kafka_error_code(acq_err);
                 rd_kafka_error_destroy(acq_err);
                 return err;
@@ -356,7 +356,7 @@ rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
                 err = rd_kafka_error_code(acq_err);
                 rd_kafka_error_destroy(acq_err);
                 return err;

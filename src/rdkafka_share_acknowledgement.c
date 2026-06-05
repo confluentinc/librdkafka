@@ -1004,9 +1004,13 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
                                 rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err;
 
-        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
                 return err;
+        }
 
         if (!rkmessage) {
                 err = RD_KAFKA_RESP_ERR__INVALID_ARG;
@@ -1034,9 +1038,13 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                                   int64_t offset,
                                   rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err;
 
-        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
                 return err;
+        }
 
         err = rd_kafka_share_acknowledge_offset0(rkshare, topic, partition,
                                                  offset, type);

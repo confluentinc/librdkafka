@@ -48,13 +48,17 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe(rd_kafka_t *rk) {
 
 rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
                 return err;
+        }
         if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
                 goto done;
         err = rd_kafka_unsubscribe(rkshare->rkshare_rk);
@@ -134,13 +138,17 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_topic_partition_list_t *topics_cpy;
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
                 return err;
+        }
         if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
                 goto done;
 
@@ -342,13 +350,17 @@ rd_kafka_resp_err_t
 rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
                             rd_kafka_topic_partition_list_t **topics) {
         rd_kafka_resp_err_t err;
+        rd_kafka_error_t *acq_err;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((err = rd_kafka_share_acquire(rkshare))))
+        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)))) {
+                err = rd_kafka_error_code(acq_err);
+                rd_kafka_error_destroy(acq_err);
                 return err;
+        }
         if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
                 goto done;
         err = rd_kafka_subscription(rkshare->rkshare_rk, topics);

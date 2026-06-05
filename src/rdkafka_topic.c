@@ -573,7 +573,10 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
  *          branch in rd_kafka_topic_metadata_update is skipped.
  *
  * @param rk
- * @param topic Topic name (may be NULL — id is the canonical identity).
+ * @param topic Topic name; must be non-NULL. Callers on the share-consumer
+ *              path resolve the name via the metadata cache or the cgrp's
+ *              current assignment before calling, so this is a
+ *              precondition rather than a runtime check.
  * @param topic_id Topic id; must be non-zero.
  * @param do_lock Take rk wrlock internally if rd_true; caller must hold
  *                rk_wrlock if rd_false.
@@ -593,7 +596,8 @@ rd_kafka_topic_t *rd_kafka_topic_new_with_id(rd_kafka_t *rk,
         rd_kafka_topic_conf_t *conf;
 
         rd_dassert(!RD_KAFKA_UUID_IS_ZERO(topic_id));
-        if (RD_KAFKA_UUID_IS_ZERO(topic_id))
+        rd_dassert(topic != NULL);
+        if (RD_KAFKA_UUID_IS_ZERO(topic_id) || !topic)
                 return NULL;
 
         if (do_lock)

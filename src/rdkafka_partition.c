@@ -4436,9 +4436,10 @@ const char *rd_kafka_topic_partition_list_str(
                                 "]"
                                 "%s"
                                 "%s",
-                                of == 0 ? "" : ", ", rktpar->topic,
-                                topic_id_str, rktpar->partition, offsetstr,
-                                errstr);
+                                of == 0 ? "" : ", ",
+                                rktpar->topic ? rktpar->topic : "(null)",
+                                topic_id_str ? topic_id_str : "(null)",
+                                rktpar->partition, offsetstr, errstr);
 
                 if ((size_t)r >= dest_size - of) {
                         rd_snprintf(&dest[dest_size - 4], 4, "...");

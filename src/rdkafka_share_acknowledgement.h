@@ -307,12 +307,13 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
  * @brief Enqueue acknowledgement callbacks to application for each partition.
  *
  * Iterates through each partition in ack_details and enqueues one callback
- * operation (RD_KAFKA_OP_SHARE_ACK_COMMIT_CB) per partition to the
+ * operation (RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE) per partition to the
  * application's reply queue. Each operation contains:
  * - The partition's acknowledged offsets
  * - Per-partition error code from batch->rktpar->err
  *
- * The application's share_acknowledgement_commit_cb is invoked once per
+ * The application's runtime acknowledgement callback (set via
+ * rd_kafka_share_set_acknowledgement_commit_cb()) is invoked once per
  * partition when the app calls rd_kafka_consumer_poll() or
  * rd_kafka_queue_poll().
  *

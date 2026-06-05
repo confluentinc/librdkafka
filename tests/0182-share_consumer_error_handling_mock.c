@@ -119,13 +119,19 @@ create_mock_share_consumer(const char *bootstraps,
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "share.acknowledgement.mode", ack_mode);
 
-        if (cb && cb_state) {
-                rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, cb);
-                rd_kafka_conf_set_opaque(conf, cb_state);
-        }
-
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        /* Register acknowledgement callback at runtime */
+        if (cb && cb_state) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_set_acknowledgement_commit_cb(rkshare, cb,
+                                                                 cb_state);
+                TEST_ASSERT(error == NULL,
+                            "Failed to set acknowledgement commit callback: "
+                            "%s",
+                            rd_kafka_error_string(error));
+        }
         return rkshare;
 }
 
@@ -283,16 +289,17 @@ do_test_commit_sync_top_level_err(const char *test_name,
         /* Verify callback was invoked with the error */
         TEST_ASSERT(cb_state.callback_cnt == 1, "expected 1 callback, got %d",
                     cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err == injected_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) == injected_err,
                     "expected callback err %s, got %s",
                     rd_kafka_err2name(injected_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         TEST_ASSERT(cb_state.total_offsets == msgcnt,
                     "expected callback total_offsets %d, got %zu", msgcnt,
                     cb_state.total_offsets);
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -459,10 +466,10 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
         TEST_ASSERT(cb_state.callback_cnt == partition_cnt,
                     "expected %d callbacks (one per partition), got %d",
                     partition_cnt, cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err == injected_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) == injected_err,
                     "expected callback err %s, got %s",
                     rd_kafka_err2name(injected_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         TEST_ASSERT(cb_state.total_offsets == total_msgs,
                     "expected callback total_offsets %d, got %zu", total_msgs,
                     cb_state.total_offsets);
@@ -472,6 +479,7 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -588,10 +596,10 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
         TEST_ASSERT(cb_state.callback_cnt >= 1,
                     "expected at least 1 callback for piggybacked acks, got %d",
                     cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err == injected_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) == injected_err,
                     "expected callback err %s, got %s",
                     rd_kafka_err2name(injected_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         /* In implicit mode, we expect the callback to be invoked for the
          * first batch of messages that were piggybacked */
         TEST_ASSERT(cb_state.total_offsets > 0,
@@ -599,12 +607,13 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
                     cb_state.total_offsets);
 
         TEST_SAY(
-            "Callback invoked %d times with %zu total offsets, last_err=%s\n",
+            "Callback invoked %d times with %zu total offsets, first_err=%s\n",
             cb_state.callback_cnt, cb_state.total_offsets,
-            rd_kafka_err2name(cb_state.last_err));
+            rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -726,17 +735,16 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
                     "Phase 1: expected 1 callback, got %d",
                     cb_state.callback_cnt);
         TEST_ASSERT(
-            cb_state.last_err == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+            test_ack_cb_state_first_err(&cb_state) ==
+                RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
             "Phase 1: expected callback err SHARE_SESSION_NOT_FOUND, got %s",
-            rd_kafka_err2name(cb_state.last_err));
+            rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         TEST_ASSERT(cb_state.total_offsets == 5,
                     "Phase 1: expected 5 offsets in callback, got %zu",
                     cb_state.total_offsets);
 
         /* Reset callback state for Phase 2 */
-        cb_state.callback_cnt  = 0;
-        cb_state.total_offsets = 0;
-        cb_state.last_err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_ack_cb_state_destroy(&cb_state);
 
         /* Phase 2: ACCEPT remaining 5 records and call commit_sync
          * again. Broker epoch is 0 (session reset by phase 1). B4a
@@ -779,11 +787,11 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
         TEST_ASSERT(cb_state.callback_cnt == 1,
                     "Phase 2: expected 1 callback, got %d",
                     cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err ==
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
                         RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
                     "Phase 2: expected callback err "
                     "INVALID_SHARE_SESSION_EPOCH, got %s",
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         TEST_ASSERT(cb_state.total_offsets == 5,
                     "Phase 2: expected 5 offsets in callback, got %zu",
                     cb_state.total_offsets);
@@ -795,6 +803,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -928,14 +937,13 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
                     "Phase 1: expected 1 callback, got %d",
                     cb_state.callback_cnt);
         TEST_ASSERT(
-            cb_state.last_err == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+            test_ack_cb_state_first_err(&cb_state) ==
+                RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
             "Phase 1: expected callback err SHARE_SESSION_NOT_FOUND, got %s",
-            rd_kafka_err2name(cb_state.last_err));
+            rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
 
         /* Reset callback state for Phase 2 */
-        cb_state.callback_cnt  = 0;
-        cb_state.total_offsets = 0;
-        cb_state.last_err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_ack_cb_state_destroy(&cb_state);
 
         /* Phase 2: ACCEPT remaining 5 records and call consume_batch
          * (NOT commit_sync). This triggers a FANOUT -> ShareFetch with
@@ -1004,11 +1012,11 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         TEST_ASSERT(cb_state.callback_cnt == 1,
                     "Phase 2: expected 1 callback, got %d",
                     cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err ==
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
                         RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
                     "Phase 2: expected callback err "
                     "INVALID_SHARE_SESSION_EPOCH, got %s",
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         TEST_ASSERT(cb_state.total_offsets == 5,
                     "Phase 2: expected 5 acked offsets in callback, "
                     "got %" PRIusz,
@@ -1021,6 +1029,7 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -1126,9 +1135,7 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
         rd_kafka_topic_partition_list_destroy(partitions);
 
         /* Reset callback state for Phase 2 */
-        cb_state.callback_cnt  = 0;
-        cb_state.total_offsets = 0;
-        cb_state.last_err      = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_ack_cb_state_destroy(&cb_state);
 
         /* Phase 2: ACCEPT remaining 5 records. Inject
          * SHARE_SESSION_LIMIT_REACHED on the next ShareFetch — this is
@@ -1189,12 +1196,12 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
         TEST_ASSERT(cb_state.callback_cnt == 1,
                     "Phase 2: expected 1 callback, got %d",
                     cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err ==
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
                         RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH,
                     "Phase 2: expected callback err "
                     "INVALID_SHARE_SESSION_EPOCH (pre-set preserved), "
                     "got %s",
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
         TEST_ASSERT(cb_state.total_offsets == 5,
                     "Phase 2: expected 5 acked offsets in callback, "
                     "got %" PRIusz,
@@ -1207,6 +1214,7 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();
@@ -1281,13 +1289,18 @@ static rd_kafka_share_t *create_share_consumer_socket_timeout(
         rd_snprintf(buf, sizeof(buf), "%d", socket_timeout_ms);
         test_conf_set(conf, "socket.timeout.ms", buf);
 
-        if (cb && cb_state) {
-                rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, cb);
-                rd_kafka_conf_set_opaque(conf, cb_state);
-        }
-
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        if (cb && cb_state) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_set_acknowledgement_commit_cb(rkshare, cb,
+                                                                 cb_state);
+                TEST_ASSERT(error == NULL,
+                            "Failed to set acknowledgement commit callback: "
+                            "%s",
+                            rd_kafka_error_string(error));
+        }
         return rkshare;
 }
 
@@ -1626,10 +1639,11 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
                     partitions_total, cb_state.callback_cnt);
         t_callbacks_done_us = test_clock();
 
-        TEST_ASSERT(cb_state.last_err == expected_phase1_callback_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
+                        expected_phase1_callback_err,
                     "Phase 1: expected callback err %s, got %s",
                     rd_kafka_err2name(expected_phase1_callback_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
 
         actual_wait_ms = (int)((t_callbacks_done_us - t_p1_end_us) / 1000);
         TEST_SAY(
@@ -1888,10 +1902,11 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
                     phase1_partition_cnt, cb_state.callback_cnt);
         t_callbacks_done_us = test_clock();
 
-        TEST_ASSERT(cb_state.last_err == expected_phase1_callback_err,
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) ==
+                        expected_phase1_callback_err,
                     "Phase 1: expected callback err %s, got %s",
                     rd_kafka_err2name(expected_phase1_callback_err),
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
 
         actual_wait_ms = (int)((t_callbacks_done_us - t_p1_end_us) / 1000);
         TEST_SAY(
@@ -1956,10 +1971,12 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
             partitions->cnt, prev_callback_cnt, cb_state.callback_cnt);
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        TEST_ASSERT(cb_state.last_err == expected_phase2_commit_err,
-                    "Phase 2: expected last callback err %s, got %s",
-                    rd_kafka_err2name(expected_phase2_commit_err),
-                    rd_kafka_err2name(cb_state.last_err));
+        TEST_ASSERT(
+            cb_state.errs[cb_state.callback_cnt - 1] ==
+                expected_phase2_commit_err,
+            "Phase 2: expected last callback err %s, got %s",
+            rd_kafka_err2name(expected_phase2_commit_err),
+            rd_kafka_err2name(cb_state.errs[cb_state.callback_cnt - 1]));
 
         for (i = 0; i < msgcnt; i++)
                 rd_kafka_message_destroy(rkmessages[i]);

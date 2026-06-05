@@ -2264,13 +2264,14 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                          * corruption, or version mismatch — log loudly so
                          * the user notices, since the LOG_INFO top-level
                          * log can be easy to miss in production output. */
-                        rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
-                                   "ShareFetch response parse failure: %s "
-                                   "(ApiVersion %hd) — broker bug, wire "
-                                   "corruption, or version mismatch; "
-                                   "this response is being dropped",
-                                   rd_kafka_err2str(err),
-                                   request->rkbuf_reqhdr.ApiVersion);
+                        rd_rkb_log(
+                            rkb, LOG_ERR, "SHAREACK",
+                            "ShareAcknowledge response parse failure: %s "
+                            "(ApiVersion %hd) — broker bug, wire "
+                            "corruption, or version mismatch; "
+                            "this response is being dropped",
+                            rd_kafka_err2str(err),
+                            request->rkbuf_reqhdr.ApiVersion);
                         break;
 
                 default:

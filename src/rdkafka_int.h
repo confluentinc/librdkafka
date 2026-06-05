@@ -352,10 +352,11 @@ struct rd_kafka_s {
          */
         struct {
                 /** Runtime acknowledgement callback set via
-                 *  rd_kafka_share_set_acknowledgement_cb().
-                 *  @locality APP THREAD ONLY (set in set_acknowledgement_cb).
+                 *  rd_kafka_share_set_acknowledgement_commit_cb().
+                 *  @locality APP THREAD ONLY (set in
+                 * set_share_acknowledgement_commit_cb).
                  */
-                void (*acknowledgement_cb)(
+                void (*share_acknowledgement_commit_cb)(
                     rd_kafka_share_t *rkshare,
                     rd_kafka_share_partition_offsets_list_t *partitions,
                     rd_kafka_resp_err_t err,
@@ -363,7 +364,7 @@ struct rd_kafka_s {
 
                 /** Application opaque for acknowledgement callback.
                  *  @locality APP THREAD ONLY. */
-                void *acknowledgement_opaque;
+                void *acknowledgement_commit_cb_opaque;
 
                 /** Reentrancy protection flag - set to true when inside
                  *  callback.
@@ -376,24 +377,26 @@ struct rd_kafka_s {
                  *  handler. Used by main thread to decide whether to
                  *  enqueue callback ops.
                  *  @locality MAIN THREAD ONLY. */
-                rd_bool_t acknowledgement_callback_registered;
+                rd_bool_t acknowledgement_commit_cb_registered;
 
                 /** Single-thread access gate with re-entrant ownership.
                  *
                  *  Every public share consumer API calls
                  *  rd_kafka_share_acquire() on entry and
                  *  rd_kafka_share_release() before returning.
-                 *  The owning thread is recorded in @c owner; concurrent
-                 *  entry from a different thread is rejected with
+                 *  The owning thread is recorded in
+                 *  @c current_owner_thread; concurrent entry from a
+                 *  different thread is rejected with
                  *  RD_KAFKA_RESP_ERR__CONFLICT. The owning thread may
-                 *  re-enter (e.g. nested share calls), with @c depth
+                 *  re-enter (e.g. nested share calls), with @c ref_count
                  *  tracking the nesting level — ownership is released
-                 *  only when @c depth returns to 0.
+                 *  only when @c ref_count returns to 0.
                  *
-                 *  @c owner holds a real per-thread identifier from
-                 *  thrd_current_id() (GetCurrentThreadId() on Windows,
-                 *  pthread_self() elsewhere); the unowned sentinel is
-                 *  RD_KAFKA_SHARE_NO_OWNER (-1) — a value no real
+                 *  @c current_owner_thread holds a real per-thread
+                 *  identifier from thrd_current_id()
+                 *  (GetCurrentThreadId() on Windows, pthread_self()
+                 *  elsewhere); the unowned sentinel is
+                 *  RD_KAFKA_SHARE_NO_CURRENT_THREAD (-1) — a value no real
                  *  thread id can take on any supported platform. 0 is
                  *  deliberately *not* the sentinel so a missing init
                  *  doesn't silently look "unowned" (a zero-initialised
@@ -401,8 +404,10 @@ struct rd_kafka_s {
                  *  letting two threads both pass through). The acquire
                  *  path uses rd_atomic64_cas() so the
                  *  first-caller-wins transition is race-free. */
-                rd_atomic64_t owner; /**< Owning thread id; -1 = unowned. */
-                rd_atomic32_t depth; /**< Re-entrancy count for the owner. */
+                rd_atomic64_t current_owner_thread; /**< Owning thread id; -1 =
+                                                       unowned. */
+                rd_atomic32_t
+                    ref_count; /**< Re-entrancy count for the owner. */
         } rk_share_consumer;
 
         rd_kafka_conf_t rk_conf;
@@ -1397,21 +1402,21 @@ rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
 
 /**
- * @brief Sentinel value stored in rk_share_consumer.owner when the
- *        gate is unowned. Chosen to never collide with a real
+ * @brief Sentinel value stored in rk_share_consumer.current_owner_thread
+ *        when the gate is unowned. Chosen to never collide with a real
  *        thread id on any supported platform. A zero-initialised struct
  *        does NOT look unowned, which is intentional: a missing
  *        init causes acquire to fail with __CONFLICT rather than
  *        silently letting two threads pass.
  */
-#define RD_KAFKA_SHARE_NO_OWNER ((int64_t) - 1)
+#define RD_KAFKA_SHARE_NO_CURRENT_THREAD ((int64_t)(-1))
 
 /**
  * @brief Acquire single-thread ownership of the share consumer.
  *
  * Every public share consumer API must call this on entry and pair
  * it with rd_kafka_share_release() on every return path. The owning
- * thread may re-enter (nested share calls bump the depth counter
+ * thread may re-enter (nested share calls bump the ref_count counter
  * and release decrements it).
  *
  * @returns NULL on success, or a newly-allocated rd_kafka_error_t (owned

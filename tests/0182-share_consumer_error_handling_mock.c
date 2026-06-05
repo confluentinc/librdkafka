@@ -123,8 +123,15 @@ create_mock_share_consumer(const char *bootstraps,
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
 
         /* Register acknowledgement callback at runtime */
-        if (cb && cb_state)
-                rd_kafka_share_set_acknowledgement_cb(rkshare, cb, cb_state);
+        if (cb && cb_state) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_set_acknowledgement_commit_cb(rkshare, cb,
+                                                                 cb_state);
+                TEST_ASSERT(error == NULL,
+                            "Failed to set acknowledgement commit callback: "
+                            "%s",
+                            rd_kafka_error_string(error));
+        }
         return rkshare;
 }
 
@@ -1285,8 +1292,15 @@ static rd_kafka_share_t *create_share_consumer_socket_timeout(
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
 
-        if (cb && cb_state)
-                rd_kafka_share_set_acknowledgement_cb(rkshare, cb, cb_state);
+        if (cb && cb_state) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_set_acknowledgement_commit_cb(rkshare, cb,
+                                                                 cb_state);
+                TEST_ASSERT(error == NULL,
+                            "Failed to set acknowledgement commit callback: "
+                            "%s",
+                            rd_kafka_error_string(error));
+        }
         return rkshare;
 }
 

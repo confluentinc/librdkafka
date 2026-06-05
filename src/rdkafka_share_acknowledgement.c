@@ -368,22 +368,9 @@ void rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                 rd_kafka_share_ack_batches_t *batch;
                 int i;
 
-                if (err == RD_KAFKA_RESP_ERR__BAD_MSG ||
-                    err == RD_KAFKA_RESP_ERR__UNDERFLOW) {
-                        /* Wire-level parse failure: response framing is
-                         * untrusted, so any per-partition err the parser
-                         * may have written before failing could be a
-                         * misaligned read. Override every batch with
-                         * INVALID_RECORD_STATE — same treatment as a
-                         * partition omitted from a well-formed response —
-                         * so the consumer treats these as "outcome
-                         * unknown" and re-acquires. */
-                        RD_LIST_FOREACH(batch,
-                                        rko->rko_u.share_fetch.ack_details, i) {
-                                batch->rktpar->err =
-                                    RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE;
-                        }
-                } else {
+                if (likely(err != RD_KAFKA_RESP_ERR__BAD_MSG &&
+                           err != RD_KAFKA_RESP_ERR__UNDERFLOW)) {
+
                         /* Propagate top-level err to each batch in
                          * ack_details, but only override the _IN_PROGRESS
                          * sentinel. This preserves:
@@ -391,14 +378,21 @@ void rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                          *     INVALID_SHARE_SESSION_EPOCH from the
                          *     epoch-0 strip path).
                          *   - Per-partition err already written by the
-                         *     parser.
-                         *   - INVALID_RECORD_STATE from the post-parse
-                         *     "missing from response" marker. */
+                         *     parser. */
                         RD_LIST_FOREACH(batch,
                                         rko->rko_u.share_fetch.ack_details, i) {
                                 if (batch->rktpar->err ==
                                     RD_KAFKA_RESP_ERR__IN_PROGRESS)
                                         batch->rktpar->err = err;
+                        }
+                } else {
+                        /* Wire-level parse failure: response framing is
+                         * untrusted, so any per-partition err the parser
+                         * may have written before failing could be a
+                         * misaligned read. */
+                        RD_LIST_FOREACH(batch,
+                                        rko->rko_u.share_fetch.ack_details, i) {
+                                batch->rktpar->err = err;
                         }
                 }
         }
@@ -1029,7 +1023,7 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
                                 rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err;
+        rd_kafka_error_t *acq_err = NULL;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
                 err = rd_kafka_error_code(acq_err);
@@ -1063,7 +1057,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                                   int64_t offset,
                                   rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err;
+        rd_kafka_error_t *acq_err = NULL;
 
         if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
                 err = rd_kafka_error_code(acq_err);
@@ -1074,6 +1068,7 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         err = rd_kafka_share_acknowledge_offset0(rkshare, topic, partition,
                                                  offset, type);
 
+done:
         rd_kafka_share_release(rkshare);
         return err;
 }
@@ -1190,7 +1185,7 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
          * No race because the flag is only modified by the main thread
          * via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op handler. */
         if (!rk->rk_rkshare ||
-            !rk->rk_share_consumer.acknowledgement_callback_registered)
+            !rk->rk_share_consumer.acknowledgement_commit_cb_registered)
                 return;
 
         partitions = rd_kafka_share_build_partition_offsets_list(batches);
@@ -1258,7 +1253,7 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
 
         /* Locality: main thread - checks runtime-set registration flag. */
         if (!rk->rk_rkshare ||
-            !rk->rk_share_consumer.acknowledgement_callback_registered ||
+            !rk->rk_share_consumer.acknowledgement_commit_cb_registered ||
             !ack_details || rd_list_cnt(ack_details) == 0)
                 return;
 

@@ -8316,8 +8316,11 @@ rd_kafka_share_t *test_create_share_consumer_with_cb(
         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
 
         /* Register acknowledgement callback at runtime */
-        rd_kafka_share_set_acknowledgement_cb(
+        rd_kafka_error_t *error = rd_kafka_share_set_acknowledgement_commit_cb(
             rkshare, cb ? cb : test_share_ack_cb, state);
+        TEST_ASSERT(error == NULL,
+                    "Failed to set acknowledgement commit callback: %s",
+                    rd_kafka_error_string(error));
         return rkshare;
 }
 

@@ -195,8 +195,11 @@ create_share_consumer_with_receipts(const char *group_id,
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
 
-        rd_kafka_share_set_acknowledgement_cb(rkshare, test_0178_ack_cb,
-                                              receipts);
+        rd_kafka_error_t *error = rd_kafka_share_set_acknowledgement_commit_cb(
+            rkshare, test_0178_ack_cb, receipts);
+        TEST_ASSERT(error == NULL,
+                    "Failed to set acknowledgement commit callback: %s",
+                    rd_kafka_error_string(error));
         return rkshare;
 }
 

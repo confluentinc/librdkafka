@@ -1275,7 +1275,7 @@ void rd_kafka_destroy(rd_kafka_t *rk) {
 }
 
 rd_kafka_error_t *rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
-        rd_kafka_error_t *error;
+        rd_kafka_error_t *error = NULL;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
@@ -1284,10 +1284,11 @@ rd_kafka_error_t *rd_kafka_share_destroy(rd_kafka_share_t *rkshare) {
         /* Claim the access gate for this thread so that, from here on, a share
          * API call from any *other* thread is rejected for the duration of the
          * teardown. Never released: the gate (and its mutex) is destroyed in
-         * rd_kafka_destroy_app(), and the owned/depth bookkeeping is never read
-         * again, so a release would be a no-op. The teardown re-enters the gate
-         * on this same thread via rd_kafka_share_consumer_close(), which the
-         * re-entrant depth count permits. A non-NO_ERROR acquire means another
+         * rd_kafka_destroy_app(), and the current_owner_thread/ref_count
+         * bookkeeping is never read again, so a release would be a no-op. The
+         * teardown re-enters the gate on this same thread via
+         * rd_kafka_share_consumer_close(), which the re-entrant ref_count
+         * permits. A non-NO_ERROR acquire means another
          * thread is concurrently inside a share API (or destroy was called from
          * the ack callback): destroying now would be unsafe, so report the
          * error and leave the instance intact for the application to retry. */
@@ -1304,7 +1305,7 @@ void rd_kafka_destroy_flags(rd_kafka_t *rk, int flags) {
 
 rd_kafka_error_t *rd_kafka_share_destroy_flags(rd_kafka_share_t *rkshare,
                                                int flags) {
-        rd_kafka_error_t *error;
+        rd_kafka_error_t *error = NULL;
 
         /* See rd_kafka_share_destroy(): claim the gate to lock other threads
          * out for the teardown. Never released (the gate is destroyed in
@@ -3045,12 +3046,13 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         rkshare->rkshare_unacked_cnt      = 0;
         rkshare->rkshare_consumer_closing = rd_false;
 
-        rk->rk_share_consumer.acknowledgement_cb                  = NULL;
-        rk->rk_share_consumer.acknowledgement_opaque              = NULL;
-        rk->rk_share_consumer.in_callback                         = rd_false;
-        rk->rk_share_consumer.acknowledgement_callback_registered = rd_false;
-        rd_atomic64_init(&rk->rk_share_consumer.owner, RD_KAFKA_SHARE_NO_OWNER);
-        rd_atomic32_init(&rk->rk_share_consumer.depth, 0);
+        rk->rk_share_consumer.share_acknowledgement_commit_cb      = NULL;
+        rk->rk_share_consumer.acknowledgement_commit_cb_opaque     = NULL;
+        rk->rk_share_consumer.in_callback                          = rd_false;
+        rk->rk_share_consumer.acknowledgement_commit_cb_registered = rd_false;
+        rd_atomic64_init(&rk->rk_share_consumer.current_owner_thread,
+                         RD_KAFKA_SHARE_NO_CURRENT_THREAD);
+        rd_atomic32_init(&rk->rk_share_consumer.ref_count, 0);
 
         /* Set backpointer from rk to rkshare for access in retry handlers */
         rk->rk_rkshare = rkshare;
@@ -3081,10 +3083,12 @@ rd_kafka_error_t *rd_kafka_share_acquire(rd_kafka_share_t *rkshare) {
          * gate is held by a different thread, the CAS fails and the
          * call is rejected as concurrent access. */
         tid = (int64_t)thrd_current_id();
-        if (rd_atomic64_get(&rk->rk_share_consumer.owner) != tid &&
-            !rd_atomic64_cas(&rk->rk_share_consumer.owner,
-                             RD_KAFKA_SHARE_NO_OWNER, tid)) {
-                int64_t other = rd_atomic64_get(&rk->rk_share_consumer.owner);
+        if (rd_atomic64_get(&rk->rk_share_consumer.current_owner_thread) !=
+                tid &&
+            !rd_atomic64_cas(&rk->rk_share_consumer.current_owner_thread,
+                             RD_KAFKA_SHARE_NO_CURRENT_THREAD, tid)) {
+                int64_t other = rd_atomic64_get(
+                    &rk->rk_share_consumer.current_owner_thread);
                 return rd_kafka_error_new(
                     RD_KAFKA_RESP_ERR__CONFLICT,
                     "Share consumer is not safe for multi-threaded "
@@ -3096,7 +3100,7 @@ rd_kafka_error_t *rd_kafka_share_acquire(rd_kafka_share_t *rkshare) {
         /* Reject re-entry from inside the user-defined acknowledgement
          * commit callback. The gate is either freshly ours or was
          * already ours (the callback runs on the owning thread), so
-         * do not touch ownership/depth — leave the outer caller's
+         * do not touch ownership/ref_count — leave the outer caller's
          * state intact. */
         if (unlikely(rk->rk_share_consumer.in_callback))
                 return rd_kafka_error_new(
@@ -3104,7 +3108,8 @@ rd_kafka_error_t *rd_kafka_share_acquire(rd_kafka_share_t *rkshare) {
                     "Share consumer methods are not accessible from "
                     "user-defined acknowledgement commit callback");
 
-        rd_atomic32_add(&rk->rk_share_consumer.depth, 1);
+        rd_dassert(rd_atomic32_get(&rk->rk_share_consumer.ref_count) >= 0);
+        rd_atomic32_add(&rk->rk_share_consumer.ref_count, 1);
         return NULL;
 }
 
@@ -3116,12 +3121,13 @@ void rd_kafka_share_release(rd_kafka_share_t *rkshare) {
 
         rk = rkshare->rkshare_rk;
 
-        /* Decrement the re-entrancy depth; when it reaches 0 the
+        /* Decrement the re-entrancy ref_count; when it reaches 0 the
          * outermost acquire has been released and the gate is freed
          * so a different thread can claim it on a future call. */
-        if (rd_atomic32_sub(&rk->rk_share_consumer.depth, 1) == 0)
-                rd_atomic64_set(&rk->rk_share_consumer.owner,
-                                RD_KAFKA_SHARE_NO_OWNER);
+        rd_dassert(rd_atomic32_get(&rk->rk_share_consumer.ref_count) > 0);
+        if (rd_atomic32_sub(&rk->rk_share_consumer.ref_count, 1) == 0)
+                rd_atomic64_set(&rk->rk_share_consumer.current_owner_thread,
+                                RD_KAFKA_SHARE_NO_CURRENT_THREAD);
 }
 
 
@@ -3138,7 +3144,7 @@ rd_kafka_share_ack_commit_cb_register_op(rd_kafka_t *rk,
                                          rd_kafka_q_t *rkq,
                                          rd_kafka_op_t *rko) {
         if (rk->rk_rkshare) {
-                rk->rk_share_consumer.acknowledgement_callback_registered =
+                rk->rk_share_consumer.acknowledgement_commit_cb_registered =
                     rko->rko_u.share_ack_commit_cb_register.registered;
                 rd_kafka_dbg(
                     rk, CGRP, "SHAREACK", "Share ack callback %sregistered",
@@ -3149,9 +3155,9 @@ rd_kafka_share_ack_commit_cb_register_op(rd_kafka_t *rk,
 }
 
 
-rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
+rd_kafka_error_t *rd_kafka_share_set_acknowledgement_commit_cb(
     rd_kafka_share_t *rkshare,
-    void (*acknowledgement_cb)(
+    void (*share_acknowledgement_commit_cb)(
         rd_kafka_share_t *rkshare,
         rd_kafka_share_partition_offsets_list_t *partitions,
         rd_kafka_resp_err_t err,
@@ -3159,31 +3165,25 @@ rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
     void *opaque) {
         rd_kafka_t *rk;
         rd_bool_t was_set, now_set;
-        rd_kafka_resp_err_t err;
-        rd_kafka_error_t *error;
-        rd_kafka_error_t *acq_err;
+        rd_kafka_error_t *error = NULL;
 
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
-                err = rd_kafka_error_code(acq_err);
-                rd_kafka_error_destroy(acq_err);
-                return err;
-        }
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
+                return error;
 
         if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
-                     NULL)) {
-                err = rd_kafka_error_code(error);
-                rd_kafka_error_destroy(error);
-                return err;
-        }
+                     NULL))
+                goto done;
 
         rk = rkshare->rkshare_rk;
 
         /* These fields are owned by app thread only - no lock needed. */
-        was_set = (rk->rk_share_consumer.acknowledgement_cb != NULL);
-        now_set = (acknowledgement_cb != NULL);
+        was_set =
+            (rk->rk_share_consumer.share_acknowledgement_commit_cb != NULL);
+        now_set = (share_acknowledgement_commit_cb != NULL);
 
-        rk->rk_share_consumer.acknowledgement_cb     = acknowledgement_cb;
-        rk->rk_share_consumer.acknowledgement_opaque = opaque;
+        rk->rk_share_consumer.share_acknowledgement_commit_cb =
+            share_acknowledgement_commit_cb;
+        rk->rk_share_consumer.acknowledgement_commit_cb_opaque = opaque;
 
         /* Send op to main thread ONLY if registration state transitions
          * (set ↔ unset). Changing callback from A→B doesn't need an op
@@ -3196,8 +3196,9 @@ rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
                 rd_kafka_q_enq(rk->rk_ops, rko);
         }
 
+done:
         rd_kafka_share_release(rkshare);
-        return RD_KAFKA_RESP_ERR_NO_ERROR;
+        return error;
 }
 
 
@@ -3851,8 +3852,8 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         size_t max_poll_records = (size_t)rk->rk_conf.share.max_poll_records;
         rd_bool_t has_records;
         rd_bool_t has_pending_acks;
-        rd_kafka_error_t *error;
-        rd_list_t *ack_batches = NULL;
+        rd_kafka_error_t *error = NULL;
+        rd_list_t *ack_batches  = NULL;
         rd_bool_t need_fetch_more_records;
 
         /* Default the out count to 0 so error returns leave it
@@ -4246,7 +4247,7 @@ rd_kafka_error_t *rd_kafka_share_commit_async(rd_kafka_share_t *rkshare) {
         rd_kafka_t *rk = rkshare->rkshare_rk;
         rd_kafka_op_t *rko;
         rd_list_t *ack_batches;
-        rd_kafka_error_t *error;
+        rd_kafka_error_t *error = NULL;
 
         if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
@@ -4317,7 +4318,7 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         rd_kafka_q_t *tmpq;
         rd_ts_t abs_timeout;
         rd_kafka_topic_partition_list_t *results;
-        rd_kafka_error_t *error;
+        rd_kafka_error_t *error = NULL;
         int i;
 
         *partitions = NULL;
@@ -5113,7 +5114,7 @@ rd_kafka_error_t *rd_kafka_consumer_close_queue(rd_kafka_t *rk,
  */
 rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
                                                       rd_kafka_queue_t *rkqu) {
-        rd_kafka_error_t *error;
+        rd_kafka_error_t *error = NULL;
 
         if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
@@ -5126,8 +5127,10 @@ rd_kafka_error_t *rd_kafka_share_consumer_close_queue(rd_kafka_share_t *rkshare,
 
         rkshare->rkshare_consumer_closing = rd_true;
         error = rd_kafka_consumer_close_queue(rkshare->rkshare_rk, rkqu);
-        if (error)
+        if (error) {
                 rkshare->rkshare_consumer_closing = rd_false;
+                goto done;
+        }
 
 done:
         rd_kafka_share_release(rkshare);
@@ -5218,7 +5221,7 @@ rd_kafka_resp_err_t rd_kafka_consumer_close(rd_kafka_t *rk) {
 }
 
 rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
-        rd_kafka_error_t *error;
+        rd_kafka_error_t *error = NULL;
         rd_kafka_t *rk;
 
         if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
@@ -5767,14 +5770,16 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 rd_kafka_share_t *rkshare = rk->rk_rkshare;
                 /* Lookup callback at invoke time.
                  * Locality: app thread */
-                if (!rkshare || !rk->rk_share_consumer.acknowledgement_cb)
+                if (!rkshare ||
+                    !rk->rk_share_consumer.share_acknowledgement_commit_cb)
                         return RD_KAFKA_OP_RES_PASS; /* Dont handle here */
                 /* Set reentrancy flag so share consumer APIs called from
                  * within the callback can detect and reject the call. */
                 rk->rk_share_consumer.in_callback = rd_true;
-                rk->rk_share_consumer.acknowledgement_cb(
+                rk->rk_share_consumer.share_acknowledgement_commit_cb(
                     rkshare, rko->rko_u.share_ack_commit_cb_execute.partitions,
-                    rko->rko_err, rk->rk_share_consumer.acknowledgement_opaque);
+                    rko->rko_err,
+                    rk->rk_share_consumer.acknowledgement_commit_cb_opaque);
                 rk->rk_share_consumer.in_callback = rd_false;
                 break;
         }

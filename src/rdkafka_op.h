@@ -884,7 +884,8 @@ struct rd_kafka_op_s {
                 /**
                  * Share acknowledgement callback reply.
                  * Contains results to deliver to the runtime acknowledgement
-                 * callback set via rd_kafka_share_set_acknowledgement_cb().
+                 * callback set via
+                 * rd_kafka_share_set_acknowledgement_commit_cb().
                  */
                 struct {
                         /** List of partition offsets. */

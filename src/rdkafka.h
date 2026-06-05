@@ -2259,7 +2259,7 @@ RD_EXPORT size_t rd_kafka_share_partition_offsets_offsets_cnt(
  * for that partition.
  *
  * @param rkshare Share consumer handle.
- * @param acknowledgement_cb Callback function, or NULL to clear.
+ * @param share_acknowledgement_commit_cb Callback function, or NULL to clear.
  * @param opaque Application opaque passed to callback.
  *
  * @remark Cannot be called from within the acknowledgement callback itself.
@@ -2268,12 +2268,17 @@ RD_EXPORT size_t rd_kafka_share_partition_offsets_offsets_cnt(
  *         calling this function during which the new registration state
  *         is not yet visible to the main thread.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or:
- *          - RD_KAFKA_RESP_ERR__STATE if called from within the callback.
+ * @returns NULL on success, or an rd_kafka_error_t* on failure:
+ *          - RD_KAFKA_RESP_ERR__STATE if called from within the callback or
+ *            after the share consumer has been closed.
+ *          - RD_KAFKA_RESP_ERR__CONFLICT if another thread is concurrently
+ *            inside a share consumer API.
+ *          The caller must destroy the returned error with
+ *          rd_kafka_error_destroy().
  */
-RD_EXPORT rd_kafka_resp_err_t rd_kafka_share_set_acknowledgement_cb(
+RD_EXPORT rd_kafka_error_t *rd_kafka_share_set_acknowledgement_commit_cb(
     rd_kafka_share_t *rkshare,
-    void (*acknowledgement_cb)(
+    void (*share_acknowledgement_commit_cb)(
         rd_kafka_share_t *rkshare,
         rd_kafka_share_partition_offsets_list_t *partitions,
         rd_kafka_resp_err_t err,

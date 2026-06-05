@@ -313,7 +313,7 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
  * - Per-partition error code from batch->rktpar->err
  *
  * The application's runtime acknowledgement callback (set via
- * rd_kafka_share_set_acknowledgement_cb()) is invoked once per
+ * rd_kafka_share_set_acknowledgement_commit_cb()) is invoked once per
  * partition when the app calls rd_kafka_consumer_poll() or
  * rd_kafka_queue_poll().
  *

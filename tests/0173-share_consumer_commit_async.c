@@ -1657,7 +1657,7 @@ static void do_test_commit_async_callback(void) {
 /* ===================================================================
  *  Test: changing the runtime acknowledgement callback at runtime.
  *
- *  Verifies that after rd_kafka_share_set_acknowledgement_cb() is
+ *  Verifies that after rd_kafka_share_set_acknowledgement_commit_cb() is
  *  called with a new callback, subsequent commit_async results are
  *  delivered to the NEW callback and not the OLD one.
  * =================================================================== */
@@ -1666,7 +1666,6 @@ static void do_test_change_callback(void) {
         const char *group = "change-callback";
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_resp_err_t err;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd, j;
         int consumed                = 0;
@@ -1727,11 +1726,11 @@ static void do_test_change_callback(void) {
                  state_a.callback_cnt, state_a.total_offsets);
 
         /* Phase 2: replace callback A with callback B (different opaque) */
-        err = rd_kafka_share_set_acknowledgement_cb(rkshare, test_share_ack_cb,
-                                                    &state_b);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+        error = rd_kafka_share_set_acknowledgement_commit_cb(
+            rkshare, test_share_ack_cb, &state_b);
+        TEST_ASSERT(error == NULL,
                     "Expected to change callback successfully, got %s",
-                    rd_kafka_err2str(err));
+                    rd_kafka_error_string(error));
 
         /* Remember current callback A count so we can verify it doesn't
          * increase after the swap. */
@@ -1792,9 +1791,10 @@ static void do_test_change_callback(void) {
         int cb_a_before_phase3 = state_a.callback_cnt;
         int cb_b_before_phase3 = state_b.callback_cnt;
 
-        err = rd_kafka_share_set_acknowledgement_cb(rkshare, NULL, NULL);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to unregister callback: %s", rd_kafka_err2str(err));
+        error =
+            rd_kafka_share_set_acknowledgement_commit_cb(rkshare, NULL, NULL);
+        TEST_ASSERT(error == NULL, "Failed to unregister callback: %s",
+                    rd_kafka_error_string(error));
 
         /* Produce a fresh batch to trigger more acknowledgements */
         test_produce_msgs_simple(common_producer, topic, 0, 20);
@@ -1960,13 +1960,16 @@ reentrancy_check_cb(rd_kafka_share_t *rkshare,
         else
                 st->failures++;
 
-        /* Try rd_kafka_share_set_acknowledgement_cb - should fail with
+        /* Try rd_kafka_share_set_acknowledgement_commit_cb - should fail with
          * _STATE because you can't change the callback from within itself */
-        resp_err = rd_kafka_share_set_acknowledgement_cb(rkshare, NULL, NULL);
-        if (resp_err == RD_KAFKA_RESP_ERR__STATE)
+        error_obj =
+            rd_kafka_share_set_acknowledgement_commit_cb(rkshare, NULL, NULL);
+        if (error_obj &&
+            rd_kafka_error_code(error_obj) == RD_KAFKA_RESP_ERR__STATE)
                 st->rejections++;
         else
                 st->failures++;
+        RD_IF_FREE(error_obj, rd_kafka_error_destroy);
 }
 
 static void do_test_reentrancy_protection(void) {
@@ -1974,7 +1977,6 @@ static void do_test_reentrancy_protection(void) {
         const char *group = "reentrancy-protection";
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_resp_err_t err;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd, j;
         int consumed                   = 0;
@@ -1992,10 +1994,10 @@ static void do_test_reentrancy_protection(void) {
         state.rkshare = rkshare;
 
         /* Register the reentrancy-checking callback at runtime */
-        err = rd_kafka_share_set_acknowledgement_cb(
+        error = rd_kafka_share_set_acknowledgement_commit_cb(
             rkshare, reentrancy_check_cb, &state);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to set callback: %s", rd_kafka_err2str(err));
+        TEST_ASSERT(error == NULL, "Failed to set callback: %s",
+                    rd_kafka_error_string(error));
 
         /* Set offset reset to earliest */
         test_share_set_auto_offset_reset(group, "earliest");

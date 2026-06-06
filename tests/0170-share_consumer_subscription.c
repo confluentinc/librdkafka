@@ -1676,7 +1676,6 @@ static void subchg_ack_cb(rd_kafka_share_t *rkshare,
         (void)rkshare;
 
         /* Mirror test_share_ack_cb's base accounting */
-        st->base.callback_cnt++;
         test_ack_cb_state_push_err(&st->base, err);
 
         entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
@@ -1803,11 +1802,11 @@ static void do_test_subscription_change_acks_pending(void) {
                     "Expected ack callback to fire after subscription change, "
                     "got %d callbacks",
                     state.base.callback_cnt);
-        TEST_ASSERT(test_ack_cb_state_first_err(&state.base) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Expected no error in callback, got %s",
-                    rd_kafka_err2name(
-                        test_ack_cb_state_first_err(&state.base)));
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Expected no error in callback, got %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
         TEST_ASSERT(strcmp(state.first_callback_topic, t1) == 0,
                     "Expected first ack callback to be for t1 (%s), got %s", t1,
                     state.first_callback_topic);

@@ -1990,7 +1990,6 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
         TEST_SAY("ACK CALLBACK: err=%s (%d), partitions=%zu, offsets=%zu\n",
                  rd_kafka_err2name(err), err, partition_cnt, offsets_in_entry);
 
-        state->base.callback_cnt++;
         test_ack_cb_state_push_err(&state->base, err);
 
         /* Track this error in our errors array */
@@ -2325,14 +2324,17 @@ static void do_test_chaos_111_ack_commit_interleave(void) {
             "chaos 1-1-1: consumed=%d sync=%d async=%d "
             "callbacks=%d offsets=%zu last_err=%s\n",
             consumed, sync_cnt, async_cnt, state.base.callback_cnt,
-            state.base.total_offsets, rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+            state.base.total_offsets,
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
         TEST_ASSERT(state.base.callback_cnt >= 1,
                     "Expected at least 1 ack callback, got %d",
                     state.base.callback_cnt);
-        TEST_ASSERT(test_ack_cb_state_first_err(&state.base) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Ack callback reported err: %s",
-                    rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -2425,11 +2427,14 @@ static void do_test_chaos_alternating_commits(void) {
             "chaos alt: consumed=%d sync=%d async=%d "
             "callbacks=%d offsets=%zu last_err=%s\n",
             consumed, sync_cnt, async_cnt, state.base.callback_cnt,
-            state.base.total_offsets, rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+            state.base.total_offsets,
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
-        TEST_ASSERT(test_ack_cb_state_first_err(&state.base) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Ack callback reported err: %s",
-                    rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -2590,9 +2595,11 @@ static void do_test_chaos_random_ack_random_commit(void) {
         TEST_ASSERT(state.base.callback_cnt >= 1,
                     "Expected at least 1 ack callback, got %d",
                     state.base.callback_cnt);
-        TEST_ASSERT(test_ack_cb_state_first_err(&state.base) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Ack callback reported err: %s",
-                    rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -2687,9 +2694,11 @@ static void do_test_chaos_burst_commits(void) {
             consumed, sync_cnt, async_cnt, state.base.callback_cnt,
             state.base.total_offsets);
 
-        TEST_ASSERT(test_ack_cb_state_first_err(&state.base) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Ack callback reported err: %s",
-                    rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -2811,9 +2820,11 @@ static void do_test_chaos_callback_receipt_match(void) {
         TEST_ASSERT(state.base.total_offsets >= (size_t)consumed,
                     "Expected callback to surface at least %d offsets, got %zu",
                     consumed, state.base.total_offsets);
-        TEST_ASSERT(test_ack_cb_state_first_err(&state.base) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Ack callback reported err: %s",
-                    rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);

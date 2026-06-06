@@ -5115,37 +5115,31 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  *    internal rkshare_rk to be present.
  */
 /**
- * @brief Subscribe to topic set using balanced consumer groups.
+ * @brief Subscribe a share consumer to a set of topics.
  *
- * Wildcard (regex) topics are not supported.
+ * Wildcard (regex) topics are not supported. Only the \c .topic field
+ * is used in \p topics; all other fields are ignored.
  *
- * @remark Only the \c .topic field is used in the supplied \p topics list,
- *         all other fields are ignored.
- *
- * @remark subscribe() is an asynchronous method which returns immediately:
- *         background threads will (re)join the group, wait for group rebalance,
- *         issue any registered rebalance_cb, assign() the assigned partitions,
- *         and then start fetching messages.
- *
- * @remark After this call returns a consumer error will be returned by
- *         rd_kafka_consumer_poll (et.al) for each unavailable topic in the
- *         \p topics. The error will be RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART
- *         for non-existent topics, and
- *         RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED for unauthorized topics.
- *         The consumer error will be raised through rd_kafka_consumer_poll()
- *         (et.al.) with the \c rd_kafka_message_t.err field set to one of the
- *         error codes mentioned above.
- *         The subscribe function itself is asynchronous and will not return
- *         an error on unavailable topics.
- *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if list is empty, contains empty
- *          topic names, or duplicate entries,
- *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
+ * @remark This call is asynchronous and returns immediately. The background
+ *         thread sends a ShareGroupHeartbeat to the broker, which assigns
+ *         partitions to the consumer. Partition assignment is entirely
+ *         broker-driven; there is no client-side rebalance callback or
+ *         assign() step.
  *
  * @remark Topic names are forwarded verbatim to the broker via the share
- *         group heartbeat. The broker validates them and rejects invalid
- *         topic names.
+ *         group heartbeat. The broker validates them; unavailable or
+ *         unauthorized topics will surface as errors via
+ *         rd_kafka_share_consume_batch().
+ *
+ * @remark If \p topics is empty (cnt == 0), the call is equivalent to
+ *         rd_kafka_share_unsubscribe(): the subscription is cleared and
+ *         RD_KAFKA_RESP_ERR_NO_ERROR is returned.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success or when \p topics is empty
+ *          (treated as unsubscribe),
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG if \p topics contains empty topic
+ *          names or duplicate entries,
+ *          RD_KAFKA_RESP_ERR__FATAL if the consumer has raised a fatal error.
  */
 RD_EXPORT rd_kafka_resp_err_t
 rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,

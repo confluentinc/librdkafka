@@ -64,6 +64,8 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
                 goto done;
 
         err = rd_kafka_unsubscribe(rkshare->rkshare_rk);
+        if (!err)
+                rkshare->rkshare_subscribed = rd_false;
 done:
         rd_kafka_share_release(rkshare);
         return err;
@@ -189,6 +191,8 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
 
         err = rd_kafka_op_err_destroy(
             rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+        if (!err)
+                rkshare->rkshare_subscribed = rd_true;
 done:
         rd_kafka_share_release(rkshare);
         return err;

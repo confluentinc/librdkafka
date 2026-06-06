@@ -890,6 +890,14 @@ struct rd_kafka_share_s {
          * while closing
          */
         rd_bool_t rkshare_consumer_closing;
+
+        /** True when the consumer has an active subscription (i.e.
+         *  rd_kafka_share_subscribe() succeeded with a non-empty list
+         *  and rd_kafka_share_unsubscribe() has not been called since).
+         *  Written only on the app thread under rkshare_acquire/release;
+         *  read only in consume_batch while the same lock is held.
+         *  @locality app thread */
+        rd_bool_t rkshare_subscribed;
 };
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)

@@ -1327,7 +1327,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
                                                         rd_kafka_q_t *rkq,
                                                         rd_ts_t now,
                                                         rd_bool_t is_blocking) {
-        if (rk->rk_type != RD_KAFKA_CONSUMER)
+        if (rk->rk_type != RD_KAFKA_CONSUMER || RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return;
 
         if (!now)
@@ -1361,7 +1361,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
                                                     rd_kafka_q_t *rkq) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_ts_t now = rd_clock();
                 rd_atomic64_set(&rk->rk_ts_last_poll, now);
                 if (unlikely(rk->rk_cgrp &&

@@ -3877,8 +3877,7 @@ rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare) {
 static void rd_kafka_share_record_poll_start(rd_kafka_t *rk, int timeout_ms) {
         rd_ts_t now;
 
-        if (timeout_ms)
-                rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+        rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
 
         now                                          = rd_clock();
         rk->rk_telemetry.rk_share_poll.ts_poll_start = now;

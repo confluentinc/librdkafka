@@ -728,6 +728,16 @@ int unit_test_telemetry(rd_kafka_type_t rk_type,
             &rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio);
 
         rd_avg_destroy(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_poll_idle_ratio);
+        rd_avg_destroy(
+            &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_poll_idle_ratio);
+
+        rd_avg_destroy(
+            &rk->rk_telemetry.rd_avg_current.rk_avg_share_time_between_poll);
+        rd_avg_destroy(
+            &rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll);
+
+        rd_avg_destroy(
             &rk->rk_telemetry.rd_avg_current.rk_avg_rebalance_latency);
         rd_avg_destroy(
             &rk->rk_telemetry.rd_avg_rollover.rk_avg_rebalance_latency);

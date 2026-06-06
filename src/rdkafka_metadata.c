@@ -375,8 +375,9 @@ static void rd_kafka_parse_Metadata_update_topic(
 
         rd_rkb_dbg(rkb, METADATA, "METADATA",
                    /* The indent below is intentional */
-                   "  Topic %s with %i partitions%s%s", mdt->topic,
-                   mdt->partition_cnt, mdt->err ? ": " : "",
+                   "  Topic %s with %i partitions%s%s",
+                   rd_kafka_topic_name_str_safe(mdt->topic), mdt->partition_cnt,
+                   mdt->err ? ": " : "",
                    mdt->err ? rd_kafka_err2str(mdt->err) : "");
 
         /* Ignore metadata completely for temporary errors. (issue #513)
@@ -387,8 +388,8 @@ static void rd_kafka_parse_Metadata_update_topic(
                 rd_rkb_dbg(rkb, TOPIC, "METADATA",
                            "Temporary error in metadata reply for "
                            "topic %s (PartCnt %i): %s: ignoring",
-                           mdt->topic, mdt->partition_cnt,
-                           rd_kafka_err2str(mdt->err));
+                           rd_kafka_topic_name_str_safe(mdt->topic),
+                           mdt->partition_cnt, rd_kafka_err2str(mdt->err));
         } else {
                 /* Update local topic & partition state based
                  * on metadata */
@@ -735,20 +736,22 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
                           &tbuf, md->topics[i].partition_cnt *
                                      sizeof(*md->topics[i].partitions))))
-                        rd_kafka_buf_parse_fail(rkbuf,
-                                                "%s: %d partitions: "
-                                                "tmpabuf memory shortage",
-                                                md->topics[i].topic,
-                                                md->topics[i].partition_cnt);
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "%s: %d partitions: "
+                            "tmpabuf memory shortage",
+                            rd_kafka_topic_name_str_safe(md->topics[i].topic),
+                            md->topics[i].partition_cnt);
 
                 if (!(mdi->topics[i].partitions = rd_tmpabuf_alloc(
                           &tbuf, md->topics[i].partition_cnt *
                                      sizeof(*mdi->topics[i].partitions))))
-                        rd_kafka_buf_parse_fail(rkbuf,
-                                                "%s: %d internal partitions: "
-                                                "tmpabuf memory shortage",
-                                                md->topics[i].topic,
-                                                md->topics[i].partition_cnt);
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "%s: %d internal partitions: "
+                            "tmpabuf memory shortage",
+                            rd_kafka_topic_name_str_safe(md->topics[i].topic),
+                            md->topics[i].partition_cnt);
 
 
                 for (j = 0; j < md->topics[i].partition_cnt; j++) {
@@ -792,7 +795,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                     "%s [%" PRId32
                                     "]: %d replicas: "
                                     "tmpabuf memory shortage",
-                                    md->topics[i].topic,
+                                    rd_kafka_topic_name_str_safe(
+                                        md->topics[i].topic),
                                     md->topics[i].partitions[j].id,
                                     md->topics[i].partitions[j].replica_cnt);
 
@@ -820,7 +824,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                     "%s [%" PRId32
                                     "]: %d isrs: "
                                     "tmpabuf memory shortage",
-                                    md->topics[i].topic,
+                                    rd_kafka_topic_name_str_safe(
+                                        md->topics[i].topic),
                                     md->topics[i].partitions[j].id,
                                     md->topics[i].partitions[j].isr_cnt);
 
@@ -906,8 +911,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
         for (i = 0; i < md->topic_cnt; i++) {
 
-                /* Ignore topics in blacklist */
+                /* Ignore topics in blacklist. Skip when the broker
+                 * returned a NULL topic name (e.g. UNKNOWN_TOPIC_ID
+                 * response from a by-id Metadata request) — the
+                 * blacklist matches on name only, so there is nothing
+                 * to compare against. */
                 if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+                    md->topics[i].topic &&
                     rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
                                            md->topics[i].topic)) {
                         rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_METADATA,
@@ -933,7 +943,11 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
                                                      &mdi->topics[i]);
 
-                if (requested_topics)
+                /* Skip the by-name dedup if the response carries a
+                 * NULL topic name; strcmp(NULL, ...) is UB. The
+                 * missing_topics list is keyed by name, so a
+                 * NULL-name response cannot match any entry. */
+                if (requested_topics && md->topics[i].topic)
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            md->topics[i].topic,

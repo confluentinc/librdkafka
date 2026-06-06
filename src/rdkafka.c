@@ -1076,6 +1076,10 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
                                             .rk_avg_share_time_between_poll);
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
                                             .rk_avg_share_time_between_poll);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
+                                            .rk_avg_rebalance_latency);
+                        rd_avg_destroy(&rk->rk_telemetry.rd_avg_rollover
+                                            .rk_avg_rebalance_latency);
                 } else {
                         rd_avg_destroy(&rk->rk_telemetry.rd_avg_current
                                             .rk_avg_poll_idle_ratio);
@@ -2812,6 +2816,23 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_avg_init(&rk->rk_telemetry.rd_avg_current
                                          .rk_avg_share_time_between_poll,
                                     RD_AVG_GAUGE, 0, 60 * 1000 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        /* Rebalance latency is a consumer-group metric
+                         * recorded by the shared cgrp join-state machine
+                         * (rd_kafka_cgrp_set_join_state), which the share
+                         * consumer also drives, so it must be initialized
+                         * here too — otherwise its mutex is left zeroed and
+                         * the rd_avg_add() on reaching the STEADY state
+                         * dereferences an uninitialized lock (crashes on
+                         * Windows, where a zeroed CRITICAL_SECTION is
+                         * invalid). */
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_rebalance_latency,
+                                    RD_AVG_GAUGE, 0, 500 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_rebalance_latency,
+                                    RD_AVG_GAUGE, 0, 900000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
                 } else {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover

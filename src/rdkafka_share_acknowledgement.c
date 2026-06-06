@@ -981,6 +981,9 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
         int64_t idx;
         rd_kafka_resp_err_t err;
 
+        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
+                return err;
+
         if (!topic || partition < 0 || offset < 0)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
@@ -992,9 +995,6 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
         if (type < RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT ||
             type > RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT)
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
-
-        if (unlikely((err = rd_kafka_share_consumer_closed_err(rkshare))))
-                return err;
 
         /* Find partition and entry containing the offset */
         err = rd_kafka_share_find_ack_entry(rkshare, topic, partition, offset,
@@ -1023,11 +1023,11 @@ rd_kafka_share_acknowledge_type(rd_kafka_share_t *rkshare,
                                 const rd_kafka_message_t *rkmessage,
                                 rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err = NULL;
+        rd_kafka_error_t *error = NULL;
 
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
-                err = rd_kafka_error_code(acq_err);
-                rd_kafka_error_destroy(acq_err);
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
                 return err;
         }
 
@@ -1057,11 +1057,11 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                                   int64_t offset,
                                   rd_kafka_share_AcknowledgeType_t type) {
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err = NULL;
+        rd_kafka_error_t *error = NULL;
 
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
-                err = rd_kafka_error_code(acq_err);
-                rd_kafka_error_destroy(acq_err);
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
                 return err;
         }
 
@@ -1251,8 +1251,10 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
         int k;
 
         /* Locality: main thread - checks runtime-set registration flag. */
-        if (!rk->rk_rkshare ||
-            !rk->rk_share_consumer.acknowledgement_commit_cb_registered ||
+        /**
+         * TODO KIP-932: Check if we want to send individual ops or 1 op.
+         */
+        if (!rk->rk_share_consumer.acknowledgement_commit_cb_registered ||
             !ack_details || rd_list_cnt(ack_details) == 0)
                 return;
 

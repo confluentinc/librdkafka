@@ -1620,17 +1620,15 @@ static void do_test_consume_batch_without_subscription(void) {
         /* Case 5: subscribe([]) is equivalent to unsubscribe — must
          * return NO_ERROR and clear the F_SUBSCRIPTION flag, so the
          * next consume_batch returns __STATE. */
-        {
-                rd_kafka_resp_err_t empty_err;
+        rd_kafka_resp_err_t empty_err;
 
-                subs      = rd_kafka_topic_partition_list_new(0);
-                empty_err = rd_kafka_share_subscribe(consumer, subs);
-                TEST_ASSERT(empty_err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Case 5 (subscribe([])): expected NO_ERROR "
-                            "(treated as unsubscribe), got: %s",
-                            rd_kafka_err2name(empty_err));
-                rd_kafka_topic_partition_list_destroy(subs);
-        }
+        subs      = rd_kafka_topic_partition_list_new(0);
+        empty_err = rd_kafka_share_subscribe(consumer, subs);
+        TEST_ASSERT(empty_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Case 5 (subscribe([])): expected NO_ERROR "
+                    "(treated as unsubscribe), got: %s",
+                    rd_kafka_err2name(empty_err));
+        rd_kafka_topic_partition_list_destroy(subs);
 
         rcvd = 0;
         err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);

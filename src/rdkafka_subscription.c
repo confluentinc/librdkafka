@@ -48,15 +48,15 @@ rd_kafka_resp_err_t rd_kafka_unsubscribe(rd_kafka_t *rk) {
 
 rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err = NULL;
+        rd_kafka_error_t *error = NULL;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
-                err = rd_kafka_error_code(acq_err);
-                rd_kafka_error_destroy(acq_err);
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
                 return err;
         }
 
@@ -142,15 +142,15 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_topic_partition_list_t *topics_cpy;
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err = NULL;
+        rd_kafka_error_t *error = NULL;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
-                err = rd_kafka_error_code(acq_err);
-                rd_kafka_error_destroy(acq_err);
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
                 return err;
         }
 
@@ -191,6 +191,12 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
 
         err = rd_kafka_op_err_destroy(
             rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+        /**
+         * TODO KIP-932: It can only return FATAL error from the main thread.
+         * In which case it unsubscribes. Check if we should change the flag
+         * to false when FATAL error is received or  keep it as true which
+         * will let the user go through the normal consumer flow.
+         */
         if (!err)
                 rkshare->rkshare_subscribed = rd_true;
 done:
@@ -363,15 +369,15 @@ rd_kafka_resp_err_t
 rd_kafka_share_subscription(rd_kafka_share_t *rkshare,
                             rd_kafka_topic_partition_list_t **topics) {
         rd_kafka_resp_err_t err;
-        rd_kafka_error_t *acq_err = NULL;
+        rd_kafka_error_t *error = NULL;
 
         /**
          * TODO KIP-932: Guard this with checks for rkshare and
          *               rkshare->rkshare_rk?
          */
-        if (unlikely((acq_err = rd_kafka_share_acquire(rkshare)) != NULL)) {
-                err = rd_kafka_error_code(acq_err);
-                rd_kafka_error_destroy(acq_err);
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL)) {
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
                 return err;
         }
 

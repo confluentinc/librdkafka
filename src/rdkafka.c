@@ -3034,6 +3034,10 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         rkshare->rkshare_unacked_cnt      = 0;
         rkshare->rkshare_consumer_closing = rd_false;
 
+        /**
+         * TODO KIP-932: Check for uniform naming structure for all
+         * share consumer variables.
+         */
         rk->rk_share_consumer.share_acknowledgement_commit_cb      = NULL;
         rk->rk_share_consumer.acknowledgement_commit_cb_opaque     = NULL;
         rk->rk_share_consumer.in_callback                          = rd_false;

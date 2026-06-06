@@ -64,6 +64,8 @@ rd_kafka_resp_err_t rd_kafka_share_unsubscribe(rd_kafka_share_t *rkshare) {
                 goto done;
 
         err = rd_kafka_unsubscribe(rkshare->rkshare_rk);
+        if (!err)
+                rkshare->rkshare_subscribed = rd_false;
 done:
         rd_kafka_share_release(rkshare);
         return err;
@@ -160,11 +162,17 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
                 goto done;
         }
 
+        /* An empty topic list is equivalent to unsubscribe. */
+        if (topics->cnt == 0) {
+                err = rd_kafka_share_unsubscribe(rkshare);
+                goto done;
+        }
+
         /* Share consumer subscriptions are literal topic names only:
-         * regex/wildcard entries are not supported. Reject empty entries;
-         * pass everything else through to the broker via the heartbeat. */
-        if (topics->cnt == 0 ||
-            rd_kafka_topic_partition_list_sum(topics, _share_invalid_topic_cb,
+         * regex/wildcard entries are not supported. Reject empty
+         * entries; pass everything else through to the broker via the
+         * heartbeat. */
+        if (rd_kafka_topic_partition_list_sum(topics, _share_invalid_topic_cb,
                                               NULL) > 0) {
                 err = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 goto done;
@@ -183,6 +191,8 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
 
         err = rd_kafka_op_err_destroy(
             rd_kafka_op_req(rkcg->rkcg_ops, rko, RD_POLL_INFINITE));
+        if (!err)
+                rkshare->rkshare_subscribed = rd_true;
 done:
         rd_kafka_share_release(rkshare);
         return err;

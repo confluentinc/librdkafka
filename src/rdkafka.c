@@ -3881,6 +3881,17 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         if (error)
                 goto done;
 
+        /* Fail early if no subscription is active.
+         * rkshare_subscribed is app-thread-owned and set/cleared by
+         * rd_kafka_share_subscribe / rd_kafka_share_unsubscribe under
+         * the same rkshare_acquire/release lock that guards this call. */
+        if (unlikely(!rkshare->rkshare_subscribed)) {
+                error = rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__STATE,
+                    "Consumer is not subscribed to any topics");
+                goto done;
+        }
+
         ack_batches = rd_kafka_share_build_ack_details(rk->rk_rkshare);
 
         has_records      = rd_kafka_q_len(rkcg->rkcg_q) > 0;

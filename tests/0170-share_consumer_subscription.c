@@ -73,6 +73,8 @@ typedef enum {
                                */
         TEST_OP_SUBSCRIBE_EXISTING, /**< Subscribe to already created topics */
         TEST_OP_PRODUCE_TO_TOPIC,   /**< Produce to specific topic index */
+        TEST_OP_SUBSCRIBE_EMPTY,    /**< Subscribe with empty list (==
+                                     unsubscribe) */
 } test_op_type_t;
 
 /**
@@ -189,6 +191,8 @@ typedef struct {
         { .op = TEST_OP_SUBSCRIBE_EXISTING, .repeat_cnt = 1 }
 #define POLL_NO_SUB()                                                          \
         { .op = TEST_OP_POLL_NO_SUB }
+#define SUBSCRIBE_EMPTY()                                                      \
+        { .op = TEST_OP_SUBSCRIBE_EMPTY }
 #define TEST_OPS_END()                                                         \
         { .op = TEST_OP_END }
 
@@ -415,6 +419,26 @@ static void exec_unsubscribe(sub_test_state_t *state, const test_op_t *op) {
 }
 
 /**
+ * @brief Execute TEST_OP_SUBSCRIBE_EMPTY
+ *
+ * Subscribe with an empty topic list is equivalent to unsubscribe:
+ * must return NO_ERROR and clear the subscription flag.
+ */
+static void exec_subscribe_empty(sub_test_state_t *state, const test_op_t *op) {
+        rd_kafka_topic_partition_list_t *tlist;
+        int cidx = op->consumer_idx;
+
+        TEST_SAY("  SUBSCRIBE_EMPTY: consumer=%d\n", cidx);
+
+        tlist = rd_kafka_topic_partition_list_new(0);
+        TEST_CALL_ERR__(
+            rd_kafka_share_subscribe(state->consumers[cidx], tlist));
+        rd_kafka_topic_partition_list_destroy(tlist);
+
+        state->sub_count[cidx] = 0;
+}
+
+/**
  * @brief Execute TEST_OP_PRODUCE
  */
 static void exec_produce(sub_test_state_t *state, const test_op_t *op) {
@@ -545,6 +569,9 @@ static void exec_create_consumer(sub_test_state_t *state, const test_op_t *op) {
 
 /**
  * @brief Execute TEST_OP_POLL_NO_SUB
+ *
+ * consume_batch must surface RD_KAFKA_RESP_ERR__STATE with a "not
+ * subscribed" message when no subscription is active.
  */
 static void exec_poll_no_sub(sub_test_state_t *state, const test_op_t *op) {
         rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
@@ -556,9 +583,19 @@ static void exec_poll_no_sub(sub_test_state_t *state, const test_op_t *op) {
 
         err = rd_kafka_share_consume_batch(state->consumers[cidx], 2000, batch,
                                            &rcvd);
-        /* TODO KIP-932: Should return error */
-        if (err)
-                rd_kafka_error_destroy(err);
+        TEST_ASSERT(err != NULL,
+                    "POLL_NO_SUB consumer=%d: expected error, got NULL", cidx);
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+                    "POLL_NO_SUB consumer=%d: expected __STATE, got: %s", cidx,
+                    rd_kafka_err2name(rd_kafka_error_code(err)));
+        TEST_ASSERT(strstr(rd_kafka_error_string(err), "not subscribed"),
+                    "POLL_NO_SUB consumer=%d: expected 'not subscribed' "
+                    "substring, got: %s",
+                    cidx, rd_kafka_error_string(err));
+        TEST_ASSERT(rcvd == 0,
+                    "POLL_NO_SUB consumer=%d: expected 0 messages, got %zu",
+                    cidx, rcvd);
+        rd_kafka_error_destroy(err);
 }
 
 /**
@@ -664,6 +701,9 @@ static void do_test_scenario(const test_scenario_t *scenario) {
                         break;
                 case TEST_OP_POLL_NO_SUB:
                         exec_poll_no_sub(&state, op);
+                        break;
+                case TEST_OP_SUBSCRIBE_EMPTY:
+                        exec_subscribe_empty(&state, op);
                         break;
                 default:
                         TEST_FAIL("Unknown operation: %d", op->op);
@@ -1482,6 +1522,143 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Verify consume_batch surfaces RD_KAFKA_RESP_ERR__STATE with
+ *        "not subscribed" when there is no active subscription.
+ *
+ * Walks the subscription state machine:
+ *   Case 1: never subscribed                     -> __STATE
+ *   Case 2: after subscribe                      -> not __STATE (recovery)
+ *   Case 3: after unsubscribe                    -> __STATE
+ *   Case 4: after re-subscribe following unsub   -> not __STATE (recovery)
+ *   Case 5: subscribe([]) (== unsubscribe)       -> __STATE
+ */
+static void do_test_consume_batch_without_subscription(void) {
+        rd_kafka_share_t *consumer;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_error_t *err;
+        size_t rcvd = 0;
+        size_t i;
+        const char *group = "share-no-subscription";
+        const char *topic;
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0170-no-subscription", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        consumer = test_create_share_consumer(group, NULL);
+
+        /* Case 1: never subscribed. */
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        TEST_ASSERT(err != NULL,
+                    "Case 1 (never subscribed): expected error, got NULL");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+                    "Case 1: expected __STATE, got: %s",
+                    rd_kafka_err2name(rd_kafka_error_code(err)));
+        TEST_ASSERT(strstr(rd_kafka_error_string(err), "not subscribed"),
+                    "Case 1: expected 'not subscribed' substring, got: %s",
+                    rd_kafka_error_string(err));
+        TEST_ASSERT(rcvd == 0, "Case 1: expected 0 msgs, got %zu", rcvd);
+        rd_kafka_error_destroy(err);
+
+        /* Case 2: subscribed -> must not surface __STATE. */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        if (err) {
+                TEST_ASSERT(rd_kafka_error_code(err) !=
+                                RD_KAFKA_RESP_ERR__STATE,
+                            "Case 2 (subscribed): unexpected __STATE: %s",
+                            rd_kafka_error_string(err));
+                rd_kafka_error_destroy(err);
+        }
+        for (i = 0; i < rcvd; i++)
+                rd_kafka_message_destroy(batch[i]);
+
+        /* Case 3: unsubscribed -> __STATE again. */
+        TEST_CALL_ERR__(rd_kafka_share_unsubscribe(consumer));
+
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        TEST_ASSERT(err != NULL,
+                    "Case 3 (after unsubscribe): expected error, got NULL");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+                    "Case 3: expected __STATE, got: %s",
+                    rd_kafka_err2name(rd_kafka_error_code(err)));
+        TEST_ASSERT(strstr(rd_kafka_error_string(err), "not subscribed"),
+                    "Case 3: expected 'not subscribed' substring, got: %s",
+                    rd_kafka_error_string(err));
+        TEST_ASSERT(rcvd == 0, "Case 3: expected 0 msgs, got %zu", rcvd);
+        rd_kafka_error_destroy(err);
+
+        /* Case 4: re-subscribed after unsubscribe -> must not surface __STATE.
+         */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        if (err) {
+                TEST_ASSERT(rd_kafka_error_code(err) !=
+                                RD_KAFKA_RESP_ERR__STATE,
+                            "Case 4 (re-subscribed): unexpected __STATE: %s",
+                            rd_kafka_error_string(err));
+                rd_kafka_error_destroy(err);
+        }
+        for (i = 0; i < rcvd; i++)
+                rd_kafka_message_destroy(batch[i]);
+
+        /* Case 5: subscribe([]) is equivalent to unsubscribe — must
+         * return NO_ERROR and clear the F_SUBSCRIPTION flag, so the
+         * next consume_batch returns __STATE. */
+        {
+                rd_kafka_resp_err_t empty_err;
+
+                subs      = rd_kafka_topic_partition_list_new(0);
+                empty_err = rd_kafka_share_subscribe(consumer, subs);
+                TEST_ASSERT(empty_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Case 5 (subscribe([])): expected NO_ERROR "
+                            "(treated as unsubscribe), got: %s",
+                            rd_kafka_err2name(empty_err));
+                rd_kafka_topic_partition_list_destroy(subs);
+        }
+
+        rcvd = 0;
+        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        TEST_ASSERT(err != NULL,
+                    "Case 5 (after subscribe([])): expected error, got NULL");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+                    "Case 5: expected __STATE, got: %s",
+                    rd_kafka_err2name(rd_kafka_error_code(err)));
+        TEST_ASSERT(strstr(rd_kafka_error_string(err), "not subscribed"),
+                    "Case 5: expected 'not subscribed' substring, got: %s",
+                    rd_kafka_error_string(err));
+        TEST_ASSERT(rcvd == 0, "Case 5: expected 0 msgs, got %zu", rcvd);
+        rd_kafka_error_destroy(err);
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
+}
+
+/* subscribe([]) is equivalent to unsubscribe — must clear the
+ * subscription flag so the subsequent poll surfaces __STATE. */
+static const test_scenario_t test_poll_after_empty_subscribe = {
+    .name = "poll-after-empty-subscribe",
+    .ops  = {SUBSCRIBE(1), PRODUCE(5), CONSUME_ANY(),
+             SUBSCRIBE_EMPTY(), /* Empty list == unsubscribe */
+             POLL_NO_SUB(), TEST_OPS_END()}};
+
 int main_0170_share_consumer_subscription(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();
@@ -1535,6 +1712,10 @@ int main_0170_share_consumer_subscription(int argc, char **argv) {
         /* Input validation tests */
         do_test_subscribe_input_validation();
         do_test_subscribe_caret_treated_as_literal_e2e();
+
+        /* Subscription state guard tests */
+        do_test_consume_batch_without_subscription();
+        do_test_scenario(&test_poll_after_empty_subscribe);
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

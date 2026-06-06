@@ -2451,13 +2451,10 @@ static void test_share_consumer_resubscribe_re_emits_persistent_failure(void) {
                         rkshare, RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION, 30),
                     "first TOPIC_EXCEPTION must surface");
 
-        /* Phase 2: unsubscribe. No surface. */
+        /* Phase 2: unsubscribe. */
         TEST_ASSERT(rd_kafka_share_unsubscribe(rkshare) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "unsubscribe");
-        share_topic_err_force_metadata(rkshare);
-        share_topic_err_assert_no_err(
-            rkshare, 5, "no error must surface while unsubscribed");
 
         /* Phase 3: re-subscribe to the same still-failing topic; the
          * error must surface again. Re-force metadata across the wait

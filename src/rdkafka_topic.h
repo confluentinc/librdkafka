@@ -110,6 +110,21 @@ typedef struct rd_kafka_partition_leader_epoch_s {
 } rd_kafka_partition_leader_epoch_t;
 
 /**
+ * @brief Return \p topic if non-NULL, else a printable literal
+ *        placeholder.
+ *
+ *        Use at %s format args where the source is a raw topic name
+ *        that may be NULL — most commonly an `mdt->topic` from a
+ *        Metadata response (compact_nullable_string can yield NULL
+ *        when the broker doesn't know a topic_id we asked about).
+ */
+static RD_INLINE RD_UNUSED const char *
+rd_kafka_topic_name_str_safe(const char *topic) {
+        return topic ? topic : "(null)";
+}
+
+
+/**
  * Finds and returns a topic based on its topic_id, or NULL if not found.
  * The 'rkt' refcount is increased by one and the caller must call
  * rd_kafka_topic_destroy() when it is done with the topic to decrease
@@ -192,6 +207,19 @@ struct rd_kafka_topic_s {
 #define rd_kafka_topic_rdunlock(rkt) rwlock_rdunlock(&(rkt)->rkt_lock)
 #define rd_kafka_topic_wrunlock(rkt) rwlock_wrunlock(&(rkt)->rkt_lock)
 
+
+/**
+ * @brief Return the name of \p rkt if available, else a printable
+ *        literal placeholder. Guards \p rkt, \p rkt->rkt_topic, and
+ *        \p rkt->rkt_topic->str — each layer can be NULL on degenerate
+ *        flows that this helper is meant to absorb.
+ */
+static RD_INLINE RD_UNUSED const char *
+rd_kafka_topic_name_safe(const rd_kafka_topic_t *rkt) {
+        if (!rkt || !rkt->rkt_topic || !rkt->rkt_topic->str)
+                return "(null)";
+        return rkt->rkt_topic->str;
+}
 
 
 /**

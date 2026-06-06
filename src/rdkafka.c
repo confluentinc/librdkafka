@@ -3094,6 +3094,10 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
         rkshare->rkshare_unacked_cnt      = 0;
         rkshare->rkshare_consumer_closing = rd_false;
 
+        /**
+         * TODO KIP-932: Check for uniform naming structure for all
+         * share consumer variables.
+         */
         rk->rk_share_consumer.share_acknowledgement_commit_cb      = NULL;
         rk->rk_share_consumer.acknowledgement_commit_cb_opaque     = NULL;
         rk->rk_share_consumer.in_callback                          = rd_false;
@@ -4017,6 +4021,17 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         error = rd_kafka_share_ensure_all_acknowledged_if_explicit(rkshare);
         if (error)
                 goto done;
+
+        /* Fail early if no subscription is active.
+         * rkshare_subscribed is app-thread-owned and set/cleared by
+         * rd_kafka_share_subscribe / rd_kafka_share_unsubscribe under
+         * the same rkshare_acquire/release lock that guards this call. */
+        if (unlikely(!rkshare->rkshare_subscribed)) {
+                error = rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__STATE,
+                    "Consumer is not subscribed to any topics");
+                goto done;
+        }
 
         rd_kafka_share_record_poll_start(rk, timeout_ms);
 

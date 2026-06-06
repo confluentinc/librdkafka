@@ -739,6 +739,12 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 }
                 rd_kafka_toppar_unlock(rktp);
 
+                /* TODO KIP-932: rktp_leader_id and rktp_broker_id are read
+                 * here without holding rd_kafka_toppar_lock, but they are
+                 * written under that lock by rd_kafka_toppar_leader_update
+                 * on the main thread during metadata refresh.
+                 * TSAN flags this in test 0179_share_consumer_destroy_local
+                 * during broker decommission. */
                 if (rktp->rktp_leader_id != rktp->rktp_broker_id) {
                         rd_kafka_toppar_delegate_to_leader(rktp);
                 } else if (rd_kafka_broker_termination_in_progress(rkb)) {

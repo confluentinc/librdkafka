@@ -3867,16 +3867,18 @@ rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare) {
 }
 
 /**
- * @brief Record the start of a share consume batch for telemetry.
- *        Captures the start timestamp, computes the interval since the
- *        previous poll, records the time-between-poll sample, and updates
- *        the previous-poll-start timestamp.
+ * @brief Record the start of a share consume batch.
+ *
+ *        Enforces max.poll.interval.ms for the share consumer.
+ *        While blocked waiting for messages, sets rk_ts_last_poll to
+ *        INT64_MAX so the wait isn't counted against the interval.
+ *        Records the time-between-poll telemetry sample.
  */
-static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
+static void rd_kafka_share_record_poll_start(rd_kafka_t *rk, int timeout_ms) {
         rd_ts_t now;
 
-        if (!rk->rk_conf.enable_metrics_push)
-                return;
+        if (timeout_ms)
+                rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
 
         now                                          = rd_clock();
         rk->rk_telemetry.rk_share_poll.ts_poll_start = now;
@@ -3899,18 +3901,27 @@ static void rd_kafka_share_record_poll_start(rd_kafka_t *rk) {
 }
 
 /**
- * @brief Record the end of a share consume batch for telemetry.
- *        Computes pollTime = now − pollStart, then idle ratio =
- *        pollTime / (pollTime + timeSinceLastPoll), and records the sample.
- *        Mirrors Java's share consumer poll idle ratio formula.
+ * @brief Record the end of a share consume batch.
+ *
+ *        Enforces max.poll.interval.ms for the share consumer.
+ *        Records the last poll time and expedites the next heartbeat if the
+ *        interval had been exceeded. Records the poll idle ratio sample
+ *        (pollTime / (pollTime + timeSinceLastPoll), mirroring Java's formula).
  */
 static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
         rd_ts_t end, poll_time, total;
 
-        if (!rk->rk_conf.enable_metrics_push)
-                return;
+        end = rd_clock();
 
-        end       = rd_clock();
+        rd_atomic64_set(&rk->rk_ts_last_poll, end);
+        if (unlikely(rk->rk_cgrp &&
+                     rk->rk_cgrp->rkcg_group_protocol ==
+                         RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
+                     rk->rk_cgrp->rkcg_flags &
+                         RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED))
+                rd_kafka_cgrp_consumer_expedite_next_heartbeat(
+                    rk->rk_cgrp, "app polled after poll interval exceeded");
+
         poll_time = end - rk->rk_telemetry.rk_share_poll.ts_poll_start;
         total = poll_time + rk->rk_telemetry.rk_share_poll.time_since_last_poll;
         if (total > 0) {
@@ -3975,7 +3986,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         if (error)
                 goto done;
 
-        rd_kafka_share_record_poll_start(rk);
+        rd_kafka_share_record_poll_start(rk, timeout_ms);
 
         ack_batches = rd_kafka_share_build_ack_details(rk->rk_rkshare);
 

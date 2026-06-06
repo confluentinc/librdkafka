@@ -3881,6 +3881,17 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         if (error)
                 goto done;
 
+        /* Fail early if no subscription is active.
+         * RD_KAFKA_CGRP_F_SUBSCRIPTION is set by cgrp_subscription_set
+         * only when the subscription list is non-NULL, and cleared on
+         * unsubscribe or subscribe with an empty topic list. */
+        if (unlikely(!(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_SUBSCRIPTION))) {
+                error = rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__STATE,
+                    "Consumer is not subscribed to any topics");
+                goto done;
+        }
+
         ack_batches = rd_kafka_share_build_ack_details(rk->rk_rkshare);
 
         has_records      = rd_kafka_q_len(rkcg->rkcg_q) > 0;

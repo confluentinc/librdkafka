@@ -2625,11 +2625,9 @@ static void do_test_empty_topic_subscription(void) {
 
 
 /**
- * @brief Empty topic list subscription returns INVALID_ARG.
- *
- * librdkafka intentionally rejects subscribe() with an empty topic list,
- * unlike Java which treats it as unsubscribe(). This is an intentional
- * difference (see sghb_test_discrepancies.txt #1).
+ * @brief subscribe() with an empty topic list is equivalent to
+ *        unsubscribe() — must return NO_ERROR and leave the consumer
+ *        in the unsubscribed state.
  */
 static void do_test_empty_topic_list_subscription(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -2645,16 +2643,14 @@ static void do_test_empty_topic_list_subscription(void) {
 
         share_c = create_share_consumer(bootstraps, group);
 
-        /* Subscribe with empty topic list - should return INVALID_ARG */
+        /* subscribe(empty_list) must succeed and act as unsubscribe. */
         empty_list = rd_kafka_topic_partition_list_new(0);
         err        = rd_kafka_share_subscribe(share_c, empty_list);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                    "Expected INVALID_ARG from subscribe(empty_list), got %s",
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected NO_ERROR from subscribe(empty_list), got %s",
                     rd_kafka_err2str(err));
-        TEST_SAY("subscribe(empty_list) correctly returned %s\n",
-                 rd_kafka_err2str(err));
-
         rd_kafka_topic_partition_list_destroy(empty_list);
+
         test_share_destroy(share_c);
 
         test_mock_cluster_destroy(mcluster);

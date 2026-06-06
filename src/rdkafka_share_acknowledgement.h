@@ -371,5 +371,18 @@ void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
  */
 void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg);
 
+/**
+ * @brief Same as rd_kafka_share_commit_sync_send_response() but lets
+ *        the caller stamp a top-level @p err on the reply op so the
+ *        app thread can surface it as the commit_sync return value.
+ *        Used by the wakeup-abort path to return __WAKEUP at the
+ *        top level (per-partition err is left untouched).
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_send_response_with_err(
+    rd_kafka_cgrp_t *rkcg,
+    rd_kafka_resp_err_t err);
+
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

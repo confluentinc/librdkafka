@@ -520,6 +520,7 @@ static const struct rd_kafka_err_desc rd_kafka_err_descs[] = {
               "the failure of this message too"),
     _ERR_DESC(RD_KAFKA_RESP_ERR__DESTROY_BROKER,
               "Local: Broker handle destroyed without termination"),
+    _ERR_DESC(RD_KAFKA_RESP_ERR__WAKEUP, "Local: Share consumer woken up"),
 
     _ERR_DESC(RD_KAFKA_RESP_ERR_UNKNOWN, "Unknown broker error"),
     _ERR_DESC(RD_KAFKA_RESP_ERR_NO_ERROR, "Success"),
@@ -3314,8 +3315,6 @@ rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
                 rd_kafka_share_fetch_fanout_enqueue(rk, rko);
 }
 
-static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
-                                               rd_kafka_broker_t *rkb);
 rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
                                                 rd_kafka_op_t *rko_orig);
 
@@ -3328,9 +3327,9 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
  *
  * @locality main thread
  */
-static rd_kafka_op_res_t rd_kafka_share_fetch_reply_op_cb(rd_kafka_t *rk,
-                                                          rd_kafka_q_t *rkq,
-                                                          rd_kafka_op_t *rko) {
+rd_kafka_op_res_t rd_kafka_share_fetch_reply_op_cb(rd_kafka_t *rk,
+                                                   rd_kafka_q_t *rkq,
+                                                   rd_kafka_op_t *rko) {
         return rd_kafka_share_fetch_reply_op(rk, rko);
 }
 
@@ -3867,6 +3866,15 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                      NULL))
                 goto done;
 
+        /* Check #1: If wakeup was called before this consume_batch,
+         * return immediately without sending any fetch requests.
+         * This prevents wasting resources on fetching data when the
+         * application is likely shutting down. */
+        if (rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__WAKEUP,
+                                          "Share consumer woken up");
+        }
+
         /* Drain rk_rep for all pending callbacks (non-blocking) */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
@@ -4037,54 +4045,6 @@ static void rd_kafka_share_commit_sync_timeout_cb(rd_kafka_timers_t *rkts,
         }
 
         rd_kafka_share_commit_sync_send_response(rkcg);
-}
-
-/**
- * @brief Create and enqueue a sync ack-only SHARE_FETCH op on a broker.
- *
- * Moves ack details, abs_timeout, and commit_sync_request_id from
- * rkb_pending_commit_sync into the op.
- *
- * @param rk Client instance.
- * @param rkb Broker to enqueue on. Must have pending_commit_sync data.
- *
- * @locality main thread
- */
-static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
-                                               rd_kafka_broker_t *rkb) {
-        rd_kafka_op_t *rko_sf;
-
-        rko_sf = rd_kafka_op_new(RD_KAFKA_OP_SHARE_FETCH);
-        rko_sf->rko_u.share_fetch.should_leave = rd_false;
-        rko_sf->rko_u.share_fetch.abs_timeout =
-            rkb->rkb_pending_commit_sync.abs_timeout;
-        rko_sf->rko_u.share_fetch.should_fetch = rd_false;
-        rko_sf->rko_u.share_fetch.commit_sync_request_id =
-            rkb->rkb_pending_commit_sync.commit_sync_request_id;
-
-        /* Move ack details from pending_commit_sync to op */
-        rko_sf->rko_u.share_fetch.ack_details =
-            rkb->rkb_pending_commit_sync.sync_ack_details;
-        rkb->rkb_pending_commit_sync.sync_ack_details       = NULL;
-        rkb->rkb_pending_commit_sync.abs_timeout            = 0;
-        rkb->rkb_pending_commit_sync.commit_sync_request_id = 0;
-
-        rd_kafka_broker_keep(rkb);
-        rko_sf->rko_u.share_fetch.target_broker = rkb;
-        rko_sf->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);
-        rko_sf->rko_op_cb  = rd_kafka_share_fetch_reply_op_cb;
-        rko_sf->rko_rk     = rk;
-
-        rkb->rkb_share_fetch_enqueued = rd_true;
-
-        rd_kafka_dbg(
-            rk, CGRP, "SHARE",
-            "Enqueuing sync ack op on broker %s "
-            "(abs_timeout %" PRId64 ", commit_sync_request_id %" PRId64 ")",
-            rd_kafka_broker_name(rkb), rko_sf->rko_u.share_fetch.abs_timeout,
-            rko_sf->rko_u.share_fetch.commit_sync_request_id);
-
-        rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
 }
 
 /**
@@ -4299,7 +4259,8 @@ rd_kafka_error_t *
 rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
                            int timeout_ms,
                            rd_kafka_topic_partition_list_t **partitions) {
-        rd_kafka_t *rk = rkshare->rkshare_rk;
+        rd_kafka_t *rk        = rkshare->rkshare_rk;
+        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
         rd_kafka_op_t *rko;
         rd_kafka_op_t *rko_reply;
         rd_list_t *ack_batches;
@@ -4317,6 +4278,16 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
         if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
                      NULL))
                 goto done;
+
+        /* Check if wakeup was called before commit_sync started.
+         * Matches Java behavior where wakeup() before commitSync()
+         * causes immediate WakeupException. */
+        if (rd_kafka_q_check_yield_and_clear(rkcg->rkcg_q)) {
+                rd_kafka_dbg(rk, CGRP, "SHARE",
+                             "commit_sync aborted: wakeup called before start");
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__WAKEUP,
+                                          "Wakeup called before commit_sync");
+        }
 
         rd_kafka_dbg(rk, CGRP, "SHARE",
                      "Committing synchronously with timeout %d ms", timeout_ms);
@@ -4358,8 +4329,13 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
 
         rd_kafka_q_enq(rk->rk_ops, rko);
 
-        /* Block on temp queue — main thread always sends a response
-         * (either from broker replies or timeout callback) */
+        /* Block on temp queue waiting for response from main thread.
+         * Main thread always sends a response via one of:
+         *   - Normal completion (all brokers responded)
+         *   - Timeout callback (timeout expired)
+         *   - Wakeup abort (wakeup called)
+         * Wakeup is handled on main thread in
+         * rd_kafka_share_commit_sync_maybe_complete(). */
         rko_reply = rd_kafka_q_pop(tmpq, RD_POLL_INFINITE, 0);
 
         rd_kafka_q_destroy_owner(tmpq);
@@ -4369,6 +4345,13 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
                    RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY);
         *partitions = rko_reply->rko_u.share_commit_sync_fanout_reply.results;
         rko_reply->rko_u.share_commit_sync_fanout_reply.results = NULL;
+
+        /* Propagate the top-level err the main thread stamped on the
+         * reply op (e.g. __WAKEUP from the wakeup-abort path). */
+        if (rko_reply->rko_err)
+                error =
+                    rd_kafka_error_new(rko_reply->rko_err, "%s",
+                                       rd_kafka_err2str(rko_reply->rko_err));
 
         rd_kafka_op_destroy(rko_reply);
 

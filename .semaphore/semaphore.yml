@@ -596,3 +596,9 @@ promotions:
             - "x86_64,aarch64"
             - "x86_64"
             - "aarch64"
+  - name: Run share consumer tests under ASAN+LSAN
+    pipeline_file: run-asan-tests.yml
+  - name: Run share consumer tests under TSAN
+    pipeline_file: run-tsan-tests.yml
+  - name: Run share consumer tests under valgrind
+    pipeline_file: run-valgrind-tests.yml

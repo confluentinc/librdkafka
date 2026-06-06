@@ -3877,7 +3877,13 @@ rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare) {
 static void rd_kafka_share_record_poll_start(rd_kafka_t *rk, int timeout_ms) {
         rd_ts_t now;
 
+        /* max.poll.interval.ms enforcement: always mark the consumer as
+         * blocked inside librdkafka for the duration of the batch. */
         rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
+
+        /* The remaining work is telemetry sampling only. */
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
 
         now                                          = rd_clock();
         rk->rk_telemetry.rk_share_poll.ts_poll_start = now;
@@ -3912,6 +3918,8 @@ static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
 
         end = rd_clock();
 
+        /* max.poll.interval.ms enforcement: record the poll time and, if the
+         * interval had been exceeded, expedite the next heartbeat to rejoin. */
         rd_atomic64_set(&rk->rk_ts_last_poll, end);
         if (unlikely(rk->rk_cgrp &&
                      rk->rk_cgrp->rkcg_group_protocol ==
@@ -3920,6 +3928,10 @@ static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
                          RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED))
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                     rk->rk_cgrp, "app polled after poll interval exceeded");
+
+        /* The remaining work is telemetry sampling only. */
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
 
         poll_time = end - rk->rk_telemetry.rk_share_poll.ts_poll_start;
         total = poll_time + rk->rk_telemetry.rk_share_poll.time_since_last_poll;

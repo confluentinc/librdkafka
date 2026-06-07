@@ -612,9 +612,6 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2(rd_kafka_t *rk,
                                         int32_t partition,
                                         int ua_on_miss,
                                         int create_on_miss);
-#define rd_kafka_toppar_get_by_id(rkt, partition)                              \
-        rd_kafka_toppar_get0(__FUNCTION__, __LINE__, (rkt), (partition),       \
-                             0 /*no ua-on-miss*/)
 rd_kafka_toppar_t *rd_kafka_toppar_get_by_id2(rd_kafka_t *rk,
                                               const char *topic,
                                               rd_kafka_Uuid_t topic_id,

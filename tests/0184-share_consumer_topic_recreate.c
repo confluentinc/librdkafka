@@ -247,7 +247,6 @@ static rd_kafka_share_t *create_consumer_hb_first(const char *group_id) {
         test_conf_init(&conf, NULL, 0);
 
         test_conf_set(conf, "group.id", group_id);
-        // test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "300000");
         test_conf_set(conf, "topic.metadata.propagation.max.ms", "30000");
@@ -400,7 +399,6 @@ static rd_kafka_share_t *create_consumer_md_first(const char *group_id) {
         test_conf_init(&conf, NULL, 0);
 
         test_conf_set(conf, "group.id", group_id);
-        // test_conf_set(conf, "enable.auto.commit", "false");
         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
         test_conf_set(conf, "topic.metadata.propagation.max.ms", "30000");
@@ -761,106 +759,108 @@ static void do_test_recreate_shrink_partitions_md_first(void) {
 }
 
 
-/**
- * @brief Build a share consumer with configurable
- *        topic.metadata.propagation.max.ms.
- *
- * Other settings mirror create_consumer_md_first: short metadata refresh
- * interval (500ms) so the periodic refresh observes
- * UNKNOWN_TOPIC_OR_PART promptly after the delete — the propagation
- * grace window then determines how long that observation is suppressed
- * before being surfaced to the application.
- */
-static rd_kafka_share_t *
-create_consumer_with_propagation(const char *group_id, int propagation_max_ms) {
-        rd_kafka_share_t *rkshare;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-        char propagation_str[32];
+// /**
+//  * @brief Build a share consumer with configurable
+//  *        topic.metadata.propagation.max.ms.
+//  *
+//  * Other settings mirror create_consumer_md_first: short metadata refresh
+//  * interval (500ms) so the periodic refresh observes
+//  * UNKNOWN_TOPIC_OR_PART promptly after the delete — the propagation
+//  * grace window then determines how long that observation is suppressed
+//  * before being surfaced to the application.
+//  */
+// static rd_kafka_share_t *
+// create_consumer_with_propagation(const char *group_id, int
+// propagation_max_ms) {
+//         rd_kafka_share_t *rkshare;
+//         rd_kafka_conf_t *conf;
+//         char errstr[512];
+//         char propagation_str[32];
+//
+//         rd_snprintf(propagation_str, sizeof(propagation_str), "%d",
+//                     propagation_max_ms);
+//
+//         test_conf_init(&conf, NULL, 0);
+//
+//         test_conf_set(conf, "group.id", group_id);
+//         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+//         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+//         test_conf_set(conf, "topic.metadata.propagation.max.ms",
+//                       propagation_str);
+//
+//         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+//         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+//
+//         return rkshare;
+// }
 
-        rd_snprintf(propagation_str, sizeof(propagation_str), "%d",
-                    propagation_max_ms);
 
-        test_conf_init(&conf, NULL, 0);
-
-        test_conf_set(conf, "group.id", group_id);
-        // test_conf_set(conf, "enable.auto.commit", "false");
-        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
-        test_conf_set(conf, "topic.metadata.propagation.max.ms",
-                      propagation_str);
-
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
-
-        return rkshare;
-}
-
-
-/**
- * @brief Poll the share consumer for up to \p timeout_ms and return the
- *        timestamp (test_clock()) of the first UNKNOWN_TOPIC_OR_PART
- *        event observed — or 0 if none was seen.
- *
- * Note: consumer-level error events for share consumers (those produced
- * by rd_kafka_propagate_consumer_topic_errors() and friends) are
- * surfaced by rd_kafka_share_consume_batch() as the returned
- * rd_kafka_error_t*, NOT inside the per-message batch with m->err set
- * (rdkafka_queue.c:936-945 — RD_KAFKA_OP_CONSUMER_ERR is converted into
- * an rd_kafka_error_t). So we check the return value, not the batch.
- *
- * Any non-error messages in the same call are ACCEPT-ack'd and dropped.
- *
- * \p topic is currently unused (the consumer-err return value doesn't
- * carry topic context), but is kept in the signature for clarity at
- * call sites about which topic we expect the error for.
- */
-static rd_ts_t wait_for_unknown_topic_event(rd_kafka_share_t *rkshare,
-                                            const char *topic,
-                                            int timeout_ms) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
-        rd_ts_t deadline = test_clock() + (rd_ts_t)timeout_ms * 1000;
-
-        (void)topic;
-
-        while (test_clock() < deadline) {
-                rd_kafka_error_t *err;
-                size_t rcvd = 0;
-                size_t i;
-
-                err = rd_kafka_share_consume_batch(rkshare, 200, batch, &rcvd);
-
-                if (err) {
-                        rd_kafka_resp_err_t code = rd_kafka_error_code(err);
-                        if (code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART) {
-                                rd_ts_t now = test_clock();
-                                TEST_SAY(
-                                    "Observed UNKNOWN_TOPIC_OR_PART from "
-                                    "share_consume_batch: %s\n",
-                                    rd_kafka_error_string(err));
-                                rd_kafka_error_destroy(err);
-                                for (i = 0; i < rcvd; i++)
-                                        rd_kafka_message_destroy(batch[i]);
-                                return now;
-                        }
-                        TEST_SAY(
-                            "Event ignored while waiting for "
-                            "UNKNOWN_TOPIC_OR_PART: %s (%s)\n",
-                            rd_kafka_err2name(code),
-                            rd_kafka_error_string(err));
-                        rd_kafka_error_destroy(err);
-                }
-
-                for (i = 0; i < rcvd; i++) {
-                        rd_kafka_message_t *m = batch[i];
-                        if (!m->err)
-                                rd_kafka_share_acknowledge(rkshare, m);
-                        rd_kafka_message_destroy(m);
-                }
-        }
-
-        return 0;
-}
+// /**
+//  * @brief Poll the share consumer for up to \p timeout_ms and return the
+//  *        timestamp (test_clock()) of the first UNKNOWN_TOPIC_OR_PART
+//  *        event observed — or 0 if none was seen.
+//  *
+//  * Note: consumer-level error events for share consumers (those produced
+//  * by rd_kafka_propagate_consumer_topic_errors() and friends) are
+//  * surfaced by rd_kafka_share_consume_batch() as the returned
+//  * rd_kafka_error_t*, NOT inside the per-message batch with m->err set
+//  * (rdkafka_queue.c:936-945 — RD_KAFKA_OP_CONSUMER_ERR is converted into
+//  * an rd_kafka_error_t). So we check the return value, not the batch.
+//  *
+//  * Any non-error messages in the same call are ACCEPT-ack'd and dropped.
+//  *
+//  * \p topic is currently unused (the consumer-err return value doesn't
+//  * carry topic context), but is kept in the signature for clarity at
+//  * call sites about which topic we expect the error for.
+//  */
+// static rd_ts_t wait_for_unknown_topic_event(rd_kafka_share_t *rkshare,
+//                                             const char *topic,
+//                                             int timeout_ms) {
+//         rd_kafka_message_t *batch[BATCH_SIZE];
+//         rd_ts_t deadline = test_clock() + (rd_ts_t)timeout_ms * 1000;
+//
+//         (void)topic;
+//
+//         while (test_clock() < deadline) {
+//                 rd_kafka_error_t *err;
+//                 size_t rcvd = 0;
+//                 size_t i;
+//
+//                 err = rd_kafka_share_consume_batch(rkshare, 200, batch,
+//                 &rcvd);
+//
+//                 if (err) {
+//                         rd_kafka_resp_err_t code = rd_kafka_error_code(err);
+//                         if (code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
+//                         {
+//                                 rd_ts_t now = test_clock();
+//                                 TEST_SAY(
+//                                     "Observed UNKNOWN_TOPIC_OR_PART from "
+//                                     "share_consume_batch: %s\n",
+//                                     rd_kafka_error_string(err));
+//                                 rd_kafka_error_destroy(err);
+//                                 for (i = 0; i < rcvd; i++)
+//                                         rd_kafka_message_destroy(batch[i]);
+//                                 return now;
+//                         }
+//                         TEST_SAY(
+//                             "Event ignored while waiting for "
+//                             "UNKNOWN_TOPIC_OR_PART: %s (%s)\n",
+//                             rd_kafka_err2name(code),
+//                             rd_kafka_error_string(err));
+//                         rd_kafka_error_destroy(err);
+//                 }
+//
+//                 for (i = 0; i < rcvd; i++) {
+//                         rd_kafka_message_t *m = batch[i];
+//                         if (!m->err)
+//                                 rd_kafka_share_acknowledge(rkshare, m);
+//                         rd_kafka_message_destroy(m);
+//                 }
+//         }
+//
+//         return 0;
+// }
 
 
 /**

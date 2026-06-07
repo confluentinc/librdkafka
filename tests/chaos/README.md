@@ -615,8 +615,43 @@ chase.
 
 - **More chaos shapes.** Today the harness only churns broker
   liveness + (optionally) leader assignment. Add:
+
+  *Consumer-side:*
   - **Dynamic consumer count.** Add/remove share-consumer instances
     mid-run to exercise share-group rebalancing across consumers.
+  - **Slow / pausing consumer.** `share_consume_verify` sleeps
+    between batches on a configurable schedule. Drives the
+    acquisition-lock-timeout → broker redelivers → `dc[2+] > 0`
+    path which we currently never reach (lock is 1 s in our config;
+    a 2 s sleep per batch would trigger it reliably). High signal:
+    the `dc[2+]` bucket stays empty in every run today.
+  - **Mixed implicit / explicit ack consumers in the same group.**
+    Run two consumers in the same share group with different
+    `share.acknowledgement.mode`. Broker tracks ack mode per member,
+    so this should work; look for inconsistency between members.
+  - **Pause / resume partitions.** Triggers a `rktp_version` bump
+    via the pause/resume op handler — exercises an alternative
+    trigger into the same filter machinery that broker-movement
+    paths use, plus broker-side lock-timeout under pause.
+  - **Subscribe / unsubscribe / resubscribe mid-run.** Clean session
+    teardown + re-establishment without restarting the consumer
+    process.
+  - **`acknowledge.type` mix per record.** Today `share_consume_verify`
+    always sends ACCEPT. Mix in RELEASE (intentional retry) and
+    REJECT (poison-pill skip) to test ack-state-machine corners.
+  - **Multiple share groups consuming the same topic.** Exercises
+    share-coordinator multiplexing across groups.
+
+  *Producer-side:*
+  - **Variable producer rate.** Burst 5000 rec/s for 10 s, idle for
+    30 s, then 500 rec/s. Drives the consumer between "behind" and
+    "caught up"; catches bugs that only surface during catch-up.
+  - **Transactional producer with mixed commit / abort.** Today the
+    producer is `rdkafka_performance -P` (non-transactional).
+    Aborted batches exercise the share-consumer's `isolation_level`
+    handling and aborted-transaction skipping.
+
+  *Topic / metadata:*
   - **Topic deletion.** Delete a subscribed topic mid-run; verify
     the consumer drops the assignment cleanly and any subsequent
     ShareFetch surfaces the right err.
@@ -632,5 +667,66 @@ chase.
     topic mid-run; verify the consumer picks up the new partitions
     via heartbeat-driven reassignment (see
     [[gap-heartbeat-partition-count-increase]] for the known gap).
-  - **Combinations.** Interleave the above with broker rolls for
+
+  *Broker-side (beyond just stopping):*
+  - **Kill the active KRaft controller specifically.** Today
+    `roll()` picks brokers at random — the controller is whichever
+    one happens to be picked. A `--target-controller` mode forces
+    a controller-election cycle on top of leader migration.
+  - **ISR shrinkage without leader loss.** Kill follower replicas
+    (not leader). Producer with `acks=all` sees `NOT_ENOUGH_REPLICAS`;
+    consumer side should see nothing different — unless a bug
+    surfaces.
+  - **Bursty preferred-leader-election cycle.** Many partitions
+    migrating in a single election (vs `change-leader` mode which
+    drains brokers serially).
+
+  *Network-level (heavier — needs root + `tc` / `iptables`):*
+  - **TCP latency spikes.** `tc qdisc add dev lo root netem delay
+    200ms 50ms` injected briefly. Stresses request-timeout handling,
+    ack-RPC timeouts, lock-expiry overlap with in-flight acks.
+  - **Asymmetric partition.** Broker receives but doesn't send
+    (or vice versa) — TCP up, application protocol stalls. Tests
+    `socket.timeout.ms` / `request.timeout.ms` paths that pure
+    SIGKILL doesn't reach.
+
+  *Config-level:*
+  - **Topic config change mid-run.** `cleanup.policy`,
+    `retention.ms`, `min.insync.replicas` via `kafka-configs.sh`
+    while traffic is flowing.
+  - **Share-group config change.** Adjust `share.delivery.count.limit`
+    or `share.record.lock.duration.ms` mid-run. Test whether running
+    consumers pick up changes vs only new members.
+  - **ACL revoke + restore on topic mid-run.** Yanks read permission,
+    restores after a few seconds. Tests `TOPIC_AUTHORIZATION_FAILED`
+    propagation in the share-consumer error path (not exercised in
+    any run yet).
+
+  *Combinations worth designing intentionally:*
+  - **Slow consumer + broker roll** — overlapping lock-expiry
+    redelivery and leader-migration redelivery.
+  - **Topic recreation + active consumer** — `S_NOTEXISTS` handling
+    on a session-attached toppar.
+  - **Controller kill + leader kill back-to-back** — two SIGKILLs
+    where the second targets the new controller; stresses controller
+    failover during leader migration.
+  - **General:** interleave any of the above with broker rolls for
     maximum surface coverage.
+
+### Top picks for highest signal vs effort
+
+If picking up chaos work without a specific target in mind:
+
+1. **Slow / pausing consumer** — drives `dc[2+]`, currently the
+   only verify.txt bucket that never fires in practice. Small
+   change to `share_consume_verify`.
+2. **Multiple share groups** — share-coordinator multiplexing
+   coverage. Orchestrator change only.
+3. **Controller-targeted kill** — distinct broker-side failover
+   code path from leader-of-data-partition kill.
+4. **Variable producer rate** — catch-up phase coverage; bursts
+   reveal back-pressure handling.
+5. **`acknowledge.type` mix** — RELEASE / REJECT paths in the
+   share-consumer ack-state machine.
+
+Each is ~30–50 LoC in the orchestrator + `share_consume_verify`.

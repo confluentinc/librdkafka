@@ -3287,7 +3287,7 @@ static void rd_kafka_share_fetch_fanout_enqueue(rd_kafka_t *rk,
 static void rd_kafka_share_fetch_fanout(rd_kafka_t *rk,
                                         rd_bool_t fetch_more_records,
                                         rd_list_t *ack_batches) {
-        rd_kafka_op_t *rko    = rd_kafka_op_new_cb(
+        rd_kafka_op_t *rko = rd_kafka_op_new_cb(
             rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
         rko->rko_u.share_fetch_fanout.fetch_more_records = fetch_more_records;
         rko->rko_replyq = RD_KAFKA_REPLYQ(rk->rk_ops, 0);

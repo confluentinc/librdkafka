@@ -1589,8 +1589,9 @@ rd_kafka_metadata_refresh_topic_ids(rd_kafka_t *rk,
                 if (!(rkb = rd_kafka_broker_any_usable(
                           rk, RD_POLL_NOWAIT, RD_DO_LOCK, 0, reason))) {
                         rd_kafka_dbg(rk, METADATA, "METADATA",
-                                     "Skipping metadata refresh of %d topic "
-                                     "id(s): %s: no usable brokers",
+                                     "Skipping metadata refresh of %d "
+                                     "topic(s) using id: %s: no usable "
+                                     "brokers",
                                      rd_list_cnt(topic_ids), reason);
                         return RD_KAFKA_RESP_ERR__TRANSPORT;
                 }
@@ -1602,7 +1603,7 @@ rd_kafka_metadata_refresh_topic_ids(rd_kafka_t *rk,
         rd_list_copy_to(&q_topic_ids, topic_ids, rd_list_Uuid_copy, NULL);
 
         rd_kafka_dbg(rk, METADATA, "METADATA",
-                     "Requesting metadata for %d topic id(s): %s",
+                     "Requesting metadata for %d topic(s) using id: %s",
                      rd_list_cnt(&q_topic_ids), reason);
 
         rd_kafka_MetadataRequest(
@@ -1683,6 +1684,7 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                                           rd_kafka_broker_t *rkb,
                                           const char *reason) {
         rd_list_t topics;
+        rd_list_t topic_ids;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
         rd_bool_t allow_auto_create_topics =
@@ -1714,7 +1716,6 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                  * marks stale ids (e.g. those left behind by a
                  * delete+recreate) as unknown, which drives cleanup
                  * of the corresponding rkts. */
-                rd_list_t topic_ids;
                 rd_list_init(&topic_ids, 8, rd_list_Uuid_destroy);
                 rd_kafka_local_topic_ids_to_list(rk, &topic_ids);
                 err = rd_kafka_metadata_refresh_topic_ids(rk, rkb, &topic_ids,

@@ -1039,6 +1039,12 @@ static void do_test_recreate_shrink_partitions_md_first(void) {
 
 
 int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
+        /* Topic deletion is not supported against Windows brokers. */
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SKIP("Topic deletion not supported on Windows brokers\n");
+                return 0;
+        }
+
         test_timeout_set(300);
 
         common_producer = test_create_producer();

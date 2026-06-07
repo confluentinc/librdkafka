@@ -3264,14 +3264,11 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
         return selected_rkb;
 }
 
-/**
- * @brief Timer callback for reenequeing SHARE_FETCH_FANOUT after a backoff.
- * @locality main thread
- * @locks none
- */
+
 /**
  * @brief Enqueue a SHARE_FETCH_FANOUT op and set the fetch guard flag
  *        if the op requests more records.
+ * @locality app thread
  */
 static void rd_kafka_share_fetch_fanout_enqueue(rd_kafka_t *rk,
                                                 rd_kafka_op_t *rko) {
@@ -3280,27 +3277,16 @@ static void rd_kafka_share_fetch_fanout_enqueue(rd_kafka_t *rk,
         rd_kafka_q_enq(rk->rk_ops, rko);
 }
 
-static void rd_kafka_share_fetch_fanout_renqueue(rd_kafka_timers_t *rkts,
-                                                 void *arg) {
-        rd_kafka_op_t *rko = arg;
-        rd_kafka_t *rk     = rkts->rkts_rk;
-
-        rd_kafka_dbg(rk, CGRP, "SHARE", "Re-enqueing SHARE_FETCH_FANOUT");
-        rd_kafka_share_fetch_fanout_enqueue(rk, rko);
-}
 
 /**
  * @brief Enqueue a SHARE_FETCH_FANOUT op on the main queue.
  * @param backoff_ms If >0 the op will be enqueued after this many milliseconds.
  * Else, it will be immediate.
- * @locality any thread
+ * @locality app thread
  */
-static void
-rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
-                                         rd_bool_t fetch_more_records,
-                                         int backoff_ms,
-                                         rd_list_t *ack_batches) {
-        rd_kafka_cgrp_t *rkcg = rd_kafka_cgrp_get(rk);
+static void rd_kafka_share_fetch_fanout(rd_kafka_t *rk,
+                                        rd_bool_t fetch_more_records,
+                                        rd_list_t *ack_batches) {
         rd_kafka_op_t *rko    = rd_kafka_op_new_cb(
             rk, RD_KAFKA_OP_SHARE_FETCH_FANOUT, rd_kafka_share_fetch_fanout_op);
         rko->rko_u.share_fetch_fanout.fetch_more_records = fetch_more_records;
@@ -3309,13 +3295,7 @@ rd_kafka_share_fetch_fanout_with_backoff(rd_kafka_t *rk,
         /* Attach pre-built ack_details (ownership transferred to op) */
         rko->rko_u.share_fetch_fanout.ack_batches = ack_batches;
 
-        if (backoff_ms > 0)
-                rd_kafka_timer_start_oneshot(
-                    &rk->rk_timers, &rkcg->rkcg_share.share_fetch_fanout_tmr,
-                    rd_true, backoff_ms * 1000,
-                    rd_kafka_share_fetch_fanout_renqueue, rko);
-        else
-                rd_kafka_share_fetch_fanout_enqueue(rk, rko);
+        rd_kafka_share_fetch_fanout_enqueue(rk, rko);
 }
 
 static void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk,
@@ -3512,45 +3492,6 @@ rd_kafka_op_res_t rd_kafka_share_fetch_reply_op(rd_kafka_t *rk,
         return RD_KAFKA_OP_RES_HANDLED;
 }
 
-/**
- * Handles RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY.
- * @locality main thread
- */
-rd_kafka_op_res_t
-rd_kafka_share_fetch_fanout_reply_op(rd_kafka_t *rk, rd_kafka_op_t *rko_orig) {
-        rd_kafka_resp_err_t err;
-
-        if (!rko_orig->rko_err && !rko_orig->rko_error)
-                return RD_KAFKA_OP_RES_HANDLED;
-
-        err = rko_orig->rko_err;
-        if (rko_orig->rko_error)
-                err = rd_kafka_error_code(rko_orig->rko_error);
-
-        /* TODO: KIP-932: Add error handling - either retries, or user-level
-         * propagation, later. */
-        rd_kafka_dbg(rk, CGRP, "SHARE",
-                     "Encountered error in SHARE_FETCH_FANOUT: %s",
-                     rd_kafka_err2name(err));
-
-        switch (err) {
-        /* Some errors need not be retried. */
-        case RD_KAFKA_RESP_ERR__DESTROY:
-        case RD_KAFKA_RESP_ERR__TIMED_OUT:
-                break;
-
-        /* Some errors may be retried - with a constant backoff. */
-        default:
-                rd_kafka_share_fetch_fanout_with_backoff(
-                    rk, rko_orig->rko_u.share_fetch_fanout.fetch_more_records,
-                    /* TODO: KIP-932: Consider setting this to retry_backoff_ms
-                       or to a constant.*/
-                    rk->rk_conf.retry_backoff_max_ms,
-                    NULL /* no ack_details on retry */);
-                break;
-        }
-        return RD_KAFKA_OP_RES_HANDLED;
-}
 
 /**
  * @brief Create and enqueue a SHARE_FETCH op on a broker.
@@ -3907,8 +3848,8 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
             !rk->rk_rkshare->rkshare_fetch_more_records_requested;
 
         if (need_fetch_more_records || has_pending_acks)
-                rd_kafka_share_fetch_fanout_with_backoff(
-                    rk, need_fetch_more_records, 0, ack_batches);
+                rd_kafka_share_fetch_fanout(rk, need_fetch_more_records,
+                                            ack_batches);
 
         error = rd_kafka_q_serve_share_rkmessages(rkcg->rkcg_q, timeout_ms,
                                                   rkmessages, max_poll_records,
@@ -5960,15 +5901,6 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
 
         case RD_KAFKA_OP_METADATA_UPDATE:
                 res = rd_kafka_metadata_update_op(rk, rko->rko_u.metadata.mdi);
-                break;
-
-
-        /*
-         * TODO KIP-932: Remove this op handling as we don't send this anymore.
-         */
-        case RD_KAFKA_OP_SHARE_FETCH_FANOUT | RD_KAFKA_OP_REPLY:
-                rd_kafka_assert(rk, thrd_is_current(rk->rk_thread));
-                res = rd_kafka_share_fetch_fanout_reply_op(rk, rko);
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE:

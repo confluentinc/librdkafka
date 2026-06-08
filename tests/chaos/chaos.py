@@ -995,7 +995,9 @@ def leave_broker_down(cluster, topics, idx, unclean, stop_s,
 
 
 def roll(cluster, cycles, stop_s, up_s, rng, topics, unclean,
-         leader_log_path=None, exclude_indices=()):
+         leader_log_path=None, exclude_indices=(),
+         rebalance_add_cycle=None, rebalance_remove_cycle=None,
+         consumers=None, spawn_consumer_fn=None):
     """Roll brokers; order is shuffled each cycle for diversity.
 
     If `unclean` is True, brokers are killed (SIGKILL) instead of being
@@ -1006,6 +1008,12 @@ def roll(cluster, cycles, stop_s, up_s, rng, topics, unclean,
     `exclude_indices` pins the listed broker indices out of the roll
     (used by `--leave-broker-down` to keep an already-killed broker
     out of the rotation).
+
+    `rebalance_add_cycle` / `rebalance_remove_cycle` (when paired with
+    `consumers` + `spawn_consumer_fn`) fire add_consumer at the start
+    of the add cycle and remove_consumer at the start of the remove
+    cycle, to force a share-group rebalance concurrent with the broker
+    roll. The remove picks uniformly at random via `rng`.
     """
     excluded = set(exclude_indices)
     indices = [i for i in range(len(cluster.brokers))
@@ -1029,6 +1037,24 @@ def roll(cluster, cycles, stop_s, up_s, rng, topics, unclean,
             leader_log.flush()
 
     for c in range(cycles):
+        if (rebalance_add_cycle == c
+                and consumers is not None
+                and spawn_consumer_fn is not None):
+            new_c = add_consumer(consumers, spawn_consumer_fn)
+            ts = time.strftime('%H:%M:%S')
+            print(f'[roll {ts}] cycle={c} rebalance-add: '
+                  f'spawned consumer-{new_c.idx}', flush=True)
+            _log(f'  [{ts}] rebalance-add cycle={c} '
+                 f'-> consumer-{new_c.idx}')
+        if (rebalance_remove_cycle == c
+                and consumers is not None):
+            removed = remove_consumer(consumers, rng=rng)
+            if removed is not None:
+                ts = time.strftime('%H:%M:%S')
+                print(f'[roll {ts}] cycle={c} rebalance-remove: '
+                      f'stopped consumer-{removed.idx}', flush=True)
+                _log(f'  [{ts}] rebalance-remove cycle={c} '
+                     f'-> consumer-{removed.idx}')
         order = indices[:]
         rng.shuffle(order)
         ts = time.strftime('%H:%M:%S')
@@ -2092,6 +2118,16 @@ def main():
                          '(bounded by '
                          'topic.metadata.refresh.interval.ms). '
                          'Default: disabled.')
+    ap.add_argument('--rebalance-mid-roll', action='store_true',
+                    help='[broker-roll mode] Pair a share-group '
+                         'rebalance with the broker roll: '
+                         'add_consumer at the start of cycle '
+                         'floor(--cycles / 2), remove_consumer '
+                         '(uniform random target) at the start of '
+                         'the next cycle. Tests partition '
+                         'reassignment under concurrent leader '
+                         'migration. Needs --cycles >= 2 for the '
+                         'remove leg to fire. Default: disabled.')
     ap.add_argument('--leader-change-mode',
                     choices=['broker-roll', 'change-leader',
                              'reassign-partitions'],
@@ -2361,11 +2397,30 @@ def main():
                                       args.unclean_stop, args.stop_s,
                                       leader_log_path)
                     exclude = [args.leave_broker_down]
+            add_cycle = None
+            remove_cycle = None
+            if args.rebalance_mid_roll:
+                if args.leader_change_mode != 'broker-roll':
+                    print('[orch] WARNING: --rebalance-mid-roll only '
+                          'applies in broker-roll mode; ignoring',
+                          file=sys.stderr, flush=True)
+                else:
+                    add_cycle = args.cycles // 2
+                    if args.cycles >= 2:
+                        remove_cycle = add_cycle + 1
+                    else:
+                        print('[orch] NOTE: --rebalance-mid-roll '
+                              'remove leg skipped (need --cycles '
+                              '>= 2); add only', flush=True)
             if args.leader_change_mode == 'broker-roll':
                 roll(cluster, args.cycles, args.stop_s, args.up_s,
                      random.Random(seed), topics, args.unclean_stop,
                      leader_log_path=leader_log_path,
-                     exclude_indices=exclude)
+                     exclude_indices=exclude,
+                     rebalance_add_cycle=add_cycle,
+                     rebalance_remove_cycle=remove_cycle,
+                     consumers=consumers,
+                     spawn_consumer_fn=spawn_consumer)
             else:
                 reassign_roll(cluster, args.cycles, args.stop_s,
                               args.up_s, random.Random(seed),

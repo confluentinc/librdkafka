@@ -362,6 +362,7 @@ diagnostic information about a broker-side issue, not a script bug.
 | `--seed N` | random (time-based) | Reproducible broker stop order |
 | `--unclean-stop` | off | [broker-roll only] SIGKILL brokers instead of SIGTERM |
 | `--leave-broker-down N` | disabled | [broker-roll only] Stop broker index `N` once before the roll begins and never restart it. `N` is excluded from the roll rotation. Honours `--unclean-stop`. Useful for measuring consumer recovery time against a permanently-dead broker (bounded by `topic.metadata.refresh.interval.ms`). |
+| `--rebalance-mid-roll` | disabled | [broker-roll only] Force a share-group rebalance during the roll: spawn a fresh share-consumer at the start of cycle `floor(--cycles / 2)`, then stop a uniformly random one at the start of the next cycle. Tests partition reassignment under concurrent leader migration. Needs `--cycles >= 2` for the remove leg. |
 | `--leader-change-mode` | `broker-roll` | `broker-roll` / `change-leader` / `reassign-partitions`. Picks the mechanism the auto-mode roll uses to trigger leader changes. See the "Leader-change modes" section below. |
 | `--leader-poll-s` | `2` | Background leader-watcher poll interval. Every observed transition is printed inline (`[leader HH:MM:SS] ...`) and appended to `leader_history.log`. Catches changes between/outside our explicit operations (preferred-leader timer, ISR shrinkage). Set to `0` to disable. |
 | `--consume-mode` | `share-consumer-verify` | See table above |
@@ -430,6 +431,13 @@ python3 tests/chaos/chaos.py --mode manual
 python3 tests/chaos/chaos.py \
     --leave-broker-down 2 \
     --consumer-conf topic.metadata.refresh.interval.ms=30000
+
+# 6) Rebalance under chaos: 4-cycle roll, add a consumer at cycle 2,
+#    remove a random one at cycle 3. Forces a share-group rebalance
+#    while leaders are migrating.
+python3 tests/chaos/chaos.py \
+    --cycles 4 \
+    --rebalance-mid-roll
 ```
 
 ## share_consume_verify event format

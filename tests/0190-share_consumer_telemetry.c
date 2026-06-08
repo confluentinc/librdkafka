@@ -126,7 +126,6 @@ static void produce_and_share_consume(const char *topic, const char *group_id) {
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "group.id", group_id);
         test_conf_set(conf, "enable.metrics.push", "true");
-        test_conf_set(conf, "enable.auto.commit", "false");
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "share_consumer_new failed: %s", errstr);

@@ -289,6 +289,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         rd_avg_t rkb_avg_share_fetch_latency; /**< Current share
                                                                *   fetch latency
                                                                *   avg */
+                        rd_avg_t rkb_avg_share_fetch_size;    /**< Current share
+                                                               *   fetch response
+                                                               *   size avg
+                                                               *   (bytes) */
                         rd_avg_t rkb_avg_produce_latency; /**< Current produce
                                                            *   latency avg */
                 } rd_avg_current;
@@ -305,6 +309,14 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                             rkb_avg_share_fetch_latency; /**< Rolled over
                                                           *   share fetch
                                                           *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_latency; /**< Rolled over
+                                                          *   share fetch
+                                                          *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_size; /**< Rolled over
+                                                       *   share fetch response
+                                                       *   size avg (bytes) */
                         rd_avg_t
                             rkb_avg_produce_latency; /**< Rolled over produce
                                                       *   latency avg */

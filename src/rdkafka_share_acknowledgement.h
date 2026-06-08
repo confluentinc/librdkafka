@@ -78,20 +78,19 @@ typedef struct rd_kafka_share_ack_batch_entry_s {
  *   - rktp (toppar reference, refcount held)
  *   - topic_id
  *
- * The response_leader_id and response_leader_epoch are the leader info
- * at the time records were acquired. These may differ from the current
- * leader when sending acknowledgements.
+ * response_leader_id is the broker id from which the records were
+ * acquired and is used to send the acknowledgement back to the same
+ * broker. It may differ from the current leader when sending
+ * acknowledgements.
  */
 /**
  * TODO KIP-932: Check naming.
  */
 typedef struct rd_kafka_share_ack_batches_s {
         rd_kafka_topic_partition_t
-            *rktpar;                   /**< Topic-partition with rktp ref */
-        int32_t response_leader_id;    /**< Leader broker id when records
-                                        *   were acquired */
-        int32_t response_leader_epoch; /**< Leader epoch when records
-                                        *   were acquired */
+            *rktpar;                /**< Topic-partition with rktp ref */
+        int32_t response_leader_id; /**< Leader broker id when records
+                                     *   were acquired */
         int64_t response_acquired_offsets_count; /**< Total acquired messages */
         rd_list_t entries; /**< rd_kafka_share_ack_batch_entry_t*,
                             *   sorted by start_offset */
@@ -119,7 +118,6 @@ rd_kafka_share_ack_batch_entry_t *rd_kafka_share_ack_batch_entry_copy(
 rd_kafka_share_ack_batches_t *
 rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
                                int32_t response_leader_id,
-                               int32_t response_leader_epoch,
                                int64_t response_acquired_offsets_count);
 
 /** Allocate an empty share ack batches (all fields zeroed). */

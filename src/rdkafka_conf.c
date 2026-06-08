@@ -943,6 +943,19 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_SENSITIVE, "ssl.keystore.password", _RK_C_STR,
      _RK(ssl.keystore_password), "Client's keystore (PKCS#12) password.",
      _UNSUPPORTED_SSL},
+    {_RK_GLOBAL, "ssl.certificate.refresh.interval.ms", _RK_C_INT,
+     _RK(ssl.cert_refresh_interval_ms),
+     "Interval (in milliseconds) at which the client's TLS "
+     "certificate, key and CA files configured through the "
+     "`ssl.*.location` properties are checked for changes and, if a change "
+     "is detected, reloaded into a new SSL context that is used for "
+     "subsequent broker connections. Existing connections are not affected "
+     "until they reconnect. A value of 0 disables automatic refresh. "
+     "Only file-based locations are supported (in-memory PEM strings, "
+     "certificates set with `rd_kafka_conf_set_ssl_cert()` and OpenSSL "
+     "engines are not reloadable). The context can also be reloaded on "
+     "demand with `rd_kafka_ssl_ctx_reload()`.",
+     0, 24 * 3600 * 1000, 0, _UNSUPPORTED_SSL},
     {_RK_GLOBAL, "ssl.providers", _RK_C_STR, _RK(ssl.providers),
      "Comma-separated list of OpenSSL 3.0.x implementation providers. "
      "E.g., \"default,legacy\".",

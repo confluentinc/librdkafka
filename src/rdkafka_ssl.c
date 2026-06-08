@@ -57,6 +57,7 @@
 #if !_WIN32
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #endif
 
@@ -579,7 +580,13 @@ int rd_kafka_transport_ssl_connect(rd_kafka_broker_t *rkb,
                                    size_t errstr_size) {
         int r;
 
+        /* Take the SSL context lock so the context can be safely swapped by
+         * a concurrent certificate reload. SSL_new() bumps the context's
+         * refcount, keeping it alive for the lifetime of this connection even
+         * if the context is replaced and freed afterwards. */
+        mtx_lock(&rkb->rkb_rk->rk_ssl.lock);
         rktrans->rktrans_ssl = SSL_new(rkb->rkb_rk->rk_conf.ssl.ctx);
+        mtx_unlock(&rkb->rkb_rk->rk_ssl.lock);
         if (!rktrans->rktrans_ssl)
                 goto fail;
 
@@ -1878,54 +1885,44 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
 
 
 /**
- * @brief Once per rd_kafka_t handle initialization of OpenSSL
- *
- * @locality application thread
- *
- * @locks rd_kafka_wrlock() MUST be held
+ * @brief If \p errstr ends with the "...: " error preamble, append the last
+ *        error from the OpenSSL error stack to it, otherwise leave it as is.
  */
-int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
-        int r;
-        SSL_CTX *ctx = NULL;
-        const char *linking =
-#if WITH_STATIC_LIB_libcrypto
-            "statically linked "
-#else
-            ""
-#endif
-            ;
+static void rd_kafka_ssl_ctx_append_openssl_error(rd_kafka_t *rk,
+                                                  char *errstr,
+                                                  size_t errstr_size) {
+        int r = (int)strlen(errstr);
+        if (r > 2 && !strcmp(&errstr[r - 2], ": "))
+                rd_kafka_ssl_error(rk, NULL, errstr + r,
+                                   (int)errstr_size > r ? (int)errstr_size - r
+                                                        : 0);
+}
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000
-        rd_kafka_dbg(rk, SECURITY, "OPENSSL",
-                     "Using %sOpenSSL version %s "
-                     "(0x%lx, librdkafka built with 0x%lx)",
-                     linking, OpenSSL_version(OPENSSL_VERSION),
-                     OpenSSL_version_num(), OPENSSL_VERSION_NUMBER);
-#else
-        rd_kafka_dbg(rk, SECURITY, "OPENSSL",
-                     "librdkafka built with %sOpenSSL version 0x%lx", linking,
-                     OPENSSL_VERSION_NUMBER);
-#endif
+
+/**
+ * @brief Build a new SSL_CTX from the current client configuration.
+ *
+ * This creates and configures a fresh SSL_CTX (ciphers, verification,
+ * curves/sigalgs, certificates, keys, etc.) but does NOT assign it to
+ * \c rk->rk_conf.ssl.ctx and does NOT perform the one-time provider/engine
+ * loading (that is handled by rd_kafka_ssl_ctx_init()).
+ *
+ * It is safe to call repeatedly as long as no consumable in-memory
+ * certificate sources are configured (see
+ * rd_kafka_ssl_cert_files_are_reloadable()); file-based certificate
+ * locations are read non-destructively.
+ *
+ * @returns the new SSL_CTX on success, or NULL on failure (with a complete
+ *          \p errstr written).
+ *
+ * @locality application thread or rdkafka main thread
+ */
+static SSL_CTX *
+rd_kafka_ssl_ctx_new0(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+        SSL_CTX *ctx = NULL;
 
         if (errstr_size > 0)
                 errstr[0] = '\0';
-
-#if OPENSSL_VERSION_NUMBER >= 0x30000000
-        if (rk->rk_conf.ssl.providers &&
-            !rd_kafka_ssl_ctx_load_providers(rk, rk->rk_conf.ssl.providers,
-                                             errstr, errstr_size))
-                goto fail;
-#endif
-
-#if WITH_SSL_ENGINE
-        if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
-                rd_kafka_dbg(rk, SECURITY, "SSL",
-                             "Loading OpenSSL engine from \"%s\"",
-                             rk->rk_conf.ssl.engine_location);
-                if (!rd_kafka_ssl_ctx_init_engine(rk, errstr, errstr_size))
-                        goto fail;
-        }
-#endif
 
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
         ctx = SSL_CTX_new(TLS_client_method());
@@ -2011,26 +2008,310 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
 
         SSL_CTX_set_mode(ctx, SSL_MODE_ENABLE_PARTIAL_WRITE);
 
+        return ctx;
+
+fail:
+        rd_kafka_ssl_ctx_append_openssl_error(rk, errstr, errstr_size);
+        RD_IF_FREE(ctx, SSL_CTX_free);
+        return NULL;
+}
+
+
+/**
+ * @brief Once per rd_kafka_t handle initialization of OpenSSL
+ *
+ * @locality application thread
+ *
+ * @locks rd_kafka_wrlock() MUST be held
+ */
+int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+        SSL_CTX *ctx = NULL;
+        const char *linking =
+#if WITH_STATIC_LIB_libcrypto
+            "statically linked "
+#else
+            ""
+#endif
+            ;
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000
+        rd_kafka_dbg(rk, SECURITY, "OPENSSL",
+                     "Using %sOpenSSL version %s "
+                     "(0x%lx, librdkafka built with 0x%lx)",
+                     linking, OpenSSL_version(OPENSSL_VERSION),
+                     OpenSSL_version_num(), OPENSSL_VERSION_NUMBER);
+#else
+        rd_kafka_dbg(rk, SECURITY, "OPENSSL",
+                     "librdkafka built with %sOpenSSL version 0x%lx", linking,
+                     OPENSSL_VERSION_NUMBER);
+#endif
+
+        if (errstr_size > 0)
+                errstr[0] = '\0';
+
+                /* One-time loading of providers and engine. These are kept on
+                 * the rd_kafka_t handle and are not rebuilt on certificate
+                 * reload. */
+#if OPENSSL_VERSION_NUMBER >= 0x30000000
+        if (rk->rk_conf.ssl.providers &&
+            !rd_kafka_ssl_ctx_load_providers(rk, rk->rk_conf.ssl.providers,
+                                             errstr, errstr_size)) {
+                rd_kafka_ssl_ctx_append_openssl_error(rk, errstr, errstr_size);
+                goto fail;
+        }
+#endif
+
+#if WITH_SSL_ENGINE
+        if (rk->rk_conf.ssl.engine_location && !rk->rk_conf.ssl.engine) {
+                rd_kafka_dbg(rk, SECURITY, "SSL",
+                             "Loading OpenSSL engine from \"%s\"",
+                             rk->rk_conf.ssl.engine_location);
+                if (!rd_kafka_ssl_ctx_init_engine(rk, errstr, errstr_size)) {
+                        rd_kafka_ssl_ctx_append_openssl_error(rk, errstr,
+                                                              errstr_size);
+                        goto fail;
+                }
+        }
+#endif
+
+        /* Build the SSL context itself (errstr is complete on failure). */
+        ctx = rd_kafka_ssl_ctx_new0(rk, errstr, errstr_size);
+        if (!ctx)
+                goto fail;
+
         rk->rk_conf.ssl.ctx = ctx;
 
         return 0;
 
 fail:
-        r = (int)strlen(errstr);
-        /* If only the error preamble is provided in errstr and ending with
-         * "....: ", then retrieve the last error from the OpenSSL error stack,
-         * else treat the errstr as complete. */
-        if (r > 2 && !strcmp(&errstr[r - 2], ": "))
-                rd_kafka_ssl_error(rk, NULL, errstr + r,
-                                   (int)errstr_size > r ? (int)errstr_size - r
-                                                        : 0);
-        RD_IF_FREE(ctx, SSL_CTX_free);
 #if WITH_SSL_ENGINE
         RD_IF_FREE(rk->rk_conf.ssl.engine, ENGINE_free);
 #endif
         rd_list_destroy(&rk->rk_conf.ssl.loaded_providers);
 
         return -1;
+}
+
+
+/**
+ * @enum rd_kafka_ssl_cert_file_t
+ * @brief Identifiers for the file-based certificate inputs that are tracked
+ *        for hot-reload change detection. The values are used as indices into
+ *        rd_kafka_t.rk_ssl.files[].
+ */
+typedef enum {
+        RD_KAFKA_SSL_CERT_FILE_CA = 0,   /**< ssl.ca.location */
+        RD_KAFKA_SSL_CERT_FILE_CERT,     /**< ssl.certificate.location */
+        RD_KAFKA_SSL_CERT_FILE_KEY,      /**< ssl.key.location */
+        RD_KAFKA_SSL_CERT_FILE_KEYSTORE, /**< ssl.keystore.location */
+        RD_KAFKA_SSL_CERT_FILE_CRL,      /**< ssl.crl.location */
+        RD_KAFKA_SSL_CERT_FILE__CNT,
+} rd_kafka_ssl_cert_file_t;
+
+
+/**
+ * @returns the configured file path for the given certificate file slot,
+ *          or NULL if not set (or, for the CA slot, set to the special
+ *          "probe" directive which is not a real file).
+ */
+static const char *rd_kafka_ssl_cert_file_path(const rd_kafka_t *rk,
+                                               rd_kafka_ssl_cert_file_t which) {
+        const char *path = NULL;
+
+        switch (which) {
+        case RD_KAFKA_SSL_CERT_FILE_CA:
+                path = rk->rk_conf.ssl.ca_location;
+                if (path && !strcmp(path, "probe"))
+                        path = NULL;
+                break;
+        case RD_KAFKA_SSL_CERT_FILE_CERT:
+                path = rk->rk_conf.ssl.cert_location;
+                break;
+        case RD_KAFKA_SSL_CERT_FILE_KEY:
+                path = rk->rk_conf.ssl.key_location;
+                break;
+        case RD_KAFKA_SSL_CERT_FILE_KEYSTORE:
+                path = rk->rk_conf.ssl.keystore_location;
+                break;
+        case RD_KAFKA_SSL_CERT_FILE_CRL:
+                path = rk->rk_conf.ssl.crl_location;
+                break;
+        default:
+                break;
+        }
+
+        return path;
+}
+
+
+/**
+ * @brief Stat \p path and return its modification time (microseconds) and
+ *        size. On error (missing file, etc.) \p *existsp is set to rd_false
+ *        and mtime/size to 0.
+ *
+ * @remark Change detection uses second-resolution mtime plus file size, which
+ *         is sufficient for certificate renewal where the file content (and
+ *         usually size) changes. A NULL \p path is treated as non-existing.
+ */
+static void rd_kafka_ssl_file_fingerprint(const char *path,
+                                          rd_ts_t *mtimep,
+                                          int64_t *sizep,
+                                          rd_bool_t *existsp) {
+#ifdef _WIN32
+        struct _stat st;
+        if (path && _stat(path, &st) == 0) {
+#else
+        struct stat st;
+        if (path && stat(path, &st) == 0) {
+#endif
+                *mtimep  = (rd_ts_t)st.st_mtime * 1000000;
+                *sizep   = (int64_t)st.st_size;
+                *existsp = rd_true;
+        } else {
+                *mtimep  = 0;
+                *sizep   = 0;
+                *existsp = rd_false;
+        }
+}
+
+
+rd_bool_t rd_kafka_ssl_cert_files_are_reloadable(rd_kafka_t *rk) {
+        const rd_kafka_conf_t *conf = &rk->rk_conf;
+
+        /* At least one file-based certificate location must be configured. */
+        if (!(conf->ssl.ca_location || conf->ssl.cert_location ||
+              conf->ssl.key_location || conf->ssl.keystore_location ||
+              conf->ssl.crl_location))
+                return rd_false;
+
+        /* None of the non-file (consumed at init / one-time) certificate
+         * sources may be in use, since those cannot be re-read from disk and
+         * rebuilding the context with them would be incorrect. */
+        if (conf->ssl.ca || conf->ssl.cert || conf->ssl.key ||
+            conf->ssl.ca_pem || conf->ssl.cert_pem || conf->ssl.key_pem)
+                return rd_false;
+
+#if WITH_SSL_ENGINE
+        if (conf->ssl.engine)
+                return rd_false;
+#endif
+
+        return rd_true;
+}
+
+
+void rd_kafka_ssl_cert_refresh_baseline(rd_kafka_t *rk) {
+        int i;
+
+        rd_assert(RD_KAFKA_SSL_CERT_FILE__CNT ==
+                  RD_ARRAY_SIZE(rk->rk_ssl.files));
+
+        for (i = 0; i < RD_KAFKA_SSL_CERT_FILE__CNT; i++) {
+                const char *path = rd_kafka_ssl_cert_file_path(rk, i);
+                rd_kafka_ssl_file_fingerprint(path, &rk->rk_ssl.files[i].mtime,
+                                              &rk->rk_ssl.files[i].size,
+                                              &rk->rk_ssl.files[i].exists);
+        }
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_ssl_ctx_reload0(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
+        SSL_CTX *new_ctx, *old_ctx;
+
+        if (errstr_size > 0)
+                errstr[0] = '\0';
+
+        if (!rk->rk_conf.ssl.ctx) {
+                rd_snprintf(errstr, errstr_size,
+                            "SSL is not configured on this client");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        if (!rd_kafka_ssl_cert_files_are_reloadable(rk)) {
+                rd_snprintf(errstr, errstr_size,
+                            "SSL certificate reload requires file-based "
+                            "certificates configured through ssl.*.location; "
+                            "in-memory PEM strings, certificates set with "
+                            "rd_kafka_conf_set_ssl_cert() and OpenSSL engine "
+                            "certificates cannot be reloaded");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        /* Build the new context outside of the lock (file I/O). On failure
+         * the existing context is left in place. */
+        new_ctx = rd_kafka_ssl_ctx_new0(rk, errstr, errstr_size);
+        if (!new_ctx)
+                return RD_KAFKA_RESP_ERR__SSL;
+
+        /* Atomically swap in the new context. Broker threads take the same
+         * lock around SSL_new(), and SSL_new() bumps the context refcount, so
+         * existing connections keep the old context alive until they close. */
+        mtx_lock(&rk->rk_ssl.lock);
+        old_ctx             = rk->rk_conf.ssl.ctx;
+        rk->rk_conf.ssl.ctx = new_ctx;
+        mtx_unlock(&rk->rk_ssl.lock);
+
+        SSL_CTX_free(old_ctx);
+
+        rd_kafka_dbg(rk, SECURITY, "SSLRELOAD",
+                     "Reloaded SSL certificates into a new SSL context");
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+void rd_kafka_ssl_cert_refresh_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
+        rd_kafka_t *rk = rkts->rkts_rk;
+        int i;
+        rd_bool_t changed = rd_false;
+        struct {
+                rd_ts_t mtime;
+                int64_t size;
+                rd_bool_t exists;
+        } cur[RD_KAFKA_SSL_CERT_FILE__CNT];
+
+        /* Compute the current fingerprint of each watched file and compare
+         * against the stored baseline. */
+        for (i = 0; i < RD_KAFKA_SSL_CERT_FILE__CNT; i++) {
+                const char *path = rd_kafka_ssl_cert_file_path(rk, i);
+                rd_kafka_ssl_file_fingerprint(path, &cur[i].mtime, &cur[i].size,
+                                              &cur[i].exists);
+                if (cur[i].exists != rk->rk_ssl.files[i].exists ||
+                    cur[i].mtime != rk->rk_ssl.files[i].mtime ||
+                    cur[i].size != rk->rk_ssl.files[i].size)
+                        changed = rd_true;
+        }
+
+        if (!changed)
+                return;
+
+        rd_kafka_dbg(rk, SECURITY, "SSLRELOAD",
+                     "Change detected in SSL certificate file(s), "
+                     "reloading SSL context");
+
+        {
+                char errstr[512];
+                rd_kafka_resp_err_t err =
+                    rd_kafka_ssl_ctx_reload0(rk, errstr, sizeof(errstr));
+
+                if (err) {
+                        /* Keep the previous baseline so the reload is retried
+                         * on the next tick once the files are consistent. */
+                        rd_kafka_log(rk, LOG_ERR, "SSLRELOAD",
+                                     "Failed to reload SSL certificates: %s "
+                                     "(will retry)",
+                                     errstr);
+                        return;
+                }
+        }
+
+        /* Update the baseline to the newly applied state. */
+        for (i = 0; i < RD_KAFKA_SSL_CERT_FILE__CNT; i++) {
+                rk->rk_ssl.files[i].mtime  = cur[i].mtime;
+                rk->rk_ssl.files[i].size   = cur[i].size;
+                rk->rk_ssl.files[i].exists = cur[i].exists;
+        }
 }
 
 
@@ -2173,6 +2454,87 @@ int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
         return 0;
 }
 
+#if !_WIN32
+/**
+ * @brief Unit test for SSL certificate file change detection.
+ *
+ * Verifies that rd_kafka_ssl_file_fingerprint() correctly reports file
+ * existence, size and modification time, which are the inputs used to
+ * detect renewed certificate files for hot reload.
+ */
+static int unittest_ssl_cert_fingerprint(void) {
+        int fails   = 0;
+        char path[] = "/tmp/rdkafka_ut_sslcert_XXXXXX";
+        int fd;
+        rd_ts_t mtime;
+        int64_t size;
+        rd_bool_t exists;
+        struct timeval times[2];
+        const rd_ts_t fixed_mtime = (rd_ts_t)1000000000 * 1000000;
+        FILE *fp;
+        rd_ts_t mtime2;
+        int64_t size2;
+        rd_bool_t exists2;
+
+        RD_UT_SAY("Testing SSL certificate file fingerprint/change detection");
+
+        fd = mkstemp(path);
+        RD_UT_ASSERT(fd != -1, "mkstemp(%s) failed: %s", path,
+                     rd_strerror(errno));
+        RD_UT_ASSERT(write(fd, "AAAA", 4) == 4, "failed to write temp file");
+        close(fd);
+
+        /* Existing file: reported present with the correct size. */
+        rd_kafka_ssl_file_fingerprint(path, &mtime, &size, &exists);
+        RD_UT_ASSERT(exists, "expected file %s to be reported present", path);
+        RD_UT_ASSERT(size == 4, "expected size 4, got %lld", (long long)size);
+
+        /* Set a known modification time and verify it is read back
+         * (microsecond value derived from whole-second mtime). */
+        times[0].tv_sec  = 1000000000;
+        times[0].tv_usec = 0;
+        times[1].tv_sec  = 1000000000;
+        times[1].tv_usec = 0;
+        RD_UT_ASSERT(utimes(path, times) == 0, "utimes failed: %s",
+                     rd_strerror(errno));
+        rd_kafka_ssl_file_fingerprint(path, &mtime, &size, &exists);
+        RD_UT_ASSERT(mtime == fixed_mtime, "expected mtime %lld, got %lld",
+                     (long long)fixed_mtime, (long long)mtime);
+
+        /* A size change while keeping the same mtime must be detectable. */
+        fp = fopen(path, "w");
+        RD_UT_ASSERT(fp != NULL, "fopen(%s) failed: %s", path,
+                     rd_strerror(errno));
+        (void)fwrite("BBBBBB", 1, 6, fp);
+        fclose(fp);
+        RD_UT_ASSERT(utimes(path, times) == 0, "utimes (restore) failed: %s",
+                     rd_strerror(errno));
+        rd_kafka_ssl_file_fingerprint(path, &mtime2, &size2, &exists2);
+        RD_UT_ASSERT(size2 == 6, "expected size 6, got %lld", (long long)size2);
+        RD_UT_ASSERT(size2 != size,
+                     "size change should be detectable (%lld vs %lld)",
+                     (long long)size, (long long)size2);
+        RD_UT_ASSERT(mtime2 == mtime,
+                     "mtime should be unchanged after utimes restore");
+
+        unlink(path);
+
+        /* Removed file: reported missing with a zeroed fingerprint. */
+        rd_kafka_ssl_file_fingerprint(path, &mtime, &size, &exists);
+        RD_UT_ASSERT(!exists, "expected removed file to be reported missing");
+        RD_UT_ASSERT(size == 0 && mtime == 0,
+                     "expected zeroed fingerprint for missing file");
+
+        /* NULL path is treated as missing. */
+        rd_kafka_ssl_file_fingerprint(NULL, &mtime, &size, &exists);
+        RD_UT_ASSERT(!exists, "expected NULL path to be reported missing");
+
+        RD_UT_SAY("SSL certificate fingerprint detection passed");
+
+        return fails;
+}
+#endif /* !_WIN32 */
+
 /**
  * @brief Unit test for SSL hostname normalization.
  *
@@ -2230,6 +2592,10 @@ int unittest_ssl(void) {
         }
 
         RD_UT_SAY("All %d hostname normalization edge cases passed", i);
+
+#if !_WIN32
+        fails += unittest_ssl_cert_fingerprint();
+#endif
 
         return fails;
 }

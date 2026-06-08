@@ -3529,6 +3529,42 @@ rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
                                                 const char *password);
 
 /**
+ * @brief Reload the client's SSL context from the currently configured
+ *        certificate files.
+ *
+ * Rebuilds the SSL context from the certificate, key and CA files configured
+ * through the \c ssl.*.location properties (\c ssl.ca.location,
+ * \c ssl.certificate.location, \c ssl.key.location, \c ssl.keystore.location
+ * and \c ssl.crl.location) and atomically replaces the client's SSL context.
+ * The new context is used the next time this client establishes a broker
+ * connection; existing connections are not affected until they reconnect.
+ *
+ * This is useful for picking up renewed (rotated) certificates without
+ * recreating the client. It can be called explicitly by the application
+ * (for example from a file-watch handler), or performed automatically at a
+ * fixed interval by setting the \c ssl.certificate.refresh.interval.ms
+ * configuration property.
+ *
+ * @param rk Client instance.
+ *
+ * @remark Only file-based certificate locations are supported. If the client
+ *         uses in-memory PEM strings, certificates set with
+ *         rd_kafka_conf_set_ssl_cert(), or an OpenSSL engine, this function
+ *         returns an error and the context is left unchanged.
+ *
+ * @remark If the new certificate files cannot be loaded the previous context
+ *         is retained and an error is returned.
+ *
+ * @remark This function is thread-safe and may be called from any thread.
+ *
+ * @returns NULL on success or an error object on error (caller must destroy
+ *          it with rd_kafka_error_destroy()). Returns an error if the client
+ *          was not built or configured with SSL.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_ssl_ctx_reload(rd_kafka_t *rk);
+
+/**
  * @returns a reference to the librdkafka consumer queue.
  * This is the queue served by rd_kafka_consumer_poll().
  *

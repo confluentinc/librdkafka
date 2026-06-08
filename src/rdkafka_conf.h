@@ -196,7 +196,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 35)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 36)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -296,6 +296,10 @@ struct rd_kafka_conf_s {
                 char *keystore_password;
                 int endpoint_identification;
                 int enable_verify;
+                /** Interval (ms) at which client certificate/key/CA files
+                 *  (ssl.*.location) are polled for changes and reloaded into
+                 *  a new SSL context. 0 disables automatic refresh. */
+                int cert_refresh_interval_ms;
                 int (*cert_verify_cb)(rd_kafka_t *rk,
                                       const char *broker_name,
                                       int32_t broker_id,

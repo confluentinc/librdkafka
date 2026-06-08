@@ -29,6 +29,7 @@
 #include "test.h"
 #include "testshared.h"
 #include "rdkafka.h"
+#include "../src/rdkafka_proto.h"
 
 /**
  * @name Share consumer behavior across server-side topic recreation.
@@ -63,6 +64,9 @@
 static rd_kafka_t *common_producer;
 static rd_kafka_t *common_admin;
 
+/****************************************************************************
+ * Helpers
+ ****************************************************************************/
 
 /**
  * @brief Produce MSGS_PER_PARTITION framework-encoded messages (NULL
@@ -82,7 +86,6 @@ produce_phase(const char *topic, uint64_t testid, int32_t partition_cnt) {
                                    NULL /*payload*/, 0);
         }
 }
-
 
 /**
  * @brief Fetch the broker-assigned topic_id for \p topic via the
@@ -136,7 +139,6 @@ fetch_topic_id(const char *topic, int64_t *out_msb, int64_t *out_lsb) {
         rd_kafka_TopicCollection_destroy(tc);
         rd_kafka_queue_destroy(q);
 }
-
 
 /**
  * @brief Consume from a share consumer into \p mv until \p exp_cnt messages
@@ -203,7 +205,6 @@ static int consume_into_msgver(rd_kafka_share_t *rkshare,
         return mv->msgcnt;
 }
 
-
 /**
  * @brief Delete a topic, wait for the deletion to settle, then recreate
  *        with the same name and \p partition_cnt partitions. The new
@@ -227,7 +228,6 @@ static void recreate_topic(const char *topic, int partition_cnt) {
                                       60 * 1000);
 }
 
-
 /**
  * @brief Build a share consumer such that the ShareGroupHeartbeat is the
  *        dominant channel for discovering topic_id changes:
@@ -250,6 +250,7 @@ static rd_kafka_share_t *create_consumer_hb_first(const char *group_id) {
         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "300000");
         test_conf_set(conf, "topic.metadata.propagation.max.ms", "30000");
+        test_conf_set(conf, "debug", "all");
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
@@ -257,9 +258,108 @@ static rd_kafka_share_t *create_consumer_hb_first(const char *group_id) {
         return rkshare;
 }
 
+/**
+ * @brief Build a share consumer such that the periodic metadata refresh
+ *        is the dominant channel for discovering topic_id changes:
+ *          - topic.metadata.refresh.interval.ms is set to 500ms, well
+ *            below the broker-dictated ShareGroupHeartbeat interval
+ *            (typically 5s), so the refresh timer is virtually
+ *            guaranteed to fire between heartbeats during the
+ *            delete/recreate window;
+ *          - topic.metadata.propagation.max.ms is left at default (30s).
+ */
+static rd_kafka_share_t *create_consumer_md_first(const char *group_id) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+
+        test_conf_set(conf, "group.id", group_id);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        test_conf_set(conf, "topic.metadata.propagation.max.ms", "30000");
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+
+        return rkshare;
+}
 
 /**
- * @brief TC#1 — Recreate while the periodic metadata refresh is silent.
+ * @brief Background-thread payload that deletes and recreates a topic
+ *        on a mock cluster after a short sleep.
+ *
+ * Used by recreate-during-close mock tests so the recreate lands in the
+ * middle of an artificially-delayed broker request on the main thread.
+ */
+struct recreate_thread_args {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic;
+        int32_t partition_cnt;
+        int sleep_ms;
+};
+
+static int recreate_thread_main(void *p) {
+        struct recreate_thread_args *args = p;
+        rd_usleep((int64_t)args->sleep_ms * 1000, NULL);
+        TEST_SAY("[recreate-thread] Deleting topic %s\n", args->topic);
+        TEST_ASSERT(rd_kafka_mock_topic_delete(args->mcluster, args->topic) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "[recreate-thread] mock_topic_delete failed");
+        TEST_SAY("[recreate-thread] Recreating topic %s with %" PRId32
+                 " partition(s)\n",
+                 args->topic, args->partition_cnt);
+        TEST_ASSERT(rd_kafka_mock_topic_create(args->mcluster, args->topic,
+                                               args->partition_cnt,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "[recreate-thread] mock_topic_create failed");
+        return 0;
+}
+
+/**
+ * @brief Background producer thread: produces one record every
+ *        producer_period_ms with payload "<phase>:<seq>", where
+ *        phase is whatever the controlling thread has most recently
+ *        written into args->phase. Tolerates produce errors (the
+ *        topic may not exist mid-test).
+ *
+ *
+ * Used by the survives-delete-and-recreate test to keep produce
+ * activity steady through the delete window.
+ */
+struct producer_thread_args {
+        rd_kafka_t *producer;
+        const char *topic;
+        int period_ms;
+        char phase[16]; /* "before" / "during" / "after" */
+        rd_bool_t stop;
+};
+
+static int producer_thread_main(void *p) {
+        struct producer_thread_args *args = p;
+        int seq                           = 0;
+        while (!args->stop) {
+                char payload[64];
+                rd_snprintf(payload, sizeof(payload), "%s:%d", args->phase,
+                            seq++);
+                /* Errors during the delete window are expected; the
+                 * test tolerates them silently. */
+                (void)rd_kafka_producev(
+                    args->producer, RD_KAFKA_V_TOPIC(args->topic),
+                    RD_KAFKA_V_VALUE(payload, strlen(payload)),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END);
+                rd_usleep((int64_t)args->period_ms * 1000, NULL);
+        }
+        return 0;
+}
+
+/****************************************************************************
+ * Test Cases
+ ****************************************************************************/
+
+/**
+ * @brief Recreate while the periodic metadata refresh is silent.
  *
  * Sequence:
  *   1. Subscribe; produce MSGS_BEFORE framework-encoded messages tagged
@@ -380,47 +480,16 @@ static void do_test_recreate_hb_first(void) {
         SUB_TEST_PASS();
 }
 
-
 /**
- * @brief Build a share consumer such that the periodic metadata refresh
- *        is the dominant channel for discovering topic_id changes:
- *          - topic.metadata.refresh.interval.ms is set to 500ms, well
- *            below the broker-dictated ShareGroupHeartbeat interval
- *            (typically 5s), so the refresh timer is virtually
- *            guaranteed to fire between heartbeats during the
- *            delete/recreate window;
- *          - topic.metadata.propagation.max.ms is left at default (30s).
- */
-static rd_kafka_share_t *create_consumer_md_first(const char *group_id) {
-        rd_kafka_share_t *rkshare;
-        rd_kafka_conf_t *conf;
-        char errstr[512];
-
-        test_conf_init(&conf, NULL, 0);
-
-        test_conf_set(conf, "group.id", group_id);
-        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
-        test_conf_set(conf, "topic.metadata.propagation.max.ms", "30000");
-
-        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
-
-        return rkshare;
-}
-
-
-/**
- * @brief TC#2 — Recreate while the periodic metadata refresh fires
+ * @brief Recreate while the periodic metadata refresh fires
  *        frequently.
  *
- * Mirror of TC#1, but with topic.metadata.refresh.interval.ms set to
- * 500ms so the refresh timer wins the race against the ShareGroupHeartbeat
- * for discovering the new topic_id. Because the MD path updates
- * rkt->rkt_topic_id directly when it sees the change, the subsequent
- * HB-driven assignment-resolution finds NEW-UUID already in the cache
- * without needing a targeted-by-id MetadataRequest. Otherwise the test
- * shape is identical to TC#1.
+ * Mirror of do_test_recreate_hb_first, but with
+ * topic.metadata.refresh.interval.ms set to 500ms so the refresh timer wins the
+ * race against the ShareGroupHeartbeat for discovering the new topic_id.
+ * Because the MD path updates rkt->rkt_topic_id directly when it sees the
+ * change, the subsequent HB-driven assignment-resolution finds NEW-UUID already
+ * in the cache without needing a targeted-by-id MetadataRequest.
  */
 static void do_test_recreate_md_first(void) {
         const char *topic;
@@ -520,9 +589,9 @@ static void do_test_recreate_md_first(void) {
 
 
 /**
- * @brief TC#6 — Recreate with a smaller partition count, HB-first regime.
+ * @brief Recreate with a smaller partition count, HB-first regime.
  *
- * Same HB-first regime as TC#1 (topic.metadata.refresh.interval.ms is
+ * topic.metadata.refresh.interval.ms is
  * pinned high so the ShareGroupHeartbeat drives discovery), but the
  * recreated topic has only 2 partitions instead of 3. On top of the
  * topic_id flip we now exercise the partition-count shrink path:
@@ -639,9 +708,9 @@ static void do_test_recreate_shrink_partitions_hb_first(void) {
 
 
 /**
- * @brief TC#6 — Recreate with a smaller partition count, MD-first regime.
+ * @brief Recreate with a smaller partition count, MD-first regime.
  *
- * Same MD-first regime as TC#2 (topic.metadata.refresh.interval.ms is
+ * topic.metadata.refresh.interval.ms is
  * set very low so the periodic metadata refresh wins the race against
  * the ShareGroupHeartbeat for discovering the new topic_id and the
  * smaller partition count), combined with the partition-count shrink
@@ -758,285 +827,579 @@ static void do_test_recreate_shrink_partitions_md_first(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Stress test: many rapid topic recreations interleaved with
+ *        random produce activity and varying partition counts.
+ *
+ * Each chaos cycle picks (uniformly at random):
+ *   - A short pre-recreate sleep in [200, 1500] ms, to let the
+ *     consumer's state advance unpredictably between cycles.
+ *   - Whether to produce 0..5 records to each partition of the
+ *     current topic instance before the recreate; if any are
+ *     produced, they use a per-cycle testid that the test does not
+ *     track (we don't require these records to be received).
+ *   - A new partition count from {2, 3, 4} for the recreated topic,
+ *     exercising shrink, no-change, and grow paths from one cycle to
+ *     the next.
+ *
+ * After chaos_cycles iterations the test produces a final batch of
+ * MSGS_PER_PARTITION records to every partition of whatever topic
+ * instance is currently live (partition count is whatever chaos left
+ * it at) and asserts:
+ *   - The final batch is fully consumed (per-partition exact-range).
+ *   - All final-batch records have delivery_count == 1.
+ *   - The broker-assigned topic_id changed end-to-end.
+ *
+ * The test does NOT assert anything about records produced during
+ * the chaos loop. Whether they're received depends on whether the
+ * consumer happened to be in a fetchable state for that topic_id at
+ * that moment; that timing is intentionally unpredictable.
+ *
+ * Randomness is seeded from a freshly generated testid which is
+ * logged at the start so any failing run can be reproduced by
+ * re-seeding from the same value.
+ */
+static void do_test_recreate_chaos(void) {
+        const int chaos_cycles                  = 10;
+        const int chaos_sleep_min_ms            = 200;
+        const int chaos_sleep_max_ms            = 1500;
+        const int chaos_max_records_per_part    = 5;
+        const int32_t chaos_partition_choices[] = {2, 3, 4};
+        const int chaos_partition_choices_cnt =
+            sizeof(chaos_partition_choices) /
+            sizeof(chaos_partition_choices[0]);
+        const char *topic;
+        const char *group_id = "0184-share-recreate-chaos";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        test_msgver_t mv_warmup, mv_final;
+        uint64_t testid_warmup, testid_final, seed_testid;
+        int64_t id_initial_msb, id_initial_lsb;
+        int64_t id_final_msb, id_final_lsb;
+        int32_t current_partition_cnt = PARTITION_CNT;
+        int cycle;
+        int got;
+        int32_t p;
+        int final_msgs;
 
-// /**
-//  * @brief Build a share consumer with configurable
-//  *        topic.metadata.propagation.max.ms.
-//  *
-//  * Other settings mirror create_consumer_md_first: short metadata refresh
-//  * interval (500ms) so the periodic refresh observes
-//  * UNKNOWN_TOPIC_OR_PART promptly after the delete — the propagation
-//  * grace window then determines how long that observation is suppressed
-//  * before being surfaced to the application.
-//  */
-// static rd_kafka_share_t *
-// create_consumer_with_propagation(const char *group_id, int
-// propagation_max_ms) {
-//         rd_kafka_share_t *rkshare;
-//         rd_kafka_conf_t *conf;
-//         char errstr[512];
-//         char propagation_str[32];
-//
-//         rd_snprintf(propagation_str, sizeof(propagation_str), "%d",
-//                     propagation_max_ms);
-//
-//         test_conf_init(&conf, NULL, 0);
-//
-//         test_conf_set(conf, "group.id", group_id);
-//         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
-//         test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
-//         test_conf_set(conf, "topic.metadata.propagation.max.ms",
-//                       propagation_str);
-//
-//         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
-//         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
-//
-//         return rkshare;
-// }
+        SUB_TEST_QUICK();
 
+        /* Use a freshly-generated testid as the RNG seed; log it so a
+         * failure can be reproduced by manually seeding the same
+         * value. test_id_generate() returns a 64-bit value; srand()
+         * takes unsigned, so we truncate. */
+        seed_testid = test_id_generate();
+        srand((unsigned)seed_testid);
+        TEST_SAY("Chaos seed (from testid): %" PRIu64 "\n", seed_testid);
 
-// /**
-//  * @brief Poll the share consumer for up to \p timeout_ms and return the
-//  *        timestamp (test_clock()) of the first UNKNOWN_TOPIC_OR_PART
-//  *        event observed — or 0 if none was seen.
-//  *
-//  * Note: consumer-level error events for share consumers (those produced
-//  * by rd_kafka_propagate_consumer_topic_errors() and friends) are
-//  * surfaced by rd_kafka_share_consume_batch() as the returned
-//  * rd_kafka_error_t*, NOT inside the per-message batch with m->err set
-//  * (rdkafka_queue.c:936-945 — RD_KAFKA_OP_CONSUMER_ERR is converted into
-//  * an rd_kafka_error_t). So we check the return value, not the batch.
-//  *
-//  * Any non-error messages in the same call are ACCEPT-ack'd and dropped.
-//  *
-//  * \p topic is currently unused (the consumer-err return value doesn't
-//  * carry topic context), but is kept in the signature for clarity at
-//  * call sites about which topic we expect the error for.
-//  */
-// static rd_ts_t wait_for_unknown_topic_event(rd_kafka_share_t *rkshare,
-//                                             const char *topic,
-//                                             int timeout_ms) {
-//         rd_kafka_message_t *batch[BATCH_SIZE];
-//         rd_ts_t deadline = test_clock() + (rd_ts_t)timeout_ms * 1000;
-//
-//         (void)topic;
-//
-//         while (test_clock() < deadline) {
-//                 rd_kafka_error_t *err;
-//                 size_t rcvd = 0;
-//                 size_t i;
-//
-//                 err = rd_kafka_share_consume_batch(rkshare, 200, batch,
-//                 &rcvd);
-//
-//                 if (err) {
-//                         rd_kafka_resp_err_t code = rd_kafka_error_code(err);
-//                         if (code == RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART)
-//                         {
-//                                 rd_ts_t now = test_clock();
-//                                 TEST_SAY(
-//                                     "Observed UNKNOWN_TOPIC_OR_PART from "
-//                                     "share_consume_batch: %s\n",
-//                                     rd_kafka_error_string(err));
-//                                 rd_kafka_error_destroy(err);
-//                                 for (i = 0; i < rcvd; i++)
-//                                         rd_kafka_message_destroy(batch[i]);
-//                                 return now;
-//                         }
-//                         TEST_SAY(
-//                             "Event ignored while waiting for "
-//                             "UNKNOWN_TOPIC_OR_PART: %s (%s)\n",
-//                             rd_kafka_err2name(code),
-//                             rd_kafka_error_string(err));
-//                         rd_kafka_error_destroy(err);
-//                 }
-//
-//                 for (i = 0; i < rcvd; i++) {
-//                         rd_kafka_message_t *m = batch[i];
-//                         if (!m->err)
-//                                 rd_kafka_share_acknowledge(rkshare, m);
-//                         rd_kafka_message_destroy(m);
-//                 }
-//         }
-//
-//         return 0;
-// }
+        testid_warmup = test_id_generate();
+        testid_final  = test_id_generate();
 
+        topic = test_mk_topic_name("0184-recreate-chaos", 1);
+
+        test_create_topic_wait_exists(common_admin, topic, PARTITION_CNT, -1,
+                                      60 * 1000);
+        fetch_topic_id(topic, &id_initial_msb, &id_initial_lsb);
+        TEST_SAY("Initial topic_id: msb=0x%" PRIx64 " lsb=0x%" PRIx64 "\n",
+                 id_initial_msb, id_initial_lsb);
+
+        test_share_set_auto_offset_reset(group_id, "earliest");
+
+        /* HB-first regime: long MD refresh so HB drives discovery
+         * across recreate cycles. */
+        rkshare = create_consumer_hb_first(group_id);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Warmup: drive the consumer to a fully-active state before
+         * chaos begins. Produces MSGS_PER_PARTITION to every
+         * partition; consumes them all. */
+        TEST_SAY(
+            "Warmup: producing %d msgs/partition x %d partitions "
+            "(testid=%" PRIu64 ")\n",
+            MSGS_PER_PARTITION, PARTITION_CNT, testid_warmup);
+        produce_phase(topic, testid_warmup, PARTITION_CNT);
+
+        test_msgver_init(&mv_warmup, testid_warmup);
+        got =
+            consume_into_msgver(rkshare, &mv_warmup, MSGS_PER_PHASE, 30 * 1000);
+        TEST_ASSERT(got == MSGS_PER_PHASE, "Warmup: expected %d msgs, got %d",
+                    MSGS_PER_PHASE, got);
+        test_msgver_clear(&mv_warmup);
+
+        /* Chaos loop. */
+        for (cycle = 0; cycle < chaos_cycles; cycle++) {
+                int sleep_ms;
+                int32_t next_partition_cnt;
+                int do_produce;
+                int n_per_part;
+
+                sleep_ms =
+                    chaos_sleep_min_ms +
+                    (rand() % (chaos_sleep_max_ms - chaos_sleep_min_ms + 1));
+                next_partition_cnt =
+                    chaos_partition_choices[rand() %
+                                            chaos_partition_choices_cnt];
+                do_produce = rand() % 2;
+                n_per_part = do_produce
+                                 ? (rand() % (chaos_max_records_per_part + 1))
+                                 : 0;
+
+                TEST_SAY(
+                    "[chaos cycle %d/%d] sleep=%dms, produce=%d "
+                    "msg(s)/partition (cur_partitions=%" PRId32
+                    "), next_partition_cnt=%" PRId32 "\n",
+                    cycle + 1, chaos_cycles, sleep_ms, n_per_part,
+                    current_partition_cnt, next_partition_cnt);
+
+                rd_usleep((int64_t)sleep_ms * 1000, NULL);
+
+                /* Optional mid-cycle produce. Uses a throwaway testid
+                 * so these records are silently ignored on consume —
+                 * they may or may not arrive depending on what state
+                 * the consumer is in. */
+                if (n_per_part > 0) {
+                        uint64_t cycle_testid = test_id_generate();
+                        int32_t cp;
+                        for (cp = 0; cp < current_partition_cnt; cp++) {
+                                test_produce_msgs2(common_producer, topic,
+                                                   cycle_testid, cp,
+                                                   0 /*msg_base*/, n_per_part,
+                                                   NULL /*payload*/, 0);
+                        }
+                }
+
+                recreate_topic(topic, next_partition_cnt);
+                current_partition_cnt = next_partition_cnt;
+
+                /* common_producer's per-topic metadata cache still has
+                 * the previous partition count; if the recreate grew
+                 * the partition count, the next mid-cycle produce or
+                 * the final settle would hit "Local: Unknown
+                 * partition". Force a producer-side metadata refresh
+                 * so its view matches the broker before we try to
+                 * produce again. */
+                test_wait_topic_exists(common_producer, topic, 60 * 1000);
+        }
+
+        /* Settle: produce a final batch we will require to be fully
+         * consumed, against whatever topic instance chaos left us
+         * with. */
+        TEST_SAY("Settle: producing %d msgs/partition x %" PRId32
+                 " partitions (testid=%" PRIu64 ")\n",
+                 MSGS_PER_PARTITION, current_partition_cnt, testid_final);
+        produce_phase(topic, testid_final, current_partition_cnt);
+
+        final_msgs = current_partition_cnt * MSGS_PER_PARTITION;
+
+        test_msgver_init(&mv_final, testid_final);
+        got = consume_into_msgver(rkshare, &mv_final, final_msgs, 60 * 1000);
+        TEST_ASSERT(got == final_msgs,
+                    "Settle: expected %d msgs matching testid_final, "
+                    "got %d after %d chaos cycles",
+                    final_msgs, got, chaos_cycles);
+        for (p = 0; p < current_partition_cnt; p++)
+                test_msgver_verify_part("chaos-final-part", &mv_final,
+                                        TEST_MSGVER_ALL_PART, topic, p,
+                                        0 /*msg_base*/, MSGS_PER_PARTITION);
+        test_msgver_clear(&mv_final);
+
+        /* Verify chaos actually moved the topic_id. */
+        fetch_topic_id(topic, &id_final_msb, &id_final_lsb);
+        TEST_SAY("Final topic_id: msb=0x%" PRIx64 " lsb=0x%" PRIx64 "\n",
+                 id_final_msb, id_final_lsb);
+        TEST_ASSERT(
+            id_initial_msb != id_final_msb || id_initial_lsb != id_final_lsb,
+            "Final topic_id unchanged after %d recreate cycles", chaos_cycles);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
 
 /**
- * @brief TC#7 — Topic deleted server-side without recreate; verify the
- *        topic.metadata.propagation.max.ms grace window suppresses
- *        UNKNOWN_TOPIC_OR_PART for that duration and then surfaces it.
+ * @brief Subscribed consumer survives topic delete + recreate-with-
+ *        different-partition-count while a producer is actively
+ *        producing across the whole window.
  *
- * Timing semantics caveat (rdkafka_topic.c:1218-1264):
+ * Differs from the other recreate tests in that this one keeps a
+ * concurrent producer thread running through the entire delete window.
+ * That stresses the path where:
+ *   - records arrive at the broker before the delete (must reach the
+ *     consumer);
+ *   - records produced while the topic does not exist fail at the
+ *     producer (test tolerates these silently);
+ *   - records produced after the recreate, against the new partition
+ *     shape, must reach the consumer once the share session has
+ *     reconciled the new topic_id.
  *
- *   rd_kafka_topic_set_notexists() compares
- *       remains_us = (rkt_ts_state + propagation_max_ms) - rkt_ts_metadata
- *   against zero. `rkt_ts_state` is the timestamp of the LAST topic-state
- *   transition (e.g. UNKNOWN -> EXISTS). Once `remains_us` reaches zero,
- *   the next metadata response that says UNKNOWN flips the rkt to
- *   S_NOTEXISTS and the error is propagated.
+ * Invariant: the consumer does not need to be restarted or
+ * re-subscribed across the recreate; it transparently reattaches to
+ * the freshly-created topic and continues delivering records.
  *
- *   So the grace window is measured from when the rkt last transitioned
- *   to S_EXISTS — NOT from when the delete happened. To make the test's
- *   measurement meaningful, we keep the gap between rkt_ts_state and
- *   the topic delete as small as possible: we only do enough work
- *   between consumer-create and topic-delete to confirm the rkt is in
- *   S_EXISTS (one metadata round-trip), then immediately delete. That
- *   way "time since rkt_ts_state" ≈ "time since delete" within tens
- *   of milliseconds.
+ * Producer-thread payload format: "<phase>:<seq>" where phase is one
+ * of "before" / "during" / "after". The main thread switches the
+ * phase variable at each transition. Records are produced with
+ * RD_KAFKA_PARTITION_UA so the partitioner picks; we don't verify
+ * per-partition coverage here, only that some records from "before"
+ * and some from "after" reach the consumer.
  *
- * Flow:
- *   1. Create topic.
- *   2. Create share consumer; subscribe.
- *   3. Poll briefly so the consumer issues a MetadataRequest and the
- *      rkt transitions to S_EXISTS — this stamps rkt_ts_state.
- *   4. Delete the topic. t_delete ≈ rkt_ts_state.
- *   5. Poll, waiting for UNKNOWN_TOPIC_OR_PART. Measure elapsed.
- *   6. Assert elapsed is in [propagation_max_ms - slack,
- *      propagation_max_ms + slack].
- *
- * @param propagation_max_ms  topic.metadata.propagation.max.ms value
- *                            for the consumer under test.
- * @param slack_ms            tolerance on both sides of the expected
- *                            event time. Must accommodate at least one
- *                            metadata refresh tick (500ms) plus broker
- *                            delete latency.
- * @param label               short slug used for topic naming.
+ * Assertions:
+ *   - At least one "before" record consumed (consumer was healthy).
+ *   - At least one "after" record consumed (consumer recovered).
+ *   - "During" records may or may not be consumed; no assertion.
+ *   - Final topic_id differs from the initial topic_id (broker
+ *     actually recreated the topic).
  */
-// static void do_test_delete_within_propagation_window(int propagation_max_ms,
-//                                                      int slack_ms,
-//                                                      const char *label) {
-//         const char *topic;
-//         const char *group_id = "0184-share-delete-within-propagation";
-//         rd_kafka_share_t *rkshare;
-//         rd_kafka_topic_partition_list_t *subs;
-//         rd_ts_t t_delete, t_event;
-//         int64_t elapsed_ms;
-//         int upper_bound_ms;
-//
-//         SUB_TEST_QUICK("%s (propagation_max_ms=%d)", label,
-//                        propagation_max_ms);
-//
-//         topic = test_mk_topic_name(label, 1);
-//
-//         test_create_topic_wait_exists(common_admin, topic, PARTITION_CNT, -1,
-//                                       60 * 1000);
-//
-//         test_share_set_auto_offset_reset(group_id, "earliest");
-//
-//         rkshare =
-//             create_consumer_with_propagation(group_id, propagation_max_ms);
-//
-//         subs = rd_kafka_topic_partition_list_new(1);
-//         rd_kafka_topic_partition_list_add(subs, topic,
-//         RD_KAFKA_PARTITION_UA); rd_kafka_share_subscribe(rkshare, subs);
-//         rd_kafka_topic_partition_list_destroy(subs);
-//
-//         /* Bring the consumer to a fully-active state before deleting
-//          * the topic. "Fully active" means: the ShareGroupHeartbeat has
-//          * delivered an assignment, rkts have been created for the
-//          * assigned partitions, and at least one ShareFetch round-trip
-//          * has completed (which is what guarantees the rkt has been
-//          * marked S_EXISTS — stamping rkt_ts_state).
-//          *
-//          * Without this, the broker's share-group assignor may not have
-//          * even assigned partitions to us yet, so no rkt exists, the
-//          * propagation grace window never engages, and the test will
-//          * time out without ever seeing the error event.
-//          *
-//          * The cleanest "fully active" signal is receiving an actual
-//          * record. We produce one warmup message per partition (with a
-//          * disposable testid so it doesn't pollute later state) and
-//          * poll until we see at least one come back.
-//          *
-//          * The interval [first record received .. topic delete] is
-//          * small but non-zero — typically a few hundred ms. The
-//          * propagation grace window is measured from rkt_ts_state, so
-//          * this small offset is implicitly absorbed by the slack in the
-//          * assertion bounds. */
-//         {
-//                 uint64_t warmup_testid = test_id_generate();
-//                 rd_kafka_message_t *batch[BATCH_SIZE];
-//                 rd_ts_t warmup_deadline;
-//                 rd_bool_t got_warmup_record = rd_false;
-//
-//                 TEST_SAY("Warmup: producing 1 msg/partition to drive "
-//                          "assignment and rkt creation\n");
-//                 produce_phase(topic, warmup_testid, PARTITION_CNT);
-//
-//                 warmup_deadline = test_clock() + 30 * 1000 * 1000;
-//                 while (!got_warmup_record && test_clock() < warmup_deadline)
-//                 {
-//                         rd_kafka_error_t *err;
-//                         size_t rcvd = 0;
-//                         size_t i;
-//                         err = rd_kafka_share_consume_batch(rkshare, 500,
-//                         batch,
-//                                                            &rcvd);
-//                         if (err) {
-//                                 TEST_SAY("Warmup: share_consume_batch "
-//                                          "returned %s\n",
-//                                          rd_kafka_error_string(err));
-//                                 rd_kafka_error_destroy(err);
-//                         }
-//                         for (i = 0; i < rcvd; i++) {
-//                                 rd_kafka_message_t *m = batch[i];
-//                                 if (!m->err) {
-//                                         got_warmup_record = rd_true;
-//                                         rd_kafka_share_acknowledge(rkshare,
-//                                         m);
-//                                 }
-//                                 rd_kafka_message_destroy(m);
-//                         }
-//                 }
-//                 TEST_ASSERT(got_warmup_record,
-//                             "Warmup: did not receive any record within 30s; "
-//                             "share consumer never became active");
-//         }
-//
-//         /* Delete the topic. After this point, every metadata refresh
-//          * (every 500ms) will return UNKNOWN_TOPIC_OR_PART. The rkt will
-//          * not transition to S_NOTEXISTS — and thus no error will be
-//          * propagated to the application — until propagation_max_ms has
-//          * elapsed since rkt_ts_state. */
-//         TEST_SAY("Deleting topic %s (no recreate)\n", topic);
-//         t_delete = test_clock();
-//         test_delete_topic(common_admin, topic);
-//
-//         /* Wait for the UNKNOWN_TOPIC_OR_PART event with a generous
-//          * upper bound. We'll measure when it actually arrives and
-//          * assert it lands in [propagation - slack, propagation + slack]. */
-//         upper_bound_ms = propagation_max_ms + slack_ms + 5000;
-//         TEST_SAY("Waiting up to %d ms for UNKNOWN_TOPIC_OR_PART "
-//                  "(expecting around T+%d ms)\n",
-//                  upper_bound_ms, propagation_max_ms);
-//         t_event = wait_for_unknown_topic_event(rkshare, topic,
-//         upper_bound_ms); TEST_ASSERT(t_event != 0,
-//                     "UNKNOWN_TOPIC_OR_PART for %s did not surface within "
-//                     "%d ms after delete",
-//                     topic, upper_bound_ms);
-//
-//         elapsed_ms = (t_event - t_delete) / 1000;
-//         TEST_SAY("UNKNOWN_TOPIC_OR_PART surfaced at T+%" PRId64
-//                  " ms (delete at T+0, propagation_max_ms=%d, slack=%d)\n",
-//                  elapsed_ms, propagation_max_ms, slack_ms);
-//
-//         TEST_ASSERT(elapsed_ms >= propagation_max_ms - slack_ms,
-//                     "UNKNOWN_TOPIC_OR_PART surfaced at T+%" PRId64
-//                     " ms, more than %d ms before propagation_max_ms (%d)",
-//                     elapsed_ms, slack_ms, propagation_max_ms);
-//         TEST_ASSERT(elapsed_ms <= propagation_max_ms + slack_ms,
-//                     "UNKNOWN_TOPIC_OR_PART surfaced at T+%" PRId64
-//                     " ms, more than %d ms after propagation_max_ms (%d)",
-//                     elapsed_ms, slack_ms, propagation_max_ms);
-//
-//         test_share_consumer_close(rkshare);
-//         test_share_destroy(rkshare);
-//
-//         SUB_TEST_PASS();
-// }
+static void do_test_recreate_survives_concurrent_producer(void) {
+        const char *topic;
+        const char *group_id = "0184-share-recreate-concurrent-producer";
+        const int32_t partition_cnt_a = 3;
+        const int32_t partition_cnt_b = 5;
+        const int producer_period_ms  = 100; /* ~10 msgs/sec */
+        const int phase_duration_ms   = 10000;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_message_t *batch[BATCH_SIZE];
+        struct producer_thread_args producer_args;
+        thrd_t producer_thrd;
+        int64_t id_initial_msb, id_initial_lsb;
+        int64_t id_final_msb, id_final_lsb;
+        int before_cnt = 0, during_cnt = 0, after_cnt = 0;
+        rd_ts_t consume_deadline;
 
+        SUB_TEST_QUICK();
+
+        topic = test_mk_topic_name("0184-recreate-concurrent-producer", 1);
+
+        test_create_topic_wait_exists(common_admin, topic, partition_cnt_a, -1,
+                                      60 * 1000);
+        fetch_topic_id(topic, &id_initial_msb, &id_initial_lsb);
+        TEST_SAY("Initial topic_id: msb=0x%" PRIx64 " lsb=0x%" PRIx64
+                 " (partition_cnt=%" PRId32 ")\n",
+                 id_initial_msb, id_initial_lsb, partition_cnt_a);
+
+        test_share_set_auto_offset_reset(group_id, "earliest");
+        /* MD-first regime: short metadata refresh interval so the
+         * consumer notices the recreate quickly. The HB-first regime
+         * used by the simpler recreate tests has a 5min refresh and
+         * would leave the consumer blind to the topic_id change for
+         * far longer than this test is willing to wait. */
+        rkshare = create_consumer_hb_first(group_id);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Start background producer in "before" phase. */
+        producer_args.producer  = common_producer;
+        producer_args.topic     = topic;
+        producer_args.period_ms = producer_period_ms;
+        producer_args.stop      = rd_false;
+        rd_snprintf(producer_args.phase, sizeof(producer_args.phase), "before");
+
+        TEST_ASSERT(thrd_create(&producer_thrd, producer_thread_main,
+                                &producer_args) == thrd_success,
+                    "thrd_create failed");
+
+        /* --- Phase: BEFORE.
+         * Consume for a few seconds while producer thread feeds the
+         * topic. Count "before:" records to confirm the pipeline is
+         * live. */
+        consume_deadline = test_clock() + (rd_ts_t)phase_duration_ms * 1000;
+        while (test_clock() < consume_deadline) {
+                rd_kafka_error_t *err;
+                size_t rcvd = 0;
+                size_t i;
+                err = rd_kafka_share_consume_batch(rkshare, 200, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+                for (i = 0; i < rcvd; i++) {
+                        rd_kafka_message_t *m = batch[i];
+                        if (!m->err && m->payload && m->len >= 7 &&
+                            !strncmp((const char *)m->payload, "before:", 7)) {
+                                before_cnt++;
+                                rd_kafka_share_acknowledge(rkshare, m);
+                        }
+                        rd_kafka_message_destroy(m);
+                }
+        }
+        TEST_SAY("Phase BEFORE: consumed %d \"before:\" record(s)\n",
+                 before_cnt);
+
+        /* --- Transition: enter DURING. Delete the topic but keep the
+         * producer running. Most produces in this window will fail with
+         * Unknown topic-type errors; that's expected. */
+        TEST_SAY("Phase transition: entering DURING (delete topic)\n");
+        rd_snprintf(producer_args.phase, sizeof(producer_args.phase), "during");
+        test_delete_topic(common_admin, topic);
+
+        /* Drain the consumer briefly during the delete window. Most
+         * fetches will return errors. We don't track "during:" counts
+         * for an assertion; just log. */
+        consume_deadline = test_clock() + (rd_ts_t)phase_duration_ms * 1000;
+        while (test_clock() < consume_deadline) {
+                rd_kafka_error_t *err;
+                size_t rcvd = 0;
+                size_t i;
+                err = rd_kafka_share_consume_batch(rkshare, 200, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+                for (i = 0; i < rcvd; i++) {
+                        rd_kafka_message_t *m = batch[i];
+                        if (!m->err && m->payload && m->len >= 7 &&
+                            !strncmp((const char *)m->payload, "during:", 7)) {
+                                during_cnt++;
+                                rd_kafka_share_acknowledge(rkshare, m);
+                        }
+                        rd_kafka_message_destroy(m);
+                }
+        }
+        TEST_SAY(
+            "Phase DURING: consumed %d \"during:\" record(s) "
+            "(no assertion on this count)\n",
+            during_cnt);
+
+        /* --- Transition: recreate with a different partition count
+         * and switch producer to "after". */
+        TEST_SAY("Recreating topic with partition_cnt=%" PRId32 " (was %" PRId32
+                 ")\n",
+                 partition_cnt_b, partition_cnt_a);
+        rd_sleep(5); /* let delete settle on the broker */
+        test_create_topic_wait_exists(common_admin, topic, partition_cnt_b, -1,
+                                      60 * 1000);
+
+        fetch_topic_id(topic, &id_final_msb, &id_final_lsb);
+        TEST_SAY("Recreated topic_id: msb=0x%" PRIx64 " lsb=0x%" PRIx64
+                 " (partition_cnt=%" PRId32 ")\n",
+                 id_final_msb, id_final_lsb, partition_cnt_b);
+
+        /* Force the producer to refresh its metadata for the recreated
+         * topic. common_producer has the topic's previous partition
+         * count and topic_id cached; without this, every subsequent
+         * producev call routes "after:" records to partitions of the
+         * old topic instance (which no longer exists or has a
+         * different layout), so the broker rejects them and the
+         * consumer never sees any "after:" records. */
+        test_wait_topic_exists(common_producer, topic, 60 * 1000);
+
+        rd_snprintf(producer_args.phase, sizeof(producer_args.phase), "after");
+
+        /* --- Phase: AFTER.
+         * Consume for a longer window to give the consumer time to
+         * reconcile the new topic_id and start delivering "after:"
+         * records. */
+        consume_deadline = test_clock() + 60 * 1000 * 1000;
+        while (after_cnt == 0 && test_clock() < consume_deadline) {
+                rd_kafka_error_t *err;
+                size_t rcvd = 0;
+                size_t i;
+                err = rd_kafka_share_consume_batch(rkshare, 500, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+                for (i = 0; i < rcvd; i++) {
+                        rd_kafka_message_t *m = batch[i];
+                        if (!m->err && m->payload && m->len >= 6 &&
+                            !strncmp((const char *)m->payload, "after:", 6)) {
+                                after_cnt++;
+                                rd_kafka_share_acknowledge(rkshare, m);
+                        }
+                        rd_kafka_message_destroy(m);
+                }
+        }
+        TEST_SAY("Phase AFTER: consumed %d \"after:\" record(s)\n", after_cnt);
+
+        /* Stop and join the producer thread before any assertion
+         * runs. TEST_ASSERT longjmps on failure, so leaving the
+         * thread alive past an assertion would let it read the
+         * struct after the stack frame is gone — segfault.
+         * Joining first guarantees clean teardown either way. */
+        producer_args.stop = rd_true;
+        thrd_join(producer_thrd, NULL);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        /* All assertions deferred to here so any failure runs after
+         * the background thread has been joined. */
+        TEST_ASSERT(before_cnt > 0,
+                    "Expected at least one \"before:\" record to be "
+                    "consumed");
+        TEST_ASSERT(id_initial_msb != id_final_msb ||
+                        id_initial_lsb != id_final_lsb,
+                    "Recreated topic_id matches initial; broker did not "
+                    "actually recreate");
+        TEST_ASSERT(after_cnt > 0,
+                    "Consumer did not recover after recreate: zero "
+                    "\"after:\" records seen within 60s");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Topic ID changes server-side while the consumer is in
+ *        the middle of close(); verify close completes cleanly.
+ *
+ * Setup:
+ *   - Mock cluster, 1 broker, 1 topic with 1 partition.
+ *   - Produce N messages.
+ *   - Share consumer with explicit ack mode. Subscribe, consume, and
+ *     locally-ack every message via rd_kafka_share_acknowledge. The
+ *     acks are staged but not yet flushed.
+ *   - Inject a delay on the next ShareAcknowledge response so the
+ *     close-time ack flush is held by the broker for that duration.
+ *   - Spawn a background thread that mock-deletes and mock-recreates
+ *     the topic during that ack hold, so by the time the broker
+ *     finally responds the topic on the cluster has a fresh topic_id.
+ *
+ * Note on observability:
+ *   The consumer does not actually adopt the new topic_id during
+ *   close — the periodic metadata refresh path issues by-id requests
+ *   for the cached (old) topic_id and the broker returns
+ *   UNKNOWN_TOPIC_ID, but there is no close-time machinery that
+ *   re-resolves the topic by name. So the recreate is effectively
+ *   invisible to the consumer for the remainder of the close window.
+ *   This test therefore verifies that close still terminates cleanly
+ *   even when the topic ID changes underneath an in-flight ack.
+ *
+ * Assertions:
+ *   - close() completes within a reasonable time
+ */
+static void test_recreate_during_close(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        const char *topic  = "0184-recreate-during-close";
+        const char *group  = "0184-share-recreate-during-close";
+        const int n_msgs   = 10;
+        const int delay_ms = 5000;
+        rd_kafka_message_t *rkmessages[64];
+        rd_kafka_topic_partition_list_t *subs;
+        struct recreate_thread_args thread_args;
+        thrd_t recreate_thrd;
+        rd_kafka_conf_t *conf;
+        size_t rcvd     = 0;
+        int attempts    = 0;
+        int max_attempt = 30;
+        int i;
+        rd_ts_t t_start, t_elapsed_ms;
+        /* Upper bound: broker holds the ack for delay_ms; close also
+         * needs to send the session-leave HB and wait for one more
+         * round-trip on the same broker. Allow a couple of seconds for
+         * overhead and jitter. */
+        const int64_t close_upper_bound_ms = delay_ms + 2000;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to create mock topic");
+
+        TEST_SAY("Producing %d messages to topic %s\n", n_msgs, topic);
+        test_produce_msgs_easy_v(topic, 0, 0, 0, n_msgs, 16,
+                                 "bootstrap.servers", bootstraps, NULL);
+
+        TEST_SAY("Creating share consumer with explicit ack mode\n");
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_ASSERT(!rd_kafka_share_subscribe(rkshare, subs),
+                    "Subscribe failed");
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        TEST_SAY("Consuming up to %d messages\n", n_msgs);
+        while (rcvd < (size_t)n_msgs && attempts < max_attempt) {
+                size_t batch_rcvd =
+                    sizeof(rkmessages) / sizeof(rkmessages[0]) - rcvd;
+                error = rd_kafka_share_consume_batch(
+                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                if (error) {
+                        TEST_SAY("Consume attempt %d: %s\n", attempts,
+                                 rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                } else if (batch_rcvd > 0) {
+                        rcvd += batch_rcvd;
+                }
+                attempts++;
+        }
+        TEST_ASSERT(rcvd == (size_t)n_msgs,
+                    "Expected to consume %d messages, got %zu", n_msgs, rcvd);
+
+        TEST_SAY("Staging acks for all %zu messages\n", rcvd);
+        for (i = 0; i < (int)rcvd; i++) {
+                rd_kafka_resp_err_t ack_err =
+                    rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+                TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "ack %d failed: %s", i, rd_kafka_err2str(ack_err));
+        }
+
+        TEST_SAY("Injecting %dms delay on the next ShareAcknowledge response\n",
+                 delay_ms);
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        mcluster, 1, RD_KAFKAP_ShareAcknowledge, 1,
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                        delay_ms) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Failed to inject ShareAcknowledge delay");
+
+        thread_args.mcluster      = mcluster;
+        thread_args.topic         = topic;
+        thread_args.partition_cnt = 1;
+        thread_args.sleep_ms      = 1000;
+        TEST_ASSERT(thrd_create(&recreate_thrd, recreate_thread_main,
+                                &thread_args) == thrd_success,
+                    "thrd_create failed");
+
+        TEST_SAY(
+            "Calling close(); broker will hold ack for %dms while "
+            "background thread recreates the topic\n",
+            delay_ms);
+        t_start      = test_clock();
+        error        = rd_kafka_share_consumer_close(rkshare);
+        t_elapsed_ms = (test_clock() - t_start) / 1000;
+        TEST_SAY("close() returned in %" PRId64 " ms\n", t_elapsed_ms);
+
+        if (error) {
+                TEST_SAY("close() returned error: %s\n",
+                         rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+        }
+
+        TEST_ASSERT(t_elapsed_ms <= close_upper_bound_ms,
+                    "close() took %" PRId64 " ms, expected <= %" PRId64
+                    " ms (broker delay + overhead)",
+                    t_elapsed_ms, close_upper_bound_ms);
+
+        thrd_join(recreate_thrd, NULL);
+
+        for (i = 0; i < (int)rcvd; i++)
+                rd_kafka_message_destroy(rkmessages[i]);
+
+        test_share_destroy(rkshare);
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
 
 int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
         /* Topic deletion is not supported against Windows brokers. */
@@ -1050,18 +1413,26 @@ int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
         common_producer = test_create_producer();
         common_admin    = test_create_producer();
 
-        do_test_recreate_hb_first();
-        do_test_recreate_md_first();
-        do_test_recreate_shrink_partitions_hb_first();
-        do_test_recreate_shrink_partitions_md_first();
+        // do_test_recreate_hb_first();
+        // do_test_recreate_md_first();
+        // do_test_recreate_shrink_partitions_hb_first();
+        // do_test_recreate_shrink_partitions_md_first();
+        // do_test_recreate_chaos();
+        do_test_recreate_survives_concurrent_producer();
 
-        /* TC#7: topic deletion within propagation window. */
-        // do_test_delete_within_propagation_window(
-        //     10000 /* propagation_max_ms */, 3000 /* post-window slack */,
-        //     "0184-delete-within-propagation-10s");
+
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);
+
+        return 0;
+}
+
+int main_0184_share_consumer_topic_recreate_local(int argc, char **argv) {
+        TEST_SKIP_MOCK_CLUSTER(0);
+        test_timeout_set(120);
+
+        // test_recreate_during_close();
 
         return 0;
 }

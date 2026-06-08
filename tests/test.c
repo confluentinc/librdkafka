@@ -310,6 +310,7 @@ _TEST_DECL(0181_share_consumer_topic_delete);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
 _TEST_DECL(0183_share_consumer_leader_change_mock);
 _TEST_DECL(0184_share_consumer_topic_recreate);
+_TEST_DECL(0184_share_consumer_topic_recreate_local);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -602,6 +603,7 @@ struct test tests[] = {
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
     _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
     _TEST(0184_share_consumer_topic_recreate, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0184_share_consumer_topic_recreate_local, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

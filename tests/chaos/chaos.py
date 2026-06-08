@@ -1479,14 +1479,23 @@ def _scan_producer_cumulative(prod):
     """Walk one producer's stdout/rotated files and sum produced /
     delivered counts across producer-process restarts. Each
     rdkafka_performance process emits monotonically-increasing
-    counters; when the counter drops between adjacent stats lines
-    we infer a restart and lock in the previous max before
-    continuing from the new value. Returns (produced, delivered)
-    or (None, None) if no stats lines were seen."""
+    counters per session; on restart the counter drops to ~0. We
+    track a running max per session and lock it in when we see a
+    fresh-start signature (large drop to a value below ~1000).
+
+    A small late drop is NOT a restart — rdkafka_performance also
+    emits a final exit-summary line where the `messages produced`
+    field reports the cumulative delivered count rather than the
+    cumulative produced count, so the number can be a few records
+    smaller than the previous periodic line. Treating that as a
+    restart would double-count the session.
+
+    Returns (produced, delivered) or (None, None) if no stats lines
+    were seen."""
     total_produced = 0
     total_delivered = 0
-    last_p = 0
-    last_d = 0
+    session_max_p = 0
+    session_max_d = 0
     any_found = False
     for path in iter_log_files(prod.stdout_path):
         with open(path, 'r', errors='replace') as f:
@@ -1497,17 +1506,23 @@ def _scan_producer_cumulative(prod):
                 any_found = True
                 p = int(m.group(1))
                 d = int(m.group(2))
-                # Counter went backwards => producer was restarted;
-                # lock in the previous run's max and start fresh.
-                if p < last_p:
-                    total_produced += last_p
-                    total_delivered += last_d
-                last_p = p
-                last_d = d
+                # Real restart: counter drops to a fresh-start value
+                # (below ~1000) AND well below the running max.
+                if (p < session_max_p // 2 and p < 1000
+                        and session_max_p >= 1000):
+                    total_produced += session_max_p
+                    total_delivered += session_max_d
+                    session_max_p = p
+                    session_max_d = d
+                else:
+                    if p > session_max_p:
+                        session_max_p = p
+                    if d > session_max_d:
+                        session_max_d = d
     if not any_found:
         return None, None
-    total_produced += last_p
-    total_delivered += last_d
+    total_produced += session_max_p
+    total_delivered += session_max_d
     return total_produced, total_delivered
 
 

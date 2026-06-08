@@ -1813,7 +1813,15 @@ def bookkeeping_report(producers, consumers, topics,
             o = ev.get('o')
             if not e or t is None or p is None or o is None:
                 continue
-            key = (t, p, o)
+            # Topic id is a base64 string snapshot from
+            # rd_kafka_topic_id() taken at consume time, emitted by
+            # share_consume_verify. With --topic-chaos recreate, the
+            # OLD and NEW topic generations both restart from offset
+            # 0; including the id in the distinct-key keeps the two
+            # generations apart. '' is fine as a fallback for legacy
+            # events that didn't carry an id field.
+            tid = ev.get('id', '')
+            key = (t, tid, p, o)
             tp = (t, p)
             if e == 'consumed':
                 d = int(ev.get('dc', 1))
@@ -1925,9 +1933,10 @@ def bookkeeping_report(producers, consumers, topics,
         lines.append('')
         lines.append(f'Sample of {min(15, len(never_acked))} '
                      f'never-acked records (real loss):')
+        # key = (topic, topic_id_b64, partition, offset)
         for (k, d) in never_acked[:15]:
-            lines.append(f'  {k[0]}[{k[1]}] offset={k[2]} '
-                         f'last_dc={d}')
+            lines.append(f'  {k[0]}[{k[2]}] offset={k[3]} '
+                         f'id={k[1] or "-"} last_dc={d}')
 
     if acked_with_err:
         # Full trail for every record whose ack history had any
@@ -1937,15 +1946,17 @@ def bookkeeping_report(producers, consumers, topics,
         lines.append(f'Per-record ack trail for {len(acked_with_err)} '
                      f'records with err in their ack history '
                      f'(ambiguous, not loss):')
-        lines.append('  format: t[p] offset=O consumes=[dc1,dc2,...] '
-                     'acks=[err1,err2,...]')
+        lines.append('  format: t[p] offset=O id=<id> '
+                     'consumes=[dc1,dc2,...] acks=[err1,err2,...]')
+        # key = (topic, topic_id_b64, partition, offset)
         for (k, _max_dc, errs) in acked_with_err:
             rec = record_events[k]
             consumes_fmt = '[' + ','.join(
                 str(d) for d, _ in rec['consumes']) + ']'
             acks_fmt = '[' + ','.join(
                 str(e) for e, _ in rec['acks']) + ']'
-            lines.append(f'  {k[0]}[{k[1]}] offset={k[2]} '
+            lines.append(f'  {k[0]}[{k[2]}] offset={k[3]} '
+                         f'id={k[1] or "-"} '
                          f'consumes={consumes_fmt} acks={acks_fmt}')
 
     lines.append('')

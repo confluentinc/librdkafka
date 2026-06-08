@@ -12,8 +12,16 @@
  *
  * Event lines (one JSON object per line, stdout):
  *
- *   {"e":"consumed","t":"<topic>","p":<part>,"o":<offset>,"dc":<deliv_cnt>}
- *   {"e":"acked","t":"<topic>","p":<part>,"o":<offset>,"err":<resp_err_int>}
+ *   {"e":"consumed","t":"<topic>","id":"<topic_id_b64>","p":<part>,
+ *      "o":<offset>,"dc":<deliv_cnt>}
+ *   {"e":"acked","t":"<topic>","id":"<topic_id_b64>","p":<part>,
+ *      "o":<offset>,"err":<resp_err_int>}
+ *
+ * `id` is a base64-encoded snapshot of the broker-side topic_id at
+ * the time of the consume. Under --topic-chaos, the OLD and NEW
+ * topic generations both restart from offset 0, so the consumer
+ * bookkeeping must key on (topic, id, partition, offset) — name +
+ * id together — to avoid collisions.
  *
  * stderr is reserved for librdkafka debug logs.
  *
@@ -56,6 +64,13 @@ struct acked_offset {
         const char *topic;
         int32_t partition;
         int64_t offset;
+        /* base64-encoded topic_id captured at consume time, reused
+         * for the matching "acked" event so the orchestrator can
+         * key (topic, topic_id, partition, offset) — necessary
+         * under --topic-chaos where OLD and NEW topic generations
+         * both restart from offset 0. ~22 chars + NUL; 32 is
+         * comfortable. */
+        char topic_id_str[32];
 };
 
 static void usage(const char *prog) {
@@ -76,14 +91,13 @@ static int apply_conf_kv(rd_kafka_conf_t *conf,
         size_t klen;
 
         if (!eq || eq == kv) {
-                snprintf(errstr, errstr_size,
-                         "expected key=value, got '%s'", kv);
+                snprintf(errstr, errstr_size, "expected key=value, got '%s'",
+                         kv);
                 return -1;
         }
         klen = (size_t)(eq - kv);
         if (klen >= sizeof(key)) {
-                snprintf(errstr, errstr_size,
-                         "conf key too long: '%s'", kv);
+                snprintf(errstr, errstr_size, "conf key too long: '%s'", kv);
                 return -1;
         }
         memcpy(key, kv, klen);
@@ -207,13 +221,13 @@ int main(int argc, char **argv) {
         signal(SIGINT, stop);
 
         while (run) {
-                size_t rcvd = 0;
+                size_t rcvd   = 0;
                 int acked_cnt = 0;
                 rd_kafka_error_t *error;
                 rd_kafka_topic_partition_list_t *results = NULL;
 
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 1000, rkmessages, &rcvd);
+                error = rd_kafka_share_consume_batch(rkshare, 1000, rkmessages,
+                                                     &rcvd);
                 if (error) {
                         fprintf(stderr, "%% consume_batch error: %s\n",
                                 rd_kafka_error_string(error));
@@ -226,11 +240,12 @@ int main(int argc, char **argv) {
 
                 for (i = 0; i < (int)rcvd; i++) {
                         rd_kafka_message_t *rkm = rkmessages[i];
+                        rd_kafka_Uuid_t *id;
+                        const char *id_str;
 
                         if (rkm->err) {
                                 fprintf(stderr,
-                                        "%% rkm err on %s [%" PRId32
-                                        "]: %s\n",
+                                        "%% rkm err on %s [%" PRId32 "]: %s\n",
                                         rkm->rkt ? rd_kafka_topic_name(rkm->rkt)
                                                  : "?",
                                         rkm->partition,
@@ -239,13 +254,23 @@ int main(int argc, char **argv) {
                                 continue;
                         }
 
+                        /* Capture the topic_id at consume time; the
+                         * same string is reused for the matching
+                         * "acked" event so consumed+acked share the
+                         * same (topic, topic_id, partition, offset)
+                         * key on the orchestrator side. */
+                        id     = rd_kafka_topic_id(rkm->rkt);
+                        id_str = rd_kafka_Uuid_base64str(id);
+
                         /* "consumed" event */
-                        printf("{\"e\":\"consumed\",\"t\":\"%s\","
-                               "\"p\":%" PRId32 ",\"o\":%" PRId64
-                               ",\"dc\":%" PRId16 "}\n",
-                               rd_kafka_topic_name(rkm->rkt),
-                               rkm->partition, rkm->offset,
-                               rd_kafka_message_delivery_count(rkm));
+                        printf(
+                            "{\"e\":\"consumed\",\"t\":\"%s\","
+                            "\"id\":\"%s\","
+                            "\"p\":%" PRId32 ",\"o\":%" PRId64
+                            ",\"dc\":%" PRId16 "}\n",
+                            rd_kafka_topic_name(rkm->rkt), id_str,
+                            rkm->partition, rkm->offset,
+                            rd_kafka_message_delivery_count(rkm));
 
                         err = rd_kafka_share_acknowledge_type(
                             rkshare, rkm,
@@ -253,11 +278,11 @@ int main(int argc, char **argv) {
                         if (err) {
                                 fprintf(stderr,
                                         "%% acknowledge_type err for "
-                                        "%s [%" PRId32 "] @ %" PRId64
-                                        ": %s\n",
+                                        "%s [%" PRId32 "] @ %" PRId64 ": %s\n",
                                         rd_kafka_topic_name(rkm->rkt),
                                         rkm->partition, rkm->offset,
                                         rd_kafka_err2str(err));
+                                rd_kafka_Uuid_destroy(id);
                                 rd_kafka_message_destroy(rkm);
                                 continue;
                         }
@@ -269,12 +294,15 @@ int main(int argc, char **argv) {
                          * topic_name (interned in rkt's parent rkt
                          * structure — stable across the message
                          * destroy). */
-                        acked[acked_cnt].topic =
-                            rd_kafka_topic_name(rkm->rkt);
+                        acked[acked_cnt].topic = rd_kafka_topic_name(rkm->rkt);
                         acked[acked_cnt].partition = rkm->partition;
                         acked[acked_cnt].offset    = rkm->offset;
+                        snprintf(acked[acked_cnt].topic_id_str,
+                                 sizeof(acked[acked_cnt].topic_id_str), "%s",
+                                 id_str);
                         acked_cnt++;
 
+                        rd_kafka_Uuid_destroy(id);
                         rd_kafka_message_destroy(rkm);
                 }
 
@@ -293,14 +321,16 @@ int main(int argc, char **argv) {
                          * for every record we just acked, since we
                          * can't tell partition-level outcomes. */
                         for (i = 0; i < acked_cnt; i++)
-                                printf("{\"e\":\"acked\",\"t\":\"%s\","
-                                       "\"p\":%" PRId32 ",\"o\":%" PRId64
-                                       ",\"err\":%d}\n",
-                                       acked[i].topic, acked[i].partition,
-                                       acked[i].offset, (int)top_err);
+                                printf(
+                                    "{\"e\":\"acked\",\"t\":\"%s\","
+                                    "\"id\":\"%s\","
+                                    "\"p\":%" PRId32 ",\"o\":%" PRId64
+                                    ",\"err\":%d}\n",
+                                    acked[i].topic, acked[i].topic_id_str,
+                                    acked[i].partition, acked[i].offset,
+                                    (int)top_err);
                         if (results)
-                                rd_kafka_topic_partition_list_destroy(
-                                    results);
+                                rd_kafka_topic_partition_list_destroy(results);
                         continue;
                 }
 
@@ -319,11 +349,12 @@ int main(int argc, char **argv) {
                         if (rktpar)
                                 part_err = rktpar->err;
 
-                        printf("{\"e\":\"acked\",\"t\":\"%s\","
-                               "\"p\":%" PRId32 ",\"o\":%" PRId64
-                               ",\"err\":%d}\n",
-                               acked[i].topic, acked[i].partition,
-                               acked[i].offset, (int)part_err);
+                        printf(
+                            "{\"e\":\"acked\",\"t\":\"%s\","
+                            "\"id\":\"%s\","
+                            "\"p\":%" PRId32 ",\"o\":%" PRId64 ",\"err\":%d}\n",
+                            acked[i].topic, acked[i].topic_id_str,
+                            acked[i].partition, acked[i].offset, (int)part_err);
                 }
 
                 if (results)

@@ -461,14 +461,25 @@ python3 tests/chaos/chaos.py \
 The verify binary emits one JSON object per line on stdout. Format:
 
 ```
-{"e":"consumed","t":"<topic>","p":<partition>,"o":<offset>,"dc":<broker_delivery_count>}
-{"e":"acked","t":"<topic>","p":<partition>,"o":<offset>,"err":<resp_err_int>}
+{"e":"consumed","t":"<topic>","id":"<topic_id_b64>","p":<partition>,"o":<offset>,"dc":<broker_delivery_count>}
+{"e":"acked","t":"<topic>","id":"<topic_id_b64>","p":<partition>,"o":<offset>,"err":<resp_err_int>}
 ```
 
 `err=0` means the broker accepted the ack for this partition. `dc`
 is `rd_kafka_message_delivery_count(rkm)`: 1 means first-time
 delivery, ≥2 means the broker re-served this record after the
 acquisition lock timed out.
+
+`id` is a base64-encoded snapshot of `rd_kafka_topic_id()` taken at
+the moment the record was consumed. Under `--topic-chaos
+recreate-*`, the OLD and NEW topic generations both have offsets
+starting at 0, so the orchestrator keys the distinct bookkeeping
+on `(topic, id, partition, offset)` — name + id together — to
+keep generations separate. The matching `acked` event carries the
+same `id` (captured at consume time) so the consume/ack pair
+shares one key. If a non-chaos workload doesn't have a topic_id to
+emit, `id` can be the all-zero UUID base64 string or omitted (the
+orchestrator falls back to `""`).
 
 If you want to plug a custom workload into the same bookkeeping
 report, have it emit JSON in this exact format on stdout — the

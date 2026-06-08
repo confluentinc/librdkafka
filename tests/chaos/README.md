@@ -348,6 +348,7 @@ diagnostic information about a broker-side issue, not a script bug.
 | `--drain-s` | `30` | After cooldown: producer stopped, consumers continue, then teardown |
 | `--seed N` | random (time-based) | Reproducible broker stop order |
 | `--unclean-stop` | off | [broker-roll only] SIGKILL brokers instead of SIGTERM |
+| `--leave-broker-down N` | disabled | [broker-roll only] Stop broker index `N` once before the roll begins and never restart it. `N` is excluded from the roll rotation. Honours `--unclean-stop`. Useful for measuring consumer recovery time against a permanently-dead broker (bounded by `topic.metadata.refresh.interval.ms`). |
 | `--leader-change-mode` | `broker-roll` | `broker-roll` / `change-leader` / `reassign-partitions`. Picks the mechanism the auto-mode roll uses to trigger leader changes. See the "Leader-change modes" section below. |
 | `--leader-poll-s` | `2` | Background leader-watcher poll interval. Every observed transition is printed inline (`[leader HH:MM:SS] ...`) and appended to `leader_history.log`. Catches changes between/outside our explicit operations (preferred-leader timer, ISR shrinkage). Set to `0` to disable. |
 | `--consume-mode` | `share-consumer-verify` | See table above |
@@ -409,6 +410,13 @@ python3 tests/chaos/chaos.py \
 python3 tests/chaos/chaos.py --mode manual
 #  (then in another shell, use kafka-topics.sh / your-consumer.py
 #   against the bootstrap that was printed)
+
+# 5) Permanently-dead broker: kill broker 2 once before the roll and
+#    never restart it; remaining 4 brokers roll normally on top.
+#    Shortens metadata refresh so recovery completes inside the run.
+python3 tests/chaos/chaos.py \
+    --leave-broker-down 2 \
+    --consumer-conf topic.metadata.refresh.interval.ms=30000
 ```
 
 ## share_consume_verify event format
@@ -602,16 +610,6 @@ if you Ctrl-C'd the runner mid-iteration and have stranded JVMs to
 chase.
 
 ## TODO
-
-- **Simulate a broker killed and never restarted.** Today every
-  broker comes back after `--up-s`. Manual mode allows it via
-  `kill N` without `start N`, but no auto-mode flag. Useful for
-  measuring consumer recovery time, which is bounded by
-  `topic.metadata.refresh.interval.ms` (librdkafka) /
-  `metadata.max.age.ms` (Java), default 300 s in both. Workaround:
-  `--consumer-conf topic.metadata.refresh.interval.ms=30000` to
-  shorten the wait. Cleanest fix: add a `--no-restart-after-cycle N`
-  flag to `roll()`.
 
 - **More chaos shapes.** Today the harness only churns broker
   liveness + (optionally) leader assignment. Add:

@@ -870,20 +870,74 @@ def _roll_log(cycle, idx, b, phase):
           f'{phase}', flush=True)
 
 
+def leave_broker_down(cluster, topics, idx, unclean, stop_s,
+                      leader_log_path):
+    """Stop broker `idx` once and never restart it.
+
+    Run before the regular roll so the broker is already out of the
+    rotation when `roll()` starts. Honours `unclean` (SIGKILL vs
+    SIGTERM) and waits `stop_s` after the stop so leader migration
+    has time to register before the post-stop sample.
+    """
+    if idx < 0 or idx >= len(cluster.brokers):
+        print(f'[orch] FATAL: --leave-broker-down {idx} out of range '
+              f'(have {len(cluster.brokers)} brokers)',
+              file=sys.stderr, flush=True)
+        sys.exit(2)
+    b = cluster.brokers[idx]
+    mode = 'UNCLEAN (SIGKILL)' if unclean else 'clean (SIGTERM)'
+    leaders_pre = describe_leaders(cluster, topics)
+    ts = time.strftime('%H:%M:%S')
+    print(f'[orch {ts}] leaving broker {idx} ({b.appid}) '
+          f'permanently down ({mode})', flush=True)
+    b.stop(wait_term=True, force=unclean)
+    time.sleep(stop_s)
+    leaders_down = describe_leaders(cluster, topics)
+    migrated = _diff_leaders(leaders_pre, leaders_down)
+    now = time.strftime('%H:%M:%S')
+    print(f'[orch {now}] broker {idx} ({b.appid}) is down. '
+          f'migrated_away: {_format_leader_diff(migrated)}',
+          flush=True)
+    if leader_log_path:
+        # Open 'w' to truncate any stale log from a prior run; roll()
+        # will then append to it instead of truncating again.
+        with open(leader_log_path, 'w') as f:
+            f.write(f'# chaos harness leader-change log '
+                    f'(mode={mode})\n')
+            f.write(f'\n## permanently-stopped broker={idx} '
+                    f'({b.appid}) ({mode}) at {now}\n')
+            f.write(f'  migrated_away: '
+                    f'{_format_leader_diff(migrated)}\n')
+
+
 def roll(cluster, cycles, stop_s, up_s, rng, topics, unclean,
-         leader_log_path=None):
+         leader_log_path=None, exclude_indices=()):
     """Roll brokers; order is shuffled each cycle for diversity.
 
     If `unclean` is True, brokers are killed (SIGKILL) instead of being
     asked to shut down gracefully. Around each bounce we sample the
     broker's per-partition leader so we can verify the leader actually
     moved (and later came back).
+
+    `exclude_indices` pins the listed broker indices out of the roll
+    (used by `--leave-broker-down` to keep an already-killed broker
+    out of the rotation).
     """
-    indices = list(range(len(cluster.brokers)))
+    excluded = set(exclude_indices)
+    indices = [i for i in range(len(cluster.brokers))
+               if i not in excluded]
     mode = 'UNCLEAN (SIGKILL)' if unclean else 'clean (SIGTERM)'
-    leader_log = open(leader_log_path, 'w') if leader_log_path else None
-    if leader_log:
-        leader_log.write(f'# cluster roll leader-change log (mode={mode})\n')
+    # When leave_broker_down() ran first it has already truncated the
+    # file and written the header; append in that case so we don't
+    # clobber its permanently-stopped block.
+    if leader_log_path:
+        log_mode = 'a' if excluded else 'w'
+        leader_log = open(leader_log_path, log_mode)
+        if log_mode == 'w':
+            leader_log.write(f'# chaos harness leader-change log '
+                             f'(mode={mode})\n')
+    else:
+        leader_log = None
 
     def _log(line):
         if leader_log:
@@ -1943,6 +1997,17 @@ def main():
                     help='[broker-roll mode] Kill brokers with '
                          'SIGKILL (no graceful shutdown). Default: '
                          'clean SIGTERM stop.')
+    ap.add_argument('--leave-broker-down', type=int, default=None,
+                    metavar='N',
+                    help='[broker-roll mode] Stop broker index N '
+                         'once before the roll begins and never '
+                         'restart it. N is excluded from the roll '
+                         'rotation. Honours --unclean-stop. Useful '
+                         'for measuring consumer recovery time '
+                         'against a permanently-dead broker '
+                         '(bounded by '
+                         'topic.metadata.refresh.interval.ms). '
+                         'Default: disabled.')
     ap.add_argument('--leader-change-mode',
                     choices=['broker-roll', 'change-leader',
                              'reassign-partitions'],
@@ -2192,10 +2257,23 @@ def main():
             print(f'[orch] roll RNG seed: {seed} '
                   f'leader-change-mode={args.leader_change_mode}',
                   flush=True)
+            exclude = []
+            if args.leave_broker_down is not None:
+                if args.leader_change_mode != 'broker-roll':
+                    print('[orch] WARNING: --leave-broker-down only '
+                          'applies in broker-roll mode; ignoring',
+                          file=sys.stderr, flush=True)
+                else:
+                    leave_broker_down(cluster, topics,
+                                      args.leave_broker_down,
+                                      args.unclean_stop, args.stop_s,
+                                      leader_log_path)
+                    exclude = [args.leave_broker_down]
             if args.leader_change_mode == 'broker-roll':
                 roll(cluster, args.cycles, args.stop_s, args.up_s,
                      random.Random(seed), topics, args.unclean_stop,
-                     leader_log_path=leader_log_path)
+                     leader_log_path=leader_log_path,
+                     exclude_indices=exclude)
             else:
                 reassign_roll(cluster, args.cycles, args.stop_s,
                               args.up_s, random.Random(seed),

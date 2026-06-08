@@ -1450,4 +1450,23 @@ void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_bool_t should_fetch,
                                      rd_bool_t should_leave);
 
+/**
+ * @brief Create and enqueue a sync ack-only SHARE_FETCH op on a broker.
+ *
+ * Moves ack details, abs_timeout, and commit_sync_request_id from
+ * rkb_pending_commit_sync into the op.
+ *
+ * @locality main thread
+ */
+void rd_kafka_share_enqueue_sync_ack_op(rd_kafka_t *rk, rd_kafka_broker_t *rkb);
+
+/**
+ * @brief rko_op_cb wrapper for rd_kafka_share_fetch_reply_op.
+ *
+ * @locality main thread
+ */
+rd_kafka_op_res_t rd_kafka_share_fetch_reply_op_cb(rd_kafka_t *rk,
+                                                   rd_kafka_q_t *rkq,
+                                                   rd_kafka_op_t *rko);
+
 #endif /* _RDKAFKA_INT_H_ */

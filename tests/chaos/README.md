@@ -239,6 +239,10 @@ manual> commands:
                      stop one running share-consumer. With k, targets
                      consumer-k; without k, picks uniformly at random.
                      Floors at 1 so at least one stays alive.
+  delete-topic <t>   kafka-topics.sh --delete on topic t
+  recreate-topic <t> delete t and immediately re-create it with the
+                     same partition + replication; exercises the
+                     in-place topic_id mutation path on the client
   show               full replica + ISR view (kafka-topics.sh --describe)
   leaders            shorthand: just current leader per partition
   status             broker up/down state for all brokers
@@ -363,6 +367,7 @@ diagnostic information about a broker-side issue, not a script bug.
 | `--unclean-stop` | off | [broker-roll only] SIGKILL brokers instead of SIGTERM |
 | `--leave-broker-down N` | disabled | [broker-roll only] Stop broker index `N` once before the roll begins and never restart it. `N` is excluded from the roll rotation. Honours `--unclean-stop`. Useful for measuring consumer recovery time against a permanently-dead broker (bounded by `topic.metadata.refresh.interval.ms`). |
 | `--rebalance-mid-roll` | disabled | [broker-roll only] Force a share-group rebalance during the roll: spawn a fresh share-consumer at the start of cycle `floor(--cycles / 2)`, then stop a uniformly random one at the start of the next cycle. Tests partition reassignment under concurrent leader migration. Needs `--cycles >= 2` for the remove leg. |
+| `--topic-chaos` | disabled | One-shot topic-level chaos fired at a random moment (15-45s after the roll begins) against a randomly-picked topic. `delete` leaves the topic gone; `recreate-immediate` delete+create back-to-back (in-place `topic_id` mutation); `recreate-delayed` delete, dwell 10-30s, then create (`S_NOTEXISTS` -> `S_EXISTS` transition on the client). Records lost in flight are expected — interpret `verify.txt` accordingly. |
 | `--leader-change-mode` | `broker-roll` | `broker-roll` / `change-leader` / `reassign-partitions`. Picks the mechanism the auto-mode roll uses to trigger leader changes. See the "Leader-change modes" section below. |
 | `--leader-poll-s` | `2` | Background leader-watcher poll interval. Every observed transition is printed inline (`[leader HH:MM:SS] ...`) and appended to `leader_history.log`. Catches changes between/outside our explicit operations (preferred-leader timer, ISR shrinkage). Set to `0` to disable. |
 | `--consume-mode` | `share-consumer-verify` | See table above |
@@ -438,6 +443,17 @@ python3 tests/chaos/chaos.py \
 python3 tests/chaos/chaos.py \
     --cycles 4 \
     --rebalance-mid-roll
+
+# 7) Topic chaos: at a random moment during the roll, delete the
+#    subscribed topic and re-create it back-to-back. Tests the
+#    in-place topic_id mutation path on the client.
+python3 tests/chaos/chaos.py \
+    --topic-chaos recreate-immediate
+
+# 7b) Same trigger but with a dwell window between delete + create
+#     so the client sees the topic as NOTEXISTS for a few seconds.
+python3 tests/chaos/chaos.py \
+    --topic-chaos recreate-delayed
 ```
 
 ## share_consume_verify event format
@@ -636,8 +652,6 @@ chase.
   liveness + (optionally) leader assignment. Add:
 
   *Consumer-side:*
-  - **Dynamic consumer count.** Add/remove share-consumer instances
-    mid-run to exercise share-group rebalancing across consumers.
   - **Slow / pausing consumer.** `share_consume_verify` sleeps
     between batches on a configurable schedule. Drives the
     acquisition-lock-timeout → broker redelivers → `dc[2+] > 0`
@@ -671,17 +685,6 @@ chase.
     handling and aborted-transaction skipping.
 
   *Topic / metadata:*
-  - **Topic deletion.** Delete a subscribed topic mid-run; verify
-    the consumer drops the assignment cleanly and any subsequent
-    ShareFetch surfaces the right err.
-  - **Topic recreation (immediate).** Delete + recreate in the
-    same metadata snapshot the consumer observes — exercises the
-    topic-state-machine path where `rkt` is reused with a new
-    `topic_id`.
-  - **Topic recreation (delayed).** Delete in one metadata update,
-    recreate in a later one — exercises the "topic disappeared,
-    then came back" path, including the
-    `RD_KAFKA_TOPIC_S_NOTEXISTS` → `S_EXISTS` transition.
   - **Partition count increase.** Add partitions to an existing
     topic mid-run; verify the consumer picks up the new partitions
     via heartbeat-driven reassignment (see

@@ -669,6 +669,42 @@ def create_topic(cluster, topic, partitions, replication):
     subprocess.run(cmd, check=True)
 
 
+def delete_topic(cluster, topic):
+    """Delete a topic via kafka-topics.sh. Returns True on success,
+    False on broker error (e.g. topic already gone) — the chaos
+    flow logs and continues either way."""
+    broker = cluster.brokers[0]
+    bindir = broker.conf['bindir']
+    bootstrap = cluster.bootstrap_servers()
+    cmd = [
+        os.path.join(bindir, 'kafka-topics.sh'),
+        '--bootstrap-server', bootstrap,
+        '--delete', '--topic', topic,
+    ]
+    print(f"[orch] deleting topic: {' '.join(cmd)}", flush=True)
+    rc = subprocess.run(cmd).returncode
+    return rc == 0
+
+
+def recreate_topic(cluster, topic, partitions, replication,
+                   dwell_s=0):
+    """Delete then re-create `topic` with the same partition count +
+    replication factor.
+
+    `dwell_s` > 0 leaves the topic absent for that many seconds
+    between delete and re-create (the "delayed recreate" path —
+    exercises the topic's S_NOTEXISTS -> S_EXISTS transition on the
+    client). dwell_s == 0 issues delete + create back-to-back (the
+    "immediate" path — exercises the in-place topic_id mutation).
+    """
+    delete_topic(cluster, topic)
+    if dwell_s > 0:
+        print(f'[orch] topic-chaos: dwelling {dwell_s}s before '
+              f'recreating {topic}', flush=True)
+        time.sleep(dwell_s)
+    create_topic(cluster, topic, partitions, replication)
+
+
 def set_share_group_offset_reset(cluster, group, strategy='earliest'):
     """Set share.auto.offset.reset on the share group.
 
@@ -763,6 +799,10 @@ manual> commands:
                      stop one running share-consumer. With k, targets
                      consumer-k; without k, picks uniformly at random.
                      Floors at 1 so at least one stays alive.
+  delete-topic <t>   kafka-topics.sh --delete on topic t
+  recreate-topic <t> delete t and immediately re-create with the
+                     same partition + replication; exercises the
+                     in-place topic_id mutation path on the client
   show               full replica + ISR view (kafka-topics.sh --describe)
   leaders            shorthand: just current leader per partition
   status             broker up/down state for all brokers
@@ -773,7 +813,8 @@ manual> commands:
 
 
 def manual_roll(cluster, topics, leader_log_path=None,
-                consumers=None, spawn_consumer_fn=None, rng=None):
+                consumers=None, spawn_consumer_fn=None, rng=None,
+                partitions=None, replication=None):
     """Interactive REPL: user controls per-broker stop/start.
 
     The cluster, producer, and consumers are already running. Returns
@@ -786,6 +827,9 @@ def manual_roll(cluster, topics, leader_log_path=None,
     is None, those commands print a notice and do nothing — used by
     the bring-your-own-workload manual mode where the orchestrator
     doesn't own a consumer pool.
+
+    `partitions` + `replication` enable `recreate-topic <t>` by
+    giving it the original config to re-create with.
     """
     leader_log = open(leader_log_path, 'w') if leader_log_path else None
     if leader_log:
@@ -860,6 +904,36 @@ def manual_roll(cluster, topics, leader_log_path=None,
                   f'{_format_leader_diff(diffs)}')
             _log(f'         {cmd} {t}[{p}]: '
                  f'{_format_leader_diff(diffs)}')
+            continue
+
+        if cmd in ('delete-topic', 'recreate-topic'):
+            if len(parts) < 2:
+                print(f'usage: {cmd} <topic>')
+                continue
+            t = parts[1]
+            ts = time.strftime('%H:%M:%S')
+            try:
+                if cmd == 'delete-topic':
+                    delete_topic(cluster, t)
+                    print(f'[manual {ts}] deleted topic {t}',
+                          flush=True)
+                    _log(f'[{ts}] delete-topic {t}')
+                else:
+                    if partitions is None or replication is None:
+                        print('[manual] recreate-topic needs '
+                              'partitions + replication; not '
+                              'available in this mode.')
+                        continue
+                    recreate_topic(cluster, t, partitions,
+                                   replication, dwell_s=0)
+                    print(f'[manual {ts}] recreated topic {t} '
+                          f'(partitions={partitions} '
+                          f'replication={replication})', flush=True)
+                    _log(f'[{ts}] recreate-topic {t} '
+                         f'partitions={partitions} '
+                         f'replication={replication}')
+            except Exception as e:
+                print(f'[manual] {cmd} failed: {e}', flush=True)
             continue
 
         if cmd in ('add-consumer', 'remove-consumer'):
@@ -1971,6 +2045,68 @@ def start_leader_watcher(cluster, topics, poll_s, log_dir):
     return stop_event, t
 
 
+# Random-timing windows for --topic-chaos. Tweakable here rather
+# than via the CLI to keep the flag surface minimal.
+_TOPIC_CHAOS_FIRE_MIN_S = 15
+_TOPIC_CHAOS_FIRE_MAX_S = 45
+_TOPIC_CHAOS_DELAYED_DWELL_MIN_S = 10
+_TOPIC_CHAOS_DELAYED_DWELL_MAX_S = 30
+
+
+def _topic_chaos_thread(cluster, topics, partitions, replication,
+                        mode, rng, stop_event, leader_log_path):
+    fire_after = rng.uniform(_TOPIC_CHAOS_FIRE_MIN_S,
+                             _TOPIC_CHAOS_FIRE_MAX_S)
+    if stop_event.wait(fire_after):
+        return
+    if not topics:
+        return
+    topic = rng.choice(topics)
+    ts = time.strftime('%H:%M:%S')
+    print(f'[topic-chaos {ts}] mode={mode} target={topic} '
+          f'(fired after {fire_after:.1f}s)', flush=True)
+    if leader_log_path:
+        with open(leader_log_path, 'a') as f:
+            f.write(f'\n## topic-chaos [{ts}] mode={mode} '
+                    f'target={topic} fire_after={fire_after:.1f}s\n')
+    try:
+        if mode == 'delete':
+            delete_topic(cluster, topic)
+        elif mode == 'recreate-immediate':
+            recreate_topic(cluster, topic, partitions, replication,
+                           dwell_s=0)
+        elif mode == 'recreate-delayed':
+            dwell = rng.uniform(_TOPIC_CHAOS_DELAYED_DWELL_MIN_S,
+                                _TOPIC_CHAOS_DELAYED_DWELL_MAX_S)
+            if stop_event.is_set():
+                return
+            recreate_topic(cluster, topic, partitions, replication,
+                           dwell_s=dwell)
+    except Exception as e:
+        print(f'[topic-chaos] action failed: {e}', flush=True)
+
+
+def start_topic_chaos(cluster, topics, partitions, replication,
+                      mode, rng, leader_log_path):
+    """Start a daemon thread that, after a random delay, executes the
+    chosen topic-chaos action on a randomly picked topic. Returns
+    (stop_event, thread). `mode` is one of 'delete',
+    'recreate-immediate', 'recreate-delayed' (or None to disable)."""
+    if mode is None:
+        return None, None
+    stop_event = threading.Event()
+    t = threading.Thread(
+        target=_topic_chaos_thread,
+        args=(cluster, topics, partitions, replication, mode, rng,
+              stop_event, leader_log_path),
+        daemon=True)
+    t.start()
+    print(f'[orch] topic-chaos thread armed (mode={mode}, '
+          f'fire in {_TOPIC_CHAOS_FIRE_MIN_S}-'
+          f'{_TOPIC_CHAOS_FIRE_MAX_S}s)', flush=True)
+    return stop_event, t
+
+
 # ---------------------------------------------------------------------------
 # Manual mode: just cluster + REPL, no built-in workload
 # ---------------------------------------------------------------------------
@@ -2032,7 +2168,8 @@ def _run_manual_mode(args, cluster_conf):
         manual_roll(
             cluster, topics,
             leader_log_path=os.path.join(args.log_dir,
-                                         'leader_changes.txt'))
+                                         'leader_changes.txt'),
+            partitions=args.partitions, replication=replication)
     finally:
         if watcher_stop is not None:
             watcher_stop.set()
@@ -2128,6 +2265,29 @@ def main():
                          'reassignment under concurrent leader '
                          'migration. Needs --cycles >= 2 for the '
                          'remove leg to fire. Default: disabled.')
+    ap.add_argument('--topic-chaos',
+                    choices=['delete', 'recreate-immediate',
+                             'recreate-delayed'],
+                    default=None,
+                    help='Fire a one-shot topic-level chaos action '
+                         'at a random moment during the roll, '
+                         'against a randomly-picked topic from the '
+                         'set this run subscribed to:\n'
+                         '  delete: kafka-topics.sh --delete and '
+                         'leave deleted.\n'
+                         '  recreate-immediate: delete + immediate '
+                         're-create with the same partition + '
+                         'replication; exercises the in-place '
+                         'topic_id mutation path.\n'
+                         '  recreate-delayed: delete, dwell for a '
+                         'random window, re-create; exercises the '
+                         'topic disappearing then reappearing path '
+                         '(NOTEXISTS -> EXISTS transition).\n'
+                         'Default: disabled. Note: records produced '
+                         'against the deleted topic in flight are '
+                         'lost; verify.txt may report '
+                         'never-consumed / never-acked entries '
+                         'around the chaos timestamp — expected.')
     ap.add_argument('--leader-change-mode',
                     choices=['broker-roll', 'change-leader',
                              'reassign-partitions'],
@@ -2264,6 +2424,8 @@ def main():
     partition_hwms = {}
     watcher_stop = None
     watcher_thread = None
+    topic_chaos_stop = None
+    topic_chaos_thread = None
     try:
         bootstrap = cluster.bootstrap_servers()
         print(f'[orch] bootstrap: {bootstrap}', flush=True)
@@ -2412,6 +2574,13 @@ def main():
                         print('[orch] NOTE: --rebalance-mid-roll '
                               'remove leg skipped (need --cycles '
                               '>= 2); add only', flush=True)
+            if args.topic_chaos is not None:
+                topic_chaos_stop, topic_chaos_thread = (
+                    start_topic_chaos(
+                        cluster, topics, args.partitions,
+                        replication, args.topic_chaos,
+                        random.Random(seed ^ 0xC0FFEE),
+                        leader_log_path))
             if args.leader_change_mode == 'broker-roll':
                 roll(cluster, args.cycles, args.stop_s, args.up_s,
                      random.Random(seed), topics, args.unclean_stop,
@@ -2458,6 +2627,10 @@ def main():
         partition_hwms = get_partition_hwms(cluster, topics)
 
     finally:
+        if topic_chaos_stop is not None:
+            topic_chaos_stop.set()
+            if topic_chaos_thread is not None:
+                topic_chaos_thread.join(timeout=5)
         if watcher_stop is not None:
             watcher_stop.set()
             if watcher_thread is not None:

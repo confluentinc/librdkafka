@@ -738,6 +738,17 @@ const char *rd_kafka_topic_name(const rd_kafka_topic_t *app_rkt) {
 }
 
 
+rd_kafka_Uuid_t *rd_kafka_topic_id(const rd_kafka_topic_t *rkt) {
+        rd_kafka_Uuid_t snapshot = RD_KAFKA_UUID_ZERO;
+        if (!rd_kafka_rkt_is_lw(rkt)) {
+                rd_kafka_rdlock(rkt->rkt_rk);
+                snapshot = rkt->rkt_topic_id;
+                rd_kafka_rdunlock(rkt->rkt_rk);
+        }
+        return rd_kafka_Uuid_copy(&snapshot);
+}
+
+
 /**
  * @brief Update the broker that a topic+partition is delegated to.
  *

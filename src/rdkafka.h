@@ -3665,6 +3665,22 @@ const char *rd_kafka_topic_name(const rd_kafka_topic_t *rkt);
 
 
 /**
+ * @brief Returns a snapshot of the topic id (UUID) for the topic
+ *        at the moment of the call.
+ *
+ * The topic id can change in-place on the topic handle when a topic
+ * is deleted and re-created on the broker. This function captures
+ * the current value and returns a newly-allocated copy; the caller
+ * owns it and must free with rd_kafka_Uuid_destroy().
+ *
+ * For lightweight topic handles or topics whose id is not yet known
+ * on this handle, the returned UUID is the zero UUID (all-zero
+ * bytes).
+ */
+RD_EXPORT rd_kafka_Uuid_t *rd_kafka_topic_id(const rd_kafka_topic_t *rkt);
+
+
+/**
  * @brief Get the \p rkt_opaque pointer that was set in the topic configuration
  *        with rd_kafka_topic_conf_set_opaque().
  */

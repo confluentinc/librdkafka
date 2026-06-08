@@ -117,6 +117,7 @@ void rd_kafka_telemetry_clear(rd_kafka_t *rk,
                 mtx_unlock(&rk->rk_telemetry.lock);
                 mtx_destroy(&rk->rk_telemetry.lock);
                 cnd_destroy(&rk->rk_telemetry.termination_cnd);
+                cnd_destroy(&rk->rk_telemetry.client_instance_id_cnd);
         }
 
         if (rk->rk_telemetry.accepted_compression_types_cnt) {
@@ -158,6 +159,8 @@ static void rd_kafka_telemetry_set_terminated(rd_kafka_t *rk) {
                             1 /*lock*/);
         mtx_lock(&rk->rk_telemetry.lock);
         cnd_signal(&rk->rk_telemetry.termination_cnd);
+        /* Wake app threads waiting in rd_kafka_share_client_instance_id() */
+        cnd_broadcast(&rk->rk_telemetry.client_instance_id_cnd);
         mtx_unlock(&rk->rk_telemetry.lock);
 }
 
@@ -556,6 +559,12 @@ void rd_kafka_handle_get_telemetry_subscriptions(rd_kafka_t *rk,
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rk_telemetry.request_timer, rd_false,
             next_scheduled, rd_kafka_telemetry_fsm_tmr_cb, rk);
+
+        /* Wake any app threads blocked in rd_kafka_share_client_instance_id().
+         */
+        mtx_lock(&rk->rk_telemetry.lock);
+        cnd_broadcast(&rk->rk_telemetry.client_instance_id_cnd);
+        mtx_unlock(&rk->rk_telemetry.lock);
 }
 
 void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
@@ -639,10 +648,17 @@ void rd_kafka_handle_push_telemetry(rd_kafka_t *rk, rd_kafka_resp_err_t err) {
 void rd_kafka_telemetry_await_termination(rd_kafka_t *rk) {
         rd_kafka_op_t *rko;
 
-        /* In the case where we have a termination during creation, we can't
-         * send any telemetry. */
-        if (thrd_is_current(rk->rk_thread) ||
-            !rk->rk_conf.enable_metrics_push) {
+        /* Telemetry was never enabled — nothing was scheduled, nothing
+         * is waiting on the termination/instance-id condvars, so there
+         * is nothing to terminate. Returning here also avoids invoking
+         * rd_kafka_telemetry_set_terminated() from the app thread, which
+         * would trip the main-thread-locality assertion. */
+        if (!rk->rk_conf.enable_metrics_push)
+                return;
+
+        /* In the case where we have a termination during creation we are
+         * already on the main thread; set_terminated() is then safe. */
+        if (thrd_is_current(rk->rk_thread)) {
                 rd_kafka_telemetry_set_terminated(rk);
                 return;
         }

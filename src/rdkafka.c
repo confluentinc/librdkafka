@@ -2550,6 +2550,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
 
         mtx_init(&rk->rk_telemetry.lock, mtx_plain);
         cnd_init(&rk->rk_telemetry.termination_cnd);
+        cnd_init(&rk->rk_telemetry.client_instance_id_cnd);
 
         rd_atomic64_init(&rk->rk_ts_last_poll, rk->rk_ts_created);
         rd_atomic32_init(&rk->rk_flushing, 0);
@@ -4335,6 +4336,61 @@ rd_kafka_share_commit_sync(rd_kafka_share_t *rkshare,
 done:
         rd_kafka_share_release(rkshare);
         return error;
+}
+
+rd_kafka_error_t *
+rd_kafka_share_client_instance_id(rd_kafka_share_t *rkshare,
+                                  int timeout_ms,
+                                  rd_kafka_Uuid_t **client_instance_id) {
+        rd_kafka_t *rk = rkshare->rkshare_rk;
+        rd_kafka_error_t *error;
+        rd_ts_t abs_timeout;
+        rd_bool_t terminated;
+
+        *client_instance_id = NULL;
+
+        if (unlikely(timeout_ms < 0))
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                          "timeout_ms must be non-negative");
+
+        if (unlikely((error = rd_kafka_share_consumer_closed_error(rkshare)) !=
+                     NULL))
+                return error;
+
+        if (unlikely(!rk->rk_conf.enable_metrics_push))
+                return rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
+                                          "Telemetry is not enabled.");
+
+        abs_timeout = rd_timeout_init(timeout_ms);
+
+        mtx_lock(&rk->rk_telemetry.lock);
+        while (RD_KAFKA_UUID_IS_ZERO(rk->rk_telemetry.client_instance_id) &&
+               rk->rk_telemetry.state != RD_KAFKA_TELEMETRY_TERMINATED) {
+                int remaining_ms = rd_timeout_remains(abs_timeout);
+                if (remaining_ms <= 0)
+                        break;
+                cnd_timedwait_ms(&rk->rk_telemetry.client_instance_id_cnd,
+                                 &rk->rk_telemetry.lock, remaining_ms);
+        }
+
+        if (!RD_KAFKA_UUID_IS_ZERO(rk->rk_telemetry.client_instance_id)) {
+                *client_instance_id =
+                    rd_kafka_Uuid_copy(&rk->rk_telemetry.client_instance_id);
+                mtx_unlock(&rk->rk_telemetry.lock);
+                return NULL;
+        }
+
+        terminated = (rk->rk_telemetry.state == RD_KAFKA_TELEMETRY_TERMINATED);
+        mtx_unlock(&rk->rk_telemetry.lock);
+
+        if (terminated)
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__STATE,
+                    "Telemetry terminated before client instance ID "
+                    "was obtained");
+
+        return rd_kafka_error_new(RD_KAFKA_RESP_ERR__TIMED_OUT,
+                                  "Timed out waiting for client instance ID");
 }
 
 /**

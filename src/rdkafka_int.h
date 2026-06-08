@@ -788,6 +788,10 @@ struct rd_kafka_s {
                 mtx_t lock;
                 /**< Used to wait for termination (Lock protected). */
                 cnd_t termination_cnd;
+                /**< Signaled when client_instance_id is populated by the
+                 *   telemetry FSM or when telemetry terminates.
+                 *   (Lock protected). */
+                cnd_t client_instance_id_cnd;
 
                 /* Fields obtained from broker as a result of GetSubscriptions -
                  * only accessed from main thread.

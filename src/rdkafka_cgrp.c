@@ -5712,6 +5712,9 @@ static void rd_kafka_propagate_consumer_topic_errors(
  *        directly to the application on next poll; transient codes are
  *        debug-logged.
  *
+ *       TODO KIP-932: We need to throw the CONSUMER_ERR ops as a set
+ *       of topic partitions and error code, rather than one per topic.
+ *
  * @locality rdkafka main thread
  */
 void rd_kafka_share_topic_err_propagate(rd_kafka_cgrp_t *rkcg) {

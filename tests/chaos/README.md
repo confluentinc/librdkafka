@@ -367,7 +367,7 @@ diagnostic information about a broker-side issue, not a script bug.
 | `--unclean-stop` | off | [broker-roll only] SIGKILL brokers instead of SIGTERM |
 | `--leave-broker-down N` | disabled | [broker-roll only] Stop broker index `N` once before the roll begins and never restart it. `N` is excluded from the roll rotation. Honours `--unclean-stop`. Useful for measuring consumer recovery time against a permanently-dead broker (bounded by `topic.metadata.refresh.interval.ms`). |
 | `--rebalance-mid-roll` | disabled | [broker-roll only] Force a share-group rebalance during the roll: spawn a fresh share-consumer at the start of cycle `floor(--cycles / 2)`, then stop a uniformly random one at the start of the next cycle. Tests partition reassignment under concurrent leader migration. Needs `--cycles >= 2` for the remove leg. |
-| `--topic-chaos` | disabled | One-shot topic-level chaos fired at a random moment (15-45s after the roll begins) against a randomly-picked topic. `delete` leaves the topic gone; `recreate-immediate` delete+create back-to-back (in-place `topic_id` mutation); `recreate-delayed` delete, dwell 10-30s, then create (`S_NOTEXISTS` -> `S_EXISTS` transition on the client). Records lost in flight are expected — interpret `verify.txt` accordingly. |
+| `--topic-chaos` | disabled | One-shot topic-level chaos fired at a random moment (15-45s after the roll begins) against a randomly-picked topic. `delete` leaves the topic gone; `recreate-immediate` delete+create back-to-back (in-place `topic_id` mutation); `recreate-delayed` delete, dwell 10-30s, then create (`S_NOTEXISTS` -> `S_EXISTS` transition on the client). On recreate modes the orchestrator restarts the producer for the chaos'd topic so the new `topic_id` gets traffic, and `verify.txt` computes the expected-loss window deterministically (see "Reading the reports → Topic-chaos accounting" below). |
 | `--leader-change-mode` | `broker-roll` | `broker-roll` / `change-leader` / `reassign-partitions`. Picks the mechanism the auto-mode roll uses to trigger leader changes. See the "Leader-change modes" section below. |
 | `--leader-poll-s` | `2` | Background leader-watcher poll interval. Every observed transition is printed inline (`[leader HH:MM:SS] ...`) and appended to `leader_history.log`. Catches changes between/outside our explicit operations (preferred-leader timer, ISR shrinkage). Set to `0` to disable. |
 | `--consume-mode` | `share-consumer-verify` | See table above |
@@ -570,6 +570,46 @@ VERDICT rules:
   never reached the consumer) — fetch-side loss.
 - **FAIL** if `never-acked > 0` — consumer-pipeline loss (consume
   event fired, no ack callback ever followed).
+
+#### Topic-chaos accounting
+
+When `--topic-chaos` is active, `verify.txt` adds a Topic-chaos
+accounting block before the VERDICT line. For each chaos'd topic,
+the orchestrator captures:
+
+- `pre_delete_hwm` — sum of broker offsets across partitions at the
+  exact moment the topic was deleted (snapshot via `kafka-topics.sh
+  --describe` just before `--delete`).
+- `consumed_pre_delete` — count of `consumed` events with timestamp
+  `< delete_ts` on this topic.
+- `post_hwm` — end-of-test sum of broker offsets (post-recreate
+  generation only, since the old data is gone; zero for `delete`
+  mode).
+- `consumed_post_recreate` — count of `consumed` events with
+  timestamp `> recreate_ts`.
+
+The block also prints `expected_loss = max(0, pre_delete_hwm −
+consumed_pre_delete)` per topic — these are records that were on
+the broker at delete time but the consumer hadn't reached yet, so
+they're gone forever (expected, not a bug).
+
+VERDICT logic with chaos:
+
+- **`expected_loss` is subtracted** from `(delivered −
+  consumed_distinct)` before the FAIL check, so chaos noise on its
+  own never trips FAIL.
+- **For recreate modes**: `consumed_post_recreate` must equal
+  `post_hwm` — i.e. every record produced after the re-create must
+  be consumed. A deficit here is a library bug (records were on the
+  broker after the re-create but the consumer never saw them) and
+  **always FAILs**, regardless of chaos.
+- **For `delete` mode**: `post_hwm == 0` (topic gone). No
+  post-recreate strict check.
+
+So under `recreate-immediate` / `recreate-delayed`, a clean run
+gives `VERDICT: OK [topic-chaos expected_loss=N subtracted]`. A
+truly bad run gives `VERDICT: FAIL — post-recreate loss on chaos'd
+topic(s)`.
 
 ### `summary.txt`
 

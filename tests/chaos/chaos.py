@@ -1475,19 +1475,55 @@ def _scan_last_match(base_path, pattern):
     return last
 
 
+def _scan_producer_cumulative(prod):
+    """Walk one producer's stdout/rotated files and sum produced /
+    delivered counts across producer-process restarts. Each
+    rdkafka_performance process emits monotonically-increasing
+    counters; when the counter drops between adjacent stats lines
+    we infer a restart and lock in the previous max before
+    continuing from the new value. Returns (produced, delivered)
+    or (None, None) if no stats lines were seen."""
+    total_produced = 0
+    total_delivered = 0
+    last_p = 0
+    last_d = 0
+    any_found = False
+    for path in iter_log_files(prod.stdout_path):
+        with open(path, 'r', errors='replace') as f:
+            for line in f:
+                m = _PRODUCER_RE.search(line)
+                if not m:
+                    continue
+                any_found = True
+                p = int(m.group(1))
+                d = int(m.group(2))
+                # Counter went backwards => producer was restarted;
+                # lock in the previous run's max and start fresh.
+                if p < last_p:
+                    total_produced += last_p
+                    total_delivered += last_d
+                last_p = p
+                last_d = d
+    if not any_found:
+        return None, None
+    total_produced += last_p
+    total_delivered += last_d
+    return total_produced, total_delivered
+
+
 def _sum_producer_counts(producers):
     """Walk every producer's stdout for the final 'N messages
-    produced ... D delivered' line and sum across producers.
-    Returns (produced, delivered) or (None, None) if no producer
-    summary was found."""
+    produced ... D delivered' line and sum across producers,
+    handling per-producer restarts. Returns (produced, delivered)
+    or (None, None) if no producer summary was found."""
     total_produced = 0
     total_delivered = 0
     any_found = False
     for prod in producers:
-        groups = _scan_last_match(prod.stdout_path, _PRODUCER_RE)
-        if groups:
-            total_produced += int(groups[0])
-            total_delivered += int(groups[1])
+        p, d = _scan_producer_cumulative(prod)
+        if p is not None:
+            total_produced += p
+            total_delivered += d
             any_found = True
     if not any_found:
         return None, None
@@ -1711,7 +1747,8 @@ def _iter_event_lines(consumer):
 
 def bookkeeping_report(producers, consumers, topics,
                        partitions_per_topic,
-                       hwms, drain_end_ts, out_path):
+                       hwms, drain_end_ts, out_path,
+                       chaos_state=None):
     import collections
     # Cross-consumer state keyed by (topic, partition, offset).
     #
@@ -1745,6 +1782,14 @@ def bookkeeping_report(producers, consumers, topics,
     first_consume_ts = {}
     last_consume_ts = {}
 
+    # Topic-chaos bucketing: count consume events per topic that fall
+    # before the chaos delete (pre-delete generation) vs after the
+    # recreate (new generation). Events with ts in the delete/recreate
+    # gap are limbo and excluded from both counts.
+    chaos_state = chaos_state or {}
+    consumed_pre_delete_per_topic = collections.Counter()
+    consumed_post_recreate_per_topic = collections.Counter()
+
     for c in consumers:
         for ts, ev in _iter_event_lines(c):
             e = ev.get('e')
@@ -1766,6 +1811,13 @@ def bookkeeping_report(producers, consumers, topics,
                     if tp not in first_consume_ts:
                         first_consume_ts[tp] = ts
                     last_consume_ts[tp] = ts
+                cs = chaos_state.get(t)
+                if cs is not None and ts is not None:
+                    if ts < cs['delete_ts']:
+                        consumed_pre_delete_per_topic[t] += 1
+                    elif (cs.get('recreate_ts')
+                          and ts > cs['recreate_ts']):
+                        consumed_post_recreate_per_topic[t] += 1
             elif e == 'acked':
                 err = int(ev.get('err', 0))
                 rec = record_events.get(key)
@@ -1926,6 +1978,49 @@ def bookkeeping_report(producers, consumers, topics,
                      f'{total_partition_missing} (broker hwm − '
                      f'consume events)')
 
+    # Topic-chaos accounting: for each topic that was deleted (and
+    # optionally re-created) mid-run, compute the expected-loss
+    # window so the final VERDICT can ignore noise from records that
+    # were on the broker at delete time and gone afterwards. For
+    # recreate modes, also check the post-recreate window — those
+    # records *must* all be consumed; a deficit there IS a library
+    # bug, not chaos noise.
+    chaos_expected_loss = 0
+    chaos_post_recreate_loss = []
+    if chaos_state:
+        lines.append('')
+        lines.append('Topic-chaos accounting:')
+        lines.append('  Per chaos\'d topic: pre_delete_hwm is the '
+                     'broker offset sum at delete time; post_hwm is '
+                     'the sum at end-of-test (== post-recreate '
+                     'generation, since old data is gone). Expected '
+                     'loss = pre_delete_hwm − consumed_before_delete. '
+                     'Post-recreate consumed must reach post_hwm.')
+        for t, cs in sorted(chaos_state.items()):
+            pre_hwm = sum(cs['pre_delete_hwm'].values()) \
+                if cs.get('pre_delete_hwm') else 0
+            post_hwm = sum(h for (tt, _p), h in hwms.items()
+                           if tt == t) if hwms else 0
+            pre_consumed = consumed_pre_delete_per_topic.get(t, 0)
+            post_consumed = consumed_post_recreate_per_topic.get(t, 0)
+            expected_loss_t = max(0, pre_hwm - pre_consumed)
+            chaos_expected_loss += expected_loss_t
+            lines.append(f'  {t} mode={cs["mode"]} '
+                         f'pre_delete_hwm={pre_hwm} '
+                         f'consumed_pre_delete={pre_consumed} '
+                         f'expected_loss={expected_loss_t} '
+                         f'post_hwm={post_hwm} '
+                         f'consumed_post_recreate={post_consumed}')
+            if cs['mode'] in ('recreate-immediate',
+                              'recreate-delayed') \
+                    and cs.get('recreate_ts'):
+                # Post-recreate generation should be 100% consumed.
+                if post_consumed < post_hwm:
+                    chaos_post_recreate_loss.append(
+                        (t, post_hwm - post_consumed))
+        lines.append(f'  total expected_loss across chaos\'d '
+                     f'topics: {chaos_expected_loss}')
+
     lines.append('')
     if total_consumed_distinct == 0:
         lines.append('VERDICT: no events parsed (workload not in '
@@ -1935,10 +2030,16 @@ def bookkeeping_report(producers, consumers, topics,
         # callback ever. ack_with_err is ambiguous (broker may have
         # processed or will redeliver) and does NOT fail the run.
         consumer_loss_ok = (total_never_acked == 0)
+        # Topic-chaos expected loss is subtracted from the raw
+        # delivered-vs-consumed diff so chaos noise doesn't trip
+        # FAIL on its own.
         if delivered is None:
             delivery_ok = None
+            effective_missing = 0
         else:
-            delivery_ok = (total_consumed_distinct >= delivered)
+            raw_missing = delivered - total_consumed_distinct
+            effective_missing = raw_missing - chaos_expected_loss
+            delivery_ok = (effective_missing <= 0)
 
         ack_with_err_note = ''
         if total_ack_with_err > 0:
@@ -1947,19 +2048,35 @@ def bookkeeping_report(producers, consumers, topics,
                 f'records had err in ack history but at least one '
                 f'callback fired — ambiguous, not loss]')
 
-        if consumer_loss_ok and delivery_ok is True:
+        chaos_note = ''
+        if chaos_state and chaos_expected_loss > 0:
+            chaos_note = (f' [topic-chaos expected_loss='
+                          f'{chaos_expected_loss} subtracted]')
+
+        if chaos_post_recreate_loss:
+            details = ', '.join(f'{t}:{lost}'
+                                for t, lost in
+                                chaos_post_recreate_loss)
+            lines.append(f'VERDICT: FAIL — post-recreate loss on '
+                         f'chaos\'d topic(s): {details} (these '
+                         f'records were on the broker after the '
+                         f're-create but the consumer never saw '
+                         f'them — library bug, not chaos noise)')
+        elif consumer_loss_ok and delivery_ok is True:
             tail = (sorted(dc_distribution.items())[-1]
                     if dc_distribution else 'n/a')
             lines.append(f'VERDICT: OK — produced={delivered} '
                          f'consumed={total_consumed_distinct} '
                          f'acked={total_acked} '
-                         f'(dc tail: {tail}){ack_with_err_note}')
+                         f'(dc tail: {tail}){ack_with_err_note}'
+                         f'{chaos_note}')
         elif delivery_ok is False:
-            missing = delivered - total_consumed_distinct
-            lines.append(f'VERDICT: FAIL — {missing} record(s) were '
-                         f'delivered by broker but never consumed '
-                         f'(produced={delivered} '
-                         f'consumed={total_consumed_distinct})')
+            lines.append(f'VERDICT: FAIL — {effective_missing} '
+                         f'record(s) lost beyond the expected '
+                         f'chaos window (produced={delivered} '
+                         f'consumed={total_consumed_distinct} '
+                         f'chaos_expected_loss={chaos_expected_loss}'
+                         f')')
         elif consumer_loss_ok and delivery_ok is None:
             tail = (sorted(dc_distribution.items())[-1]
                     if dc_distribution else 'n/a')
@@ -2054,7 +2171,8 @@ _TOPIC_CHAOS_DELAYED_DWELL_MAX_S = 30
 
 
 def _topic_chaos_thread(cluster, topics, partitions, replication,
-                        mode, rng, stop_event, leader_log_path):
+                        mode, rng, stop_event, leader_log_path,
+                        chaos_state, restart_producer_fn):
     fire_after = rng.uniform(_TOPIC_CHAOS_FIRE_MIN_S,
                              _TOPIC_CHAOS_FIRE_MAX_S)
     if stop_event.wait(fire_after):
@@ -2062,19 +2180,43 @@ def _topic_chaos_thread(cluster, topics, partitions, replication,
     if not topics:
         return
     topic = rng.choice(topics)
+    # Capture pre-delete HWM so the verify report can compute the
+    # expected loss window for this topic.
+    pre_delete_hwm = {}
+    try:
+        all_hwms = get_partition_hwms(cluster, [topic])
+        pre_delete_hwm = {p: h for (t, p), h in all_hwms.items()
+                          if t == topic}
+    except Exception as e:
+        print(f'[topic-chaos] pre-delete HWM capture failed: {e}',
+              flush=True)
+    delete_ts = time.time()
+    chaos_state[topic] = {
+        'mode': mode,
+        'delete_ts': delete_ts,
+        'recreate_ts': None,
+        'pre_delete_hwm': pre_delete_hwm,
+    }
     ts = time.strftime('%H:%M:%S')
+    pre_hwm_sum = sum(pre_delete_hwm.values()) if pre_delete_hwm else 0
     print(f'[topic-chaos {ts}] mode={mode} target={topic} '
-          f'(fired after {fire_after:.1f}s)', flush=True)
+          f'(fired after {fire_after:.1f}s, '
+          f'pre-delete-hwm-sum={pre_hwm_sum})', flush=True)
     if leader_log_path:
         with open(leader_log_path, 'a') as f:
             f.write(f'\n## topic-chaos [{ts}] mode={mode} '
-                    f'target={topic} fire_after={fire_after:.1f}s\n')
+                    f'target={topic} fire_after={fire_after:.1f}s '
+                    f'pre_delete_hwm_sum={pre_hwm_sum}\n')
     try:
         if mode == 'delete':
             delete_topic(cluster, topic)
+            # No restart: topic stays gone.
         elif mode == 'recreate-immediate':
             recreate_topic(cluster, topic, partitions, replication,
                            dwell_s=0)
+            chaos_state[topic]['recreate_ts'] = time.time()
+            if restart_producer_fn is not None:
+                restart_producer_fn(topic)
         elif mode == 'recreate-delayed':
             dwell = rng.uniform(_TOPIC_CHAOS_DELAYED_DWELL_MIN_S,
                                 _TOPIC_CHAOS_DELAYED_DWELL_MAX_S)
@@ -2082,23 +2224,35 @@ def _topic_chaos_thread(cluster, topics, partitions, replication,
                 return
             recreate_topic(cluster, topic, partitions, replication,
                            dwell_s=dwell)
+            chaos_state[topic]['recreate_ts'] = time.time()
+            if restart_producer_fn is not None:
+                restart_producer_fn(topic)
     except Exception as e:
         print(f'[topic-chaos] action failed: {e}', flush=True)
 
 
 def start_topic_chaos(cluster, topics, partitions, replication,
-                      mode, rng, leader_log_path):
+                      mode, rng, leader_log_path, chaos_state,
+                      restart_producer_fn):
     """Start a daemon thread that, after a random delay, executes the
     chosen topic-chaos action on a randomly picked topic. Returns
     (stop_event, thread). `mode` is one of 'delete',
-    'recreate-immediate', 'recreate-delayed' (or None to disable)."""
+    'recreate-immediate', 'recreate-delayed' (or None to disable).
+
+    On recreate modes, `restart_producer_fn(topic)` is invoked after
+    the re-create completes so the producer rebinds to the new
+    topic_id (rdkafka_performance exits on UNKNOWN_TOPIC and won't
+    self-recover). `chaos_state` is populated with the chaos
+    timestamps + pre-delete HWM snapshot so the verify report can
+    bucket consume events and compute the expected loss window."""
     if mode is None:
         return None, None
     stop_event = threading.Event()
     t = threading.Thread(
         target=_topic_chaos_thread,
         args=(cluster, topics, partitions, replication, mode, rng,
-              stop_event, leader_log_path),
+              stop_event, leader_log_path, chaos_state,
+              restart_producer_fn),
         daemon=True)
     t.start()
     print(f'[orch] topic-chaos thread armed (mode={mode}, '
@@ -2426,6 +2580,7 @@ def main():
     watcher_thread = None
     topic_chaos_stop = None
     topic_chaos_thread = None
+    chaos_state = {}
     try:
         bootstrap = cluster.bootstrap_servers()
         print(f'[orch] bootstrap: {bootstrap}', flush=True)
@@ -2468,13 +2623,32 @@ def main():
         # Producer: no librdkafka debug. stdout carries the summary line
         # ("% N messages produced ... D delivered ...") that we parse for
         # the conservation check at end-of-run.
-        for prod, t in zip(producers, topics):
-            prod_cmd = [
+        topic_to_producer = dict(zip(topics, producers))
+
+        def producer_cmd_for_topic(t):
+            return [
                 perf, '-P', '-b', bootstrap, '-t', t,
                 '-s', str(args.msg_size),
                 '-r', str(args.produce_rate),
             ]
-            prod.start(prod_cmd, env)
+
+        for prod, t in zip(producers, topics):
+            prod.start(producer_cmd_for_topic(t), env)
+
+        def restart_producer_for_topic(topic_name):
+            """Stop + re-spawn the producer subprocess for a topic.
+            Called by the topic-chaos thread after a recreate so the
+            new topic_id gets traffic. The new process appends its
+            own monotonically-increasing stats lines to the same
+            stdout file; _scan_producer_cumulative handles the
+            counter reset across the restart boundary."""
+            prod = topic_to_producer.get(topic_name)
+            if prod is None:
+                return
+            print(f'[orch] restarting producer for {topic_name} '
+                  f'(post-chaos recreate)', flush=True)
+            prod.stop()
+            prod.start(producer_cmd_for_topic(topic_name), env)
 
         print(f'[orch] producer warmup {args.warmup_s}s', flush=True)
         time.sleep(args.warmup_s)
@@ -2580,7 +2754,8 @@ def main():
                         cluster, topics, args.partitions,
                         replication, args.topic_chaos,
                         random.Random(seed ^ 0xC0FFEE),
-                        leader_log_path))
+                        leader_log_path, chaos_state,
+                        restart_producer_for_topic))
             if args.leader_change_mode == 'broker-roll':
                 roll(cluster, args.cycles, args.stop_s, args.up_s,
                      random.Random(seed), topics, args.unclean_stop,
@@ -2674,7 +2849,8 @@ def main():
         bookkeeping_report(
             producers, consumers, topics, args.partitions,
             partition_hwms, drain_end_ts,
-            os.path.join(args.log_dir, 'verify.txt'))
+            os.path.join(args.log_dir, 'verify.txt'),
+            chaos_state=chaos_state)
     else:
         conservation_report(producers, consumers,
                             os.path.join(args.log_dir, 'conservation.txt'))

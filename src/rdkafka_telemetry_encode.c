@@ -286,36 +286,6 @@ calculate_consumer_poll_idle_ratio_avg(rd_kafka_t *rk,
 }
 
 static rd_kafka_telemetry_metric_value_t
-calculate_share_consumer_poll_idle_ratio_avg(rd_kafka_t *rk,
-                                             rd_kafka_broker_t *rkb_selected,
-                                             rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t share_poll_idle_avg;
-        share_poll_idle_avg.double_value = calculate_avg(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_poll_idle_ratio, 1e6);
-        return share_poll_idle_avg;
-}
-
-static rd_kafka_telemetry_metric_value_t
-calculate_share_time_between_poll_avg(rd_kafka_t *rk,
-                                      rd_kafka_broker_t *rkb_selected,
-                                      rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t time_between_poll_avg;
-        time_between_poll_avg.double_value = calculate_avg(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll, 1);
-        return time_between_poll_avg;
-}
-
-static rd_kafka_telemetry_metric_value_t
-calculate_share_time_between_poll_max(rd_kafka_t *rk,
-                                      rd_kafka_broker_t *rkb_selected,
-                                      rd_ts_t now_ns) {
-        rd_kafka_telemetry_metric_value_t time_between_poll_max;
-        time_between_poll_max.int_value = calculate_max(
-            rk->rk_telemetry.rd_avg_rollover.rk_avg_share_time_between_poll, 1);
-        return time_between_poll_max;
-}
-
-static rd_kafka_telemetry_metric_value_t
 calculate_consumer_commit_latency_avg(rd_kafka_t *rk,
                                       rd_kafka_broker_t *rkb_selected,
                                       rd_ts_t now_ns) {

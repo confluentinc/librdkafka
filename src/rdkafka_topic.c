@@ -721,10 +721,20 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
 
         rktp->rktp_leader_epoch = leader_epoch;
 
-        fetching_from_follower =
-            leader != NULL && rktp->rktp_broker != NULL &&
-            rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
-            rktp->rktp_broker != leader;
+        /* Fetch-from-follower (KIP-392) does not apply to share
+         * consumers: rktp_broker is always tracked to the leader, no
+         * preferred-replica lease is ever issued. Forcing rd_false here
+         * makes the "not migrating away from preferred replica" branch
+         * below unreachable for share consumers, so a leader update
+         * from metadata always takes the standard leader-update path
+         * and the misleading FFF-flavored debug log is suppressed. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+                fetching_from_follower = rd_false;
+        else
+                fetching_from_follower =
+                    leader != NULL && rktp->rktp_broker != NULL &&
+                    rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
+                    rktp->rktp_broker != leader;
 
         if (fetching_from_follower && rktp->rktp_leader_id == leader_id) {
                 rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "BROKER",

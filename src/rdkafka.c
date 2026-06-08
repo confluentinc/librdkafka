@@ -2684,7 +2684,13 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                 }
         }
 
-        if (rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
+        /* Share consumers do server-side assignment via ShareGroupHeartbeat
+         * and never invoke a client-side assignor; rkcg_assignor stays NULL.
+         * Skip the builtin assignor registration so no per-handle range /
+         * roundrobin / sticky state is allocated. rd_kafka_assignors_term
+         * tolerates a zero-init partition_assignors list. */
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
+            rd_kafka_assignors_init(rk, errstr, errstr_size) == -1) {
                 ret_err   = RD_KAFKA_RESP_ERR__INVALID_ARG;
                 ret_errno = EINVAL;
                 goto fail;

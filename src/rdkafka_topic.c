@@ -742,6 +742,17 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                 if (rktp->rktp_leader_id != leader_id ||
                     rktp->rktp_leader != leader) {
                         /* Update leader if it has changed */
+                        rd_kafka_dbg(
+                            rktp->rktp_rkt->rkt_rk, TOPIC, "LEADER",
+                            "%s [%" PRId32
+                            "]: applying leader-id update %" PRId32
+                            " -> %" PRId32 " (epoch %" PRId32 "%s)",
+                            rktp->rktp_rkt->rkt_topic->str,
+                            rktp->rktp_partition, rktp->rktp_leader_id,
+                            leader_id, leader_epoch,
+                            RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)
+                                ? ", share-consumer"
+                                : "");
                         rktp->rktp_leader_id = leader_id;
                         if (rktp->rktp_leader)
                                 rd_kafka_broker_destroy(rktp->rktp_leader);
@@ -755,10 +766,16 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
                                                   "leader updated");
         }
 
-        if (need_epoch_validation) {
+        if (need_epoch_validation &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
                 /* Set offset validation position,
                  * depending it if should continue with current position or
-                 * with next fetch start position. */
+                 * with next fetch start position.
+                 *
+                 * Skipped for share consumers: the offset-validation flow
+                 * issues OffsetForLeaderEpoch / ListOffsets and pipes
+                 * results into rktp_fetchq, which the share path doesn't
+                 * drain. */
                 rd_kafka_toppar_set_offset_validation_position(
                     rktp,
                     rd_kafka_toppar_fetch_decide_next_fetch_start_pos(rktp));

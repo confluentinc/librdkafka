@@ -211,9 +211,15 @@ typedef enum {
         RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
                                            *   all messages and partition acks
                                            *   from a single broker response. */
-        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB,  /**< Share acknowledgement callback
-                                           *   reply: main -> app */
-
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE,  /**< Share acknowledgement
+                                                   * callback  reply: main -> app
+                                                   */
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER, /**< Register/unregister share
+                                                   *   acknowledgement callback:
+                                                   *   app -> main */
+        RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
+                                            to clear share session during broker
+                                            decommission */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -615,6 +621,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                 RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                                RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA,
                                 RD_KAFKA_MOCK_CMD_BROKER_ADD,
                                 RD_KAFKA_MOCK_CMD_COORD_SET,
                                 RD_KAFKA_MOCK_CMD_APIVERSION_SET,
@@ -876,21 +883,24 @@ struct rd_kafka_op_s {
 
                 /**
                  * Share acknowledgement callback reply.
-                 * Contains results to deliver to
-                 * share_acknowledgement_commit_cb.
+                 * Contains results to deliver to the runtime acknowledgement
+                 * callback set via
+                 * rd_kafka_share_set_acknowledgement_commit_cb().
                  */
                 struct {
                         /** List of partition offsets. */
                         rd_kafka_share_partition_offsets_list_t *partitions;
-                        /** Callback function pointer. */
-                        void (*cb)(
-                            rd_kafka_share_t *rkshare,
-                            rd_kafka_share_partition_offsets_list_t *partitions,
-                            rd_kafka_resp_err_t err,
-                            void *opaque);
-                        /** Application opaque. */
-                        void *opaque;
-                } share_ack_commit;
+                        /* Callback is looked up from rk->rk_rkshare at
+                         * invoke time. */
+                } share_ack_commit_cb_execute;
+
+                /** Share acknowledgement callback registration op.
+                 *  Sent from app thread to main thread when the runtime
+                 *  callback registration state transitions (set ↔ unset). */
+                struct {
+                        rd_bool_t
+                            registered; /**< true=register, false=unregister */
+                } share_ack_commit_cb_register;
 
         } rko_u;
 };
@@ -942,6 +952,17 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
                            int64_t offset,
                            const char *fmt,
                            ...) RD_FORMAT(printf, 8, 9);
+void rd_kafka_share_msgset_err_ops(
+    rd_kafka_q_t *rkq,
+    int32_t broker_id,
+    rd_kafka_resp_err_t err,
+    int32_t version,
+    rd_kafka_toppar_t *rktp,
+    int64_t start_offset,
+    int64_t end_offset,
+    rd_kafka_share_internal_acknowledgement_type ack_type,
+    const char *fmt,
+    ...) RD_FORMAT(printf, 9, 10);
 rd_kafka_op_t *rd_kafka_op_req0(rd_kafka_q_t *destq,
                                 rd_kafka_q_t *recvq,
                                 rd_kafka_op_t *rko,

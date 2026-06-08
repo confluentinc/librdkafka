@@ -131,13 +131,17 @@ const char *rd_kafka_op2str(rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] =
                 "REPLY:SHARE_SESSION_PARTITION_REMOVE",
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] = "REPLY:SHARE_FETCH_RESPONSE",
-            [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB]  = "REPLY:SHARE_ACK_COMMIT_CB",
+            [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE] =
+                "REPLY:SHARE_ACK_COMMIT_CB_EXECUTE",
+            [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER] =
+                "REPLY:SHARE_ACK_COMMIT_CB_REGISTER",
             [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
                 "REPLY:SHARE_COMMIT_ASYNC_FANOUT",
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT] =
                 "REPLY:SHARE_COMMIT_SYNC_FANOUT",
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
                 "REPLY:SHARE_COMMIT_SYNC_FANOUT_REPLY",
+            [RD_KAFKA_OP_SHARE_SESSION_CLEAR] = "REPLY:SHARE_SESSION_CLEAR",
         };
 
         if (type & RD_KAFKA_OP_REPLY)
@@ -309,14 +313,17 @@ rd_kafka_op_t *rd_kafka_op_new0(const char *source, rd_kafka_op_type_t type) {
             [RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE] = _RD_KAFKA_OP_EMPTY,
             [RD_KAFKA_OP_SHARE_FETCH_RESPONSE] =
                 sizeof(rko->rko_u.share_fetch_response),
-            [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB] =
-                sizeof(rko->rko_u.share_ack_commit),
+            [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE] =
+                sizeof(rko->rko_u.share_ack_commit_cb_execute),
+            [RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER] =
+                sizeof(rko->rko_u.share_ack_commit_cb_register),
             [RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT] =
                 sizeof(rko->rko_u.share_commit_async_fanout),
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT] =
                 sizeof(rko->rko_u.share_commit_sync_fanout),
             [RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY] =
                 sizeof(rko->rko_u.share_commit_sync_fanout_reply),
+            [RD_KAFKA_OP_SHARE_SESSION_CLEAR] = _RD_KAFKA_OP_EMPTY,
         };
         size_t tsize = op2size[type & ~RD_KAFKA_OP_FLAGMASK];
 
@@ -584,8 +591,8 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
         }
 
-        case RD_KAFKA_OP_SHARE_ACK_COMMIT_CB:
-                RD_IF_FREE(rko->rko_u.share_ack_commit.partitions,
+        case RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE:
+                RD_IF_FREE(rko->rko_u.share_ack_commit_cb_execute.partitions,
                            rd_kafka_share_partition_offsets_list_destroy);
                 break;
 
@@ -646,6 +653,10 @@ void rd_kafka_q_op_err(rd_kafka_q_t *rkq,
  *
  * @sa rd_kafka_q_op_err()
  */
+/**
+ * TODO KIP-932: GA: Improve handling of this particular function
+ *  as we dont need most information available here.
+ */
 void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
                            int32_t broker_id,
                            rd_kafka_resp_err_t err,
@@ -679,6 +690,67 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
 
 
         rd_kafka_q_enq(rkq, rko);
+}
+
+
+/**
+ * @brief Enqueue multiple RD_KAFKA_OP_CONSUMER_ERR ops on \p rkq for
+ *        a range of offsets, used for share consumer MessageSet-level errors.
+ *
+ * @param broker_id Is the relevant broker id, or RD_KAFKA_NODEID_UA (-1)
+ *                  if not applicable.
+ * @param err Error code.
+ * @param version Queue version barrier, or 0 if not applicable.
+ * @param rktp Toppar reference (required for share consumers).
+ * @param start_offset First offset in the error range (inclusive).
+ * @param end_offset Last offset in the error range (inclusive).
+ * @param ack_type Acknowledgement type for share consumer
+ *                 (REJECT for permanent errors, RELEASE for retryable).
+ *
+ * Creates one error op per offset in the range [start_offset, end_offset].
+ * Each op has ack_type pre-set for share consumer acknowledgement tracking.
+ *
+ * @sa rd_kafka_consumer_err()
+ */
+void rd_kafka_share_msgset_err_ops(
+    rd_kafka_q_t *rkq,
+    int32_t broker_id,
+    rd_kafka_resp_err_t err,
+    int32_t version,
+    rd_kafka_toppar_t *rktp,
+    int64_t start_offset,
+    int64_t end_offset,
+    rd_kafka_share_internal_acknowledgement_type ack_type,
+    const char *fmt,
+    ...) {
+        va_list ap;
+        char buf[2048];
+        int64_t offset;
+
+        /* Format error message once for all offsets */
+        va_start(ap, fmt);
+        rd_vsnprintf(buf, sizeof(buf), fmt, ap);
+        va_end(ap);
+
+        /* Create one error op per offset in the range */
+        for (offset = start_offset; offset <= end_offset; offset++) {
+                rd_kafka_op_t *rko;
+
+                rko              = rd_kafka_op_new(RD_KAFKA_OP_CONSUMER_ERR);
+                rko->rko_version = version;
+                rko->rko_err     = err;
+                rko->rko_u.err.offset            = offset;
+                rko->rko_u.err.errstr            = rd_strdup(buf);
+                rko->rko_u.err.rkm.rkm_broker_id = broker_id;
+
+                /* Set acknowledgement type for share consumer */
+                rko->rko_u.err.rkm.rkm_u.consumer.ack_type = ack_type;
+
+                if (rktp)
+                        rko->rko_rktp = rd_kafka_toppar_keep(rktp);
+
+                rd_kafka_q_enq(rkq, rko);
+        }
 }
 
 
@@ -1126,6 +1198,10 @@ rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
                     rko->rko_u.share_fetch_response.message_rkos, i);
 
                 /* Return message to application */
+                /**
+                 * TODO KIP-932: We need to expose the error string maybe
+                 * as rd_kafka_error_t in the message op.
+                 */
                 rkmessages[cnt++] = rd_kafka_message_get(msg_rko);
         }
 

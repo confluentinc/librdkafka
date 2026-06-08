@@ -1516,14 +1516,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(offset_commit_cb),
      "Offset commit result propagation callback. "
      "(set with rd_kafka_conf_set_offset_commit_cb())"},
-    /**
-     * TODO KIP-932: Verify if the handling of this callback is required
-     * in the events API or not.
-     */
-    {_RK_GLOBAL | _RK_CONSUMER, "share_acknowledgement_commit_cb", _RK_C_PTR,
-     _RK(share_acknowledgement_commit_cb),
-     "Share consumer acknowledgement result callback. "
-     "(set with rd_kafka_conf_set_share_acknowledgement_commit_cb())"},
     {_RK_GLOBAL | _RK_CONSUMER, "enable.partition.eof", _RK_C_BOOL,
      _RK(enable_partition_eof),
      "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
@@ -1540,8 +1532,6 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "which indicates where this client is physically located. It "
      "corresponds with the broker config `broker.rack`.",
      .sdef = ""},
-    {_RK_GLOBAL | _RK_HIDDEN, "share.consumer", _RK_C_BOOL,
-     _RK(share.is_share_consumer), "tba description", 0, 1, 0},
     {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
      _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "share.acknowledgement.mode",
@@ -3009,25 +2999,6 @@ void rd_kafka_conf_set_offset_commit_cb(
 }
 
 
-/**
- * TODO KIP-932: This callback handling needs to be changed.
- * It is currently set in confs, but we have to expose a public
- * API function to change the callback while the share consumer
- * is running.
- */
-void rd_kafka_conf_set_share_acknowledgement_commit_cb(
-    rd_kafka_conf_t *conf,
-    void (*share_acknowledgement_commit_cb)(
-        rd_kafka_share_t *rkshare,
-        rd_kafka_share_partition_offsets_list_t *partitions,
-        rd_kafka_resp_err_t err,
-        void *opaque)) {
-        rd_kafka_anyconf_set_internal(_RK_GLOBAL, conf,
-                                      "share_acknowledgement_commit_cb",
-                                      share_acknowledgement_commit_cb);
-}
-
-
 void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
                                 void (*error_cb)(rd_kafka_t *rk,
                                                  int err,
@@ -4291,6 +4262,67 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
 
+                /* Share-consumer-specific config validation.
+                 *
+                 * The share consumer is broker-driven
+                 * (ShareGroupHeartbeat), so a number of client-side
+                 * properties have no meaning or must take
+                 * library-mandatory values. The checks below reject
+                 * any explicit set of those properties; the
+                 * library-mandatory values are then applied at the
+                 * end of the block, before the downstream
+                 * group-protocol validation runs so its
+                 * CONSUMER-branch checks also apply to share
+                 * consumers. */
+                if (conf->share.is_share_consumer) {
+                        if (conf->rebalance_cb)
+                                return "`rebalance_cb` is not applicable "
+                                       "for share consumer";
+
+                        if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
+                                return "`RD_KAFKA_EVENT_REBALANCE` is not "
+                                       "applicable for share consumer";
+
+                        /* TODO KIP-932: verify whether stats_cb should also
+                         * be rejected. Today we only reject the interval
+                         * because the test framework sets stats_cb
+                         * defensively; with interval=0 the callback is
+                         * never invoked, so the callback alone is inert. */
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "statistics.interval.ms"))
+                                return "`statistics.interval.ms` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "enable.auto.commit"))
+                                return "`enable.auto.commit` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "group.protocol"))
+                                return "`group.protocol` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "socket.max.fails"))
+                                return "`socket.max.fails` must be 1 for "
+                                       "share consumer; changing it is not "
+                                       "allowed";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "partition.assignment.strategy"))
+                                return "`partition.assignment.strategy` is "
+                                       "not applicable for share consumer";
+
+                        if (conf->topic_conf &&
+                            rd_kafka_topic_conf_is_modified(
+                                conf->topic_conf, "auto.offset.reset"))
+                                return "`auto.offset.reset` is not "
+                                       "applicable for share consumer";
+
+                        conf->enable_auto_commit = 0;
+                        conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
+                        conf->socket_max_fails = 1;
+                }
+
                 if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
                         if (conf->max_poll_interval_ms <
                             conf->group_session_timeout_ms)
@@ -4306,8 +4338,9 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (rd_kafka_conf_is_modified(conf,
                                                       "session.timeout.ms")) {
                                 return "`session.timeout.ms` is not supported "
-                                       "for `group.protocol=consumer`. It is "
-                                       "defined broker side";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer. It is defined broker "
+                                       "side";
                         }
 
                         if (rd_kafka_conf_is_modified(
@@ -4321,15 +4354,17 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (rd_kafka_conf_is_modified(conf,
                                                       "group.protocol.type")) {
                                 return "`group.protocol.type` is not supported "
-                                       "for `group.protocol=consumer`";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer";
                         }
 
                         if (rd_kafka_conf_is_modified(
                                 conf, "heartbeat.interval.ms")) {
                                 return "`heartbeat.interval.ms` is not "
                                        "supported "
-                                       "for `group.protocol=consumer`. It is "
-                                       "defined broker side";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer. It is defined broker "
+                                       "side";
                         }
                 }
 

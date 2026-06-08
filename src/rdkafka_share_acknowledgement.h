@@ -30,6 +30,8 @@
 
 /* Forward declarations */
 typedef struct rd_kafka_op_s rd_kafka_op_t;
+typedef struct rd_kafka_broker_s rd_kafka_broker_t;
+typedef struct rd_kafka_cgrp_s rd_kafka_cgrp_t;
 
 typedef enum rd_kafka_internal_ShareAcknowledgement_type_s {
         RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED =
@@ -185,6 +187,17 @@ void rd_kafka_share_segregate_acks_by_leader(rd_kafka_t *rk,
                                              rd_list_t *ack_batches);
 
 /**
+ * @brief Segregate sync ack batches by partition leader into each
+ *        broker's pending_commit_sync list.
+ *
+ * @locality main thread
+ */
+void rd_kafka_share_segregate_sync_acks_by_leader(rd_kafka_t *rk,
+                                                  rd_kafka_cgrp_t *rkcg,
+                                                  rd_list_t *ack_batches,
+                                                  rd_ts_t abs_timeout);
+
+/**
  * @brief Extract acknowledged (non-ACQUIRED) records from inflight map.
  *
  * Non-ACQUIRED offsets are collated into ack_details for sending.
@@ -224,7 +237,6 @@ rd_kafka_share_ensure_all_acknowledged_if_explicit(rd_kafka_share_t *rkshare);
  * Used with rd_list_is_sorted().
  */
 int rd_kafka_share_ack_entries_sort_cmp_ptr(const void *_a, const void *_b);
-
 
 /**
  * @struct rd_kafka_share_partition_offsets_s
@@ -295,12 +307,13 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
  * @brief Enqueue acknowledgement callbacks to application for each partition.
  *
  * Iterates through each partition in ack_details and enqueues one callback
- * operation (RD_KAFKA_OP_SHARE_ACK_COMMIT_CB) per partition to the
+ * operation (RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE) per partition to the
  * application's reply queue. Each operation contains:
  * - The partition's acknowledged offsets
  * - Per-partition error code from batch->rktpar->err
  *
- * The application's share_acknowledgement_commit_cb is invoked once per
+ * The application's runtime acknowledgement callback (set via
+ * rd_kafka_share_set_acknowledgement_commit_cb()) is invoked once per
  * partition when the app calls rd_kafka_consumer_poll() or
  * rd_kafka_queue_poll().
  *
@@ -310,5 +323,53 @@ void rd_kafka_share_enqueue_ack_commit_cb_op(
  */
 void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
                                            rd_list_t *ack_details);
+
+
+/**
+ * @brief Clear cached share-ack state on a broker that is being
+ *        decommissioned.
+ *
+ * For each pending async ack batch on the broker, stamps
+ * SHARE_SESSION_NOT_FOUND on the batch and fires the share-ack
+ * callback so the application sees the failure. For sync acks
+ * (pending_commit_sync), stamps the same err and applies it to the
+ * in-flight commit_sync request (decrements awaiting count, completes
+ * sync if last broker outstanding).
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_acks_clear_during_broker_decommission(
+    rd_kafka_t *rk,
+    rd_kafka_broker_t *rkb);
+
+
+/**
+ * @brief Apply a broker's commit_sync result: copy each batch's
+ *        per-partition err onto the corresponding entry in
+ *        rkcg_commit_sync_request.results, decrement the count of
+ *        brokers still awaiting reply, and complete the commit_sync
+ *        if this was the last broker outstanding.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_apply_result(rd_kafka_t *rk,
+                                             rd_kafka_cgrp_t *rkcg,
+                                             rd_list_t *ack_batches);
+
+/**
+ * @brief Check if all broker results are in and send response if done.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_maybe_complete(rd_kafka_t *rk,
+                                               rd_kafka_cgrp_t *rkcg);
+
+/**
+ * @brief Send commit_sync response to the app thread and clear state.
+ *
+ * @locality main thread.
+ */
+void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg);
+
 
 #endif /* _RDKAFKA_SHARE_ACKNOWLEDGEMENT_H_ */

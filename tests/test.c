@@ -295,12 +295,21 @@ _TEST_DECL(0171_share_consumer_consume);
 _TEST_DECL(0172_share_consumer_acknowledge);
 _TEST_DECL(0173_share_consumer_commit_async_local);
 _TEST_DECL(0173_share_consumer_commit_async);
+_TEST_DECL(0174_share_consumer_concurrency);
+_TEST_DECL(0175_share_consumer_groups);
 _TEST_DECL(0176_share_consumer_commit_sync);
 _TEST_DECL(0176_share_consumer_commit_sync_local);
 _TEST_DECL(0177_share_consumer_transactions);
 _TEST_DECL(0178_share_consumer_close);
 _TEST_DECL(0178_share_consumer_close_local);
+_TEST_DECL(0179_share_consumer_destroy);
+_TEST_DECL(0179_share_consumer_destroy_local);
+_TEST_DECL(0180_share_consumer_config);
+_TEST_DECL(0181_share_consumer_topic_delete);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
+_TEST_DECL(0183_share_consumer_leader_change_mock);
+_TEST_DECL(0185_share_consumer_max_poll_interval);
+_TEST_DECL(0185_share_consumer_max_poll_interval_local);
 _TEST_DECL(0190_share_consumer_telemetry);
 
 /* Manual tests */
@@ -571,21 +580,29 @@ struct test tests[] = {
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
-    _TEST(0156_share_consumer_fetch_mock, TEST_F_MANUAL),
-    _TEST(0157_share_consumer_ack_mock, TEST_F_MANUAL),
+    _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
+    _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),
     _TEST(0158_share_consumer_transactions_mock, TEST_F_LOCAL),
-    _TEST(0153_memberid, 0, TEST_BRKVER(0, 4, 0, 0)),
-    _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 0, 0)),
-    _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 0, 0)),
-    _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0173_share_consumer_commit_async_local, TEST_F_LOCAL),
-    _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 0, 0)),
-    _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0174_share_consumer_concurrency, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0175_share_consumer_groups, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0176_share_consumer_commit_sync_local, TEST_F_LOCAL),
-    _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 0, 0)),
-    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
+    _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
+    _TEST(0180_share_consumer_config, TEST_F_LOCAL),
+    _TEST(0181_share_consumer_topic_delete, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
+    _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
+    _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(0, 4, 0, 0)),
+    _TEST(0185_share_consumer_max_poll_interval_local, TEST_F_LOCAL),
     _TEST(0190_share_consumer_telemetry,
           TEST_F_MANUAL,
           TEST_BRKVER(0, 4, 0, 0)),
@@ -8004,8 +8021,6 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id,
         test_conf_init(&conf, NULL, 0);
 
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "enable.auto.commit", "false", errstr,
-                          sizeof(errstr));
 
         if (ack_mode) {
                 rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode,
@@ -8242,6 +8257,32 @@ void test_share_destroy(rd_kafka_share_t *rkshare) {
  * Tracks callback invocations, offsets acknowledged, and errors.
  * Opaque must be a pointer to test_ack_cb_state_t.
  */
+void test_ack_cb_state_push_err(test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err) {
+        state->errs = rd_realloc(state->errs, sizeof(*state->errs) *
+                                                  (state->callback_cnt + 1));
+        state->errs[state->callback_cnt] = err;
+        state->callback_cnt++;
+}
+
+void test_ack_cb_state_destroy(test_ack_cb_state_t *state) {
+        if (state->errs)
+                rd_free(state->errs);
+        state->errs          = NULL;
+        state->callback_cnt  = 0;
+        state->total_offsets = 0;
+}
+
+rd_kafka_resp_err_t
+test_ack_cb_state_first_err(const test_ack_cb_state_t *state) {
+        int i;
+        for (i = 0; i < state->callback_cnt; i++) {
+                if (state->errs[i] != RD_KAFKA_RESP_ERR_NO_ERROR)
+                        return state->errs[i];
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 void test_share_ack_cb(rd_kafka_share_t *rkshare,
                        rd_kafka_share_partition_offsets_list_t *partitions,
                        rd_kafka_resp_err_t err,
@@ -8251,8 +8292,7 @@ void test_share_ack_cb(rd_kafka_share_t *rkshare,
 
         (void)rkshare;
 
-        state->callback_cnt++;
-        state->last_err = err;
+        test_ack_cb_state_push_err(state, err);
 
         entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
         if (entry)
@@ -8275,16 +8315,20 @@ rd_kafka_share_t *test_create_share_consumer_with_cb(
         rd_kafka_conf_t *conf;
         char errstr[512];
 
-        test_conf_init(&conf, NULL, 60);
+        test_conf_init(&conf, NULL, 0);
         rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
         rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
                           sizeof(errstr));
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(
-            conf, cb ? cb : test_share_ack_cb);
-        rd_kafka_conf_set_opaque(conf, state);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+
+        /* Register acknowledgement callback at runtime */
+        rd_kafka_error_t *error = rd_kafka_share_set_acknowledgement_commit_cb(
+            rkshare, cb ? cb : test_share_ack_cb, state);
+        TEST_ASSERT(error == NULL,
+                    "Failed to set acknowledgement commit callback: %s",
+                    rd_kafka_error_string(error));
         return rkshare;
 }
 

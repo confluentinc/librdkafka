@@ -932,8 +932,16 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                                     delivery_count;
                         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rkm = &rko->rko_u.err.rkm;
-                                rkm->rkm_u.consumer.ack_type =
-                                    RD_KAFKA_SHARE_INTERNAL_ACK_REJECT;
+                                /* Set ack_type to REJECT only if not already
+                                 * set by rd_kafka_share_msgset_err_ops()
+                                 * (which sets REJECT for CRC/unsupported
+                                 * errors, RELEASE for decompression errors). */
+                                if (rkm->rkm_u.consumer.ack_type ==
+                                        RD_KAFKA_SHARE_INTERNAL_ACK_GAP ||
+                                    rkm->rkm_u.consumer.ack_type ==
+                                        RD_KAFKA_SHARE_INTERNAL_ACK_ACQUIRED)
+                                        rkm->rkm_u.consumer.ack_type =
+                                            RD_KAFKA_SHARE_INTERNAL_ACK_RELEASE;
                         }
 
                         /* Add to filtered messages list */
@@ -1094,17 +1102,20 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
 
-                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH) {
+                        /**
+                         * The per message error ops (Decompression error, CRC
+                         * error, or MagicByte Errors are tracked in the same
+                         * list of messages as the successful messages.
+                         * TODO KIP-932: Check if we need a new op for record
+                         * level message errors: RD_KAFKA_OP_CONSUMER_MSG_ERR.
+                         */
+                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH ||
+                            msg_rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rd_list_add(
                                     response_rko->rko_u.share_fetch_response
                                         .message_rkos,
                                     msg_rko);
                                 msg_cnt++;
-                        } else {
-                                /* RD_KAFKA_OP_CONSUMER_ERR: forward to
-                                 * consumer group queue */
-                                rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q,
-                                               msg_rko);
                         }
                 }
 
@@ -1126,6 +1137,115 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                    inflight_acks_cnt);
 
         return response_rko;
+}
+
+
+/**
+ * @brief Handle a per-partition fetch error from a ShareFetch response.
+ *
+ * @locality broker thread
+ */
+static void rd_kafka_share_fetch_reply_handle_partition_error(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_toppar_t *rktp,
+    const rd_kafkap_str_t *topic,
+    int32_t partition,
+    rd_kafka_resp_err_t err,
+    const rd_kafkap_str_t *err_msg) {
+
+        /* TODO KIP-932: Verify whether the SURFACE-only arms below
+         * (CORRUPT_MESSAGE, default unknown err) should also emit an
+         * explicit warn-level log here. They currently rely on the
+         * downstream OP_CONSUMER_ERR being surfaced to the app via
+         * consume_batch. */
+        /* TODO KIP-932: write test cases for each per-partition error
+         * arm below once the mock cluster exposes a per-partition
+         * error-injection API (e.g.
+         * rd_kafka_mock_partition_push_share_fetch_error). Today only
+         * the leader-change errors are exercised via
+         * rd_kafka_mock_partition_set_leader; the remaining arms
+         * (KAFKA_STORAGE_ERROR, OFFSET_NOT_AVAILABLE,
+         * REPLICA_NOT_AVAILABLE, UNKNOWN_TOPIC_OR_PART,
+         * UNKNOWN_TOPIC_ID, INCONSISTENT_TOPIC_ID,
+         * TOPIC_AUTHORIZATION_FAILED, UNKNOWN_LEADER_EPOCH,
+         * UNKNOWN_SERVER_ERROR, CORRUPT_MESSAGE, and the default)
+         * have no deterministic mock trigger. */
+        switch (err) {
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+        case RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR:
+        case RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE:
+        case RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE:
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "%.*s [%" PRId32
+                           "]: ShareFetch failed: %s: %.*s: "
+                           "triggering metadata refresh",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                rd_kafka_toppar_leader_unavailable(rktp, "sharefetch", err);
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
+        case RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID:
+                /* No per-partition recovery action; left for the next
+                 * metadata refresh / heartbeat reconciliation to resolve. */
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: ShareFetch failed: %s: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                rd_rkb_log(rkb, LOG_WARNING, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: Not authorized to read: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           RD_KAFKAP_STR_PR(err_msg));
+                rd_kafka_consumer_err(
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
+                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
+                    "ShareFetch failed for %.*s [%" PRId32 "]: %.*s",
+                    RD_KAFKAP_STR_PR(topic), partition,
+                    RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH:
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: ShareFetch failed: %s: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_UNKNOWN:
+                rd_rkb_log(rkb, LOG_WARNING, "SHAREFETCH",
+                           "%.*s [%" PRId32 "]: ShareFetch failed: %s: %.*s",
+                           RD_KAFKAP_STR_PR(topic), partition,
+                           rd_kafka_err2name(err), RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        case RD_KAFKA_RESP_ERR_INVALID_MSG:
+                rd_kafka_consumer_err(
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
+                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
+                    "Encountered corrupt message when fetching "
+                    "topic-partition %.*s-%" PRId32 ": %.*s",
+                    RD_KAFKAP_STR_PR(topic), partition,
+                    RD_KAFKAP_STR_PR(err_msg));
+                break;
+
+        default:
+                rd_kafka_consumer_err(
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb),
+                    RD_KAFKA_RESP_ERR__STATE, 0, NULL, rktp,
+                    RD_KAFKA_OFFSET_INVALID,
+                    "Unexpected error code %" PRId16
+                    " (%s) while fetching from topic-partition "
+                    "%.*s-%" PRId32 ": %.*s",
+                    (int16_t)err, rd_kafka_err2name(err),
+                    RD_KAFKAP_STR_PR(topic), partition,
+                    RD_KAFKAP_STR_PR(err_msg));
+                break;
+        }
 }
 
 
@@ -1193,9 +1313,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         rd_kafka_buf_read_i16(rkbuf,
                               &PartitionFetchErrorCode);  // PartitionFetchError
         rd_kafka_buf_read_str(rkbuf, &PartitionFetchErrorStr);  // ErrorString
-        /* TODO KIP-932: We should reset (to INVALID) previous acknowledgement
-           information in the reply or maybe while sending the request itself?
-         */
         rd_kafka_buf_read_i16(
             rkbuf, &AcknowledgementErrorCode);  // AcknowledgementError
         rd_kafka_buf_read_str(
@@ -1259,15 +1376,46 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 rd_kafka_topic_rdunlock(rkt);
         }
 
-        if (unlikely(!rkt || !rktp)) {
+        if (unlikely(!rkt || !rktp || PartitionFetchErrorCode)) {
                 int64_t tmp_first, tmp_last;
                 int16_t tmp_delivery;
-                rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
-                           "Received Fetch response (error %hu) for unknown "
-                           "topic %.*s [%" PRId32 "]: ignoring",
-                           PartitionFetchErrorCode, RD_KAFKAP_STR_PR(topic),
-                           PartitionId);
+
+                if (!rkt) {
+                        /* TODO KIP-932: Recheck this branch once the
+                         * topic-recreate session-bookkeeping bug is fixed
+                         * (broker session may stop carrying old topic_ids
+                         * that no longer match any local rkt). */
+                        rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
+                                   "Received Fetch response (error %hu) for "
+                                   "unknown topic %.*s [%" PRId32 "]: ignoring",
+                                   PartitionFetchErrorCode,
+                                   RD_KAFKAP_STR_PR(topic), PartitionId);
+                } else if (!rktp) {
+                        /* TODO KIP-932: Verify this handling against expected
+                         * behavior. librdkafka requires rktp to route records;
+                         * partitions with no local rktp are silently dropped.
+                         */
+                        rd_rkb_dbg(rkb, TOPIC, "UNKTOPIC",
+                                   "Received Fetch response (error %hu) for "
+                                   "unknown partition %.*s [%" PRId32
+                                   "]: ignoring",
+                                   PartitionFetchErrorCode,
+                                   RD_KAFKAP_STR_PR(topic), PartitionId);
+                } else {
+                        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
+                                   "%.*s [%" PRId32
+                                   "]: per-partition fetch error %s",
+                                   RD_KAFKAP_STR_PR(topic), PartitionId,
+                                   rd_kafka_err2name(PartitionFetchErrorCode));
+                        rd_kafka_share_fetch_reply_handle_partition_error(
+                            rkb, rktp, topic, PartitionId,
+                            PartitionFetchErrorCode, &PartitionFetchErrorStr);
+                }
+
                 rd_kafka_buf_skip(rkbuf, MessageSetSize);
+                /* TODO KIP-932: Consider tracking total byte size of the
+                 * AcquiredRecords array in the protocol to allow a single
+                 * rd_kafka_buf_skip() here instead of per-entry parsing. */
                 rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt,
                                            -1);  // AcquiredRecordsArrayCnt
                 for (i = 0; i < AcquiredRecordsArrayCnt; i++) {
@@ -1278,22 +1426,21 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                                               &tmp_delivery);  // DeliveryCount
                         rd_kafka_buf_skip_tags(rkbuf);  // AcquiredRecords tags
                 }
-                /* Initialize batches_out with NULL rktpar for unknown topic */
-                batches_out->rktpar = NULL;
+                /* No records to track for this partition. Leave
+                 * batches_out->rktpar as NULL so the caller skips
+                 * adding this batch to inflight_acks. */
                 rd_kafka_buf_skip_tags(rkbuf);
                 goto done;
         }
 
-        tver.rktp    = rktp;
-        tver.version = rktp->rktp_fetch_version;
+        tver.rktp = rktp;
+        /* There is no versioning/barrier of the records/partitions in
+         * share consumer case. */
+        tver.version = 0;
 
         /* No error, clear any previous fetch error. */
         rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        /**
-         * TODO KIP-932: Currently for CRC error, we are sending reject for only
-         * 1 offset. We should send reject for all offsets in the range.
-         */
         if (MessageSetSize > 0) {
                 /**
                  * Parse MessageSet
@@ -1311,6 +1458,22 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 rd_slice_widen(&rkbuf->rkbuf_reader, &save_slice);
                 /* Continue with next partition regardless of
                  * parse errors (which are partition-specific) */
+
+                /**
+                 * Only inner-record parsing errors (RD_KAFKA_RESP_ERR__BAD_MSG
+                 * / RD_KAFKA_RESP_ERR__UNDERFLOW) propagate out of
+                 * rd_kafka_share_msgset_parse for share consumers — per-batch
+                 * codec / CRC / unsupported-MagicByte failures are handled
+                 * inline by emitting per-offset RELEASE/REJECT ops and are
+                 * swallowed by the v2 reader (msgset_reader.c). When a true
+                 * parse error bubbles up the wire data is corrupt and we can no
+                 * longer trust the buffer position or any per-batch metadata.
+                 * Stop processing the rest of this ShareFetch response and
+                 * propagate the error to the caller, which aborts the whole
+                 * response handling.
+                 */
+                if (err)
+                        goto done;
         }
 
         rd_kafka_buf_read_arraycnt(rkbuf, &AcquiredRecordsArrayCnt,
@@ -1332,8 +1495,14 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         parpriv->topic_id             = topic_id;
         batches_out->rktpar->_private = parpriv;
 
-        batches_out->response_leader_id    = CurrentLeader.LeaderId;
-        batches_out->response_leader_epoch = CurrentLeader.LeaderEpoch;
+        /* Record the broker and leader epoch at the time records were
+         * acquired. The wire CurrentLeader hint is only set when the
+         * broker signals a leader change, so we use the responding
+         * broker and the partition's cached epoch instead.
+         * TODO KIP-932: remove response_leader_epoch field if the
+         * segregation check stays leader-id-only. */
+        batches_out->response_leader_id              = rkb->rkb_nodeid;
+        batches_out->response_leader_epoch           = rktp->rktp_leader_epoch;
         batches_out->response_acquired_offsets_count = 0;
         /* Pre-allocate capacity without re-initializing the list.
          * batches_out->entries was already initialized by
@@ -1455,6 +1624,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_list_t *inflight_acks      = NULL;
         rd_kafka_op_t *rko_orig       = request->rkbuf_opaque;
         rd_kafka_op_t *response_rko   = NULL;
+        rd_kafka_resp_err_t err       = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1462,15 +1632,13 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_str(rkbuf, &ErrorStr);
 
         if (ErrorCode) {
+                /**
+                 * TODO KIP_932: Change err log here to debug log
+                 */
                 rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
                            "ShareFetch response error %s: '%.*s'",
                            rd_kafka_err2name(ErrorCode),
                            RD_KAFKAP_STR_PR(&ErrorStr));
-                /* TODO KIP-932: Check if the response buffer still needs
-                 * to be parsed in some error cases. For example,
-                 * UNKNOWN_TOPIC_ID may require removing partitions from
-                 * the session, and acknowledgements for that topic id
-                 * should also be destroyed. */
                 return ErrorCode;
         }
 
@@ -1509,12 +1677,29 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafka_share_ack_batches_t *batches =
                             rd_kafka_share_ack_batches_new_empty();
 
-                        if (rd_kafka_share_fetch_reply_handle_partition(
-                                rkb, &topic, topic_id, rkt, rkbuf, request,
-                                filtered_msgs, batches,
-                                rko_orig->rko_u.share_fetch.ack_details)) {
+                        err = rd_kafka_share_fetch_reply_handle_partition(
+                            rkb, &topic, topic_id, rkt, rkbuf, request,
+                            filtered_msgs, batches,
+                            rko_orig->rko_u.share_fetch.ack_details);
+
+                        /*
+                         * Only inner-record parsing errors
+                         * (RD_KAFKA_RESP_ERR__BAD_MSG /
+                         * RD_KAFKA_RESP_ERR__UNDERFLOW) reach this point —
+                         * per-batch CRC / decompression / MagicByte failures
+                         * are handled inline inside
+                         * rd_kafka_share_msgset_parse by emitting per-offset
+                         * RELEASE/REJECT ops and are swallowed, and
+                         * per-partition broker errors are handled by
+                         * rd_kafka_share_fetch_reply_handle_partition_error
+                         * before MessageSet parsing begins. A parsing error
+                         * means the wire data is corrupt and the buffer
+                         * position can no longer be trusted for subsequent
+                         * partitions, so abort the whole response.
+                         */
+                        if (err) {
                                 rd_kafka_share_ack_batches_destroy(batches);
-                                goto err_parse;
+                                goto done;
                         }
 
                         /* Skip unknown topics - don't add to inflight_acks */
@@ -1550,15 +1735,6 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         /* Top level tags */
         rd_kafka_buf_skip_tags(rkbuf);
 
-
-        if (rd_kafka_buf_read_remain(rkbuf) != 0) {
-                rd_kafka_buf_parse_fail(rkbuf,
-                                        "Remaining data after message set "
-                                        "parse: %" PRIusz " bytes",
-                                        rd_kafka_buf_read_remain(rkbuf));
-                RD_NOTREACHED();
-        }
-
         /* Return response_rko to the caller instead of enqueueing here.
          * The caller enqueues it on rkcg_q AFTER sending the reply to
          * rk_ops, ensuring the main thread processes the reply (and
@@ -1576,6 +1752,9 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
+        err = rkbuf->rkbuf_err;
+
+done:
         /* Free inflight_acks list on error (destructor handles cleanup) */
         rd_list_destroy(inflight_acks);
         rd_list_destroy(filtered_msgs);
@@ -1585,11 +1764,9 @@ err_parse:
 
         if (rkt)
                 rd_kafka_topic_destroy0(rkt);
-        rd_rkb_dbg(rkb, MSG, "BADMSG",
-                   "Bad message (Fetch v%d): "
-                   "is broker.version.fallback incorrectly set?",
+        rd_rkb_dbg(rkb, MSG, "BADMSG", "Bad message (ShareFetch v%d): ",
                    (int)request->rkbuf_reqhdr.ApiVersion);
-        return rkbuf->rkbuf_err;
+        return err;
 }
 
 
@@ -1608,14 +1785,16 @@ err_parse:
  * @locality broker thread
  */
 static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb) {
-        rd_kafka_toppar_t *rktp, *tmp_rktp;
+        rd_kafka_toppar_t *rktp;
+        int i;
 
-        rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
-                   "Resetting share session: epoch %" PRId32
-                   " -> 0, "
-                   "moving %d toppars_in_session to toppars_to_add",
-                   rkb->rkb_share_fetch_session.epoch,
-                   rkb->rkb_share_fetch_session.toppars_in_session_cnt);
+        rd_rkb_dbg(
+            rkb, FETCH, "SHAREFETCH",
+            "Resetting share session: epoch %" PRId32
+            " -> 0, "
+            "moving %d toppars_in_session to toppars_to_add",
+            rkb->rkb_share_fetch_session.epoch,
+            rd_list_cnt(rkb->rkb_share_fetch_session.toppars_in_session));
 
         rkb->rkb_share_fetch_session.epoch = 0;
 
@@ -1624,27 +1803,15 @@ static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb) {
          * new session. */
         if (rkb->rkb_share_fetch_session.toppars_to_forget) {
                 rd_kafka_toppar_t *forget_rktp;
-                int i;
 
                 RD_LIST_FOREACH(forget_rktp,
                                 rkb->rkb_share_fetch_session.toppars_to_forget,
                                 i) {
-                        TAILQ_FOREACH_SAFE(
-                            rktp,
-                            &rkb->rkb_share_fetch_session.toppars_in_session,
-                            rktp_rkb_session_link, tmp_rktp) {
-                                if (rktp == forget_rktp) {
-                                        TAILQ_REMOVE(
-                                            &rkb->rkb_share_fetch_session
-                                                 .toppars_in_session,
-                                            rktp, rktp_rkb_session_link);
-                                        rkb->rkb_share_fetch_session
-                                            .toppars_in_session_cnt--;
-                                        rd_kafka_toppar_destroy(
-                                            rktp); /* from session list */
-                                        break;
-                                }
-                        }
+                        rktp = rd_list_remove(
+                            rkb->rkb_share_fetch_session.toppars_in_session,
+                            forget_rktp);
+                        if (rktp)
+                                rd_kafka_toppar_destroy(rktp);
                 }
 
                 rd_list_destroy(rkb->rkb_share_fetch_session.toppars_to_forget);
@@ -1653,89 +1820,81 @@ static void rd_kafka_broker_session_reset(rd_kafka_broker_t *rkb) {
 
         /* Move remaining toppars_in_session to toppars_to_add so they
          * get sent as new additions in the next request (epoch 0). */
-        TAILQ_FOREACH_SAFE(rktp,
-                           &rkb->rkb_share_fetch_session.toppars_in_session,
-                           rktp_rkb_session_link, tmp_rktp) {
-                TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session,
-                             rktp, rktp_rkb_session_link);
-                rkb->rkb_share_fetch_session.toppars_in_session_cnt--;
-
-                if (!rkb->rkb_share_fetch_session.toppars_to_add)
-                        rkb->rkb_share_fetch_session.toppars_to_add =
-                            rd_list_new(1, rd_kafka_toppar_destroy_free);
-
-                if (!rd_list_find(rkb->rkb_share_fetch_session.toppars_to_add,
-                                  rktp, rd_list_cmp_ptr))
-                        rd_list_add(rkb->rkb_share_fetch_session.toppars_to_add,
-                                    rktp); /* transfer ref */
-                else
-                        rd_kafka_toppar_destroy(rktp); /* from session list */
+        if (!rkb->rkb_share_fetch_session.toppars_to_add) {
+                rkb->rkb_share_fetch_session.toppars_to_add =
+                    rkb->rkb_share_fetch_session.toppars_in_session;
+                rkb->rkb_share_fetch_session.toppars_in_session =
+                    rd_list_new(0, rd_kafka_toppar_destroy_free);
+        } else {
+                while ((rktp = rd_list_pop(
+                            rkb->rkb_share_fetch_session.toppars_in_session))) {
+                        if (!rd_list_find(
+                                rkb->rkb_share_fetch_session.toppars_to_add,
+                                rktp, rd_list_cmp_ptr))
+                                rd_list_add(
+                                    rkb->rkb_share_fetch_session.toppars_to_add,
+                                    rktp);
+                        else
+                                rd_kafka_toppar_destroy(rktp);
+                }
         }
 }
 
 static void rd_kafka_broker_session_update_epoch(rd_kafka_broker_t *rkb) {
-        if (rkb->rkb_share_fetch_session.epoch == -1) {
+        int32_t prev_epoch = rkb->rkb_share_fetch_session.epoch;
+        if (prev_epoch == -1) {
                 rd_kafka_dbg(
                     rkb->rkb_rk, MSG, "SHAREFETCH",
                     "Not updating next epoch for -1 as it should be -1 again.");
                 return;
         }
-        if (rkb->rkb_share_fetch_session.epoch == INT32_MAX)
+        if (prev_epoch == INT32_MAX)
                 rkb->rkb_share_fetch_session.epoch = 1;
         else
                 rkb->rkb_share_fetch_session.epoch++;
+        rd_rkb_dbg(rkb, FETCH, "SHARESESSION",
+                   "share-fetch session epoch %" PRId32 " -> %" PRId32
+                   " (wrap=%s)",
+                   prev_epoch, rkb->rkb_share_fetch_session.epoch,
+                   prev_epoch == INT32_MAX ? "yes" : "no");
 }
 
 static void rd_kafka_broker_session_add_partition_to_toppars_in_session(
     rd_kafka_broker_t *rkb,
     rd_kafka_toppar_t *rktp) {
-        rd_kafka_toppar_t *session_rktp, *adding_rktp;
-        TAILQ_FOREACH(session_rktp,
-                      &rkb->rkb_share_fetch_session.toppars_in_session,
-                      rktp_rkb_session_link) {
-                if (rktp == session_rktp) {
-                        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
-                                     "%s [%" PRId32
-                                     "]: already in ShareFetch session",
-                                     rktp->rktp_rkt->rkt_topic->str,
-                                     rktp->rktp_partition);
-                        return;
-                }
+        if (rd_list_find(rkb->rkb_share_fetch_session.toppars_in_session, rktp,
+                         rd_list_cmp_ptr)) {
+                rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
+                             "%s [%" PRId32 "]: already in ShareFetch session",
+                             rktp->rktp_rkt->rkt_topic->str,
+                             rktp->rktp_partition);
+                return;
         }
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                      "%s [%" PRId32 "]: adding to ShareFetch session",
                      rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
-        adding_rktp = rd_kafka_toppar_keep(rktp);
-        TAILQ_INSERT_TAIL(&rkb->rkb_share_fetch_session.toppars_in_session,
-                          adding_rktp, rktp_rkb_session_link);
-        rkb->rkb_share_fetch_session.toppars_in_session_cnt++;
+        rd_kafka_toppar_keep(rktp);
+        rd_list_add(rkb->rkb_share_fetch_session.toppars_in_session, rktp);
 }
 
-static void rd_kafka_broker_session_remove_partition_from_toppars_in_session(
+void rd_kafka_broker_session_remove_partition_from_toppars_in_session(
     rd_kafka_broker_t *rkb,
     rd_kafka_toppar_t *rktp) {
-        rd_kafka_toppar_t *session_rktp, *tmp_rktp;
-        TAILQ_FOREACH_SAFE(session_rktp,
-                           &rkb->rkb_share_fetch_session.toppars_in_session,
-                           rktp_rkb_session_link, tmp_rktp) {
-                if (rktp == session_rktp) {
-                        TAILQ_REMOVE(
-                            &rkb->rkb_share_fetch_session.toppars_in_session,
-                            session_rktp, rktp_rkb_session_link);
-                        rd_kafka_toppar_destroy(
-                            session_rktp);  // from session list
-                        rkb->rkb_share_fetch_session.toppars_in_session_cnt--;
-                        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
-                                     "%s [%" PRId32
-                                     "]: removed from ShareFetch session",
-                                     rktp->rktp_rkt->rkt_topic->str,
-                                     rktp->rktp_partition);
-                        return;
-                }
+        rd_kafka_toppar_t *removed_rktp;
+        removed_rktp = rd_list_remove(
+            rkb->rkb_share_fetch_session.toppars_in_session, rktp);
+        if (removed_rktp) {
+                rd_kafka_toppar_destroy(removed_rktp);
+                rd_kafka_dbg(
+                    rkb->rkb_rk, MSG, "SHAREFETCH",
+                    "%s [%" PRId32 "]: removed from ShareFetch session",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
+        } else {
+                rd_kafka_dbg(
+                    rkb->rkb_rk, MSG, "SHAREFETCH",
+                    "%s [%" PRId32 "]: not found in ShareFetch session",
+                    rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
         }
-        rd_kafka_dbg(rkb->rkb_rk, MSG, "SHAREFETCH",
-                     "%s [%" PRId32 "]: not found in ShareFetch session",
-                     rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition);
 }
 
 static void
@@ -1807,6 +1966,20 @@ rd_kafka_broker_session_update_removed_partitions(rd_kafka_broker_t *rkb) {
 }
 
 static void rd_kafka_broker_session_update_partitions(rd_kafka_broker_t *rkb) {
+        rd_rkb_dbg(
+            rkb, FETCH, "SHARESESSION",
+            "applying session updates: adding_toppars=%d "
+            "forgetting_toppars=%d toppars_in_session=%d epoch=%" PRId32,
+            rkb->rkb_share_fetch_session.adding_toppars
+                ? rd_list_cnt(rkb->rkb_share_fetch_session.adding_toppars)
+                : 0,
+            rkb->rkb_share_fetch_session.forgetting_toppars
+                ? rd_list_cnt(rkb->rkb_share_fetch_session.forgetting_toppars)
+                : 0,
+            rkb->rkb_share_fetch_session.toppars_in_session
+                ? rd_list_cnt(rkb->rkb_share_fetch_session.toppars_in_session)
+                : 0,
+            rkb->rkb_share_fetch_session.epoch);
         rd_kafka_broker_session_update_added_partitions(rkb);
         rd_kafka_broker_session_update_removed_partitions(rkb);
 }
@@ -1819,6 +1992,24 @@ static void rd_kafka_broker_session_update_partitions(rd_kafka_broker_t *rkb) {
 static void rd_kafka_broker_session_update(rd_kafka_broker_t *rkb) {
         rd_kafka_broker_session_update_epoch(rkb);
         rd_kafka_broker_session_update_partitions(rkb);
+}
+
+/**
+ * @brief Whether \p err is a per-partition ShareAcknowledge error
+ *        whose CurrentLeader hint should trigger an inline metadata
+ *        update.
+ */
+static rd_bool_t
+rd_kafka_share_ack_err_is_leader_change(rd_kafka_resp_err_t err) {
+        switch (err) {
+        case RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER:
+        case RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
+        case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID:
+                return rd_true;
+        default:
+                return rd_false;
+        }
 }
 
 /**
@@ -1854,6 +2045,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
         int16_t ErrorCode           = RD_KAFKA_RESP_ERR_NO_ERROR;
         rd_kafkap_str_t ErrorStr    = RD_KAFKAP_STR_INITIALIZER_EMPTY;
         rd_kafkap_NodeEndpoints_t NodeEndpoints;
+        rd_list_t *leader_changes     = NULL;
         NodeEndpoints.NodeEndpoints   = NULL;
         NodeEndpoints.NodeEndpointCnt = 0;
 
@@ -1888,6 +2080,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         rd_kafkap_str_t PartErrorStr;
                         rd_kafkap_CurrentLeader_t CurrentLeader;
                         rd_kafka_share_ack_batches_t *batch;
+                        rd_kafkap_share_leader_change_t *lc;
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
                         rd_kafka_buf_read_i16(rkbuf, &PartErrorCode);
@@ -1916,12 +2109,42 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         }
 
                         if (PartErrorCode) {
+                                /* TODO KIP-932: write test cases for each
+                                 * per-partition ShareAcknowledge error code
+                                 * once the mock cluster exposes a
+                                 * per-partition error-injection API for
+                                 * ShareAcknowledge responses. Today only
+                                 * NOT_LEADER_OR_FOLLOWER (via
+                                 * rd_kafka_mock_partition_set_leader) is
+                                 * deterministically reachable; the other
+                                 * leader-change errors
+                                 * (FENCED_LEADER_EPOCH,
+                                 * UNKNOWN_TOPIC_OR_PART,
+                                 * UNKNOWN_TOPIC_ID),
+                                 * INVALID_RECORD_STATE,
+                                 * INVALID_REQUEST, KAFKA_STORAGE_ERROR
+                                 * and the inline-leader-update path have
+                                 * no deterministic mock trigger. */
                                 rd_rkb_dbg(rkb, FETCH, "SHAREACK",
                                            "ShareAcknowledge partition %" PRId32
                                            " error %s: '%.*s'",
                                            Partition,
                                            rd_kafka_err2name(PartErrorCode),
                                            RD_KAFKAP_STR_PR(&PartErrorStr));
+
+                                if (rd_kafka_share_ack_err_is_leader_change(
+                                        PartErrorCode) &&
+                                    CurrentLeader.LeaderId != -1 &&
+                                    CurrentLeader.LeaderEpoch != -1) {
+                                        if (!leader_changes)
+                                                leader_changes =
+                                                    rd_list_new(0, rd_free);
+                                        lc = rd_calloc(1, sizeof(*lc));
+                                        lc->topic_id       = topic_id;
+                                        lc->partition      = Partition;
+                                        lc->current_leader = CurrentLeader;
+                                        rd_list_add(leader_changes, lc);
+                                }
                         }
 
                         /* Partition tags */
@@ -1937,10 +2160,15 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
         /* Top level tags */
         rd_kafka_buf_skip_tags(rkbuf);
 
+        rd_kafkap_share_leader_changes_apply(rkb, leader_changes,
+                                             &NodeEndpoints);
+
+        RD_IF_FREE(leader_changes, rd_list_destroy);
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 
 err_parse:
+        RD_IF_FREE(leader_changes, rd_list_destroy);
         RD_IF_FREE(NodeEndpoints.NodeEndpoints, rd_free);
         rd_rkb_dbg(rkb, MSG, "BADMSG",
                    "Bad ShareAcknowledge response (v%d): parse error",
@@ -2037,6 +2265,24 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                             rkb->rkb_rk, NULL, rd_true /*force*/, tmp);
                         break;
                 }
+
+                case RD_KAFKA_RESP_ERR__BAD_MSG:
+                case RD_KAFKA_RESP_ERR__UNDERFLOW:
+                        /* Wire-level parse failure: response envelope or
+                         * an inner MessageSet/record was malformed or
+                         * truncated. Indicates broker bug, on-the-wire
+                         * corruption, or version mismatch — log loudly so
+                         * the user notices, since the LOG_INFO top-level
+                         * log can be easy to miss in production output. */
+                        rd_rkb_log(
+                            rkb, LOG_ERR, "SHAREACK",
+                            "ShareAcknowledge response parse failure: %s "
+                            "(ApiVersion %hd) — broker bug, wire "
+                            "corruption, or version mismatch; "
+                            "this response is being dropped",
+                            rd_kafka_err2str(err),
+                            request->rkbuf_reqhdr.ApiVersion);
+                        break;
 
                 default:
                         /* No retry for ShareAcknowledge RPC-level
@@ -2144,21 +2390,31 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                         rd_kafka_broker_session_reset(rkb);
                         break;
 
-                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932: The response already carries
-                         * per-partition currentLeader + nodeEndpoints;
-                         * use that to update partition leadership
-                         * directly instead of triggering a full
-                         * metadata refresh RPC. */
-                        rd_snprintf(tmp, sizeof(tmp), "FetchRequest failed: %s",
+                        rd_snprintf(tmp, sizeof(tmp), "ShareFetch failed: %s",
                                     rd_kafka_err2str(err));
                         rd_kafka_metadata_refresh_known_topics(
-                            rkb->rkb_rk, NULL, rd_true /*force*/, tmp);
+                            rkb->rkb_rk, NULL, rd_false /*!force*/, tmp);
                         break;
                 }
+
+                case RD_KAFKA_RESP_ERR__BAD_MSG:
+                case RD_KAFKA_RESP_ERR__UNDERFLOW:
+                        /* Wire-level parse failure: response envelope or
+                         * an inner MessageSet/record was malformed or
+                         * truncated. Indicates broker bug, on-the-wire
+                         * corruption, or version mismatch — log loudly so
+                         * the user notices, since the LOG_INFO top-level
+                         * log can be easy to miss in production output. */
+                        rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
+                                   "ShareFetch response parse failure: %s "
+                                   "(ApiVersion %hd) — broker bug, wire "
+                                   "corruption, or version mismatch; "
+                                   "this response is being dropped",
+                                   rd_kafka_err2str(err),
+                                   request->rkbuf_reqhdr.ApiVersion);
+                        break;
 
                 default:
                         /* No error-specific handling at the request
@@ -2863,12 +3119,10 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         /* Update TopicArrayCnt */
         rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicArrayCnt, TopicArrayCnt);
 
-        /* TODO KIP-932: Check if commit_sync requests should use
-         * rko_orig->rko_u.share_fetch.abs_timeout instead of
-         * socket.timeout.ms. Currently the transport timeout is
-         * independent of the commit_sync timeout, so the broker
-         * request may outlive a timed-out commit_sync or time out
-         * at the transport level before the commit_sync timer fires. */
+        /* Wire RPC timeout is socket.timeout.ms, decoupled from any
+         * caller-side commit_sync deadline. Interactions covered by
+         * tests/0182-share_consumer_error_handling_mock.c
+         * (do_test_socket_timeout_full_ack_then_more). */
         rd_kafka_buf_set_timeout(rkbuf, rkb->rkb_rk->rk_conf.socket_timeout_ms,
                                  now);
 
@@ -2882,22 +3136,12 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
 
 
 void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
-        rd_kafka_toppar_t *rktp, *tmp_rktp;
-
         /* Clear toppars in session */
-        TAILQ_FOREACH_SAFE(rktp,
-                           &rkb->rkb_share_fetch_session.toppars_in_session,
-                           rktp_rkb_session_link, tmp_rktp) {
-                TAILQ_REMOVE(&rkb->rkb_share_fetch_session.toppars_in_session,
-                             rktp, rktp_rkb_session_link);
-                rd_rkb_dbg(rkb, BROKER, "SHAREFETCH",
-                           "%s [%" PRId32
-                           "]: removed from ShareFetch session on clear",
-                           rktp->rktp_rkt->rkt_topic->str,
-                           rktp->rktp_partition);
-                rd_kafka_toppar_destroy(rktp);  // from session list
-        }
-        rkb->rkb_share_fetch_session.toppars_in_session_cnt = 0;
+        rd_rkb_dbg(
+            rkb, BROKER, "SHAREFETCH",
+            "Clearing %d toppars from ShareFetch session",
+            rd_list_cnt(rkb->rkb_share_fetch_session.toppars_in_session));
+        rd_list_clear(rkb->rkb_share_fetch_session.toppars_in_session);
 
         /* Clear toppars to add */
         if (rkb->rkb_share_fetch_session.toppars_to_add) {
@@ -2944,6 +3188,11 @@ void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb) {
                     rkb->rkb_share_fetch_session.forgetting_toppars);
                 rkb->rkb_share_fetch_session.forgetting_toppars = NULL;
         }
+
+        /*
+         * This allows us to avoid future changes to the closed share session
+         * Toppar add/remove functions do not allow updates if epoch is -1
+         * Avoid future changes to the closed share session */
         rkb->rkb_share_fetch_session.epoch = -1;
 }
 
@@ -3028,6 +3277,14 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                         return;
                 }
 
+                /* TODO KIP-932: add a defensive per-batch leader-stale
+                 * strip here (mirroring the segregation-time check) to
+                 * cover the window where the cached leader changes
+                 * between segregation on the main thread and this RPC
+                 * send on the broker thread. It must run AFTER the
+                 * epoch==0 check above so the local-only failure path
+                 * stays identical to the broker-roundtrip flow. */
+
                 rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREACK",
                              "Sending ShareAcknowledge Request with"
                              " acknowledgements");
@@ -3073,6 +3330,13 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
                 rko_orig->rko_u.share_fetch.ack_details = NULL;
                 has_ack_details                         = rd_false;
         }
+
+        /* TODO KIP-932: add a defensive per-batch leader-stale strip
+         * here (mirroring the segregation-time check) to cover the
+         * window where the cached leader changes between segregation
+         * on the main thread and this RPC send on the broker thread.
+         * It must run AFTER the epoch==0 strip above so the local-only
+         * failure path stays identical to the broker-roundtrip flow. */
 
         rd_kafka_dbg(rkb->rkb_rk, FETCH, "SHAREFETCH",
                      "Sending ShareFetch Request with%s%s%s fetching messages",

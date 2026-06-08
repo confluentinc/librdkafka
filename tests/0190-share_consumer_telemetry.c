@@ -1,0 +1,332 @@
+/*
+ * librdkafka - Apache Kafka C library
+ *
+ * Copyright (c) 2026, Confluent Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+#include "test.h"
+#include "rdkafka.h"
+#include "../src/rdkafka_telemetry_encode.h"
+
+#include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
+
+static const char *telemetry_topic(void) {
+        const char *env = getenv("TELEMETRY_TOPIC");
+        return env && *env ? env : "client-telemetry-metrics";
+}
+
+/**
+ * @name End-to-end share-consumer telemetry integration test.
+ *
+ * Requires external infrastructure already brought up by the surrounding
+ * pipeline (packaging/tools/setup-share-telemetry-testing.sh):
+ *   - broker with ClientOtlpMetricsReporter plugin loaded
+ *   - OpenTelemetry Collector with Kafka exporter
+ *   - topic "client-telemetry-metrics" (the OTel-exported telemetry sink)
+ *   - client metrics subscription on "org.apache.kafka.consumer.share." prefix
+ */
+
+/**
+ * @brief Scan a raw byte buffer for every "consumer.share.<chars>"
+ *        substring and add each unique one to the names list.
+ *
+ * The OTLP protobuf encoding leaves metric names as plain UTF-8 — the
+ * field tag is binary but the string payload is uncompressed.
+ */
+static void
+extract_share_metric_names(const void *data, size_t len, rd_list_t *names) {
+        const char *p           = (const char *)data;
+        const char *end         = p + len;
+        const char prefix[]     = "consumer.share.";
+        const size_t prefix_len = sizeof(prefix) - 1;
+
+        while (p + prefix_len <= end) {
+                const char *match = NULL;
+                const char *q;
+                for (q = p; q + prefix_len <= end; q++) {
+                        if (memcmp(q, prefix, prefix_len) == 0) {
+                                match = q;
+                                break;
+                        }
+                }
+                if (!match)
+                        break;
+
+                const char *name_end = match + prefix_len;
+                while (name_end < end &&
+                       (isalnum((unsigned char)*name_end) || *name_end == '.' ||
+                        *name_end == '_')) {
+                        name_end++;
+                }
+
+                size_t name_len = (size_t)(name_end - match);
+                if (name_len > 0 && name_len < 256) {
+                        char *name = rd_malloc(name_len + 1);
+                        memcpy(name, match, name_len);
+                        name[name_len] = '\0';
+
+                        if (!rd_list_find(
+                                names, name,
+                                (int (*)(const void *, const void *))strcmp)) {
+                                rd_list_add(names, name);
+                        } else {
+                                rd_free(name);
+                        }
+                }
+
+                p = name_end;
+        }
+}
+
+/**
+ * @brief Produce a batch of messages and drive a share consumer through
+ *        the consume path so the telemetry sampling sites fire.
+ */
+static void produce_and_share_consume(const char *topic, const char *group_id) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        int64_t deadline_us;
+        int consumed = 0;
+
+        TEST_SAY("Producing %d messages to %s\n", 200, topic);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 30 * 1000);
+        test_produce_msgs_easy(topic, 0, RD_KAFKA_PARTITION_UA, 200);
+
+        TEST_SAY(
+            "Starting share consumer (enable.metrics.push=true) for %d s\n",
+            20);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "group.id", group_id);
+        test_conf_set(conf, "enable.metrics.push", "true");
+        test_conf_set(conf, "enable.auto.commit", "false");
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "share_consumer_new failed: %s", errstr);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        err = rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+        TEST_ASSERT(!err, "share_subscribe: %s", rd_kafka_err2str(err));
+
+        deadline_us = test_clock() + 20 * 1000000;
+        while (test_clock() < deadline_us) {
+                rd_kafka_message_t *batch[100];
+                rd_kafka_error_t *e;
+                size_t rcvd = 0;
+                size_t i;
+
+                e = rd_kafka_share_consume_batch(rkshare, 1000, batch, &rcvd);
+                if (e) {
+                        rd_kafka_error_destroy(e);
+                        continue;
+                }
+                for (i = 0; i < rcvd; i++) {
+                        if (!batch[i]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[i]);
+                }
+        }
+        TEST_SAY("Share-consumed %d messages\n", consumed);
+
+        rd_kafka_share_consumer_close(rkshare);
+        rd_kafka_share_destroy(rkshare);
+}
+
+/**
+ * @brief Open a regular consumer on the telemetry topic, drain it for
+ *        up to the given number of seconds, returning a list of every
+ *        distinct "consumer.share.*" metric name seen across all messages.
+ */
+static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_list_t *seen;
+        int64_t deadline_us;
+        int msgs_seen = 0;
+
+        TEST_SAY("Consuming '%s' for up to %d s\n", topic, seconds);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "group.id", "0190-telemetry-verifier");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        rd_kafka_poll_set_consumer(rk);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_subscribe(rk, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        seen = rd_list_new(0, rd_free);
+
+        deadline_us = test_clock() + (int64_t)seconds * 1000000;
+        while (test_clock() < deadline_us) {
+                rd_kafka_message_t *msg = rd_kafka_consumer_poll(rk, 1000);
+                if (!msg)
+                        continue;
+                if (msg->err) {
+                        rd_kafka_message_destroy(msg);
+                        continue;
+                }
+                msgs_seen++;
+                extract_share_metric_names(msg->payload, msg->len, seen);
+                rd_kafka_message_destroy(msg);
+        }
+
+        TEST_SAY(
+            "Read %d telemetry messages, observed %d distinct share metric "
+            "names\n",
+            msgs_seen, rd_list_cnt(seen));
+
+        rd_kafka_consumer_close(rk);
+        rd_kafka_destroy(rk);
+
+        return seen;
+}
+
+/**
+ * @brief Compare the seen-names list against EXPECTED_METRICS and
+ *        TEST_ASSERT that every expected name appears.
+ */
+static void verify_metrics(rd_list_t *seen) {
+        int missing      = 0;
+        int expected_cnt = 0;
+        size_t i;
+
+        TEST_SAY("Verifying expected share-consumer metric names:\n");
+        for (i = 0; i < RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT; i++) {
+                const char *name =
+                    RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO[i].name;
+                int found =
+                    rd_list_find(seen, name,
+                                 (int (*)(const void *, const void *))strcmp)
+                        ? 1
+                        : 0;
+                expected_cnt++;
+                TEST_SAY("  %s  %s\n", found ? "[OK]" : "[MISSING]", name);
+                if (!found)
+                        missing++;
+        }
+
+        TEST_ASSERT(missing == 0,
+                    "%d of %d expected share-consumer metric name(s) "
+                    "were not observed in topic '%s'",
+                    missing, expected_cnt, telemetry_topic());
+
+        TEST_SAY("PASS: all %d expected share-consumer metric names observed\n",
+                 expected_cnt);
+}
+
+
+/**
+ * @brief Return 1 if the given topic exists on the broker, 0 otherwise.
+ *
+ * Used to decide whether the surrounding telemetry pipeline is set up.
+ * If the OTel Collector is not running and producing into the topic,
+ * the topic itself won't exist and the test is skipped. CI pipelines
+ * that intend to exercise the full path are expected to verify infra
+ * health themselves before invoking this test.
+ */
+static int telemetry_infra_available(const char *topic) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        const struct rd_kafka_metadata *md;
+        rd_kafka_resp_err_t err;
+        int found = 0;
+        int i;
+
+        test_conf_init(&conf, NULL, 30);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* List ALL topics — does NOT trigger broker-side auto-create the
+         * way a per-topic metadata query would on clusters that have
+         * auto.create.topics.enable=true (e.g. trivup). */
+        err = rd_kafka_metadata(rk, 1, NULL, &md, 10 * 1000);
+        if (err == RD_KAFKA_RESP_ERR_NO_ERROR) {
+                for (i = 0; i < md->topic_cnt; i++) {
+                        if (strcmp(md->topics[i].topic, topic) == 0 &&
+                            md->topics[i].err == RD_KAFKA_RESP_ERR_NO_ERROR &&
+                            md->topics[i].partition_cnt > 0) {
+                                found = 1;
+                                break;
+                        }
+                }
+                rd_kafka_metadata_destroy(md);
+        }
+
+        rd_kafka_destroy(rk);
+        return found;
+}
+
+/**
+ * @brief Sub-test: basic produce → share-consume → verify metrics flow.
+ *
+ * Produces a batch of messages to a fresh topic, drives a share consumer
+ * over them so the telemetry sampling sites fire, then consumes from the
+ * telemetry topic and asserts every expected share-consumer metric name
+ * appears at least once.
+ */
+static void do_test_produce_share_consume_verify_metrics(void) {
+        const char *data_topic = test_mk_topic_name("0190-data", 1);
+        const char *group_id   = test_mk_topic_name("0190-share-grp", 0);
+        rd_list_t *seen;
+
+        SUB_TEST();
+
+        produce_and_share_consume(data_topic, group_id);
+
+        seen = consume_telemetry_topic(telemetry_topic(), 30);
+        verify_metrics(seen);
+        rd_list_destroy(seen);
+
+        SUB_TEST_PASS();
+}
+
+
+int main_0190_share_consumer_telemetry(int argc, char **argv) {
+        test_timeout_set(180);
+
+        if (!telemetry_infra_available(telemetry_topic())) {
+                TEST_SKIP(
+                    "telemetry topic '%s' not found — "
+                    "OTel/plugin pipeline not configured for this run\n",
+                    telemetry_topic());
+                return 0;
+        }
+
+        do_test_produce_share_consume_verify_metrics();
+
+        return 0;
+}

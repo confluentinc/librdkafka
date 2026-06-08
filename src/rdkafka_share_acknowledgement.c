@@ -115,20 +115,18 @@ static void *rd_kafka_share_ack_batch_entry_copy_void(const void *elem,
 }
 
 rd_kafka_share_ack_batches_t *rd_kafka_share_ack_batches_new_empty(void) {
-        return rd_kafka_share_ack_batches_new(NULL, 0, 0, 0);
+        return rd_kafka_share_ack_batches_new(NULL, 0, 0);
 }
 
 rd_kafka_share_ack_batches_t *
 rd_kafka_share_ack_batches_new(rd_kafka_topic_partition_t *rktpar,
                                int32_t response_leader_id,
-                               int32_t response_leader_epoch,
                                int64_t response_acquired_offsets_count) {
         rd_kafka_share_ack_batches_t *batches;
 
-        batches                        = rd_calloc(1, sizeof(*batches));
-        batches->rktpar                = rktpar;
-        batches->response_leader_id    = response_leader_id;
-        batches->response_leader_epoch = response_leader_epoch;
+        batches                     = rd_calloc(1, sizeof(*batches));
+        batches->rktpar             = rktpar;
+        batches->response_leader_id = response_leader_id;
         batches->response_acquired_offsets_count =
             response_acquired_offsets_count;
         rd_list_init(&batches->entries, 0,
@@ -153,8 +151,7 @@ rd_kafka_share_ack_batches_copy(const rd_kafka_share_ack_batches_t *src) {
 
         dst = rd_kafka_share_ack_batches_new(
             src->rktpar ? rd_kafka_topic_partition_copy(src->rktpar) : NULL,
-            src->response_leader_id, src->response_leader_epoch,
-            src->response_acquired_offsets_count);
+            src->response_leader_id, src->response_acquired_offsets_count);
 
         /* Deep copy all entries and preserve flags (e.g., RD_LIST_F_SORTED) */
         rd_list_copy_to(&dst->entries, &src->entries,
@@ -753,15 +750,14 @@ rd_list_t *rd_kafka_share_build_ack_details(rd_kafka_share_t *rkshare) {
                                         /* Non-ACQUIRED: add to ack_details
                                          */
                                         if (!ack_batch) {
-                                                ack_batch = rd_kafka_share_ack_batches_new(
-                                                    rd_kafka_topic_partition_copy(
+                                                ack_batch =
+                                                    rd_kafka_share_ack_batches_new(
+                                                        rd_kafka_topic_partition_copy(
+                                                            inflight_batches
+                                                                ->rktpar),
                                                         inflight_batches
-                                                            ->rktpar),
-                                                    inflight_batches
-                                                        ->response_leader_id,
-                                                    inflight_batches
-                                                        ->response_leader_epoch,
-                                                    0);
+                                                            ->response_leader_id,
+                                                        0);
                                                 /* Sentinel: no reply path
                                                  * has touched this batch
                                                  * yet. Distinct from

@@ -1495,14 +1495,11 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
         parpriv->topic_id             = topic_id;
         batches_out->rktpar->_private = parpriv;
 
-        /* Record the broker and leader epoch at the time records were
-         * acquired. The wire CurrentLeader hint is only set when the
-         * broker signals a leader change, so we use the responding
-         * broker and the partition's cached epoch instead.
-         * TODO KIP-932: remove response_leader_epoch field if the
-         * segregation check stays leader-id-only. */
+        /* Record the broker from which records were acquired so the
+         * acknowledgement is sent back to the same broker. The wire
+         * CurrentLeader hint is only set when the broker signals a
+         * leader change, so we use the responding broker. */
         batches_out->response_leader_id              = rkb->rkb_nodeid;
-        batches_out->response_leader_epoch           = rktp->rktp_leader_epoch;
         batches_out->response_acquired_offsets_count = 0;
         /* Pre-allocate capacity without re-initializing the list.
          * batches_out->entries was already initialized by

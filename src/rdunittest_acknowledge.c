@@ -127,8 +127,7 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
         parpriv         = rd_kafka_topic_partition_private_new();
         batches->rktpar->_private = parpriv;
 
-        batches->response_leader_id    = 1;
-        batches->response_leader_epoch = 1;
+        batches->response_leader_id = 1;
 
         int64_t size = end_offset - start_offset + 1;
         batches->response_acquired_offsets_count = (int32_t)size;
@@ -597,7 +596,6 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         batches->rktpar->_private = parpriv;
 
         batches->response_leader_id              = 1;
-        batches->response_leader_epoch           = 1;
         batches->response_acquired_offsets_count = 40;
 
         rd_list_init(&batches->entries, 4, NULL);
@@ -866,11 +864,10 @@ static int ut_case_bsearch_empty_entries(rd_kafka_share_t *rkshare,
         rd_kafka_topic_partition_private_t *parpriv;
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
 
-        batches->rktpar                = rd_kafka_topic_partition_new(topic, 0);
-        parpriv                        = rd_kafka_topic_partition_private_new();
-        batches->rktpar->_private      = parpriv;
-        batches->response_leader_id    = 1;
-        batches->response_leader_epoch = 1;
+        batches->rktpar             = rd_kafka_topic_partition_new(topic, 0);
+        parpriv                     = rd_kafka_topic_partition_private_new();
+        batches->rktpar->_private   = parpriv;
+        batches->response_leader_id = 1;
         batches->response_acquired_offsets_count = 0;
 
         rd_list_init(&batches->entries, 0, NULL);

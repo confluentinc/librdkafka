@@ -1211,10 +1211,10 @@ static void do_test_recreate_survives_concurrent_producer(void) {
                 for (i = 0; i < rcvd; i++) {
                         rd_kafka_message_t *m = batch[i];
                         if (!m->err && m->payload && m->len >= 6 &&
-                            !strncmp((const char *)m->payload, "after:", 6)) {
+                            !strncmp((const char *)m->payload, "after:", 6))
                                 after_cnt++;
+                        if (!m->err)
                                 rd_kafka_share_acknowledge(rkshare, m);
-                        }
                         rd_kafka_message_destroy(m);
                 }
         }

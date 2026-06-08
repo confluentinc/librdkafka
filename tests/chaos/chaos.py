@@ -1895,7 +1895,12 @@ def bookkeeping_report(producers, consumers, topics,
                  f'   <-- effective data loss (consumer-side)')
     lines.append(f'orphan acks (ack w/o cons.): {orphan_acks}')
     if delivered is not None:
-        missing = delivered - total_consumed_distinct
+        # Use total consume events (not distinct keys) so the count
+        # is correct under --topic-chaos: OLD and NEW topic-id
+        # generations both restart from offset 0, so distinct keys
+        # under-counts. Each consume event represents one delivery
+        # from broker to consumer.
+        missing = delivered - total_consumed_events
         lines.append(f'never-consumed             : {missing}'
                      f'   <-- delivered by broker but no consume '
                      f'event seen')
@@ -2045,6 +2050,15 @@ def bookkeeping_report(producers, consumers, topics,
         # callback ever. ack_with_err is ambiguous (broker may have
         # processed or will redeliver) and does NOT fail the run.
         consumer_loss_ok = (total_never_acked == 0)
+        # Compare producer.delivered against TOTAL consume events
+        # (not distinct keys). With --topic-chaos recreate, the
+        # OLD and NEW topic generations both restart from offset 0
+        # so their (t,p,o) keys collide and total_consumed_distinct
+        # under-counts. total_consumed_events is the right measure
+        # — each consume event represents one record delivered from
+        # broker to consumer, regardless of generation. Redeliveries
+        # (dc[2+]) only inflate events, never decrease them, so the
+        # >= check stays correct without chaos too.
         # Topic-chaos expected loss is subtracted from the raw
         # delivered-vs-consumed diff so chaos noise doesn't trip
         # FAIL on its own.
@@ -2052,7 +2066,7 @@ def bookkeeping_report(producers, consumers, topics,
             delivery_ok = None
             effective_missing = 0
         else:
-            raw_missing = delivered - total_consumed_distinct
+            raw_missing = delivered - total_consumed_events
             effective_missing = raw_missing - chaos_expected_loss
             delivery_ok = (effective_missing <= 0)
 
@@ -2081,7 +2095,8 @@ def bookkeeping_report(producers, consumers, topics,
             tail = (sorted(dc_distribution.items())[-1]
                     if dc_distribution else 'n/a')
             lines.append(f'VERDICT: OK — produced={delivered} '
-                         f'consumed={total_consumed_distinct} '
+                         f'consume_events={total_consumed_events} '
+                         f'(distinct={total_consumed_distinct}) '
                          f'acked={total_acked} '
                          f'(dc tail: {tail}){ack_with_err_note}'
                          f'{chaos_note}')
@@ -2089,7 +2104,7 @@ def bookkeeping_report(producers, consumers, topics,
             lines.append(f'VERDICT: FAIL — {effective_missing} '
                          f'record(s) lost beyond the expected '
                          f'chaos window (produced={delivered} '
-                         f'consumed={total_consumed_distinct} '
+                         f'consume_events={total_consumed_events} '
                          f'chaos_expected_loss={chaos_expected_loss}'
                          f')')
         elif consumer_loss_ok and delivery_ok is None:

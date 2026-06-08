@@ -108,29 +108,27 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
 
         /**
-         * TODO KIP-932: Check the type again to optimize the performance
-         *               of adding or removing a partition. Maybe use a map
-         *               or linked list instead of rd_list_t in some of the
-         *               cases.
+         * TODO KIP-932: Consider using a map instead of rd_list_t for
+         *               some of the partition lists to optimize
+         *               add/remove performance.
          */
         struct {
-                TAILQ_HEAD(, rd_kafka_toppar_s)
-                toppars_in_session; /* List of toppars
-                            in the current
-                            fetch session.
-                            Any new added toppar in rkb_toppars will be added
-                            here after successful share fetch request. Any
-                            removed toppar from rkb_toppars will be removed from
-                            here after successful share fetch request.*/
-                int toppars_in_session_cnt;
+                rd_list_t *toppars_in_session; /* List of toppars in the current
+                                                * fetch session. Any new added
+                                                * toppar in rkb_toppars will be
+                                                * added here after successful
+                                                * share fetch request. Any
+                                                * removed toppar from
+                                                * rkb_toppars will be removed
+                                                * from here after successful
+                                                * share fetch request. */
                 rd_list_t
-                    *toppars_to_add; /* TODO KIP-932: Move this from `rd_list_t`
-                                      * to `TAILQ_HEAD(, rd_kafka_toppar_s)` for
-                                      * performance improvements. List of
-                                      * toppars that are to be added to the
-                                      * fetch session. `adding_toppars` are
-                                      * removed from this when fetch request is
-                                      * successful */
+                    *toppars_to_add; /* TODO KIP-932: Consider using a map
+                                      * for performance improvements. List
+                                      * of toppars that are to be added to
+                                      * the fetch session. `adding_toppars`
+                                      * are removed from this when fetch
+                                      * request is successful. */
 
                 rd_list_t
                     *adding_toppars; /* List of toppars that are being added to
@@ -142,14 +140,12 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                       */
 
                 rd_list_t
-                    *toppars_to_forget; /* TODO KIP-932: Move this from
-                                         * `rd_list_t` to `TAILQ_HEAD(,
-                                         * rd_kafka_toppar_s)` for performance
-                                         * improvements. List of toppars that
-                                         * are removed from the session.
-                                         * `forgetting_toppars` are removed from
-                                         * this when fetch request is successful
-                                         */
+                    *toppars_to_forget; /* TODO KIP-932: Consider using a map
+                                         * for performance improvements. List
+                                         * of toppars that are removed from
+                                         * the session. `forgetting_toppars`
+                                         * are removed from this when fetch
+                                         * request is successful. */
 
                 rd_list_t *forgetting_toppars; /* List of toppars that are being
                                                 * removed from the session.
@@ -308,6 +304,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         rd_avg_t rkb_avg_outbuf_latency; /**< Rolled over outbuf
                                                           *   latency avg */
                         rd_avg_t rkb_avg_fetch_latency;  /**< Rolled over fetch
+                                                          *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_latency; /**< Rolled over
+                                                          *   share fetch
                                                           *   latency avg */
                         rd_avg_t
                             rkb_avg_share_fetch_latency; /**< Rolled over

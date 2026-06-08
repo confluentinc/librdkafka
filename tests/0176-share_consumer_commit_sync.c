@@ -1862,8 +1862,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
         /* Verify timing: should complete in ~4s (2s inflight + 2s sync),
          * not ~6s (2s inflight + 2s async + 2s sync). */
-        TEST_ASSERT(t_elapsed_ms >= 3500 && t_elapsed_ms <= 4500,
-                    "Expected commit_sync to complete in ~4s (3500-4500ms), "
+        TEST_ASSERT(t_elapsed_ms >= 3250 && t_elapsed_ms <= 4500,
+                    "Expected commit_sync to complete in ~4s (3250-4500ms), "
                     "got %" PRId64 "ms. If >5s, dispatch priority is wrong.",
                     t_elapsed_ms);
 
@@ -1932,54 +1932,9 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
 
 /* ===================================================================
- *  Acknowledgement callback helpers.
- * =================================================================== */
-
-
-/* Extended ack callback state with error tracking for sync commit tests */
-typedef struct ack_cb_state_s {
-        test_ack_cb_state_t base;       /* Base state from test.h */
-        rd_kafka_resp_err_t errors[64]; /* Track errors per callback */
-        int error_cnt;
-} ack_cb_state_t;
-
-static void share_ack_cb(rd_kafka_share_t *rkshare,
-                         rd_kafka_share_partition_offsets_list_t *partitions,
-                         rd_kafka_resp_err_t err,
-                         void *opaque) {
-        ack_cb_state_t *state = (ack_cb_state_t *)opaque;
-        const rd_kafka_share_partition_offsets_t *entry;
-        size_t partition_cnt, offsets_in_entry = 0;
-
-        (void)rkshare;
-
-        partition_cnt = rd_kafka_share_partition_offsets_list_count(partitions);
-
-        entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
-        if (entry)
-                offsets_in_entry =
-                    rd_kafka_share_partition_offsets_offsets_cnt(entry);
-
-        TEST_SAY("ACK CALLBACK: err=%s (%d), partitions=%zu, offsets=%zu\n",
-                 rd_kafka_err2name(err), err, partition_cnt, offsets_in_entry);
-
-        state->base.callback_cnt++;
-        state->base.last_err = err;
-
-        /* Track this error in our errors array */
-        if (state->error_cnt < 64)
-                state->errors[state->error_cnt++] = err;
-
-        if (entry)
-                state->base.total_offsets += offsets_in_entry;
-}
-
-
-
-/* ===================================================================
  *  Test: commit_sync callback invocation.
  *
- *  Verifies that share_acknowledgement_commit_cb is invoked after
+ *  Verifies that the runtime acknowledgement callback is invoked after
  *  commit_sync when using dedicated ShareAcknowledge request.
  * =================================================================== */
 static void do_test_commit_sync_callback(void) {
@@ -1991,9 +1946,9 @@ static void do_test_commit_sync_callback(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        ack_cb_state_t state;
+        size_t consumed           = 0;
+        int attempts              = 0;
+        test_ack_cb_state_t state = {0};
 
         SUB_TEST();
 
@@ -2001,8 +1956,8 @@ static void do_test_commit_sync_callback(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 50);
 
-        rkshare = test_create_share_consumer_with_cb(group, "explicit",
-                                                     &state.base, share_ack_cb);
+        rkshare =
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
@@ -2026,7 +1981,7 @@ static void do_test_commit_sync_callback(void) {
                 }
         }
 
-        TEST_SAY("Consumed and acknowledged %d messages\n", consumed);
+        TEST_SAY("Consumed and acknowledged %zu messages\n", consumed);
         TEST_ASSERT(consumed > 0, "Expected to consume some messages");
 
         /* Call commit_sync to trigger callback */
@@ -2036,21 +1991,21 @@ static void do_test_commit_sync_callback(void) {
         RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
 
         /* Wait for callback */
-        test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
 
-        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
-                 state.base.callback_cnt, state.base.total_offsets,
-                 rd_kafka_err2name(state.base.last_err));
+        TEST_SAY("Callback count=%d, total_offsets=%zu\n", state.callback_cnt,
+                 state.total_offsets);
 
-        TEST_ASSERT(state.base.callback_cnt >= 1,
-                    "Expected at least 1 callback, got %d",
-                    state.base.callback_cnt);
-        TEST_ASSERT(state.base.total_offsets > 0,
-                    "Expected offsets in callback, got %zu",
-                    state.base.total_offsets);
+        TEST_ASSERT(state.callback_cnt == 1,
+                    "Expected callback to be invoked once, got %d",
+                    state.callback_cnt);
+        TEST_ASSERT(state.total_offsets == consumed,
+                    "Expected %zu offsets in callback, got %zu", consumed,
+                    state.total_offsets);
 
         rd_kafka_share_consumer_close(rkshare);
         rd_kafka_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }

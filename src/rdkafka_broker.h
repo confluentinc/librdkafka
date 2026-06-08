@@ -310,10 +310,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                           *   share fetch
                                                           *   latency avg */
                         rd_avg_t
-                            rkb_avg_share_fetch_latency; /**< Rolled over
-                                                          *   share fetch
-                                                          *   latency avg */
-                        rd_avg_t
                             rkb_avg_share_fetch_size; /**< Rolled over
                                                        *   share fetch response
                                                        *   size avg (bytes) */

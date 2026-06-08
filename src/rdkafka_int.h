@@ -280,6 +280,12 @@ static RD_UNUSED const char *rd_kafka_type2str(rd_kafka_type_t type) {
 }
 
 /**
+ * Number of certificate file slots tracked for SSL hot-reload change
+ * detection. Must match rd_kafka_ssl_cert_file_t in rdkafka_ssl.c.
+ */
+#define RD_KAFKA_SSL_CERT_FILE_CNT 5
+
+/**
  * Kafka handle, internal representation of the application's rd_kafka_t.
  */
 
@@ -622,6 +628,28 @@ struct rd_kafka_s {
          *  Will add bootstrap brokers again
          *  when it's fired. */
         rd_kafka_timer_t rebootstrap_tmr;
+
+        /** SSL certificate hot-reload state. */
+        struct {
+                /** Protects access to rk_conf.ssl.ctx so that the context
+                 *  can be atomically swapped during a reload while broker
+                 *  threads create per-connection SSL objects from it.
+                 *  Always initialized (also for non-SSL clients). */
+                mtx_t lock;
+                /** Periodic cert-file change poll timer
+                 *  (rdkafka main thread). Only started when
+                 *  ssl.certificate.refresh.interval.ms > 0 and the
+                 *  configured certificates are file-based. */
+                rd_kafka_timer_t refresh_tmr;
+                /** Last observed state of each watched certificate file,
+                 *  used to detect changes between polls. Indexed by
+                 *  rd_kafka_ssl_cert_file_t (rdkafka_ssl.c). */
+                struct {
+                        rd_ts_t mtime;    /**< Modification time (us). */
+                        int64_t size;     /**< File size in bytes. */
+                        rd_bool_t exists; /**< Whether the file existed. */
+                } files[RD_KAFKA_SSL_CERT_FILE_CNT];
+        } rk_ssl;
 
         thrd_t rk_thread;
 

@@ -1,3 +1,14 @@
+# librdkafka v2.15.0
+
+librdkafka v2.15.0 is a feature release:
+
+* Add SSL certificate hot reload: renewed `ssl.*.location` certificate files
+  can be picked up without recreating the client, either automatically via the
+  new `ssl.certificate.refresh.interval.ms` property or on demand with the new
+  `rd_kafka_ssl_ctx_reload()` API (#5483).
+
+
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:

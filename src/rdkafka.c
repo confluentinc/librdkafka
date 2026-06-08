@@ -1080,6 +1080,7 @@ void rd_kafka_destroy_final(rd_kafka_t *rk) {
         rd_list_destroy(&rk->rk_broker_by_id);
 
         mtx_destroy(&rk->rk_conf.sasl.lock);
+        mtx_destroy(&rk->rk_ssl.lock);
         rwlock_destroy(&rk->rk_lock);
 
         rd_free(rk);
@@ -2235,6 +2236,23 @@ static int rd_kafka_init_wait(rd_kafka_t *rk, int timeout_ms) {
 }
 
 
+rd_kafka_error_t *rd_kafka_ssl_ctx_reload(rd_kafka_t *rk) {
+#if WITH_SSL
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+
+        err = rd_kafka_ssl_ctx_reload0(rk, errstr, sizeof(errstr));
+        if (err)
+                return rd_kafka_error_new(err, "%s", errstr);
+
+        return NULL;
+#else
+        return rd_kafka_error_new(RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,
+                                  "librdkafka was built without SSL support");
+#endif
+}
+
+
 /**
  * Main loop for Kafka handler thread.
  */
@@ -2267,6 +2285,32 @@ static int rd_kafka_thread_main(void *arg) {
                                      rk->rk_conf.metadata_refresh_interval_ms *
                                          1000ll,
                                      rd_kafka_metadata_refresh_cb, NULL);
+
+#if WITH_SSL
+        /* Periodic reload of renewed SSL certificate files. */
+        if ((rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SSL ||
+             rk->rk_conf.security_protocol == RD_KAFKA_PROTO_SASL_SSL) &&
+            rk->rk_conf.ssl.cert_refresh_interval_ms > 0) {
+                if (rd_kafka_ssl_cert_files_are_reloadable(rk)) {
+                        rd_kafka_ssl_cert_refresh_baseline(rk);
+                        rd_kafka_timer_start(
+                            &rk->rk_timers, &rk->rk_ssl.refresh_tmr,
+                            (rd_ts_t)rk->rk_conf.ssl.cert_refresh_interval_ms *
+                                1000ll,
+                            rd_kafka_ssl_cert_refresh_tmr_cb, NULL);
+                        rd_kafka_dbg(rk, SECURITY, "SSLRELOAD",
+                                     "Automatic SSL certificate refresh "
+                                     "enabled, polling every %dms",
+                                     rk->rk_conf.ssl.cert_refresh_interval_ms);
+                } else {
+                        rd_kafka_log(rk, LOG_WARNING, "SSLRELOAD",
+                                     "ssl.certificate.refresh.interval.ms is "
+                                     "set but automatic certificate refresh "
+                                     "requires file-based certificates "
+                                     "(ssl.*.location); not enabling refresh");
+                }
+        }
+#endif
 
         if (rk->rk_cgrp)
                 rd_kafka_q_fwd_set(rk->rk_cgrp->rkcg_ops, rk->rk_ops);
@@ -2402,6 +2446,9 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rwlock_init(&rk->rk_lock);
         mtx_init(&rk->rk_conf.sasl.lock, mtx_plain);
         mtx_init(&rk->rk_internal_rkb_lock, mtx_plain);
+        /* Protects swapping of rk_conf.ssl.ctx during certificate reload.
+         * Always initialized, also for non-SSL clients. */
+        mtx_init(&rk->rk_ssl.lock, mtx_plain);
 
         cnd_init(&rk->rk_broker_state_change_cnd);
         mtx_init(&rk->rk_broker_state_change_lock, mtx_plain);

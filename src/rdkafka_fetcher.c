@@ -932,7 +932,7 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                                     delivery_count;
                         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                                 rkm = &rko->rko_u.err.rkm;
-                                /* Set ack_type to REJECT only if not already
+                                /* Set ack_type to RELEASE only if not already
                                  * set by rd_kafka_share_msgset_err_ops()
                                  * (which sets REJECT for CRC/unsupported
                                  * errors, RELEASE for decompression errors). */
@@ -1754,8 +1754,9 @@ done:
 
         if (rkt)
                 rd_kafka_topic_destroy0(rkt);
-        rd_rkb_dbg(rkb, MSG, "BADMSG", "Bad message (ShareFetch v%d): ",
-                   (int)request->rkbuf_reqhdr.ApiVersion);
+        rd_rkb_dbg(rkb, MSG, "BADMSG", "Bad message (ShareFetch v%d): %s",
+                   (int)request->rkbuf_reqhdr.ApiVersion,
+                   rd_kafka_err2str(err));
         return err;
 }
 

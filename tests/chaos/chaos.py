@@ -704,6 +704,48 @@ def set_share_group_offset_reset(cluster, group, strategy='earliest'):
               flush=True)
 
 
+def add_consumer(consumers, spawn_fn):
+    """Spawn a new share-consumer with the next available consumer-N
+    log dir; append to `consumers`. Returns the new instance."""
+    new_idx = max((c.idx for c in consumers), default=-1) + 1
+    new_c = spawn_fn(new_idx)
+    consumers.append(new_c)
+    return new_c
+
+
+def remove_consumer(consumers, rng=None, idx=None):
+    """Stop one running share-consumer. With `idx` set, targets that
+    specific consumer; otherwise picks uniformly at random across
+    currently-running consumers. Floors at 1 to keep at least one
+    consumer alive (returns None instead of dropping to zero).
+
+    The stopped consumer stays in `consumers` so its bookkeeping
+    (per-record events, stats) is still aggregated into the final
+    verify.txt / summary.txt reports.
+    """
+    active = [c for c in consumers
+              if c.proc is not None and c.proc.poll() is None]
+    if not active:
+        print('[orch] remove-consumer: no running consumers',
+              flush=True)
+        return None
+    if len(active) <= 1:
+        print('[orch] remove-consumer: only one consumer running; '
+              'refusing to drop to zero', flush=True)
+        return None
+    if idx is not None:
+        target = next((c for c in active if c.idx == idx), None)
+        if target is None:
+            print(f'[orch] remove-consumer: consumer-{idx} not '
+                  f'running', flush=True)
+            return None
+    else:
+        target = (rng or random).choice(active)
+    print(f'[orch] removing consumer-{target.idx}', flush=True)
+    target.stop()
+    return target
+
+
 _MANUAL_HELP = """\
 manual> commands:
   stop <i>           graceful stop (SIGTERM, wait for exit) of broker i
@@ -715,6 +757,12 @@ manual> commands:
   reassign <t> <p>   replace partition's current leader with a non-
                      replica broker (data moves). Falls back to reorder
                      when the cluster is saturated.
+  add-consumer       spawn a new share-consumer subprocess
+                     (consumer-K where K is the next free index)
+  remove-consumer [k]
+                     stop one running share-consumer. With k, targets
+                     consumer-k; without k, picks uniformly at random.
+                     Floors at 1 so at least one stays alive.
   show               full replica + ISR view (kafka-topics.sh --describe)
   leaders            shorthand: just current leader per partition
   status             broker up/down state for all brokers
@@ -724,13 +772,20 @@ manual> commands:
 """
 
 
-def manual_roll(cluster, topics, leader_log_path=None):
+def manual_roll(cluster, topics, leader_log_path=None,
+                consumers=None, spawn_consumer_fn=None, rng=None):
     """Interactive REPL: user controls per-broker stop/start.
 
     The cluster, producer, and consumers are already running. Returns
     when the user issues 'done' / 'quit' / EOF. Logs every command +
     its leader-state diff to leader_log_path (if provided), mirroring
     what `roll()` does in auto mode.
+
+    `consumers` + `spawn_consumer_fn` + `rng` enable the
+    `add-consumer` / `remove-consumer` REPL commands. If any of them
+    is None, those commands print a notice and do nothing — used by
+    the bring-your-own-workload manual mode where the orchestrator
+    doesn't own a consumer pool.
     """
     leader_log = open(leader_log_path, 'w') if leader_log_path else None
     if leader_log:
@@ -805,6 +860,35 @@ def manual_roll(cluster, topics, leader_log_path=None):
                   f'{_format_leader_diff(diffs)}')
             _log(f'         {cmd} {t}[{p}]: '
                  f'{_format_leader_diff(diffs)}')
+            continue
+
+        if cmd in ('add-consumer', 'remove-consumer'):
+            if consumers is None or spawn_consumer_fn is None:
+                print(f'[manual] {cmd} not available in '
+                      f'bring-your-own-workload manual mode '
+                      f'(no orchestrator-owned consumer pool).')
+                continue
+            ts = time.strftime('%H:%M:%S')
+            if cmd == 'add-consumer':
+                new_c = add_consumer(consumers, spawn_consumer_fn)
+                print(f'[manual {ts}] added consumer-{new_c.idx}',
+                      flush=True)
+                _log(f'[{ts}] add-consumer -> consumer-{new_c.idx}')
+            else:
+                target_idx = None
+                if len(parts) >= 2:
+                    try:
+                        target_idx = int(parts[1])
+                    except ValueError:
+                        print('usage: remove-consumer [k]')
+                        continue
+                removed = remove_consumer(consumers, rng=rng,
+                                          idx=target_idx)
+                if removed is not None:
+                    print(f'[manual {ts}] removed '
+                          f'consumer-{removed.idx}', flush=True)
+                    _log(f'[{ts}] remove-consumer -> '
+                         f'consumer-{removed.idx}')
             continue
 
         if cmd == 'sleep':
@@ -2135,11 +2219,11 @@ def main():
     cluster.deploy()
     cluster.start(timeout=30)
 
-    # producer list is built once we know the topic list; allocate
-    # consumers up front.
+    # producer list is built once we know the topic list; the
+    # consumer list is built dynamically by spawn_consumer (defined
+    # once we know bootstrap + topics + env).
     producers = []
-    consumers = [ShareConsumer(i, args.log_dir, per_consumer_budget)
-                 for i in range(args.consumers)]
+    consumers = []
     drain_end_ts = None
     partition_hwms = {}
     watcher_stop = None
@@ -2204,8 +2288,8 @@ def main():
         for kv in args.consumer_conf:
             extra_conf_args += ['-X', kv]
 
+        verify_bin = None
         if args.consume_mode == 'share-consumer-verify':
-            # share_consume_verify lives next to this script.
             verify_bin = os.path.join(_HERE, 'share_consume_verify')
             if not os.access(verify_bin, os.X_OK):
                 print(f'[orch] FATAL: {verify_bin} not executable. '
@@ -2213,17 +2297,21 @@ def main():
                       f'(or `make -C tests/chaos`).',
                       file=sys.stderr)
                 sys.exit(2)
-            for c in consumers:
+
+        def spawn_consumer(idx):
+            """Construct + start a ShareConsumer for the configured
+            consume_mode. Called for the baseline pool and by the
+            add-consumer REPL command / --rebalance triggers."""
+            c = ShareConsumer(idx, args.log_dir, per_consumer_budget)
+            if args.consume_mode == 'share-consumer-verify':
                 cons_cmd = [verify_bin]
                 if args.consumer_debug:
                     cons_cmd += ['-d', args.consumer_debug]
                 cons_cmd += extra_conf_args
                 cons_cmd += [bootstrap, args.group, *topics]
-                c.start(cons_cmd, env)
-        else:
-            mode_flag = ('-S' if args.consume_mode == 'rdkafka-perf-share'
-                         else '-G')
-            for c in consumers:
+            else:
+                mode_flag = ('-S' if args.consume_mode ==
+                             'rdkafka-perf-share' else '-G')
                 cons_cmd = [
                     perf, mode_flag, args.group, '-b', bootstrap,
                     *topic_args,
@@ -2233,11 +2321,15 @@ def main():
                 cons_cmd += extra_conf_args
                 cons_cmd += [
                     '-T', '5000',
-                    # Route stats JSON to a per-consumer file instead of
-                    # mixing it with -T's textual stats on stdout.
+                    # Route stats JSON to a per-consumer file instead
+                    # of mixing it with -T's textual stats on stdout.
                     '-Y', f'cat >> {c.stats_path}',
                 ]
-                c.start(cons_cmd, env)
+            c.start(cons_cmd, env)
+            return c
+
+        for i in range(args.consumers):
+            consumers.append(spawn_consumer(i))
         print(f'[orch] consumer warmup {args.warmup_s}s', flush=True)
         time.sleep(args.warmup_s)
 

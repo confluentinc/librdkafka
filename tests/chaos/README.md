@@ -233,6 +233,12 @@ manual> commands:
   reassign <t> <p>   replace partition's current leader with a non-
                      replica broker (data moves). Falls back to reorder
                      when the cluster is saturated.
+  add-consumer       spawn a new share-consumer subprocess
+                     (consumer-K where K is the next free index)
+  remove-consumer [k]
+                     stop one running share-consumer. With k, targets
+                     consumer-k; without k, picks uniformly at random.
+                     Floors at 1 so at least one stays alive.
   show               full replica + ISR view (kafka-topics.sh --describe)
   leaders            shorthand: just current leader per partition
   status             broker up/down state for all brokers
@@ -256,6 +262,13 @@ automatically:
   replicas (= `d`). New replicas `[d, b, c]`. If saturated (no
   broker outside current replicas), falls back to reorder and
   prints a notice.
+
+`add-consumer` / `remove-consumer` are no-ops in the default manual
+mode (which doesn't own an orchestrator-managed consumer pool —
+users bring their own workload). They are wired up for use by
+auto-mode rebalance triggers (e.g. a future `--rebalance-mid-roll`
+that pairs a consumer add/remove with the broker roll to exercise
+partition reassignment under chaos).
 
 ## Leader-change modes
 

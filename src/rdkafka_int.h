@@ -811,6 +811,10 @@ struct rd_kafka_s {
                                            *   started */
                         /** Total rebalance latency (ms) up to previous push */
                         uint64_t rebalance_latency_total;
+                        /** Total share fetch requests up to previous push */
+                        int64_t share_fetch_total;
+                        /** Total acknowledgements sent up to previous push */
+                        int64_t acknowledgements_send_total;
                 } rk_historic_c;
 
                 struct {
@@ -850,6 +854,11 @@ struct rd_kafka_s {
                         rd_ts_t time_since_last_poll;
                 } rk_share_poll;
 
+                /* Share consumer fetch-RPC counter */
+                rd_atomic64_t share_fetch_total;
+
+                /* Share consumer record-level acknowledgements sent counter */
+                rd_atomic64_t acknowledgements_send_total;
         } rk_telemetry;
 
         /* Test mocks */

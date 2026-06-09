@@ -309,6 +309,8 @@ _TEST_DECL(0180_share_consumer_config_local);
 _TEST_DECL(0181_share_consumer_topic_delete);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
 _TEST_DECL(0183_share_consumer_leader_change_mock);
+_TEST_DECL(0184_share_consumer_topic_recreate);
+_TEST_DECL(0184_share_consumer_topic_recreate_local);
 _TEST_DECL(0185_share_consumer_max_poll_interval);
 _TEST_DECL(0190_share_consumer_telemetry);
 
@@ -583,29 +585,31 @@ struct test tests[] = {
     _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
     _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),
     _TEST(0158_share_consumer_transactions_mock, TEST_F_LOCAL),
-    _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(0, 4, 2, 0)),
-    _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(0, 4, 2, 0)),
-    _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0173_share_consumer_commit_async_local, TEST_F_LOCAL),
-    _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(0, 4, 2, 0)),
-    _TEST(0174_share_consumer_concurrency, 0, TEST_BRKVER(0, 4, 2, 0)),
-    _TEST(0175_share_consumer_groups, 0, TEST_BRKVER(0, 4, 2, 0)),
-    _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0174_share_consumer_concurrency, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0175_share_consumer_groups, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0176_share_consumer_commit_sync_local, TEST_F_LOCAL),
-    _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(0, 4, 2, 0)),
-    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
-    _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
-    _TEST(0180_share_consumer_config, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0180_share_consumer_config, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0180_share_consumer_config_local, TEST_F_LOCAL),
-    _TEST(0181_share_consumer_topic_delete, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0181_share_consumer_topic_delete, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
     _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
-    _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(0, 4, 2, 0)),
+    _TEST(0184_share_consumer_topic_recreate, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0184_share_consumer_topic_recreate_local, TEST_F_LOCAL),
+    _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0190_share_consumer_telemetry,
           TEST_F_MANUAL,
-          TEST_BRKVER(0, 4, 2, 0)),
+          TEST_BRKVER(4, 2, 0, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

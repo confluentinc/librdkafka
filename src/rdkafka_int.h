@@ -820,6 +820,12 @@ struct rd_kafka_s {
                         rd_avg_t
                             rk_avg_rebalance_latency; /**< Current rebalance
                                                        *   latency avg */
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t
+                            rk_avg_share_time_between_poll; /**< Current time
+                                                               between two
+                                                               share_consume_batch
+                                                             */
                 } rd_avg_current;
 
                 struct {
@@ -829,7 +835,20 @@ struct rd_kafka_s {
                         rd_avg_t
                             rk_avg_rebalance_latency; /**< Rolled over rebalance
                                                        *   latency avg */
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t
+                            rk_avg_share_time_between_poll; /**< Rolled over
+                                                               time between two
+                                                               share_consume_batch
+                                                             */
                 } rd_avg_rollover;
+
+                /* Share consumer poll/batch tracking */
+                struct {
+                        rd_ts_t ts_last_poll_start;
+                        rd_ts_t ts_poll_start;
+                        rd_ts_t time_since_last_poll;
+                } rk_share_poll;
 
         } rk_telemetry;
 
@@ -1316,7 +1335,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
                                                         rd_kafka_q_t *rkq,
                                                         rd_ts_t now,
                                                         rd_bool_t is_blocking) {
-        if (rk->rk_type != RD_KAFKA_CONSUMER)
+        if (rk->rk_type != RD_KAFKA_CONSUMER || RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return;
 
         if (!now)
@@ -1350,7 +1369,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
                                                     rd_kafka_q_t *rkq) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_ts_t now = rd_clock();
                 rd_atomic64_set(&rk->rk_ts_last_poll, now);
                 if (unlikely(rk->rk_cgrp &&

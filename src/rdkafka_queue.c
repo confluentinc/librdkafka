@@ -901,8 +901,7 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         }
         mtx_unlock(&rkq->rkq_lock);
 
-        abs_timeout = rd_timeout_init(timeout_ms);
-        rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
+        abs_timeout           = rd_timeout_init(timeout_ms);
         rd_kafka_yield_thread = 0;
 
         /* Wait for at least one op to arrive */
@@ -916,7 +915,6 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
 
         if (!rko) {
                 mtx_unlock(&rkq->rkq_lock);
-                rd_kafka_app_polled(rk, rkq);
                 return NULL;
         }
 
@@ -969,7 +967,6 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         }
 
         rd_kafka_op_destroy(rko);
-        rd_kafka_app_polled(rk, rkq);
         *rkmessages_size_out = cnt;
         return error;
 }

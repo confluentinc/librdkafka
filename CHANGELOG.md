@@ -9,6 +9,49 @@ librdkafka v2.14.2 is a maintenance release:
   dependencies (#5346).
 
 
+## Security considerations
+
+Bundled dependencies were upgraded as follows (see #5346):
+OpenSSL 3.0.15 → 3.5.6 (LTS) for source/autoconf builds, and to 3.6.2 in
+vcpkg-based packages (no LTS available in vcpkg); libcurl 8.10.1 → 8.20.0
+for source/autoconf builds and to 8.19.0 in vcpkg; zlib 1.3.1 → 1.3.2;
+zstd 1.5.6 → 1.5.7; cJSON 1.7.14 → 1.7.19.
+
+ * OpenSSL upgrade (3.0.15 → 3.5.6 LTS for source/autoconf,
+   3.3.2 → 3.6.2 for vcpkg) addresses:
+   * CVE-2025-15467 (OpenSSL): upgraded OpenSSL to 3.5.6 (LTS) or
+     3.6.2 with vcpkg as it usually doesn't provide LTS upgrades.
+   * Both branches (affect 3.0.15 and 3.3.2): CVE-2024-9143,
+     CVE-2024-13176, CVE-2025-9230, CVE-2025-68160, CVE-2025-69418,
+     CVE-2025-69419, CVE-2025-69420, CVE-2025-69421, CVE-2026-22795,
+     CVE-2026-22796, CVE-2026-28387, CVE-2026-28388, CVE-2026-28389,
+     CVE-2026-28390, CVE-2026-31789, CVE-2026-31790.
+   * Only the 3.3.x→3.6.2 vcpkg branch (3.0.15 was not affected):
+     CVE-2024-12797, CVE-2025-9231, CVE-2025-15468, CVE-2025-66199.
+
+ * libcurl upgrade (8.10.1 → 8.20.0 source/autoconf, 8.10.1 → 8.19.0
+   vcpkg) addresses:
+   * CVE-2025-14017 (libcurl): solved through upgrading to CURL 8.20.0.
+     LDAP module isn't present in pre-built binary, so this CVE doesn't
+     affect librdkafka but can still trigger automatic scanners.
+   * Fixed by 8.18.0 or earlier (both autoconf and vcpkg paths):
+     CVE-2024-9681, CVE-2024-11053, CVE-2025-0167, CVE-2025-0725,
+     CVE-2025-4947, CVE-2025-5025, CVE-2025-10966, CVE-2025-13034,
+     CVE-2025-14524, CVE-2025-14819, CVE-2025-15079, CVE-2025-15224,
+     CVE-2026-1965, CVE-2026-3783, CVE-2026-3784.
+   * Fixed only by 8.20.0 (autoconf path); vcpkg-pinned 8.19.0 still
+     contains these: CVE-2026-4873, CVE-2026-5545, CVE-2026-5773,
+     CVE-2026-6253, CVE-2026-6276, CVE-2026-6429, CVE-2026-7168.
+
+ * zlib (1.3.1 → 1.3.2): CVE-2026-27171 (CPU exhaustion in
+   `crc32_combine64` and `crc32_combine_gen64`).
+
+ * zstd (1.5.6 → 1.5.7): no CVEs; bug-fix and performance release.
+
+ * cJSON (1.7.14 → 1.7.19): CVE-2023-50471, CVE-2023-50472,
+   CVE-2024-31755, CVE-2025-57052.
+
+
 ## Fixes
 
 ### General fixes
@@ -17,6 +60,11 @@ librdkafka v2.14.2 is a maintenance release:
   Fix data race in timers. The callback and its argument could have been modified after the lock is released.
   Happening since 1.x (#5089).
 
+### Consumer fixes
+
+* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
+  is unavailable during consumer close. The error logging path dereferenced
+  a potentially NULL broker pointer. Happening since 1.x.
 
 ### Admin client fixes
 

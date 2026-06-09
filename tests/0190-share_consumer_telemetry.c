@@ -34,9 +34,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TELEMETRY_TOPIC_DEFAULT "client-telemetry-metrics"
+#define METRIC_PREFIX           "org.apache.kafka."
+
 static const char *telemetry_topic(void) {
         const char *env = getenv("TELEMETRY_TOPIC");
-        return env && *env ? env : "client-telemetry-metrics";
+        return env && *env ? env : TELEMETRY_TOPIC_DEFAULT;
 }
 
 /**
@@ -51,8 +54,9 @@ static const char *telemetry_topic(void) {
  */
 
 /**
- * @brief Scan a raw byte buffer for every "consumer.share.<chars>"
- *        substring and add each unique one to the names list.
+ * @brief Scan a raw byte buffer for every
+ *        "org.apache.kafka.consumer.share.<chars>" substring and add each
+ *        unique one to the names list.
  *
  * The OTLP protobuf encoding leaves metric names as plain UTF-8 — the
  * field tag is binary but the string payload is uncompressed.
@@ -61,7 +65,7 @@ static void
 extract_share_metric_names(const void *data, size_t len, rd_list_t *names) {
         const char *p           = (const char *)data;
         const char *end         = p + len;
-        const char prefix[]     = "consumer.share.";
+        const char prefix[]     = METRIC_PREFIX "consumer.share.";
         const size_t prefix_len = sizeof(prefix) - 1;
 
         while (p + prefix_len <= end) {
@@ -217,7 +221,8 @@ static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
 
 /**
  * @brief Compare the seen-names list against EXPECTED_METRICS and
- *        TEST_ASSERT that every expected name appears.
+ *        TEST_ASSERT that every expected name appears with the full
+ *        "org.apache.kafka." prefix.
  */
 static void verify_metrics(rd_list_t *seen) {
         int missing      = 0;
@@ -226,15 +231,20 @@ static void verify_metrics(rd_list_t *seen) {
 
         TEST_SAY("Verifying expected share-consumer metric names:\n");
         for (i = 0; i < RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT; i++) {
-                const char *name =
+                char full_name[512];
+                const char *short_name =
                     RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO[i].name;
-                int found =
-                    rd_list_find(seen, name,
+                int found;
+
+                rd_snprintf(full_name, sizeof(full_name), METRIC_PREFIX "%s",
+                            short_name);
+                found =
+                    rd_list_find(seen, full_name,
                                  (int (*)(const void *, const void *))strcmp)
                         ? 1
                         : 0;
                 expected_cnt++;
-                TEST_SAY("  %s  %s\n", found ? "[OK]" : "[MISSING]", name);
+                TEST_SAY("  %s  %s\n", found ? "[OK]" : "[MISSING]", full_name);
                 if (!found)
                         missing++;
         }

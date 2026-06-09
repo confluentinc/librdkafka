@@ -1077,6 +1077,21 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+rd_kafka_error_t *rd_kafka_share_set_log_queue(rd_kafka_share_t *rkshare,
+                                               rd_kafka_queue_t *rkqu) {
+        rd_kafka_resp_err_t err;
+
+        if (!rkshare || !rkshare->rkshare_rk)
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Share consumer handle is NULL or uninitialized");
+
+        err = rd_kafka_set_log_queue(rkshare->rkshare_rk, rkqu);
+
+        return err ? rd_kafka_error_new(err, "%s", rd_kafka_err2str(err))
+                   : NULL;
+}
+
 void rd_kafka_queue_forward(rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {
         rd_kafka_q_fwd_set0(src->rkqu_q, dst ? dst->rkqu_q : NULL,
                             1, /* do_lock */

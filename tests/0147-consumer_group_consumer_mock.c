@@ -1036,6 +1036,117 @@ static void do_test_max_poll_interval_rejoin(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Stronger variant of do_test_max_poll_interval_rejoin(): after the
+ *        forced rejoin race, verify the consumer not only avoids a fatal
+ *        error but actually re-acquires its assignment and consumes all the
+ *        records.
+ *
+ * The topic is kept empty while the rejoin race is forced (so active fetching
+ * does not perturb the timing); the records are produced only afterwards. A
+ * regression strands the member at epoch 0 and the next heartbeat is rejected
+ * with a fatal INVALID_REQUEST -- which is detected first in the poll loop and
+ * fails the test fast. With the fix the consumer rejoins and (auto-commit
+ * disabled -> earliest) consumes the full set of records.
+ */
+static void do_test_max_poll_interval_rejoin_consume(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_t *c;
+        rd_kafka_conf_t *conf;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        uint64_t testid   = test_id_generate();
+        const int msgcnt  = 100;
+        rd_kafka_resp_err_t fatal_err;
+        char errstr[512];
+        int64_t deadline;
+        rd_kafka_message_t *rkm;
+        rd_kafka_topic_partition_list_t *assignment = NULL;
+        int received                                = 0;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 500);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        max_poll_inject_done = 0;
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        /* Disable auto-commit so the re-assigned partition has no committed
+         * offset after the rejoin and deterministically resets to earliest. */
+        test_conf_set(conf, "enable.auto.commit", "false");
+        test_conf_set(conf, "max.poll.interval.ms", "3000");
+        /* Intercept logs to force the rejoin race, see
+         * max_poll_rejoin_delay_log_cb(). */
+        test_conf_set(conf, "debug", "cgrp");
+        rd_kafka_conf_set_log_cb(conf, max_poll_rejoin_delay_log_cb);
+        c = test_create_consumer(topic, NULL, conf, NULL);
+
+        test_consumer_subscribe(c, topic);
+
+        /* Reach steady membership on an empty topic: the partition is assigned
+         * but there is nothing to fetch, so the forced rejoin race below is
+         * not perturbed by fetch traffic. */
+        TEST_SAY("Waiting for steady assignment\n");
+        deadline = test_clock() + 10 * 1000000;
+        while (test_clock() < deadline) {
+                rkm = rd_kafka_consumer_poll(c, 200);
+                if (rkm)
+                        rd_kafka_message_destroy(rkm);
+                if (!rd_kafka_assignment(c, &assignment) && assignment &&
+                    assignment->cnt > 0) {
+                        rd_kafka_topic_partition_list_destroy(assignment);
+                        assignment = NULL;
+                        break;
+                }
+                RD_IF_FREE(assignment, rd_kafka_topic_partition_list_destroy);
+                assignment = NULL;
+        }
+
+        TEST_SAY("Stalling for 4s (> max.poll.interval.ms=3s)\n");
+        rd_sleep(4);
+
+        /* Produce only now, after the race window, so the records are consumed
+         * by the (re-)joined member rather than prefetched during the race. */
+        test_produce_msgs_easy_v(topic, testid, RD_KAFKA_PARTITION_UA, 0,
+                                 msgcnt, 64, "bootstrap.servers", bootstraps,
+                                 NULL);
+
+        /* Resume: a regression goes fatal here (detected first, fails fast);
+         * with the fix the consumer rejoins and consumes all records. */
+        TEST_SAY(
+            "Resuming poll; consumer must rejoin and consume all %d "
+            "records\n",
+            msgcnt);
+        deadline = test_clock() + 20 * 1000000;
+        while (received < msgcnt && test_clock() < deadline) {
+                fatal_err = rd_kafka_fatal_error(c, errstr, sizeof(errstr));
+                if (fatal_err)
+                        TEST_FAIL(
+                            "Consumer went fatal after max.poll.interval.ms "
+                            "expiry instead of rejoining: %s: %s",
+                            rd_kafka_err2name(fatal_err), errstr);
+                rkm = rd_kafka_consumer_poll(c, 200);
+                if (!rkm)
+                        continue;
+                if (!rkm->err)
+                        received++;
+                rd_kafka_message_destroy(rkm);
+        }
+
+        TEST_ASSERT(received == msgcnt,
+                    "Expected to consume all %d records after rejoining, "
+                    "got %d: consumer failed to fully recover",
+                    msgcnt, received);
+
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
+
 int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -1045,6 +1156,8 @@ int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         }
 
         do_test_max_poll_interval_rejoin();
+
+        do_test_max_poll_interval_rejoin_consume();
 
         do_test_consumer_group_heartbeat_fatal_errors();
 

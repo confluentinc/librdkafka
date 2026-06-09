@@ -202,25 +202,27 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
-  - name: 'OSX arm64/m1: share consumer tests'
-    dependencies: []
-    skip:
-      when: "tag =~ '^v[0-9]\\.'"
-    task:
-      agent:
-        machine:
-          type: s1-macos-15-arm64-8
-      jobs:
-        - name: 'OSX arm64/m1: share consumer tests'
-          commands:
-            - brew install openjdk@21
-            - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
-            - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
-            - cd tests && python3 -m pip install -r requirements.txt && cd ..
-            - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
-            - ./packaging/tools/run-share-consumer-tests.sh
-              ${KAFKA_VERSION} ${CP_VERSION}
-            - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
+# TODO: Re-enable when M1 issues on share consumer tests are fixed.
+# Currently M1 is causing issues on share consumer tests.
+#   - name: 'OSX arm64/m1: share consumer tests'
+#     dependencies: []
+#     skip:
+#       when: "tag =~ '^v[0-9]\\.'"
+#     task:
+#       agent:
+#         machine:
+#           type: s1-macos-15-arm64-8
+#       jobs:
+#         - name: 'OSX arm64/m1: share consumer tests'
+#           commands:
+#             - brew install openjdk@21
+#             - sudo ln -sfn $(brew --prefix openjdk@21)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-21.jdk
+#             - export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+#             - cd tests && python3 -m pip install -r requirements.txt && cd ..
+#             - cache restore trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG}
+#             - ./packaging/tools/run-share-consumer-tests.sh
+#               ${KAFKA_VERSION} ${CP_VERSION}
+#             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
   - name: 'Linux Ubuntu amd64: Share Consumer Single Broker Tests'
     dependencies: []

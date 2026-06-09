@@ -309,7 +309,6 @@ _TEST_DECL(0181_share_consumer_topic_delete);
 _TEST_DECL(0182_share_consumer_error_handling_mock);
 _TEST_DECL(0183_share_consumer_leader_change_mock);
 _TEST_DECL(0185_share_consumer_max_poll_interval);
-_TEST_DECL(0185_share_consumer_max_poll_interval_local);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -600,8 +599,7 @@ struct test tests[] = {
     _TEST(0181_share_consumer_topic_delete, 0, TEST_BRKVER(0, 4, 2, 0)),
     _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
     _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
-    _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(0, 4, 0, 0)),
-    _TEST(0185_share_consumer_max_poll_interval_local, TEST_F_LOCAL),
+    _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(0, 4, 2, 0)),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

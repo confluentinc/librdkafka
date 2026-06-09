@@ -3946,11 +3946,8 @@ static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
         /* max.poll.interval.ms enforcement: record the poll time and, if the
          * interval had been exceeded, expedite the next heartbeat to rejoin. */
         rd_atomic64_set(&rk->rk_ts_last_poll, end);
-        if (unlikely(rk->rk_cgrp &&
-                     rk->rk_cgrp->rkcg_group_protocol ==
-                         RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
-                     rk->rk_cgrp->rkcg_flags &
-                         RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED))
+        if (unlikely(rk->rk_cgrp && rk->rk_cgrp->rkcg_flags &
+                                        RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED))
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                     rk->rk_cgrp, "app polled after poll interval exceeded");
 

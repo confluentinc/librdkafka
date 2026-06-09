@@ -1342,7 +1342,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
                 now = rd_clock();
         if (is_blocking)
                 rd_atomic64_set(&rk->rk_ts_last_poll, INT64_MAX);
-        if (rkq->rkq_ts_last_poll_end && !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+        if (rkq->rkq_ts_last_poll_end) {
                 int64_t poll_idle_ratio = 0;
                 rd_ts_t poll_interval   = now - rkq->rkq_ts_last_poll_start;
                 if (poll_interval) {

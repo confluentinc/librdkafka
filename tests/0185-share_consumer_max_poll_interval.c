@@ -28,7 +28,6 @@
 
 #include "test.h"
 #include "rdkafka.h"
-#include "rdkafka_protocol.h"
 
 /**
  * @name Share consumer max.poll.interval.ms enforcement (KIP-932).
@@ -48,15 +47,6 @@
  *  - After a timeout the consumer rejoins on the next batch poll.
  *  - A second consumer keeps consuming while the first is evicted.
  *
- * Two entry points:
- *  - main_0185_share_consumer_max_poll_interval        : real broker,
- *    comprehensive coverage of all of the above.
- *  - main_0185_share_consumer_max_poll_interval_local  : mock broker, only the
- *    two design-specific regression checks (rd_kafka_poll() does not reset, and
- *    a long blocking poll does not falsely trip) for fast/deterministic CI.
- *
- * max.poll.interval.ms enforcement is entirely client-side, so these cases do
- * not require a mock broker; the real-broker entry point is the primary one.
  */
 
 /* rd_kafka_share_consume_batch() fills the caller's array with up to
@@ -65,30 +55,9 @@
  * be large enough to hold a full batch. */
 #define BATCH_SIZE TEST_SHARE_BATCH_SIZE
 
-/* Short interval for the deterministic mock regression tests. */
-#define MOCK_MAX_POLL_INTERVAL_MS 3000
 /* Longer interval for the real-broker tests (matches 0089/0091), giving the
  * group join/assignment enough headroom not to falsely trip. */
 #define REAL_MAX_POLL_INTERVAL_MS 10000
-
-
-/**
- * @brief Enable the three share APIs on the mock cluster.
- */
-static void enable_share_apis(rd_kafka_mock_cluster_t *mcluster) {
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(
-                        mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareGroupHeartbeat");
-        TEST_ASSERT(rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareFetch,
-                                                 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to enable ShareFetch");
-        TEST_ASSERT(
-            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_ShareAcknowledge,
-                                         1, 1) == RD_KAFKA_RESP_ERR_NO_ERROR,
-            "Failed to enable ShareAck");
-}
 
 
 /**
@@ -117,20 +86,6 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
                     errstr);
 
         return rkshare;
-}
-
-
-/**
- * @brief Subscribe a share consumer to a single topic.
- */
-static void subscribe(rd_kafka_share_t *rkshare, const char *topic) {
-        rd_kafka_topic_partition_list_t *subs;
-
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        TEST_ASSERT(!rd_kafka_share_subscribe(rkshare, subs),
-                    "Subscribe failed");
-        rd_kafka_topic_partition_list_destroy(subs);
 }
 
 
@@ -237,7 +192,7 @@ real_setup(char *topic, size_t topic_sz, int msgcnt, int max_poll_interval_ms) {
         test_share_set_auto_offset_reset(group, "earliest");
 
         c = create_share_consumer(NULL, group, max_poll_interval_ms);
-        subscribe(c, topic);
+        test_share_consumer_subscribe_multi(c, 1, topic);
 
         return c;
 }
@@ -405,7 +360,7 @@ static void do_test_two_consumers(void) {
         test_share_set_auto_offset_reset(group, "earliest");
 
         for (i = 0; i < 2; i++)
-                subscribe(c[i], topic);
+                test_share_consumer_subscribe_multi(c[i], 1, topic);
 
         /* c[0] never polls: it joins the group and is assigned via heartbeat
          * (which starts its max.poll.interval.ms timer) but immediately stalls.
@@ -477,7 +432,7 @@ static void do_test_log_queue_no_reset(void) {
         logq = rd_kafka_queue_new(rk);
         TEST_CALL__(rd_kafka_set_log_queue(rk, logq));
 
-        subscribe(c, topic);
+        test_share_consumer_subscribe_multi(c, 1, topic);
         establish_membership(c);
 
         TEST_SAY("Polling only the log queue for %ds (> %dms)\n",
@@ -551,6 +506,8 @@ static void do_test_blocking_poll_no_false_trip(void) {
         char topic[128];
         rd_kafka_share_t *c;
         rd_bool_t exceeded = rd_false;
+        int consumed       = 0;
+        int attempts;
 
         SUB_TEST();
 
@@ -570,135 +527,19 @@ static void do_test_blocking_poll_no_false_trip(void) {
                     "A blocking consume_batch() must not trip "
                     "max.poll.interval.ms");
 
-        /* And a subsequent poll should still be healthy. */
-        share_consume_once(c, 500, &exceeded);
+        test_produce_msgs_easy(topic, test_id_generate(), 0, 5);
+        for (attempts = 0; attempts < 30 && consumed == 0; attempts++)
+                consumed += share_consume_once(c, 1000, &exceeded);
+
         TEST_ASSERT(!exceeded,
                     "Consumer should remain in the group after a long "
+                    "blocking poll");
+        TEST_ASSERT(consumed > 0,
+                    "Consumer should still consume messages after a long "
                     "blocking poll");
 
         test_share_consumer_close(c);
         test_share_destroy(c);
-
-        SUB_TEST_PASS();
-}
-
-
-/*
- * ===========================================================================
- *  Mock broker tests (design-specific regression checks only)
- * ===========================================================================
- */
-
-/**
- * @brief Mock cluster setup: 1-broker cluster with the share APIs enabled, a
- *        single topic, and @p msgcnt messages produced to partition 0.
- */
-static rd_kafka_mock_cluster_t *
-mock_setup(const char *topic, int msgcnt, const char **bootstraps_out) {
-        rd_kafka_mock_cluster_t *mcluster;
-        const char *bootstraps;
-
-        mcluster = test_mock_cluster_new(1, &bootstraps);
-        enable_share_apis(mcluster);
-        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster,
-                                                       1 /*earliest*/);
-
-        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, 1, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Failed to create mock topic");
-
-        if (msgcnt > 0)
-                test_produce_msgs_easy_v(topic, 0, 0, 0, msgcnt, 16,
-                                         "bootstrap.servers", bootstraps, NULL);
-
-        *bootstraps_out = bootstraps;
-        return mcluster;
-}
-
-
-/**
- * @brief Mock regression: rd_kafka_poll() must not reset the share consumer's
- *        max.poll.interval.ms timer. Deterministic counterpart of
- *        do_test_rd_kafka_poll_does_not_reset().
- */
-static void do_test_mock_rd_kafka_poll_does_not_reset(void) {
-        rd_kafka_mock_cluster_t *mcluster;
-        const char *bootstraps;
-        rd_kafka_share_t *c;
-        rd_kafka_t *rk;
-        const char *topic = "0185-mock-poll-noreset";
-        const char *group = "0185-sg-poll-noreset";
-        int64_t deadline;
-
-        SUB_TEST_QUICK();
-
-        mcluster = mock_setup(topic, 10, &bootstraps);
-        c = create_share_consumer(bootstraps, group, MOCK_MAX_POLL_INTERVAL_MS);
-        subscribe(c, topic);
-        establish_membership(c);
-
-        rk = test_share_consumer_get_rk(c);
-
-        TEST_SAY("Calling only rd_kafka_poll() for %dms\n",
-                 MOCK_MAX_POLL_INTERVAL_MS + 2000);
-        deadline =
-            test_clock() + (int64_t)(MOCK_MAX_POLL_INTERVAL_MS + 2000) * 1000;
-        while (test_clock() < deadline)
-                rd_kafka_poll(rk, 200);
-
-        TEST_ASSERT(
-            wait_max_poll_exceeded(c, 5000),
-            "Expected MAX_POLL_EXCEEDED: rd_kafka_poll() must not reset "
-            "the share consumer max.poll.interval.ms timer");
-
-        test_share_consumer_close(c);
-        test_share_destroy(c);
-        test_mock_cluster_destroy(mcluster);
-
-        SUB_TEST_PASS();
-}
-
-
-/**
- * @brief Mock regression: a long blocking consume_batch() must not falsely
- *        trip max.poll.interval.ms. Deterministic counterpart of
- *        do_test_blocking_poll_no_false_trip().
- */
-static void do_test_mock_blocking_poll_no_false_trip(void) {
-        rd_kafka_mock_cluster_t *mcluster;
-        const char *bootstraps;
-        rd_kafka_share_t *c;
-        const char *topic  = "0185-mock-blocking";
-        const char *group  = "0185-sg-blocking";
-        rd_bool_t exceeded = rd_false;
-
-        SUB_TEST_QUICK();
-
-        mcluster = mock_setup(topic, 5, &bootstraps);
-        c = create_share_consumer(bootstraps, group, MOCK_MAX_POLL_INTERVAL_MS);
-        subscribe(c, topic);
-        establish_membership(c);
-
-        /* Drain remaining produced messages so the next poll blocks. */
-        while (share_consume_once(c, 500, NULL) > 0)
-                ;
-
-        TEST_SAY("Blocking in a single consume_batch() for %dms (> %dms)\n",
-                 MOCK_MAX_POLL_INTERVAL_MS + 2000, MOCK_MAX_POLL_INTERVAL_MS);
-        share_consume_once(c, MOCK_MAX_POLL_INTERVAL_MS + 2000, &exceeded);
-
-        TEST_ASSERT(!exceeded,
-                    "A blocking consume_batch() must not trip "
-                    "max.poll.interval.ms");
-
-        share_consume_once(c, 500, &exceeded);
-        TEST_ASSERT(!exceeded,
-                    "Consumer should remain in the group after a long "
-                    "blocking poll");
-
-        test_share_consumer_close(c);
-        test_share_destroy(c);
-        test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();
 }
@@ -714,17 +555,6 @@ int main_0185_share_consumer_max_poll_interval(int argc, char **argv) {
         do_test_log_queue_no_reset();
         do_test_rd_kafka_poll_does_not_reset();
         do_test_blocking_poll_no_false_trip();
-
-        return 0;
-}
-
-
-int main_0185_share_consumer_max_poll_interval_local(int argc, char **argv) {
-        TEST_SKIP_MOCK_CLUSTER(0);
-        test_timeout_set(60);
-
-        do_test_mock_rd_kafka_poll_does_not_reset();
-        do_test_mock_blocking_poll_no_false_trip();
 
         return 0;
 }

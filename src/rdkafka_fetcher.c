@@ -1622,6 +1622,9 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_op_t *rko_orig       = request->rkbuf_opaque;
         rd_kafka_op_t *response_rko   = NULL;
         rd_kafka_resp_err_t err       = RD_KAFKA_RESP_ERR_NO_ERROR;
+        rd_kafka_op_t *fetch_size_rko;
+        int fetch_size_idx;
+        int64_t total_fetch_size_bytes = 0;
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -1721,6 +1724,24 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         }
 
         rd_kafka_buf_read_NodeEndpoints(rkbuf, &NodeEndpoints);
+
+        /* Sum per-record wire bytes across acquired records for
+         * consumer.share.fetch.manager.fetch.size.{avg,max} and
+         * .bytes.consumed.{total,rate}. */
+        RD_LIST_FOREACH(fetch_size_rko, filtered_msgs, fetch_size_idx) {
+                if (fetch_size_rko->rko_type == RD_KAFKA_OP_FETCH) {
+                        rd_kafka_msg_t *rkm = &fetch_size_rko->rko_u.fetch.rkm;
+                        total_fetch_size_bytes +=
+                            (int64_t)rkm->rkm_u.consumer.wire_size;
+                }
+        }
+        /* Update bytes per fetch metrics */
+        rd_avg_add(&rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_size,
+                   total_fetch_size_bytes);
+
+        /* Update total bytes consumed */
+        rd_atomic64_add(&rkb->rkb_rk->rk_telemetry.share_bytes_consumed_total,
+                        total_fetch_size_bytes);
 
         /* Build response rko with messages and inflight_acks */
         response_rko = rd_kafka_share_build_response_rko(rkb, filtered_msgs,

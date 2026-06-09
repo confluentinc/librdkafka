@@ -280,12 +280,15 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         rd_avg_t rkb_avg_rtt;      /* Current RTT avg */
                         rd_avg_t rkb_avg_throttle; /* Current throttle avg */
                         rd_avg_t
-                            rkb_avg_outbuf_latency;       /**< Current latency
-                                                           *   between buf_enq0
-                                                           *   and writing to socket
-                                                           */
-                        rd_avg_t rkb_avg_fetch_latency;   /**< Current fetch
-                                                           *   latency avg */
+                            rkb_avg_outbuf_latency;     /**< Current latency
+                                                         *   between buf_enq0
+                                                         *   and writing to socket
+                                                         */
+                        rd_avg_t rkb_avg_fetch_latency; /**< Current fetch
+                                                         *   latency avg */
+                        rd_avg_t rkb_avg_share_fetch_latency; /**< Current share
+                                                               *   fetch latency
+                                                               *   avg */
                         rd_avg_t rkb_avg_produce_latency; /**< Current produce
                                                            *   latency avg */
                 } rd_avg_current;
@@ -297,6 +300,10 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         rd_avg_t rkb_avg_outbuf_latency; /**< Rolled over outbuf
                                                           *   latency avg */
                         rd_avg_t rkb_avg_fetch_latency;  /**< Rolled over fetch
+                                                          *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_latency; /**< Rolled over
+                                                          *   share fetch
                                                           *   latency avg */
                         rd_avg_t
                             rkb_avg_produce_latency; /**< Rolled over produce

@@ -1639,6 +1639,23 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                 return ErrorCode;
         }
 
+        /* Count this successful ShareFetch response for
+         * consumer.share.fetch.manager.fetch.{total,rate}.
+         * Fires only after top level error handling.
+         *
+         * TODO KIP-932: Revisit this sampling before GA. It fires here,
+         * before the message set is parsed (rd_kafka_share_msgset_parse in
+         * the partition loop below). If that parse fails with
+         * RD_KAFKA_RESP_ERR__BAD_MSG / __UNDERFLOW the caller drops the
+         * whole response, yet fetch.{total,rate} and fetch.latency have
+         * already been counted here. */
+        rd_atomic64_add(&rkb->rkb_rk->rk_telemetry.share_fetch_total, 1);
+
+        /* rkbuf_ts_sent is already the request RTT here */
+        rd_avg_add(
+            &rkb->rkb_telemetry.rd_avg_current.rkb_avg_share_fetch_latency,
+            request->rkbuf_ts_sent);
+
         rd_kafka_buf_read_i32(rkbuf, &AcquisitionLockTimeoutMs);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicArrayCnt, RD_KAFKAP_TOPICS_MAX);
@@ -2505,6 +2522,38 @@ static rd_bool_t can_use_topic_ids(rd_kafka_broker_t *rkb) {
 }
 
 
+/**
+ * @brief Sum the total acknowledgement entries and records across all
+ *        per-partition batches in \p ack_details.
+ *
+ * @param ack_details   List of rd_kafka_share_ack_batches_t, or NULL.
+ * @param entries_out   Set to the total number of ack entries (offset ranges).
+ * @param records_out   Set to the total number of acknowledged records
+ *                      (sum of entry->size across all entries).
+ */
+static void rd_kafka_share_ack_details_totals(rd_list_t *ack_details,
+                                              int *entries_out,
+                                              int64_t *records_out) {
+        rd_kafka_share_ack_batches_t *batches;
+        rd_kafka_share_ack_batch_entry_t *entry;
+        int k, j;
+        int entries     = 0;
+        int64_t records = 0;
+
+        if (ack_details) {
+                RD_LIST_FOREACH(batches, ack_details, k) {
+                        entries += rd_list_cnt(&batches->entries);
+                        RD_LIST_FOREACH(entry, &batches->entries, j) {
+                                records += entry->size;
+                        }
+                }
+        }
+
+        *entries_out = entries;
+        *records_out = records;
+}
+
+
 void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                                 const rd_kafkap_str_t *group_id,
                                 const rd_kafkap_str_t *member_id,
@@ -2536,7 +2585,8 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
         int ack_details_cnt = ack_details ? rd_list_cnt(ack_details) : 0;
         /* TODO KIP-932: Ensure there is no intersection between toppars_to_add
          * and ack_details. A toppar should not appear in both lists. */
-        int total_ack_entries = 0;
+        int total_ack_entries     = 0;
+        int64_t total_ack_records = 0;
         int toppars_to_forget_cnt =
             toppars_to_forget ? rd_list_cnt(toppars_to_forget) : 0;
         rd_bool_t is_fetching_messages = max_records > 0 ? rd_true : rd_false;
@@ -2564,14 +2614,17 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
          * E x acknowledgement entries */
 
         rkbuf_size += (ack_details_cnt * (32 + 4));
-        /* Count total ack entries across all ack_details batches */
-        if (ack_details) {
-                rd_kafka_share_ack_batches_t *batches;
-                int k;
-                RD_LIST_FOREACH(batches, ack_details, k) {
-                        total_ack_entries += rd_list_cnt(&batches->entries);
-                }
-        }
+        /* Sum total ack entries and total records across all
+         * ack_details batches. */
+        rd_kafka_share_ack_details_totals(ack_details, &total_ack_entries,
+                                          &total_ack_records);
+        /* Accumulate piggybacked record-level acknowledgements for
+         * consumer.share.fetch.manager.acknowledgements.send.{total,rate}. */
+        if (total_ack_records > 0)
+                rd_atomic64_add(
+                    &rkb->rkb_rk->rk_telemetry.acknowledgements_send_total,
+                    total_ack_records);
+
         rkbuf_size += (total_ack_entries * acknowledgement_size);
 
         /* F x (topic id + partition id) for topics to forget */
@@ -2928,8 +2981,9 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         size_t rkbuf_size           = 0;
         rd_list_t *ack_details =
             rko_orig ? rko_orig->rko_u.share_fetch.ack_details : NULL;
-        int ack_details_cnt   = ack_details ? rd_list_cnt(ack_details) : 0;
-        int total_ack_entries = 0;
+        int ack_details_cnt       = ack_details ? rd_list_cnt(ack_details) : 0;
+        int total_ack_entries     = 0;
+        int64_t total_ack_records = 0;
         /* FirstOffset + LastOffset + AcknowledgementType per ack entry */
         size_t acknowledgement_size = 8 + 8 + 1;
 
@@ -2946,14 +3000,17 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
         rkbuf_size += 4 + 4;
         /* N x (topic id + partition id) for ack details */
         rkbuf_size += (ack_details_cnt * (32 + 4));
-        /* Count total ack entries across all ack_details batches */
-        if (ack_details) {
-                rd_kafka_share_ack_batches_t *batches;
-                int k;
-                RD_LIST_FOREACH(batches, ack_details, k) {
-                        total_ack_entries += rd_list_cnt(&batches->entries);
-                }
-        }
+        /* Sum total ack entries and total records across all
+         * ack_details batches. */
+        rd_kafka_share_ack_details_totals(ack_details, &total_ack_entries,
+                                          &total_ack_records);
+        /* Accumulate standalone record-level acknowledgements for
+         * consumer.share.fetch.manager.acknowledgements.send.{total,rate}. */
+        if (total_ack_records > 0)
+                rd_atomic64_add(
+                    &rkb->rkb_rk->rk_telemetry.acknowledgements_send_total,
+                    total_ack_records);
+
         rkbuf_size += (total_ack_entries * acknowledgement_size);
 
         rkbuf = rd_kafka_buf_new_flexver_request(

@@ -10,6 +10,9 @@
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnableManifest>true</VcpkgEnableManifest>
+  </PropertyGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
     <Link>
@@ -254,6 +257,7 @@
     <ClCompile Include="..\..\tests\0183-share_consumer_leader_change_mock.c" />
     <ClCompile Include="..\..\tests\0184-share_consumer_topic_recreate.c" />
     <ClCompile Include="..\..\tests\0185-share_consumer_max_poll_interval.c" />
+    <ClCompile Include="..\..\tests\0190-share_consumer_telemetry.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

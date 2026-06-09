@@ -1257,7 +1257,14 @@ def reassign_roll(cluster, cycles, stop_s, up_s, rng, topics, rf,
 
 # (label, regex). Loose patterns because debug log lines vary by context.
 GAP_SIGNATURES = [
-    ('S10 stale PARTITION_LEAVE bail-out',
+    # Stale PARTITION_LEAVE bail-out (rdkafka_broker.c:3541, rktp_broker
+    # != rkb). NOT a bug indicator — race-exposure signal. The bail-out
+    # is the correct response when a stale LEAVE arrives on a broker
+    # that doesn't currently own the rktp; the chained JOIN's F_REMOVE
+    # check at broker.c:3419 prevents any ghost-membership outcome.
+    # Count = number of times the assignment-shrink-during-migration
+    # interleaving fired in this run.
+    ('Stale PARTITION_LEAVE bail-out (benign race signal)',
      r'TOPBRK.*ignoring PARTITION_LEAVE: not delegated'),
     # ShareFetch per-partition error names: the wire-protocol error name
     # `NOT_LEADER_FOR_PARTITION` is what appears in logs; librdkafka's

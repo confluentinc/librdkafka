@@ -625,10 +625,11 @@ topic(s)`.
 ### `summary.txt`
 
 Counts of known librdkafka log-line signatures (e.g.
-`SHAREFETCH per-partition leader-change err`, `S10 stale
-PARTITION_LEAVE bail-out`, `_TRANSPORT broker disconnects`). One row
-per consumer + grand totals. Reads consumer.stderr — both
-`share_consume_verify` and `rdkafka_performance` honour
+`SHAREFETCH per-partition leader-change err`, `Stale
+PARTITION_LEAVE bail-out (benign race signal)`, `_TRANSPORT broker
+disconnects`). One row per consumer + grand totals. Reads
+consumer.stderr — both `share_consume_verify` and
+`rdkafka_performance` honour
 `--consumer-debug`, so by default the signatures populate in every
 mode. Pass `--consumer-debug ''` to disable.
 

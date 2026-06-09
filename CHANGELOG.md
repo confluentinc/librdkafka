@@ -1,3 +1,20 @@
+# librdkafka v2.14.3
+
+librdkafka v2.14.3 is a maintenance release:
+
+## Fixes
+
+### Consumer fixes
+
+* Fix `GROUP_ID_NOT_FOUND` not being handled in the KIP-848
+  `ConsumerGroupHeartbeat` response, which caused a consumer to silently
+  re-send heartbeats with a stale member epoch indefinitely (without
+  rejoining or surfacing an error) when the coordinator no longer had the
+  group. The error is now treated like `UNKNOWN_MEMBER_ID` /
+  `FENCED_MEMBER_EPOCH`: the consumer rejoins the group, re-creating it on
+  the coordinator.
+
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:

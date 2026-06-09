@@ -3280,6 +3280,7 @@ err:
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
         case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
                              "ConsumerGroupHeartbeat failed due to: %s: "
                              "will rejoin the group",

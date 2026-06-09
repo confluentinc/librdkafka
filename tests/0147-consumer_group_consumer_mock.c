@@ -676,6 +676,108 @@ static void do_test_consumer_group_heartbeat_fenced_errors(void) {
 }
 
 /**
+ * @brief A GROUP_ID_NOT_FOUND error on a ConsumerGroupHeartbeat of an already
+ *        joined member (non-zero epoch) must trigger a rejoin, not a silent
+ *        re-send of the heartbeat with the stale epoch.
+ *
+ *        This is the regression test for the bug where GROUP_ID_NOT_FOUND was
+ *        unhandled in rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(): it fell
+ *        through to a PERMANENT classification that took no action in steady
+ *        state, so the consumer kept heartbeating forever with the same epoch
+ *        (which the coordinator keeps rejecting) without rejoining or
+ *        surfacing an error.
+ *
+ *        Sequence:
+ *          - first HB receives the assignment (assign callback)
+ *          - the assignment-ack HB returns GROUP_ID_NOT_FOUND
+ *          - the member must lose its assignment and rejoin
+ *            (lost revoke callback), like for UNKNOWN_MEMBER_ID /
+ *            FENCED_MEMBER_EPOCH
+ *          - no error is delivered to the application
+ *
+ *        Note: a real coordinator that returns GROUP_ID_NOT_FOUND no longer has
+ *        the group, so the epoch-0 rejoin re-creates it and the member is
+ *        assigned again. The mock keeps its group state when injecting the
+ *        error, so it does not re-assign on rejoin; this test therefore asserts
+ *        the rejoin is initiated (the discriminating behavior vs. the bug)
+ *        rather than the subsequent re-assignment.
+ */
+static void do_test_consumer_group_heartbeat_group_id_not_found_rejoins(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_topic_partition_list_t *subscription;
+        rd_kafka_t *c;
+        rd_kafka_message_t *rkmessage;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+
+        rebalance_cnt       = 0;
+        rebalance_exp_lost  = rd_false;
+        rebalance_exp_event = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        SUB_TEST_QUICK();
+
+        /* Any error reaching the application error_cb fails the test:
+         * GROUP_ID_NOT_FOUND must be handled silently via a rejoin. */
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 1000);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        /* First HB returns the assignment, the second HB (the ack) returns
+         * GROUP_ID_NOT_FOUND. */
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
+            RD_KAFKA_RESP_ERR_NO_ERROR, 0);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
+            RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 0);
+
+        c = create_consumer(bootstraps, topic, rd_true);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_subscribe(c, subscription));
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        /* First HB assigns the partition. */
+        rebalance_exp_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+        rkmessage           = rd_kafka_consumer_poll(c, 5000);
+        TEST_ASSERT(!rkmessage, "No message should be returned");
+        TEST_ASSERT(rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected assign callback to be processed, but it wasn't");
+        TEST_ASSERT(rebalance_cnt == 1, "Expected 1 rebalance event, got %d",
+                    rebalance_cnt);
+
+        /* The assignment-ack HB returns GROUP_ID_NOT_FOUND. With the fix the
+         * consumer rejoins and loses its assignment (lost revoke callback).
+         * Without the fix no callback fires (the consumer silently loops),
+         * and this poll times out without the expected event. */
+        rebalance_exp_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+        rebalance_exp_lost  = rd_true;
+        rkmessage           = rd_kafka_consumer_poll(c, 5000);
+        TEST_ASSERT(!rkmessage, "No message should be returned");
+        TEST_ASSERT(rebalance_exp_event == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "Expected lost/revoke callback after GROUP_ID_NOT_FOUND: "
+                    "the consumer must rejoin, not loop on the stale epoch");
+        TEST_ASSERT(rebalance_cnt == 2, "Expected 2 rebalance events, got %d",
+                    rebalance_cnt);
+        rebalance_exp_lost = rd_false;
+
+        TEST_CALL_ERR__(rd_kafka_consumer_close(c));
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        test_curr->is_fatal_cb = NULL;
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @enum test_variation_unknown_topic_id_t
  * @brief Variations for `do_test_metadata_unknown_topic_id_tests`.
  */
@@ -941,6 +1043,8 @@ int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         do_test_consumer_group_heartbeat_retriable_errors();
 
         do_test_consumer_group_heartbeat_fenced_errors();
+
+        do_test_consumer_group_heartbeat_group_id_not_found_rejoins();
 
         do_test_metadata_unknown_topic_id_tests();
 

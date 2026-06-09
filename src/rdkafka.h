@@ -4016,11 +4016,11 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
  * @brief Forward a share consumer's internal log queue onto another queue
  *        for serving with one of the ..poll() calls.
  *
- *        Thin wrapper around rd_kafka_set_log_queue() for use with
- *        rd_kafka_share_t handles. Required when `log.queue=true` is
- *        configured on a share consumer — without this call the share
- *        consumer's internal log queue is never drained and log_cb never
- *        fires.
+ * Thin wrapper around rd_kafka_set_log_queue() for use with
+ * rd_kafka_share_t handles. Required when `log.queue=true` is
+ * configured on a share consumer — without this call the share
+ * consumer's internal log queue is never drained and log_cb never
+ * fires.
  *
  * @param rkshare Share consumer instance.
  * @param rkqu    Queue to forward logs to. If NULL the logs are forwarded

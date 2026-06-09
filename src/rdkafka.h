@@ -4044,9 +4044,8 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
  * @sa rd_kafka_set_log_queue
  */
 RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_share_set_log_queue(rd_kafka_share_t *rkshare,
-                             rd_kafka_queue_t *rkqu);
+rd_kafka_error_t *rd_kafka_share_set_log_queue(rd_kafka_share_t *rkshare,
+                                               rd_kafka_queue_t *rkqu);
 
 
 /**

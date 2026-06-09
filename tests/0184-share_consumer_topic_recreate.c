@@ -34,7 +34,7 @@
 #define PARTITION_CNT      3
 #define MSGS_PER_PARTITION 10
 #define MSGS_PER_PHASE     (PARTITION_CNT * MSGS_PER_PARTITION)
-#define BATCH_SIZE         64
+#define BATCH_SIZE         1024
 
 
 static rd_kafka_t *common_producer;

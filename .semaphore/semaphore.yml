@@ -202,7 +202,8 @@ blocks:
               ${KAFKA_VERSION} ${CP_VERSION}
             - cache store trivup-kafka-${KAFKA_VERSION}-${CACHE_TAG} tests/tmp-KafkaCluster/KafkaCluster/KafkaBrokerApp/kafka/${KAFKA_VERSION}
 
-# Currently M1 is causing issues on share consumer tests; 
+# TODO: Re-enable when M1 issues on share consumer tests are fixed.
+# Currently M1 is causing issues on share consumer tests.
 #   - name: 'OSX arm64/m1: share consumer tests'
 #     dependencies: []
 #     skip:

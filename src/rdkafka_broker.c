@@ -5254,7 +5254,6 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
                                     .rkb_avg_share_fetch_latency);
         }
 
-
         mtx_lock(&rkb->rkb_logname_lock);
         rd_free(rkb->rkb_logname);
         rkb->rkb_logname = NULL;

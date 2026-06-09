@@ -813,8 +813,13 @@ struct rd_kafka_s {
                         uint64_t rebalance_latency_total;
                         /** Total share fetch requests up to previous push */
                         int64_t share_fetch_total;
+                        /** Total share bytes consumed up to previous push */
+                        int64_t share_bytes_consumed_total;
                         /** Total acknowledgements sent up to previous push */
                         int64_t acknowledgements_send_total;
+                        /** Total ShareGroupHeartbeat responses up to previous
+                         * push */
+                        int64_t heartbeat_total;
                 } rk_historic_c;
 
                 struct {
@@ -857,8 +862,14 @@ struct rd_kafka_s {
                 /* Share consumer fetch-RPC counter */
                 rd_atomic64_t share_fetch_total;
 
+                /* Share consumer total bytes consumed */
+                rd_atomic64_t share_bytes_consumed_total;
+
                 /* Share consumer record-level acknowledgements sent counter */
                 rd_atomic64_t acknowledgements_send_total;
+
+                /* Share consumer ShareGroupHeartbeat response counter */
+                rd_atomic64_t heartbeat_total;
         } rk_telemetry;
 
         /* Test mocks */

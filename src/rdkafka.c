@@ -2834,6 +2834,11 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                                          .rk_avg_rebalance_latency,
                                     RD_AVG_GAUGE, 0, 900000 * 1000, 2,
                                     rk->rk_conf.enable_metrics_push);
+
+                        rd_atomic64_init(&rk->rk_telemetry.share_fetch_total,
+                                         0);
+                        rd_atomic64_init(
+                            &rk->rk_telemetry.acknowledgements_send_total, 0);
                 } else {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_poll_idle_ratio,

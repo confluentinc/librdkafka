@@ -4033,16 +4033,18 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
  *
  * @remark librdkafka maintains its own reference to the provided queue.
  *
- * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success;
- *          RD_KAFKA_RESP_ERR__INVALID_ARG if rkshare is NULL or
- *          uninitialized;
- *          RD_KAFKA_RESP_ERR__NOT_CONFIGURED when log.queue is not set to
- *          true.
+ * @returns NULL on success or an error object on failure.
+ *          The error code will be RD_KAFKA_RESP_ERR__INVALID_ARG if rkshare
+ *          is NULL or uninitialized, or RD_KAFKA_RESP_ERR__NOT_CONFIGURED
+ *          when log.queue is not set to true.
+ *
+ *          The returned error object (if any) must be destroyed with
+ *          rd_kafka_error_destroy().
  *
  * @sa rd_kafka_set_log_queue
  */
 RD_EXPORT
-rd_kafka_resp_err_t
+rd_kafka_error_t *
 rd_kafka_share_set_log_queue(rd_kafka_share_t *rkshare,
                              rd_kafka_queue_t *rkqu);
 

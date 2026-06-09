@@ -368,6 +368,24 @@ static void destroy_share_consumer(rd_kafka_share_t *rkshare,
         TEST_SAY("Successfully destroyed share consumer\n");
 }
 
+/* Per-thread argument for destroy_watchdog_thread. Atomic `done` lets the
+ * main thread poll for completion without locking. */
+typedef struct destroy_watchdog_arg_s {
+        rd_kafka_share_t *rkshare;
+        int destroy_flags;
+        rd_atomic32_t done;
+} destroy_watchdog_arg_t;
+
+static int destroy_watchdog_thread(void *p) {
+        destroy_watchdog_arg_t *a = p;
+        if (a->destroy_flags)
+                rd_kafka_share_destroy_flags(a->rkshare, a->destroy_flags);
+        else
+                rd_kafka_share_destroy(a->rkshare);
+        rd_atomic32_set(&a->done, 1);
+        return 0;
+}
+
 /**
  * @brief is_fatal_cb hook for test_broker_decommission_with_commit_sync.
  *
@@ -2056,6 +2074,190 @@ static void do_test_destroy_with_subscribe_unsubscribe(int do_subscribe,
 }
 
 
+/**
+ * @brief Destroy a consumer that drove a mixed-ack chaos workload —
+ *        ACCEPT/RELEASE/REJECT round-robin acks, with commit_async every
+ *        5 acks and commit_sync every 10 acks. destroy runs on a
+ *        watchdog thread so a hung destroy fails the test loudly instead
+ *        of wedging the binary.
+ */
+static void do_test_destroy_with_mixed_acks_and_commits(int destroy_flags) {
+        const char *topic;
+        const char *group = "0179-destroy-mixed";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *batch[64];
+        rd_kafka_error_t *close_err;
+        thrd_t destroy_thr;
+        destroy_watchdog_arg_t arg;
+        ack_receipts_t receipts;
+        const int produce_cnt         = 40;
+        const int target              = 30;
+        const int DESTROY_DEADLINE_MS = 15000;
+        rd_ts_t t_start;
+        int64_t t_close_ms = 0;
+        int64_t t_destroy_ms;
+        size_t rcvd;
+        size_t j;
+        int acked     = 0;
+        int sync_cnt  = 0;
+        int async_cnt = 0;
+        int attempts  = 0;
+        int wait_ok;
+        rd_bool_t do_close =
+            !(destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+
+        SUB_TEST("destroy_flags=0x%x", destroy_flags);
+
+        ack_receipts_init(&receipts);
+
+        topic = test_mk_topic_name("0179-destroy-mixed", 1);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, produce_cnt);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+        rkshare =
+            new_share_consumer_for_real_test(group, "explicit", &receipts);
+        subscribe_topics(rkshare, &topic, 1);
+
+        /* Drive chaos: round-robin ACCEPT/RELEASE/REJECT acks with
+         * interleaved commits. Past `target` we drop each batch's
+         * message handles without acking — close/destroy must cope
+         * with whatever inflight state that leaves the lib in. */
+        while (acked < target && attempts++ < 80) {
+                rd_kafka_error_t *err;
+                rcvd = 0;
+                err = rd_kafka_share_consume_batch(rkshare, 3000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_share_AcknowledgeType_t at;
+                        rd_kafka_resp_err_t aerr;
+                        rd_kafka_error_t *cerr;
+
+                        if (batch[j]->err) {
+                                rd_kafka_message_destroy(batch[j]);
+                                continue;
+                        }
+
+                        if (acked >= target) {
+                                rd_kafka_message_destroy(batch[j]);
+                                continue;
+                        }
+
+                        switch (acked % 3) {
+                        case 0:
+                                at = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
+                                break;
+                        case 1:
+                                at = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE;
+                                break;
+                        default:
+                                at = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT;
+                                break;
+                        }
+
+                        aerr = rd_kafka_share_acknowledge_type(rkshare,
+                                                               batch[j], at);
+                        TEST_ASSERT(!aerr, "acknowledge_type(%d) failed: %s",
+                                    (int)at, rd_kafka_err2str(aerr));
+                        rd_kafka_message_destroy(batch[j]);
+                        acked++;
+
+                        if (acked % 5 == 0) {
+                                cerr = rd_kafka_share_commit_async(rkshare);
+                                TEST_ASSERT(!cerr, "commit_async: %s",
+                                            cerr ? rd_kafka_error_string(cerr)
+                                                 : "");
+                                async_cnt++;
+                        }
+                        if (acked % 10 == 0) {
+                                cerr = rd_kafka_share_commit_sync(
+                                    rkshare, 30000, &partitions);
+                                TEST_ASSERT(!cerr, "commit_sync: %s",
+                                            cerr ? rd_kafka_error_string(cerr)
+                                                 : "");
+                                RD_IF_FREE(
+                                    partitions,
+                                    rd_kafka_topic_partition_list_destroy);
+                                partitions = NULL;
+                                sync_cnt++;
+                        }
+                }
+        }
+        TEST_ASSERT(acked >= target, "expected to ack %d records, got %d",
+                    target, acked);
+        TEST_SAY(
+            "acked=%d sync=%d async=%d ack_cb_invocations=%d. "
+            "Calling close.\n",
+            acked, sync_cnt, async_cnt, receipts.callback_invocations);
+
+        if (do_close) {
+                t_start    = test_clock();
+                close_err  = rd_kafka_share_consumer_close(rkshare);
+                t_close_ms = (test_clock() - t_start) / 1000;
+                TEST_SAY("close returned in %" PRId64
+                         " ms (err=%s) "
+                         "ack_cb_invocations=%d\n",
+                         t_close_ms,
+                         close_err ? rd_kafka_error_string(close_err) : "NULL",
+                         receipts.callback_invocations);
+                if (close_err)
+                        rd_kafka_error_destroy(close_err);
+        } else {
+                TEST_SAY(
+                    "Skipping consumer_close (destroy_flags has "
+                    "NO_CONSUMER_CLOSE)\n");
+        }
+
+        /* Run destroy on the watchdog thread; fail if it hangs past
+         * DESTROY_DEADLINE_MS instead of wedging the binary. */
+        arg.rkshare       = rkshare;
+        arg.destroy_flags = destroy_flags;
+        rd_atomic32_init(&arg.done, 0);
+
+        TEST_ASSERT(thrd_create(&destroy_thr, destroy_watchdog_thread, &arg) ==
+                        thrd_success,
+                    "Failed to spawn destroy watchdog thread");
+
+        t_start = test_clock();
+        wait_ok = 1;
+        while (!rd_atomic32_get(&arg.done)) {
+                if ((test_clock() - t_start) / 1000 >= DESTROY_DEADLINE_MS) {
+                        wait_ok = 0;
+                        break;
+                }
+                rd_usleep(100 * 1000, NULL);
+        }
+        t_destroy_ms = (test_clock() - t_start) / 1000;
+
+        if (!wait_ok) {
+                /* Detach so the OS reaps the still-running thread at
+                 * process exit (rkshare permanently leaked). */
+                thrd_detach(destroy_thr);
+                TEST_FAIL(
+                    "rd_kafka_share_destroy hung past %d ms after close "
+                    "(close took %" PRId64
+                    " ms). acked=%d sync=%d async=%d "
+                    "ack_cb_invocations=%d (expected >= %d).",
+                    DESTROY_DEADLINE_MS, t_close_ms, acked, sync_cnt, async_cnt,
+                    receipts.callback_invocations, async_cnt + sync_cnt);
+        }
+
+        thrd_join(destroy_thr, NULL);
+
+        TEST_SAY("destroy returned in %" PRId64 " ms (close was %" PRId64
+                 " ms); final ack_cb_invocations=%d\n",
+                 t_destroy_ms, t_close_ms, receipts.callback_invocations);
+
+        ack_receipts_destroy(&receipts);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0179_share_consumer_destroy(int argc, char **argv) {
         /* Real broker tests */
         test_timeout_set(120);
@@ -2083,6 +2285,10 @@ int main_0179_share_consumer_destroy(int argc, char **argv) {
         do_test_destroy_with_explicit_ack(RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE,
                                           rd_true);
         do_test_destroy_with_implicit_ack(RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+
+        do_test_destroy_with_mixed_acks_and_commits(0);
+        do_test_destroy_with_mixed_acks_and_commits(
+            RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

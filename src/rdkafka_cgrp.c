@@ -3295,6 +3295,7 @@ err:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
         default:

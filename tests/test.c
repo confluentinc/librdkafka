@@ -756,6 +756,24 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
         return 0;
 }
 
+/**
+ * @brief For use as the is_fatal_cb(), tolerating transport-layer errors
+ *        (__TRANSPORT, __ALL_BROKERS_DOWN, __RESOLVE) that librdkafka
+ *        recovers from on its own. All other errors remain test-fatal.
+ */
+int test_transport_errors_not_fatal_cb(rd_kafka_t *rk,
+                                       rd_kafka_resp_err_t err,
+                                       const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN ||
+            err == RD_KAFKA_RESP_ERR__RESOLVE) {
+                TEST_SAY("Ignoring transport error %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+                return 0;
+        }
+        return 1;
+}
+
 static void
 test_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
         if (test_curr->is_fatal_cb &&

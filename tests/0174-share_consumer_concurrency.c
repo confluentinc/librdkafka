@@ -1077,6 +1077,9 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
 
         SUB_TEST();
 
+        /* Tolerate transport-layer errors; librdkafka recovers internally. */
+        test_curr->is_fatal_cb = test_transport_errors_not_fatal_cb;
+
         TEST_ASSERT(CONSUMER_POOL <= MAX_CONSUMER_POOL,
                     "CONSUMER_POOL %d > MAX_CONSUMER_POOL", CONSUMER_POOL);
         TEST_ASSERT(ACTIVE_CONSUMERS <= CONSUMER_POOL, "ACTIVE > POOL");
@@ -1370,6 +1373,8 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
             started_threads);
 
         mtx_destroy(&state.lock);
+
+        test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();
 }

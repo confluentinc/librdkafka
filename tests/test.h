@@ -931,6 +931,10 @@ int test_error_is_not_fatal_cb(rd_kafka_t *rk,
                                rd_kafka_resp_err_t err,
                                const char *reason);
 
+int test_transport_errors_not_fatal_cb(rd_kafka_t *rk,
+                                       rd_kafka_resp_err_t err,
+                                       const char *reason);
+
 
 const char *test_consumer_group_protocol();
 

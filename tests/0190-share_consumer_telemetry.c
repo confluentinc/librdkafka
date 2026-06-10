@@ -36,10 +36,10 @@
 #define TELEMETRY_TOPIC_DEFAULT "client-telemetry-metrics"
 #define METRIC_PREFIX           "org.apache.kafka."
 
-/* Expected share-consumer metric suffixes (without the org.apache.kafka. prefix).
- * Mirrors RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO in
- * src/rdkafka_telemetry_encode.h; hardcoded here so the test doesn't transitively
- * include the internal header. */
+/* Expected share-consumer metric suffixes (without the org.apache.kafka.
+ * prefix). Mirrors RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO in
+ * src/rdkafka_telemetry_encode.h; hardcoded here so the test doesn't
+ * transitively include the internal header. */
 static const char *const EXPECTED_SHARE_CONSUMER_METRICS[] = {
     "consumer.share.poll.idle.ratio.avg",
     "consumer.share.time.between.poll.avg",

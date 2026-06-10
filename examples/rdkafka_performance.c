@@ -1240,7 +1240,9 @@ int main(int argc, char **argv) {
                 rd_snprintf(tmp, sizeof(tmp), "%" PRId64, dispintvl / 1000);
         }
 
-        if (rd_kafka_conf_set(conf, "statistics.interval.ms",
+        /* Share consumer rejects statistics.interval.ms, so skip it for -S. */
+        if (mode != 'S' &&
+            rd_kafka_conf_set(conf, "statistics.interval.ms",
                               stats_intvlstr ? stats_intvlstr : tmp, errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
                 fprintf(stderr, "%% %s\n", errstr);
@@ -1757,8 +1759,7 @@ int main(int argc, char **argv) {
                                 }
 
                         } else {
-                                rkmessages[0] =
-                                    rd_kafka_consumer_poll(rk, 1000);
+                                rkmessages[0] = rd_kafka_consumer_poll(rk, 100);
                                 if (rkmessages[0]) {
                                         msg_consume(rkmessages[0], NULL);
                                         rd_kafka_message_destroy(rkmessages[0]);
@@ -1824,7 +1825,7 @@ int main(int argc, char **argv) {
                         fetch_latency = rd_clock();
 
                         error = rd_kafka_share_consume_batch(
-                            rkshare, 1000, rkmessages, &rcvd_msgs);
+                            rkshare, 100, rkmessages, &rcvd_msgs);
 
                         cnt.t_fetch_latency += rd_clock() - fetch_latency;
 

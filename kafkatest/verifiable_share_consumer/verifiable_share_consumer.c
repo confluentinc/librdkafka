@@ -551,8 +551,6 @@ int main(int argc, char **argv) {
         if (debug_flags && conf_set(conf, "debug", debug_flags) == -1)
                 return 1;
 
-        rd_kafka_conf_set_share_acknowledgement_commit_cb(conf, share_ack_cb);
-
         if (config_file && load_properties_file(config_file, conf, errstr,
                                                 sizeof(errstr)) == -1) {
                 fprintf(stderr, "%s\n", errstr);
@@ -583,6 +581,7 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
+        rd_kafka_share_set_acknowledgement_commit_cb(rkshare, share_ack_cb, NULL);
         emit_event("startup_complete");
 
         /* Post-consumer-create errors fall through to `cleanup` so the

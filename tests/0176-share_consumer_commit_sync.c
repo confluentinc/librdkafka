@@ -2338,6 +2338,7 @@ static void do_test_chaos_111_ack_commit_interleave(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         SUB_TEST_PASS();
 }
@@ -2438,6 +2439,7 @@ static void do_test_chaos_alternating_commits(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         SUB_TEST_PASS();
 }
@@ -2603,6 +2605,7 @@ static void do_test_chaos_random_ack_random_commit(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         SUB_TEST_PASS();
 }
@@ -2702,6 +2705,7 @@ static void do_test_chaos_burst_commits(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         SUB_TEST_PASS();
 }
@@ -2828,6 +2832,7 @@ static void do_test_chaos_callback_receipt_match(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         SUB_TEST_PASS();
 }

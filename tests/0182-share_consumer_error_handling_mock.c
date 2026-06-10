@@ -1430,7 +1430,10 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
         rd_kafka_resp_err_t expected_phase1_callback_err;
         int prev_callback_cnt;
         int i;
-        const int wait_tolerance_ms = 500;
+        /* Valgrind serializes threads and slows wall-clock-bound paths;
+         * widen the tolerance to avoid flaky over-budget failures. */
+        const int wait_tolerance_ms =
+            !strcmp(test_mode, "valgrind") ? 2000 : 500;
 
         SUB_TEST_QUICK("api_timeout_ms=%d socket_timeout_ms=%d rtt_ms=%d",
                        api_timeout_ms, socket_timeout_ms, rtt_ms);
@@ -1709,6 +1712,7 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
+        test_ack_cb_state_destroy(&cb_state);
 
         SUB_TEST_PASS();
 }
@@ -1775,7 +1779,10 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
         int prev_callback_cnt;
         int phase1_partition_cnt;
         int i;
-        const int wait_tolerance_ms = 500;
+        /* See do_test_socket_timeout_full_ack_then_more for the Valgrind
+         * tolerance rationale. */
+        const int wait_tolerance_ms =
+            !strcmp(test_mode, "valgrind") ? 2000 : 500;
 
         SUB_TEST_QUICK("api_timeout_ms=%d socket_timeout_ms=%d rtt_ms=%d",
                        api_timeout_ms, socket_timeout_ms, rtt_ms);
@@ -1985,6 +1992,7 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
+        test_ack_cb_state_destroy(&cb_state);
 
         SUB_TEST_PASS();
 }

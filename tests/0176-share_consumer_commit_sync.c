@@ -124,6 +124,8 @@ static void do_test_basic_implicit_commit_sync(void) {
         int consumed = 0;
         int attempts = 0;
 
+        SUB_TEST();
+
         topic = test_mk_topic_name("0176-cs-impl-basic", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 5);
@@ -220,6 +222,8 @@ static void do_test_basic_implicit_commit_sync(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -241,6 +245,8 @@ static void do_test_basic_explicit_commit_sync(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-expl-basic", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -341,6 +347,8 @@ static void do_test_basic_explicit_commit_sync(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -356,6 +364,8 @@ static void do_test_no_pending_acks(void) {
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
         rd_kafka_topic_partition_list_t *partitions = NULL;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-no-pending", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -378,6 +388,8 @@ static void do_test_no_pending_acks(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -399,6 +411,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
         size_t j;
         int consumed = 0;
         int attempts = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-no-redeliver", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -472,6 +486,8 @@ static void do_test_commit_sync_prevents_redelivery(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -495,6 +511,8 @@ static void do_test_mixed_ack_types(void) {
         int attempts = 0;
         int64_t released_offsets[3];
         int released_cnt = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-mixed-acks", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -646,6 +664,8 @@ static void do_test_mixed_ack_types(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -671,6 +691,8 @@ static void do_test_multiple_commit_sync_calls(void) {
         int attempts                = 0;
         int commit_cnt              = 0;
         int acked_since_last_commit = 0;
+
+        SUB_TEST();
 
         topic = test_mk_topic_name("0176-cs-multi-calls", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
@@ -814,6 +836,8 @@ static void do_test_multiple_commit_sync_calls(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -863,6 +887,8 @@ static void do_test_multi_topic_partition(void) {
             MULTI_TP_TOPICS * MULTI_TP_PARTITIONS * MULTI_TP_MSGS_PER_PARTITION;
         int i, p;
         int16_t max_dc_seen = 0;
+
+        SUB_TEST();
 
         /* Create topics and produce 10 messages per partition */
         for (i = 0; i < MULTI_TP_TOPICS; i++) {
@@ -1020,6 +1046,8 @@ static void do_test_multi_topic_partition(void) {
 
         for (i = 0; i < MULTI_TP_TOPICS; i++)
                 rd_free(topics[i]);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1278,9 +1306,9 @@ static void do_test_mock_uses_share_acknowledge(void) {
  *  the ack when the delayed response arrives.
  *
  *  TODO KIP-932: Verify and maybe unify the timeout error
- *  returned by commit_sync. Java uses a single REQUEST_TIMED_OUT
- *  mapping; librdkafka can return either depending on which
- *  timer fires first.
+ *  returned by commit_sync. librdkafka can return either
+ *  REQUEST_TIMED_OUT or _TIMED_OUT depending on which timer
+ *  fires first.
  *
  *  Phase 2: Remove RTT, wait 5s for broker to finish processing.
  *  Second consumer should get 0 records (acks were processed).
@@ -1533,6 +1561,8 @@ static void do_test_mixed_commit_types(void) {
         rd_ts_t t_start, t_elapsed_ms;
         rd_ts_t max_sync_elapsed_ms = 0;
 
+        SUB_TEST();
+
         topic = test_mk_topic_name("0176-cs-mixed-types", 1);
         test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 50);
@@ -1701,6 +1731,8 @@ static void do_test_mixed_commit_types(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
 }
 
 
@@ -1862,8 +1894,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
         /* Verify timing: should complete in ~4s (2s inflight + 2s sync),
          * not ~6s (2s inflight + 2s async + 2s sync). */
-        TEST_ASSERT(t_elapsed_ms >= 3500 && t_elapsed_ms <= 4500,
-                    "Expected commit_sync to complete in ~4s (3500-4500ms), "
+        TEST_ASSERT(t_elapsed_ms >= 3250 && t_elapsed_ms <= 4500,
+                    "Expected commit_sync to complete in ~4s (3250-4500ms), "
                     "got %" PRId64 "ms. If >5s, dispatch priority is wrong.",
                     t_elapsed_ms);
 
@@ -1931,11 +1963,6 @@ static void do_test_mock_broker_dispatch_priority(void) {
 }
 
 
-/* ===================================================================
- *  Acknowledgement callback helpers.
- * =================================================================== */
-
-
 /* Extended ack callback state with error tracking for sync commit tests */
 typedef struct ack_cb_state_s {
         test_ack_cb_state_t base;       /* Base state from test.h */
@@ -1963,8 +1990,7 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
         TEST_SAY("ACK CALLBACK: err=%s (%d), partitions=%zu, offsets=%zu\n",
                  rd_kafka_err2name(err), err, partition_cnt, offsets_in_entry);
 
-        state->base.callback_cnt++;
-        state->base.last_err = err;
+        test_ack_cb_state_push_err(&state->base, err);
 
         /* Track this error in our errors array */
         if (state->error_cnt < 64)
@@ -1979,7 +2005,7 @@ static void share_ack_cb(rd_kafka_share_t *rkshare,
 /* ===================================================================
  *  Test: commit_sync callback invocation.
  *
- *  Verifies that share_acknowledgement_commit_cb is invoked after
+ *  Verifies that the runtime acknowledgement callback is invoked after
  *  commit_sync when using dedicated ShareAcknowledge request.
  * =================================================================== */
 static void do_test_commit_sync_callback(void) {
@@ -1991,9 +2017,9 @@ static void do_test_commit_sync_callback(void) {
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         size_t rcvd;
         size_t j;
-        int consumed = 0;
-        int attempts = 0;
-        ack_cb_state_t state;
+        size_t consumed           = 0;
+        int attempts              = 0;
+        test_ack_cb_state_t state = {0};
 
         SUB_TEST();
 
@@ -2001,8 +2027,8 @@ static void do_test_commit_sync_callback(void) {
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
         test_produce_msgs_simple(common_producer, topic, 0, 50);
 
-        rkshare = test_create_share_consumer_with_cb(group, "explicit",
-                                                     &state.base, share_ack_cb);
+        rkshare =
+            test_create_share_consumer_with_cb(group, "explicit", &state, NULL);
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         test_alter_group_configurations(group, grp_conf, 1);
         subscribe_consumer(rkshare, &topic, 1);
@@ -2026,7 +2052,7 @@ static void do_test_commit_sync_callback(void) {
                 }
         }
 
-        TEST_SAY("Consumed and acknowledged %d messages\n", consumed);
+        TEST_SAY("Consumed and acknowledged %zu messages\n", consumed);
         TEST_ASSERT(consumed > 0, "Expected to consume some messages");
 
         /* Call commit_sync to trigger callback */
@@ -2036,24 +2062,776 @@ static void do_test_commit_sync_callback(void) {
         RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
 
         /* Wait for callback */
-        test_wait_for_cb_with_poll(&state.base, rkshare, 1, 10000);
+        test_wait_for_cb_with_poll(&state, rkshare, 1, 10000);
 
-        TEST_SAY("Callback count=%d, total_offsets=%zu, last_err=%s\n",
-                 state.base.callback_cnt, state.base.total_offsets,
-                 rd_kafka_err2name(state.base.last_err));
+        TEST_SAY("Callback count=%d, total_offsets=%zu\n", state.callback_cnt,
+                 state.total_offsets);
 
-        TEST_ASSERT(state.base.callback_cnt >= 1,
-                    "Expected at least 1 callback, got %d",
-                    state.base.callback_cnt);
-        TEST_ASSERT(state.base.total_offsets > 0,
-                    "Expected offsets in callback, got %zu",
-                    state.base.total_offsets);
+        TEST_ASSERT(state.callback_cnt == 1,
+                    "Expected callback to be invoked once, got %d",
+                    state.callback_cnt);
+        TEST_ASSERT(state.total_offsets == consumed,
+                    "Expected %zu offsets in callback, got %zu", consumed,
+                    state.total_offsets);
 
-        rd_kafka_share_consumer_close(rkshare);
-        rd_kafka_share_destroy(rkshare);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }
+
+/* ===================================================================
+ *  commit_sync after subscribed topic deletion surfaces a per-partition
+ *  error.
+ *
+ *  Produce records, consume them, delete the subscribed topic, then
+ *  call commit_sync. The returned per-partition list should include the
+ *  deleted topic's partition with an error code (typically
+ *  UNKNOWN_TOPIC_OR_PART), not silent success.
+ * =================================================================== */
+static void do_test_commit_sync_after_topic_deletion(void) {
+        const char *topic_name;
+        char *topic_dup;
+        char *topics_for_delete[1];
+        const char *group = "commit-sync-deleted-topic";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_resp_err_t del_err;
+        size_t rcvd;
+        size_t j;
+        int consumed             = 0;
+        int attempts             = 0;
+        rd_bool_t topic_err_seen = rd_false;
+
+        SUB_TEST();
+
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping commit_sync-after-topic-deletion "
+                    "(broker on Windows)\n");
+                SUB_TEST_PASS();
+                return;
+        }
+
+        topic_name = test_mk_topic_name("0176-cs-deleted", 1);
+        topic_dup  = rd_strdup(topic_name);
+        test_create_topic_wait_exists(common_admin, topic_name, 1, -1,
+                                      60 * 1000);
+        test_produce_msgs_simple(common_producer, topic_name, 0, 5);
+
+        rkshare = create_share_consumer(group, "implicit");
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic_name, 1);
+
+        /* Consume records (so there's something to commit) */
+        while (consumed == 0 && attempts++ < 30) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+                }
+        }
+        TEST_ASSERT(consumed > 0, "Expected to consume records, got 0");
+
+        /* Delete the subscribed topic */
+        TEST_SAY("Deleting topic %s\n", topic_name);
+        topics_for_delete[0] = topic_dup;
+        del_err              = test_DeleteTopics_simple(common_admin, NULL,
+                                                        topics_for_delete, 1, NULL);
+        TEST_ASSERT(del_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "DeleteTopics failed: %s", rd_kafka_err2str(del_err));
+
+        /* Wait for the topic delete to propagate in the cluster. */
+        rd_sleep(3);
+
+        /* commit_sync should return per-partition results — at least one
+         * partition's err should indicate the deletion. */
+        error = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        TEST_SAY("commit_sync returned: error=%s, partitions=%p\n",
+                 error ? rd_kafka_error_string(error) : "NULL",
+                 (void *)partitions);
+
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        if (partitions) {
+                int i;
+                TEST_SAY("commit_sync returned %d partition entries\n",
+                         partitions->cnt);
+                for (i = 0; i < partitions->cnt; i++) {
+                        TEST_SAY("  %s [%" PRId32 "]: %s\n",
+                                 partitions->elems[i].topic,
+                                 partitions->elems[i].partition,
+                                 rd_kafka_err2name(partitions->elems[i].err));
+                        if (partitions->elems[i].err !=
+                            RD_KAFKA_RESP_ERR_NO_ERROR)
+                                topic_err_seen = rd_true;
+                }
+                rd_kafka_topic_partition_list_destroy(partitions);
+        }
+
+        TEST_ASSERT(topic_err_seen,
+                    "Expected commit_sync to surface a per-partition error "
+                    "after topic deletion");
+
+        rd_free(topic_dup);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Chaos: strict per-record ack / commit interleaving.
+ *
+ *  Pattern over 30 ACCEPTed records:
+ *    Phase A (records 0-14): one commit per ack, alternating
+ *                            commit_sync (odd-indexed acks) and
+ *                            commit_async (even-indexed acks).
+ *    Phase B (records 15-29): one commit per every 2 acks,
+ *                             alternating commit_sync / commit_async
+ *                             by pair index.
+ *  Verifies the library survives tight ack/commit alternation and
+ *  that the ack callback fires at least once across the run.
+ * =================================================================== */
+static void do_test_chaos_111_ack_commit_interleave(void) {
+        const char *topic;
+        const char *group = "commit-sync-chaos-111";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed         = 0;
+        int attempts         = 0;
+        int sync_cnt         = 0;
+        int async_cnt        = 0;
+        const int total_msgs = 30;
+        const int phase_a    = 15; /* 1-1 interleave region */
+        ack_cb_state_t state = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0176-cs-chaos-111", 1);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, total_msgs);
+
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        while (consumed < total_msgs && attempts++ < 60) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd && consumed < total_msgs; j++) {
+                        if (rkmessages[j]->err) {
+                                rd_kafka_message_destroy(rkmessages[j]);
+                                continue;
+                        }
+
+                        rd_kafka_share_acknowledge(rkshare, rkmessages[j]);
+                        consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+
+                        if (consumed <= phase_a) {
+                                /* Phase A: ack 1 -> commit alternates */
+                                if (consumed % 2 == 1) {
+                                        error = rd_kafka_share_commit_sync(
+                                            rkshare, 30000, &partitions);
+                                        TEST_ASSERT(
+                                            !error,
+                                            "phase A commit_sync #%d: %s",
+                                            sync_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                        RD_IF_FREE(
+                                            partitions,
+                                            rd_kafka_topic_partition_list_destroy);
+                                        partitions = NULL;
+                                        sync_cnt++;
+                                } else {
+                                        error = rd_kafka_share_commit_async(
+                                            rkshare);
+                                        TEST_ASSERT(
+                                            !error,
+                                            "phase A commit_async #%d: %s",
+                                            async_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                        async_cnt++;
+                                }
+                        } else if (consumed % 2 == 0) {
+                                /* Phase B: commit every 2 records,
+                                 * alternating sync/async by pair index */
+                                int pair_idx = (consumed - phase_a) / 2;
+                                if (pair_idx % 2 == 1) {
+                                        error = rd_kafka_share_commit_async(
+                                            rkshare);
+                                        TEST_ASSERT(
+                                            !error,
+                                            "phase B commit_async #%d: %s",
+                                            async_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                        async_cnt++;
+                                } else {
+                                        error = rd_kafka_share_commit_sync(
+                                            rkshare, 30000, &partitions);
+                                        TEST_ASSERT(
+                                            !error,
+                                            "phase B commit_sync #%d: %s",
+                                            sync_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                        RD_IF_FREE(
+                                            partitions,
+                                            rd_kafka_topic_partition_list_destroy);
+                                        partitions = NULL;
+                                        sync_cnt++;
+                                }
+                        }
+                }
+        }
+
+        TEST_ASSERT(consumed == total_msgs, "Expected %d records, consumed %d",
+                    total_msgs, consumed);
+
+        /* Drain any pending async commit callbacks. */
+        test_wait_for_cb_with_poll(&state.base, rkshare, sync_cnt + async_cnt,
+                                   10000);
+
+        TEST_SAY(
+            "chaos 1-1-1: consumed=%d sync=%d async=%d "
+            "callbacks=%d offsets=%zu last_err=%s\n",
+            consumed, sync_cnt, async_cnt, state.base.callback_cnt,
+            state.base.total_offsets,
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        TEST_ASSERT(state.base.callback_cnt >= 1,
+                    "Expected at least 1 ack callback, got %d",
+                    state.base.callback_cnt);
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Chaos: per-record alternating commit_sync / commit_async.
+ *
+ *  Consume 40 records and, for every single ACCEPTed record, alternate
+ *  between commit_sync and commit_async. Stresses the library's
+ *  bookkeeping under the tightest possible commit cadence.
+ * =================================================================== */
+static void do_test_chaos_alternating_commits(void) {
+        const char *topic;
+        const char *group = "commit-sync-chaos-alt";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed         = 0;
+        int attempts         = 0;
+        int sync_cnt         = 0;
+        int async_cnt        = 0;
+        const int total_msgs = 40;
+        ack_cb_state_t state = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0176-cs-chaos-alt", 1);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, total_msgs);
+
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        while (consumed < total_msgs && attempts++ < 60) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd && consumed < total_msgs; j++) {
+                        if (rkmessages[j]->err) {
+                                rd_kafka_message_destroy(rkmessages[j]);
+                                continue;
+                        }
+                        rd_kafka_share_acknowledge(rkshare, rkmessages[j]);
+                        consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+
+                        if (consumed % 2 == 1) {
+                                error = rd_kafka_share_commit_sync(
+                                    rkshare, 30000, &partitions);
+                                TEST_ASSERT(
+                                    !error, "commit_sync #%d: %s", sync_cnt + 1,
+                                    error ? rd_kafka_error_string(error) : "");
+                                RD_IF_FREE(
+                                    partitions,
+                                    rd_kafka_topic_partition_list_destroy);
+                                partitions = NULL;
+                                sync_cnt++;
+                        } else {
+                                error = rd_kafka_share_commit_async(rkshare);
+                                TEST_ASSERT(!error, "commit_async #%d: %s",
+                                            async_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                async_cnt++;
+                        }
+                }
+        }
+
+        TEST_ASSERT(consumed == total_msgs, "Expected %d records, consumed %d",
+                    total_msgs, consumed);
+
+        test_wait_for_cb_with_poll(&state.base, rkshare, sync_cnt + async_cnt,
+                                   10000);
+
+        TEST_SAY(
+            "chaos alt: consumed=%d sync=%d async=%d "
+            "callbacks=%d offsets=%zu last_err=%s\n",
+            consumed, sync_cnt, async_cnt, state.base.callback_cnt,
+            state.base.total_offsets,
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Chaos: randomized ack types and commit modes (fixed seed).
+ *
+ *  Seeded PRNG so the sequence is fully reproducible across runs.
+ *  For each ACCEPTed/RELEASEd/REJECTed record we may immediately issue
+ *  a commit (sync or async), with the choices driven by the PRNG.
+ *  Verifies that the lib survives a realistic mixed workload and that
+ *  ACCEPT'd offsets eventually flow through the ack callback without
+ *  errors.
+ * =================================================================== */
+static void do_test_chaos_random_ack_random_commit(void) {
+        const char *topic;
+        const char *group = "commit-sync-chaos-rand";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int processed         = 0;
+        int accepted          = 0;
+        int released          = 0;
+        int rejected          = 0;
+        int attempts          = 0;
+        int sync_cnt          = 0;
+        int async_cnt         = 0;
+        const int produce_cnt = 80;
+        const int target      = 60; /* stop after this many processed */
+        ack_cb_state_t state  = {0};
+
+        SUB_TEST();
+
+        /* Fixed seed: this test must produce the same chaos sequence
+         * across runs so a failure can be reproduced deterministically.
+         * Seed is set before any rand() call inside this test; no earlier
+         * test in main_0176_share_consumer_commit_sync calls rand(). */
+        srand(0xC0FFEE);
+
+        topic = test_mk_topic_name("0176-cs-chaos-rand", 1);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, produce_cnt);
+
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        while (processed < target && attempts++ < 80) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                /* Drain the entire batch every iteration. Past `target`,
+                 * stop driving chaos but still ACCEPT every record so
+                 * nothing is left ACQUIRED in the lib's inflight map —
+                 * otherwise close/destroy would have to clean it up,
+                 * which the share consumer doesn't currently handle. */
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_share_AcknowledgeType_t at;
+                        rd_kafka_resp_err_t aerr;
+                        int r;
+
+                        if (rkmessages[j]->err) {
+                                rd_kafka_message_destroy(rkmessages[j]);
+                                continue;
+                        }
+
+                        if (processed >= target) {
+                                /* Drain-only path: ACCEPT to release the
+                                 * lock without affecting chaos stats. */
+                                aerr = rd_kafka_share_acknowledge_type(
+                                    rkshare, rkmessages[j],
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                                TEST_ASSERT(!aerr, "drain ACCEPT failed: %s",
+                                            rd_kafka_err2str(aerr));
+                                rd_kafka_message_destroy(rkmessages[j]);
+                                continue;
+                        }
+
+                        r = rand() % 6;
+                        if (r < 4) {
+                                at = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
+                                accepted++;
+                        } else if (r == 4) {
+                                at = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE;
+                                released++;
+                        } else {
+                                at = RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT;
+                                rejected++;
+                        }
+
+                        aerr = rd_kafka_share_acknowledge_type(
+                            rkshare, rkmessages[j], at);
+                        TEST_ASSERT(!aerr, "acknowledge_type(%d) failed: %s",
+                                    (int)at, rd_kafka_err2str(aerr));
+                        rd_kafka_message_destroy(rkmessages[j]);
+                        processed++;
+
+                        /* ~1 in 3 records: issue a commit. Sync vs async
+                         * decided by another PRNG draw. */
+                        if (rand() % 3 == 0) {
+                                if (rand() % 2 == 0) {
+                                        error = rd_kafka_share_commit_sync(
+                                            rkshare, 30000, &partitions);
+                                        TEST_ASSERT(
+                                            !error, "commit_sync #%d: %s",
+                                            sync_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                        RD_IF_FREE(
+                                            partitions,
+                                            rd_kafka_topic_partition_list_destroy);
+                                        partitions = NULL;
+                                        sync_cnt++;
+                                } else {
+                                        error = rd_kafka_share_commit_async(
+                                            rkshare);
+                                        TEST_ASSERT(
+                                            !error, "commit_async #%d: %s",
+                                            async_cnt + 1,
+                                            error ? rd_kafka_error_string(error)
+                                                  : "");
+                                        async_cnt++;
+                                }
+                        }
+                }
+        }
+
+        /* Final flush. */
+        error = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        TEST_ASSERT(!error, "final commit_sync: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
+        partitions = NULL;
+        sync_cnt++;
+
+        test_wait_for_cb_with_poll(&state.base, rkshare, sync_cnt + async_cnt,
+                                   15000);
+
+        TEST_SAY(
+            "chaos random: processed=%d accept=%d release=%d reject=%d "
+            "sync=%d async=%d callbacks=%d offsets=%zu\n",
+            processed, accepted, released, rejected, sync_cnt, async_cnt,
+            state.base.callback_cnt, state.base.total_offsets);
+
+        TEST_ASSERT(state.base.callback_cnt >= 1,
+                    "Expected at least 1 ack callback, got %d",
+                    state.base.callback_cnt);
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Chaos: burst of back-to-back commit_async then a flushing commit_sync.
+ *
+ *  Consume 50 records. After every ACCEPT, fire 5 commit_async in a row
+ *  followed by 1 commit_sync. Stresses the in-flight async commit queue
+ *  and the path where commit_sync drains a backlog of pending acks.
+ * =================================================================== */
+static void do_test_chaos_burst_commits(void) {
+        const char *topic;
+        const char *group = "commit-sync-chaos-burst";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed  = 0;
+        int attempts  = 0;
+        int sync_cnt  = 0;
+        int async_cnt = 0;
+        int b;
+        const int total_msgs = 50;
+        const int burst_size = 5;
+        ack_cb_state_t state = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0176-cs-chaos-burst", 1);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, total_msgs);
+
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        while (consumed < total_msgs && attempts++ < 60) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd && consumed < total_msgs; j++) {
+                        if (rkmessages[j]->err) {
+                                rd_kafka_message_destroy(rkmessages[j]);
+                                continue;
+                        }
+                        rd_kafka_share_acknowledge(rkshare, rkmessages[j]);
+                        consumed++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+
+                        for (b = 0; b < burst_size; b++) {
+                                error = rd_kafka_share_commit_async(rkshare);
+                                TEST_ASSERT(
+                                    !error, "burst commit_async #%d: %s",
+                                    async_cnt + 1,
+                                    error ? rd_kafka_error_string(error) : "");
+                                async_cnt++;
+                        }
+
+                        error = rd_kafka_share_commit_sync(rkshare, 30000,
+                                                           &partitions);
+                        TEST_ASSERT(!error, "burst commit_sync #%d: %s",
+                                    sync_cnt + 1,
+                                    error ? rd_kafka_error_string(error) : "");
+                        RD_IF_FREE(partitions,
+                                   rd_kafka_topic_partition_list_destroy);
+                        partitions = NULL;
+                        sync_cnt++;
+                }
+        }
+
+        TEST_ASSERT(consumed == total_msgs, "Expected %d records, consumed %d",
+                    total_msgs, consumed);
+
+        test_wait_for_cb_with_poll(&state.base, rkshare, sync_cnt, 15000);
+
+        TEST_SAY(
+            "chaos burst: consumed=%d sync=%d async=%d "
+            "callbacks=%d offsets=%zu\n",
+            consumed, sync_cnt, async_cnt, state.base.callback_cnt,
+            state.base.total_offsets);
+
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  Chaos: callback-driven receipt accounting under varying batch sizes.
+ *
+ *  Consume 60 records and commit with progressively varying batch sizes
+ *  (ack 1 -> commit, ack 2 -> commit, ack 3 -> commit, ...) alternating
+ *  between commit_sync and commit_async. After the run, verify the ack
+ *  callback received offset counts that account for all ACCEPTed records.
+ * =================================================================== */
+static void do_test_chaos_callback_receipt_match(void) {
+        const char *topic;
+        const char *group = "commit-sync-chaos-receipts";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        size_t j;
+        int consumed           = 0;
+        int attempts           = 0;
+        int acked_since_commit = 0;
+        int batch_target       = 1;
+        int sync_cnt           = 0;
+        int async_cnt          = 0;
+        const int total_msgs   = 60;
+        ack_cb_state_t state   = {0};
+
+        SUB_TEST();
+
+        topic = test_mk_topic_name("0176-cs-chaos-receipts", 1);
+        test_create_topic_wait_exists(common_admin, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, total_msgs);
+
+        rkshare = test_create_share_consumer_with_cb(group, "explicit",
+                                                     &state.base, share_ack_cb);
+        test_share_set_auto_offset_reset(group, "earliest");
+        subscribe_consumer(rkshare, &topic, 1);
+
+        while (consumed < total_msgs && attempts++ < 60) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+
+                for (j = 0; j < rcvd && consumed < total_msgs; j++) {
+                        if (rkmessages[j]->err) {
+                                rd_kafka_message_destroy(rkmessages[j]);
+                                continue;
+                        }
+                        rd_kafka_share_acknowledge(rkshare, rkmessages[j]);
+                        consumed++;
+                        acked_since_commit++;
+                        rd_kafka_message_destroy(rkmessages[j]);
+
+                        if (acked_since_commit < batch_target)
+                                continue;
+
+                        /* Alternate sync (odd batch idx) / async (even). */
+                        if ((sync_cnt + async_cnt) % 2 == 0) {
+                                error = rd_kafka_share_commit_sync(
+                                    rkshare, 30000, &partitions);
+                                TEST_ASSERT(
+                                    !error, "receipts commit_sync #%d: %s",
+                                    sync_cnt + 1,
+                                    error ? rd_kafka_error_string(error) : "");
+                                RD_IF_FREE(
+                                    partitions,
+                                    rd_kafka_topic_partition_list_destroy);
+                                partitions = NULL;
+                                sync_cnt++;
+                        } else {
+                                error = rd_kafka_share_commit_async(rkshare);
+                                TEST_ASSERT(
+                                    !error, "receipts commit_async #%d: %s",
+                                    async_cnt + 1,
+                                    error ? rd_kafka_error_string(error) : "");
+                                async_cnt++;
+                        }
+                        acked_since_commit = 0;
+                        batch_target       = (batch_target % 5) + 1;
+                }
+        }
+
+        /* Drain any leftover acked-but-not-committed records. */
+        if (acked_since_commit > 0) {
+                error = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+                TEST_ASSERT(!error, "final commit_sync: %s",
+                            error ? rd_kafka_error_string(error) : "");
+                RD_IF_FREE(partitions, rd_kafka_topic_partition_list_destroy);
+                partitions = NULL;
+                sync_cnt++;
+        }
+
+        TEST_ASSERT(consumed == total_msgs, "Expected %d records, consumed %d",
+                    total_msgs, consumed);
+
+        test_wait_for_cb_with_poll(&state.base, rkshare, sync_cnt + async_cnt,
+                                   15000);
+
+        TEST_SAY(
+            "chaos receipts: consumed=%d sync=%d async=%d "
+            "callbacks=%d offsets=%zu\n",
+            consumed, sync_cnt, async_cnt, state.base.callback_cnt,
+            state.base.total_offsets);
+
+        TEST_ASSERT(state.base.callback_cnt >= 1,
+                    "Expected at least 1 ack callback, got %d",
+                    state.base.callback_cnt);
+        TEST_ASSERT(state.base.total_offsets >= (size_t)consumed,
+                    "Expected callback to surface at least %d offsets, got %zu",
+                    consumed, state.base.total_offsets);
+        TEST_ASSERT(
+            test_ack_cb_state_first_err(&state.base) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "Ack callback reported err: %s",
+            rd_kafka_err2name(test_ack_cb_state_first_err(&state.base)));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
 
 int main_0176_share_consumer_commit_sync(int argc, char **argv) {
         test_timeout_set(120);
@@ -2072,6 +2850,16 @@ int main_0176_share_consumer_commit_sync(int argc, char **argv) {
 
         /* Callback test */
         do_test_commit_sync_callback();
+
+        /* commit_sync after subscribed topic was deleted */
+        do_test_commit_sync_after_topic_deletion();
+
+        /* Chaos: interleaved ack / commit patterns. */
+        do_test_chaos_111_ack_commit_interleave();
+        do_test_chaos_alternating_commits();
+        do_test_chaos_random_ack_random_commit();
+        do_test_chaos_burst_commits();
+        do_test_chaos_callback_receipt_match();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

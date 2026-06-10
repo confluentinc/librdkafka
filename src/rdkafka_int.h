@@ -94,6 +94,10 @@ typedef struct rd_kafka_lwtopic_s rd_kafka_lwtopic_t;
 
 #define RD_KAFKA_OFFSET_IS_LOGICAL(OFF) ((OFF) < 0)
 
+/**
+ * TODO KIP-932: Remove the check of RD_KAFKA_CONSUMER. Only
+ * checking for is_share_consumer should be sufficient.
+ */
 #define RD_KAFKA_IS_SHARE_CONSUMER(rk)                                         \
         ((rk)->rk_type == RD_KAFKA_CONSUMER &&                                 \
          (rk)->rk_conf.share.is_share_consumer)
@@ -340,6 +344,71 @@ struct rd_kafka_s {
                           *   Set when rd_kafka_share_consumer_new()
                           *   is called, used to access inflight
                           *   acks for building ack batches. */
+
+        /** Share consumer state. Only used when this rd_kafka_t handle
+         *  is a share consumer (rk_rkshare != NULL). */
+        /**
+         * TODO KIP-932: Change to rk_share when interface is finalized.
+         */
+        struct {
+                /** Runtime acknowledgement callback set via
+                 *  rd_kafka_share_set_acknowledgement_commit_cb().
+                 *  @locality APP THREAD ONLY (set in
+                 * set_share_acknowledgement_commit_cb).
+                 */
+                void (*share_acknowledgement_commit_cb)(
+                    rd_kafka_share_t *rkshare,
+                    rd_kafka_share_partition_offsets_list_t *partitions,
+                    rd_kafka_resp_err_t err,
+                    void *opaque);
+
+                /** Application opaque for acknowledgement callback.
+                 *  @locality APP THREAD ONLY. */
+                void *acknowledgement_commit_cb_opaque;
+
+                /** Reentrancy protection flag - set to true when inside
+                 *  callback.
+                 *  @locality APP THREAD ONLY. */
+                rd_bool_t in_callback;
+
+                /** Registration flag - whether callback is currently
+                 *  registered.
+                 *  Written via RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER op
+                 *  handler. Used by main thread to decide whether to
+                 *  enqueue callback ops.
+                 *  @locality MAIN THREAD ONLY. */
+                rd_bool_t acknowledgement_commit_cb_registered;
+
+                /** Single-thread access gate with re-entrant ownership.
+                 *
+                 *  Every public share consumer API calls
+                 *  rd_kafka_share_acquire() on entry and
+                 *  rd_kafka_share_release() before returning.
+                 *  The owning thread is recorded in
+                 *  @c current_owner_thread; concurrent entry from a
+                 *  different thread is rejected with
+                 *  RD_KAFKA_RESP_ERR__CONFLICT. The owning thread may
+                 *  re-enter (e.g. nested share calls), with @c ref_count
+                 *  tracking the nesting level — ownership is released
+                 *  only when @c ref_count returns to 0.
+                 *
+                 *  @c current_owner_thread holds a real per-thread
+                 *  identifier from thrd_current_id()
+                 *  (GetCurrentThreadId() on Windows, pthread_self()
+                 *  elsewhere); the unowned sentinel is
+                 *  RD_KAFKA_SHARE_NO_CURRENT_THREAD (-1) — a value no real
+                 *  thread id can take on any supported platform. 0 is
+                 *  deliberately *not* the sentinel so a missing init
+                 *  doesn't silently look "unowned" (a zero-initialised
+                 *  struct will fail acquire with __CONFLICT instead of
+                 *  letting two threads both pass through). The acquire
+                 *  path uses rd_atomic64_cas() so the
+                 *  first-caller-wins transition is race-free. */
+                rd_atomic64_t current_owner_thread; /**< Owning thread id; -1 =
+                                                       unowned. */
+                rd_atomic32_t
+                    ref_count; /**< Re-entrancy count for the owner. */
+        } rk_share_consumer;
 
         rd_kafka_conf_t rk_conf;
         rd_kafka_q_t *rk_logq; /* Log queue if `log.queue` set */
@@ -766,6 +835,12 @@ struct rd_kafka_s {
                         rd_avg_t
                             rk_avg_rebalance_latency; /**< Current rebalance
                                                        *   latency avg */
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t
+                            rk_avg_share_time_between_poll; /**< Current time
+                                                               between two
+                                                               share_consume_batch
+                                                             */
                 } rd_avg_current;
 
                 struct {
@@ -781,12 +856,20 @@ struct rd_kafka_s {
                         rd_avg_t
                             rk_avg_rebalance_latency; /**< Rolled over rebalance
                                                        *   latency avg */
+                        rd_avg_t rk_avg_share_poll_idle_ratio;
+                        rd_avg_t
+                            rk_avg_share_time_between_poll; /**< Rolled over
+                                                               time between two
+                                                               share_consume_batch
+                                                             */
                 } rd_avg_rollover;
 
                 /* Share consumer poll/batch tracking */
-                rd_ts_t ts_last_share_poll_start;
-                rd_ts_t ts_share_poll_start;
-                rd_ts_t time_since_last_share_poll;
+                struct {
+                        rd_ts_t ts_last_poll_start;
+                        rd_ts_t ts_poll_start;
+                        rd_ts_t time_since_last_poll;
+                } rk_share_poll;
 
                 /* Share consumer fetch-RPC counter */
                 rd_atomic64_t share_fetch_total;
@@ -858,6 +941,14 @@ struct rd_kafka_share_s {
          * while closing
          */
         rd_bool_t rkshare_consumer_closing;
+
+        /** True when the consumer has an active subscription (i.e.
+         *  rd_kafka_share_subscribe() succeeded with a non-empty list
+         *  and rd_kafka_share_unsubscribe() has not been called since).
+         *  Written only on the app thread under rkshare_acquire/release;
+         *  read only in consume_batch while the same lock is held.
+         *  @locality app thread */
+        rd_bool_t rkshare_subscribed;
 };
 
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
@@ -1276,7 +1367,7 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
                                                         rd_kafka_q_t *rkq,
                                                         rd_ts_t now,
                                                         rd_bool_t is_blocking) {
-        if (rk->rk_type != RD_KAFKA_CONSUMER)
+        if (rk->rk_type != RD_KAFKA_CONSUMER || RD_KAFKA_IS_SHARE_CONSUMER(rk))
                 return;
 
         if (!now)
@@ -1310,7 +1401,8 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_poll_start(rd_kafka_t *rk,
  */
 static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
                                                     rd_kafka_q_t *rkq) {
-        if (rk->rk_type == RD_KAFKA_CONSUMER) {
+        if (rk->rk_type == RD_KAFKA_CONSUMER &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_ts_t now = rd_clock();
                 rd_atomic64_set(&rk->rk_ts_last_poll, now);
                 if (unlikely(rk->rk_cgrp &&
@@ -1368,6 +1460,42 @@ rd_kafka_share_consumer_closed_error(rd_kafka_share_t *rkshare);
  */
 rd_kafka_resp_err_t
 rd_kafka_share_consumer_closed_err(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Sentinel value stored in rk_share_consumer.current_owner_thread
+ *        when the gate is unowned. Chosen to never collide with a real
+ *        thread id on any supported platform. A zero-initialised struct
+ *        does NOT look unowned, which is intentional: a missing
+ *        init causes acquire to fail with __CONFLICT rather than
+ *        silently letting two threads pass.
+ */
+#define RD_KAFKA_SHARE_NO_CURRENT_THREAD ((int64_t)(-1))
+
+/**
+ * @brief Acquire single-thread ownership of the share consumer.
+ *
+ * Every public share consumer API must call this on entry and pair
+ * it with rd_kafka_share_release() on every return path. The owning
+ * thread may re-enter (nested share calls bump the ref_count counter
+ * and release decrements it).
+ *
+ * @returns NULL on success, or a newly-allocated rd_kafka_error_t (owned
+ *          by the caller) on rejection:
+ *           - RD_KAFKA_RESP_ERR__STATE on NULL rkshare, or when called
+ *             from inside the user-defined acknowledgement commit
+ *             callback.
+ *           - RD_KAFKA_RESP_ERR__CONFLICT on concurrent entry from a
+ *             different application thread.
+ */
+rd_kafka_error_t *rd_kafka_share_acquire(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief Release ownership acquired by rd_kafka_share_acquire().
+ *
+ * Tolerates NULL rkshare (no-op) so error paths can call it
+ * unconditionally.
+ */
+void rd_kafka_share_release(rd_kafka_share_t *rkshare);
 
 void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                                      rd_kafka_broker_t *rkb,

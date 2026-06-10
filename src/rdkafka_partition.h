@@ -143,12 +143,9 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
         TAILQ_ENTRY(rd_kafka_toppar_s) rktp_rktlink;  /* rd_kafka_topic_t link*/
         TAILQ_ENTRY(rd_kafka_toppar_s) rktp_cgrplink; /* rd_kafka_cgrp_t link */
         TAILQ_ENTRY(rd_kafka_toppar_s)
-        rktp_txnlink; /**< rd_kafka_t.rk_eos.
-                       *   txn_pend_rktps
-                       *   or txn_rktps */
-        TAILQ_ENTRY(rd_kafka_toppar_s)
-        rktp_rkb_session_link;      /* rkb_share_fetch_session
-                                     * toppars_in_session link */
+        rktp_txnlink;               /**< rd_kafka_t.rk_eos.
+                                     *   txn_pend_rktps
+                                     *   or txn_rktps */
         rd_kafka_topic_t *rktp_rkt; /**< This toppar's topic object */
         int32_t rktp_partition;
         // LOCK: toppar_lock() + topic_wrlock()
@@ -615,6 +612,11 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2(rd_kafka_t *rk,
                                         int32_t partition,
                                         int ua_on_miss,
                                         int create_on_miss);
+rd_kafka_toppar_t *rd_kafka_toppar_get_by_id2(rd_kafka_t *rk,
+                                              const char *topic,
+                                              rd_kafka_Uuid_t topic_id,
+                                              int32_t partition,
+                                              int create_on_miss);
 rd_kafka_toppar_t *rd_kafka_toppar_get_avail(const rd_kafka_topic_t *rkt,
                                              int32_t partition,
                                              int ua_on_miss,

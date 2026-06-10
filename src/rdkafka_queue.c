@@ -885,6 +885,8 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         rd_ts_t abs_timeout;
         rd_kafka_error_t *error = NULL;
         unsigned int cnt        = 0;
+        rd_kafka_resp_err_t fatal_err;
+        char fatal_errstr[512];
 
         *rkmessages_size_out = 0;
 
@@ -899,8 +901,7 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         }
         mtx_unlock(&rkq->rkq_lock);
 
-        abs_timeout = rd_timeout_init(timeout_ms);
-        rd_kafka_app_poll_start(rk, rkq, 0, timeout_ms);
+        abs_timeout           = rd_timeout_init(timeout_ms);
         rd_kafka_yield_thread = 0;
 
         /* Wait for at least one op to arrive */
@@ -914,7 +915,6 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
 
         if (!rko) {
                 mtx_unlock(&rkq->rkq_lock);
-                rd_kafka_app_polled(rk, rkq);
                 return NULL;
         }
 
@@ -935,19 +935,38 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                     rd_false;
         } else if (rko->rko_type == RD_KAFKA_OP_CONSUMER_ERR) {
                 /* Return error */
-                if (rko->rko_error) {
+                if (unlikely(rko->rko_err == RD_KAFKA_RESP_ERR__FATAL)) {
+                        /* Never surface the generic __FATAL sentinel naked:
+                         * the specific fatal code + message are set before
+                         * this op is enqueued (and never cleared), so fetch
+                         * them and return a fatal-flagged error. */
+                        fatal_err = rd_kafka_fatal_error(rk, fatal_errstr,
+                                                         sizeof(fatal_errstr));
+                        error     = rd_kafka_error_new_fatal(fatal_err, "%s",
+                                                             fatal_errstr);
+                } else if (unlikely(rko->rko_error != NULL)) {
                         error          = rko->rko_error;
                         rko->rko_error = NULL;
                 } else {
-                        error = rd_kafka_error_new(
+                        /* Non-fatal share-consumer errors are retriable: the
+                         * app can retry the consume_batch call. */
+                        error = rd_kafka_error_new_retriable(
                             rko->rko_err, "%s",
                             rko->rko_u.err.errstr ? rko->rko_u.err.errstr : "");
                 }
+        } else {
+                /* Only OP_SHARE_FETCH_RESPONSE and OP_CONSUMER_ERR are
+                 * expected on the share consumer queue. Anything else
+                 * indicates a routing bug or unsupported API misuse;
+                 * abort in devel builds, drop silently in production. */
+                rd_kafka_dbg(rk, QUEUE, "SHAREQ",
+                             "Unexpected op %s (type %d) on share "
+                             "consumer queue; dropping",
+                             rd_kafka_op2str(rko->rko_type), rko->rko_type);
+                rd_dassert(!*"unexpected op on share consumer queue");
         }
 
-        /* Destroy other op types */
         rd_kafka_op_destroy(rko);
-        rd_kafka_app_polled(rk, rkq);
         *rkmessages_size_out = cnt;
         return error;
 }
@@ -1056,6 +1075,21 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
                 rkq = rkqu->rkqu_q;
         rd_kafka_q_fwd_set(rk->rk_logq, rkq);
         return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+rd_kafka_error_t *rd_kafka_share_set_log_queue(rd_kafka_share_t *rkshare,
+                                               rd_kafka_queue_t *rkqu) {
+        rd_kafka_resp_err_t err;
+
+        if (!rkshare || !rkshare->rkshare_rk)
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Share consumer handle is NULL or uninitialized");
+
+        err = rd_kafka_set_log_queue(rkshare->rkshare_rk, rkqu);
+
+        return err ? rd_kafka_error_new(err, "%s", rd_kafka_err2str(err))
+                   : NULL;
 }
 
 void rd_kafka_queue_forward(rd_kafka_queue_t *src, rd_kafka_queue_t *dst) {

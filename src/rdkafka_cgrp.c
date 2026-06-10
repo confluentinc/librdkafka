@@ -1097,6 +1097,10 @@ rd_kafka_cgrp_handle_ShareGroupHeartbeat_leave(rd_kafka_t *rk,
                 goto err;
         }
 
+        /* Count the leave ShareGroupHeartbeat response for
+         * consumer.share.coordinator.heartbeat.{total,rate} */
+        rd_atomic64_add(&rk->rk_telemetry.heartbeat_total, 1);
+
         rd_kafka_buf_read_throttle_time(rkbuf);
 
         /* Count the leave ShareGroupHeartbeat response for
@@ -3385,6 +3389,10 @@ err:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
+        /* FIXME: GROUP_ID_NOT_FOUND on a non-leave heartbeat indicates the
+         * coordinator no longer knows the group and should be treated as a
+         * fatal error here; it currently falls through to the default action.
+         */
         default:
                 actions = rd_kafka_err_action(
                     rkb, err, request,
@@ -3476,6 +3484,12 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
                 err = RD_KAFKA_RESP_ERR__OUTDATED;
         if (err)
                 goto err;
+
+        /* Count this ShareGroupHeartbeat response for
+         * consumer.share.coordinator.heartbeat.{total,rate}.
+         * recorded once the response arrives (transport-level success),
+         * regardless of Broker level errors */
+        rd_atomic64_add(&rk->rk_telemetry.heartbeat_total, 1);
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
@@ -3674,6 +3688,7 @@ err:
                 break;
 
         case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
+        case RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH:
                 rd_kafka_dbg(rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
                              "ShareGroupHeartbeat failed due to: %s: "
                              "will rejoin the group",
@@ -3687,9 +3702,15 @@ err:
         case RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
 
+        /* TODO KIP-932: unrecognized error codes currently fall through to
+         * the generic action (retried if retriable, otherwise logged and
+         * ignored) and the consumer keeps heartbeating. Consider treating an
+         * unexpected code as fatal so a protocol mismatch surfaces to the
+         * application instead of looping silently. */
         default:
                 actions = rd_kafka_err_action(
                     rkb, err, request,
@@ -3930,7 +3951,8 @@ static void rd_kafka_cgrp_terminated(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_assert(
             NULL, rkcg->rkcg_share.share_session_leave_remaining_cnt == 0);
         rd_kafka_assert(
-            NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0);
+            NULL, rkcg->rkcg_share.share_should_fetch_ops_in_flight_cnt == 0 ||
+                      rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk));
 
         rd_kafka_timer_stop(&rkcg->rkcg_rk->rk_timers,
                             &rkcg->rkcg_offset_commit_tmr, 1 /*lock*/);
@@ -4064,8 +4086,8 @@ static RD_INLINE int rd_kafka_cgrp_try_terminate(rd_kafka_cgrp_t *rkcg) {
  *
  * @locks none
  */
-static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
-                                        rd_kafka_toppar_t *rktp) {
+void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTADD",
                      "Group \"%s\": add %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
@@ -4101,8 +4123,8 @@ static void rd_kafka_cgrp_partition_add(rd_kafka_cgrp_t *rkcg,
  *
  * @locks none
  */
-static void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
-                                        rd_kafka_toppar_t *rktp) {
+void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
+                                 rd_kafka_toppar_t *rktp) {
         rd_kafka_dbg(rkcg->rkcg_rk, CGRP, "PARTDEL",
                      "Group \"%s\": delete %s [%" PRId32 "]",
                      rkcg->rkcg_group_id->str, rktp->rktp_rkt->rkt_topic->str,
@@ -5703,6 +5725,63 @@ static void rd_kafka_propagate_consumer_topic_errors(
 
 
 /**
+ * @brief Share-consumer entry point for end-of-metadata-cycle error
+ *        propagation.
+ *
+ *        Drains the per-cycle pending list: app-facing codes
+ *        (TOPIC_EXCEPTION, TOPIC_AUTHORIZATION_FAILED) are emitted
+ *        directly to the application on next poll; transient codes are
+ *        debug-logged.
+ *
+ *       TODO KIP-932: We need to throw the CONSUMER_ERR ops as a set
+ *       of topic partitions and error code, rather than one per topic.
+ *
+ * @locality rdkafka main thread
+ */
+void rd_kafka_share_topic_err_propagate(rd_kafka_cgrp_t *rkcg) {
+        rd_kafka_t *rk = rkcg->rkcg_rk;
+        int i;
+
+        if (!rkcg->rkcg_errored_topics)
+                return;
+
+        for (i = 0; i < rkcg->rkcg_errored_topics->cnt; i++) {
+                const rd_kafka_topic_partition_t *pending_errored_tp =
+                    &rkcg->rkcg_errored_topics->elems[i];
+
+                switch (pending_errored_tp->err) {
+                case RD_KAFKA_RESP_ERR_TOPIC_EXCEPTION:
+                case RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED:
+                        rd_kafka_dbg(rk, CONSUMER | RD_KAFKA_DBG_TOPIC,
+                                     "TOPICERR",
+                                     "Subscribed topic not available: %s: %s",
+                                     pending_errored_tp->topic,
+                                     rd_kafka_err2str(pending_errored_tp->err));
+                        rd_kafka_consumer_err(
+                            rkcg->rkcg_q, RD_KAFKA_NODEID_UA,
+                            pending_errored_tp->err, 0,
+                            pending_errored_tp->topic, NULL,
+                            RD_KAFKA_OFFSET_INVALID,
+                            "Subscribed topic not available: %s: %s",
+                            pending_errored_tp->topic,
+                            rd_kafka_err2str(pending_errored_tp->err));
+                        break;
+
+                default:
+                        rd_kafka_dbg(rk, TOPIC | RD_KAFKA_DBG_CGRP, "TOPICERR",
+                                     "Topic %s: %s", pending_errored_tp->topic,
+                                     rd_kafka_err2str(pending_errored_tp->err));
+                        break;
+                }
+        }
+
+        /* Clear the per-cycle accumulator; next cycle starts fresh. */
+        rd_kafka_topic_partition_list_destroy(rkcg->rkcg_errored_topics);
+        rkcg->rkcg_errored_topics = rd_kafka_topic_partition_list_new(0);
+}
+
+
+/**
  * @brief Work out the topics currently subscribed to that do not
  *        match any pattern in \p subscription.
  */
@@ -5809,23 +5888,39 @@ rd_kafka_cgrp_subscription_set(rd_kafka_cgrp_t *rkcg,
 
         if (rkcg->rkcg_subscription) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_SUBSCRIPTION;
-                if (rd_kafka_topic_partition_list_regex_cnt(
-                        rkcg->rkcg_subscription) > 0)
-                        rkcg->rkcg_flags |=
-                            RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
 
-                if (rkcg->rkcg_group_protocol ==
-                    RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                        rkcg->rkcg_subscription_regex =
-                            rd_kafka_topic_partition_list_combine_regexes(
-                                rkcg->rkcg_subscription);
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                        /* Share consumer has no regex subscription: feed the
+                         * full subscription list to the heartbeat as
+                         * SubscribedTopicNames; let the broker reject any
+                         * invalid topic names. */
                         rkcg->rkcg_subscription_topics =
-                            rd_kafka_topic_partition_list_remove_regexes(
+                            rd_kafka_topic_partition_list_copy(
                                 rkcg->rkcg_subscription);
                         rkcg->rkcg_consumer_flags |=
                             RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
                             RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
                         rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(rkcg);
+                } else {
+                        if (rd_kafka_topic_partition_list_regex_cnt(
+                                rkcg->rkcg_subscription) > 0)
+                                rkcg->rkcg_flags |=
+                                    RD_KAFKA_CGRP_F_WILDCARD_SUBSCRIPTION;
+
+                        if (rkcg->rkcg_group_protocol ==
+                            RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
+                                rkcg->rkcg_subscription_regex =
+                                    rd_kafka_topic_partition_list_combine_regexes(
+                                        rkcg->rkcg_subscription);
+                                rkcg->rkcg_subscription_topics =
+                                    rd_kafka_topic_partition_list_remove_regexes(
+                                        rkcg->rkcg_subscription);
+                                rkcg->rkcg_consumer_flags |=
+                                    RD_KAFKA_CGRP_CONSUMER_F_SUBSCRIBED_ONCE |
+                                    RD_KAFKA_CGRP_CONSUMER_F_SEND_NEW_SUBSCRIPTION;
+                                rd_kafka_cgrp_maybe_clear_heartbeat_failed_err(
+                                    rkcg);
+                        }
                 }
         } else {
                 rkcg->rkcg_subscription_regex  = NULL;
@@ -6167,20 +6262,22 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
 
         /* For share groups, we have to additionally close
          * sessions with all the brokers */
-        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+            !rd_kafka_destroy_flags_no_consumer_close(rkcg->rkcg_rk)) {
                 /* TODO KIP-932: the below code is similar to
                  * rd_kafka_share_segregate_and_dispatch_acks()
                  * Check if we can reduce code duplication */
                 rd_kafka_broker_t *rkb                             = NULL;
                 rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
-                rd_list_t *ack_batches =
-                    rko->rko_u.share_fetch_fanout.ack_batches;
-                if (ack_batches) {
-                        rd_kafka_share_segregate_acks_by_leader(rkcg->rkcg_rk,
-                                                                ack_batches);
+                if (rko->rko_u.share_fetch_fanout.ack_batches) {
+                        rd_kafka_share_segregate_acks_by_leader(
+                            rkcg->rkcg_rk,
+                            rko->rko_u.share_fetch_fanout.ack_batches);
                         /* Ownership of elements transferred to broker
                          * ack_details. Destroy the container. */
-                        rd_list_destroy(ack_batches);
+                        rd_list_destroy(
+                            rko->rko_u.share_fetch_fanout.ack_batches);
+                        rko->rko_u.share_fetch_fanout.ack_batches = NULL;
                 }
                 /* TODO KIP-932: See how we can avoid locking the handle */
                 rd_kafka_rdlock(rkcg->rkcg_rk);
@@ -6207,6 +6304,16 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                                                         rd_false, rd_true);
                 }
                 rd_kafka_rdunlock(rkcg->rkcg_rk);
+        } else if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+                   rko->rko_u.share_fetch_fanout.ack_batches) {
+                /* NO_CONSUMER_CLOSE: we skip dispatching the final ack
+                 * batches to brokers, but still take ownership of the
+                 * ack_batches list so the toppar refs held inside it
+                 * are released. */
+                /* TODO KIP-932: Check if we need to invoke ack callbacks here
+                 */
+                rd_list_destroy(rko->rko_u.share_fetch_fanout.ack_batches);
+                rko->rko_u.share_fetch_fanout.ack_batches = NULL;
         }
 
         rkcg->rkcg_ts_terminate = rd_clock();
@@ -7239,8 +7346,15 @@ static rd_kafka_op_res_t rd_kafka_cgrp_op_serve(rd_kafka_t *rk,
         case RD_KAFKA_OP_PARTITION_JOIN:
                 rd_kafka_cgrp_partition_add(rkcg, rktp);
 
-                /* If terminating tell the partition to leave */
-                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)
+                /* If terminating tell the partition to leave.
+                 *
+                 * Skipped for share consumers: op_fetch_stop bumps the
+                 * version barrier, touches rktp_offset_query_tmr, and
+                 * calls offset_store_stop — none of which should fire
+                 * for a share-assigned rktp that never started a
+                 * regular fetch. */
+                if ((rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
+                    !RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
                         rd_kafka_toppar_op_fetch_stop(rktp, RD_KAFKA_NO_REPLYQ);
                 break;
 

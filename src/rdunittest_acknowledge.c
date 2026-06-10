@@ -127,8 +127,7 @@ static void ut_ack_add_partition(rd_kafka_share_t *rkshare,
         parpriv         = rd_kafka_topic_partition_private_new();
         batches->rktpar->_private = parpriv;
 
-        batches->response_leader_id    = 1;
-        batches->response_leader_epoch = 1;
+        batches->response_leader_id = 1;
 
         int64_t size = end_offset - start_offset + 1;
         batches->response_acquired_offsets_count = (int32_t)size;
@@ -439,8 +438,9 @@ static int ut_case_error_gap_record(rd_kafka_share_t *rkshare,
 /**
  * @brief Test error case - Invalid parameters (NULL).
  *
- * Verifies that NULL rkshare, message, or topic parameters return
- * RD_KAFKA_RESP_ERR__INVALID_ARG error.
+ * Verifies that a NULL rkshare returns RD_KAFKA_RESP_ERR__STATE (rejected
+ * by the reentrancy guard), and that NULL message or topic parameters
+ * return RD_KAFKA_RESP_ERR__INVALID_ARG.
  */
 static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
                                          rd_kafka_topic_t *rkt) {
@@ -448,8 +448,8 @@ static int ut_case_error_null_parameters(rd_kafka_share_t *rkshare,
 
         /* Test NULL rkshare */
         rd_kafka_resp_err_t err = rd_kafka_share_acknowledge(NULL, msg);
-        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
-                     "expected INVALID_ARG for NULL rkshare, got %s",
+        RD_UT_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
+                     "expected STATE for NULL rkshare, got %s",
                      rd_kafka_err2str(err));
 
         /* Test NULL message */
@@ -596,7 +596,6 @@ static void ut_ack_add_partition_multiple_entries(rd_kafka_share_t *rkshare,
         batches->rktpar->_private = parpriv;
 
         batches->response_leader_id              = 1;
-        batches->response_leader_epoch           = 1;
         batches->response_acquired_offsets_count = 40;
 
         rd_list_init(&batches->entries, 4, NULL);
@@ -865,11 +864,10 @@ static int ut_case_bsearch_empty_entries(rd_kafka_share_t *rkshare,
         rd_kafka_topic_partition_private_t *parpriv;
         rd_kafka_share_ack_batches_t *batches = rd_calloc(1, sizeof(*batches));
 
-        batches->rktpar                = rd_kafka_topic_partition_new(topic, 0);
-        parpriv                        = rd_kafka_topic_partition_private_new();
-        batches->rktpar->_private      = parpriv;
-        batches->response_leader_id    = 1;
-        batches->response_leader_epoch = 1;
+        batches->rktpar             = rd_kafka_topic_partition_new(topic, 0);
+        parpriv                     = rd_kafka_topic_partition_private_new();
+        batches->rktpar->_private   = parpriv;
+        batches->response_leader_id = 1;
         batches->response_acquired_offsets_count = 0;
 
         rd_list_init(&batches->entries, 0, NULL);

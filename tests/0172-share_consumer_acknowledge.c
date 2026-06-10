@@ -1769,6 +1769,7 @@ static void do_test_mixed_ack_mode_same_group(void) {
         test_share_destroy(implicit_c);
         test_share_consumer_close(explicit_c);
         test_share_destroy(explicit_c);
+        test_ack_cb_state_destroy(&exp_state);
 
         TEST_SAY(
             "SUCCESS: mixed ack-mode group - implicit=%d explicit=%d "

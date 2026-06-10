@@ -1097,6 +1097,10 @@ rd_kafka_cgrp_handle_ShareGroupHeartbeat_leave(rd_kafka_t *rk,
                 goto err;
         }
 
+        /* Count the leave ShareGroupHeartbeat response for
+         * consumer.share.coordinator.heartbeat.{total,rate} */
+        rd_atomic64_add(&rk->rk_telemetry.heartbeat_total, 1);
+
         rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
@@ -3477,7 +3481,14 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
         if (err)
                 goto err;
 
+        /* Count this ShareGroupHeartbeat response for
+         * consumer.share.coordinator.heartbeat.{total,rate}.
+         * recorded once the response arrives (transport-level success),
+         * regardless of Broker level errors */
+        rd_atomic64_add(&rk->rk_telemetry.heartbeat_total, 1);
+
         rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i16(rkbuf, &error_code);
         rd_kafka_buf_read_str(rkbuf, &error_str);
 

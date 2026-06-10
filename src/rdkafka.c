@@ -2840,14 +2840,38 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                         rd_atomic64_init(
                             &rk->rk_telemetry.acknowledgements_send_total, 0);
                 } else {
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover.rk_avg_poll_idle_ratio,
+                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
+                rd_avg_init(
+                    &rk->rk_telemetry.rd_avg_current.rk_avg_poll_idle_ratio,
+                    RD_AVG_GAUGE, 0, 1, 2, rk->rk_conf.enable_metrics_push);
+
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
-                                         .rk_avg_poll_idle_ratio,
+                                         .rk_avg_share_poll_idle_ratio,
                                     RD_AVG_GAUGE, 0, 1, 2,
                                     rk->rk_conf.enable_metrics_push);
                         rd_avg_init(&rk->rk_telemetry.rd_avg_current
-                                         .rk_avg_poll_idle_ratio,
+                                         .rk_avg_share_poll_idle_ratio,
                                     RD_AVG_GAUGE, 0, 1, 2,
                                     rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
+                                         .rk_avg_share_time_between_poll,
+                                    RD_AVG_GAUGE, 0, 60 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+                        rd_avg_init(&rk->rk_telemetry.rd_avg_current
+                                         .rk_avg_share_time_between_poll,
+                                    RD_AVG_GAUGE, 0, 60 * 1000, 2,
+                                    rk->rk_conf.enable_metrics_push);
+
+                        rd_atomic64_init(&rk->rk_telemetry.share_fetch_total,
+                                         0);
+                        rd_atomic64_init(
+                            &rk->rk_telemetry.acknowledgements_send_total, 0);
+                        rd_atomic64_init(&rk->rk_telemetry.heartbeat_total, 0);
+                }
+
+                if (!RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                         rd_avg_init(&rk->rk_telemetry.rd_avg_rollover
                                          .rk_avg_rebalance_latency,
                                     RD_AVG_GAUGE, 0, 500 * 1000, 2,

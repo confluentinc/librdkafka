@@ -6060,6 +6060,25 @@ rd_kafka_cgrp_consumer_unsubscribe(rd_kafka_cgrp_t *rkcg,
          * When group is already leaving we just wait that previous
          * leave request finishes.
          */
+
+        /* TODO KIP-932: Revisit how the fatal-error case suppresses the
+         * leave heartbeat and consider simplifying it.
+         *
+         * Today, after a fatal error raised from the ShareGroupHeartbeat
+         * response handler, the leave is suppressed implicitly: that
+         * handler calls revoke_all_rejoin_maybe(), and because a fatal
+         * error code is now set, rebalance_op_incr() eventually sets
+         * rkcg_generation_id = 0 within the same op. So by the time the
+         * application observes the fatal error (via consume_batch) and calls
+         * close(), the member is back in join-state INIT with generation_id ==
+         * 0, hence HAS_JOINED below is false and no leave ShareGroupHeartbeat
+         * is sent.
+         *
+         * This works but is indirect and easy to break. Consider adding an
+         * explicit fatal-error guard here (as the Java client does) so the
+         * no-leave behaviour is stated directly rather than relying on the
+         * generation-id reset happening first.
+         */
         if (leave_group && !rd_kafka_cgrp_consumer_will_rejoin(rkcg) &&
             RD_KAFKA_CGRP_HAS_JOINED(rkcg) && !rd_kafka_cgrp_will_leave(rkcg)) {
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;

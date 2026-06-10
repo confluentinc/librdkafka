@@ -462,9 +462,6 @@ static void do_test_mixed_transactions(const char *isolation_level) {
 
         SUB_TEST("isolation.level=%s", isolation_level);
 
-        /* Tolerate transport-layer errors; librdkafka recovers internally. */
-        test_curr->is_fatal_cb = test_transport_errors_not_fatal_cb;
-
         /* Create topic */
         test_create_topic(NULL, topic, 1, -1);
 
@@ -520,8 +517,6 @@ static void do_test_mixed_transactions(const char *isolation_level) {
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
         rd_kafka_destroy(producer);
-
-        test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();
 }

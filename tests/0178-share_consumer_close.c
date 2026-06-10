@@ -951,8 +951,6 @@ static int test_close_with_broker_down_is_fatal_cb(rd_kafka_t *rk,
  consumer.
  */
 static void do_test_close_with_acknowledge(void) {
-        /* Tolerate transport-layer errors; librdkafka recovers internally. */
-        test_curr->is_fatal_cb = test_transport_errors_not_fatal_cb;
 
         /**
          * @brief Test configuration for close with acknowledge scenarios
@@ -1089,8 +1087,6 @@ static void do_test_close_with_acknowledge(void) {
                          config->test_name);
                 test_share_destroy(c1);
         }
-
-        test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();
 }

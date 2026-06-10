@@ -162,7 +162,6 @@ echo "    producer PID=${PRODUCER_PID}"
 # (b) librdkafka share consumer
 ${PERF_BIN} -S ${LIBRDKAFKA_GROUP_ID} -t ${TOPIC} \
     -X file=${ROOT}/tests/test.conf \
-    -X auto.offset.reset=earliest \
     > ${WORK_DIR}/librdkafka-share.log 2>&1 &
 LIBRDKAFKA_CONSUMER_PID=$!
 echo "    librdkafka share PID=${LIBRDKAFKA_CONSUMER_PID}"

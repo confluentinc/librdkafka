@@ -1438,9 +1438,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
          * share consumer case. */
         tver.version = 0;
 
-        /* No error, clear any previous fetch error. */
-        rktp->rktp_last_error = RD_KAFKA_RESP_ERR_NO_ERROR;
-
         if (MessageSetSize > 0) {
                 /**
                  * Parse MessageSet

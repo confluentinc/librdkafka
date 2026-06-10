@@ -3696,7 +3696,7 @@ err:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
 
-        /* TODO KIP-932: unrecognized error codes currently fall through to
+        /* TODO KIP-932 Pratyush: unrecognized error codes currently fall through to
          * the generic action (retried if retriable, otherwise logged and
          * ignored) and the consumer keeps heartbeating. Consider treating an
          * unexpected code as fatal so a protocol mismatch surfaces to the
@@ -6300,7 +6300,7 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                  * batches to brokers, but still take ownership of the
                  * ack_batches list so the toppar refs held inside it
                  * are released. */
-                /* TODO KIP-932: Check if we need to invoke ack callbacks here
+                /* TODO KIP-932 Ojasva: Check if we need to invoke ack callbacks here
                  */
                 rd_list_destroy(rko->rko_u.share_fetch_fanout.ack_batches);
                 rko->rko_u.share_fetch_fanout.ack_batches = NULL;

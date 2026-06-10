@@ -2232,7 +2232,7 @@ rd_kafka_share_partition_offsets_partition(
  * @returns Array of acknowledged offsets (valid for the lifetime of the list).
  */
 /**
- * TODO KIP-932: Recheck name once public interfaces are finalized.
+ * TODO KIP-932 Pratyush: Recheck name once public interfaces are finalized.
  */
 RD_EXPORT const int64_t *rd_kafka_share_partition_offsets_offsets(
     const rd_kafka_share_partition_offsets_t *partition_offsets);
@@ -3243,7 +3243,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
  * in case the creation of a new handle fails. In which case the function
  * returns NULL.
  *
- * TODO KIP-932: understand whether all share consumer APIs need to be gated
+ * TODO KIP-932 Ojasva: understand whether all share consumer APIs need to be gated
  * once a fatal error has been raised on the handle, and check what the Java
  * client does in the fatal-error case.
  *

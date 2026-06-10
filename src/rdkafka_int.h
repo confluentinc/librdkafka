@@ -348,7 +348,7 @@ struct rd_kafka_s {
         /** Share consumer state. Only used when this rd_kafka_t handle
          *  is a share consumer (rk_rkshare != NULL). */
         /**
-         * TODO KIP-932: Change to rk_share when interface is finalized.
+         * TODO KIP-932 Pratyush: Change to rk_share when interface is finalized.
          */
         struct {
                 /** Runtime acknowledgement callback set via
@@ -899,7 +899,7 @@ struct rd_kafka_share_s {
         rd_kafka_t *rkshare_rk; /**< The shared rd_kafka_t instance */
 
         /**
-         * TODO KIP-932: Decide whether we want to keep this here
+         * TODO KIP-932 Pratyush: Decide whether we want to keep this here
          * or move it in rd_kafka_t.
          */
         /** Map of inflight acknowledgements per topic-partition.
@@ -907,7 +907,7 @@ struct rd_kafka_share_s {
          *  Value: rd_kafka_share_ack_batches_t*
          */
         /**
-         * TODO KIP-932: Decide on cleanup of this map,
+         * TODO KIP-932 Pratyush: Decide on cleanup of this map,
          *  new colleated entries are created when we will be sending
          *  the contents of this map with Commit/Next Poll
          *  We would have to cleanup this map then.

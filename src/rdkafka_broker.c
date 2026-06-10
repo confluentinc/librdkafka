@@ -739,7 +739,7 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 }
                 rd_kafka_toppar_unlock(rktp);
 
-                /* TODO KIP-932: rktp_leader_id and rktp_broker_id are read
+                /* TODO KIP-932 Pratyush: rktp_leader_id and rktp_broker_id are read
                  * here without holding rd_kafka_toppar_lock, but they are
                  * written under that lock by rd_kafka_toppar_leader_update
                  * on the main thread during metadata refresh.
@@ -3677,7 +3677,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
                 //         rko = NULL;
                 // }
-                /* TODO KIP-932: Verify handling of this op */
+                /* TODO KIP-932 Pranav: Verify handling of this op */
                 if (rd_kafka_broker_or_instance_terminating(rkb)) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
@@ -3685,7 +3685,7 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
                 } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                        /* TODO KIP-932: The main thread should check
+                        /* TODO KIP-932 Pranav: The main thread should check
                          * broker state before enqueuing SHARE_FETCH
                          * ops, or back off after receiving ERR__STATE
                          * replies, to avoid flooding the broker thread
@@ -3709,24 +3709,6 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                 } else {
                         rd_kafka_broker_share_rpc(rkb, rko, rd_clock());
                 }
-
-                /* TODO KIP-932: Add handling for commit sync partition level
-                 * and ack callback errors */
-                // if (!rko->rko_u.share_fetch.should_fetch) {
-                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                //                    "Ignoring SHARE_FETCH op: "
-                //                    "should_fetch is false");
-                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__NOOP);
-                //         break;
-                // }
-
-                // if(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                //                    "Connection not up: Sending connect in
-                //                    progress as reply");
-                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
-                //         break;
-                // }
 
                 rko = NULL; /* the rko is reused for the reply */
 
@@ -4589,29 +4571,11 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
         rd_kafka_broker_unlock(rkb);
 }
 
-/**
- * TODO KIP-932: Remove if not needed later during finalizing share session
- * implementation.
- */
-// void rd_kafka_broker_update_share_fetch_session(rd_kafka_broker_t *rkb) {
-//         rd_kafka_toppar_t *rktp;
-//         int i;
-//         rd_bool_t needs_update = rd_false;
-//
-//         RD_LIST_FOREACH(rktp,
-//                         rkb->rkb_share_fetch_session.toppars_in_session, i) {
-//                 rd_kafka_toppar_is_valid_to_send_for_share_fetch(rktp);
-//         }
-//
-//         if (needs_update)
-//                 rd_kafka_toppar_share_fetch_session_update(rkb);
-// }
-
 
 /**
  * Consumer serving
  *
- * TODO KIP-932: Fix timeouts.
+ * TODO KIP-932 Pranav: Fix timeouts.
  */
 static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                                                  rd_ts_t abs_timeout) {
@@ -4630,7 +4594,7 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                 rd_kafka_broker_unlock(rkb);
 
                 /*
-                 * TODO KIP-932: Check the below connection handling properly.
+                 * TODO KIP-932 Pranav: Check the below connection handling properly.
                  */
                 if (rkb->rkb_toppar_cnt > 0 &&
                     rkb->rkb_share_fetch_session.epoch >= 0 &&
@@ -4641,7 +4605,7 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                 }
 
                 /**
-                 * TODO KIP-932: Check if the below is needed. Currently, used
+                 * TODO KIP-932 Pranav: Check if the below is needed. Currently, used
                  *               as it is from the original consumer serve
                  * function.
                  */

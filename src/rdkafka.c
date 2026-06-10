@@ -939,7 +939,7 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
          * consumer error so it is returned from consumer_poll(),
          * while for all other client types (the producer) we propagate to
          * the standard error handler (typically error_cb). */
-        /* TODO KIP-932: when a fatal error has been raised, check what the
+        /* TODO KIP-932 Ojasva: when a fatal error has been raised, check what the
          * Java client does in the fatal-error case and decide whether we
          * should still close the share session and send the leave-group
          * heartbeat during consumer close. */
@@ -3612,58 +3612,6 @@ void rd_kafka_share_enqueue_fetch_op(rd_kafka_t *rk,
                      should_leave ? "with" : "no",
                      rko_sf->rko_u.share_fetch.ack_details ? "with" : "no");
 
-        // /* TODO KIP-932: Remove this debug printing */
-        // {
-        //         static const char *ack_type_names[] = {
-        //             [0] = "GAP",
-        //             [1] = "ACCEPT",
-        //             [2] = "RELEASE",
-        //             [3] = "REJECT",
-        //         };
-        //         rd_list_t *ack_details =
-        //             rko_sf->rko_u.share_fetch.ack_details;
-
-        //         printf("[SHARE_FETCH] broker=%s should_fetch=%d",
-        //                rd_kafka_broker_name(rkb), should_fetch);
-
-        //         if (ack_details && rd_list_cnt(ack_details) > 0) {
-        //                 rd_kafka_share_ack_batches_t *batches;
-        //                 int k;
-        //                 printf(" ack_details=[");
-        //                 RD_LIST_FOREACH(batches, ack_details, k) {
-        //                         rd_kafka_share_ack_batch_entry_t *entry;
-        //                         int m;
-        //                         if (k > 0)
-        //                                 printf(", ");
-        //                         printf("%s[%" PRId32 "]:{",
-        //                                batches->rktpar->topic,
-        //                                batches->rktpar->partition);
-        //                         RD_LIST_FOREACH(entry, &batches->entries, m)
-        //                         {
-        //                                 int type_val =
-        //                                     (int)entry->types[0];
-        //                                 const char *type_str =
-        //                                     (type_val >= 0 && type_val <= 3)
-        //                                         ? ack_type_names[type_val]
-        //                                         : "UNKNOWN";
-        //                                 if (m > 0)
-        //                                         printf(", ");
-        //                                 printf("%" PRId64 "-%" PRId64
-        //                                        "(%s)",
-        //                                        entry->start_offset,
-        //                                        entry->end_offset,
-        //                                        type_str);
-        //                         }
-        //                         printf("}");
-        //                 }
-        //                 printf("]");
-        //         } else {
-        //                 printf(" ack_details=none");
-        //         }
-        //         printf("\n");
-        //         fflush(stdout);
-        // }
-
         rd_kafka_q_enq(rkb->rkb_ops, rko_sf);
 }
 
@@ -3935,7 +3883,7 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
 
-        /* TODO KIP-932: the non-fatal errors returned from the other paths
+        /* TODO KIP-932 Pranav - after soak?: the non-fatal errors returned from the other paths
          * below (consumer-group-not-initialized, consumer-closed, and the
          * not-all-acknowledged guard) should be marked retriable so the app
          * knows it can retry the consume_batch call, consistent with the
@@ -5321,7 +5269,7 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
                      NULL))
                 goto done;
 
-        /* TODO KIP-932: when a fatal error has been raised, check what the
+        /* TODO KIP-932 Ojasva: when a fatal error has been raised, check what the
          * Java client does in the fatal-error case and decide whether we
          * should still close the share session and send the leave-group
          * heartbeat during consumer close. */
@@ -6046,7 +5994,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                 break;
 
         case RD_KAFKA_OP_SHARE_FETCH_RESPONSE:
-                /* TODO KIP-932: RD_KAFKA_OP_SHARE_FETCH_RESPONSE should never
+                /* TODO KIP-932 Ojasva: RD_KAFKA_OP_SHARE_FETCH_RESPONSE should never
                    be handled from this cb in Share Consumer except maybe in
                    case of closing as this op we don't forward rk_rep queue to
                    rkcg.q. This op is handled separately in

@@ -550,7 +550,7 @@ err:
                             msetr->msetr_v2_hdr->LastOffsetDelta;
 
                         /**
-                         * TODO KIP-932: Add a TODO to translate errors inside
+                         * TODO KIP-932 Pratyush: Add a TODO to translate errors inside
                          * this function. _BAD_COMPRESSION and _BAD_MSG should
                          * be sent as INVALID_MSG, and _CRIT_SYS_RESOURCE should
                          * be sent as _CRIT_SYS_RESOURCE.
@@ -1201,7 +1201,7 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                                 /* Read LastOffsetDelta to
                                  * determine full offset range.
                                  *
-                                 * TODO KIP-932: These bytes come from
+                                 * TODO KIP-932 Pratyush: These bytes come from
                                  * within the CRC-covered region of the
                                  * MessageSet body, and the CRC has
                                  * just failed — so `Attributes` and
@@ -1592,7 +1592,7 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
 
                 } else if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
                         /**
-                         * TODO KIP-932: Check how to handle fetch_msg_max_bytes
+                         * TODO KIP-932 Pratyush: Check how to handle fetch_msg_max_bytes
                          * for share consumer. We keep on bringing up the msg
                          * for normal consumers, then it is fine but in share
                          * consumers the delivery count will keep on increasing

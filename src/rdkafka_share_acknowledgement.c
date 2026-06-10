@@ -276,7 +276,7 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare) {
  */
 static void rd_kafka_share_ack_details_batch_destroy(void *ptr) {
         rd_kafka_share_ack_batches_t *batch = ptr;
-        // TODO KIP-932: Check if this null check is needed
+        // TODO KIP-932 Pratyush: Check if this null check is needed
         if (!batch)
                 return;
         rd_kafka_share_ack_batches_destroy(batch);
@@ -298,7 +298,7 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
         int i;
 
         RD_LIST_FOREACH(existing, ack_list, i) {
-                /* TODO KIP-932: We might need to use leader id and epoch
+                /* TODO KIP-932 Pranav: We might need to use leader id and epoch
                  * as well to understand about the stale topic partition
                  * information */
                 if (rd_kafka_topic_partition_by_id_cmp(existing->rktpar,

@@ -919,9 +919,6 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                 if (in_acquired_range) {
                         /* Set ack type based on op type */
                         rd_kafka_msg_t *rkm = NULL;
-                        /* TODO KIP-932: Check and update the handling
-                         * of control messages
-                         */
                         if (unlikely(rd_kafka_op_is_ctrl_msg(rko)))
                                 continue;
                         if (rko->rko_type == RD_KAFKA_OP_FETCH) {
@@ -1153,12 +1150,12 @@ static void rd_kafka_share_fetch_reply_handle_partition_error(
     rd_kafka_resp_err_t err,
     const rd_kafkap_str_t *err_msg) {
 
-        /* TODO KIP-932: Verify whether the SURFACE-only arms below
+        /* TODO KIP-932 Preview: Verify whether the SURFACE-only arms below
          * (CORRUPT_MESSAGE, default unknown err) should also emit an
          * explicit warn-level log here. They currently rely on the
          * downstream OP_CONSUMER_ERR being surfaced to the app via
          * consume_batch. */
-        /* TODO KIP-932: write test cases for each per-partition error
+        /* TODO KIP-932 Pratyush: write test cases for each per-partition error
          * arm below once the mock cluster exposes a per-partition
          * error-injection API (e.g.
          * rd_kafka_mock_partition_push_share_fetch_error). Today only
@@ -1381,7 +1378,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 int16_t tmp_delivery;
 
                 if (!rkt) {
-                        /* TODO KIP-932: Recheck this branch once the
+                        /* TODO KIP-932 Pranav: Recheck this branch once the
                          * topic-recreate session-bookkeeping bug is fixed
                          * (broker session may stop carrying old topic_ids
                          * that no longer match any local rkt). */
@@ -1391,7 +1388,7 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                                    PartitionFetchErrorCode,
                                    RD_KAFKAP_STR_PR(topic), PartitionId);
                 } else if (!rktp) {
-                        /* TODO KIP-932: Verify this handling against expected
+                        /* TODO KIP-932 Pranav: Verify this handling against expected
                          * behavior. librdkafka requires rktp to route records;
                          * partitions with no local rktp are silently dropped.
                          */
@@ -2135,7 +2132,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
                         }
 
                         if (PartErrorCode) {
-                                /* TODO KIP-932: write test cases for each
+                                /* TODO KIP-932 Pratyush: write test cases for each
                                  * per-partition ShareAcknowledge error code
                                  * once the mock cluster exposes a
                                  * per-partition error-injection API for
@@ -2261,7 +2258,7 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR__TIMED_OUT:
                         /* __TRANSPORT means connection is already
                          * dead.
-                         * TODO KIP-932: For __TIMED_OUT:
+                         * TODO KIP-932 Pranav: For __TIMED_OUT:
                          * 1) Ensure socket.max.fails cannot be set
                          *    for share consumer, or if it can be set,
                          *    tear down the connection for each
@@ -2279,7 +2276,7 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
                 case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
                         char tmp[128];
-                        /* TODO KIP-932: The response already carries
+                        /* TODO KIP-932 Pranav: The response already carries
                          * per-partition currentLeader + nodeEndpoints;
                          * use that to update partition leadership
                          * directly instead of triggering a full
@@ -2381,10 +2378,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 }
         }
 
-        /* TODO KIP-932: Partition add/remove is done unconditionally
-         * here. Likely correct — partitions stay in the session
-         * across response errors and migrate on the next metadata
-         * refresh. Verify this matches the intended KIP-932 flow. */
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
@@ -2402,7 +2395,7 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                          * re-establishes a new session (epoch 0).
                          * __TRANSPORT means connection is already
                          * dead.
-                         * TODO KIP-932: For __TIMED_OUT:
+                         * TODO KIP-932 Pranav: For __TIMED_OUT:
                          * 1) Ensure socket.max.fails cannot be set
                          *    for share consumer, or if it can be set,
                          *    tear down the connection for each
@@ -2604,7 +2597,7 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
         rd_list_t *ack_details =
             rko_orig ? rko_orig->rko_u.share_fetch.ack_details : NULL;
         int ack_details_cnt = ack_details ? rd_list_cnt(ack_details) : 0;
-        /* TODO KIP-932: Ensure there is no intersection between toppars_to_add
+        /* TODO KIP-932 Pranav: Ensure there is no intersection between toppars_to_add
          * and ack_details. A toppar should not appear in both lists. */
         int total_ack_entries     = 0;
         int64_t total_ack_records = 0;
@@ -2698,7 +2691,7 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
         /* Write zero TopicArrayCnt but store pointer for later update */
         of_TopicArrayCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
-        /* TODO KIP-932: Ensure toppars_to_add and ack_details don't have
+        /* TODO KIP-932 Pranav: Ensure toppars_to_add and ack_details don't have
          * common rktps. A toppar should only appear in one list.
          * Also merge toppars_to_add and ack_details as both can have
          * the same topic but different partitions. */
@@ -3391,7 +3384,7 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
             rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
             rkb->rkb_rk->rk_conf.fetch_min_bytes,
             rkb->rkb_rk->rk_conf.fetch_max_bytes, max_records,
-            max_records,    /* TODO KIP-932: Check if this is correct for batch
+            max_records,    /* TODO KIP-932 Pratyush: Check if this is correct for batch
                                size or not */
             toppars_to_add, /* toppars to add to session */
             toppars_to_forget, /* forgetting toppars */

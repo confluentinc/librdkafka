@@ -28,7 +28,6 @@
 
 #include "test.h"
 #include "rdkafka.h"
-#include "../src/rdkafka_telemetry_encode.h"
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -36,6 +35,34 @@
 
 #define TELEMETRY_TOPIC_DEFAULT "client-telemetry-metrics"
 #define METRIC_PREFIX           "org.apache.kafka."
+
+/* Expected share-consumer metric suffixes (without the org.apache.kafka.
+ * prefix). Mirrors RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO in
+ * src/rdkafka_telemetry_encode.h; hardcoded here so the test doesn't
+ * transitively include the internal header. */
+static const char *const EXPECTED_SHARE_CONSUMER_METRICS[] = {
+    "consumer.share.poll.idle.ratio.avg",
+    "consumer.share.time.between.poll.avg",
+    "consumer.share.time.between.poll.max",
+    "consumer.share.fetch.manager.fetch.total",
+    "consumer.share.fetch.manager.fetch.rate",
+    "consumer.share.fetch.manager.fetch.latency.avg",
+    "consumer.share.fetch.manager.fetch.latency.max",
+    "consumer.share.fetch.manager.acknowledgements.send.total",
+    "consumer.share.fetch.manager.acknowledgements.send.rate",
+    "consumer.share.fetch.manager.fetch.throttle.time.avg",
+    "consumer.share.fetch.manager.fetch.throttle.time.max",
+    "consumer.share.coordinator.heartbeat.total",
+    "consumer.share.coordinator.heartbeat.rate",
+    "consumer.share.fetch.manager.fetch.size.avg",
+    "consumer.share.fetch.manager.fetch.size.max",
+    "consumer.share.fetch.manager.bytes.consumed.total",
+    "consumer.share.fetch.manager.bytes.consumed.rate",
+};
+
+#define EXPECTED_SHARE_CONSUMER_METRICS_CNT                                    \
+        (sizeof(EXPECTED_SHARE_CONSUMER_METRICS) /                             \
+         sizeof(EXPECTED_SHARE_CONSUMER_METRICS[0]))
 
 static const char *telemetry_topic(void) {
         const char *env = getenv("TELEMETRY_TOPIC");
@@ -230,10 +257,9 @@ static void verify_metrics(rd_list_t *seen) {
         size_t i;
 
         TEST_SAY("Verifying expected share-consumer metric names:\n");
-        for (i = 0; i < RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT; i++) {
+        for (i = 0; i < EXPECTED_SHARE_CONSUMER_METRICS_CNT; i++) {
                 char full_name[512];
-                const char *short_name =
-                    RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO[i].name;
+                const char *short_name = EXPECTED_SHARE_CONSUMER_METRICS[i];
                 int found;
 
                 rd_snprintf(full_name, sizeof(full_name), METRIC_PREFIX "%s",

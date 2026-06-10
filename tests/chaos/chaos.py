@@ -1807,10 +1807,18 @@ def bookkeeping_report(producers, consumers, topics,
     # Topic-chaos bucketing: count consume events per topic that fall
     # before the chaos delete (pre-delete generation) vs after the
     # recreate (new generation). Events with ts in the delete/recreate
-    # gap are limbo and excluded from both counts.
+    # gap are limbo and excluded from both counts. Display-only;
+    # boundary jitter can move a few events between buckets without
+    # affecting correctness — the real verdict uses distinct-offset
+    # coverage per (topic_id, partition) below.
     chaos_state = chaos_state or {}
     consumed_pre_delete_per_topic = collections.Counter()
     consumed_post_recreate_per_topic = collections.Counter()
+    # Distinct offsets consumed per (topic, topic_id, partition) across
+    # all consumers. Used to check post-recreate coverage — the real
+    # FAIL signal under --topic-chaos.
+    chaos_offsets_by_id_part = collections.defaultdict(
+        lambda: collections.defaultdict(set))
 
     for c in consumers:
         for ts, ev in _iter_event_lines(c):
@@ -1842,12 +1850,15 @@ def bookkeeping_report(producers, consumers, topics,
                         first_consume_ts[tp] = ts
                     last_consume_ts[tp] = ts
                 cs = chaos_state.get(t)
-                if cs is not None and ts is not None:
-                    if ts < cs['delete_ts']:
-                        consumed_pre_delete_per_topic[t] += 1
-                    elif (cs.get('recreate_ts')
-                          and ts > cs['recreate_ts']):
-                        consumed_post_recreate_per_topic[t] += 1
+                if cs is not None:
+                    chaos_offsets_by_id_part[t][(tid, int(p))].add(
+                        int(o))
+                    if ts is not None:
+                        if ts < cs['delete_ts']:
+                            consumed_pre_delete_per_topic[t] += 1
+                        elif (cs.get('recreate_ts')
+                              and ts > cs['recreate_ts']):
+                            consumed_post_recreate_per_topic[t] += 1
             elif e == 'acked':
                 err = int(ev.get('err', 0))
                 rec = record_events.get(key)
@@ -2020,11 +2031,12 @@ def bookkeeping_report(producers, consumers, topics,
     # optionally re-created) mid-run, compute the expected-loss
     # window so the final VERDICT can ignore noise from records that
     # were on the broker at delete time and gone afterwards. For
-    # recreate modes, also check the post-recreate window — those
-    # records *must* all be consumed; a deficit there IS a library
-    # bug, not chaos noise.
+    # recreate modes, also check post-recreate coverage per
+    # (topic_id, partition) — the new generation's [0..hwm-1] must
+    # be fully consumed across the share group; a gap there IS a
+    # library bug, not chaos noise.
     chaos_expected_loss = 0
-    chaos_post_recreate_loss = []
+    chaos_per_partition_loss = []
     if chaos_state:
         lines.append('')
         lines.append('Topic-chaos accounting:')
@@ -2033,7 +2045,8 @@ def bookkeeping_report(producers, consumers, topics,
                      'the sum at end-of-test (== post-recreate '
                      'generation, since old data is gone). Expected '
                      'loss = pre_delete_hwm − consumed_before_delete. '
-                     'Post-recreate consumed must reach post_hwm.')
+                     'Post-recreate coverage is checked per '
+                     '(topic_id, partition) — see lines below.')
         for t, cs in sorted(chaos_state.items()):
             pre_hwm = sum(cs['pre_delete_hwm'].values()) \
                 if cs.get('pre_delete_hwm') else 0
@@ -2048,14 +2061,62 @@ def bookkeeping_report(producers, consumers, topics,
                          f'consumed_pre_delete={pre_consumed} '
                          f'expected_loss={expected_loss_t} '
                          f'post_hwm={post_hwm} '
-                         f'consumed_post_recreate={post_consumed}')
+                         f'consumed_post_recreate~={post_consumed} '
+                         f'(events; boundary-jittery, display only)')
             if cs['mode'] in ('recreate-immediate',
                               'recreate-delayed') \
                     and cs.get('recreate_ts'):
-                # Post-recreate generation should be 100% consumed.
-                if post_consumed < post_hwm:
-                    chaos_post_recreate_loss.append(
-                        (t, post_hwm - post_consumed))
+                # Per-partition coverage check: for each partition,
+                # find the topic_id whose distinct-offset set has the
+                # largest max offset (= new generation) and verify
+                # it covers [0..hwm-1]. Aggregating across consumers
+                # is what catches records consumed by a re-joining
+                # consumer during the share-group rebalance.
+                topic_offsets = chaos_offsets_by_id_part.get(t, {})
+                partitions = sorted({p for (_tid, p)
+                                     in topic_offsets})
+                cov_lines = []
+                for p in partitions:
+                    hwm_p = hwms.get((t, p)) if hwms else None
+                    if hwm_p is None or hwm_p == 0:
+                        continue
+                    candidates = [(tid, s) for (tid, pp), s in
+                                  topic_offsets.items() if pp == p]
+                    if not candidates:
+                        chaos_per_partition_loss.append(
+                            (t, p, hwm_p, []))
+                        cov_lines.append(
+                            f'    [{p}] hwm={hwm_p} '
+                            f'covered=0 missing={hwm_p} '
+                            f'(no consumer events)')
+                        continue
+                    new_tid, new_set = max(
+                        candidates,
+                        key=lambda x: (max(x[1]) if x[1] else -1))
+                    expected = set(range(hwm_p))
+                    missing = sorted(expected - new_set)
+                    cov_lines.append(
+                        f'    [{p}] hwm={hwm_p} '
+                        f'covered={len(new_set & expected)} '
+                        f'missing={len(missing)}')
+                    if missing:
+                        runs = []
+                        start = missing[0]
+                        prev = start
+                        for x in missing[1:]:
+                            if x == prev + 1:
+                                prev = x
+                            else:
+                                runs.append((start, prev))
+                                start = x
+                                prev = x
+                        runs.append((start, prev))
+                        chaos_per_partition_loss.append(
+                            (t, p, len(missing), runs[:3]))
+                if cov_lines:
+                    lines.append('  per-partition new-generation '
+                                 'coverage (across all consumers):')
+                    lines.extend(cov_lines)
         lines.append(f'  total expected_loss across chaos\'d '
                      f'topics: {chaos_expected_loss}')
 
@@ -2100,15 +2161,23 @@ def bookkeeping_report(producers, consumers, topics,
             chaos_note = (f' [topic-chaos expected_loss='
                           f'{chaos_expected_loss} subtracted]')
 
-        if chaos_post_recreate_loss:
-            details = ', '.join(f'{t}:{lost}'
-                                for t, lost in
-                                chaos_post_recreate_loss)
-            lines.append(f'VERDICT: FAIL — post-recreate loss on '
-                         f'chaos\'d topic(s): {details} (these '
-                         f'records were on the broker after the '
-                         f're-create but the consumer never saw '
-                         f'them — library bug, not chaos noise)')
+        if chaos_per_partition_loss:
+            details_parts = []
+            for t, p, n_missing, runs in chaos_per_partition_loss:
+                if runs:
+                    run_str = ','.join(f'[{a}..{b}]'
+                                       for a, b in runs)
+                    details_parts.append(
+                        f'{t}[{p}]:{n_missing} (runs: {run_str})')
+                else:
+                    details_parts.append(f'{t}[{p}]:{n_missing}')
+            details = ', '.join(details_parts)
+            lines.append(f'VERDICT: FAIL — post-recreate '
+                         f'new-generation coverage gap on chaos\'d '
+                         f'topic(s): {details} (the broker has these '
+                         f'offsets but no consumer in the share '
+                         f'group ever consumed them — library bug, '
+                         f'not chaos noise)')
         elif consumer_loss_ok and delivery_ok is True:
             tail = (sorted(dc_distribution.items())[-1]
                     if dc_distribution else 'n/a')

@@ -873,7 +873,14 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
 
         rktp->rktp_leader_epoch = leader_epoch;
 
+        /* Share consumer never fetches from a follower (KIP-392), so
+         * rktp_broker == leader always holds on the share path. Force
+         * the flag to false here so the "not migrating away from
+         * preferred replica" branch is structurally unreachable on the
+         * share path, rather than depending on the runtime equality
+         * happening to hold. */
         fetching_from_follower =
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
             leader != NULL && rktp->rktp_broker != NULL &&
             rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
             rktp->rktp_broker != leader;

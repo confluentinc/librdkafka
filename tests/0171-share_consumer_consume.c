@@ -930,6 +930,19 @@ static void do_test_concurrent_thread_access_rejected(void) {
 
         SUB_TEST();
 
+        /* Skip under Valgrind: Valgrind's heavy thread serialization
+         * makes the blocker thread's 5s consume_batch timeout
+         * unreliable, which can leave thrd_join / share consumer close
+         * waiting indefinitely (see logs.txt: subtest ran ~4000s
+         * before the suite watchdog killed it). */
+        if (!strcmp(test_mode, "valgrind")) {
+                TEST_SKIP(
+                    "Concurrent-thread gate test is scheduling-sensitive "
+                    "under Valgrind\n");
+                SUB_TEST_PASS();
+                return;
+        }
+
         TEST_SAY("\n");
         TEST_SAY("=== Concurrent thread access rejected ===\n");
 

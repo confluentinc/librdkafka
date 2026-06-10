@@ -3648,6 +3648,11 @@ err:
                 /* quick cleanup */
                 return;
 
+        case RD_KAFKA_RESP_ERR__OUTDATED:
+                /* Consumer is leaving; response is no longer
+                 * actionable. Drop silently. */
+                return;
+
         case RD_KAFKA_RESP_ERR_COORDINATOR_LOAD_IN_PROGRESS:
                 rd_kafka_dbg(
                     rkcg->rkcg_rk, CONSUMER, "HEARTBEAT",
@@ -3696,11 +3701,6 @@ err:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
 
-        /* TODO KIP-932: unrecognized error codes currently fall through to
-         * the generic action (retried if retriable, otherwise logged and
-         * ignored) and the consumer keeps heartbeating. Consider treating an
-         * unexpected code as fatal so a protocol mismatch surfaces to the
-         * application instead of looping silently. */
         default:
                 actions = rd_kafka_err_action(
                     rkb, err, request,
@@ -3709,6 +3709,19 @@ err:
                     RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
 
                     RD_KAFKA_ERR_ACTION_END);
+                /* An unrecognized HB error code is fatal: it indicates a
+                 * client/broker protocol mismatch or a server-side error
+                 * the client doesn't know how to handle. Silently looping
+                 * would hide the divergence from the application. The
+                 * err_action override above still lets known generic codes
+                 * (TOPIC_AUTHORIZATION_FAILED, etc.) take their normal
+                 * SPECIAL/REFRESH/RETRY paths; the fallback fires only
+                 * when no explicit mapping applies. */
+                if (!(actions &
+                      (RD_KAFKA_ERR_ACTION_RETRY |
+                       RD_KAFKA_ERR_ACTION_REFRESH |
+                       RD_KAFKA_ERR_ACTION_SPECIAL)))
+                        actions |= RD_KAFKA_ERR_ACTION_FATAL;
                 break;
         }
 

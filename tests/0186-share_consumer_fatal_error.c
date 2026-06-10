@@ -32,6 +32,12 @@
 
 #define CONSUME_ARRAY 1024
 
+static rd_bool_t is_share_heartbeat_request(rd_kafka_mock_request_t *request,
+                                            void *opaque) {
+        return rd_kafka_mock_request_api_key(request) ==
+               RD_KAFKAP_ShareGroupHeartbeat;
+}
+
 /**
  * @brief Create a share consumer connected to the mock cluster.
  *
@@ -51,15 +57,19 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
         test_conf_set(conf, "group.id", group_id);
         if (ack_mode)
                 test_conf_set(conf, "share.acknowledgement.mode", ack_mode);
-        if (cb_state) {
-                rd_kafka_conf_set_share_acknowledgement_commit_cb(
-                    conf, test_share_ack_cb);
-                rd_kafka_conf_set_opaque(conf, cb_state);
-        }
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer: %s",
                     errstr);
+
+        if (cb_state) {
+                rd_kafka_error_t *cb_err =
+                    rd_kafka_share_set_acknowledgement_commit_cb(
+                        rkshare, test_share_ack_cb, cb_state);
+                TEST_ASSERT(cb_err == NULL,
+                            "Failed to set ack commit callback: %s",
+                            rd_kafka_error_string(cb_err));
+        }
 
         return rkshare;
 }
@@ -179,19 +189,23 @@ static void do_test_no_records_after_fatal_error(void) {
 }
 
 /**
- * @brief close() flushes acks and leaves the share session even when a
- *        fatal error is already set.
+ * @brief close() flushes pending acks but does NOT send a share-group
+ *        leave heartbeat when a fatal error was raised naturally.
+ *
+ * When a fatal error arises from the ShareGroupHeartbeat path the member
+ * is no longer in a state to leave the group, so close() must not send a
+ * leaving ShareGroupHeartbeat. It must still flush the pending
+ * acknowledgements (so the ack commit callback fires without error).
  *
  * 1. Create a 1-partition topic and produce 10 messages.
- * 2. Consume at least one batch, breaking out as soon as records arrive.
- * 3. Acknowledge (ACCEPT) every consumed record in explicit mode (the
- *    acks are pending, not yet sent to the broker).
- * 4. Set a fatal error on the underlying handle, then call close():
- *    despite the fatal error, close() must still flush the pending
- *    acknowledgements and leave the share session.
- * 5. Destroy the consumer.
- * 6. Verify the ack commit callback fired without any error, which
- *    confirms the pending acks were flushed during close().
+ * 2. Consume at least one batch (explicit ack), acknowledging every
+ *    record so the acks are pending (not yet sent to the broker).
+ * 3. Inject GROUP_AUTHORIZATION_FAILED on the next ShareGroupHeartbeat
+ *    and wait for a heartbeat so the fatal error is raised naturally.
+ * 4. Poll consume_batch until the fatal error surfaces.
+ * 5. Start request tracking, then call close().
+ * 6. Assert NO ShareGroupHeartbeat (leave) request is sent during close.
+ * 7. Destroy, and verify the ack commit callback fired without error.
  */
 static void do_test_close_flushes_acks_after_fatal_error(void) {
         rd_kafka_mock_cluster_t *mcluster;
@@ -200,13 +214,16 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         rd_kafka_topic_partition_list_t *subscription;
         rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
         rd_kafka_error_t *error;
-        const char *topic            = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group            = "sg-0186-close-flushes-acks";
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        const char *group = "sg-0186-close-no-leave-after-fatal";
+        const rd_kafka_resp_err_t fatal_err =
+            RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED;
         const int msgcnt             = 10;
         test_ack_cb_state_t cb_state = {0};
-        rd_kafka_t *rk;
-        int consumed = 0;
-        int attempts = 0;
+        int heartbeats_after_close;
+        int consumed        = 0;
+        int attempts        = 0;
+        rd_bool_t got_fatal = rd_false;
 
         SUB_TEST_QUICK();
 
@@ -229,8 +246,8 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(rkshare, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* 2 & 3. Consume atmost one batch and acknowledge every record.
-         *        Break out as soon as we have received some records. */
+        /* 2. Consume at least one batch and acknowledge every record.
+         *    Break out as soon as we have received some records. */
         while (consumed == 0 && attempts++ < 30) {
                 size_t rcvd = 0;
                 size_t j;
@@ -249,37 +266,76 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
                         rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
-        TEST_ASSERT(consumed == 10, "expected to consume 10 records");
-        TEST_SAY("Consumed %d records\n", consumed);
+        TEST_ASSERT(consumed > 0, "expected to consume and ack > 0 records");
+        TEST_SAY("Consumed and acknowledged %d records\n", consumed);
 
-        /* 4. Set a fatal error, then close(): despite the fatal error,
-         *    close() must still flush the pending acks and leave the share
-         *    session. */
-        rk = test_share_consumer_get_rk(rkshare);
-        TEST_ASSERT(rd_kafka_test_fatal_error(
-                        rk, RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
-                        "injected fatal error") == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "failed to set fatal error");
+        /* 3. Inject the fatal error on the next ShareGroupHeartbeat so the
+         *    fatal error gets raised naturally. */
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
+                        fatal_err, 0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push fatal error on ShareGroupHeartbeat");
+
+        /* 4. Poll consume_batch until the fatal error surfaces. The fatal
+         *    error is delivered only after a heartbeat has hit the injected
+         *    error and the cgrp has processed it (revoking the assignment
+         *    and resetting the generation id), so this loop also serves as
+         *    the synchronization point for that handling. */
+        attempts = 0;
+        while (attempts++ < 50) {
+                size_t rcvd = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 1000, rkmessages,
+                                                     &rcvd);
+                if (error) {
+                        TEST_ASSERT(rd_kafka_error_is_fatal(error),
+                                    "expected a fatal error, got non-fatal %s",
+                                    rd_kafka_error_name(error));
+                        rd_kafka_error_destroy(error);
+                        got_fatal = rd_true;
+                        break;
+                }
+        }
+        TEST_ASSERT(got_fatal,
+                    "expected a fatal error to surface within timeout");
+
+        /* 5. Reset the tracked-request baseline (start_request_tracking
+         *    clears the list), then close(). */
+        rd_kafka_mock_start_request_tracking(mcluster);
 
         error = rd_kafka_share_consumer_close(rkshare);
         if (error)
                 rd_kafka_error_destroy(error);
 
-        /* 5. Destroy. */
+        /* 6. No leaving ShareGroupHeartbeat must be sent during close. The
+         *    natural fatal handling already revoked the assignment and reset
+         *    the generation id (HAS_JOINED is false), so the group-leave path
+         *    is skipped. (The share session is still closed, but via a
+         *    ShareAcknowledge with epoch=-1, not a ShareGroupHeartbeat.) */
+        heartbeats_after_close = (int)test_mock_get_matching_request_cnt(
+            mcluster, is_share_heartbeat_request, NULL);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        /* 7. Destroy and verify the ack commit callback fired without error,
+         *    confirming the pending acks were flushed during close(). */
         test_share_destroy(rkshare);
 
-        /* 6. The ack commit callback must have fired without any error,
-         *    confirming the pending acks were flushed during close(). */
+        TEST_ASSERT(heartbeats_after_close == 0,
+                    "expected no ShareGroupHeartbeat during close, got %d",
+                    heartbeats_after_close);
         TEST_ASSERT(cb_state.callback_cnt > 0,
                     "expected the ack commit callback to be invoked, got %d",
                     cb_state.callback_cnt);
-        TEST_ASSERT(cb_state.last_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+        rd_kafka_resp_err_t cb_first_err =
+            test_ack_cb_state_first_err(&cb_state);
+        TEST_ASSERT(cb_first_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "expected ack callback with no error, got %s",
-                    rd_kafka_err2name(cb_state.last_err));
+                    rd_kafka_err2name(cb_first_err));
         TEST_SAY("Ack callback invoked %d time(s), %zu offsets, err=%s\n",
                  cb_state.callback_cnt, cb_state.total_offsets,
-                 rd_kafka_err2name(cb_state.last_err));
+                 rd_kafka_err2name(cb_first_err));
 
+        test_ack_cb_state_destroy(&cb_state);
         test_mock_cluster_destroy(mcluster);
 
         SUB_TEST_PASS();

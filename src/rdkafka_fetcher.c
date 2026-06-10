@@ -2345,8 +2345,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         rd_kafka_op_t *rko_orig     = opaque;
         rd_kafka_op_t *response_rko = NULL;
 
-        rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
-
         /* Parse the response only if the network/broker layer didn't
          * report an error. If err is set (e.g. __TRANSPORT,
          * __TIMED_OUT, __DESTROY), the reply buffer is unusable so
@@ -2465,8 +2463,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
          * before the app thread wakes up and enqueues a new FANOUT. */
         if (response_rko)
                 rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q, response_rko);
-
-        rkb->rkb_fetching = 0;
 }
 
 /**
@@ -2957,7 +2953,6 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                     rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_forget,
                                  rd_kafka_toppar_list_copy, NULL);
 
-        rkb->rkb_fetching = 1;
         rd_kafka_dbg(
             rkb->rkb_rk, MSG, "FETCH",
             "Issuing ShareFetch request (max wait %dms, min %d bytes, "

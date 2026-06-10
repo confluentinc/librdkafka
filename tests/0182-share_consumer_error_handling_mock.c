@@ -2528,6 +2528,281 @@ static void test_share_consumer_does_not_surface_unknown_topic_or_part(void) {
 }
 
 
+/* ===================================================================
+ *  Log callback shared by the two select_broker STATE_UP guard tests
+ *  below. Counts the broker-thread short-circuit log emitted at
+ *  src/rdkafka_broker.c when a SHARE_FETCH op is served against a
+ *  broker whose rkb_state is not STATE_UP.
+ * =================================================================== */
+static void no_bounce_loop_log_cb(const rd_kafka_t *rk,
+                                  int level,
+                                  const char *fac,
+                                  const char *buf) {
+        rd_atomic32_t *cnt = rd_kafka_opaque(rk);
+        if (cnt && !strcmp(fac, "SHAREFETCH") && strstr(buf, "broker not up"))
+                rd_atomic32_add(cnt, 1);
+}
+
+/* ===================================================================
+ *  do_test_no_bounce_loop_on_down_broker
+ *
+ *  Steady-state DOWN: the consumer is idle when the broker is taken
+ *  down, sleeps long enough for the broker thread to settle rkb_state
+ *  to !UP, then drives consume_batch for ~1s. Every FANOUT must skip
+ *  the DOWN leader via the select_broker STATE_UP guard, so no
+ *  "broker not up" log line should fire.
+ *
+ *  Wire never sees a ShareFetch on the DOWN broker (broker thread
+ *  rejects the internal op before any RPC is built), so we assert on
+ *  the count of the broker-thread short-circuit debug log instead of
+ *  on mock_get_requests.
+ * =================================================================== */
+static void do_test_no_bounce_loop_on_down_broker(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        rd_atomic32_t broker_not_up_cnt;
+        rd_kafka_error_t *commit_error;
+        const char *topic       = "0182-no_bounce_loop";
+        const char *group       = "sg-0182-no-bounce-loop";
+        const int msgcnt_phase1 = 5;
+        const int msgcnt_phase2 = 5;
+        int acked, cnt;
+        rd_ts_t end_ts;
+
+        SUB_TEST_QUICK();
+
+        /* Taking the only broker down legitimately raises
+         * __ALL_BROKERS_DOWN and __TRANSPORT on producer + consumer
+         * error callbacks. None of these should fail the test. */
+        test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce(ctx.producer, topic, msgcnt_phase1);
+
+        rd_atomic32_init(&broker_not_up_cnt, 0);
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "debug", "broker");
+        rd_kafka_conf_set_log_cb(conf, no_bounce_loop_log_cb);
+        rd_kafka_conf_set_opaque(conf, &broker_not_up_cnt);
+
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        subscribe_one(rkshare, topic);
+
+        acked = consume_and_ack_all(rkshare, msgcnt_phase1);
+        TEST_ASSERT(acked == msgcnt_phase1, "phase1: expected %d acked, got %d",
+                    msgcnt_phase1, acked);
+
+        /* Flush any acks still cached in rkb_share_async_ack_details
+         * before taking the broker down. Otherwise the next FANOUT
+         * after set_down would dispatch an ack-only op to the DOWN
+         * broker (the FANOUT iteration must always deliver cached
+         * acks so the broker thread can surface the error), and the
+         * broker thread would legitimately log "broker not up" once.
+         * That log is unrelated to the select_broker guard. */
+        commit_error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!commit_error, "commit_async error: %s",
+                    commit_error ? rd_kafka_error_string(commit_error)
+                                 : "NULL");
+
+        /* Phase-2 records sit in the partition log; the post-recovery
+         * consume below drains them. */
+        mock_produce(ctx.producer, topic, msgcnt_phase2);
+
+        TEST_SAY("Taking broker 1 down\n");
+        rd_kafka_mock_broker_set_down(ctx.mcluster, 1);
+
+        /* Settle: let the client's broker thread detect TCP close and
+         * transition rkb_state to !UP before we start counting. After
+         * this point every select_broker reads DOWN — no race window. */
+        rd_sleep(1);
+        rd_atomic32_set(&broker_not_up_cnt, 0);
+
+        end_ts = test_clock() + 1000 * 1000;
+        while (test_clock() < end_ts) {
+                rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+                size_t rcvd             = 0;
+                rd_kafka_error_t *error = rd_kafka_share_consume_batch(
+                    rkshare, 100, rkmessages, &rcvd);
+                TEST_ASSERT(!error,
+                            "unexpected error from consume_batch while "
+                            "broker is down: %s",
+                            error ? rd_kafka_error_string(error) : "NULL");
+                TEST_ASSERT(rcvd == 0,
+                            "expected 0 records while broker is down, "
+                            "got %zu",
+                            rcvd);
+        }
+
+        cnt = rd_atomic32_get(&broker_not_up_cnt);
+        TEST_SAY("\"broker not up\" log count: %d (expected 0)\n", cnt);
+        TEST_ASSERT(cnt == 0,
+                    "select_broker should skip the DOWN leader on every "
+                    "FANOUT once rkb_state has settled; got %d "
+                    "\"broker not up\" log lines",
+                    cnt);
+
+        TEST_SAY("Bringing broker 1 back up\n");
+        rd_kafka_mock_broker_set_up(ctx.mcluster, 1);
+
+        acked = consume_and_ack_all(rkshare, msgcnt_phase2);
+        TEST_ASSERT(acked == msgcnt_phase2,
+                    "phase2 (post-recovery): expected %d acked, got %d",
+                    msgcnt_phase2, acked);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+/* ===================================================================
+ *  do_test_one_log_on_broker_down_during_active_empty_poll
+ *
+ *  Race-window companion to do_test_no_bounce_loop_on_down_broker.
+ *
+ *  With an empty topic the consumer's FANOUT->ShareFetch->Step 6
+ *  empty-poll loop fires continuously. We take the broker down
+ *  while that loop is hot. A narrow window exists between the mock
+ *  TCP close and the client's broker thread updating rkb_state, in
+ *  which select_broker can read stale STATE_UP and enqueue one more
+ *  op. The broker thread (rkb_state has caught up by then) logs
+ *  "broker not up" once, replies ERR__STATE; the next Step 6
+ *  re-select then reads DOWN and skips, closing the loop.
+ *
+ *  Without the select_broker guard the Step 6 re-select would log
+ *  this hundreds of times per second for the duration of the down
+ *  window.
+ * =================================================================== */
+static void do_test_one_log_on_broker_down_during_active_empty_poll(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        rd_atomic32_t broker_not_up_cnt;
+        const char *topic             = "0182-race_bounce";
+        const char *group             = "sg-0182-race-bounce";
+        const int msgcnt_recovery     = 5;
+        const int max_allowed_log_cnt = 1;
+        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        size_t rcvd;
+        rd_kafka_error_t *error;
+        rd_ts_t end_ts;
+        int cnt, acked;
+
+        SUB_TEST_QUICK();
+
+        /* Taking the only broker down legitimately raises
+         * __ALL_BROKERS_DOWN and __TRANSPORT on producer + consumer
+         * error callbacks. None of these should fail the test. */
+        test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        rd_atomic32_init(&broker_not_up_cnt, 0);
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "debug", "broker");
+        rd_kafka_conf_set_log_cb(conf, no_bounce_loop_log_cb);
+        rd_kafka_conf_set_opaque(conf, &broker_not_up_cnt);
+
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        subscribe_one(rkshare, topic);
+
+        /* Prime with one record so the share group has joined and the
+         * partition is assigned by the time we take the broker down.
+         * Without this guarantee, select_broker would return NULL
+         * (no toppars) and the bounce loop wouldn't fire at all,
+         * making the test pass for the wrong reason. */
+        mock_produce(ctx.producer, topic, 1);
+        acked = consume_and_ack_all(rkshare, 1);
+        TEST_ASSERT(acked == 1, "prime: expected 1 acked, got %d", acked);
+
+        /* Flush the prime ack still cached in rkb_share_async_ack_details
+         * before taking the broker down. Otherwise the next FANOUT
+         * iteration would dispatch an ack-only op to the DOWN broker
+         * and produce a "broker not up" log unrelated to the
+         * select_broker race we're measuring. */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async error: %s",
+                    error ? rd_kafka_error_string(error) : "NULL");
+
+        /* Reset to drop any noise from cgrp/connection bring-up. */
+        rd_atomic32_set(&broker_not_up_cnt, 0);
+
+        /* Kickstart the empty-poll loop: one consume_batch on the now
+         * empty topic starts the FANOUT->Step 6 cycle which keeps
+         * firing on the main thread until consume_batch returns. */
+        rcvd  = 0;
+        error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages, &rcvd);
+        TEST_ASSERT(!error, "kickstart consume_batch error: %s",
+                    error ? rd_kafka_error_string(error) : "NULL");
+        TEST_ASSERT(rcvd == 0, "expected 0 records, got %zu", rcvd);
+
+        TEST_SAY("Taking broker 1 down mid-empty-poll\n");
+        rd_kafka_mock_broker_set_down(ctx.mcluster, 1);
+
+        end_ts = test_clock() + 1000 * 1000;
+        while (test_clock() < end_ts) {
+                rcvd  = 0;
+                error = rd_kafka_share_consume_batch(rkshare, 100, rkmessages,
+                                                     &rcvd);
+                TEST_ASSERT(!error, "consume_batch error: %s",
+                            error ? rd_kafka_error_string(error) : "NULL");
+                TEST_ASSERT(rcvd == 0, "expected 0 records, got %zu", rcvd);
+        }
+
+        cnt = rd_atomic32_get(&broker_not_up_cnt);
+        TEST_SAY("\"broker not up\" log count: %d (max %d)\n", cnt,
+                 max_allowed_log_cnt);
+        TEST_ASSERT(cnt <= max_allowed_log_cnt,
+                    "race-window slip must be bounded to %d op; got %d "
+                    "log lines (without the guard this would be "
+                    "hundreds)",
+                    max_allowed_log_cnt, cnt);
+
+        /* Recovery: bring the broker back up, produce records, verify
+         * the consumer drains them. */
+        TEST_SAY("Bringing broker 1 back up\n");
+        rd_kafka_mock_broker_set_up(ctx.mcluster, 1);
+
+        mock_produce(ctx.producer, topic, msgcnt_recovery);
+
+        acked = consume_and_ack_all(rkshare, msgcnt_recovery);
+        TEST_ASSERT(acked == msgcnt_recovery,
+                    "post-recovery: expected %d acked, got %d", msgcnt_recovery,
+                    acked);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -2600,6 +2875,11 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         do_test_socket_timeout_partial_ack_then_remaining(
             5000, 1000, 3000); /* socket < rtt < api  */
         /* Boundary api == socket skipped — see comment above. */
+
+        /* select_broker STATE_UP guard: steady-state DOWN and
+         * race-window flavours. */
+        do_test_no_bounce_loop_on_down_broker();
+        do_test_one_log_on_broker_down_during_active_empty_poll();
 
         return 0;
 }

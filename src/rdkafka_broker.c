@@ -3685,11 +3685,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
                 } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                        /* TODO KIP-932: The main thread should check
-                         * broker state before enqueuing SHARE_FETCH
-                         * ops, or back off after receiving ERR__STATE
-                         * replies, to avoid flooding the broker thread
-                         * with ops that are immediately rejected. */
+                        /* Backstop: the main thread filters on rkb_state
+                         * in rd_kafka_share_select_broker, so this only
+                         * fires when the broker transitioned to !UP
+                         * after that unlocked check. */
                         rd_kafka_dbg(
                             rkb->rkb_rk, BROKER, "SHAREFETCH",
                             "Ignoring SHARE_FETCH op: "

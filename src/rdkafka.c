@@ -3299,11 +3299,19 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
 
                 /* Criteria to choose a broker:
                  * 1. It should be the leader of a partition.
-                 * 2. A share-fetch op must not already be enqueued on it.
-                 * 3. The broker or instance must not be terminating. */
+                 * 2. The broker or instance must not be terminating.
+                 * 3. A share-fetch op must not already be enqueued on it.
+                 * 4. The broker must currently be UP.
+                 *
+                 * The rkb_state read is intentionally unlocked: a stale
+                 * UP value at worst costs one stray op (broker thread
+                 * rejects with ERR__STATE), bounded to one per state
+                 * transition. Without this guard, a DOWN leader causes
+                 * an unbounded main<->broker thread bounce loop. */
                 if (leader) {
                         if (!rd_kafka_broker_or_instance_terminating(leader) &&
-                            !leader->rkb_share_fetch_enqueued) {
+                            !leader->rkb_share_fetch_enqueued &&
+                            leader->rkb_state == RD_KAFKA_BROKER_STATE_UP) {
                                 rd_kafka_broker_keep(leader);
                                 selected_rkb = leader;
                                 rd_kafka_dbg(

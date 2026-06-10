@@ -939,10 +939,6 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
          * consumer error so it is returned from consumer_poll(),
          * while for all other client types (the producer) we propagate to
          * the standard error handler (typically error_cb). */
-        /* TODO KIP-932: when a fatal error has been raised, check what the
-         * Java client does in the fatal-error case and decide whether we
-         * should still close the share session and send the leave-group
-         * heartbeat during consumer close. */
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp)
                 rd_kafka_consumer_err(
                     rk->rk_cgrp->rkcg_q, RD_KAFKA_NODEID_UA,

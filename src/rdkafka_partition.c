@@ -4437,7 +4437,7 @@ const char *rd_kafka_topic_partition_list_str(
                                 "%s"
                                 "%s",
                                 of == 0 ? "" : ", ",
-                                rktpar->topic ? rktpar->topic : "(null)",
+                                rd_kafka_topic_name_str_safe(rktpar->topic),
                                 topic_id_str ? topic_id_str : "(null)",
                                 rktpar->partition, offsetstr, errstr);
 

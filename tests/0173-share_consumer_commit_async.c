@@ -1693,6 +1693,7 @@ static void do_test_commit_async_callback(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }
@@ -1815,6 +1816,7 @@ static void do_test_partial_batch_commit_async(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }
@@ -1892,6 +1894,7 @@ static void do_test_implicit_callback_no_explicit_commit(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }
@@ -1982,6 +1985,7 @@ static void do_test_lock_expiry_callback_err(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state);
 
         SUB_TEST_PASS();
 }
@@ -2091,6 +2095,7 @@ static void do_test_safe_api_from_callback(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&st.base);
 
         SUB_TEST_PASS();
 }
@@ -2210,6 +2215,7 @@ static void do_test_callback_side_effects_dont_break(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&st.base);
 
         SUB_TEST_PASS();
 }

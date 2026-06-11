@@ -873,7 +873,14 @@ static int rd_kafka_toppar_leader_update(rd_kafka_topic_t *rkt,
 
         rktp->rktp_leader_epoch = leader_epoch;
 
+        /* Share consumer never fetches from a follower (KIP-392), so
+         * rktp_broker == leader always holds on the share path. Force
+         * the flag to false here so the "not migrating away from
+         * preferred replica" branch is structurally unreachable on the
+         * share path, rather than depending on the runtime equality
+         * happening to hold. */
         fetching_from_follower =
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
             leader != NULL && rktp->rktp_broker != NULL &&
             rktp->rktp_broker->rkb_source != RD_KAFKA_INTERNAL &&
             rktp->rktp_broker != leader;
@@ -1109,16 +1116,18 @@ static int rd_kafka_topic_partition_cnt_update(rd_kafka_topic_t *rkt,
         if (unlikely(rkt->rkt_partition_cnt != 0 &&
                      !rd_kafka_terminating(rkt->rkt_rk)))
                 rd_kafka_log(rk, LOG_NOTICE, "PARTCNT",
-                             "Topic %s partition count changed "
+                             "Topic %s (id %s) partition count changed "
                              "from %" PRId32 " to %" PRId32,
-                             rkt->rkt_topic->str, rkt->rkt_partition_cnt,
-                             partition_cnt);
+                             rkt->rkt_topic->str,
+                             rd_kafka_Uuid_base64str(&rkt->rkt_topic_id),
+                             rkt->rkt_partition_cnt, partition_cnt);
         else
                 rd_kafka_dbg(rk, TOPIC, "PARTCNT",
-                             "Topic %s partition count changed "
+                             "Topic %s (id %s) partition count changed "
                              "from %" PRId32 " to %" PRId32,
-                             rkt->rkt_topic->str, rkt->rkt_partition_cnt,
-                             partition_cnt);
+                             rkt->rkt_topic->str,
+                             rd_kafka_Uuid_base64str(&rkt->rkt_topic_id),
+                             rkt->rkt_partition_cnt, partition_cnt);
 
 
         /* Create and assign new partition list */

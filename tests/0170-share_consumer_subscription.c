@@ -1815,6 +1815,7 @@ static void do_test_subscription_change_acks_pending(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&state.base);
 
         rd_free(t1);
         rd_free(t2);

@@ -1430,7 +1430,8 @@ void rd_kafka_metadata_log(rd_kafka_t *rk,
                 rd_kafka_dbg(
                     rk, METADATA, fac,
                     "  Topic #%i/%i: %s with %i partitions%s%s", i,
-                    md->topic_cnt, md->topics[i].topic,
+                    md->topic_cnt,
+                    rd_kafka_topic_name_str_safe(md->topics[i].topic),
                     md->topics[i].partition_cnt, md->topics[i].err ? ": " : "",
                     md->topics[i].err ? rd_kafka_err2str(md->topics[i].err)
                                       : "");
@@ -2240,9 +2241,10 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                                     "Topic id %s not found in cache",
                                     rd_kafka_Uuid_base64str(&topic_id));
                         } else {
-                                rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
-                                             "Topic %s not found in cache",
-                                             topic);
+                                rd_kafka_log(
+                                    rk, LOG_WARNING, "METADATAUPDATE",
+                                    "Topic %s not found in cache",
+                                    rd_kafka_topic_name_str_safe(topic));
                         }
                         continue;
                 }

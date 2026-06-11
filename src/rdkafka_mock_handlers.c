@@ -4298,7 +4298,22 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 }
 
                                 /* Release ACQUIRED records for this
-                                 * member on this partition. */
+                                 * member on this partition, but only
+                                 * if this broker currently leads it:
+                                 * forgetting a partition that moved to
+                                 * another leader must not release the
+                                 * locks now held through the new
+                                 * leader's session. */
+                                rd_kafka_mock_topic_t *ftopic =
+                                    rd_kafka_mock_topic_find_by_id(mcluster,
+                                                                   ftid);
+                                rd_kafka_mock_partition_t *fpart =
+                                    ftopic ? rd_kafka_mock_partition_find(
+                                                 ftopic, ftp->partition)
+                                           : NULL;
+                                if (!fpart || fpart->leader != mconn->broker)
+                                        continue;
+
                                 pmeta = rd_kafka_mock_sgrp_partmeta_find(
                                     sgrp, ftid, ftp->partition);
                                 if (pmeta) {

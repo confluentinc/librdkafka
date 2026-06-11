@@ -994,10 +994,25 @@ void rd_kafka_mock_sgrp_release_session_locks(
 
         TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
                 rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+                rd_kafka_mock_topic_t *mtopic;
+                rd_kafka_mock_partition_t *mpart;
 
                 if (rd_kafka_topic_partition_list_find_idx_by_id(
                         session->partitions, pmeta->topic_id,
                         pmeta->partition) < 0)
+                        continue;
+
+                /* A session can only release locks for partitions its
+                 * broker currently leads: a session's partition list
+                 * can be stale after a leader change, while the locks
+                 * now belong to the new leader's session. */
+                mtopic = rd_kafka_mock_topic_find_by_id(mshgrp->cluster,
+                                                        pmeta->topic_id);
+                mpart  = mtopic ? rd_kafka_mock_partition_find(mtopic,
+                                                               pmeta->partition)
+                                : NULL;
+                if (!mpart || !mpart->leader ||
+                    mpart->leader->id != session->node_id)
                         continue;
 
                 TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {

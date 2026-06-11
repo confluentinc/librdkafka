@@ -108,9 +108,11 @@ static int consume_share_messages(rd_kafka_share_t *rkshare,
                                   int expected_cnt,
                                   int max_attempts,
                                   int poll_timeout_ms) {
-        rd_kafka_messages_t *batch = NULL;
-        int consumed               = 0;
-        int attempts               = max_attempts;
+        rd_kafka_messages_t *batch    = NULL;
+        int consumed                  = 0;
+        int attempts                  = max_attempts;
+        int redelivered_cnt           = 0;
+        int32_t max_delivery_cnt_seen = 0;
 
         while (consumed < expected_cnt && attempts-- > 0) {
                 size_t rcvd = 0;
@@ -127,12 +129,29 @@ static int consume_share_messages(rd_kafka_share_t *rkshare,
                 for (i = 0; i < rcvd; i++) {
                         rd_kafka_message_t *msg =
                             rd_kafka_messages_get(batch, i);
-                        if (!msg->err)
+                        if (!msg->err) {
+                                int32_t dc =
+                                    rd_kafka_message_delivery_count(msg);
+                                TEST_SAY(
+                                    "consume_share_messages: msg #%d "
+                                    "partition=%" PRId32 " offset=%" PRId64
+                                    " delivery_count=%" PRId32 "\n",
+                                    consumed, msg->partition, msg->offset, dc);
+                                if (dc > max_delivery_cnt_seen)
+                                        max_delivery_cnt_seen = dc;
+                                if (dc != 1)
+                                        redelivered_cnt++;
                                 consumed++;
+                        }
                 }
                 rd_kafka_messages_destroy(batch);
                 batch = NULL;
         }
+
+        TEST_SAY(
+            "consume_share_messages: summary: consumed=%d expected=%d "
+            "redelivered=%d max_delivery_count=%" PRId32 "\n",
+            consumed, expected_cnt, redelivered_cnt, max_delivery_cnt_seen);
 
         return consumed;
 }
@@ -720,12 +739,20 @@ static void do_test_interleaved_producers(const char *isolation_level) {
 
         SUB_TEST("isolation.level=%s", isolation_level);
 
-        /* Create topic */
-        test_create_topic(NULL, topic, 1, -1);
+        /* Create topic and wait for it to exist on the broker before
+         * any producer/consumer is created, so subsequent metadata
+         * refreshes for the new handles see it. */
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
         /* Create two transactional producers */
         producer1 = create_txn_producer("txn-producer-1");
         producer2 = create_txn_producer("txn-producer-2");
+
+        /* Ensure both producers' metadata caches have picked up the
+         * topic before begin_transaction/produce — otherwise the first
+         * produce can fail with UNKNOWN_TOPIC_OR_PART. */
+        test_wait_topic_exists(producer1, topic, 60 * 1000);
+        test_wait_topic_exists(producer2, topic, 60 * 1000);
 
         /* Create share consumer and set group config */
         consumer = test_create_share_consumer(group, NULL);

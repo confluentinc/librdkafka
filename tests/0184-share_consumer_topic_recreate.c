@@ -640,6 +640,12 @@ static void do_test_recreate_survives_concurrent_producer(void) {
 
         test_create_topic_wait_exists(common_admin, topic, partition_cnt_a, -1,
                                       60 * 1000);
+        /* Refresh the producer's metadata so it sees the new topic before
+         * the background thread starts producing — otherwise the first
+         * "before:" records can be dropped with UNKNOWN_TOPIC_OR_PART and
+         * the assertion `before_cnt > 0` flakes. */
+        test_wait_topic_exists(common_producer, topic, 60 * 1000);
+
         id_initial = fetch_topic_id(topic);
         TEST_SAY("Initial topic_id: %s (partition_cnt=%" PRId32 ")\n",
                  rd_kafka_Uuid_base64str(id_initial), partition_cnt_a);

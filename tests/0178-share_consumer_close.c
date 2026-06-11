@@ -313,6 +313,11 @@ static int setup_topics_and_produce(test_context_t *ctx,
 
                 test_create_topic_wait_exists(common_admin, ctx->topic_names[t],
                                               partitions[t], -1, 60 * 1000);
+                /* Ensure the producer's metadata cache has picked up the
+                 * newly-created topic before issuing produce calls,
+                 * otherwise the first produce can hit UNKNOWN_TOPIC_OR_PART. */
+                test_wait_topic_exists(common_producer, ctx->topic_names[t],
+                                       60 * 1000);
 
                 for (p = 0; p < partitions[t]; p++) {
                         test_produce_msgs_simple(common_producer,

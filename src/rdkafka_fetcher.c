@@ -919,9 +919,6 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                 if (in_acquired_range) {
                         /* Set ack type based on op type */
                         rd_kafka_msg_t *rkm = NULL;
-                        /* TODO KIP-932: Check and update the handling
-                         * of control messages
-                         */
                         if (unlikely(rd_kafka_op_is_ctrl_msg(rko)))
                                 continue;
                         if (rko->rko_type == RD_KAFKA_OP_FETCH) {
@@ -2379,10 +2376,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 }
         }
 
-        /* TODO KIP-932: Partition add/remove is done unconditionally
-         * here. Likely correct — partitions stay in the session
-         * across response errors and migrate on the next metadata
-         * refresh. Verify this matches the intended KIP-932 flow. */
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {

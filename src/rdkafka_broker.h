@@ -158,11 +158,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                 */
                 int32_t epoch;                 /* Current fetch session
                                                 * epoch, or -1 if leaving the session
-                                                * TODO KIP-932: Handle 0 and -1 properly.
-                                                *               * Can we move from -1 to 0?
-                                                *               * Maybe in some error case?
-                                                *               * Is there a way in which we
-                                                * close a previous session and start a new one?
                                                 */
         } rkb_share_fetch_session;
 
@@ -466,10 +461,6 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
         /**
          * Whether a share fetch should_fetch set is enqueued on
          * this broker's op queue or not.
-         *
-         * TODO KIP-932: Check the below fields are not causing
-         * thread safety issues. If causing, check if keeping the reference
-         * to the rkb will solve the issue or not.
          */
         rd_bool_t rkb_share_fetch_enqueued;
 

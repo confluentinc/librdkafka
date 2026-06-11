@@ -76,7 +76,7 @@ static void do_test_consume_batch_timeout_matrix(void) {
         rd_kafka_topic_partition_list_t *subs;
         /* Phase A timeouts (empty topic). -1 (infinite) is tested in
          * Phase C only — it would hang here. */
-        const int timeouts_ms[] = {0,    1,    300,   500,   1000,
+        const int timeouts_ms[] = {0,    1,    300,   500,  1000,
                                    3000, 5000, 10000, 30000};
         size_t i;
 
@@ -119,21 +119,18 @@ static void do_test_consume_batch_timeout_matrix(void) {
                 else
                         tolerance_ms = 2000;
 
-                TEST_SAY(
-                    "Phase A: empty-topic poll, timeout_ms=%d (+/-%dms)\n",
-                    timeout_ms, tolerance_ms);
+                TEST_SAY("Phase A: empty-topic poll, timeout_ms=%d (+/-%dms)\n",
+                         timeout_ms, tolerance_ms);
 
                 t_start = test_clock();
-                err     = rd_kafka_share_consume_batch(consumer, timeout_ms,
-                                                       batch, &rcvd);
-                t_end   = test_clock();
+                err = rd_kafka_share_consume_batch(consumer, timeout_ms, batch,
+                                                   &rcvd);
+                t_end = test_clock();
 
                 actual_ms = (int)((t_end - t_start) / 1000);
 
                 TEST_ASSERT(
-                    !err,
-                    "timeout_ms=%d: unexpected error %s",
-                    timeout_ms,
+                    !err, "timeout_ms=%d: unexpected error %s", timeout_ms,
                     err ? rd_kafka_err2str(rd_kafka_error_code(err)) : "");
                 TEST_ASSERT(
                     rcvd == 0,
@@ -156,8 +153,7 @@ static void do_test_consume_batch_timeout_matrix(void) {
                             actual_ms >= timeout_ms - tolerance_ms,
                             "timeout_ms=%d: actual wait %dms returned too "
                             "early (lower bound %dms)",
-                            timeout_ms, actual_ms,
-                            timeout_ms - tolerance_ms);
+                            timeout_ms, actual_ms, timeout_ms - tolerance_ms);
 
                 TEST_SAY("  timeout_ms=%d -> actual %dms (OK)\n", timeout_ms,
                          actual_ms);
@@ -171,33 +167,30 @@ static void do_test_consume_batch_timeout_matrix(void) {
             "alive after long blocking polls\n");
         test_produce_msgs_simple(common_producer, topic, 0, 10);
 
-        {
-                int consumed = 0;
-                int attempts = 0;
-                while (consumed < 10 && attempts++ < 30) {
-                        size_t rcvd = 0;
-                        size_t j;
-                        rd_kafka_error_t *err;
+        int consumed = 0;
+        int attempts = 0;
+        while (consumed < 10 && attempts++ < 30) {
+                size_t rcvd = 0;
+                size_t j;
+                rd_kafka_error_t *err;
 
-                        err = rd_kafka_share_consume_batch(
-                            consumer, 1000, batch, &rcvd);
-                        if (err) {
-                                rd_kafka_error_destroy(err);
-                                continue;
-                        }
-                        for (j = 0; j < rcvd; j++) {
-                                if (!batch[j]->err)
-                                        consumed++;
-                                rd_kafka_message_destroy(batch[j]);
-                        }
+                err =
+                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
                 }
-                TEST_ASSERT(consumed == 10,
-                            "Expected 10 records after the timeout matrix "
-                            "(consumer should not have been fenced); got %d",
-                            consumed);
-                TEST_SAY("  consumer still alive: consumed=%d (OK)\n",
-                         consumed);
+                for (j = 0; j < rcvd; j++) {
+                        if (!batch[j]->err)
+                                consumed++;
+                        rd_kafka_message_destroy(batch[j]);
+                }
         }
+        TEST_ASSERT(consumed == 10,
+                    "Expected 10 records after the timeout matrix "
+                    "(consumer should not have been fenced); got %d",
+                    consumed);
+        TEST_SAY("  consumer still alive: consumed=%d (OK)\n", consumed);
 
         /* Phase C — produce more, then poll with infinite timeout (-1).
          * Must return promptly with records, not hang. */
@@ -206,39 +199,32 @@ static void do_test_consume_batch_timeout_matrix(void) {
             "(infinite)\n");
         test_produce_msgs_simple(common_producer, topic, 0, 5);
 
-        {
-                size_t rcvd = 0;
-                size_t k;
-                rd_ts_t t_start, t_end;
-                int actual_ms;
-                rd_kafka_error_t *err;
+        size_t rcvd = 0;
+        size_t k;
+        rd_ts_t t_start, t_end;
+        int actual_ms;
+        rd_kafka_error_t *err;
 
-                t_start = test_clock();
-                err = rd_kafka_share_consume_batch(consumer, -1, batch, &rcvd);
-                t_end   = test_clock();
+        t_start = test_clock();
+        err     = rd_kafka_share_consume_batch(consumer, -1, batch, &rcvd);
+        t_end   = test_clock();
 
-                actual_ms = (int)((t_end - t_start) / 1000);
+        actual_ms = (int)((t_end - t_start) / 1000);
 
-                TEST_ASSERT(
-                    !err,
-                    "timeout_ms=-1: unexpected error %s",
+        TEST_ASSERT(!err, "timeout_ms=-1: unexpected error %s",
                     err ? rd_kafka_err2str(rd_kafka_error_code(err)) : "");
-                TEST_ASSERT(
-                    rcvd > 0,
+        TEST_ASSERT(rcvd > 0,
                     "timeout_ms=-1 with available records returned 0");
-                /* Generous upper bound; must not hang. */
-                TEST_ASSERT(
-                    actual_ms < 10000,
+        /* Generous upper bound; must not hang. */
+        TEST_ASSERT(actual_ms < 10000,
                     "timeout_ms=-1 took %dms with records available; "
                     "expected prompt return",
                     actual_ms);
 
-                for (k = 0; k < rcvd; k++)
-                        rd_kafka_message_destroy(batch[k]);
+        for (k = 0; k < rcvd; k++)
+                rd_kafka_message_destroy(batch[k]);
 
-                TEST_SAY("  timeout_ms=-1 -> %dms, rcvd=%zu (OK)\n",
-                         actual_ms, rcvd);
-        }
+        TEST_SAY("  timeout_ms=-1 -> %dms, rcvd=%zu (OK)\n", actual_ms, rcvd);
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);

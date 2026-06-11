@@ -40,5 +40,23 @@ rd_ts_t rd_kafka_toppar_fetch_decide(rd_kafka_toppar_t *rktp,
                                      rd_kafka_broker_t *rkb,
                                      int force_remove);
 
+void rd_kafka_broker_share_fetch_session_leave(rd_kafka_broker_t *rkb,
+                                               rd_kafka_op_t *rko_orig,
+                                               rd_ts_t now);
+void rd_kafka_broker_share_fetch_session_clear(rd_kafka_broker_t *rkb);
+void rd_kafka_broker_session_remove_partition_from_toppars_in_session(
+    rd_kafka_broker_t *rkb,
+    rd_kafka_toppar_t *rktp);
+void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
+                               rd_kafka_op_t *rko_orig,
+                               rd_ts_t now);
+void rd_kafka_share_filter_acquired_records_and_update_ack_type(
+    rd_kafka_q_t *temp_fetchq,
+    rd_list_t *filtered_msgs,
+    const int64_t *FirstOffsets,
+    const int64_t *LastOffsets,
+    const int16_t *DeliveryCounts,
+    int32_t AcquiredRecordsArrayCnt);
+
 
 #endif /* _RDKAFKA_FETCHER_H_ */

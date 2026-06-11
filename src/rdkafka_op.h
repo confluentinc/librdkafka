@@ -189,6 +189,37 @@ typedef enum {
         RD_KAFKA_OP_ELECTLEADERS,         /**< Admin:
                                            *   ElectLeaders
                                            *   u.admin_request */
+        RD_KAFKA_OP_SHARE_FETCH, /**< broker op: Issue share fetch request if
+                                    applicable. */
+        RD_KAFKA_OP_SHARE_FETCH_FANOUT, /**< fanout share fetch operation */
+        RD_KAFKA_OP_SHARE_COMMIT_ASYNC_FANOUT, /**< fanout share commit async
+                                                *   operation (ack-only,
+                                                *   no fetch) */
+        RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT,  /**< fanout share commit sync
+                                                *   operation. App thread
+                                                *   blocks until main thread
+                                                *   sends response. */
+        RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY, /**< Reply from main thread
+                                                     *   to app thread for
+                                                     *   commit sync. Carries
+                                                     *   per-partition results.
+                                                     */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_ADD,    /**< share session:
+                                                     * add partition */
+        RD_KAFKA_OP_SHARE_SESSION_PARTITION_REMOVE, /**< share session:
+                                                     * remove partition */
+        RD_KAFKA_OP_SHARE_FETCH_RESPONSE, /**< Share fetch response containing
+                                           *   all messages and partition acks
+                                           *   from a single broker response. */
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_EXECUTE,  /**< Share acknowledgement
+                                                   * callback  reply: main -> app
+                                                   */
+        RD_KAFKA_OP_SHARE_ACK_COMMIT_CB_REGISTER, /**< Register/unregister share
+                                                   *   acknowledgement callback:
+                                                   *   app -> main */
+        RD_KAFKA_OP_SHARE_SESSION_CLEAR, /**< broker op: Enqueued by main thread
+                                            to clear share session during broker
+                                            decommission */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 
@@ -580,6 +611,8 @@ struct rd_kafka_op_s {
                         enum {
                                 RD_KAFKA_MOCK_CMD_TOPIC_SET_ERROR,
                                 RD_KAFKA_MOCK_CMD_TOPIC_CREATE,
+                                RD_KAFKA_MOCK_CMD_TOPIC_DELETE,
+                                RD_KAFKA_MOCK_CMD_PART_DELETE_RECORDS,
                                 RD_KAFKA_MOCK_CMD_PART_SET_LEADER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
@@ -588,6 +621,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
                                 RD_KAFKA_MOCK_CMD_BROKER_DECOMMISSION,
+                                RD_KAFKA_MOCK_CMD_BROKER_REMOVE_FROM_METADATA,
                                 RD_KAFKA_MOCK_CMD_BROKER_ADD,
                                 RD_KAFKA_MOCK_CMD_COORD_SET,
                                 RD_KAFKA_MOCK_CMD_APIVERSION_SET,
@@ -607,7 +641,8 @@ struct rd_kafka_op_s {
                                                   *    PART_PUSH_LEADER_RESPONSE
                                                   */
                         char *str;               /**< For:
-                                                  *    COORD_SET (key) */
+                                                  *    COORD_SET (key)
+                                                  */
                         int32_t partition;       /**< For:
                                                   *    PART_SET_FOLLOWER
                                                   *    PART_SET_FOLLOWER_WMARKS
@@ -629,6 +664,8 @@ struct rd_kafka_op_s {
                                                   *    BROKER_SET_UPDOWN
                                                   *    APIVERSION_SET (minver)
                                                   *    BROKER_SET_RTT
+                                                  *    PART_DELETE_RECORDS
+                                                  *      (before_offset)
                                                   */
                         int64_t hi;              /**< High offset, for:
                                                   *    TOPIC_CREATE (repl fact)
@@ -724,6 +761,147 @@ struct rd_kafka_op_s {
                         void (*cb)(rd_kafka_t *rk, void *rkb);
                 } terminated;
 
+                struct {
+
+                        rd_bool_t should_leave; /**< Whether this broker should
+                                                 * leave the share-fetch
+                                                 * session. */
+
+                        /** Whether this broker should share-fetch nonzero
+                         * messages. */
+                        rd_bool_t should_fetch;
+
+                        /** Absolute timeout left to complete this share-fetch.
+                         * TODO KIP-932: Use timeout properly.
+                         */
+                        rd_ts_t abs_timeout;
+
+                        /** Target broker to which op is sent. */
+                        rd_kafka_broker_t *target_broker;
+
+                        /** Whether records were fetched in this
+                         *  share-fetch response. Set by broker
+                         *  thread, read by main thread in reply
+                         *  handler. */
+                        rd_bool_t records_fetched;
+
+                        /** Ack batches to send with this request.
+                         *  Type: rd_kafka_share_ack_batches_t*.
+                         *  Moved from rkb_share_async_ack_details
+                         *  when creating the op. Freed by broker
+                         *  thread after use.
+                         *  TODO KIP-932: Change name.
+                         */
+                        rd_list_t *ack_details;
+
+                        /** commit_sync request ID that this op belongs
+                         *  to, or 0 if not a commit_sync op. Compared
+                         *  with rkcg_commit_sync_request.id to detect
+                         *  stale responses. */
+                        int64_t commit_sync_request_id;
+                } share_fetch;
+
+                struct {
+                        /** Whether this FANOUT should fetch more records.
+                         *  When rd_true, the selected broker's SHARE_FETCH
+                         *  op will have should_fetch=true.
+                         *  When rd_false, this is an ack-only FANOUT and
+                         *  no broker will fetch new records. */
+                        rd_bool_t fetch_more_records;
+
+                        /** List of all acknowledgement batches to send.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Built from inflight ack map, will be filtered
+                         *  by leader when creating SHARE_FETCH ops.
+                         *  Each entry uses size=1 with types[0] holding the
+                         *  single ack type for the collated range.
+                         *  Set to NULL after ownership is transferred
+                         *  to per-broker ack_details.
+                         * TODO KIP-932: Change name
+                         */
+                        rd_list_t *ack_batches;
+                } share_fetch_fanout;
+
+                struct {
+                        /** List of all acknowledgement batches to commit.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Built from inflight ack map, will be segregated
+                         *  by leader and sent to respective brokers.
+                         *  Set to NULL after ownership is transferred
+                         *  to per-broker ack_details. */
+                        rd_list_t *ack_batches;
+                } share_commit_async_fanout;
+
+                struct {
+                        /** List of all acknowledgement batches to commit.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Built from inflight ack map, will be segregated
+                         *  by leader and sent to respective brokers.
+                         *  Set to NULL after ownership is transferred
+                         *  to per-broker ack_details. */
+                        rd_list_t *ack_batches;
+
+                        /** Absolute timeout for the commit_sync request.
+                         *  Calculated from user-provided timeout_ms. */
+                        rd_ts_t abs_timeout;
+
+                        /** Per-partition results (topic, partition, err).
+                         *  Set in response op by main thread.
+                         *  Read by app thread after unblocking. */
+                        rd_kafka_topic_partition_list_t *results;
+                } share_commit_sync_fanout;
+
+                struct {
+                        /** Per-partition results (topic, partition, err).
+                         *  Moved from commit_sync_request by main thread. */
+                        rd_kafka_topic_partition_list_t *results;
+                } share_commit_sync_fanout_reply;
+
+                /**
+                 * Share fetch response - single rko containing all messages
+                 * and partition ack info from one broker response.
+                 */
+                struct {
+                        /** List of message ops (rd_kafka_op_t*).
+                         *  Contains only actual messages (ACQUIRED/REJECT),
+                         *  no GAP placeholder ops.
+                         */
+                        /*
+                         * TODO KIP-932: Check if we can send the messages only
+                         *  instead of the message rkos.
+                         */
+                        rd_list_t *message_rkos;
+
+                        /** List of per-partition inflight ack mappings.
+                         *  Type: rd_kafka_share_ack_batches_t*
+                         *  Contains per-offset ack types (ACQUIRED/GAP/REJECT).
+                         *  Built in broker thread, merged to rkshare in app
+                         * thread.
+                         */
+                        rd_list_t *inflight_acks;
+                } share_fetch_response;
+
+                /**
+                 * Share acknowledgement callback reply.
+                 * Contains results to deliver to the runtime acknowledgement
+                 * callback set via
+                 * rd_kafka_share_set_acknowledgement_commit_cb().
+                 */
+                struct {
+                        /** List of partition offsets. */
+                        rd_kafka_share_partition_offsets_list_t *partitions;
+                        /* Callback is looked up from rk->rk_rkshare at
+                         * invoke time. */
+                } share_ack_commit_cb_execute;
+
+                /** Share acknowledgement callback registration op.
+                 *  Sent from app thread to main thread when the runtime
+                 *  callback registration state transitions (set ↔ unset). */
+                struct {
+                        rd_bool_t
+                            registered; /**< true=register, false=unregister */
+                } share_ack_commit_cb_register;
+
         } rko_u;
 };
 
@@ -774,6 +952,17 @@ void rd_kafka_consumer_err(rd_kafka_q_t *rkq,
                            int64_t offset,
                            const char *fmt,
                            ...) RD_FORMAT(printf, 8, 9);
+void rd_kafka_share_msgset_err_ops(
+    rd_kafka_q_t *rkq,
+    int32_t broker_id,
+    rd_kafka_resp_err_t err,
+    int32_t version,
+    rd_kafka_toppar_t *rktp,
+    int64_t start_offset,
+    int64_t end_offset,
+    rd_kafka_share_internal_acknowledgement_type ack_type,
+    const char *fmt,
+    ...) RD_FORMAT(printf, 9, 10);
 rd_kafka_op_t *rd_kafka_op_req0(rd_kafka_q_t *destq,
                                 rd_kafka_q_t *recvq,
                                 rd_kafka_op_t *rko,
@@ -823,6 +1012,13 @@ void rd_kafka_op_print(FILE *fp, const char *prefix, rd_kafka_op_t *rko);
 
 void rd_kafka_fetch_op_app_prepare(rd_kafka_t *rk, rd_kafka_op_t *rko);
 
+int64_t rd_kafka_op_get_offset(const rd_kafka_op_t *rko);
+
+unsigned int
+rd_kafka_op_process_share_fetch_response(rd_kafka_op_t *rko,
+                                         rd_kafka_share_t *rkshare,
+                                         rd_kafka_message_t **rkmessages,
+                                         unsigned int cnt);
 
 #define rd_kafka_op_is_ctrl_msg(rko)                                           \
         ((rko)->rko_type == RD_KAFKA_OP_FETCH && !(rko)->rko_err &&            \

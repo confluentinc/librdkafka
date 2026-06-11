@@ -554,6 +554,12 @@ rd_kafka_t *test_create_consumer(
                          void *opaque),
     rd_kafka_conf_t *conf,
     rd_kafka_topic_conf_t *default_topic_conf);
+
+void test_produce_msgs_simple(rd_kafka_t *rk,
+                              const char *topic,
+                              int32_t partition,
+                              int msgcnt);
+
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk, const char *topic);
 rd_kafka_topic_t *
 test_create_topic_object(rd_kafka_t *rk, const char *topic, ...);
@@ -863,6 +869,10 @@ test_IncrementalAlterConfigs_simple(rd_kafka_t *rk,
                                     const char **configs,
                                     size_t config_cnt);
 
+void test_alter_group_configurations(const char *group_name,
+                                     const char **cfg,
+                                     size_t cfg_cnt);
+
 rd_kafka_resp_err_t test_DeleteGroups_simple(rd_kafka_t *rk,
                                              rd_kafka_queue_t *useq,
                                              char **groups,
@@ -1015,6 +1025,120 @@ int test_consumer_group_protocol_classic();
                 TEST_SAY0("Error: %s: %s" _C_CLR "\n",                         \
                           rd_kafka_error_name(_e), rd_kafka_error_string(_e)); \
         } while (0)
+
+/****************************************************************************
+ * Share Consumer helpers
+ ****************************************************************************/
+
+rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare);
+
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode);
+
+#define TEST_SHARE_BATCH_SIZE 10001
+
+int test_share_consume_batch(rd_kafka_share_t *rk,
+                             int timeout_ms,
+                             const char **expected_topics,
+                             int expected_topic_cnt,
+                             int *out_valid);
+
+int test_share_consume_msgs(rd_kafka_share_t *rk,
+                            int expected,
+                            int max_attempts,
+                            int timeout_ms,
+                            const char **expected_topics,
+                            int expected_topic_cnt);
+
+void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
+                                         int topic_count,
+                                         ...);
+
+rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk);
+
+void test_share_set_auto_offset_reset(const char *group_name,
+                                      const char *reset_policy);
+
+void test_share_set_isolation_level(const char *group_name,
+                                    const char *isolation_level);
+
+void test_share_consumer_close(rd_kafka_share_t *rkshare);
+void test_share_destroy(rd_kafka_share_t *rkshare);
+
+/**
+ * @brief State for tracking share acknowledgement callbacks.
+ *
+ * @remark Call test_ack_cb_state_destroy() to free the @c errs allocation.
+ */
+typedef struct test_ack_cb_state_s {
+        int callback_cnt;          /**< Number of callbacks invoked */
+        size_t total_offsets;      /**< Total offsets acknowledged */
+        rd_kafka_resp_err_t *errs; /**< Per-callback err, length callback_cnt */
+} test_ack_cb_state_t;
+
+/**
+ * @brief Record the err for one callback invocation. Grows @c errs by one.
+ */
+void test_ack_cb_state_push_err(test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err);
+
+/**
+ * @brief Free the @c errs allocation and zero counters. Safe to call on a
+ *        zero-initialized state.
+ */
+void test_ack_cb_state_destroy(test_ack_cb_state_t *state);
+
+/**
+ * @brief Returns the first non-NO_ERROR err recorded, or NO_ERROR if all
+ *        callbacks were clean (or none have fired yet).
+ */
+rd_kafka_resp_err_t
+test_ack_cb_state_first_err(const test_ack_cb_state_t *state);
+
+/**
+ * @brief Standard share acknowledgement callback.
+ *
+ * Tracks callback invocations, offsets acknowledged, and errors.
+ * Opaque must be a pointer to test_ack_cb_state_t.
+ */
+void test_share_ack_cb(rd_kafka_share_t *rkshare,
+                       rd_kafka_share_partition_offsets_list_t *partitions,
+                       rd_kafka_resp_err_t err,
+                       void *opaque);
+
+/**
+ * @brief Create share consumer with callback and custom acknowledgement mode.
+ *
+ * @param group_id Share group ID
+ * @param ack_mode Acknowledgement mode ("implicit" or "explicit")
+ * @param state Callback state (will be set as opaque)
+ * @param cb Custom callback function (NULL to use test_share_ack_cb)
+ * @returns Created share consumer
+ */
+rd_kafka_share_t *test_create_share_consumer_with_cb(
+    const char *group_id,
+    const char *ack_mode,
+    test_ack_cb_state_t *state,
+    void (*cb)(rd_kafka_share_t *,
+               rd_kafka_share_partition_offsets_list_t *,
+               rd_kafka_resp_err_t,
+               void *));
+
+/**
+ * @brief Wait for acknowledgement callbacks while polling.
+ *
+ * Polls for messages and waits until at least min_callbacks have been invoked.
+ *
+ * @param state Callback state to monitor
+ * @param rkshare Share consumer to poll
+ * @param min_callbacks Minimum number of callbacks to wait for
+ * @param timeout_ms Maximum time to wait in milliseconds
+ * @returns rd_true if min_callbacks reached, rd_false on timeout
+ */
+rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
+                                     rd_kafka_share_t *rkshare,
+                                     int min_callbacks,
+                                     int timeout_ms);
 
 /**
  * @name rusage.c

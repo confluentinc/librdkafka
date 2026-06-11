@@ -476,6 +476,48 @@ rd_kafka_error_t *rd_kafka_sasl_background_callbacks_enable(rd_kafka_t *rk) {
 }
 
 
+rd_kafka_error_t *
+rd_kafka_share_sasl_background_callbacks_enable(rd_kafka_share_t *rkshare) {
+        return rd_kafka_sasl_background_callbacks_enable(rkshare->rkshare_rk);
+}
+
+
+rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
+                                                      const char *username,
+                                                      const char *password) {
+        return rd_kafka_sasl_set_credentials(rkshare->rkshare_rk, username,
+                                             password);
+}
+
+
+rd_kafka_queue_t *rd_kafka_share_queue_get_sasl(rd_kafka_share_t *rkshare) {
+        return rd_kafka_queue_get_sasl(rkshare->rkshare_rk);
+}
+
+
+rd_kafka_resp_err_t rd_kafka_share_oauthbearer_set_token(
+    rd_kafka_share_t *rkshare,
+    const char *token_value,
+    int64_t md_lifetime_ms,
+    const char *md_principal_name,
+    const char **extensions,
+    size_t extension_size,
+    char *errstr,
+    size_t errstr_size) {
+        return rd_kafka_oauthbearer_set_token(
+            rkshare->rkshare_rk, token_value, md_lifetime_ms, md_principal_name,
+            extensions, extension_size, errstr, errstr_size);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_share_oauthbearer_set_token_failure(rd_kafka_share_t *rkshare,
+                                             const char *errstr) {
+        return rd_kafka_oauthbearer_set_token_failure(rkshare->rkshare_rk,
+                                                      errstr);
+}
+
+
 /**
  * Global SASL termination.
  */

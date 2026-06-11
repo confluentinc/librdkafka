@@ -4616,8 +4616,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* epoch=-1 (final fetch) → release remaining acquired
                  * records and close the session. */
                 if (!err && session && SessionEpoch == -1) {
-                        rd_kafka_mock_sgrp_release_session_locks(sgrp,
-                                                                  session);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
@@ -4903,8 +4902,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                 /* epoch=-1 (final ack) → release remaining
                  * acquired records and close the session. */
                 if (!err && session && SessionEpoch == -1) {
-                        rd_kafka_mock_sgrp_release_session_locks(sgrp,
-                                                                  session);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);

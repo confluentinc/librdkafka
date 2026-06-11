@@ -2635,6 +2635,13 @@ def main():
                     help='Extra rdkafka conf property for the consumer '
                          '(repeatable). Forwarded as -X k=v to '
                          'share-consumer-verify and rdkafka_performance.')
+    ap.add_argument('--producer-conf', action='append', default=[],
+                    metavar='KEY=VALUE',
+                    help='Extra rdkafka conf property for the producer '
+                         '(repeatable). Forwarded as -X k=v to '
+                         'rdkafka_performance. Use this to drive '
+                         'compression, acks, idempotence, batch.size, '
+                         'linger.ms, etc.')
     ap.add_argument('--log-budget-gb', type=float, default=1.0,
                     help='Total cap on consumer logs on disk, summed across '
                          'all consumers')
@@ -2754,11 +2761,14 @@ def main():
         topic_to_producer = dict(zip(topics, producers))
 
         def producer_cmd_for_topic(t):
-            return [
+            cmd = [
                 perf, '-P', '-b', bootstrap, '-t', t,
                 '-s', str(args.msg_size),
                 '-r', str(args.produce_rate),
             ]
+            for kv in args.producer_conf:
+                cmd.extend(['-X', kv])
+            return cmd
 
         for prod, t in zip(producers, topics):
             prod.start(producer_cmd_for_topic(t), env)

@@ -172,6 +172,10 @@ static int rd_kafka_mock_handle_Produce(rd_kafka_mock_connection_t *mconn,
                         else if (mpart->leader != mconn->broker)
                                 err =
                                     RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION;
+                        else
+                                err =
+                                    rd_kafka_mock_partition_next_request_error(
+                                        mpart, rkbuf->rkbuf_reqhdr.ApiKey);
 
                         /* Append to partition log */
                         if (!err)
@@ -501,6 +505,11 @@ static int rd_kafka_mock_handle_Fetch(rd_kafka_mock_connection_t *mconn,
                                 err =
                                     rd_kafka_mock_partition_leader_epoch_check(
                                         mpart, CurrentLeaderEpoch);
+
+                        if (!err && mpart)
+                                err =
+                                    rd_kafka_mock_partition_next_request_error(
+                                        mpart, rkbuf->rkbuf_reqhdr.ApiKey);
 
                         /* Find MessageSet for FetchOffset */
                         if (!err && FetchOffset != mpart->end_offset) {
@@ -4366,6 +4375,18 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 if (mpart->leader != mconn->broker)
                                         continue;
 
+                                /* Injected partition error: skip acquisition
+                                 * so no records are locked for a partition
+                                 * the client will see as failed.  The error
+                                 * is stashed on the session's partition list
+                                 * element and consumed (read and cleared) by
+                                 * the response writer below. */
+                                rktpar->err =
+                                    rd_kafka_mock_partition_next_request_error(
+                                        mpart, rkbuf->rkbuf_reqhdr.ApiKey);
+                                if (rktpar->err)
+                                        continue;
+
                                 rd_kafka_mock_sgrp_partmeta_t *pmeta =
                                     rd_kafka_mock_sgrp_partmeta_get(
                                         sgrp, topic_id, rktpar->partition,
@@ -4491,8 +4512,13 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                 part_err =
                                                     RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
                                         else
-                                                part_err =
-                                                    RD_KAFKA_RESP_ERR_NO_ERROR;
+                                                part_err = rktpar->err;
+
+                                        /* Consume the stashed injected error
+                                         * so it doesn't leak into subsequent
+                                         * responses. */
+                                        rktpar->err =
+                                            RD_KAFKA_RESP_ERR_NO_ERROR;
 
                                         /* Response: Partition */
                                         rd_kafka_buf_write_i32(
@@ -4562,7 +4588,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                         rd_kafka_buf_write_tags_empty(resp);
                                         /* Response: Records (all acquired
                                          * batches concatenated) */
-                                        if (mpart && pmeta)
+                                        if (mpart && pmeta && !part_err)
                                                 rd_kafka_mock_sgrp_write_acquired_records(
                                                     resp, pmeta, mpart,
                                                     &MemberId, now);
@@ -4570,7 +4596,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                                 rd_kafka_buf_write_uvarint(resp,
                                                                            1);
                                         /* Response: AcquiredRecords */
-                                        if (mpart && pmeta)
+                                        if (mpart && pmeta && !part_err)
                                                 rd_kafka_mock_sgrp_write_acquired_records_meta(
                                                     resp, pmeta, &MemberId,
                                                     now);
@@ -4830,6 +4856,35 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                         session->session_epoch++;
                 }
 
+                /* Pop injected partition-level errors and stash them on
+                 * the request-local partition list.  Done before ack
+                 * application so that acks for an errored partition are
+                 * NOT applied, keeping mock record state consistent with
+                 * the reported error. */
+                if (!err) {
+                        int p;
+                        for (p = 0; p < ack_partitions->cnt; p++) {
+                                rd_kafka_topic_partition_t *rktpar =
+                                    &ack_partitions->elems[p];
+                                rd_kafka_mock_topic_t *mtopic =
+                                    rd_kafka_mock_topic_find_by_id(
+                                        mcluster,
+                                        rd_kafka_topic_partition_get_topic_id(
+                                            rktpar));
+                                rd_kafka_mock_partition_t *mpart =
+                                    mtopic ? rd_kafka_mock_partition_find(
+                                                 mtopic, rktpar->partition)
+                                           : NULL;
+
+                                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                                if (mpart && mpart->leader == mconn->broker)
+                                        rktpar->err =
+                                            rd_kafka_mock_partition_next_request_error(
+                                                mpart,
+                                                rkbuf->rkbuf_reqhdr.ApiKey);
+                        }
+                }
+
                 /* Apply acknowledgement batches */
                 if (!err && sgrp && rd_list_cnt(&ack_entries) > 0) {
                         int k;
@@ -4842,6 +4897,16 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                         for (k = 0; k < rd_list_cnt(&ack_entries); k++) {
                                 struct rd_kafka_mock_sgrp_ack_entry *entry =
                                     rd_list_elem(&ack_entries, k);
+                                int idx =
+                                    rd_kafka_topic_partition_list_find_idx_by_id(
+                                        ack_partitions, entry->topic_id,
+                                        entry->partition);
+
+                                /* Skip ack application for partitions with
+                                 * an injected error. */
+                                if (idx >= 0 && ack_partitions->elems[idx].err)
+                                        continue;
+
                                 entry->err = rd_kafka_mock_sgrp_apply_ack(
                                     sgrp, entry->topic_id, entry->partition,
                                     entry->first_offset, entry->last_offset,
@@ -4940,6 +5005,11 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                                         else if (mpart->leader != mconn->broker)
                                                 part_err =
                                                     RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
+                                        else if (rktpar->err)
+                                                /* Injected partition error
+                                                 * stashed before ack
+                                                 * application. */
+                                                part_err = rktpar->err;
                                         else
                                                 part_err =
                                                     rd_kafka_mock_sgrp_ack_error_for_partition(

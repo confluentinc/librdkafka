@@ -3718,8 +3718,7 @@ err:
                  * SPECIAL/REFRESH/RETRY paths; the fallback fires only
                  * when no explicit mapping applies. */
                 if (!(actions &
-                      (RD_KAFKA_ERR_ACTION_RETRY |
-                       RD_KAFKA_ERR_ACTION_REFRESH |
+                      (RD_KAFKA_ERR_ACTION_RETRY | RD_KAFKA_ERR_ACTION_REFRESH |
                        RD_KAFKA_ERR_ACTION_SPECIAL)))
                         actions |= RD_KAFKA_ERR_ACTION_FATAL;
                 break;

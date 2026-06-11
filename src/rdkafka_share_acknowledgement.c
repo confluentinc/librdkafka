@@ -276,9 +276,6 @@ void rd_kafka_share_ack_all(rd_kafka_share_t *rkshare) {
  */
 static void rd_kafka_share_ack_details_batch_destroy(void *ptr) {
         rd_kafka_share_ack_batches_t *batch = ptr;
-        // TODO KIP-932: Check if this null check is needed
-        if (!batch)
-                return;
         rd_kafka_share_ack_batches_destroy(batch);
 }
 

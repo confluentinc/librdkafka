@@ -170,8 +170,8 @@ static void wait_member_count(rd_kafka_mock_cluster_t *mc,
 
         while (test_clock() < deadline) {
                 rd_kafka_resp_err_t err =
-                    rd_kafka_mock_sharegroup_get_member_ids(mc, group_id,
-                                                            &ids, &got);
+                    rd_kafka_mock_sharegroup_get_member_ids(mc, group_id, &ids,
+                                                            &got);
                 if (err == RD_KAFKA_RESP_ERR_NO_ERROR && got == expected) {
                         size_t i;
                         for (i = 0; i < got; i++)
@@ -277,8 +277,7 @@ static void bring_up_consumers(rd_kafka_mock_cluster_t *mc,
                 rd_kafka_topic_partition_list_destroy(s);
 
                 wait_member_count(mc, group_id, (size_t)(i + 1), WAIT_MS);
-                ids[i]   = capture_new_member_id(mc, group_id, known,
-                                                 (size_t)i);
+                ids[i] = capture_new_member_id(mc, group_id, known, (size_t)i);
                 known[i] = ids[i];
                 rd_usleep(HB_INTERVAL_MS * 2 * 1000, 0);
         }
@@ -360,13 +359,11 @@ static void do_test_force_precise_assignment_single_consumer(void) {
         wait_member_count(mc, group, 1, WAIT_MS);
         id_c1 = capture_new_member_id(mc, group, NULL, 0);
 
-        {
-                const char *ids[1]                     = {id_c1};
-                rd_kafka_topic_partition_list_t *as[1] = {
-                    build_partition_list(2, T, 0, T, 2)};
-                push_round(mc, group, ids, as, &l1, 1, "force_precise");
-                rd_kafka_topic_partition_list_destroy(as[0]);
-        }
+        const char *ids[1]                     = {id_c1};
+        rd_kafka_topic_partition_list_t *as[1] = {
+            build_partition_list(2, T, 0, T, 2)};
+        push_round(mc, group, ids, as, &l1, 1, "force_precise");
+        rd_kafka_topic_partition_list_destroy(as[0]);
 
         rd_free(id_c1);
         test_share_consumer_close(c1);
@@ -441,15 +438,15 @@ static void do_test_force_shared_partition_between_consumers(void) {
         as[1]  = as2;
         rd_kafka_mock_sharegroup_target_assignment(mc, group, ids, as, 2);
 
-        got  = test_share_consumer_wait_serves_after(l1, snap1.serves, 3,
-                                                     WAIT_MS);
+        got =
+            test_share_consumer_wait_serves_after(l1, snap1.serves, 3, WAIT_MS);
         want = build_partition_list(3, T, 0, T, 1, T, 2);
         assert_set_eq("c1", got, want);
         rd_kafka_topic_partition_list_destroy(got);
         rd_kafka_topic_partition_list_destroy(want);
 
-        got  = test_share_consumer_wait_serves_after(l2, snap2.serves, 3,
-                                                     WAIT_MS);
+        got =
+            test_share_consumer_wait_serves_after(l2, snap2.serves, 3, WAIT_MS);
         want = build_partition_list(3, T, 1, T, 2, T, 3);
         assert_set_eq("c2", got, want);
         rd_kafka_topic_partition_list_destroy(got);
@@ -459,8 +456,10 @@ static void do_test_force_shared_partition_between_consumers(void) {
         rd_kafka_topic_partition_list_destroy(as2);
         rd_free(id_c1);
         rd_free(id_c2);
-        test_share_consumer_close(c1); test_share_destroy(c1);
-        test_share_consumer_close(c2); test_share_destroy(c2);
+        test_share_consumer_close(c1);
+        test_share_destroy(c1);
+        test_share_consumer_close(c2);
+        test_share_destroy(c2);
         test_share_consumer_assignments_destroy(l1);
         test_share_consumer_assignments_destroy(l2);
         test_mock_cluster_destroy(mc);
@@ -500,13 +499,12 @@ static void do_test_force_change_existing_assignment(void) {
 
         /* Replace {T[0..3]} with {T[2,3]}. Exact-match (assert_set_eq inside
          * push_round) implies T[0] and T[1] were dropped. */
-        {
-                const char *ids[1]                     = {id_c1};
-                rd_kafka_topic_partition_list_t *as[1] = {
-                    build_partition_list(2, T, 2, T, 3)};
-                push_round(mc, group, ids, as, &l1, 1, "change_existing");
-                rd_kafka_topic_partition_list_destroy(as[0]);
-        }
+        const char *ids[1]                     = {id_c1};
+        rd_kafka_topic_partition_list_t *as[1] = {
+            build_partition_list(2, T, 2, T, 3)};
+        push_round(mc, group, ids, as, &l1, 1, "change_existing");
+        rd_kafka_topic_partition_list_destroy(as[0]);
+
 
         rd_free(id_c1);
         test_share_consumer_close(c1);
@@ -546,13 +544,12 @@ static void do_test_force_empty_assignment(void) {
         rd_kafka_topic_partition_list_destroy(got);
         id_c1 = capture_new_member_id(mc, group, NULL, 0);
 
-        {
-                const char *ids[1]                     = {id_c1};
-                rd_kafka_topic_partition_list_t *as[1] = {
-                    build_partition_list(0)};
-                push_round(mc, group, ids, as, &l1, 1, "force_empty");
-                rd_kafka_topic_partition_list_destroy(as[0]);
-        }
+
+        const char *ids[1]                     = {id_c1};
+        rd_kafka_topic_partition_list_t *as[1] = {build_partition_list(0)};
+        push_round(mc, group, ids, as, &l1, 1, "force_empty");
+        rd_kafka_topic_partition_list_destroy(as[0]);
+
 
         rd_free(id_c1);
         test_share_consumer_close(c1);
@@ -597,8 +594,8 @@ static void do_test_steady_state_no_spurious_serves(void) {
         TEST_ASSERT(after.serves == before.serves,
                     "spurious serves over %d ms: %d -> %d", STEADY_MS,
                     before.serves, after.serves);
-        TEST_ASSERT(after.parser_errors == 0,
-                    "parser_errors = %d", after.parser_errors);
+        TEST_ASSERT(after.parser_errors == 0, "parser_errors = %d",
+                    after.parser_errors);
 
         test_share_consumer_close(c1);
         test_share_destroy(c1);
@@ -643,11 +640,9 @@ static void do_test_force_reassignment_cycle_three_consumers(void) {
         rd_kafka_mock_sharegroup_set_session_timeout(mc, SESSION_MS);
         rd_kafka_mock_topic_create(mc, T, 6, 1);
 
-        {
-                const char *names[1] = {T};
-                bring_up_consumers(mc, bootstraps, group, names, 1, 3, c, l,
-                                   ids);
-        }
+        const char *names[1] = {T};
+        bring_up_consumers(mc, bootstraps, group, names, 1, 3, c, l, ids);
+
         for (i = 0; i < 3; i++)
                 id_arr[i] = ids[i];
 
@@ -723,11 +718,9 @@ static void do_test_force_chaos_four_consumers(void) {
         rd_kafka_mock_sharegroup_set_session_timeout(mc, SESSION_MS);
         rd_kafka_mock_topic_create(mc, T, 8, 1);
 
-        {
-                const char *names[1] = {T};
-                bring_up_consumers(mc, bootstraps, group, names, 1, 4, c, l,
-                                   ids);
-        }
+        const char *names[1] = {T};
+        bring_up_consumers(mc, bootstraps, group, names, 1, 4, c, l, ids);
+
         for (i = 0; i < 4; i++)
                 id_arr[i] = ids[i];
 
@@ -839,15 +832,15 @@ static void do_test_force_multi_topic_assignment_two_consumers(void) {
         as[1]  = as2;
         rd_kafka_mock_sharegroup_target_assignment(mc, group, ids, as, 2);
 
-        got  = test_share_consumer_wait_serves_after(l1, snap1.serves, 2,
-                                                     WAIT_MS);
+        got =
+            test_share_consumer_wait_serves_after(l1, snap1.serves, 2, WAIT_MS);
         want = build_partition_list(2, T, 0, U, 1);
         assert_set_eq("c1 striped", got, want);
         rd_kafka_topic_partition_list_destroy(got);
         rd_kafka_topic_partition_list_destroy(want);
 
-        got  = test_share_consumer_wait_serves_after(l2, snap2.serves, 2,
-                                                     WAIT_MS);
+        got =
+            test_share_consumer_wait_serves_after(l2, snap2.serves, 2, WAIT_MS);
         want = build_partition_list(2, T, 1, U, 0);
         assert_set_eq("c2 striped", got, want);
         rd_kafka_topic_partition_list_destroy(got);
@@ -857,8 +850,10 @@ static void do_test_force_multi_topic_assignment_two_consumers(void) {
         rd_kafka_topic_partition_list_destroy(as2);
         rd_free(id_c1);
         rd_free(id_c2);
-        test_share_consumer_close(c1); test_share_destroy(c1);
-        test_share_consumer_close(c2); test_share_destroy(c2);
+        test_share_consumer_close(c1);
+        test_share_destroy(c1);
+        test_share_consumer_close(c2);
+        test_share_destroy(c2);
         test_share_consumer_assignments_destroy(l1);
         test_share_consumer_assignments_destroy(l2);
         test_mock_cluster_destroy(mc);
@@ -909,13 +904,11 @@ static void do_test_force_same_assignment_twice_no_extra_serve(void) {
         id_c1 = capture_new_member_id(mc, group, NULL, 0);
 
         /* First push: force {T[0], T[1]} and wait for the serve. */
-        {
-                const char *ids[1]                     = {id_c1};
-                rd_kafka_topic_partition_list_t *as[1] = {
-                    build_partition_list(2, T, 0, T, 1)};
-                push_round(mc, group, ids, as, &l1, 1, "first_push");
-                rd_kafka_topic_partition_list_destroy(as[0]);
-        }
+        const char *ids[1]                     = {id_c1};
+        rd_kafka_topic_partition_list_t *as[1] = {
+            build_partition_list(2, T, 0, T, 1)};
+        push_round(mc, group, ids, as, &l1, 1, "first_push");
+        rd_kafka_topic_partition_list_destroy(as[0]);
 
         snap_after_first = test_share_consumer_assignment_stats(l1);
 
@@ -924,32 +917,30 @@ static void do_test_force_same_assignment_twice_no_extra_serve(void) {
          * is_new_assignment_different check should suppress
          * reconciliation, leaving stats.serves unchanged. */
         forced_second = build_partition_list(2, T, 0, T, 1);
-        {
-                const char *ids[1]                     = {id_c1};
-                rd_kafka_topic_partition_list_t *as[1] = {forced_second};
-                rd_kafka_mock_sharegroup_target_assignment(mc, group, ids, as,
-                                                           1);
-        }
+
+        /* Reuse the ids/as arrays declared above; as[0] was destroyed
+         * after the first push so we rebind it to forced_second. */
+        as[0] = forced_second;
+        rd_kafka_mock_sharegroup_target_assignment(mc, group, ids, as, 1);
+
 
         /* Wait long enough for several heartbeats to fly. */
         rd_usleep(STEADY_MS * 1000, 0);
         snap_after_second = test_share_consumer_assignment_stats(l1);
 
-        TEST_ASSERT(
-            snap_after_second.serves == snap_after_first.serves,
-            "duplicate push triggered %d extra serve(s); "
-            "is_new_assignment_different is broken",
-            snap_after_second.serves - snap_after_first.serves);
-        TEST_ASSERT(snap_after_second.parser_errors == 0,
-                    "parser_errors = %d", snap_after_second.parser_errors);
+        TEST_ASSERT(snap_after_second.serves == snap_after_first.serves,
+                    "duplicate push triggered %d extra serve(s); "
+                    "is_new_assignment_different is broken",
+                    snap_after_second.serves - snap_after_first.serves);
+        TEST_ASSERT(snap_after_second.parser_errors == 0, "parser_errors = %d",
+                    snap_after_second.parser_errors);
 
         /* Use the snapshot accessor (non-blocking read after the
          * steady window) to verify the latest observed assignment is
          * still what we pushed. */
         got  = test_share_consumer_assignments(l1, 0);
         want = build_partition_list(2, T, 0, T, 1);
-        TEST_ASSERT(got != NULL,
-                    "snapshot returned NULL after a known serve");
+        TEST_ASSERT(got != NULL, "snapshot returned NULL after a known serve");
         assert_set_eq("snapshot after steady", got, want);
         rd_kafka_topic_partition_list_destroy(got);
         rd_kafka_topic_partition_list_destroy(want);

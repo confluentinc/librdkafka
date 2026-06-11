@@ -763,8 +763,9 @@ void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     rd_kafka_mock_sgrp_record_state_t *state);
-void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
-                                             const char *member_id);
+void rd_kafka_mock_sgrp_release_session_locks(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    const rd_kafka_mock_sgrp_fetch_session_t *session);
 void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
                                              void *arg);
 

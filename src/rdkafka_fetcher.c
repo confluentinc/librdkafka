@@ -919,9 +919,6 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                 if (in_acquired_range) {
                         /* Set ack type based on op type */
                         rd_kafka_msg_t *rkm = NULL;
-                        /* TODO KIP-932: Check and update the handling
-                         * of control messages
-                         */
                         if (unlikely(rd_kafka_op_is_ctrl_msg(rko)))
                                 continue;
                         if (rko->rko_type == RD_KAFKA_OP_FETCH) {
@@ -2345,8 +2342,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
         rd_kafka_op_t *rko_orig     = opaque;
         rd_kafka_op_t *response_rko = NULL;
 
-        rd_kafka_assert(rkb->rkb_rk, rkb->rkb_fetching > 0);
-
         /* Parse the response only if the network/broker layer didn't
          * report an error. If err is set (e.g. __TRANSPORT,
          * __TIMED_OUT, __DESTROY), the reply buffer is unusable so
@@ -2381,10 +2376,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                 }
         }
 
-        /* TODO KIP-932: Partition add/remove is done unconditionally
-         * here. Likely correct — partitions stay in the session
-         * across response errors and migrate on the next metadata
-         * refresh. Verify this matches the intended KIP-932 flow. */
         rd_kafka_broker_session_update(rkb);
 
         if (unlikely(err)) {
@@ -2465,8 +2456,6 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
          * before the app thread wakes up and enqueues a new FANOUT. */
         if (response_rko)
                 rd_kafka_q_enq(rkb->rkb_rk->rk_cgrp->rkcg_q, response_rko);
-
-        rkb->rkb_fetching = 0;
 }
 
 /**
@@ -2957,7 +2946,6 @@ void rd_kafka_ShareFetchRequest(rd_kafka_broker_t *rkb,
                     rd_list_copy(rkb->rkb_share_fetch_session.toppars_to_forget,
                                  rd_kafka_toppar_list_copy, NULL);
 
-        rkb->rkb_fetching = 1;
         rd_kafka_dbg(
             rkb->rkb_rk, MSG, "FETCH",
             "Issuing ShareFetch request (max wait %dms, min %d bytes, "

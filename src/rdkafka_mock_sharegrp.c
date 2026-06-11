@@ -899,8 +899,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
          *    fresh one. */
         if (SessionEpoch == 0) {
                 if (session) {
-                        rd_kafka_mock_sgrp_release_member_locks(
-                            sgrp, session->member_id);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
@@ -930,8 +929,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                          * The client handles this by resetting its
                          * per-broker epoch to 0 (opening a fresh session
                          * on the next fetch). */
-                        rd_kafka_mock_sgrp_release_member_locks(
-                            sgrp, session->member_id);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
@@ -972,26 +970,43 @@ void rd_kafka_mock_sgrp_record_release(
 }
 
 /**
- * @brief Release all ACQUIRED records owned by \p member_id across all
- *        share-partition metadata in the share group.
+ * @brief Release all ACQUIRED records owned by \p session's member on
+ *        the partitions belonging to \p session.
  *
- * This is called when a session is closed (epoch=-1), when a session
- * times out, or as part of periodic lock-expiry reclamation.
+ * Share sessions are per-broker: closing one broker's session must
+ * only release the records acquired through that session (the
+ * partitions that broker leads), never the member's locks held
+ * through other brokers' intact sessions.
+ *
+ * This is called when a session is closed (epoch=-1), replaced
+ * (epoch=0), invalidated (epoch mismatch), times out, or its
+ * connection is closed.
  *
  * @locks mcluster->lock MUST be held.
  */
-void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
-                                             const char *member_id) {
+void rd_kafka_mock_sgrp_release_session_locks(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    const rd_kafka_mock_sgrp_fetch_session_t *session) {
         rd_kafka_mock_sgrp_partmeta_t *pmeta;
+
+        if (!session->partitions)
+                return;
 
         TAILQ_FOREACH(pmeta, &mshgrp->partitions, link) {
                 rd_kafka_mock_sgrp_record_state_t *state, *tmp;
+
+                if (rd_kafka_topic_partition_list_find_idx_by_id(
+                        session->partitions, pmeta->topic_id,
+                        pmeta->partition) < 0)
+                        continue;
+
                 TAILQ_FOREACH_SAFE(state, &pmeta->inflight, link, tmp) {
                         if (state->state != RD_KAFKA_MOCK_SGRP_RECORD_ACQUIRED)
                                 continue;
                         if (!state->owner_member_id)
                                 continue;
-                        if (strcmp(state->owner_member_id, member_id) != 0)
+                        if (strcmp(state->owner_member_id,
+                                   session->member_id) != 0)
                                 continue;
 
                         rd_kafka_mock_sgrp_record_release(mshgrp, pmeta, state);
@@ -1054,8 +1069,7 @@ void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
 
                 /* Release all locks held by this member before
                  * destroying the session. */
-                rd_kafka_mock_sgrp_release_member_locks(mshgrp,
-                                                        session->member_id);
+                rd_kafka_mock_sgrp_release_session_locks(mshgrp, session);
 
                 TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
                 mshgrp->fetch_session_cnt--;
@@ -1115,8 +1129,8 @@ void rd_kafka_mock_sharegrps_node_connection_closed(
                                    tmp) {
                         if (session->node_id != node_id)
                                 continue;
-                        rd_kafka_mock_sgrp_release_member_locks(
-                            mshgrp, session->member_id);
+                        rd_kafka_mock_sgrp_release_session_locks(mshgrp,
+                                                                 session);
                         TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
                         mshgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);

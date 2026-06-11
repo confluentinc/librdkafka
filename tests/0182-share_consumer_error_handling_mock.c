@@ -135,17 +135,6 @@ create_mock_share_consumer(const char *bootstraps,
         return rkshare;
 }
 
-static void subscribe_one(rd_kafka_share_t *rkshare, const char *topic) {
-        rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_resp_err_t err;
-
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        err = rd_kafka_share_subscribe(rkshare, subs);
-        TEST_ASSERT(!err, "subscribe failed: %s", rd_kafka_err2str(err));
-        rd_kafka_topic_partition_list_destroy(subs);
-}
-
 static void mock_produce(rd_kafka_t *producer, const char *topic, int msgcnt) {
         int i;
         for (i = 0; i < msgcnt; i++) {
@@ -251,7 +240,7 @@ do_test_commit_sync_top_level_err(const char *test_name,
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         acked = consume_and_ack_all(rkshare, msgcnt);
         TEST_ASSERT(acked == msgcnt, "expected %d acked, got %d", msgcnt,
@@ -399,7 +388,7 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         /* Consume messages from all partitions */
         while (total_consumed < total_msgs && attempts++ < 50) {
@@ -532,7 +521,7 @@ static void test_consume_batch_multi_partition_top_level_error(void) {
         /* Use implicit mode - acks are piggybacked on ShareFetch */
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "implicit",
                                              &cb_state, test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         /* First consume batch - establishes session, consumes messages */
         while (total_consumed < total_msgs && attempts++ < 50) {
@@ -672,7 +661,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         /* Phase 0: consume all 10 records. Hold message handles for
          * acknowledge in phase 1 and phase 2. */
@@ -873,7 +862,7 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         /* Phase 0: consume all msgcnt records in a single consume_batch
          * call (with retry-on-empty for transient cases). Explicit-mode
@@ -1083,7 +1072,7 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              &cb_state, test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         /* Phase 0: consume all msgcnt records in a single consume_batch
          * call (with retry-on-empty for transient cases). Explicit-mode
@@ -1588,7 +1577,7 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
         rkshare = create_share_consumer_socket_timeout(
             ctx.bootstraps, group, "explicit", socket_timeout_ms, &cb_state,
             test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         rkmessages = rd_calloc(msgcnt, sizeof(*rkmessages));
 
@@ -1850,7 +1839,7 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
         rkshare = create_share_consumer_socket_timeout(
             ctx.bootstraps, group, "explicit", socket_timeout_ms, &cb_state,
             test_share_ack_cb);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         rkmessages = rd_calloc(msgcnt, sizeof(*rkmessages));
 
@@ -2151,7 +2140,7 @@ static void do_test_share_topic_err_surfaces(const char *topic_suffix,
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              NULL, NULL);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         rd_kafka_mock_topic_set_error(ctx.mcluster, topic, inject_err);
@@ -2214,7 +2203,7 @@ static void test_share_consumer_multi_partition_single_op_per_cycle(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              NULL, NULL);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         /* Inject AUTH_FAILED on the topic; partition_cnt_update +
@@ -2282,7 +2271,7 @@ static void test_share_consumer_re_emits_when_err_code_changes(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              NULL, NULL);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         /* First err: AUTH_FAILED. */
@@ -2330,7 +2319,7 @@ static void test_share_consumer_re_surfaces_after_recovery(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              NULL, NULL);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         /* Phase 1: fail — first surface. */
@@ -2386,7 +2375,7 @@ test_share_consumer_re_surfaces_after_recovery_topic_exception(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              NULL, NULL);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         /* Phase 1: fail. */
@@ -2440,7 +2429,7 @@ static void test_share_consumer_resubscribe_re_emits_persistent_failure(void) {
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
                                              NULL, NULL);
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         /* Phase 1: subscribe + fail + surface. */
@@ -2460,7 +2449,7 @@ static void test_share_consumer_resubscribe_re_emits_persistent_failure(void) {
          * error must surface again. Re-force metadata across the wait
          * loop so the request happens after the share-assignment
          * heartbeat re-populates the partition list. */
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         rd_bool_t saw_err = rd_false;
         int outer;
         for (outer = 0; outer < 10 && !saw_err; outer++) {
@@ -2509,7 +2498,7 @@ static void test_share_consumer_does_not_surface_unknown_topic_or_part(void) {
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
 
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
         share_topic_err_prime_assignment(rkshare);
 
         rd_kafka_mock_topic_set_error(ctx.mcluster, topic,
@@ -2596,13 +2585,19 @@ static void do_test_no_bounce_loop_on_down_broker(void) {
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
         test_conf_set(conf, "debug", "broker");
+        /* Cap reconnect backoff so the consumer recovers quickly after
+         * set_up. The default max (10s) extends past the recovery
+         * sleep below, causing the post-recovery ShareFetch not to
+         * land in time. */
+        test_conf_set(conf, "reconnect.backoff.ms", "100");
+        test_conf_set(conf, "reconnect.backoff.max.ms", "500");
         rd_kafka_conf_set_log_cb(conf, no_bounce_loop_log_cb);
         rd_kafka_conf_set_opaque(conf, &broker_not_up_cnt);
 
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
 
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         acked = consume_and_ack_all(rkshare, msgcnt_phase1);
         TEST_ASSERT(acked == msgcnt_phase1, "phase1: expected %d acked, got %d",
@@ -2760,13 +2755,17 @@ static void do_test_one_log_on_broker_down_during_active_empty_poll(void) {
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "explicit");
         test_conf_set(conf, "debug", "broker");
+        /* Cap reconnect backoff so each set_up reconnects quickly
+         * across the chaos cycles. */
+        test_conf_set(conf, "reconnect.backoff.ms", "100");
+        test_conf_set(conf, "reconnect.backoff.max.ms", "500");
         rd_kafka_conf_set_log_cb(conf, no_bounce_loop_log_cb);
         rd_kafka_conf_set_opaque(conf, &broker_not_up_cnt);
 
         rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
         TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
 
-        subscribe_one(rkshare, topic);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
         /* Prime with one record so the share group has joined and the
          * partition is assigned by the time we take the broker down.

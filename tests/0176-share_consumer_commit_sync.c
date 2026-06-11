@@ -1357,9 +1357,7 @@ static void do_test_mock_uses_share_acknowledge(void) {
                     "partitions count (%d)",
                     share_ack_cnt, commit_with_partitions);
 
-        TEST_SAY("Closing share consumer\n");
         test_share_consumer_close(rkshare);
-        TEST_SAY("Destroying share consumer\n");
         test_share_destroy(rkshare);
         TEST_SAY("Destroying mock test context\n");
         test_ctx_destroy(&ctx);

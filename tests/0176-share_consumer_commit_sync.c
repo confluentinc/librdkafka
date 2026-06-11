@@ -1185,24 +1185,32 @@ static void do_test_mock_uses_share_acknowledge(void) {
         SUB_TEST_QUICK();
 
         ctx = test_ctx_new();
+        TEST_SAY("Mock cluster ready, bootstraps=%s\n", ctx.bootstraps);
 
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "Failed to create mock topic");
+        TEST_SAY("Created mock topic [%s] (1 partition)\n", topic);
 
         mock_produce_messages(ctx.producer, topic, msgcnt);
+        TEST_SAY("Produced %d messages to [%s]\n", msgcnt, topic);
 
         rkshare = create_mock_share_consumer(ctx.bootstraps, "sg-mock-cs-ack",
                                              "explicit");
+        TEST_SAY(
+            "Created share consumer (group=sg-mock-cs-ack, "
+            "ack=explicit)\n");
 
-        {
-                const char *t = topic;
-                subscribe_consumer(rkshare, &t, 1);
-        }
+        subscribe_consumer(rkshare, &topic, 1);
+        TEST_SAY("Subscribed to [%s]\n", topic);
 
         /* Clear and start tracking requests */
         rd_kafka_mock_start_request_tracking(ctx.mcluster);
         rd_kafka_mock_clear_requests(ctx.mcluster);
+        TEST_SAY(
+            "Started mock request tracking; entering consume loop "
+            "(msgcnt=%d, batch=%d)\n",
+            msgcnt, CONSUME_ARRAY);
 
         /* Consume all records, ACCEPT each, commit_sync every 10 */
         while (consumed < msgcnt && attempts++ < 30) {
@@ -1210,27 +1218,72 @@ static void do_test_mock_uses_share_acknowledge(void) {
                 size_t rcvd = 0;
                 size_t j;
 
+                TEST_SAY(
+                    "Iter %d: calling share_consume_batch "
+                    "(consumed=%d/%d, acked_since_last=%d)\n",
+                    attempts, consumed, msgcnt, acked_since_last_commit);
+
                 error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
                                                      &rcvd);
                 if (error) {
+                        TEST_SAY(
+                            "Iter %d: share_consume_batch error: %s "
+                            "(rcvd=%zu)\n",
+                            attempts, rd_kafka_error_string(error), rcvd);
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
+                TEST_SAY("Iter %d: share_consume_batch returned %zu msg(s)\n",
+                         attempts, rcvd);
+
                 for (j = 0; j < rcvd; j++) {
                         if (!rkmessages[j]->err) {
+                                TEST_SAY(
+                                    "  ACK %s [%" PRId32 "] @ offset %" PRId64
+                                    " (delivery_count=%d)\n",
+                                    rd_kafka_topic_name(rkmessages[j]->rkt),
+                                    rkmessages[j]->partition,
+                                    rkmessages[j]->offset,
+                                    (int)rd_kafka_message_delivery_count(
+                                        rkmessages[j]));
                                 rd_kafka_share_acknowledge(rkshare,
                                                            rkmessages[j]);
                                 consumed++;
                                 acked_since_last_commit++;
+                        } else {
+                                TEST_SAY(
+                                    "  msg #%zu carries error %s on "
+                                    "%s [%" PRId32 "] @ %" PRId64 "\n",
+                                    j, rd_kafka_err2name(rkmessages[j]->err),
+                                    rkmessages[j]->rkt ? rd_kafka_topic_name(
+                                                             rkmessages[j]->rkt)
+                                                       : "(no-rkt)",
+                                    rkmessages[j]->partition,
+                                    rkmessages[j]->offset);
                         }
                         rd_kafka_message_destroy(rkmessages[j]);
 
                         if (acked_since_last_commit == 10) {
                                 partitions = NULL;
-                                error      = rd_kafka_share_commit_sync(
+                                TEST_SAY(
+                                    "Calling commit_sync #%d "
+                                    "(timeout=30000ms, acked=%d, "
+                                    "consumed=%d)\n",
+                                    commit_cnt + 1, acked_since_last_commit,
+                                    consumed);
+                                error = rd_kafka_share_commit_sync(
                                     rkshare, 30000, &partitions);
                                 commit_cnt++;
+                                TEST_SAY(
+                                    "commit_sync #%d returned: "
+                                    "error=%s, partitions=%s, "
+                                    "partition_cnt=%d\n",
+                                    commit_cnt,
+                                    error ? rd_kafka_error_string(error)
+                                          : "NULL",
+                                    partitions ? "non-NULL" : "NULL",
+                                    partitions ? partitions->cnt : 0);
                                 TEST_ASSERT(
                                     !error, "commit_sync #%d failed: %s",
                                     commit_cnt,
@@ -1242,6 +1295,18 @@ static void do_test_mock_uses_share_acknowledge(void) {
                                                 rd_kafka_topic_partition_t
                                                     *rktpar =
                                                         &partitions->elems[i];
+                                                TEST_SAY(
+                                                    "  commit_sync #%d "
+                                                    "partition[%d]: "
+                                                    "%s [%" PRId32
+                                                    "] offset=%" PRId64
+                                                    " err=%s\n",
+                                                    commit_cnt, i,
+                                                    rktpar->topic,
+                                                    rktpar->partition,
+                                                    rktpar->offset,
+                                                    rd_kafka_err2name(
+                                                        rktpar->err));
                                                 TEST_ASSERT(
                                                     rktpar->err ==
                                                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1266,13 +1331,18 @@ static void do_test_mock_uses_share_acknowledge(void) {
         }
 
         TEST_SAY(
-            "Mock: consumed %d/%d, %d commit_sync calls, "
-            "%d with partition results\n",
-            consumed, msgcnt, commit_cnt, commit_with_partitions);
+            "Consume loop exited after %d iter(s): "
+            "consumed=%d/%d, commit_cnt=%d, with_partitions=%d, "
+            "acked_since_last=%d\n",
+            attempts, consumed, msgcnt, commit_cnt, commit_with_partitions,
+            acked_since_last_commit);
         TEST_ASSERT(consumed == msgcnt, "Expected %d, got %d", msgcnt,
                     consumed);
 
         /* Wait for async ops to complete before counting requests */
+        TEST_SAY(
+            "Sleeping 3s for async ops to drain before counting "
+            "ShareAcknowledge requests\n");
         rd_sleep(3);
 
         share_ack_cnt = count_share_ack_requests(ctx.mcluster);
@@ -1289,6 +1359,7 @@ static void do_test_mock_uses_share_acknowledge(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        TEST_SAY("Destroying mock test context\n");
         test_ctx_destroy(&ctx);
 
         SUB_TEST_PASS();

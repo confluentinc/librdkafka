@@ -939,10 +939,6 @@ int rd_kafka_set_fatal_error0(rd_kafka_t *rk,
          * consumer error so it is returned from consumer_poll(),
          * while for all other client types (the producer) we propagate to
          * the standard error handler (typically error_cb). */
-        /* TODO KIP-932: when a fatal error has been raised, check what the
-         * Java client does in the fatal-error case and decide whether we
-         * should still close the share session and send the leave-group
-         * heartbeat during consumer close. */
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp)
                 rd_kafka_consumer_err(
                     rk->rk_cgrp->rkcg_q, RD_KAFKA_NODEID_UA,
@@ -1162,6 +1158,10 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
             "Terminate", "DestroyCalled", "Immediate", "NoConsumerClose", NULL};
 
         /* Fatal errors and _F_IMMEDIATE also sets .._NO_CONSUMER_CLOSE */
+        /* TODO KIP-932: Decide how destroy should behave when a fatal error
+         * is set: flush pending acks and send the share-session leave
+         * (as the explicit close() path does), or keep forcing
+         * NO_CONSUMER_CLOSE and skip those network calls. */
         if (flags & RD_KAFKA_DESTROY_F_IMMEDIATE ||
             rd_kafka_fatal_error_code(rk))
                 flags |= RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE;
@@ -5111,8 +5111,16 @@ static rd_kafka_error_t *rd_kafka_consumer_close_q(rd_kafka_t *rk,
         /* If a fatal error has been raised and this is an
          * explicit consumer_close() from the application we return
          * a fatal error. Otherwise let the "silent" no_consumer_close
-         * logic be performed to clean up properly. */
-        if (!rd_kafka_destroy_flags_no_consumer_close(rk) &&
+         * logic be performed to clean up properly.
+         *
+         * Share consumers are exempt: an explicit close() must still
+         * flush pending acks and send the share-session leave even when
+         * a fatal error is set. The destroy-after-fatal path is
+         * unaffected because it sets NO_CONSUMER_CLOSE (so the
+         * !no_consumer_close clause is already false there, and the cgrp
+         * terminate handler drops the acks regardless). */
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
+            !rd_kafka_destroy_flags_no_consumer_close(rk) &&
             (error = rd_kafka_get_fatal_error(rk)))
                 return error;
 
@@ -5277,10 +5285,6 @@ rd_kafka_error_t *rd_kafka_share_consumer_close(rd_kafka_share_t *rkshare) {
                      NULL))
                 goto done;
 
-        /* TODO KIP-932: when a fatal error has been raised, check what the
-         * Java client does in the fatal-error case and decide whether we
-         * should still close the share session and send the leave-group
-         * heartbeat during consumer close. */
         rk                                = rkshare->rkshare_rk;
         rkshare->rkshare_consumer_closing = rd_true;
         error                             = rd_kafka_consumer_close0(rk);

@@ -3685,11 +3685,10 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                         rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
                 } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                        /* TODO KIP-932: The main thread should check
-                         * broker state before enqueuing SHARE_FETCH
-                         * ops, or back off after receiving ERR__STATE
-                         * replies, to avoid flooding the broker thread
-                         * with ops that are immediately rejected. */
+                        /* Backstop: the main thread filters on rkb_state
+                         * in rd_kafka_share_select_broker, so this only
+                         * fires when the broker transitioned to !UP
+                         * after that unlocked check. */
                         rd_kafka_dbg(
                             rkb->rkb_rk, BROKER, "SHAREFETCH",
                             "Ignoring SHARE_FETCH op: "
@@ -3697,36 +3696,12 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                             rd_kafka_broker_state_names[rkb->rkb_state]);
                         rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, RD_KAFKA_RESP_ERR__STATE);
-                } else if (rkb->rkb_fetching) {
-                        rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                                     "Ignoring SHARE_FETCH op: "
-                                     "already fetching");
-                        rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
-                            rko, RD_KAFKA_RESP_ERR__PREV_IN_PROGRESS);
                 } else if (rko->rko_u.share_fetch.should_leave) {
                         rd_kafka_broker_share_fetch_session_leave(rkb, rko,
                                                                   rd_clock());
                 } else {
                         rd_kafka_broker_share_rpc(rkb, rko, rd_clock());
                 }
-
-                /* TODO KIP-932: Add handling for commit sync partition level
-                 * and ack callback errors */
-                // if (!rko->rko_u.share_fetch.should_fetch) {
-                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                //                    "Ignoring SHARE_FETCH op: "
-                //                    "should_fetch is false");
-                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__NOOP);
-                //         break;
-                // }
-
-                // if(rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                //         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
-                //                    "Connection not up: Sending connect in
-                //                    progress as reply");
-                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
-                //         break;
-                // }
 
                 rko = NULL; /* the rko is reused for the reply */
 
@@ -4588,25 +4563,6 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
 
         rd_kafka_broker_unlock(rkb);
 }
-
-/**
- * TODO KIP-932: Remove if not needed later during finalizing share session
- * implementation.
- */
-// void rd_kafka_broker_update_share_fetch_session(rd_kafka_broker_t *rkb) {
-//         rd_kafka_toppar_t *rktp;
-//         int i;
-//         rd_bool_t needs_update = rd_false;
-//
-//         RD_LIST_FOREACH(rktp,
-//                         rkb->rkb_share_fetch_session.toppars_in_session, i) {
-//                 rd_kafka_toppar_is_valid_to_send_for_share_fetch(rktp);
-//         }
-//
-//         if (needs_update)
-//                 rd_kafka_toppar_share_fetch_session_update(rkb);
-// }
-
 
 /**
  * Consumer serving

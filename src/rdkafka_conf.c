@@ -1530,10 +1530,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "client.rack", _RK_C_KSTR, _RK(client_rack),
      "A rack identifier for this client. This can be any string value "
      "which indicates where this client is physically located. It "
-     "corresponds with the broker config `broker.rack`. "
-     "For share consumers (KIP-932), `client.rack` is forwarded to the "
-     "broker via `ShareGroupHeartbeat` for share-group assignment hints; "
-     "client-side fetch-from-follower (KIP-392) does not apply.",
+     "corresponds with the broker config `broker.rack`. ",
      .sdef = ""},
     {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
      _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},

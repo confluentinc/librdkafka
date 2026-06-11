@@ -2065,16 +2065,6 @@ static rd_bool_t share_topic_err_wait_for_err(rd_kafka_share_t *rkshare,
                 rcvd  = 0;
                 error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
                                                      &rcvd);
-                /* consume_batch may return records and an error in the
-                 * same call. Release records first so neither branch
-                 * below leaks them. Ack only on the no-error path,
-                 * matching the original explicit-mode gate behavior. */
-                for (j = 0; j < rcvd; j++) {
-                        if (!error && !rkmessages[j]->err)
-                                rd_kafka_share_acknowledge(rkshare,
-                                                           rkmessages[j]);
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
                 if (error) {
                         rd_kafka_resp_err_t code = rd_kafka_error_code(error);
                         TEST_SAY("consume_batch returned %s: %s\n",
@@ -2084,6 +2074,15 @@ static rd_bool_t share_topic_err_wait_for_err(rd_kafka_share_t *rkshare,
                         if (code == expected)
                                 return rd_true;
                         continue;
+                }
+                /* Ack received records so the next consume_batch can
+                 * proceed past the explicit-mode "previous poll
+                 * unacked" gate. */
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
         return rd_false;
@@ -2105,15 +2104,6 @@ static void share_topic_err_assert_no_err(rd_kafka_share_t *rkshare,
                 rcvd  = 0;
                 error = rd_kafka_share_consume_batch(rkshare, 200, rkmessages,
                                                      &rcvd);
-                /* Release records before the error check so the
-                 * leak-on-error case is impossible. Ack only on the
-                 * no-error path. */
-                for (j = 0; j < rcvd; j++) {
-                        if (!error && !rkmessages[j]->err)
-                                rd_kafka_share_acknowledge(rkshare,
-                                                           rkmessages[j]);
-                        rd_kafka_message_destroy(rkmessages[j]);
-                }
                 if (error) {
                         rd_kafka_resp_err_t code = rd_kafka_error_code(error);
                         rd_kafka_error_destroy(error);
@@ -2121,6 +2111,15 @@ static void share_topic_err_assert_no_err(rd_kafka_share_t *rkshare,
                             "[%s] unexpected error from consume_batch: "
                             "%s",
                             context, rd_kafka_err2name(code));
+                }
+                /* Ack received records so the next consume_batch can
+                 * proceed past the explicit-mode "previous poll
+                 * unacked" gate. */
+                for (j = 0; j < rcvd; j++) {
+                        if (!rkmessages[j]->err)
+                                rd_kafka_share_acknowledge(rkshare,
+                                                           rkmessages[j]);
+                        rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
 }

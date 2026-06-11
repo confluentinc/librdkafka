@@ -51,6 +51,8 @@ rd_kafka_mock_request_new(int32_t id, int16_t api_key, int64_t timestamp_us);
 static void rd_kafka_mock_request_free(void *element);
 static void rd_kafka_mock_coord_remove(rd_kafka_mock_cluster_t *mcluster,
                                        int32_t broker_id);
+static void
+rd_kafka_mock_error_stack_destroy(rd_kafka_mock_error_stack_t *errstack);
 
 static rd_kafka_mock_broker_t *
 rd_kafka_mock_broker_find(const rd_kafka_mock_cluster_t *mcluster,
@@ -873,6 +875,7 @@ static void rd_kafka_mock_partition_destroy(rd_kafka_mock_partition_t *mpart) {
         rd_kafka_mock_committed_offset_t *coff, *tmpcoff;
         rd_kafka_mock_partition_leader_t *mpart_leader, *tmp_mpart_leader;
         rd_kafka_mock_aborted_txn_t *mabort, *tmp_mabort;
+        rd_kafka_mock_error_stack_t *errstack, *tmp_errstack;
 
         TAILQ_FOREACH_SAFE(mset, &mpart->msgsets, link, tmp)
         rd_kafka_mock_msgset_destroy(mpart, mset);
@@ -889,6 +892,11 @@ static void rd_kafka_mock_partition_destroy(rd_kafka_mock_partition_t *mpart) {
         TAILQ_FOREACH_SAFE(mabort, &mpart->aborted_txns, link, tmp_mabort) {
                 TAILQ_REMOVE(&mpart->aborted_txns, mabort, link);
                 rd_free(mabort);
+        }
+
+        TAILQ_FOREACH_SAFE(errstack, &mpart->errstacks, link, tmp_errstack) {
+                TAILQ_REMOVE(&mpart->errstacks, errstack, link);
+                rd_kafka_mock_error_stack_destroy(errstack);
         }
 
         rd_free(mpart->replicas);
@@ -916,6 +924,7 @@ static void rd_kafka_mock_partition_init(rd_kafka_mock_topic_t *mtopic,
 
         TAILQ_INIT(&mpart->committed_offsets);
         TAILQ_INIT(&mpart->leader_responses);
+        TAILQ_INIT(&mpart->errstacks);
 
         rd_list_init(&mpart->pidstates, 0, rd_free);
 
@@ -2317,6 +2326,27 @@ rd_kafka_mock_next_request_error(rd_kafka_mock_connection_t *mconn,
         return err_rtt.err;
 }
 
+/**
+ * @brief Removes and returns the next partition request error for
+ *        request type \p ApiKey, or RD_KAFKA_RESP_ERR_NO_ERROR if
+ *        no error was injected for this partition and ApiKey.
+ *
+ * @locality mcluster thread
+ */
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_next_request_error(rd_kafka_mock_partition_t *mpart,
+                                           int16_t ApiKey) {
+        rd_kafka_mock_error_stack_t *errstack;
+        rd_kafka_mock_error_rtt_t err_rtt;
+
+        errstack = rd_kafka_mock_error_stack_find(&mpart->errstacks, ApiKey);
+        if (likely(!errstack))
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        err_rtt = rd_kafka_mock_error_stack_next(errstack);
+
+        return err_rtt.err;
+}
 
 void rd_kafka_mock_clear_request_errors(rd_kafka_mock_cluster_t *mcluster,
                                         int16_t ApiKey) {
@@ -2574,6 +2604,34 @@ rd_kafka_mock_partition_push_leader_response(rd_kafka_mock_cluster_t *mcluster,
         return rd_kafka_op_err_destroy(
             rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
 }
+
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_push_request_errors(rd_kafka_mock_cluster_t *mcluster,
+                                            const char *topic,
+                                            int32_t partition,
+                                            int16_t ApiKey,
+                                            size_t cnt,
+                                            ...) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+        va_list ap;
+        size_t i;
+
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_PART_PUSH_REQUEST_ERRORS;
+        rko->rko_u.mock.name      = rd_strdup(topic);
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.lo        = (int64_t)ApiKey;
+        rko->rko_u.mock.hi        = (int64_t)cnt;
+        rko->rko_u.mock.errs = rd_malloc(sizeof(*rko->rko_u.mock.errs) * cnt);
+
+        va_start(ap, cnt);
+        for (i = 0; i < cnt; i++)
+                rko->rko_u.mock.errs[i] = va_arg(ap, rd_kafka_resp_err_t);
+        va_end(ap);
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
 
 rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
@@ -2843,7 +2901,9 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
         rd_kafka_mock_topic_t *mtopic;
         rd_kafka_mock_partition_t *mpart;
         rd_kafka_mock_broker_t *mrkb;
+        rd_kafka_mock_error_stack_t *errstack;
         size_t i;
+        size_t errcnt;
         rd_kafka_resp_err_t err;
 
         switch (rko->rko_u.mock.cmd) {
@@ -2995,6 +3055,38 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                 rd_kafka_mock_partition_push_leader_response0(
                     mpart, rko->rko_u.mock.leader_id,
                     rko->rko_u.mock.leader_epoch);
+                break;
+
+        case RD_KAFKA_MOCK_CMD_PART_PUSH_REQUEST_ERRORS:
+                errcnt = (size_t)rko->rko_u.mock.hi;
+
+                mpart = rd_kafka_mock_partition_get(
+                    mcluster, rko->rko_u.mock.name, rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Push %s [%" PRId32 "] %" PRIusz
+                             " request error(s) for ApiKey %s",
+                             rko->rko_u.mock.name, rko->rko_u.mock.partition,
+                             errcnt,
+                             rd_kafka_ApiKey2str((int16_t)rko->rko_u.mock.lo));
+
+                errstack = rd_kafka_mock_error_stack_get(
+                    &mpart->errstacks, (int16_t)rko->rko_u.mock.lo);
+
+                if (errstack->cnt + errcnt > errstack->size) {
+                        errstack->size = errstack->cnt + errcnt + 4;
+                        errstack->errs = rd_realloc(
+                            errstack->errs,
+                            errstack->size * sizeof(*errstack->errs));
+                }
+
+                for (i = 0; i < errcnt; i++) {
+                        errstack->errs[errstack->cnt].err =
+                            rko->rko_u.mock.errs[i];
+                        errstack->errs[errstack->cnt++].rtt = 0;
+                }
                 break;
 
                 /* Broker commands */

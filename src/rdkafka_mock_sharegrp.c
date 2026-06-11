@@ -899,8 +899,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
          *    fresh one. */
         if (SessionEpoch == 0) {
                 if (session) {
-                        rd_kafka_mock_sgrp_release_session_locks(sgrp,
-                                                                  session);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
@@ -930,8 +929,7 @@ rd_kafka_resp_err_t rd_kafka_mock_sgrp_session_validate(
                          * The client handles this by resetting its
                          * per-broker epoch to 0 (opening a fresh session
                          * on the next fetch). */
-                        rd_kafka_mock_sgrp_release_session_locks(sgrp,
-                                                                  session);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
@@ -1132,7 +1130,7 @@ void rd_kafka_mock_sharegrps_node_connection_closed(
                         if (session->node_id != node_id)
                                 continue;
                         rd_kafka_mock_sgrp_release_session_locks(mshgrp,
-                                                                  session);
+                                                                 session);
                         TAILQ_REMOVE(&mshgrp->fetch_sessions, session, link);
                         mshgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);

@@ -177,36 +177,40 @@ int main(int argc, char **argv) {
 
         srand((unsigned int)time(NULL));
 
-        rd_kafka_message_t *rkmessages[10001];
         while (run) {
-                size_t rcvd_msgs = 0;
+                rd_kafka_messages_t *rkmessages = NULL;
+                size_t rcvd_msgs;
                 rd_kafka_error_t *error;
+                size_t k;
 
-                printf("Calling rd_kafka_share_consume_batch()\n");
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd_msgs);
+                printf("Calling rd_kafka_share_poll()\n");
+                error = rd_kafka_share_poll(rkshare, 3000, &rkmessages);
 
                 if (error) {
                         fprintf(stderr, "%% Consume error: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(rkmessages);
                         continue;
                 }
 
-                if (rcvd_msgs == 0)
+                rcvd_msgs = rd_kafka_messages_count(rkmessages);
+                if (rcvd_msgs == 0) {
+                        rd_kafka_messages_destroy(rkmessages);
                         continue;
+                }
 
                 printf("Received %zu messages\n", rcvd_msgs);
 
-                for (i = 0; i < (int)rcvd_msgs; i++) {
-                        rd_kafka_message_t *rkm = rkmessages[i];
+                for (k = 0; k < rcvd_msgs; k++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(rkmessages, k);
                         rd_kafka_share_AcknowledgeType_t ack_type;
                         int r;
 
                         if (rkm->err) {
                                 fprintf(stderr, "%% Consumer error: %d: %s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
-                                rd_kafka_message_destroy(rkm);
                                 continue;
                         }
 
@@ -251,8 +255,6 @@ int main(int argc, char **argv) {
                                         rkm->partition, rkm->offset,
                                         rd_kafka_err2str(err));
 
-                        rd_kafka_message_destroy(rkm);
-
                         /* Randomly commit ~10% of the time to
                          * exercise sync commit mid-batch. */
                         if (run && (rand() % 100) < 10) {
@@ -293,6 +295,7 @@ int main(int argc, char **argv) {
                                 }
                         }
                 }
+                rd_kafka_messages_destroy(rkmessages);
         }
 
         fprintf(stderr, "%% Closing share consumer\n");

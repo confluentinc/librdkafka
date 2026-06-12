@@ -93,7 +93,7 @@ static void do_test_no_records_after_fatal_error(void) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_messages_t *rkmessages = NULL;
         rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "sg-0186-no-records-after-fatal";
@@ -141,8 +141,8 @@ static void do_test_no_records_after_fatal_error(void) {
         attempts = 0;
         while (attempts++ < 50) {
                 size_t rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 1000, rkmessages,
-                                                     &rcvd);
+                error       = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
+                rcvd        = rd_kafka_messages_count(rkmessages);
                 TEST_ASSERT(rcvd == 0,
                             "no records expected while waiting for the fatal "
                             "error, got %d",
@@ -171,8 +171,8 @@ static void do_test_no_records_after_fatal_error(void) {
          *    records, even though new messages are available. */
         for (i = 0; i < 10; i++) {
                 size_t rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
-                                                     &rcvd);
+                error       = rd_kafka_share_poll(rkshare, 500, &rkmessages);
+                rcvd        = rd_kafka_messages_count(rkmessages);
                 TEST_ASSERT(rcvd == 0,
                             "expected 0 records on post-fatal call %d, got %d",
                             i, (int)rcvd);
@@ -212,7 +212,7 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        rd_kafka_messages_t *rkmessages = NULL;
         rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "sg-0186-close-no-leave-after-fatal";
@@ -251,19 +251,19 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         while (consumed == 0 && attempts++ < 30) {
                 size_t rcvd = 0;
                 size_t j;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 3000, &rkmessages);
+                rcvd  = rd_kafka_messages_count(rkmessages);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
+                        if (!rd_kafka_messages_get(rkmessages, j)->err) {
                                 TEST_CALL_ERR__(rd_kafka_share_acknowledge(
-                                    rkshare, rkmessages[j]));
+                                    rkshare,
+                                    rd_kafka_messages_get(rkmessages, j)));
                                 consumed++;
                         }
-                        rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
         TEST_ASSERT(consumed > 0, "expected to consume and ack > 0 records");
@@ -284,8 +284,8 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         attempts = 0;
         while (attempts++ < 50) {
                 size_t rcvd = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 1000, rkmessages,
-                                                     &rcvd);
+                error       = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
+                rcvd        = rd_kafka_messages_count(rkmessages);
                 if (error) {
                         TEST_ASSERT(rd_kafka_error_is_fatal(error),
                                     "expected a fatal error, got non-fatal %s",

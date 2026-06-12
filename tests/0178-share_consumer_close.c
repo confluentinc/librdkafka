@@ -1061,6 +1061,8 @@ static void do_test_close_with_acknowledge(void) {
                 verify_receipts_match(&receipts, tracked_msgs, tracked_cnt,
                                       commit_mode_str(config->commit_mode));
 
+                rd_sleep(3);
+
                 /* Create C2 with implicit ack mode after C1 is fully destroyed
                  */
                 TEST_SAY("C2: Creating and subscribing after C1 close\n");

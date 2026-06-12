@@ -349,7 +349,7 @@ static void produce_one_per_batch(rd_kafka_t *producer,
 
 /**
  * @brief Consume \p target records and record how many records came in
- *        each batch returned by rd_kafka_share_consume_batch().
+ *        each batch returned by rd_kafka_share_poll().
  *
  * @returns Number of batches it took to reach \p target records.
  *          Out-param \p batch_sizes is filled with each batch's
@@ -361,7 +361,7 @@ static int consume_record_batches(rd_kafka_share_t *rkshare,
                                   int batch_sizes_cap,
                                   int per_call_timeout_ms,
                                   int max_calls) {
-        rd_kafka_message_t *rkmessages[1024];
+        rd_kafka_messages_t *rkmessages = NULL;
         size_t rcvd;
         size_t j;
         rd_kafka_error_t *error;
@@ -371,8 +371,9 @@ static int consume_record_batches(rd_kafka_share_t *rkshare,
 
         for (call = 0; call < max_calls && got < target; call++) {
                 rcvd  = 0;
-                error = rd_kafka_share_consume_batch(
-                    rkshare, per_call_timeout_ms, rkmessages, &rcvd);
+                error = rd_kafka_share_poll(rkshare, per_call_timeout_ms,
+                                            &rkmessages);
+                rcvd  = rd_kafka_messages_count(rkmessages);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -386,9 +387,8 @@ static int consume_record_batches(rd_kafka_share_t *rkshare,
                 batches++;
 
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
+                        if (!rd_kafka_messages_get(rkmessages, j)->err)
                                 got++;
-                        rd_kafka_message_destroy(rkmessages[j]);
                 }
         }
         return batches;

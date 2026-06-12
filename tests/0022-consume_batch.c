@@ -207,13 +207,13 @@ share_refresh_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
 
 /**
  * @brief Verify that the oauthbearer_refresh_cb() is triggered
- *        when using rd_kafka_share_consume_batch() with a share consumer.
+ *        when using rd_kafka_share_poll() with a share consumer.
  */
 static void do_test_share_consume_batch_oauthbearer_cb(void) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
-        rd_kafka_message_t *rkms[1];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *rkms = NULL;
+        size_t rcvd               = 0;
         rd_kafka_error_t *err;
         char errstr[512];
 
@@ -232,9 +232,12 @@ static void do_test_share_consume_batch_oauthbearer_cb(void) {
         TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
 
         /* Poll to trigger the token refresh callback */
-        err = rd_kafka_share_consume_batch(rk, 1000, rkms, &rcvd);
+        err  = rd_kafka_share_poll(rk, 1000, &rkms);
+        rcvd = rd_kafka_messages_count(rkms);
+        (void)rcvd;
         if (err)
                 rd_kafka_error_destroy(err);
+        rd_kafka_messages_destroy(rkms);
 
         TEST_SAY("share_refresh_called = %d\n", share_refresh_called);
         TEST_ASSERT(share_refresh_called,
@@ -297,8 +300,6 @@ static void do_test_consume_batch_non_existent_topic(void) {
         TEST_SAY("Received ERR_UNKNOWN_TOPIC_OR_PART\n");
 
         TEST_SAY("Stopping consumer\n");
-
-        rd_kafka_message_destroy(rkms[0]);
 
         rd_kafka_queue_destroy(rkq);
 

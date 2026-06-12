@@ -313,8 +313,8 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
         /* Clean up held message handles. */
-        for (j = 0; j < rcvd; j++)
-                test_share_consumer_close(rkshare);
+        rd_kafka_messages_destroy(rkmessages);
+        test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ctx_destroy(&ctx);
 

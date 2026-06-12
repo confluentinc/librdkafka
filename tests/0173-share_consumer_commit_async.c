@@ -2007,8 +2007,7 @@ static void do_test_lock_expiry_callback_err(void) {
                     "expiry, got %s",
                     rd_kafka_err2name(test_ack_cb_state_first_err(&state)));
 
-        for (j = 0; j < consumed; j++)
-                test_share_consumer_close(rkshare);
+        test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ack_cb_state_destroy(&state);
 

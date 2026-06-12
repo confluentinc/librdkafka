@@ -469,8 +469,7 @@ static void test_commit_sync_multi_partition_top_level_error(void) {
                     "expected callback total_offsets %d, got %zu", total_msgs,
                     cb_state.total_offsets);
 
-        for (i = 0; i < total_consumed; i++)
-                test_share_consumer_close(rkshare);
+        test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
@@ -792,8 +791,7 @@ test_commit_sync_at_epoch_zero_returns_invalid_session_epoch_error(void) {
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
-        for (i = 0; i < msgcnt; i++)
-                test_share_consumer_close(rkshare);
+        test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
@@ -965,11 +963,11 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
          * un-acknowledged records (rcvd stays 0). */
         error = rd_kafka_share_poll(rkshare, 1000, &phase2_msgs);
         rcvd  = rd_kafka_messages_count(phase2_msgs);
+        (void)rcvd;
         if (error)
                 rd_kafka_error_destroy(error);
-        for (j = 0; j < rcvd; j++)
-                share_fetch_cnt = test_mock_get_matching_request_cnt(
-                    ctx.mcluster, is_share_fetch_request, NULL);
+        share_fetch_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_fetch_request, NULL);
         share_ack_cnt = test_mock_get_matching_request_cnt(
             ctx.mcluster, is_share_ack_request, NULL);
 
@@ -1016,8 +1014,8 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
-        for (i = 0; i < msgcnt; i++)
-                test_share_consumer_close(rkshare);
+        rd_kafka_messages_destroy(phase2_msgs);
+        test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);
@@ -1156,11 +1154,11 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
          * un-acknowledged records (rcvd stays 0). */
         error = rd_kafka_share_poll(rkshare, 1000, &phase2_msgs);
         rcvd  = rd_kafka_messages_count(phase2_msgs);
+        (void)rcvd;
         if (error)
                 rd_kafka_error_destroy(error);
-        for (j = 0; j < rcvd; j++)
-                share_fetch_cnt = test_mock_get_matching_request_cnt(
-                    ctx.mcluster, is_share_fetch_request, NULL);
+        share_fetch_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_fetch_request, NULL);
         share_ack_cnt = test_mock_get_matching_request_cnt(
             ctx.mcluster, is_share_ack_request, NULL);
 
@@ -1200,8 +1198,8 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
 
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
-        for (i = 0; i < msgcnt; i++)
-                test_share_consumer_close(rkshare);
+        rd_kafka_messages_destroy(phase2_msgs);
+        test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         test_ack_cb_state_destroy(&cb_state);
         test_ctx_destroy(&ctx);

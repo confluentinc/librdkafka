@@ -2010,9 +2010,8 @@ static void do_test_mock_broker_dispatch_priority(void) {
 
         rd_kafka_topic_partition_list_destroy(partitions);
 
-        /* Destroy message handles */
-        for (i = 0; i < msgcnt; i++)
-                rd_kafka_message_destroy(msg_handles[i]);
+        /* msg_handles[] elements are owned by rkmessages; that handle is
+         * destroyed at the end of the function. */
 
         /* Wait for remaining async to complete */
         rd_sleep(3);

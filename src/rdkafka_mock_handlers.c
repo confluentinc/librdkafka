@@ -2993,6 +2993,37 @@ err_parse:
         return -1;
 }
 
+
+/**
+ * @brief Handle ListTransactionsRequest
+ *
+ * Returns an empty list of transactions.
+ */
+static int
+rd_kafka_mock_handle_ListTransactions(rd_kafka_mock_connection_t *mconn,
+                                      rd_kafka_buf_t *rkbuf) {
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        rd_kafka_resp_err_t err;
+
+        /* Inject error */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_write_i32(resp, 0);
+        /* ErrorCode */
+        rd_kafka_buf_write_i16(resp, err);
+        /* UnknownStateFilters (empty compact array) */
+        rd_kafka_buf_write_arraycnt(resp, 0);
+        /* TransactionStates (empty compact array) */
+        rd_kafka_buf_write_arraycnt(resp, 0);
+
+        /* Note: Response tags are written automatically by
+         * rd_kafka_mock_connection_send_response() */
+        rd_kafka_mock_connection_send_response(mconn, resp);
+        return 0;
+}
+
+
 /**
  * @brief Default request handlers
  */
@@ -3027,8 +3058,10 @@ const struct rd_kafka_mock_api_handler
             {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_GetTelemetrySubscriptions] =
             {0, 0, 0, rd_kafka_mock_handle_GetTelemetrySubscriptions},
-        [RD_KAFKAP_PushTelemetry] = {0, 0, 0,
-                                     rd_kafka_mock_handle_PushTelemetry},
+        [RD_KAFKAP_PushTelemetry]    = {0, 0, 0,
+                                        rd_kafka_mock_handle_PushTelemetry},
+        [RD_KAFKAP_ListTransactions] = {0, 2, 0,
+                                        rd_kafka_mock_handle_ListTransactions},
 };
 
 

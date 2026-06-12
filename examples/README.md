@@ -40,3 +40,7 @@ For more complex uses, see:
  * [alter_consumer_group_offsets.c](alter_consumer_group_offsets.c) - Alter offsets of a consumer group.
  * [incremental_alter_configs.c](incremental_alter_configs.c) - Incrementally alter resource configurations.
  * [user_scram.c](user_scram.c) - Describe or alter user SCRAM credentials.
+ * [list_transactions.c](list_transactions.c) - List transactions (KIP-664).
+ * [describe_transactions.c](describe_transactions.c) - Describe transactions by transactional ID (KIP-664).
+ * [describe_producers.c](describe_producers.c) - Describe active producers on topic-partitions (KIP-664).
+ * [abort_transaction.c](abort_transaction.c) - Abort hanging transactions (KIP-664).

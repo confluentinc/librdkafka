@@ -124,6 +124,29 @@ struct rd_kafka_AdminOptions_s {
                               * RD_KAFKA_ISOLATION_LEVEL_READ_UNCOMMITTED
                               */
 
+        rd_kafka_confval_t
+            match_transaction_states; /**< PTR: list of transaction states
+                                       *   (char *) to filter by.
+                                       *   Valid for: ListTransactions.
+                                       */
+
+        rd_kafka_confval_t match_producer_ids; /**< PTR: list of producer IDs
+                                                *   (int64_t) to filter by.
+                                                *   Valid for: ListTransactions.
+                                                */
+
+        rd_kafka_confval_t
+            transaction_duration_filter; /**< INT: minimum transaction duration
+                                          *   in ms. -1 means no filter.
+                                          *   Valid for: ListTransactions.
+                                          */
+
+        rd_kafka_confval_t
+            transactional_id_pattern; /**< STR: regex pattern for
+                                       *   transactional IDs.
+                                       *   Valid for: ListTransactions.
+                                       */
+
         rd_kafka_confval_t opaque; /**< PTR: Application opaque.
                                     *   Valid for all. */
 };
@@ -496,6 +519,133 @@ struct rd_kafka_ListConsumerGroupsResult_s {
         rd_list_t valid;  /**< List of valid ConsumerGroupListing
                                (rd_kafka_ConsumerGroupListing_t *) */
         rd_list_t errors; /**< List of errors (rd_kafka_error_t *) */
+};
+
+/**@}*/
+
+/**
+ * @name ListTransactions
+ * @{
+ */
+
+/**
+ * @struct ListTransactions result for a single transaction
+ */
+struct rd_kafka_TransactionListing_s {
+        char *transactional_id;  /**< Transactional ID */
+        int64_t producer_id;     /**< Producer ID */
+        char *transaction_state; /**< Transaction state as string */
+};
+
+/**
+ * @struct ListTransactions results and errors
+ */
+struct rd_kafka_ListTransactionsResult_s {
+        rd_list_t transactions; /**< List of valid TransactionListing
+                                     (rd_kafka_TransactionListing_t *) */
+        rd_list_t errors;       /**< List of errors (rd_kafka_error_t *) */
+};
+
+/**@}*/
+
+/**
+ * @name DescribeTransactions
+ * @{
+ */
+
+/**
+ * @struct DescribeTransactions result for a single transaction
+ */
+struct rd_kafka_TransactionDescription_s {
+        char *transactional_id;            /**< Transactional ID */
+        int64_t producer_id;               /**< Producer ID */
+        int32_t producer_epoch;            /**< Producer epoch */
+        char *transaction_state;           /**< Transaction state as string */
+        int32_t transaction_timeout_ms;    /**< Transaction timeout in ms */
+        int64_t transaction_start_time_ms; /**< Transaction start time in ms.
+                                            *   -1 if no transaction in
+                                            *   progress. */
+        rd_kafka_topic_partition_list_t *topics; /**< Topics involved in
+                                                  *   the transaction */
+        rd_kafka_error_t *error;                 /**< Per-transaction error */
+};
+
+/**
+ * @struct DescribeTransactions results
+ */
+struct rd_kafka_DescribeTransactionsResult_s {
+        rd_list_t transactions; /**< List of TransactionDescription
+                                     (rd_kafka_TransactionDescription_t *) */
+};
+
+/**@}*/
+
+/**
+ * @name DescribeProducers
+ * @{
+ */
+
+/**
+ * @struct ProducerState - information about an active producer
+ */
+struct rd_kafka_ProducerState_s {
+        int64_t producer_id;       /**< Producer ID */
+        int32_t producer_epoch;    /**< Producer epoch */
+        int32_t last_sequence;     /**< Last sequence number */
+        int64_t last_timestamp;    /**< Last timestamp (-1 if unknown) */
+        int32_t coordinator_epoch; /**< Coordinator epoch */
+        int64_t txn_start_offset;  /**< Transaction start offset
+                                    *   (-1 if not in transaction) */
+};
+
+/**
+ * @struct PartitionProducerState - per-partition result with list of producers
+ */
+struct rd_kafka_PartitionProducerState_s {
+        char *topic;                    /**< Topic name */
+        int32_t partition;              /**< Partition index */
+        rd_kafka_resp_err_t error_code; /**< Error code for this partition */
+        char *error_string;             /**< Error string (optional) */
+        rd_list_t active_producers;     /**< List of active producers
+                                         *   (rd_kafka_ProducerState_t *) */
+};
+
+/**@}*/
+
+/**
+ * @name AbortTransaction
+ * @{
+ */
+
+/**
+ * @struct AbortTransactionSpec - specification for aborting a transaction
+ */
+struct rd_kafka_AbortTransactionSpec_s {
+        char *topic;               /**< Topic name */
+        int32_t partition;         /**< Partition number */
+        int64_t producer_id;       /**< Producer ID */
+        int32_t producer_epoch;    /**< Producer epoch */
+        int32_t coordinator_epoch; /**< Coordinator epoch */
+        int64_t txn_start_offset;  /**< Transaction start offset
+                                    *   (-1 if unknown) */
+};
+
+/**
+ * @struct PartitionAbortResult - per-partition abort result
+ */
+struct rd_kafka_PartitionAbortResult_s {
+        char *topic;                    /**< Topic name */
+        int32_t partition;              /**< Partition index */
+        rd_kafka_resp_err_t error_code; /**< Error code */
+        char *error_string;             /**< Error string (optional) */
+};
+
+/**
+ * @struct AbortTransactionResult - container for all results
+ */
+struct rd_kafka_AbortTransactionResult_s {
+        rd_list_t results; /**< List of PartitionAbortResult
+                            *   (rd_kafka_PartitionAbortResult_t *) */
 };
 
 /**@}*/

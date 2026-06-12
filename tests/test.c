@@ -272,6 +272,10 @@ _TEST_DECL(0150_telemetry_mock);
 _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
+_TEST_DECL(0154_list_transactions);
+_TEST_DECL(0155_describe_transactions);
+_TEST_DECL(0156_describe_producers);
+_TEST_DECL(0157_abort_transaction);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -540,6 +544,10 @@ struct test tests[] = {
     _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
+    _TEST(0154_list_transactions, 0),
+    _TEST(0155_describe_transactions, 0),
+    _TEST(0156_describe_producers, 0),
+    _TEST(0157_abort_transaction, 0),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

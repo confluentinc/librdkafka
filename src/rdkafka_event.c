@@ -99,6 +99,14 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "ListOffsetsResult";
         case RD_KAFKA_EVENT_ELECTLEADERS_RESULT:
                 return "ElectLeadersResult";
+        case RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT:
+                return "ListTransactionsResult";
+        case RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT:
+                return "DescribeTransactionsResult";
+        case RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT:
+                return "DescribeProducersResult";
+        case RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT:
+                return "AbortTransactionResult";
         default:
                 return "?unknown?";
         }
@@ -499,4 +507,38 @@ rd_kafka_event_ElectLeaders_result(rd_kafka_event_t *rkev) {
                 return NULL;
         else
                 return (const rd_kafka_ElectLeaders_result_t *)rkev;
+}
+
+const rd_kafka_ListTransactions_result_t *
+rd_kafka_event_ListTransactions_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_ListTransactions_result_t *)rkev;
+}
+
+const rd_kafka_DescribeTransactions_result_t *
+rd_kafka_event_DescribeTransactions_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeTransactions_result_t *)rkev;
+}
+
+const rd_kafka_DescribeProducers_result_t *
+rd_kafka_event_DescribeProducers_result(rd_kafka_event_t *rkev) {
+        if (!rkev ||
+            rkev->rko_evtype != RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_DescribeProducers_result_t *)rkev;
+}
+
+const rd_kafka_AbortTransaction_result_t *
+rd_kafka_event_AbortTransaction_result(rd_kafka_event_t *rkev) {
+        if (!rkev || rkev->rko_evtype != RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT)
+                return NULL;
+        else
+                return (const rd_kafka_AbortTransaction_result_t *)rkev;
 }

@@ -1706,6 +1706,95 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_transaction_states(
+    rd_kafka_AdminOptions_t *options,
+    const char **states,
+    size_t state_cnt) {
+        size_t i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        rd_list_t *states_list = rd_list_new((int)state_cnt, rd_free);
+
+        for (i = 0; i < state_cnt; i++) {
+                if (!states[i] || !*states[i]) {
+                        rd_list_destroy(states_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Empty or NULL state not allowed");
+                }
+                rd_list_add(states_list, rd_strdup(states[i]));
+        }
+
+        err = rd_kafka_confval_set_type(&options->match_transaction_states,
+                                        RD_KAFKA_CONFVAL_PTR, states_list,
+                                        errstr, sizeof(errstr));
+        if (err) {
+                rd_list_destroy(states_list);
+        }
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
+rd_kafka_error_t *
+rd_kafka_AdminOptions_set_match_producer_ids(rd_kafka_AdminOptions_t *options,
+                                             const int64_t *producer_ids,
+                                             size_t producer_id_cnt) {
+        size_t i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        rd_list_t *ids_list = rd_list_new((int)producer_id_cnt, rd_free);
+
+        for (i = 0; i < producer_id_cnt; i++) {
+                int64_t *id_copy = rd_malloc(sizeof(*id_copy));
+                *id_copy         = producer_ids[i];
+                rd_list_add(ids_list, id_copy);
+        }
+
+        err = rd_kafka_confval_set_type(&options->match_producer_ids,
+                                        RD_KAFKA_CONFVAL_PTR, ids_list, errstr,
+                                        sizeof(errstr));
+        if (err) {
+                rd_list_destroy(ids_list);
+        }
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
+rd_kafka_error_t *rd_kafka_AdminOptions_set_transaction_duration_filter(
+    rd_kafka_AdminOptions_t *options,
+    int64_t duration_ms) {
+        char errstr[512];
+        int value;
+        rd_kafka_resp_err_t err;
+        if (duration_ms > INT32_MAX || duration_ms < -1)
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Duration filter must be between -1 and %d",
+                    INT32_MAX);
+        value = (int)duration_ms;
+        err   = rd_kafka_confval_set_type(
+            &options->transaction_duration_filter, RD_KAFKA_CONFVAL_INT,
+            &value, errstr, sizeof(errstr));
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
+rd_kafka_error_t *rd_kafka_AdminOptions_set_transactional_id_pattern(
+    rd_kafka_AdminOptions_t *options,
+    const char *pattern) {
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        char *pattern_copy = NULL;
+
+        if (pattern)
+                pattern_copy = rd_strdup(pattern);
+
+        err = rd_kafka_confval_set_type(&options->transactional_id_pattern,
+                                        RD_KAFKA_CONFVAL_PTR, pattern_copy,
+                                        errstr, sizeof(errstr));
+        if (err && pattern_copy) {
+                rd_free(pattern_copy);
+        }
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
 void rd_kafka_AdminOptions_set_opaque(rd_kafka_AdminOptions_t *options,
                                       void *opaque) {
         rd_kafka_confval_set_type(&options->opaque, RD_KAFKA_CONFVAL_PTR,
@@ -1791,6 +1880,28 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                 rd_kafka_confval_disable(&options->isolation_level,
                                          "isolation_level");
 
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTTRANSACTIONS) {
+                rd_kafka_confval_init_ptr(&options->match_transaction_states,
+                                          "match_transaction_states");
+                rd_kafka_confval_init_ptr(&options->match_producer_ids,
+                                          "match_producer_ids");
+                rd_kafka_confval_init_int(&options->transaction_duration_filter,
+                                          "transaction_duration_filter", -1,
+                                          INT32_MAX, -1);
+                rd_kafka_confval_init_ptr(&options->transactional_id_pattern,
+                                          "transactional_id_pattern");
+        } else {
+                rd_kafka_confval_disable(&options->match_transaction_states,
+                                         "match_transaction_states");
+                rd_kafka_confval_disable(&options->match_producer_ids,
+                                         "match_producer_ids");
+                rd_kafka_confval_disable(&options->transaction_duration_filter,
+                                         "transaction_duration_filter");
+                rd_kafka_confval_disable(&options->transactional_id_pattern,
+                                         "transactional_id_pattern");
+        }
+
         rd_kafka_confval_init_int(&options->broker, "broker", 0, INT32_MAX, -1);
         rd_kafka_confval_init_ptr(&options->opaque, "opaque");
 }
@@ -1825,6 +1936,45 @@ static void rd_kafka_AdminOptions_copy_to(rd_kafka_AdminOptions_t *dst,
                     types_list_copy, errstr, sizeof(errstr));
                 rd_assert(!err);
         }
+        if (src->match_transaction_states.u.PTR) {
+                char errstr[512];
+                rd_list_t *states_list_copy =
+                    rd_list_copy(src->match_transaction_states.u.PTR,
+                                 rd_list_string_copy, NULL);
+
+                rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+                    &dst->match_transaction_states, RD_KAFKA_CONFVAL_PTR,
+                    states_list_copy, errstr, sizeof(errstr));
+                rd_assert(!err);
+        }
+        if (src->match_producer_ids.u.PTR) {
+                char errstr[512];
+                rd_list_t *src_list = src->match_producer_ids.u.PTR;
+                rd_list_t *ids_copy =
+                    rd_list_new(rd_list_cnt(src_list), rd_free);
+                int i;
+                for (i = 0; i < rd_list_cnt(src_list); i++) {
+                        int64_t *id      = rd_list_elem(src_list, i);
+                        int64_t *id_copy = rd_malloc(sizeof(*id_copy));
+                        *id_copy         = *id;
+                        rd_list_add(ids_copy, id_copy);
+                }
+
+                rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+                    &dst->match_producer_ids, RD_KAFKA_CONFVAL_PTR, ids_copy,
+                    errstr, sizeof(errstr));
+                rd_assert(!err);
+        }
+        if (src->transactional_id_pattern.u.PTR) {
+                char errstr[512];
+                char *pattern_copy =
+                    rd_strdup((char *)src->transactional_id_pattern.u.PTR);
+
+                rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+                    &dst->transactional_id_pattern, RD_KAFKA_CONFVAL_PTR,
+                    pattern_copy, errstr, sizeof(errstr));
+                rd_assert(!err);
+        }
 }
 
 
@@ -1850,6 +2000,15 @@ void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options) {
         }
         if (options->match_consumer_group_types.u.PTR) {
                 rd_list_destroy(options->match_consumer_group_types.u.PTR);
+        }
+        if (options->match_transaction_states.u.PTR) {
+                rd_list_destroy(options->match_transaction_states.u.PTR);
+        }
+        if (options->match_producer_ids.u.PTR) {
+                rd_list_destroy(options->match_producer_ids.u.PTR);
+        }
+        if (options->transactional_id_pattern.u.PTR) {
+                rd_free(options->transactional_id_pattern.u.PTR);
         }
         rd_free(options);
 }
@@ -7746,6 +7905,1875 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
         }
         *cntp = error_cnt;
         return (const rd_kafka_error_t **)list_result->errors.rl_elems;
+}
+
+/**@}*/
+
+/**
+ * @name List transactions
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Create a new TransactionListing object.
+ */
+static rd_kafka_TransactionListing_t *
+rd_kafka_TransactionListing_new(const char *transactional_id,
+                                int64_t producer_id,
+                                const char *transaction_state) {
+        rd_kafka_TransactionListing_t *txnlist;
+        txnlist                    = rd_calloc(1, sizeof(*txnlist));
+        txnlist->transactional_id  = rd_strdup(transactional_id);
+        txnlist->producer_id       = producer_id;
+        txnlist->transaction_state = rd_strdup(transaction_state);
+        return txnlist;
+}
+
+/**
+ * @brief Copy a TransactionListing.
+ */
+static rd_kafka_TransactionListing_t *
+rd_kafka_TransactionListing_copy(const rd_kafka_TransactionListing_t *txnlist) {
+        return rd_kafka_TransactionListing_new(txnlist->transactional_id,
+                                               txnlist->producer_id,
+                                               txnlist->transaction_state);
+}
+
+/**
+ * @brief Same as rd_kafka_TransactionListing_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_TransactionListing_copy_opaque(const void *txnlist,
+                                                     void *opaque) {
+        return rd_kafka_TransactionListing_copy(txnlist);
+}
+
+static void
+rd_kafka_TransactionListing_destroy(rd_kafka_TransactionListing_t *txnlist) {
+        RD_IF_FREE(txnlist->transactional_id, rd_free);
+        RD_IF_FREE(txnlist->transaction_state, rd_free);
+        rd_free(txnlist);
+}
+
+static void rd_kafka_TransactionListing_free(void *ptr) {
+        rd_kafka_TransactionListing_destroy(ptr);
+}
+
+const char *rd_kafka_TransactionListing_transactional_id(
+    const rd_kafka_TransactionListing_t *txnlist) {
+        return txnlist->transactional_id;
+}
+
+int64_t rd_kafka_TransactionListing_producer_id(
+    const rd_kafka_TransactionListing_t *txnlist) {
+        return txnlist->producer_id;
+}
+
+const char *rd_kafka_TransactionListing_transaction_state(
+    const rd_kafka_TransactionListing_t *txnlist) {
+        return txnlist->transaction_state;
+}
+
+/**
+ * @brief Create a new ListTransactionsResult object.
+ */
+static rd_kafka_ListTransactionsResult_t *
+rd_kafka_ListTransactionsResult_new(const rd_list_t *transactions,
+                                    const rd_list_t *errors) {
+        rd_kafka_ListTransactionsResult_t *res;
+        res = rd_calloc(1, sizeof(*res));
+        rd_list_init_copy(&res->transactions, transactions);
+        rd_list_copy_to(&res->transactions, transactions,
+                        rd_kafka_TransactionListing_copy_opaque, NULL);
+        rd_list_init_copy(&res->errors, errors);
+        rd_list_copy_to(&res->errors, errors, rd_kafka_error_copy_opaque, NULL);
+        return res;
+}
+
+static void rd_kafka_ListTransactionsResult_destroy(
+    rd_kafka_ListTransactionsResult_t *res) {
+        rd_list_destroy(&res->transactions);
+        rd_list_destroy(&res->errors);
+        rd_free(res);
+}
+
+static void rd_kafka_ListTransactionsResult_free(void *ptr) {
+        rd_kafka_ListTransactionsResult_destroy(ptr);
+}
+
+/**
+ * @brief Copy the passed ListTransactionsResult.
+ */
+static rd_kafka_ListTransactionsResult_t *rd_kafka_ListTransactionsResult_copy(
+    const rd_kafka_ListTransactionsResult_t *res) {
+        return rd_kafka_ListTransactionsResult_new(&res->transactions,
+                                                   &res->errors);
+}
+
+/**
+ * @brief Same as rd_kafka_ListTransactionsResult_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_ListTransactionsResult_copy_opaque(const void *list,
+                                                         void *opaque) {
+        return rd_kafka_ListTransactionsResult_copy(list);
+}
+
+/**
+ * @brief Send ListTransactionsRequest. Admin worker compatible callback.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_ListTransactionsRequest(rd_kafka_broker_t *rkb,
+                                       const rd_list_t *groups /*(unused)*/,
+                                       rd_kafka_AdminOptions_t *options,
+                                       char *errstr,
+                                       size_t errstr_size,
+                                       rd_kafka_replyq_t replyq,
+                                       rd_kafka_resp_cb_t *resp_cb,
+                                       void *opaque) {
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        const char **states_str     = NULL;
+        size_t states_str_cnt       = 0;
+        int64_t *producer_ids_arr   = NULL;
+        const int64_t *producer_ids = NULL;
+        size_t producer_ids_cnt     = 0;
+        int64_t duration_filter_ms  = -1;
+        const char *txnid_pattern   = NULL;
+        int i;
+        rd_list_t *states =
+            rd_kafka_confval_get_ptr(&options->match_transaction_states);
+        rd_list_t *pids =
+            rd_kafka_confval_get_ptr(&options->match_producer_ids);
+
+        /* Get state filters */
+        if (states && rd_list_cnt(states) > 0) {
+                states_str_cnt = (size_t)rd_list_cnt(states);
+                states_str     = rd_calloc(states_str_cnt, sizeof(*states_str));
+                for (i = 0; i < (int)states_str_cnt; i++) {
+                        states_str[i] = rd_list_elem(states, i);
+                }
+        }
+
+        /* Get producer ID filters */
+        if (pids && rd_list_cnt(pids) > 0) {
+                producer_ids_cnt = (size_t)rd_list_cnt(pids);
+                producer_ids_arr =
+                    rd_calloc(producer_ids_cnt, sizeof(*producer_ids_arr));
+                for (i = 0; i < (int)producer_ids_cnt; i++) {
+                        int64_t *pid_ptr    = rd_list_elem(pids, i);
+                        producer_ids_arr[i] = *pid_ptr;
+                }
+                producer_ids = producer_ids_arr;
+        }
+
+        /* Get duration filter */
+        duration_filter_ms =
+            rd_kafka_confval_get_int(&options->transaction_duration_filter);
+
+        /* Get transactional ID pattern */
+        txnid_pattern = (const char *)options->transactional_id_pattern.u.PTR;
+
+        error = rd_kafka_ListTransactionsRequest(
+            rkb, states_str, states_str_cnt, producer_ids, producer_ids_cnt,
+            duration_filter_ms, txnid_pattern, replyq, resp_cb, opaque);
+
+        if (states_str)
+                rd_free(states_str);
+        if (producer_ids_arr)
+                rd_free(producer_ids_arr);
+
+        if (error) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_error_string(error));
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+                return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Parse ListTransactionsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_ListTransactionsResponse_parse(rd_kafka_op_t *rko_req,
+                                        rd_kafka_op_t **rko_resultp,
+                                        rd_kafka_buf_t *reply,
+                                        char *errstr,
+                                        size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        int i, cnt, unknown_cnt;
+        int16_t error_code;
+        rd_kafka_op_t *rko_result = NULL;
+        rd_kafka_error_t *error   = NULL;
+        rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
+        rd_list_t transactions, errors;
+        rd_kafka_ListTransactionsResult_t *list_result;
+        char *transactional_id = NULL, *transaction_state = NULL;
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_read_throttle_time(reply);
+
+        /* ErrorCode */
+        rd_kafka_buf_read_i16(reply, &error_code);
+        if (error_code) {
+                error = rd_kafka_error_new(error_code,
+                                           "Broker [%d] "
+                                           "ListTransactions: %s",
+                                           rd_kafka_broker_id(rkb),
+                                           rd_kafka_err2str(error_code));
+        }
+
+        /* UnknownStateFilters - skip for now */
+        rd_kafka_buf_read_arraycnt(reply, &unknown_cnt, 1000);
+        for (i = 0; i < unknown_cnt; i++) {
+                rd_kafkap_str_t UnknownState;
+                rd_kafka_buf_read_str(reply, &UnknownState);
+        }
+
+        /* TransactionStates */
+        rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);
+        rd_list_init(&transactions, cnt, rd_kafka_TransactionListing_free);
+        rd_list_init(&errors, 8, rd_free);
+        if (error)
+                rd_list_add(&errors, error);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_ListTransactionsResult_free);
+
+        for (i = 0; i < cnt; i++) {
+                rd_kafkap_str_t TransactionalId, TransactionState;
+                int64_t ProducerId;
+                rd_kafka_TransactionListing_t *txnlist;
+
+                rd_kafka_buf_read_str(reply, &TransactionalId);
+                rd_kafka_buf_read_i64(reply, &ProducerId);
+                rd_kafka_buf_read_str(reply, &TransactionState);
+                rd_kafka_buf_skip_tags(reply);
+
+                transactional_id  = RD_KAFKAP_STR_DUP(&TransactionalId);
+                transaction_state = RD_KAFKAP_STR_DUP(&TransactionState);
+
+                txnlist = rd_kafka_TransactionListing_new(
+                    transactional_id, ProducerId, transaction_state);
+                rd_list_add(&transactions, txnlist);
+
+                rd_free(transactional_id);
+                rd_free(transaction_state);
+                transactional_id  = NULL;
+                transaction_state = NULL;
+        }
+        rd_kafka_buf_skip_tags(reply);
+
+        if (rd_kafka_buf_read_remain(reply) != 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "ListTransactionsResponse: %" PRIusz
+                            " bytes left to parse",
+                            rd_kafka_buf_read_remain(reply));
+                rd_kafka_op_destroy(rko_result);
+                rd_list_destroy(&transactions);
+                rd_list_destroy(&errors);
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        list_result =
+            rd_kafka_ListTransactionsResult_new(&transactions, &errors);
+        rd_list_add(&rko_result->rko_u.admin_result.results, list_result);
+
+        *rko_resultp = rko_result;
+        rd_list_destroy(&transactions);
+        rd_list_destroy(&errors);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        RD_IF_FREE(transactional_id, rd_free);
+        RD_IF_FREE(transaction_state, rd_free);
+        if (rko_result) {
+                rd_kafka_op_destroy(rko_result);
+                rd_list_destroy(&transactions);
+                rd_list_destroy(&errors);
+        }
+        rd_snprintf(errstr, errstr_size,
+                    "ListTransactionsResponse: parse error: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+/** @brief Merge the ListTransactions response from a single broker
+ *         into the user response list.
+ */
+static void
+rd_kafka_ListTransactions_response_merge(rd_kafka_op_t *rko_fanout,
+                                         const rd_kafka_op_t *rko_partial) {
+        int cnt;
+        rd_kafka_ListTransactionsResult_t *res    = NULL;
+        rd_kafka_ListTransactionsResult_t *newres = NULL;
+        rd_list_t new_transactions, new_errors;
+
+        rd_assert(rko_partial->rko_evtype ==
+                  RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT);
+
+        cnt = rd_list_cnt(&rko_fanout->rko_u.admin_request.fanout.results);
+        if (cnt) {
+                res = rd_list_elem(
+                    &rko_fanout->rko_u.admin_request.fanout.results, 0);
+        } else {
+                rd_list_init(&new_transactions, 0,
+                             rd_kafka_TransactionListing_free);
+                rd_list_init(&new_errors, 0, rd_free);
+                res = rd_kafka_ListTransactionsResult_new(&new_transactions,
+                                                          &new_errors);
+                rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, 0,
+                            res);
+                rd_list_destroy(&new_transactions);
+                rd_list_destroy(&new_errors);
+        }
+        if (!rko_partial->rko_err) {
+                int new_transactions_count, new_errors_count;
+                const rd_list_t *new_transactions_list, *new_errors_list;
+                /* Read the partial result and merge the transactions
+                 * and the errors into the fanout parent result. */
+                newres =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
+                rd_assert(newres);
+                new_transactions_count = rd_list_cnt(&newres->transactions);
+                new_errors_count       = rd_list_cnt(&newres->errors);
+                if (new_transactions_count) {
+                        new_transactions_list = &newres->transactions;
+                        rd_list_grow(&res->transactions,
+                                     new_transactions_count);
+                        rd_list_copy_to(
+                            &res->transactions, new_transactions_list,
+                            rd_kafka_TransactionListing_copy_opaque, NULL);
+                }
+                if (new_errors_count) {
+                        new_errors_list = &newres->errors;
+                        rd_list_grow(&res->errors, new_errors_count);
+                        rd_list_copy_to(&res->errors, new_errors_list,
+                                        rd_kafka_error_copy_opaque, NULL);
+                }
+        } else {
+                rd_list_add(&res->errors,
+                            rd_kafka_error_new(rko_partial->rko_err, NULL));
+        }
+}
+
+void rd_kafka_ListTransactions(rd_kafka_t *rk,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_admin_ListTransactionsRequest,
+            rd_kafka_ListTransactionsResponse_parse};
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_ListTransactions_response_merge,
+            rd_kafka_ListTransactionsResult_copy_opaque,
+        };
+
+        rko = rd_kafka_admin_request_op_target_all_new(
+            rk, RD_KAFKA_OP_LISTTRANSACTIONS,
+            RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT, &cbs, &fanout_cbs,
+            rd_kafka_ListTransactionsResult_free, options, rkqu->rkqu_q);
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+const rd_kafka_TransactionListing_t **
+rd_kafka_ListTransactions_result_transactions(
+    const rd_kafka_ListTransactions_result_t *result,
+    size_t *cntp) {
+        int list_result_cnt;
+        const rd_kafka_ListTransactionsResult_t *list_result;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_LISTTRANSACTIONS);
+
+        list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
+        rd_assert(list_result_cnt == 1);
+        list_result = rd_list_elem(&rko->rko_u.admin_result.results, 0);
+        *cntp       = rd_list_cnt(&list_result->transactions);
+
+        return (const rd_kafka_TransactionListing_t **)
+            list_result->transactions.rl_elems;
+}
+
+const rd_kafka_error_t **rd_kafka_ListTransactions_result_errors(
+    const rd_kafka_ListTransactions_result_t *result,
+    size_t *cntp) {
+        int list_result_cnt, error_cnt;
+        const rd_kafka_ListTransactionsResult_t *list_result;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_LISTTRANSACTIONS);
+
+        list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
+        rd_assert(list_result_cnt == 1);
+        list_result = rko->rko_u.admin_result.results.rl_elems[0];
+        error_cnt   = rd_list_cnt(&list_result->errors);
+        if (error_cnt == 0) {
+                *cntp = 0;
+                return NULL;
+        }
+        *cntp = error_cnt;
+        return (const rd_kafka_error_t **)list_result->errors.rl_elems;
+}
+
+/**@}*/
+
+/**
+ * @name DescribeTransactions
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Create a new TransactionDescription object.
+ */
+static rd_kafka_TransactionDescription_t *
+rd_kafka_TransactionDescription_new(rd_kafka_error_t *error,
+                                    const char *transactional_id,
+                                    int64_t producer_id,
+                                    int32_t producer_epoch,
+                                    const char *transaction_state,
+                                    int32_t transaction_timeout_ms,
+                                    int64_t transaction_start_time_ms,
+                                    rd_kafka_topic_partition_list_t *topics) {
+        rd_kafka_TransactionDescription_t *txndesc;
+        txndesc                            = rd_calloc(1, sizeof(*txndesc));
+        txndesc->transactional_id          = rd_strdup(transactional_id);
+        txndesc->producer_id               = producer_id;
+        txndesc->producer_epoch            = producer_epoch;
+        txndesc->transaction_state         = rd_strdup(transaction_state);
+        txndesc->transaction_timeout_ms    = transaction_timeout_ms;
+        txndesc->transaction_start_time_ms = transaction_start_time_ms;
+        if (topics)
+                txndesc->topics = rd_kafka_topic_partition_list_copy(topics);
+        if (error)
+                txndesc->error = rd_kafka_error_copy(error);
+        return txndesc;
+}
+
+/**
+ * @brief Copy a TransactionDescription.
+ */
+static rd_kafka_TransactionDescription_t *rd_kafka_TransactionDescription_copy(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return rd_kafka_TransactionDescription_new(
+            txndesc->error, txndesc->transactional_id, txndesc->producer_id,
+            txndesc->producer_epoch, txndesc->transaction_state,
+            txndesc->transaction_timeout_ms, txndesc->transaction_start_time_ms,
+            txndesc->topics);
+}
+
+/**
+ * @brief Same as rd_kafka_TransactionDescription_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_TransactionDescription_copy_opaque(const void *txndesc,
+                                                         void *opaque) {
+        return rd_kafka_TransactionDescription_copy(txndesc);
+}
+
+static void rd_kafka_TransactionDescription_destroy(
+    rd_kafka_TransactionDescription_t *txndesc) {
+        RD_IF_FREE(txndesc->transactional_id, rd_free);
+        RD_IF_FREE(txndesc->transaction_state, rd_free);
+        RD_IF_FREE(txndesc->topics, rd_kafka_topic_partition_list_destroy);
+        RD_IF_FREE(txndesc->error, rd_kafka_error_destroy);
+        rd_free(txndesc);
+}
+
+static void rd_kafka_TransactionDescription_free(void *ptr) {
+        rd_kafka_TransactionDescription_destroy(ptr);
+}
+
+/**
+ * @brief Parse DescribeTransactionsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeTransactionsResponse_parse(rd_kafka_op_t *rko_req,
+                                            rd_kafka_op_t **rko_resultp,
+                                            rd_kafka_buf_t *reply,
+                                            char *errstr,
+                                            size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        int i, cnt, j, topic_cnt, part_cnt;
+        rd_kafka_op_t *rko_result = NULL;
+        char *transactional_id    = NULL;
+        char *transaction_state   = NULL;
+        char *topic_name          = NULL;
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_read_throttle_time(reply);
+
+        /* TransactionStates */
+        rd_kafka_buf_read_arraycnt(reply, &cnt, 100000);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, cnt,
+                     rd_kafka_TransactionDescription_free);
+
+        for (i = 0; i < cnt; i++) {
+                rd_kafkap_str_t TransactionalId, TransactionState;
+                int16_t ErrorCode, ProducerEpoch;
+                int32_t TransactionTimeoutMs;
+                int64_t TransactionStartTimeMs, ProducerId;
+                rd_kafka_error_t *error                 = NULL;
+                rd_kafka_topic_partition_list_t *topics = NULL;
+                rd_kafka_TransactionDescription_t *txndesc;
+
+                rd_kafka_buf_read_i16(reply, &ErrorCode);
+                rd_kafka_buf_read_str(reply, &TransactionalId);
+                rd_kafka_buf_read_str(reply, &TransactionState);
+                rd_kafka_buf_read_i32(reply, &TransactionTimeoutMs);
+                rd_kafka_buf_read_i64(reply, &TransactionStartTimeMs);
+                rd_kafka_buf_read_i64(reply, &ProducerId);
+                rd_kafka_buf_read_i16(reply, &ProducerEpoch);
+
+                transactional_id  = RD_KAFKAP_STR_DUP(&TransactionalId);
+                transaction_state = RD_KAFKAP_STR_DUP(&TransactionState);
+
+                if (ErrorCode) {
+                        error = rd_kafka_error_new(
+                            ErrorCode, "DescribeTransactions for \"%s\": %s",
+                            transactional_id, rd_kafka_err2str(ErrorCode));
+                }
+
+                /* Topics */
+                rd_kafka_buf_read_arraycnt(reply, &topic_cnt, 100000);
+                if (topic_cnt > 0) {
+                        topics = rd_kafka_topic_partition_list_new(topic_cnt);
+                        for (j = 0; j < topic_cnt; j++) {
+                                rd_kafkap_str_t Topic;
+                                int k;
+
+                                rd_kafka_buf_read_str(reply, &Topic);
+                                topic_name = RD_KAFKAP_STR_DUP(&Topic);
+
+                                /* Partitions */
+                                rd_kafka_buf_read_arraycnt(reply, &part_cnt,
+                                                           100000);
+                                for (k = 0; k < part_cnt; k++) {
+                                        int32_t Partition;
+                                        rd_kafka_buf_read_i32(reply,
+                                                              &Partition);
+                                        rd_kafka_topic_partition_list_add(
+                                            topics, topic_name, Partition);
+                                }
+                                rd_kafka_buf_skip_tags(reply);
+
+                                rd_free(topic_name);
+                                topic_name = NULL;
+                        }
+                }
+                rd_kafka_buf_skip_tags(reply);
+
+                txndesc = rd_kafka_TransactionDescription_new(
+                    error, transactional_id, ProducerId, ProducerEpoch,
+                    transaction_state, TransactionTimeoutMs,
+                    TransactionStartTimeMs, topics);
+                rd_list_add(&rko_result->rko_u.admin_result.results, txndesc);
+
+                RD_IF_FREE(error, rd_kafka_error_destroy);
+                RD_IF_FREE(topics, rd_kafka_topic_partition_list_destroy);
+                rd_free(transactional_id);
+                rd_free(transaction_state);
+                transactional_id  = NULL;
+                transaction_state = NULL;
+        }
+        rd_kafka_buf_skip_tags(reply);
+
+        if (rd_kafka_buf_read_remain(reply) != 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeTransactionsResponse: %" PRIusz
+                            " bytes left to parse",
+                            rd_kafka_buf_read_remain(reply));
+                rd_kafka_op_destroy(rko_result);
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        RD_IF_FREE(transactional_id, rd_free);
+        RD_IF_FREE(transaction_state, rd_free);
+        RD_IF_FREE(topic_name, rd_free);
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeTransactionsResponse: parse error: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+/**
+ * @brief Send DescribeTransactionsRequest. Admin worker compatible callback.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_DescribeTransactionsRequest(rd_kafka_broker_t *rkb,
+                                           const rd_list_t *transactional_ids,
+                                           rd_kafka_AdminOptions_t *options,
+                                           char *errstr,
+                                           size_t errstr_size,
+                                           rd_kafka_replyq_t replyq,
+                                           rd_kafka_resp_cb_t *resp_cb,
+                                           void *opaque) {
+        rd_kafka_error_t *error;
+        const char *txn_ids[1];
+        size_t txn_cnt = 1;
+
+        /* We send one transactional ID per request */
+        rd_assert(rd_list_cnt(transactional_ids) == 1);
+        txn_ids[0] = rd_list_elem(transactional_ids, 0);
+
+        error = rd_kafka_DescribeTransactionsRequest(rkb, txn_ids, txn_cnt,
+                                                     replyq, resp_cb, opaque);
+        if (error) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_error_string(error));
+                rd_kafka_error_destroy(error);
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static int rd_kafka_DescribeTransactions_cmp(const void *a, const void *b) {
+        return strcmp((const char *)a, (const char *)b);
+}
+
+/**
+ * @brief Create and enqueue a single DescribeTransactions request for
+ *        a single transactional ID.
+ */
+static void rd_kafka_admin_describe_transaction_request(
+    rd_kafka_op_t *rko_fanout,
+    rd_kafka_t *rk,
+    const char *transactional_id,
+    const struct rd_kafka_admin_worker_cbs *cbs,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_q_t *rkq) {
+        rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
+            rk, RD_KAFKA_OP_DESCRIBETRANSACTIONS,
+            RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT, cbs, options, rkq);
+
+        rko->rko_u.admin_request.fanout_parent = rko_fanout;
+        rko->rko_u.admin_request.broker_id = RD_KAFKA_ADMIN_TARGET_COORDINATOR;
+        rko->rko_u.admin_request.coordtype = RD_KAFKA_COORD_TXN;
+        rko->rko_u.admin_request.coordkey  = rd_strdup(transactional_id);
+
+        /* Set the transactional ID as opaque so the fanout worker can use it
+         * to fill in errors.
+         * References rko_fanout's memory, which will always outlive
+         * the fanned out op. */
+        rd_kafka_AdminOptions_set_opaque(&rko->rko_u.admin_request.options,
+                                         (void *)transactional_id);
+
+        rd_list_init(&rko->rko_u.admin_request.args, 1, rd_free);
+        rd_list_add(&rko->rko_u.admin_request.args,
+                    rd_strdup(transactional_id));
+
+        rd_kafka_q_enq(rko_fanout->rko_rk->rk_ops, rko);
+}
+
+/** @brief Merge the DescribeTransactions response from a single request
+ *         into the user response list.
+ */
+static void
+rd_kafka_DescribeTransactions_response_merge(rd_kafka_op_t *rko_fanout,
+                                             const rd_kafka_op_t *rko_partial) {
+        rd_kafka_TransactionDescription_t *txndesc = NULL;
+        rd_kafka_TransactionDescription_t *newtxndesc;
+        const char *txn_id = rko_partial->rko_u.admin_result.opaque;
+        int orig_pos;
+
+        rd_assert(rko_partial->rko_evtype ==
+                  RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT);
+
+        if (!rko_partial->rko_err) {
+                /* Proper results.
+                 * We only send one transactional ID per request */
+                txndesc =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
+                rd_assert(txndesc);
+                rd_assert(!strcmp(txndesc->transactional_id, txn_id));
+                newtxndesc = rd_kafka_TransactionDescription_copy(txndesc);
+        } else {
+                /* Request-level error, create a TransactionDescription with
+                 * just the error. */
+                rd_kafka_error_t *error = rd_kafka_error_new(
+                    rko_partial->rko_err, "DescribeTransactions: %s",
+                    rko_partial->rko_u.admin_result.errstr
+                        ? rko_partial->rko_u.admin_result.errstr
+                        : rd_kafka_err2str(rko_partial->rko_err));
+                newtxndesc = rd_kafka_TransactionDescription_new(
+                    error, txn_id, -1, -1, "", 0, -1, NULL);
+                rd_kafka_error_destroy(error);
+        }
+
+        /* As a convenience to the application we insert results
+         * in the same order as they were requested. */
+        orig_pos = rd_list_index(&rko_fanout->rko_u.admin_request.args, txn_id,
+                                 rd_kafka_DescribeTransactions_cmp);
+        rd_assert(orig_pos != -1);
+
+        /* Make sure result is not already set */
+        rd_assert(rd_list_elem(&rko_fanout->rko_u.admin_request.fanout.results,
+                               orig_pos) == NULL);
+
+        rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, orig_pos,
+                    newtxndesc);
+}
+
+void rd_kafka_DescribeTransactions(rd_kafka_t *rk,
+                                   const char **transactional_ids,
+                                   size_t transactional_ids_cnt,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko_fanout;
+        rd_list_t dup_list;
+        size_t i;
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_DescribeTransactions_response_merge,
+            rd_kafka_TransactionDescription_copy_opaque};
+
+        rd_assert(rkqu);
+
+        rko_fanout = rd_kafka_admin_fanout_op_new(
+            rk, RD_KAFKA_OP_DESCRIBETRANSACTIONS,
+            RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT, &fanout_cbs, options,
+            rkqu->rkqu_q);
+
+        if (transactional_ids_cnt == 0) {
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "No transactional IDs to describe");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        /* Validate that all transactional IDs are non-NULL */
+        for (i = 0; i < transactional_ids_cnt; i++) {
+                if (!transactional_ids[i]) {
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Transactional ID at index %" PRIusz " is NULL", i);
+                        rd_kafka_admin_common_worker_destroy(
+                            rk, rko_fanout, rd_true /*destroy*/);
+                        return;
+                }
+        }
+
+        /* Copy transactional ID list and store it on the request op.
+         * Maintain original ordering. */
+        rd_list_init(&rko_fanout->rko_u.admin_request.args,
+                     (int)transactional_ids_cnt, rd_free);
+        for (i = 0; i < transactional_ids_cnt; i++)
+                rd_list_add(&rko_fanout->rko_u.admin_request.args,
+                            rd_strdup(transactional_ids[i]));
+
+        /* Check for duplicates.
+         * Make a temporary copy of the list and sort it to check for
+         * duplicates, we don't want the original list sorted since we want
+         * to maintain ordering. */
+        rd_list_init(&dup_list,
+                     rd_list_cnt(&rko_fanout->rko_u.admin_request.args), NULL);
+        rd_list_copy_to(&dup_list, &rko_fanout->rko_u.admin_request.args, NULL,
+                        NULL);
+        rd_list_sort(&dup_list, rd_kafka_DescribeTransactions_cmp);
+        if (rd_list_find_duplicate(&dup_list,
+                                   rd_kafka_DescribeTransactions_cmp)) {
+                rd_list_destroy(&dup_list);
+                rd_kafka_admin_result_fail(
+                    rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "Duplicate transactional IDs not allowed");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        rd_list_destroy(&dup_list);
+
+        /* Prepare results list where fanned out op's results will be
+         * accumulated. */
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,
+                     (int)transactional_ids_cnt,
+                     rd_kafka_TransactionDescription_free);
+        rko_fanout->rko_u.admin_request.fanout.outstanding =
+            (int)transactional_ids_cnt;
+
+        /* Create individual request ops for each transactional ID.
+         * FIXME: A future optimization is to coalesce all transactional IDs
+         *        for a single coordinator into one op. */
+        for (i = 0; i < transactional_ids_cnt; i++) {
+                static const struct rd_kafka_admin_worker_cbs cbs = {
+                    rd_kafka_admin_DescribeTransactionsRequest,
+                    rd_kafka_DescribeTransactionsResponse_parse,
+                };
+                char *txn_id =
+                    rd_list_elem(&rko_fanout->rko_u.admin_request.args, (int)i);
+                rd_kafka_admin_describe_transaction_request(
+                    rko_fanout, rk, txn_id, &cbs, options, rk->rk_ops);
+        }
+}
+
+const char *rd_kafka_TransactionDescription_transactional_id(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->transactional_id;
+}
+
+int64_t rd_kafka_TransactionDescription_producer_id(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->producer_id;
+}
+
+int32_t rd_kafka_TransactionDescription_producer_epoch(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->producer_epoch;
+}
+
+const char *rd_kafka_TransactionDescription_transaction_state(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->transaction_state;
+}
+
+int32_t rd_kafka_TransactionDescription_transaction_timeout_ms(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->transaction_timeout_ms;
+}
+
+int64_t rd_kafka_TransactionDescription_transaction_start_time_ms(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->transaction_start_time_ms;
+}
+
+const rd_kafka_topic_partition_list_t *rd_kafka_TransactionDescription_topics(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->topics;
+}
+
+const rd_kafka_error_t *rd_kafka_TransactionDescription_error(
+    const rd_kafka_TransactionDescription_t *txndesc) {
+        return txndesc->error;
+}
+
+const rd_kafka_TransactionDescription_t **
+rd_kafka_DescribeTransactions_result_transactions(
+    const rd_kafka_DescribeTransactions_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBETRANSACTIONS);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_TransactionDescription_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+
+/**@}*/
+
+/**
+ * @name DescribeProducers
+ * @{
+ */
+
+/**
+ * @brief Create a new ProducerState.
+ */
+static rd_kafka_ProducerState_t *
+rd_kafka_ProducerState_new(int64_t producer_id,
+                           int32_t producer_epoch,
+                           int32_t last_sequence,
+                           int64_t last_timestamp,
+                           int32_t coordinator_epoch,
+                           int64_t txn_start_offset) {
+        rd_kafka_ProducerState_t *state = rd_calloc(1, sizeof(*state));
+        state->producer_id              = producer_id;
+        state->producer_epoch           = producer_epoch;
+        state->last_sequence            = last_sequence;
+        state->last_timestamp           = last_timestamp;
+        state->coordinator_epoch        = coordinator_epoch;
+        state->txn_start_offset         = txn_start_offset;
+        return state;
+}
+
+/**
+ * @brief Copy a ProducerState.
+ */
+static rd_kafka_ProducerState_t *
+rd_kafka_ProducerState_copy(const rd_kafka_ProducerState_t *src) {
+        return rd_kafka_ProducerState_new(
+            src->producer_id, src->producer_epoch, src->last_sequence,
+            src->last_timestamp, src->coordinator_epoch, src->txn_start_offset);
+}
+
+/**
+ * @brief Same as rd_kafka_ProducerState_copy() but suitable for rd_list_copy().
+ */
+static void *rd_kafka_ProducerState_copy_opaque(const void *src, void *opaque) {
+        return rd_kafka_ProducerState_copy(src);
+}
+
+/**
+ * @brief Destroy a ProducerState.
+ */
+static void rd_kafka_ProducerState_destroy(rd_kafka_ProducerState_t *state) {
+        rd_free(state);
+}
+
+static void rd_kafka_ProducerState_free(void *ptr) {
+        rd_kafka_ProducerState_destroy(ptr);
+}
+
+/**
+ * @brief Create a new PartitionProducerState.
+ */
+static rd_kafka_PartitionProducerState_t *
+rd_kafka_PartitionProducerState_new(const char *topic,
+                                    int32_t partition,
+                                    rd_kafka_resp_err_t error_code,
+                                    const char *error_string) {
+        rd_kafka_PartitionProducerState_t *pps = rd_calloc(1, sizeof(*pps));
+        pps->topic                             = rd_strdup(topic);
+        pps->partition                         = partition;
+        pps->error_code                        = error_code;
+        if (error_string)
+                pps->error_string = rd_strdup(error_string);
+        rd_list_init(&pps->active_producers, 0, rd_kafka_ProducerState_free);
+        return pps;
+}
+
+/**
+ * @brief Copy a PartitionProducerState.
+ */
+static rd_kafka_PartitionProducerState_t *rd_kafka_PartitionProducerState_copy(
+    const rd_kafka_PartitionProducerState_t *src) {
+        rd_kafka_PartitionProducerState_t *dst;
+        dst = rd_kafka_PartitionProducerState_new(
+            src->topic, src->partition, src->error_code, src->error_string);
+        rd_list_copy_to(&dst->active_producers, &src->active_producers,
+                        rd_kafka_ProducerState_copy_opaque, NULL);
+        return dst;
+}
+
+/**
+ * @brief Same as rd_kafka_PartitionProducerState_copy() but suitable for
+ *        rd_list_copy().
+ */
+static void *rd_kafka_PartitionProducerState_copy_opaque(const void *src,
+                                                         void *opaque) {
+        return rd_kafka_PartitionProducerState_copy(src);
+}
+
+/**
+ * @brief Destroy a PartitionProducerState.
+ */
+static void rd_kafka_PartitionProducerState_destroy(
+    rd_kafka_PartitionProducerState_t *pps) {
+        RD_IF_FREE(pps->topic, rd_free);
+        RD_IF_FREE(pps->error_string, rd_free);
+        rd_list_destroy(&pps->active_producers);
+        rd_free(pps);
+}
+
+static void rd_kafka_PartitionProducerState_free(void *ptr) {
+        rd_kafka_PartitionProducerState_destroy(ptr);
+}
+
+/**
+ * @brief Parse DescribeProducersResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_DescribeProducersResponse_parse(rd_kafka_op_t *rko_req,
+                                         rd_kafka_op_t **rko_resultp,
+                                         rd_kafka_buf_t *reply,
+                                         char *errstr,
+                                         size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        int i, topic_cnt;
+        rd_kafka_op_t *rko_result = NULL;
+        char *topic_name          = NULL;
+
+        /* ThrottleTimeMs */
+        rd_kafka_buf_read_throttle_time(reply);
+
+        /* Topics */
+        rd_kafka_buf_read_arraycnt(reply, &topic_cnt, 100000);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, topic_cnt * 4,
+                     rd_kafka_PartitionProducerState_free);
+
+        for (i = 0; i < topic_cnt; i++) {
+                rd_kafkap_str_t Topic;
+                int j, part_cnt;
+
+                /* Name */
+                rd_kafka_buf_read_str(reply, &Topic);
+                topic_name = RD_KAFKAP_STR_DUP(&Topic);
+
+                /* Partitions */
+                rd_kafka_buf_read_arraycnt(reply, &part_cnt, 100000);
+
+                for (j = 0; j < part_cnt; j++) {
+                        int32_t PartitionIndex;
+                        int16_t ErrorCode;
+                        rd_kafkap_str_t ErrorMessage;
+                        char *error_string = NULL;
+                        int k, producer_cnt;
+                        rd_kafka_PartitionProducerState_t *pps;
+
+                        rd_kafka_buf_read_i32(reply, &PartitionIndex);
+                        rd_kafka_buf_read_i16(reply, &ErrorCode);
+                        rd_kafka_buf_read_str(reply, &ErrorMessage);
+
+                        if (!RD_KAFKAP_STR_IS_NULL(&ErrorMessage))
+                                error_string = RD_KAFKAP_STR_DUP(&ErrorMessage);
+
+                        pps = rd_kafka_PartitionProducerState_new(
+                            topic_name, PartitionIndex, ErrorCode,
+                            error_string);
+
+                        RD_IF_FREE(error_string, rd_free);
+
+                        /* ActiveProducers */
+                        rd_kafka_buf_read_arraycnt(reply, &producer_cnt,
+                                                   100000);
+
+                        for (k = 0; k < producer_cnt; k++) {
+                                int64_t ProducerId;
+                                int32_t ProducerEpoch, LastSequence,
+                                    CoordinatorEpoch;
+                                int64_t LastTimestamp, CurrentTxnStartOffset;
+                                rd_kafka_ProducerState_t *state;
+
+                                rd_kafka_buf_read_i64(reply, &ProducerId);
+                                rd_kafka_buf_read_i32(reply, &ProducerEpoch);
+                                rd_kafka_buf_read_i32(reply, &LastSequence);
+                                rd_kafka_buf_read_i64(reply, &LastTimestamp);
+                                rd_kafka_buf_read_i32(reply, &CoordinatorEpoch);
+                                rd_kafka_buf_read_i64(reply,
+                                                      &CurrentTxnStartOffset);
+
+                                /* Skip tags for each producer */
+                                rd_kafka_buf_skip_tags(reply);
+
+                                state = rd_kafka_ProducerState_new(
+                                    ProducerId, ProducerEpoch, LastSequence,
+                                    LastTimestamp, CoordinatorEpoch,
+                                    CurrentTxnStartOffset);
+
+                                rd_list_add(&pps->active_producers, state);
+                        }
+
+                        /* Skip partition-level tags */
+                        rd_kafka_buf_skip_tags(reply);
+
+                        rd_list_add(&rko_result->rko_u.admin_result.results,
+                                    pps);
+                }
+
+                /* Skip topic-level tags */
+                rd_kafka_buf_skip_tags(reply);
+
+                rd_free(topic_name);
+                topic_name = NULL;
+        }
+
+        /* Skip top-level tags */
+        rd_kafka_buf_skip_tags(reply);
+
+        if (rd_kafka_buf_read_remain(reply) != 0) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeProducersResponse: %" PRIusz
+                            " bytes left to parse",
+                            rd_kafka_buf_read_remain(reply));
+                RD_IF_FREE(topic_name, rd_free);
+                rd_kafka_op_destroy(rko_result);
+                return RD_KAFKA_RESP_ERR__BAD_MSG;
+        }
+
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        RD_IF_FREE(topic_name, rd_free);
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeProducersResponse: parse error: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+/**
+ * @brief Merge results from a DescribeProducers request into the fanout parent.
+ */
+static void
+rd_kafka_DescribeProducers_response_merge(rd_kafka_op_t *rko_fanout,
+                                          const rd_kafka_op_t *rko_partial) {
+        rd_list_t *res_list;
+        const rd_kafka_PartitionProducerState_t *pps;
+        int i;
+
+        rd_assert(rko_partial->rko_evtype ==
+                  RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT);
+
+        res_list = &rko_fanout->rko_u.admin_request.fanout.results;
+
+        if (rko_partial->rko_err) {
+                /* Request-level error - set error on all partitions from the
+                 * request */
+                const rd_kafka_topic_partition_list_t *reqparts;
+                rd_kafka_topic_partition_t *rktpar;
+
+                reqparts =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.args, 0);
+
+                RD_KAFKA_TPLIST_FOREACH(rktpar, reqparts) {
+                        rd_kafka_PartitionProducerState_t *new_pps =
+                            rd_kafka_PartitionProducerState_new(
+                                rktpar->topic, rktpar->partition,
+                                rko_partial->rko_err, NULL);
+                        rd_list_add(res_list, new_pps);
+                }
+                return;
+        }
+
+        /* Merge successful results */
+        RD_LIST_FOREACH(pps, &rko_partial->rko_u.admin_result.results, i) {
+                rd_list_add(res_list,
+                            rd_kafka_PartitionProducerState_copy(pps));
+        }
+}
+
+/**
+ * @brief Callback for partition leader query result.
+ *        Fans out DescribeProducersRequest to each partition leader.
+ */
+static rd_kafka_op_res_t
+rd_kafka_DescribeProducers_leaders_queried_cb(rd_kafka_t *rk,
+                                              rd_kafka_q_t *rkq,
+                                              rd_kafka_op_t *reply) {
+        rd_kafka_resp_err_t err = reply->rko_err;
+        const rd_list_t *leaders =
+            reply->rko_u.leaders.leaders; /* Possibly NULL (on err) */
+        rd_kafka_topic_partition_list_t *partitions =
+            reply->rko_u.leaders.partitions; /* Possibly NULL (on err) */
+        rd_kafka_op_t *rko_fanout = reply->rko_u.leaders.opaque;
+        rd_kafka_topic_partition_t *rktpar;
+        rd_kafka_topic_partition_list_t *parts;
+        const struct rd_kafka_partition_leader *leader;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_DescribeProducersRequest,
+            rd_kafka_DescribeProducersResponse_parse,
+        };
+        int i;
+
+        rd_assert((rko_fanout->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
+                  RD_KAFKA_OP_ADMIN_FANOUT);
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                goto err;
+
+        /* Requested partitions */
+        parts = rd_list_elem(&rko_fanout->rko_u.admin_request.args, 0);
+
+        /* Update errors from leader query for partitions that failed */
+        RD_KAFKA_TPLIST_FOREACH(rktpar, partitions) {
+                rd_kafka_topic_partition_t *rktpar2;
+
+                if (!rktpar->err)
+                        continue;
+
+                rktpar2 = rd_kafka_topic_partition_list_find(
+                    parts, rktpar->topic, rktpar->partition);
+                if (rktpar2)
+                        rktpar2->err = rktpar->err;
+        }
+
+        if (err) {
+        err:
+                rd_kafka_admin_result_fail(
+                    rko_fanout, err, "Failed to query partition leaders: %s",
+                    err == RD_KAFKA_RESP_ERR__NOENT ? "No leaders found"
+                                                    : rd_kafka_err2str(err));
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /* Initialize results list */
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,
+                     parts->cnt, rd_kafka_PartitionProducerState_free);
+
+        rko_fanout->rko_u.admin_request.fanout.outstanding =
+            rd_list_cnt(leaders);
+
+        rd_assert(rd_list_cnt(leaders) > 0);
+
+        /* For each leader send a request for its partitions */
+        RD_LIST_FOREACH(leader, leaders, i) {
+                rd_kafka_op_t *rko = rd_kafka_admin_request_op_new(
+                    rk, RD_KAFKA_OP_DESCRIBEPRODUCERS,
+                    RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT, &cbs,
+                    &rko_fanout->rko_u.admin_request.options, rk->rk_ops);
+                rko->rko_u.admin_request.fanout_parent = rko_fanout;
+                rko->rko_u.admin_request.broker_id = leader->rkb->rkb_nodeid;
+
+                rd_kafka_topic_partition_list_sort_by_topic(leader->partitions);
+
+                rd_list_init(&rko->rko_u.admin_request.args, 1,
+                             rd_kafka_topic_partition_list_destroy_free);
+                rd_list_add(
+                    &rko->rko_u.admin_request.args,
+                    rd_kafka_topic_partition_list_copy(leader->partitions));
+
+                /* Enqueue op for admin_worker() to transition to next state */
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        }
+
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+void rd_kafka_DescribeProducers(
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *partitions,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko_fanout;
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_DescribeProducers_response_merge,
+            rd_kafka_PartitionProducerState_copy_opaque,
+        };
+        rd_kafka_topic_partition_list_t *copied_partitions;
+        int i;
+
+        rd_assert(rkqu);
+
+        rko_fanout = rd_kafka_admin_fanout_op_new(
+            rk, RD_KAFKA_OP_DESCRIBEPRODUCERS,
+            RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT, &fanout_cbs, options,
+            rkqu->rkqu_q);
+
+        if (partitions == NULL || partitions->cnt == 0) {
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "No partitions to describe");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        /* Validate partitions */
+        for (i = 0; i < partitions->cnt; i++) {
+                if (!partitions->elems[i].topic ||
+                    !partitions->elems[i].topic[0]) {
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Partition topic name at index %d must be "
+                            "non-empty",
+                            i);
+                        rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                             rd_true);
+                        return;
+                }
+                if (partitions->elems[i].partition < 0) {
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Partition at index %d cannot be negative", i);
+                        rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                             rd_true);
+                        return;
+                }
+        }
+
+        /* Copy partitions and check for duplicates */
+        copied_partitions = rd_kafka_topic_partition_list_copy(partitions);
+        if (rd_kafka_topic_partition_list_has_duplicates(copied_partitions,
+                                                         rd_false)) {
+                rd_kafka_topic_partition_list_destroy(copied_partitions);
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "Duplicate partitions not allowed");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        rd_list_init(&rko_fanout->rko_u.admin_request.args, 1,
+                     rd_kafka_topic_partition_list_destroy_free);
+        rd_list_add(&rko_fanout->rko_u.admin_request.args, copied_partitions);
+
+        /* Async query for partition leaders */
+        rd_kafka_topic_partition_list_query_leaders_async(
+            rk, copied_partitions, rd_kafka_admin_timeout_remains(rko_fanout),
+            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+            rd_kafka_DescribeProducers_leaders_queried_cb, rko_fanout);
+}
+
+const char *rd_kafka_PartitionProducerState_topic(
+    const rd_kafka_PartitionProducerState_t *pps) {
+        return pps->topic;
+}
+
+int32_t rd_kafka_PartitionProducerState_partition(
+    const rd_kafka_PartitionProducerState_t *pps) {
+        return pps->partition;
+}
+
+rd_kafka_resp_err_t rd_kafka_PartitionProducerState_error(
+    const rd_kafka_PartitionProducerState_t *pps) {
+        return pps->error_code;
+}
+
+const rd_kafka_ProducerState_t **
+rd_kafka_PartitionProducerState_active_producers(
+    const rd_kafka_PartitionProducerState_t *pps,
+    size_t *cntp) {
+        *cntp = (size_t)rd_list_cnt(&pps->active_producers);
+        if (*cntp == 0)
+                return NULL;
+        return (const rd_kafka_ProducerState_t **)
+            pps->active_producers.rl_elems;
+}
+
+int64_t
+rd_kafka_ProducerState_producer_id(const rd_kafka_ProducerState_t *state) {
+        return state->producer_id;
+}
+
+int32_t
+rd_kafka_ProducerState_producer_epoch(const rd_kafka_ProducerState_t *state) {
+        return state->producer_epoch;
+}
+
+int32_t
+rd_kafka_ProducerState_last_sequence(const rd_kafka_ProducerState_t *state) {
+        return state->last_sequence;
+}
+
+int64_t
+rd_kafka_ProducerState_last_timestamp(const rd_kafka_ProducerState_t *state) {
+        return state->last_timestamp;
+}
+
+int32_t rd_kafka_ProducerState_coordinator_epoch(
+    const rd_kafka_ProducerState_t *state) {
+        return state->coordinator_epoch;
+}
+
+int64_t
+rd_kafka_ProducerState_txn_start_offset(const rd_kafka_ProducerState_t *state) {
+        return state->txn_start_offset;
+}
+
+const rd_kafka_PartitionProducerState_t **
+rd_kafka_DescribeProducers_result_partitions(
+    const rd_kafka_DescribeProducers_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_DESCRIBEPRODUCERS);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_PartitionProducerState_t **)
+            rko->rko_u.admin_result.results.rl_elems;
+}
+
+/**@}*/
+
+/**
+ * @name AbortTransaction
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Create a new AbortTransactionSpec.
+ */
+rd_kafka_AbortTransactionSpec_t *
+rd_kafka_AbortTransactionSpec_new(const char *topic,
+                                  int32_t partition,
+                                  int64_t producer_id,
+                                  int32_t producer_epoch,
+                                  int32_t coordinator_epoch,
+                                  int64_t txn_start_offset) {
+        rd_kafka_AbortTransactionSpec_t *spec;
+
+        spec                    = rd_calloc(1, sizeof(*spec));
+        spec->topic             = rd_strdup(topic);
+        spec->partition         = partition;
+        spec->producer_id       = producer_id;
+        spec->producer_epoch    = producer_epoch;
+        spec->coordinator_epoch = coordinator_epoch;
+        spec->txn_start_offset  = txn_start_offset;
+
+        return spec;
+}
+
+/**
+ * @brief Destroy an AbortTransactionSpec (internal, suitable as list free cb).
+ */
+static void
+rd_kafka_AbortTransactionSpec_free(rd_kafka_AbortTransactionSpec_t *spec) {
+        RD_IF_FREE(spec->topic, rd_free);
+        rd_free(spec);
+}
+
+void rd_kafka_AbortTransactionSpec_destroy(
+    rd_kafka_AbortTransactionSpec_t *spec) {
+        rd_kafka_AbortTransactionSpec_free(spec);
+}
+
+void rd_kafka_AbortTransactionSpec_destroy_array(
+    rd_kafka_AbortTransactionSpec_t **specs,
+    size_t spec_cnt) {
+        size_t i;
+        for (i = 0; i < spec_cnt; i++)
+                rd_kafka_AbortTransactionSpec_free(specs[i]);
+}
+
+/**
+ * @brief Create a new PartitionAbortResult.
+ */
+static rd_kafka_PartitionAbortResult_t *
+rd_kafka_PartitionAbortResult_new(const char *topic,
+                                  int32_t partition,
+                                  rd_kafka_resp_err_t error_code,
+                                  const char *error_string) {
+        rd_kafka_PartitionAbortResult_t *par;
+
+        par               = rd_calloc(1, sizeof(*par));
+        par->topic        = rd_strdup(topic);
+        par->partition    = partition;
+        par->error_code   = error_code;
+        par->error_string = error_string ? rd_strdup(error_string) : NULL;
+
+        return par;
+}
+
+/**
+ * @brief Copy a PartitionAbortResult.
+ */
+static rd_kafka_PartitionAbortResult_t *
+rd_kafka_PartitionAbortResult_copy(const rd_kafka_PartitionAbortResult_t *src) {
+        return rd_kafka_PartitionAbortResult_new(
+            src->topic, src->partition, src->error_code, src->error_string);
+}
+
+static void *rd_kafka_PartitionAbortResult_copy_opaque(const void *src,
+                                                       void *opaque) {
+        return rd_kafka_PartitionAbortResult_copy(src);
+}
+
+/**
+ * @brief Destroy a PartitionAbortResult.
+ */
+static void
+rd_kafka_PartitionAbortResult_destroy(rd_kafka_PartitionAbortResult_t *par) {
+        RD_IF_FREE(par->topic, rd_free);
+        RD_IF_FREE(par->error_string, rd_free);
+        rd_free(par);
+}
+
+static void rd_kafka_PartitionAbortResult_free(void *ptr) {
+        rd_kafka_PartitionAbortResult_destroy(ptr);
+}
+
+/**
+ * @brief Parse WriteTxnMarkersResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_WriteTxnMarkersResponse_parse(rd_kafka_op_t *rko_req,
+                                       rd_kafka_op_t **rko_resultp,
+                                       rd_kafka_buf_t *reply,
+                                       char *errstr,
+                                       size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        int i, marker_cnt;
+        rd_kafka_op_t *rko_result = NULL;
+        char *topic_name          = NULL;
+
+        /* Note: WriteTxnMarkersResponse does NOT have ThrottleTimeMs field */
+
+        /* Markers */
+        rd_kafka_buf_read_arraycnt(reply, &marker_cnt, 100000);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, marker_cnt * 4,
+                     rd_kafka_PartitionAbortResult_free);
+
+        for (i = 0; i < marker_cnt; i++) {
+                int64_t ProducerId;
+                int j, topic_cnt;
+
+                rd_kafka_buf_read_i64(reply, &ProducerId);
+
+                /* Topics */
+                rd_kafka_buf_read_arraycnt(reply, &topic_cnt, 100000);
+
+                for (j = 0; j < topic_cnt; j++) {
+                        rd_kafkap_str_t Name;
+                        int k, part_cnt;
+
+                        rd_kafka_buf_read_str(reply, &Name);
+                        topic_name = RD_KAFKAP_STR_DUP(&Name);
+
+                        /* Partitions */
+                        rd_kafka_buf_read_arraycnt(reply, &part_cnt, 100000);
+
+                        for (k = 0; k < part_cnt; k++) {
+                                int32_t PartitionIndex;
+                                int16_t ErrorCode;
+                                rd_kafka_PartitionAbortResult_t *par;
+
+                                rd_kafka_buf_read_i32(reply, &PartitionIndex);
+                                rd_kafka_buf_read_i16(reply, &ErrorCode);
+
+                                /* Skip partition tags (v1+) */
+                                if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                                        rd_kafka_buf_skip_tags(reply);
+
+                                par = rd_kafka_PartitionAbortResult_new(
+                                    topic_name, PartitionIndex, ErrorCode,
+                                    ErrorCode ? rd_kafka_err2str(ErrorCode)
+                                              : NULL);
+
+                                rd_list_add(
+                                    &rko_result->rko_u.admin_result.results,
+                                    par);
+                        }
+
+                        /* Skip topic tags (v1+) */
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                                rd_kafka_buf_skip_tags(reply);
+
+                        rd_free(topic_name);
+                        topic_name = NULL;
+                }
+
+                /* Skip marker tags (v1+) */
+                if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                        rd_kafka_buf_skip_tags(reply);
+        }
+
+        /* Skip top-level tags (v1+) */
+        if (rd_kafka_buf_ApiVersion(reply) >= 1)
+                rd_kafka_buf_skip_tags(reply);
+
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        RD_IF_FREE(topic_name, rd_free);
+        if (rko_result)
+                rd_kafka_op_destroy(rko_result);
+
+        rd_snprintf(errstr, errstr_size,
+                    "WriteTxnMarkersResponse: parse error: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
+/**
+ * @brief Free callback for marker_list stored in child op args.
+ */
+static void rd_kafka_marker_list_free(void *ptr) {
+        rd_list_destroy((rd_list_t *)ptr);
+}
+
+/**
+ * @brief Merge results from an AbortTransaction request into the fanout parent.
+ */
+static void
+rd_kafka_AbortTransaction_response_merge(rd_kafka_op_t *rko_fanout,
+                                         const rd_kafka_op_t *rko_partial) {
+        rd_list_t *res_list;
+        const rd_kafka_PartitionAbortResult_t *par;
+        int i;
+
+        rd_assert(rko_partial->rko_evtype ==
+                  RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT);
+
+        res_list = &rko_fanout->rko_u.admin_request.fanout.results;
+
+        if (rko_partial->rko_err) {
+                /* Request-level error - set error on all partitions from the
+                 * request.
+                 * The args list contains a single element: the marker_list
+                 * (rd_list_t* of WriteTxnMarkerPartition_t entries). */
+                const rd_list_t *marker_list =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.args, 0);
+                const rd_kafka_WriteTxnMarkerPartition_t *mp;
+
+                RD_LIST_FOREACH(mp, marker_list, i) {
+                        rd_kafka_PartitionAbortResult_t *new_par =
+                            rd_kafka_PartitionAbortResult_new(
+                                mp->topic, mp->partition,
+                                rko_partial->rko_err,
+                                rd_kafka_err2str(rko_partial->rko_err));
+                        rd_list_add(res_list, new_par);
+                }
+                return;
+        }
+
+        /* Merge successful results */
+        RD_LIST_FOREACH(par, &rko_partial->rko_u.admin_result.results, i) {
+                rd_list_add(res_list, rd_kafka_PartitionAbortResult_copy(par));
+        }
+}
+
+/**
+ * @brief Convert AbortTransactionSpec to WriteTxnMarkerPartition for request.
+ */
+static rd_kafka_WriteTxnMarkerPartition_t *
+rd_kafka_AbortTransactionSpec_to_marker(
+    const rd_kafka_AbortTransactionSpec_t *spec) {
+        rd_kafka_WriteTxnMarkerPartition_t *mp;
+
+        mp                    = rd_calloc(1, sizeof(*mp));
+        mp->topic             = spec->topic; /* borrowed pointer */
+        mp->partition         = spec->partition;
+        mp->producer_id       = spec->producer_id;
+        mp->producer_epoch    = spec->producer_epoch;
+        mp->coordinator_epoch = spec->coordinator_epoch;
+        mp->txn_start_offset  = spec->txn_start_offset;
+
+        return mp;
+}
+
+/**
+ * @brief Callback for partition leader query result.
+ *        Fans out WriteTxnMarkersRequest to each partition leader.
+ */
+static rd_kafka_op_res_t
+rd_kafka_AbortTransaction_leaders_queried_cb(rd_kafka_t *rk,
+                                             rd_kafka_q_t *rkq,
+                                             rd_kafka_op_t *reply) {
+        rd_kafka_resp_err_t err = reply->rko_err;
+        const rd_list_t *leaders =
+            reply->rko_u.leaders.leaders; /* Possibly NULL (on err) */
+        rd_kafka_op_t *rko_fanout = reply->rko_u.leaders.opaque;
+        const struct rd_kafka_partition_leader *leader;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_WriteTxnMarkersRequest,
+            rd_kafka_WriteTxnMarkersResponse_parse,
+        };
+        int i;
+        rd_list_t *orig_specs;
+
+        rd_assert((rko_fanout->rko_type & ~RD_KAFKA_OP_FLAGMASK) ==
+                  RD_KAFKA_OP_ADMIN_FANOUT);
+
+        if (err == RD_KAFKA_RESP_ERR__DESTROY)
+                goto err;
+
+        orig_specs = &rko_fanout->rko_u.admin_request.args;
+
+        if (err) {
+        err:
+                rd_kafka_admin_result_fail(
+                    rko_fanout, err, "Failed to query partition leaders: %s",
+                    err == RD_KAFKA_RESP_ERR__NOENT ? "No leaders found"
+                                                    : rd_kafka_err2str(err));
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return RD_KAFKA_OP_RES_HANDLED;
+        }
+
+        /* Initialize results list */
+        rd_list_init(&rko_fanout->rko_u.admin_request.fanout.results,
+                     rd_list_cnt(orig_specs),
+                     rd_kafka_PartitionAbortResult_free);
+
+        rko_fanout->rko_u.admin_request.fanout.outstanding =
+            rd_list_cnt(leaders);
+
+        rd_assert(rd_list_cnt(leaders) > 0);
+
+        /* For each leader send a request for its partitions */
+        RD_LIST_FOREACH(leader, leaders, i) {
+                rd_kafka_op_t *rko;
+                rd_list_t *marker_list;
+                int j;
+
+                rko = rd_kafka_admin_request_op_new(
+                    rk, RD_KAFKA_OP_ABORTTRANSACTION,
+                    RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT, &cbs,
+                    &rko_fanout->rko_u.admin_request.options, rk->rk_ops);
+
+                rko->rko_u.admin_request.fanout_parent = rko_fanout;
+                rko->rko_u.admin_request.broker_id = leader->rkb->rkb_nodeid;
+
+                /* Build marker list for partitions on this leader */
+                marker_list = rd_list_new(leader->partitions->cnt, rd_free);
+
+                for (j = 0; j < leader->partitions->cnt; j++) {
+                        rd_kafka_topic_partition_t *lpart =
+                            &leader->partitions->elems[j];
+                        rd_kafka_AbortTransactionSpec_t *spec;
+                        int k;
+
+                        /* Find matching spec from original args */
+                        RD_LIST_FOREACH(spec, orig_specs, k) {
+                                if (spec->partition == lpart->partition &&
+                                    !strcmp(spec->topic, lpart->topic)) {
+                                        rd_kafka_WriteTxnMarkerPartition_t *mp =
+                                            rd_kafka_AbortTransactionSpec_to_marker(
+                                                spec);
+                                        rd_list_add(marker_list, mp);
+                                        break;
+                                }
+                        }
+                }
+
+                rd_list_init(&rko->rko_u.admin_request.args, 1,
+                             rd_kafka_marker_list_free);
+                rd_list_add(&rko->rko_u.admin_request.args, marker_list);
+
+                /* Enqueue op for admin_worker() to transition to next state */
+                rd_kafka_q_enq(rk->rk_ops, rko);
+        }
+
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+void rd_kafka_AbortTransaction(rd_kafka_t *rk,
+                               rd_kafka_AbortTransactionSpec_t **abort_specs,
+                               size_t abort_spec_cnt,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko_fanout;
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_AbortTransaction_response_merge,
+            rd_kafka_PartitionAbortResult_copy_opaque,
+        };
+        rd_kafka_topic_partition_list_t *partitions;
+        size_t i;
+
+        rd_assert(rkqu);
+
+        rko_fanout =
+            rd_kafka_admin_fanout_op_new(rk, RD_KAFKA_OP_ABORTTRANSACTION,
+                                         RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT,
+                                         &fanout_cbs, options, rkqu->rkqu_q);
+
+        if (abort_specs == NULL || abort_spec_cnt == 0) {
+                rd_kafka_admin_result_fail(rko_fanout,
+                                           RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "No abort specs provided");
+                rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                     rd_true /*destroy*/);
+                return;
+        }
+
+        /* Validate abort specs and build partition list */
+        partitions = rd_kafka_topic_partition_list_new((int)abort_spec_cnt);
+
+        for (i = 0; i < abort_spec_cnt; i++) {
+                rd_kafka_AbortTransactionSpec_t *spec = abort_specs[i];
+
+                if (!spec->topic || !spec->topic[0]) {
+                        rd_kafka_topic_partition_list_destroy(partitions);
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Abort spec at index %" PRIusz
+                            " has empty topic name",
+                            i);
+                        rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                             rd_true);
+                        return;
+                }
+                if (spec->partition < 0) {
+                        rd_kafka_topic_partition_list_destroy(partitions);
+                        rd_kafka_admin_result_fail(
+                            rko_fanout, RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Abort spec at index %" PRIusz
+                            " has negative partition",
+                            i);
+                        rd_kafka_admin_common_worker_destroy(rk, rko_fanout,
+                                                             rd_true);
+                        return;
+                }
+
+                rd_kafka_topic_partition_list_add(partitions, spec->topic,
+                                                  spec->partition);
+        }
+
+        /* Store original specs in args for use by response merge */
+        rd_list_init(
+            &rko_fanout->rko_u.admin_request.args, (int)abort_spec_cnt,
+            (void (*)(void *))rd_kafka_AbortTransactionSpec_free);
+        for (i = 0; i < abort_spec_cnt; i++) {
+                rd_kafka_AbortTransactionSpec_t *spec = abort_specs[i];
+                rd_kafka_AbortTransactionSpec_t *copy =
+                    rd_kafka_AbortTransactionSpec_new(
+                        spec->topic, spec->partition, spec->producer_id,
+                        spec->producer_epoch, spec->coordinator_epoch,
+                        spec->txn_start_offset);
+                rd_list_add(&rko_fanout->rko_u.admin_request.args, copy);
+        }
+
+        /* Async query for partition leaders */
+        rd_kafka_topic_partition_list_query_leaders_async(
+            rk, partitions, rd_kafka_admin_timeout_remains(rko_fanout),
+            RD_KAFKA_REPLYQ(rk->rk_ops, 0),
+            rd_kafka_AbortTransaction_leaders_queried_cb, rko_fanout);
+
+        rd_kafka_topic_partition_list_destroy(partitions);
+}
+
+const char *rd_kafka_PartitionAbortResult_topic(
+    const rd_kafka_PartitionAbortResult_t *par) {
+        return par->topic;
+}
+
+int32_t rd_kafka_PartitionAbortResult_partition(
+    const rd_kafka_PartitionAbortResult_t *par) {
+        return par->partition;
+}
+
+rd_kafka_resp_err_t rd_kafka_PartitionAbortResult_error(
+    const rd_kafka_PartitionAbortResult_t *par) {
+        return par->error_code;
+}
+
+const char *rd_kafka_PartitionAbortResult_error_string(
+    const rd_kafka_PartitionAbortResult_t *par) {
+        return par->error_string;
+}
+
+const rd_kafka_PartitionAbortResult_t **
+rd_kafka_AbortTransaction_result_partitions(
+    const rd_kafka_AbortTransaction_result_t *result,
+    size_t *cntp) {
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_ABORTTRANSACTION);
+
+        *cntp = rd_list_cnt(&rko->rko_u.admin_result.results);
+        return (const rd_kafka_PartitionAbortResult_t **)
+            rko->rko_u.admin_result.results.rl_elems;
 }
 
 /**@}*/

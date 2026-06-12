@@ -5610,6 +5610,14 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_LISTOFFSETS_RESULT 0x400000
 /** ElectLeaders_result_t */
 #define RD_KAFKA_EVENT_ELECTLEADERS_RESULT 0x800000
+/** ListTransactions_result_t */
+#define RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT 0x1000000
+/** DescribeTransactions_result_t */
+#define RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT 0x2000000
+/** DescribeProducers_result_t */
+#define RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT 0x4000000
+/** AbortTransaction_result_t */
+#define RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT 0x8000000
 
 /**
  * @returns the event type for the given event.
@@ -5894,6 +5902,14 @@ typedef rd_kafka_event_t rd_kafka_AlterUserScramCredentials_result_t;
 typedef rd_kafka_event_t rd_kafka_ListOffsets_result_t;
 /*! ElectLeaders result type */
 typedef rd_kafka_event_t rd_kafka_ElectLeaders_result_t;
+/*! ListTransactions result type */
+typedef rd_kafka_event_t rd_kafka_ListTransactions_result_t;
+/*! DescribeTransactions result type */
+typedef rd_kafka_event_t rd_kafka_DescribeTransactions_result_t;
+/*! DescribeProducers result type */
+typedef rd_kafka_event_t rd_kafka_DescribeProducers_result_t;
+/*! AbortTransaction result type */
+typedef rd_kafka_event_t rd_kafka_AbortTransaction_result_t;
 
 /**
  * @brief Get CreateTopics result.
@@ -6180,6 +6196,66 @@ rd_kafka_event_AlterUserScramCredentials_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_ElectLeaders_result_t *
 rd_kafka_event_ElectLeaders_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ListTransactions result.
+ *
+ * @returns the result of a ListTransactions request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *  RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListTransactions_result_t *
+rd_kafka_event_ListTransactions_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get DescribeTransactions result.
+ *
+ * @returns the result of a DescribeTransactions request, or NULL if
+ *          event is of different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *  RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeTransactions_result_t *
+rd_kafka_event_DescribeTransactions_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get DescribeProducers result.
+ *
+ * @returns the result of a DescribeProducers request, or NULL if event is of
+ *          different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *  RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT
+ */
+RD_EXPORT const rd_kafka_DescribeProducers_result_t *
+rd_kafka_event_DescribeProducers_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get AbortTransaction result.
+ *
+ * @returns the result of an AbortTransaction request, or NULL if event is of
+ *          different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *  RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT
+ */
+RD_EXPORT const rd_kafka_AbortTransaction_result_t *
+rd_kafka_event_AbortTransaction_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Poll a queue for an event for max \p timeout_ms.
@@ -7114,11 +7190,15 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBEUSERSCRAMCREDENTIALS,
         /** AlterUserScramCredentials */
         RD_KAFKA_ADMIN_OP_ALTERUSERSCRAMCREDENTIALS,
-        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,  /**< DescribeTopics */
-        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
-        RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
-        RD_KAFKA_ADMIN_OP_ELECTLEADERS,    /**< ElectLeaders */
-        RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
+        RD_KAFKA_ADMIN_OP_DESCRIBETOPICS,       /**< DescribeTopics */
+        RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER,      /**< DescribeCluster */
+        RD_KAFKA_ADMIN_OP_LISTOFFSETS,          /**< ListOffsets */
+        RD_KAFKA_ADMIN_OP_ELECTLEADERS,         /**< ElectLeaders */
+        RD_KAFKA_ADMIN_OP_LISTTRANSACTIONS,     /**< ListTransactions */
+        RD_KAFKA_ADMIN_OP_DESCRIBETRANSACTIONS, /**< DescribeTransactions */
+        RD_KAFKA_ADMIN_OP_DESCRIBEPRODUCERS,    /**< DescribeProducers */
+        RD_KAFKA_ADMIN_OP_ABORTTRANSACTION,     /**< AbortTransaction */
+        RD_KAFKA_ADMIN_OP__CNT                  /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
 /**
@@ -7371,6 +7451,80 @@ RD_EXPORT
 rd_kafka_error_t *
 rd_kafka_AdminOptions_set_isolation_level(rd_kafka_AdminOptions_t *options,
                                           rd_kafka_IsolationLevel_t value);
+
+/**
+ * @brief Set transaction states to filter by.
+ *
+ * @param options Admin options.
+ * @param states Array of transaction state strings (e.g., "Ongoing", "Empty",
+ *               "PrepareCommit", "PrepareAbort", "CompleteCommit",
+ *               "CompleteAbort", "Dead", "PrepareEpochFence").
+ * @param states_cnt Size of the \p states array.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListTransactions.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_transaction_states(
+    rd_kafka_AdminOptions_t *options,
+    const char **states,
+    size_t states_cnt);
+
+/**
+ * @brief Set producer IDs to filter by.
+ *
+ * @param options Admin options.
+ * @param producer_ids Array of producer IDs.
+ * @param producer_ids_cnt Size of the \p producer_ids array.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListTransactions.
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_AdminOptions_set_match_producer_ids(rd_kafka_AdminOptions_t *options,
+                                             const int64_t *producer_ids,
+                                             size_t producer_ids_cnt);
+
+/**
+ * @brief Set duration filter in milliseconds.
+ *
+ * Only transactions running longer than this duration will be returned.
+ *
+ * @param options Admin options.
+ * @param duration_ms Minimum transaction duration in milliseconds.
+ *                    Use -1 to disable filtering (default).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListTransactions.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_transaction_duration_filter(
+    rd_kafka_AdminOptions_t *options,
+    int64_t duration_ms);
+
+/**
+ * @brief Set transactional ID pattern to filter by.
+ *
+ * @param options Admin options.
+ * @param pattern Regular expression pattern to match transactional IDs.
+ *                Use NULL to disable filtering (default).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListTransactions.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_transactional_id_pattern(
+    rd_kafka_AdminOptions_t *options,
+    const char *pattern);
 
 /**
  * @brief Set application opaque value that can be extracted from the
@@ -8736,6 +8890,598 @@ RD_EXPORT
 const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
     const rd_kafka_ListConsumerGroups_result_t *result,
     size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - ListTransactions
+ * @{
+ */
+
+/**! ListTransactions result for a single transaction */
+typedef struct rd_kafka_TransactionListing_s rd_kafka_TransactionListing_t;
+
+/**! ListTransactions results and errors */
+typedef struct rd_kafka_ListTransactionsResult_s
+    rd_kafka_ListTransactionsResult_t;
+
+/**
+ * @brief List transactions in the cluster.
+ *
+ * @param rk Client instance.
+ * @param options Optional admin options, or NULL for defaults.
+ *                Valid options:
+ *                - rd_kafka_AdminOptions_set_request_timeout()
+ *                - rd_kafka_AdminOptions_set_match_transaction_states()
+ *                - rd_kafka_AdminOptions_set_match_producer_ids()
+ *                - rd_kafka_AdminOptions_set_transaction_duration_filter()
+ *                - rd_kafka_AdminOptions_set_transactional_id_pattern()
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTTRANSACTIONS_RESULT
+ *
+ * @remark Requires broker version >= 2.8.0. Some filter options
+ *         (duration, transactional ID pattern) require 3.6.0+.
+ */
+RD_EXPORT
+void rd_kafka_ListTransactions(rd_kafka_t *rk,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets the transactional id for the \p txn listing.
+ *
+ * @param txn The transaction listing.
+ *
+ * @return The transactional id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p txn object.
+ */
+RD_EXPORT
+const char *rd_kafka_TransactionListing_transactional_id(
+    const rd_kafka_TransactionListing_t *txn);
+
+/**
+ * @brief Gets the producer id for the \p txn listing.
+ *
+ * @param txn The transaction listing.
+ *
+ * @return The producer id.
+ */
+RD_EXPORT
+int64_t rd_kafka_TransactionListing_producer_id(
+    const rd_kafka_TransactionListing_t *txn);
+
+/**
+ * @brief Gets the transaction state for the \p txn listing.
+ *
+ * @param txn The transaction listing.
+ *
+ * @return The transaction state as a string.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p txn object.
+ */
+RD_EXPORT
+const char *rd_kafka_TransactionListing_transaction_state(
+    const rd_kafka_TransactionListing_t *txn);
+
+/**
+ * @brief Get an array of valid transactions from a ListTransactions result.
+ *
+ * @param result Result to get transaction results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @return Array of TransactionListing objects.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_TransactionListing_t **
+rd_kafka_ListTransactions_result_transactions(
+    const rd_kafka_ListTransactions_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Get an array of errors from a ListTransactions call result.
+ *
+ * The returned errors life-time is the same as the \p result object.
+ *
+ * @param result ListTransactions result.
+ * @param cntp Is updated to the number of elements in the array.
+ *
+ * @return Array of errors in \p result.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_error_t **rd_kafka_ListTransactions_result_errors(
+    const rd_kafka_ListTransactions_result_t *result,
+    size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - DescribeTransactions
+ * @{
+ */
+
+/**! DescribeTransactions result for a single transaction */
+typedef struct rd_kafka_TransactionDescription_s
+    rd_kafka_TransactionDescription_t;
+
+/**
+ * @brief Describe transactions for the specified transactional IDs.
+ *
+ * @param rk Client instance.
+ * @param transactional_ids Array of transactional IDs to describe.
+ * @param transactional_ids_cnt Number of elements in \p transactional_ids.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBETRANSACTIONS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DescribeTransactions(rd_kafka_t *rk,
+                                   const char **transactional_ids,
+                                   size_t transactional_ids_cnt,
+                                   const rd_kafka_AdminOptions_t *options,
+                                   rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets the transactional id for the \p txndesc description.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The transactional id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p txndesc object.
+ */
+RD_EXPORT
+const char *rd_kafka_TransactionDescription_transactional_id(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the producer id for the \p txndesc description.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The producer id.
+ */
+RD_EXPORT
+int64_t rd_kafka_TransactionDescription_producer_id(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the producer epoch for the \p txndesc description.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The producer epoch.
+ */
+RD_EXPORT
+int32_t rd_kafka_TransactionDescription_producer_epoch(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the transaction state for the \p txndesc description.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The transaction state (e.g., "Ongoing", "PrepareCommit",
+ *         "PrepareAbort", "CompleteCommit", "CompleteAbort", "Empty",
+ *         "Dead", "PrepareEpochFence").
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p txndesc object.
+ */
+RD_EXPORT
+const char *rd_kafka_TransactionDescription_transaction_state(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the transaction timeout in milliseconds for the \p txndesc.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The transaction timeout in milliseconds.
+ */
+RD_EXPORT
+int32_t rd_kafka_TransactionDescription_transaction_timeout_ms(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the transaction start time in milliseconds since epoch for
+ *        the \p txndesc.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The transaction start time in milliseconds since epoch,
+ *         or -1 if no transaction is in progress.
+ */
+RD_EXPORT
+int64_t rd_kafka_TransactionDescription_transaction_start_time_ms(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the topics involved in the transaction for the \p txndesc.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The topics and partitions involved in the transaction, or NULL
+ *         if no topics are involved.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p txndesc object.
+ */
+RD_EXPORT
+const rd_kafka_topic_partition_list_t *rd_kafka_TransactionDescription_topics(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Gets the error for the \p txndesc description.
+ *
+ * @param txndesc The transaction description.
+ *
+ * @return The error, or NULL if no error occurred.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p txndesc object.
+ */
+RD_EXPORT
+const rd_kafka_error_t *rd_kafka_TransactionDescription_error(
+    const rd_kafka_TransactionDescription_t *txndesc);
+
+/**
+ * @brief Get an array of transaction descriptions from a
+ *        DescribeTransactions result.
+ *
+ * The returned transactions life-time is the same as the \p result object.
+ *
+ * @param result DescribeTransactions result.
+ * @param cntp Is updated to the number of elements in the array.
+ *
+ * @return Array of transaction descriptions in \p result.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_TransactionDescription_t **
+rd_kafka_DescribeTransactions_result_transactions(
+    const rd_kafka_DescribeTransactions_result_t *result,
+    size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - DescribeProducers
+ * @{
+ */
+
+/**! ProducerState: information about an active producer on a partition */
+typedef struct rd_kafka_ProducerState_s rd_kafka_ProducerState_t;
+
+/**! PartitionProducerState: per-partition result with list of producers */
+typedef struct rd_kafka_PartitionProducerState_s
+    rd_kafka_PartitionProducerState_t;
+
+/**
+ * @brief Describe active producers for the specified topic-partitions.
+ *
+ * @param rk Client instance.
+ * @param partitions Topic-partitions to describe producers for.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_DESCRIBEPRODUCERS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_DescribeProducers(
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *partitions,
+    const rd_kafka_AdminOptions_t *options,
+    rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets the topic name for the \p pps result.
+ *
+ * @param pps The partition producer state.
+ *
+ * @return The topic name.
+ */
+RD_EXPORT
+const char *rd_kafka_PartitionProducerState_topic(
+    const rd_kafka_PartitionProducerState_t *pps);
+
+/**
+ * @brief Gets the partition index for the \p pps result.
+ *
+ * @param pps The partition producer state.
+ *
+ * @return The partition index.
+ */
+RD_EXPORT
+int32_t rd_kafka_PartitionProducerState_partition(
+    const rd_kafka_PartitionProducerState_t *pps);
+
+/**
+ * @brief Gets the error code for the \p pps result.
+ *
+ * @param pps The partition producer state.
+ *
+ * @return The error code, or RD_KAFKA_RESP_ERR_NO_ERROR on success.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t rd_kafka_PartitionProducerState_error(
+    const rd_kafka_PartitionProducerState_t *pps);
+
+/**
+ * @brief Gets the active producers for the \p pps result.
+ *
+ * @param pps The partition producer state.
+ * @param cntp Is set to the number of active producers in the returned array.
+ *
+ * @return Array of active producers, or NULL if no producers are active.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p pps object.
+ */
+RD_EXPORT
+const rd_kafka_ProducerState_t **
+rd_kafka_PartitionProducerState_active_producers(
+    const rd_kafka_PartitionProducerState_t *pps,
+    size_t *cntp);
+
+/**
+ * @brief Gets the producer ID for the \p state.
+ *
+ * @param state The producer state.
+ *
+ * @return The producer ID.
+ */
+RD_EXPORT
+int64_t
+rd_kafka_ProducerState_producer_id(const rd_kafka_ProducerState_t *state);
+
+/**
+ * @brief Gets the producer epoch for the \p state.
+ *
+ * @param state The producer state.
+ *
+ * @return The producer epoch.
+ */
+RD_EXPORT
+int32_t
+rd_kafka_ProducerState_producer_epoch(const rd_kafka_ProducerState_t *state);
+
+/**
+ * @brief Gets the last sequence number for the \p state.
+ *
+ * @param state The producer state.
+ *
+ * @return The last sequence number.
+ */
+RD_EXPORT
+int32_t
+rd_kafka_ProducerState_last_sequence(const rd_kafka_ProducerState_t *state);
+
+/**
+ * @brief Gets the last timestamp for the \p state.
+ *
+ * @param state The producer state.
+ *
+ * @return The last timestamp in milliseconds since epoch, or -1 if unknown.
+ */
+RD_EXPORT
+int64_t
+rd_kafka_ProducerState_last_timestamp(const rd_kafka_ProducerState_t *state);
+
+/**
+ * @brief Gets the coordinator epoch for the \p state.
+ *
+ * @param state The producer state.
+ *
+ * @return The coordinator epoch.
+ */
+RD_EXPORT
+int32_t
+rd_kafka_ProducerState_coordinator_epoch(const rd_kafka_ProducerState_t *state);
+
+/**
+ * @brief Gets the transaction start offset for the \p state.
+ *
+ * @param state The producer state.
+ *
+ * @return The transaction start offset, or -1 if not in a transaction.
+ */
+RD_EXPORT
+int64_t
+rd_kafka_ProducerState_txn_start_offset(const rd_kafka_ProducerState_t *state);
+
+/**
+ * @brief Get an array of PartitionProducerState from a DescribeProducers
+ *        result.
+ *
+ * The returned array is of size \p *cntp and the lifetime of the
+ * returned memory is the same as the lifetime of \p result.
+ *
+ * @param result Result object from DescribeProducers request.
+ * @param cntp Is set to the number of elements in the returned array.
+ *
+ * @return Array of PartitionProducerState objects.
+ */
+RD_EXPORT
+const rd_kafka_PartitionProducerState_t **
+rd_kafka_DescribeProducers_result_partitions(
+    const rd_kafka_DescribeProducers_result_t *result,
+    size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - AbortTransaction
+ * @{
+ */
+
+/**
+ * @brief AbortTransactionSpec: specification for aborting a transaction
+ *        on a specific partition.
+ */
+typedef struct rd_kafka_AbortTransactionSpec_s rd_kafka_AbortTransactionSpec_t;
+
+/**
+ * @brief PartitionAbortResult: per-partition result of AbortTransaction.
+ */
+typedef struct rd_kafka_PartitionAbortResult_s rd_kafka_PartitionAbortResult_t;
+
+/**
+ * @brief Create a new AbortTransactionSpec for aborting a transaction
+ *        on a specific partition.
+ *
+ * @param topic Topic name.
+ * @param partition Partition number.
+ * @param producer_id Producer ID (from DescribeProducers).
+ * @param producer_epoch Producer epoch (from DescribeProducers).
+ * @param coordinator_epoch Coordinator epoch (from DescribeProducers).
+ * @param txn_start_offset Transaction start offset (from DescribeProducers,
+ *                         -1 if unknown).
+ *
+ * @returns A new AbortTransactionSpec object.
+ *          Must be destroyed with rd_kafka_AbortTransactionSpec_destroy().
+ */
+RD_EXPORT
+rd_kafka_AbortTransactionSpec_t *
+rd_kafka_AbortTransactionSpec_new(const char *topic,
+                                  int32_t partition,
+                                  int64_t producer_id,
+                                  int32_t producer_epoch,
+                                  int32_t coordinator_epoch,
+                                  int64_t txn_start_offset);
+
+/**
+ * @brief Destroy an AbortTransactionSpec.
+ *
+ * @param spec The AbortTransactionSpec to destroy.
+ */
+RD_EXPORT
+void rd_kafka_AbortTransactionSpec_destroy(
+    rd_kafka_AbortTransactionSpec_t *spec);
+
+/**
+ * @brief Destroy an array of AbortTransactionSpec objects.
+ *
+ * @param specs Array of AbortTransactionSpec pointers.
+ * @param spec_cnt Number of elements in \p specs array.
+ */
+RD_EXPORT
+void rd_kafka_AbortTransactionSpec_destroy_array(
+    rd_kafka_AbortTransactionSpec_t **specs,
+    size_t spec_cnt);
+
+/**
+ * @brief Abort transactions on specified topic-partitions.
+ *
+ * This Admin API aborts hanging transactions by writing transaction
+ * abort markers to the specified partitions. The caller must provide
+ * transaction coordinator state obtained from DescribeProducers.
+ *
+ * @param rk Client instance.
+ * @param abort_specs Array of AbortTransactionSpec pointers.
+ * @param abort_spec_cnt Number of elements in \p abort_specs array.
+ * @param options Optional admin options, or NULL for defaults.
+ * @param rkqu Queue to emit result on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_ABORTTRANSACTION_RESULT
+ *
+ * @remark Requires Kafka 2.8+ for WriteTxnMarkers API.
+ *
+ * @sa rd_kafka_abort_transaction() which aborts the calling producer's
+ *     own transaction. This Admin API aborts another producer's hanging
+ *     transaction on specific partitions.
+ *
+ * Typical workflow:
+ *  1. Use rd_kafka_DescribeProducers() to identify hanging transactions
+ *  2. Extract producer_id, producer_epoch, coordinator_epoch, txn_start_offset
+ *  3. Create AbortTransactionSpec with those values
+ *  4. Call rd_kafka_AbortTransaction()
+ */
+RD_EXPORT
+void rd_kafka_AbortTransaction(rd_kafka_t *rk,
+                               rd_kafka_AbortTransactionSpec_t **abort_specs,
+                               size_t abort_spec_cnt,
+                               const rd_kafka_AdminOptions_t *options,
+                               rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Get an array of partition abort results from an AbortTransaction
+ *        result.
+ *
+ * The lifetime of the returned memory is the same as the lifetime
+ * of \p result.
+ *
+ * @param result Result object from AbortTransaction request.
+ * @param cntp Is set to the number of elements in the returned array.
+ *
+ * @return Array of PartitionAbortResult objects.
+ */
+RD_EXPORT
+const rd_kafka_PartitionAbortResult_t **
+rd_kafka_AbortTransaction_result_partitions(
+    const rd_kafka_AbortTransaction_result_t *result,
+    size_t *cntp);
+
+/**
+ * @brief Gets the topic name for the partition abort result.
+ *
+ * @param par PartitionAbortResult to get topic from.
+ *
+ * @return The topic name.
+ */
+RD_EXPORT
+const char *
+rd_kafka_PartitionAbortResult_topic(const rd_kafka_PartitionAbortResult_t *par);
+
+/**
+ * @brief Gets the partition index for the partition abort result.
+ *
+ * @param par PartitionAbortResult to get partition from.
+ *
+ * @return The partition index.
+ */
+RD_EXPORT
+int32_t rd_kafka_PartitionAbortResult_partition(
+    const rd_kafka_PartitionAbortResult_t *par);
+
+/**
+ * @brief Gets the error code for the partition abort result.
+ *
+ * @param par PartitionAbortResult to get error from.
+ *
+ * @return The error code, or RD_KAFKA_RESP_ERR_NO_ERROR on success.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_PartitionAbortResult_error(const rd_kafka_PartitionAbortResult_t *par);
+
+/**
+ * @brief Gets the error string for the partition abort result.
+ *
+ * @param par PartitionAbortResult to get error string from.
+ *
+ * @return The error string, or NULL if no error.
+ */
+RD_EXPORT
+const char *rd_kafka_PartitionAbortResult_error_string(
+    const rd_kafka_PartitionAbortResult_t *par);
 
 /**@}*/
 

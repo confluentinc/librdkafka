@@ -189,6 +189,18 @@ typedef enum {
         RD_KAFKA_OP_ELECTLEADERS,         /**< Admin:
                                            *   ElectLeaders
                                            *   u.admin_request */
+        RD_KAFKA_OP_LISTTRANSACTIONS,     /**< Admin:
+                                           *   ListTransactions
+                                           *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBETRANSACTIONS, /**< Admin:
+                                           *   DescribeTransactions
+                                           *   u.admin_request */
+        RD_KAFKA_OP_DESCRIBEPRODUCERS,    /**< Admin:
+                                           *   DescribeProducers
+                                           *   u.admin_request */
+        RD_KAFKA_OP_ABORTTRANSACTION,     /**< Admin:
+                                           *   AbortTransaction
+                                           *   u.admin_request */
         RD_KAFKA_OP__END
 } rd_kafka_op_type_t;
 

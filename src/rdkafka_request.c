@@ -2511,6 +2511,462 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
         return NULL;
 }
 
+
+/**
+ * @brief Construct and send ListTransactionsRequest (v2) to \p rkb.
+ *
+ *        Request schema (v2, flexible):
+ *          StateFilters: COMPACT_ARRAY<COMPACT_STRING>
+ *          ProducerIdFilters: COMPACT_ARRAY<INT64>
+ *          DurationFilter: INT64 (default -1 = no filter)
+ *          TransactionalIdPattern: COMPACT_NULLABLE_STRING
+ *          TAG_BUFFER
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ */
+rd_kafka_error_t *
+rd_kafka_ListTransactionsRequest(rd_kafka_broker_t *rkb,
+                                 const char **states,
+                                 size_t states_cnt,
+                                 const int64_t *producer_ids,
+                                 size_t producer_ids_cnt,
+                                 int64_t duration_filter_ms,
+                                 const char *transactional_id_pattern,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        int16_t min_version = 0;
+        size_t i;
+
+        /* Determine minimum required API version based on filter usage:
+         * - v0: Basic state and producer ID filters
+         * - v1: Added duration filter
+         * - v2: Added transactional ID pattern filter */
+        if (transactional_id_pattern && *transactional_id_pattern)
+                min_version = 2;
+        else if (duration_filter_ms >= 0)
+                min_version = 1;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ListTransactions, min_version, 2, NULL);
+
+        if (ApiVersion == -1) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "ListTransactionsRequest (v%d) not supported by broker",
+                    min_version);
+        }
+
+        /* All versions are flexible (0+) */
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ListTransactions, 1,
+            /* StateFilters + ProducerIdFilters + DurationFilter +
+             * TransactionalIdPattern + tags */
+            4 + 32 * states_cnt + 4 + 8 * producer_ids_cnt + 8 + 64 + 1,
+            rd_true /* is_flexver */);
+
+        /* StateFilters: COMPACT_ARRAY<COMPACT_STRING> */
+        rd_kafka_buf_write_arraycnt(rkbuf, states_cnt);
+        for (i = 0; i < states_cnt; i++) {
+                rd_kafka_buf_write_str(rkbuf, states[i], -1);
+        }
+
+        /* ProducerIdFilters: COMPACT_ARRAY<INT64> */
+        rd_kafka_buf_write_arraycnt(rkbuf, producer_ids_cnt);
+        for (i = 0; i < producer_ids_cnt; i++) {
+                rd_kafka_buf_write_i64(rkbuf, producer_ids[i]);
+        }
+
+        if (ApiVersion >= 1) {
+                /* DurationFilter: INT64 (v1+) */
+                rd_kafka_buf_write_i64(rkbuf, duration_filter_ms);
+        }
+
+        if (ApiVersion >= 2) {
+                /* TransactionalIdPattern: COMPACT_NULLABLE_STRING (v2+) */
+                rd_kafka_buf_write_str(rkbuf, transactional_id_pattern, -1);
+        }
+
+        /* Tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return NULL;
+}
+
+
+/**
+ * @brief Construct and send DescribeTransactionsRequest to \p rkb
+ *        with the transactional IDs in \p transactional_ids.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ */
+rd_kafka_error_t *
+rd_kafka_DescribeTransactionsRequest(rd_kafka_broker_t *rkb,
+                                     const char **transactional_ids,
+                                     size_t transactional_ids_cnt,
+                                     rd_kafka_replyq_t replyq,
+                                     rd_kafka_resp_cb_t *resp_cb,
+                                     void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        size_t i;
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeTransactions, 0, 0, NULL);
+
+        if (ApiVersion == -1) {
+                return rd_kafka_error_new(
+                    RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                    "DescribeTransactionsRequest (v0) not supported by broker");
+        }
+
+        /* Flexible version (0+) */
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeTransactions, 1,
+            /* TransactionalIds array + tags */
+            4 + 64 * transactional_ids_cnt + 1, rd_true /* is_flexver */);
+
+        /* TransactionalIds: COMPACT_ARRAY<COMPACT_STRING> */
+        rd_kafka_buf_write_arraycnt(rkbuf, transactional_ids_cnt);
+        for (i = 0; i < transactional_ids_cnt; i++) {
+                rd_kafka_buf_write_str(rkbuf, transactional_ids[i], -1);
+        }
+
+        /* Tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return NULL;
+}
+
+
+/**
+ * @brief Construct and send DescribeProducersRequest to \p rkb
+ *        for the specified topic-partitions in \p partitions_list.
+ *
+ *        The response (unparsed) will be enqueued on \p replyq
+ *        for handling by \p resp_cb (with \p opaque passed).
+ *
+ * @remark The rd_kafka_topic_partition_list_t in \p partitions_list must
+ *         already be sorted.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if the request was enqueued for
+ *          transmission, otherwise an error code and errstr will be
+ *          updated with a human readable error string.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DescribeProducersRequest(rd_kafka_broker_t *rkb,
+                                  /*(rd_kafka_topic_partition_list_t*)*/
+                                  const rd_list_t *partitions_list,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr,
+                                  size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        rd_map_t topic_map;
+        const rd_map_elem_t *elem;
+        const rd_kafka_topic_partition_list_t *parts;
+        int i;
+
+        parts = rd_list_elem(partitions_list, 0);
+        rd_assert(parts != NULL);
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeProducers, 0, 0, NULL);
+
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeProducersRequest (v0) not supported "
+                            "by broker");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        /* Group partitions by topic using map */
+        rd_map_init(&topic_map, parts->cnt, rd_map_str_cmp, rd_map_str_hash,
+                    NULL, NULL);
+
+        for (i = 0; i < parts->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &parts->elems[i];
+                rd_list_t *part_list;
+
+                part_list = rd_map_get(&topic_map, rktpar->topic);
+                if (!part_list) {
+                        part_list = rd_list_new(4, NULL);
+                        rd_map_set(&topic_map, rktpar->topic, part_list);
+                }
+                rd_list_add(part_list, (void *)(intptr_t)rktpar->partition);
+        }
+
+        /* Flexible version (0+) */
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeProducers, 1,
+            /* Topics array + tags */
+            4 + (rd_map_cnt(&topic_map) * 64) + 1, rd_true /* is_flexver */);
+
+        /* Topics: COMPACT_ARRAY */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_map_cnt(&topic_map));
+
+        RD_MAP_FOREACH_ELEM(elem, &topic_map) {
+                const char *topic    = (const char *)elem->key;
+                rd_list_t *part_list = (rd_list_t *)elem->value;
+                int part_cnt         = rd_list_cnt(part_list);
+                int j;
+
+                /* Name: COMPACT_STRING */
+                rd_kafka_buf_write_str(rkbuf, topic, -1);
+
+                /* PartitionIndexes: COMPACT_ARRAY<INT32> */
+                rd_kafka_buf_write_arraycnt(rkbuf, part_cnt);
+                for (j = 0; j < part_cnt; j++) {
+                        int32_t partition =
+                            (int32_t)(intptr_t)rd_list_elem(part_list, j);
+                        rd_kafka_buf_write_i32(rkbuf, partition);
+                }
+
+                /* Tags */
+                rd_kafka_buf_write_tags_empty(rkbuf);
+
+                rd_list_destroy(part_list);
+        }
+
+        /* Tags */
+        rd_kafka_buf_write_tags_empty(rkbuf);
+
+        rd_map_destroy(&topic_map);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
+ * @struct Aggregated marker for grouping by producer.
+ */
+struct rd_kafka_marker_agg_s {
+        int64_t producer_id;
+        int32_t producer_epoch;
+        int32_t coordinator_epoch;
+        rd_map_t topics; /**< Map of topic -> list of (partition, txn_offset) */
+};
+
+/**
+ * @struct Partition info for marker.
+ */
+struct rd_kafka_marker_partition_s {
+        int32_t partition;
+        int64_t txn_start_offset;
+};
+
+/**
+ * @brief Compare two int64_t pointers (for rd_map).
+ */
+static int rd_kafka_map_int64_cmp(const void *a, const void *b) {
+        const int64_t *ia = a;
+        const int64_t *ib = b;
+        if (*ia < *ib)
+                return -1;
+        if (*ia > *ib)
+                return 1;
+        return 0;
+}
+
+/**
+ * @brief Hash an int64_t pointer (for rd_map).
+ */
+static unsigned int rd_kafka_map_int64_hash(const void *a) {
+        const int64_t *ia = a;
+        return (unsigned int)(*ia ^ (*ia >> 32));
+}
+
+/**
+ * @brief Construct and send WriteTxnMarkersRequest to \p rkb
+ *        for aborting transactions on the specified partitions.
+ *
+ * @param rkb Broker to send request to (partition leader)
+ * @param partitions_list List of rd_kafka_WriteTxnMarkerPartition_t pointers
+ * @param options Admin options
+ * @param errstr Error string buffer
+ * @param errstr_size Error string buffer size
+ * @param replyq Reply queue for response
+ * @param resp_cb Response callback
+ * @param opaque Opaque pointer passed to callback
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if enqueued, else error code
+ */
+rd_kafka_resp_err_t
+rd_kafka_WriteTxnMarkersRequest(rd_kafka_broker_t *rkb,
+                                const rd_list_t *partitions_list,
+                                rd_kafka_AdminOptions_t *options,
+                                char *errstr,
+                                size_t errstr_size,
+                                rd_kafka_replyq_t replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion;
+        rd_map_t marker_map; /* producer_id -> marker_agg */
+        const rd_map_elem_t *marker_elem, *topic_elem;
+        int i, part_cnt;
+        rd_bool_t is_flexver;
+        const rd_list_t *marker_list;
+
+        /* The args list contains the marker_list as first element */
+        marker_list = rd_list_elem(partitions_list, 0);
+        rd_assert(marker_list != NULL);
+
+        part_cnt = rd_list_cnt(marker_list);
+        if (part_cnt == 0) {
+                rd_snprintf(errstr, errstr_size, "No partitions provided");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_WriteTxnMarkers, 0, 1, NULL);
+
+        if (ApiVersion == -1) {
+                rd_snprintf(errstr, errstr_size,
+                            "WriteTxnMarkersRequest (v0-1) not supported "
+                            "by broker");
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+        }
+
+        is_flexver = ApiVersion >= 1;
+
+        /* Group partitions by producer_id for efficient batching */
+        rd_map_init(&marker_map, part_cnt, rd_kafka_map_int64_cmp,
+                    rd_kafka_map_int64_hash, NULL, NULL);
+
+        for (i = 0; i < part_cnt; i++) {
+                rd_kafka_WriteTxnMarkerPartition_t *p =
+                    rd_list_elem(marker_list, i);
+                int64_t *key_copy;
+                struct rd_kafka_marker_agg_s *agg;
+                rd_list_t *topic_parts;
+                struct rd_kafka_marker_partition_s *part_info;
+
+                agg = rd_map_get(&marker_map, &p->producer_id);
+                if (!agg) {
+                        agg                    = rd_calloc(1, sizeof(*agg));
+                        agg->producer_id       = p->producer_id;
+                        agg->producer_epoch    = p->producer_epoch;
+                        agg->coordinator_epoch = p->coordinator_epoch;
+                        rd_map_init(&agg->topics, 4, rd_map_str_cmp,
+                                    rd_map_str_hash, NULL, NULL);
+                        key_copy  = rd_malloc(sizeof(*key_copy));
+                        *key_copy = p->producer_id;
+                        rd_map_set(&marker_map, key_copy, agg);
+                }
+
+                topic_parts = rd_map_get(&agg->topics, p->topic);
+                if (!topic_parts) {
+                        topic_parts = rd_list_new(4, rd_free);
+                        rd_map_set(&agg->topics, rd_strdup(p->topic),
+                                   topic_parts);
+                }
+
+                part_info                   = rd_malloc(sizeof(*part_info));
+                part_info->partition        = p->partition;
+                part_info->txn_start_offset = p->txn_start_offset;
+                rd_list_add(topic_parts, part_info);
+        }
+
+        /* Build request */
+        if (is_flexver) {
+                rkbuf = rd_kafka_buf_new_flexver_request(
+                    rkb, RD_KAFKAP_WriteTxnMarkers, 1,
+                    4 + (rd_map_cnt(&marker_map) * 128) + 1, rd_true);
+        } else {
+                rkbuf = rd_kafka_buf_new_request(
+                    rkb, RD_KAFKAP_WriteTxnMarkers, 1,
+                    4 + (rd_map_cnt(&marker_map) * 128));
+        }
+
+        /* Markers: ARRAY */
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_map_cnt(&marker_map));
+
+        RD_MAP_FOREACH_ELEM(marker_elem, &marker_map) {
+                struct rd_kafka_marker_agg_s *agg =
+                    (struct rd_kafka_marker_agg_s *)marker_elem->value;
+                int topic_cnt_local = rd_map_cnt(&agg->topics);
+
+                /* ProducerId: INT64 */
+                rd_kafka_buf_write_i64(rkbuf, agg->producer_id);
+
+                /* ProducerEpoch: INT16 */
+                rd_kafka_buf_write_i16(rkbuf, (int16_t)agg->producer_epoch);
+
+                /* TransactionResult: BOOLEAN (false=ABORT) */
+                rd_kafka_buf_write_i8(rkbuf, 0);
+
+                /* Topics: ARRAY */
+                rd_kafka_buf_write_arraycnt(rkbuf, topic_cnt_local);
+
+                RD_MAP_FOREACH_ELEM(topic_elem, &agg->topics) {
+                        const char *topic      = (const char *)topic_elem->key;
+                        rd_list_t *topic_parts = (rd_list_t *)topic_elem->value;
+                        int topic_parts_cnt    = rd_list_cnt(topic_parts);
+                        int j;
+
+                        /* Name: STRING */
+                        rd_kafka_buf_write_str(rkbuf, topic, -1);
+
+                        /* PartitionIndexes: ARRAY of INT32 (primitive array) */
+                        rd_kafka_buf_write_arraycnt(rkbuf, topic_parts_cnt);
+
+                        for (j = 0; j < topic_parts_cnt; j++) {
+                                struct rd_kafka_marker_partition_s *mp =
+                                    rd_list_elem(topic_parts, j);
+
+                                /* PartitionIndex: INT32 */
+                                rd_kafka_buf_write_i32(rkbuf, mp->partition);
+                        }
+
+                        if (is_flexver)
+                                rd_kafka_buf_write_tags_empty(rkbuf);
+
+                        rd_free((void *)topic);
+                        rd_list_destroy(topic_parts);
+                }
+
+                /* CoordinatorEpoch: INT32 (at marker level, after Topics) */
+                rd_kafka_buf_write_i32(rkbuf, agg->coordinator_epoch);
+
+                if (is_flexver)
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+
+                rd_map_destroy(&agg->topics);
+                rd_free((void *)marker_elem->key);
+                rd_free(agg);
+        }
+
+        if (is_flexver)
+                rd_kafka_buf_write_tags_empty(rkbuf);
+
+        rd_map_destroy(&marker_map);
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 /**
  * @brief Construct and send DescribeGroupsRequest to \p rkb
  *        with the groups (const char *) in \p groups.

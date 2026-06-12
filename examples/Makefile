@@ -14,6 +14,10 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	user_scram \
 	list_offsets \
 	elect_leaders \
+	list_transactions \
+	describe_transactions \
+	describe_producers \
+	abort_transaction \
 	misc
 
 all: $(EXAMPLES)
@@ -155,6 +159,22 @@ list_offsets: ../src/librdkafka.a list_offsets.c
 		../src/librdkafka.a $(LIBS)
 
 elect_leaders: ../src/librdkafka.a elect_leaders.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+list_transactions: ../src/librdkafka.a list_transactions.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_transactions: ../src/librdkafka.a describe_transactions.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+describe_producers: ../src/librdkafka.a describe_producers.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+abort_transaction: ../src/librdkafka.a abort_transaction.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

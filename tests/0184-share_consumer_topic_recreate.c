@@ -650,6 +650,8 @@ static void do_test_recreate_survives_concurrent_producer(void) {
 
         test_share_consumer_subscribe_multi(rkshare, 1, topic);
 
+        rd_sleep(3);
+
         /* Start background producer in "before" phase. */
         producer_args.producer  = common_producer;
         producer_args.topic     = topic;

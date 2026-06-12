@@ -162,6 +162,8 @@ static int producer_thread_func(void *arg) {
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
         producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
+        rd_sleep(3);
+
         TEST_SAY("Producer %d: starting, will produce %d messages\n",
                  args->producer_id, args->msgs_to_produce);
 

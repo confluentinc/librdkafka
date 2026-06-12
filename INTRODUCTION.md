@@ -2358,6 +2358,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-602 - Use all resolved addresses by default                          | 2.6.0                       | Supported                                                                                     |
 | KIP-651 - Support PEM format for SSL certs and keys                      | 2.7.0                       | Supported                                                                                     |
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |
+| KIP-664 - Provide tooling to detect and abort hanging transactions       | 2.8.0                       | Supported                                                                                     |
 | KIP-714 - Client metrics and observability                               | 3.7.0                       | Supported                                                                                     |
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
@@ -2405,6 +2406,7 @@ release of librdkafka.
 | 24     | AddPartitionsToTxn           | 5         | 0              |
 | 25     | AddOffsetsToTxn              | 4         | 0              |
 | 26     | EndTxn                       | 5         | 1              |
+| 27     | WriteTxnMarkers              | 2         | 1              |
 | 28     | TxnOffsetCommit              | 5         | 3              |
 | 29     | DescribeAcls                 | 3         | 2              |
 | 30     | CreateAcls                   | 3         | 2              |
@@ -2419,6 +2421,9 @@ release of librdkafka.
 | 47     | OffsetDelete                 | 0         | 0              |
 | 50     | DescribeUserScramCredentials | 0         | 0              |
 | 51     | AlterUserScramCredentials    | 0         | 0              |
+| 61     | DescribeProducers            | 0         | 0              |
+| 65     | DescribeTransactions         | 0         | 0              |
+| 66     | ListTransactions             | 2         | 2              |
 | 68     | ConsumerGroupHeartbeat       | 1         | 1              |
 | 69     | ConsumerGroupDescribe        | 1         | 0              |
 | 71     | GetTelemetrySubscriptions    | 0         | 0              |

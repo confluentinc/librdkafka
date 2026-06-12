@@ -234,6 +234,10 @@
     <ClCompile Include="..\..\tests\0151-purge-brokers.c" />
     <ClCompile Include="..\..\tests\0152-rebootstrap.c" />
     <ClCompile Include="..\..\tests\0153-memberid.c" />
+    <ClCompile Include="..\..\tests\0154-list_transactions.c" />
+    <ClCompile Include="..\..\tests\0155-describe_transactions.c" />
+    <ClCompile Include="..\..\tests\0156-describe_producers.c" />
+    <ClCompile Include="..\..\tests\0157-abort_transaction.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

@@ -365,6 +365,61 @@ rd_kafka_error_t *rd_kafka_ListGroupsRequest(rd_kafka_broker_t *rkb,
                                              void *opaque);
 
 rd_kafka_error_t *
+rd_kafka_ListTransactionsRequest(rd_kafka_broker_t *rkb,
+                                 const char **states,
+                                 size_t states_cnt,
+                                 const int64_t *producer_ids,
+                                 size_t producer_ids_cnt,
+                                 int64_t duration_filter_ms,
+                                 const char *transactional_id_pattern,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque);
+
+rd_kafka_error_t *
+rd_kafka_DescribeTransactionsRequest(rd_kafka_broker_t *rkb,
+                                     const char **transactional_ids,
+                                     size_t transactional_ids_cnt,
+                                     rd_kafka_replyq_t replyq,
+                                     rd_kafka_resp_cb_t *resp_cb,
+                                     void *opaque);
+
+rd_kafka_resp_err_t
+rd_kafka_DescribeProducersRequest(rd_kafka_broker_t *rkb,
+                                  /*(rd_kafka_topic_partition_list_t*)*/
+                                  const rd_list_t *partitions_list,
+                                  rd_kafka_AdminOptions_t *options,
+                                  char *errstr,
+                                  size_t errstr_size,
+                                  rd_kafka_replyq_t replyq,
+                                  rd_kafka_resp_cb_t *resp_cb,
+                                  void *opaque);
+
+/**
+ * @struct Partition info for WriteTxnMarkers request.
+ *         Used to pass abort transaction data from admin layer to request.
+ */
+typedef struct rd_kafka_WriteTxnMarkerPartition_s {
+        const char *topic;
+        int32_t partition;
+        int64_t producer_id;
+        int32_t producer_epoch;
+        int32_t coordinator_epoch;
+        int64_t txn_start_offset;
+} rd_kafka_WriteTxnMarkerPartition_t;
+
+rd_kafka_resp_err_t
+rd_kafka_WriteTxnMarkersRequest(rd_kafka_broker_t *rkb,
+                                /*(rd_kafka_WriteTxnMarkerPartition_t**)*/
+                                const rd_list_t *partitions_list,
+                                rd_kafka_AdminOptions_t *options,
+                                char *errstr,
+                                size_t errstr_size,
+                                rd_kafka_replyq_t replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque);
+
+rd_kafka_error_t *
 rd_kafka_DescribeGroupsRequest(rd_kafka_broker_t *rkb,
                                int16_t max_ApiVersion,
                                char **groups,

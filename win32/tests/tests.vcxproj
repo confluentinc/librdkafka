@@ -258,7 +258,12 @@
     <ClCompile Include="..\..\tests\0184-share_consumer_topic_recreate.c" />
     <ClCompile Include="..\..\tests\0185-share_consumer_max_poll_interval.c" />
     <ClCompile Include="..\..\tests\0186-share_consumer_fatal_error.c" />
+    <ClCompile Include="..\..\tests\0187-share_consumer_assignment_routing.c" />
+    <ClCompile Include="..\..\tests\0188-share_consumer_consume_batch_timeout.c" />
+    <ClCompile Include="..\..\tests\0189-share_consumer_fanout_no_broker_mock.c" />
     <ClCompile Include="..\..\tests\0190-share_consumer_telemetry.c" />
+    <ClCompile Include="..\..\tests\0191-share_consumer_consume_flow_mock.c" />
+    <ClCompile Include="..\..\tests\0192-share_consumer_decommission_mock.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

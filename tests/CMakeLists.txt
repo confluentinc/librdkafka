@@ -167,7 +167,10 @@ set(
     0186-share_consumer_fatal_error.c
     0187-share_consumer_assignment_routing.c
     0188-share_consumer_consume_batch_timeout.c
+    0189-share_consumer_fanout_no_broker_mock.c
     0190-share_consumer_telemetry.c
+    0191-share_consumer_consume_flow_mock.c
+    0192-share_consumer_decommission_mock.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

@@ -425,7 +425,8 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         rd_kafka_topic_partition_list_t *commit_result = NULL;
         const char *topic         = "0179-destroy-cached-acks-delayed-broker";
         const char *group         = "0179-destroy-cached-acks";
@@ -460,8 +461,8 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
                  MAX_CONSUME_ATTEMPTS);
         while (rcvd < 10 && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error             = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -497,7 +498,7 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         /* Step 1: Acknowledge first 2 messages and commit async */
         TEST_SAY(
             "Step 1: Acknowledging messages 0-1 and calling commit_async\n");
-        ack_range_logged(rkshare, rkmessages, 0, 2, (int)rcvd);
+        ack_range_logged(rkshare, rkmessages_acc.msgs, 0, 2, (int)rcvd);
         /* The below call should keep the broker busy */
         rd_kafka_share_commit_async(rkshare);
 
@@ -505,14 +506,14 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
         TEST_SAY(
             "Step 2: Acknowledging messages 2-5 and calling commit_async "
             "(should cache)\n");
-        ack_range_logged(rkshare, rkmessages, 2, 6, (int)rcvd);
+        ack_range_logged(rkshare, rkmessages_acc.msgs, 2, 6, (int)rcvd);
         rd_kafka_share_commit_async(rkshare);
 
         /* Step 3: Acknowledge next 4 messages and commit sync */
         TEST_SAY(
             "Step 3: Acknowledging messages 6-9 and calling "
             "commit_sync (should cache)\n");
-        ack_range_logged(rkshare, rkmessages, 6, 10, (int)rcvd);
+        ack_range_logged(rkshare, rkmessages_acc.msgs, 6, 10, (int)rcvd);
 
         rd_kafka_share_commit_sync(rkshare, 1000, &commit_result);
         TEST_ASSERT(commit_result != NULL,
@@ -532,9 +533,7 @@ test_destroy_with_cached_acks_and_delayed_broker(int destroy_flags) {
 
         /* Destroy all consumed messages */
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        TEST_SAY("Calling destroy with flags 0x%x\n", destroy_flags);
+                TEST_SAY("Calling destroy with flags 0x%x\n", destroy_flags);
         t_start = test_clock();
         destroy_share_consumer(rkshare, destroy_flags);
         t_elapsed_ms = (test_clock() - t_start) / 1000;
@@ -700,7 +699,8 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         rd_kafka_topic_partition_list_t *result = NULL;
         const char *topic;
         const char *group           = "0179-decommission-commit-sync";
@@ -755,8 +755,8 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
         while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
 
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -771,7 +771,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                                 size_t k;
                                 for (k = rcvd - batch_rcvd; k < rcvd; k++)
                                         rd_kafka_share_acknowledge(
-                                            rkshare, rkmessages[k]);
+                                            rkshare, rkmessages_acc.msgs[k]);
                         }
                 }
                 attempts++;
@@ -784,7 +784,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
 
         /* The last message of the last batch tells us which broker
          * holds the unacked records that commit_sync will ship to. */
-        target_partition    = rkmessages[rcvd - 1]->partition;
+        target_partition    = rkmessages_acc.msgs[rcvd - 1]->partition;
         target_broker_id    = (target_partition == 0) ? 1 : 2;
         surviving_broker_id = (target_broker_id == 1) ? 2 : 1;
         TEST_SAY("Target partition = %" PRId32 ", target broker = %" PRId32
@@ -835,9 +835,7 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
 
         /* Cleanup */
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        destroy_share_consumer(rkshare, destroy_flags);
+                destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
 
         /* Restore the default fatal-error handler. */
@@ -874,7 +872,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         const char *topic;
         const char *group           = "0179-decommission-consume-batch";
         int32_t target_broker_id    = -1;
@@ -933,8 +932,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
 
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -956,7 +955,7 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         /* The last message of the last batch tells us which broker
          * holds the unacked records — that's the broker the next
          * consume_batch's piggybacked ShareAck will target. */
-        target_partition    = rkmessages[rcvd - 1]->partition;
+        target_partition    = rkmessages_acc.msgs[rcvd - 1]->partition;
         target_broker_id    = (target_partition == 0) ? 1 : 2;
         surviving_broker_id = (target_broker_id == 1) ? 2 : 1;
         TEST_SAY("Target partition = %" PRId32 ", target broker = %" PRId32
@@ -964,8 +963,7 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
                  target_partition, target_broker_id, surviving_broker_id);
 
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-        rcvd = 0;
+                rcvd = 0;
 
         rd_kafka_mock_broker_push_request_error_rtts(
             mcluster, target_broker_id, RD_KAFKAP_ShareFetch, 1,
@@ -985,9 +983,8 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         TEST_SAY(
             "Calling consume_batch — expecting no messages and no "
             "app-visible error\n");
-        fetch_rcvd = CONSUME_ARRAY;
-        error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages + rcvd,
-                                             &fetch_rcvd);
+        error      = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+        fetch_rcvd = rkmessages_acc.cnt - rcvd;
 
         TEST_ASSERT(error == NULL,
                     "Expected consume_batch to return NULL error, got %s",
@@ -1032,6 +1029,7 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
         /* Restore the default fatal-error handler. */
         test_curr->is_fatal_cb = NULL;
 
+        test_share_batch_destroy(&rkmessages_acc);
         SUB_TEST_PASS();
 }
 
@@ -1062,7 +1060,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         const char *topic;
         const char *group           = "0179-decommission-close";
         int32_t target_broker_id    = -1;
@@ -1123,8 +1122,8 @@ static void test_broker_decommission_during_close(int destroy_flags,
         while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
 
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -1139,7 +1138,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
                                 size_t k;
                                 for (k = rcvd - batch_rcvd; k < rcvd; k++)
                                         rd_kafka_share_acknowledge(
-                                            rkshare, rkmessages[k]);
+                                            rkshare, rkmessages_acc.msgs[k]);
                         }
                 }
                 attempts++;
@@ -1155,7 +1154,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
          * holds the unacked records — that's the broker close()'s
          * ShareAck will target. Decommission that broker; the other
          * survives. */
-        target_partition    = rkmessages[rcvd - 1]->partition;
+        target_partition    = rkmessages_acc.msgs[rcvd - 1]->partition;
         target_broker_id    = (target_partition == 0) ? 1 : 2;
         surviving_broker_id = (target_broker_id == 1) ? 2 : 1;
         TEST_SAY("Target partition = %" PRId32 ", target broker = %" PRId32
@@ -1218,9 +1217,7 @@ static void test_broker_decommission_during_close(int destroy_flags,
 
         /* Cleanup */
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        destroy_share_consumer(rkshare, destroy_flags);
+                destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
 
         ack_receipts_destroy(&receipts);
@@ -1255,7 +1252,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         const char *topic;
         const char *group           = "0179-decommission-commit-async";
         int32_t target_broker_id    = -1;
@@ -1319,8 +1317,8 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
         while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
 
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -1335,7 +1333,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
                                 size_t k;
                                 for (k = rcvd - batch_rcvd; k < rcvd; k++)
                                         rd_kafka_share_acknowledge(
-                                            rkshare, rkmessages[k]);
+                                            rkshare, rkmessages_acc.msgs[k]);
                         }
                 }
                 attempts++;
@@ -1351,7 +1349,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
          * holds the unacked records — that's the broker the
          * commit_async ShareAck will target. Decommission that broker;
          * the other survives. */
-        target_partition    = rkmessages[rcvd - 1]->partition;
+        target_partition    = rkmessages_acc.msgs[rcvd - 1]->partition;
         target_broker_id    = (target_partition == 0) ? 1 : 2;
         surviving_broker_id = (target_broker_id == 1) ? 2 : 1;
         TEST_SAY("Target partition = %" PRId32 ", target broker = %" PRId32
@@ -1377,9 +1375,7 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
 
         /* Cleanup messages before destroy. */
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        destroy_share_consumer(rkshare, destroy_flags);
+                destroy_share_consumer(rkshare, destroy_flags);
         test_mock_cluster_destroy(mcluster);
 
         /* Assert ack callback receipts.
@@ -1420,7 +1416,8 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         const char *topic        = "0179-leader-migration-mid-session";
         const char *group        = "0179-leader-migration-mid-session";
         const int msgs_per_round = 5;
@@ -1457,8 +1454,8 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         while (rcvd < (size_t)msgs_per_round &&
                attempts++ < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error             = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
                 if (error)
                         rd_kafka_error_destroy(error);
                 else
@@ -1491,8 +1488,8 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         while (rcvd < (size_t)(2 * msgs_per_round) &&
                attempts++ < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error             = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
                 if (error)
                         rd_kafka_error_destroy(error);
                 else
@@ -1504,14 +1501,14 @@ static void test_leader_migration_mid_session_destroy(int destroy_flags) {
         TEST_SAY("Round 2: consumed %d total messages\n", (int)rcvd);
 
         for (i = 0; i < rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        /* Close + destroy. Without the leader-migration fix, broker 1's
-         * destroy_final would assert on non-empty toppars_in_session. */
-        TEST_SAY("Calling destroy (flags 0x%x)\n", destroy_flags);
+                /* Close + destroy. Without the leader-migration fix, broker 1's
+                 * destroy_final would assert on non-empty toppars_in_session.
+                 */
+                TEST_SAY("Calling destroy (flags 0x%x)\n", destroy_flags);
         destroy_share_consumer(rkshare, destroy_flags);
 
         test_mock_cluster_destroy(mcluster);
+        test_share_batch_destroy(&rkmessages_acc);
         SUB_TEST_PASS();
 }
 
@@ -1534,7 +1531,8 @@ static void test_destroy_during_rebalance(int destroy_flags) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         const char *topic            = "0179-destroy-during-rebalance";
         const char *group            = "0179-destroy-during-rebalance";
         const int heartbeat_delay_ms = 10000;
@@ -1564,9 +1562,9 @@ static void test_destroy_during_rebalance(int destroy_flags) {
 
         TEST_SAY("Waiting for first batch (signals assignment is live)\n");
         while (rcvd == 0 && attempts++ < MAX_CONSUME_ATTEMPTS) {
-                size_t batch_rcvd = CONSUME_ARRAY;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &batch_rcvd);
+                size_t batch_rcvd;
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
                 if (error)
                         rd_kafka_error_destroy(error);
                 else
@@ -1577,13 +1575,11 @@ static void test_destroy_during_rebalance(int destroy_flags) {
                     "got %d after %d attempts",
                     (int)rcvd, attempts);
         for (i = 0; i < rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        /* Block all subsequent ShareGroupHeartbeats. The next heartbeat
-         * sent by the cgrp (including the leave-group heartbeat) will be
-         * stuck in flight for heartbeat_delay_ms. */
-        TEST_SAY("Injecting %dms RTT delay on ShareGroupHeartbeat\n",
-                 heartbeat_delay_ms);
+                /* Block all subsequent ShareGroupHeartbeats. The next heartbeat
+                 * sent by the cgrp (including the leave-group heartbeat) will
+                 * be stuck in flight for heartbeat_delay_ms. */
+                TEST_SAY("Injecting %dms RTT delay on ShareGroupHeartbeat\n",
+                         heartbeat_delay_ms);
         TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
                         mcluster, 1, RD_KAFKAP_ShareGroupHeartbeat, 1,
                         RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1622,6 +1618,7 @@ static void test_destroy_during_rebalance(int destroy_flags) {
         }
 
         test_mock_cluster_destroy(mcluster);
+        test_share_batch_destroy(&rkmessages_acc);
         SUB_TEST_PASS();
 }
 
@@ -1649,7 +1646,8 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
         rd_kafka_t *rk;
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         const char *topic            = "0179-destroy-fatal-error";
         const char *group            = "0179-destroy-fatal-error";
         const int total_msgs         = 10;
@@ -1679,8 +1677,8 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
         TEST_SAY("Consuming %d msgs\n", total_msgs);
         while (rcvd < (size_t)total_msgs && attempts++ < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error             = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
                 if (error)
                         rd_kafka_error_destroy(error);
                 else
@@ -1693,7 +1691,7 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
         TEST_SAY("Acknowledging %d/%d messages (no commit)\n", (int)(rcvd / 2),
                  (int)rcvd);
         for (i = 0; i < rcvd / 2; i++)
-                rd_kafka_share_acknowledge(rkshare, rkmessages[i]);
+                rd_kafka_share_acknowledge(rkshare, rkmessages_acc.msgs[i]);
 
         /* Inject a long delay on the next ShareAcknowledge so a normal
          * close path would block on it. The fatal-error path must NOT
@@ -1715,10 +1713,8 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
 
         /* Destroy all consumed messages before share_destroy. */
         for (i = 0; i < rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        TEST_SAY("Calling destroy with flags 0x%x (fatal-error path)\n",
-                 destroy_flags);
+                TEST_SAY("Calling destroy with flags 0x%x (fatal-error path)\n",
+                         destroy_flags);
         t_start = test_clock();
         destroy_share_consumer(rkshare, destroy_flags);
         t_elapsed_ms = (test_clock() - t_start) / 1000;
@@ -1731,6 +1727,7 @@ static void test_destroy_with_fatal_error(int destroy_flags) {
                     t_elapsed_ms);
 
         test_mock_cluster_destroy(mcluster);
+        test_share_batch_destroy(&rkmessages_acc);
         SUB_TEST_PASS();
 }
 
@@ -1754,7 +1751,8 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
         const char *group = "0179-destroy-explicit-ack";
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         size_t rcvd               = 0;
         size_t first_batch_cnt    = 0;
         int32_t first_batch_part  = -1;
@@ -1801,8 +1799,8 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
                  MAX_CONSUME_ATTEMPTS);
         while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error             = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -1819,7 +1817,8 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
                                 first_batch_cnt = batch_rcvd;
                                 for (k = 0; k < batch_rcvd; k++)
                                         rd_kafka_share_acknowledge(
-                                            rkshare, rkmessages[rcvd + k]);
+                                            rkshare,
+                                            rkmessages_acc.msgs[rcvd + k]);
                         }
                         rcvd += batch_rcvd;
                 }
@@ -1834,7 +1833,7 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
                     TEST_MSGS / 2, (int)first_batch_cnt);
 
         drain_ack_callbacks(rkshare);
-        first_batch_part  = rkmessages[0]->partition;
+        first_batch_part  = rkmessages_acc.msgs[0]->partition;
         second_batch_part = (first_batch_part == 0) ? 1 : 0;
         TEST_SAY("Consumed %d messages (first batch on partition %" PRId32
                  ", second batch on partition %" PRId32 ")\n",
@@ -1852,7 +1851,7 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
                 int k;
                 for (k = 0; k < second_to_ack; k++)
                         rd_kafka_share_acknowledge(
-                            rkshare, rkmessages[first_batch_cnt + k]);
+                            rkshare, rkmessages_acc.msgs[first_batch_cnt + k]);
                 ack_cnt = (int)first_batch_cnt + second_to_ack;
                 TEST_SAY(
                     "Acked first batch (%d) + second batch (%d) = %d / "
@@ -1862,9 +1861,7 @@ static void do_test_destroy_with_explicit_ack(int destroy_flags,
 
         /* Destroy all consumed messages (acked and unacked alike). */
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        destroy_share_consumer(rkshare, destroy_flags);
+                destroy_share_consumer(rkshare, destroy_flags);
 
         /* Assert ack callback receipts.
          *
@@ -1918,7 +1915,8 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
         const char *group = "0179-destroy-implicit-ack";
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        test_share_batch_t rkmessages_acc;
+        test_share_batch_init(&rkmessages_acc, CONSUME_ARRAY);
         size_t rcvd               = 0;
         size_t first_batch_cnt    = 0;
         int32_t first_batch_part  = -1;
@@ -1961,8 +1959,8 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
                  MAX_CONSUME_ATTEMPTS);
         while (rcvd < TEST_MSGS && attempts < MAX_CONSUME_ATTEMPTS) {
                 size_t batch_rcvd = CONSUME_ARRAY - rcvd;
-                error             = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                error = test_share_batch_poll(&rkmessages_acc, rkshare, 3000);
+                batch_rcvd = rkmessages_acc.cnt - rcvd;
 
                 if (error) {
                         TEST_SAY("Attempt %d: consume error: %s\n", attempts,
@@ -1984,7 +1982,7 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
         TEST_ASSERT(first_batch_cnt == TEST_MSGS / 2,
                     "Expected first batch == TEST_MSGS/2 (%d), got %d",
                     TEST_MSGS / 2, (int)first_batch_cnt);
-        first_batch_part  = rkmessages[0]->partition;
+        first_batch_part  = rkmessages_acc.msgs[0]->partition;
         second_batch_part = (first_batch_part == 0) ? 1 : 0;
         TEST_SAY("Consumed %d messages (first batch on partition %" PRId32
                  ", second batch on partition %" PRId32 ")\n",
@@ -1996,9 +1994,7 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
 
         /* Destroy all consumed messages before share_destroy. */
         for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
-
-        destroy_share_consumer(rkshare, destroy_flags);
+                destroy_share_consumer(rkshare, destroy_flags);
 
         /* Assert ack callback receipts.
          *
@@ -2020,6 +2016,7 @@ static void do_test_destroy_with_implicit_ack(int destroy_flags) {
 
         ack_receipts_destroy(&receipts);
 
+        test_share_batch_destroy(&rkmessages_acc);
         SUB_TEST_PASS();
 }
 
@@ -2086,7 +2083,7 @@ static void do_test_destroy_with_mixed_acks_and_commits(int destroy_flags) {
         const char *group = "0179-destroy-mixed";
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *partitions = NULL;
-        rd_kafka_message_t *batch[64];
+        rd_kafka_messages_t *batch                  = NULL;
         rd_kafka_error_t *close_err;
         thrd_t destroy_thr;
         destroy_watchdog_arg_t arg;
@@ -2127,7 +2124,8 @@ static void do_test_destroy_with_mixed_acks_and_commits(int destroy_flags) {
         while (acked < target && attempts++ < 80) {
                 rd_kafka_error_t *err;
                 rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 3000, batch, &rcvd);
+                err  = rd_kafka_share_poll(rkshare, 3000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
@@ -2137,13 +2135,11 @@ static void do_test_destroy_with_mixed_acks_and_commits(int destroy_flags) {
                         rd_kafka_resp_err_t aerr;
                         rd_kafka_error_t *cerr;
 
-                        if (batch[j]->err) {
-                                rd_kafka_message_destroy(batch[j]);
+                        if (rd_kafka_messages_get(batch, j)->err) {
                                 continue;
                         }
 
                         if (acked >= target) {
-                                rd_kafka_message_destroy(batch[j]);
                                 continue;
                         }
 
@@ -2159,11 +2155,10 @@ static void do_test_destroy_with_mixed_acks_and_commits(int destroy_flags) {
                                 break;
                         }
 
-                        aerr = rd_kafka_share_acknowledge_type(rkshare,
-                                                               batch[j], at);
+                        aerr = rd_kafka_share_acknowledge_type(
+                            rkshare, rd_kafka_messages_get(batch, j), at);
                         TEST_ASSERT(!aerr, "acknowledge_type(%d) failed: %s",
                                     (int)at, rd_kafka_err2str(aerr));
-                        rd_kafka_message_destroy(batch[j]);
                         acked++;
 
                         if (acked % 5 == 0) {

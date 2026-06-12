@@ -120,7 +120,7 @@ static rd_kafka_share_t *create_topic_delete_consumer(const char *group,
 
 static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[1024];
+        rd_kafka_messages_t *batch               = NULL;
         rd_kafka_topic_partition_list_t *results = NULL;
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t del_err;
@@ -175,30 +175,36 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
          * records and that every partition is represented. */
         while (total < TD_TOTAL && attempts-- > 0) {
                 size_t n = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 2000, batch, &n);
+                error    = rd_kafka_share_poll(rkshare, 2000, &batch);
+                n        = rd_kafka_messages_count(batch);
                 TEST_ASSERT(!error, "consume_batch failed: %s",
                             rd_kafka_error_string(error));
                 TEST_SAY("Phase 1: got %" PRIusz " record(s), total %d/%d\n", n,
                          total + (int)n, TD_TOTAL);
                 for (m = 0; m < n; m++) {
-                        TEST_ASSERT(!strcmp(rd_kafka_topic_name(batch[m]->rkt),
-                                            topic_del),
-                                    "Phase 1 record from unexpected topic %s",
-                                    rd_kafka_topic_name(batch[m]->rkt));
-                        TEST_ASSERT(batch[m]->partition >= 0 &&
-                                        batch[m]->partition < TD_NPART,
-                                    "Unexpected partition %" PRId32,
-                                    batch[m]->partition);
-                        part_cnt[batch[m]->partition]++;
+                        TEST_ASSERT(
+                            !strcmp(rd_kafka_topic_name(
+                                        rd_kafka_messages_get(batch, m)->rkt),
+                                    topic_del),
+                            "Phase 1 record from unexpected topic %s",
+                            rd_kafka_topic_name(
+                                rd_kafka_messages_get(batch, m)->rkt));
+                        TEST_ASSERT(
+                            rd_kafka_messages_get(batch, m)->partition >= 0 &&
+                                rd_kafka_messages_get(batch, m)->partition <
+                                    TD_NPART,
+                            "Unexpected partition %" PRId32,
+                            rd_kafka_messages_get(batch, m)->partition);
+                        part_cnt[rd_kafka_messages_get(batch, m)->partition]++;
                         if (explicit_ack) {
                                 rd_kafka_resp_err_t ack_err =
-                                    rd_kafka_share_acknowledge(rkshare,
-                                                               batch[m]);
+                                    rd_kafka_share_acknowledge(
+                                        rkshare,
+                                        rd_kafka_messages_get(batch, m));
                                 TEST_ASSERT(!ack_err, "acknowledge failed: %s",
                                             rd_kafka_err2str(ack_err));
                         }
                         total++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
         TEST_ASSERT(total == TD_TOTAL, "Expected %d records, got %d", TD_TOTAL,
@@ -279,8 +285,8 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
         attempts = 60;
         while (attempts-- > 0) {
                 size_t got = 0;
-                error =
-                    rd_kafka_share_consume_batch(rkshare, 1000, batch, &got);
+                error      = rd_kafka_share_poll(rkshare, 1000, &batch);
+                got        = rd_kafka_messages_count(batch);
                 TEST_ASSERT(!error, "consume_batch failed: %s",
                             rd_kafka_error_string(error));
                 TEST_SAY("Phase 2: got %" PRIusz
@@ -297,15 +303,18 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                 idle_polls = 0;
                 for (m = 0; m < got; m++) {
                         TEST_ASSERT(
-                            !strcmp(rd_kafka_topic_name(batch[m]->rkt),
+                            !strcmp(rd_kafka_topic_name(
+                                        rd_kafka_messages_get(batch, m)->rkt),
                                     topic_keep),
                             "Phase 2 returned a record from %s; only %s "
                             "should remain",
-                            rd_kafka_topic_name(batch[m]->rkt), topic_keep);
+                            rd_kafka_topic_name(
+                                rd_kafka_messages_get(batch, m)->rkt),
+                            topic_keep);
                         if (explicit_ack)
-                                rd_kafka_share_acknowledge(rkshare, batch[m]);
+                                rd_kafka_share_acknowledge(
+                                    rkshare, rd_kafka_messages_get(batch, m));
                         keep_rcvd++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
         TEST_ASSERT(keep_rcvd == TD_KEEP_MSGS,

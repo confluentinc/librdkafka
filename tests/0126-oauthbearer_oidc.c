@@ -106,7 +106,7 @@ do_test_produce_share_consumer_with_OIDC(const char *test_name,
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[500];
+        rd_kafka_messages_t *batch = NULL;
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         int consumed           = 0, attempts;
         const int msg_cnt      = 10;
@@ -157,16 +157,16 @@ do_test_produce_share_consumer_with_OIDC(const char *test_name,
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(sc1, 3000, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 3000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        if (!rd_kafka_messages_get(batch, m)->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
 
@@ -244,8 +244,8 @@ static void do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
     const rd_kafka_conf_t *base_conf) {
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
-        rd_kafka_message_t *batch[10];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *batch = NULL;
+        size_t rcvd                = 0;
         rd_kafka_error_t *err;
         char errstr[512];
 
@@ -274,7 +274,8 @@ static void do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
         TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
 
         /* Poll — should trigger auth error callback, no messages expected */
-        err = rd_kafka_share_consume_batch(sc1, 10 * 1000, batch, &rcvd);
+        err  = rd_kafka_share_poll(sc1, 10 * 1000, &batch);
+        rcvd = rd_kafka_messages_count(batch);
         if (err)
                 rd_kafka_error_destroy(err);
 
@@ -384,8 +385,8 @@ do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
     const rd_kafka_conf_t *base_conf) {
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
-        rd_kafka_message_t *batch[10];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *batch = NULL;
+        size_t rcvd                = 0;
         rd_kafka_error_t *err;
         char errstr[512];
 
@@ -413,7 +414,8 @@ do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
         TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
 
         /* Poll — should trigger auth error callback, no messages expected */
-        err = rd_kafka_share_consume_batch(sc1, 10 * 1000, batch, &rcvd);
+        err  = rd_kafka_share_poll(sc1, 10 * 1000, &batch);
+        rcvd = rd_kafka_messages_count(batch);
         if (err)
                 rd_kafka_error_destroy(err);
 
@@ -565,8 +567,8 @@ static void do_test_produce_share_consumer_with_OIDC_should_fail(
     const rd_kafka_conf_t *base_conf) {
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
-        rd_kafka_message_t *batch[10];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *batch = NULL;
+        size_t rcvd                = 0;
         rd_kafka_error_t *err;
         char errstr[512];
 
@@ -591,7 +593,8 @@ static void do_test_produce_share_consumer_with_OIDC_should_fail(
         sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
 
-        err = rd_kafka_share_consume_batch(sc1, 5 * 1000, batch, &rcvd);
+        err  = rd_kafka_share_poll(sc1, 5 * 1000, &batch);
+        rcvd = rd_kafka_messages_count(batch);
         if (err)
                 rd_kafka_error_destroy(err);
 

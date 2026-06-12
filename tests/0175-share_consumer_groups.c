@@ -144,7 +144,7 @@ static void subscribe_all_consumers(groups_test_config_t *config,
  */
 static void consume_from_all_groups(groups_test_config_t *config,
                                     groups_test_state_t *state) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         int attempts;
         int g, c;
@@ -175,8 +175,9 @@ static void consume_from_all_groups(groups_test_config_t *config,
                         for (c = 0; c < config->consumers_per_group[g]; c++) {
                                 rcvd = 0;
 
-                                err = rd_kafka_share_consume_batch(
-                                    state->consumers[g][c], 500, batch, &rcvd);
+                                err = rd_kafka_share_poll(
+                                    state->consumers[g][c], 500, &batch);
+                                rcvd = rd_kafka_messages_count(batch);
                                 if (err) {
                                         TEST_SAY(
                                             "Group %d consumer %d: "
@@ -187,9 +188,9 @@ static void consume_from_all_groups(groups_test_config_t *config,
                                 }
 
                                 for (m = 0; m < rcvd; m++) {
-                                        if (!batch[m]->err)
+                                        if (!rd_kafka_messages_get(batch, m)
+                                                 ->err)
                                                 state->consumed[g]++;
-                                        rd_kafka_message_destroy(batch[m]);
                                 }
                                 round_consumed += (int)rcvd;
                         }
@@ -424,7 +425,7 @@ static void do_test_five_groups_same_topic(void) {
 static void do_test_groups_staggered_join(void) {
         rd_kafka_share_t *consumer_a, *consumer_b;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         const char *topic;
         const char *group_a = "share-stagger-A";
@@ -466,8 +467,8 @@ static void do_test_groups_staggered_join(void) {
         while (consumed_a < msg_cnt / 2 && attempts-- > 0) {
                 rcvd = 0;
 
-                err = rd_kafka_share_consume_batch(consumer_a, 1000, batch,
-                                                   &rcvd);
+                err  = rd_kafka_share_poll(consumer_a, 1000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         TEST_SAY("Group A: share_consume_batch failed: %s\n",
                                  rd_kafka_error_string(err));
@@ -475,9 +476,8 @@ static void do_test_groups_staggered_join(void) {
                         continue;
                 }
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        if (!rd_kafka_messages_get(batch, m)->err)
                                 consumed_a++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
         TEST_SAY("Group A consumed %d so far\n", consumed_a);
@@ -496,13 +496,13 @@ static void do_test_groups_staggered_join(void) {
                 rcvd = 0;
 
                 if (consumed_a < msg_cnt) {
-                        err = rd_kafka_share_consume_batch(consumer_a, 500,
-                                                           batch, &rcvd);
+                        err  = rd_kafka_share_poll(consumer_a, 500, &batch);
+                        rcvd = rd_kafka_messages_count(batch);
                         if (!err) {
                                 for (m = 0; m < rcvd; m++) {
-                                        if (!batch[m]->err)
+                                        if (!rd_kafka_messages_get(batch, m)
+                                                 ->err)
                                                 consumed_a++;
-                                        rd_kafka_message_destroy(batch[m]);
                                 }
                         } else {
                                 TEST_SAY(
@@ -515,13 +515,13 @@ static void do_test_groups_staggered_join(void) {
 
                 rcvd = 0;
                 if (consumed_b < msg_cnt) {
-                        err = rd_kafka_share_consume_batch(consumer_b, 500,
-                                                           batch, &rcvd);
+                        err  = rd_kafka_share_poll(consumer_b, 500, &batch);
+                        rcvd = rd_kafka_messages_count(batch);
                         if (!err) {
                                 for (m = 0; m < rcvd; m++) {
-                                        if (!batch[m]->err)
+                                        if (!rd_kafka_messages_get(batch, m)
+                                                 ->err)
                                                 consumed_b++;
-                                        rd_kafka_message_destroy(batch[m]);
                                 }
                         } else {
                                 TEST_SAY(

@@ -117,7 +117,7 @@ void do_test_share_consumer(int64_t reauth_time) {
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[500];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         const char *group      = "share-reauth-test";
@@ -158,15 +158,15 @@ void do_test_share_consumer(int64_t reauth_time) {
         attempts = 50;
         rcvd     = 0;
         while (rcvd == 0 && attempts-- > 0) {
-                err = rd_kafka_share_consume_batch(sc1, 2000, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 2000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
         }
         TEST_ASSERT(rcvd > 0,
                     "Share consumer failed to join group "
                     "and consume warmup message");
-        for (m = 0; m < rcvd; m++)
-                rd_kafka_message_destroy(batch[m]);
+        rd_kafka_messages_destroy(batch);
         TEST_SAY("Share consumer joined group, starting reauth test\n");
 
         start_time = test_clock();
@@ -177,15 +177,15 @@ void do_test_share_consumer(int64_t reauth_time) {
                 test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
                 sent_cnt++;
 
-                err = rd_kafka_share_consume_batch(sc1, 100, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 100, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         rd_kafka_flush(p1, 50);
                 } else {
                         for (m = 0; m < rcvd; m++) {
-                                if (!batch[m]->err)
+                                if (!rd_kafka_messages_get(batch, m)->err)
                                         recv_cnt++;
-                                rd_kafka_message_destroy(batch[m]);
                         }
                 }
 
@@ -200,16 +200,16 @@ void do_test_share_consumer(int64_t reauth_time) {
         while (recv_cnt < sent_cnt && attempts-- > 0) {
                 rcvd = 0;
 
-                err = rd_kafka_share_consume_batch(sc1, 3000, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 3000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        if (!rd_kafka_messages_get(batch, m)->err)
                                 recv_cnt++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
 
@@ -382,7 +382,7 @@ void do_test_share_oauthbearer(int64_t reauth_time,
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[500];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
         const char *group      = "share-oauthbearer-reauth-test";
@@ -470,15 +470,15 @@ void do_test_share_oauthbearer(int64_t reauth_time,
         attempts = 50;
         rcvd     = 0;
         while (rcvd == 0 && attempts-- > 0) {
-                err = rd_kafka_share_consume_batch(sc1, 2000, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 2000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
         }
         TEST_ASSERT(rcvd > 0,
                     "Share consumer failed to join group "
                     "and consume warmup message");
-        for (m = 0; m < rcvd; m++)
-                rd_kafka_message_destroy(batch[m]);
+        rd_kafka_messages_destroy(batch);
         TEST_SAY(
             "Share consumer joined group, starting oauthbearer "
             "reauth test\n");
@@ -490,15 +490,15 @@ void do_test_share_oauthbearer(int64_t reauth_time,
                 test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
                 sent_cnt++;
 
-                err = rd_kafka_share_consume_batch(sc1, 100, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 100, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         rd_kafka_flush(p1, 50);
                 } else {
                         for (m = 0; m < rcvd; m++) {
-                                if (!batch[m]->err)
+                                if (!rd_kafka_messages_get(batch, m)->err)
                                         recv_cnt++;
-                                rd_kafka_message_destroy(batch[m]);
                         }
                 }
 
@@ -511,16 +511,16 @@ void do_test_share_oauthbearer(int64_t reauth_time,
         while (recv_cnt < sent_cnt && attempts-- > 0) {
                 rcvd = 0;
 
-                err = rd_kafka_share_consume_batch(sc1, 3000, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 3000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        if (!rd_kafka_messages_get(batch, m)->err)
                                 recv_cnt++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
 
@@ -689,7 +689,7 @@ void do_test_share_reauth_failure(int64_t reauth_time) {
         rd_kafka_share_t *sc1;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[500];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         const char *group = "share-reauth-failure-test";
         const char *topic = test_mk_topic_name("share_reauth_fail", 1);
@@ -738,15 +738,15 @@ void do_test_share_reauth_failure(int64_t reauth_time) {
         attempts = 50;
         rcvd     = 0;
         while (rcvd == 0 && attempts-- > 0) {
-                err = rd_kafka_share_consume_batch(sc1, 2000, batch, &rcvd);
+                err  = rd_kafka_share_poll(sc1, 2000, &batch);
+                rcvd = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
         }
         TEST_ASSERT(rcvd > 0,
                     "Share consumer failed to consume warmup message");
         for (m = 0; m < rcvd; m++)
-                rd_kafka_message_destroy(batch[m]);
-        TEST_SAY("Share consumer connected, producing messages\n");
+                TEST_SAY("Share consumer connected, producing messages\n");
 
         test_produce_msgs_simple(p1, topic, 0, 200);
         TEST_SAY("Produced messages\n");
@@ -763,13 +763,14 @@ void do_test_share_reauth_failure(int64_t reauth_time) {
         while ((test_clock() - start_time) <= wait_time) {
                 rcvd = 0;
 
-                err = rd_kafka_share_consume_batch(sc1, 100, batch, &rcvd);
+                batch = NULL;
+                err   = rd_kafka_share_poll(sc1, 100, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
+                (void)rcvd;
                 if (err) {
                         rd_kafka_error_destroy(err);
-                } else {
-                        for (m = 0; m < rcvd; m++)
-                                rd_kafka_message_destroy(batch[m]);
                 }
+                rd_kafka_messages_destroy(batch);
         }
 
         TEST_ASSERT(error_seen, "should have had an authentication error");

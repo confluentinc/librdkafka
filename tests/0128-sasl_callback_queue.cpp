@@ -179,10 +179,10 @@ static void do_test_share_consumer(bool use_background_queue) {
   } else {
     /* Poll via share_consume_batch — this serves the main queue
      * which should trigger the OAUTHBEARER refresh callback. */
-    rd_kafka_message_t *msgs[1];
-    size_t rcvd = 0;
-    rd_kafka_error_t *err =
-        rd_kafka_share_consume_batch(rkshare, 1000, msgs, &rcvd);
+    rd_kafka_messages_t *msgs = NULL;
+    size_t rcvd               = 0;
+    rd_kafka_error_t *err     = rd_kafka_share_poll(rkshare, 1000, &msgs);
+    rcvd                      = rd_kafka_messages_count(msgs);
     if (err)
       rd_kafka_error_destroy(err);
   }

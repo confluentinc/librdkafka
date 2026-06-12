@@ -202,19 +202,17 @@ int main(int argc, char **argv) {
          * since a rebalance may happen at any time.
          * Start polling for messages. */
 
-        rd_kafka_message_t *rkmessages[10001];
         while (run) {
-                rd_kafka_message_t *rkm = NULL;
-                size_t rcvd_msgs        = 0;
-                int i;
+                rd_kafka_messages_t *rkmessages = NULL;
+                size_t rcvd_msgs                = 0;
+                size_t i;
                 rd_kafka_error_t *error;
                 double __elapsed_ms;
 
-                TIME_BLOCK_MS(__elapsed_ms,
-                              error = rd_kafka_share_consume_batch(
-                                  rkshare, 3000, rkmessages, &rcvd_msgs));
+                TIME_BLOCK_MS(__elapsed_ms, error = rd_kafka_share_poll(
+                                                rkshare, 3000, &rkmessages));
                 fprintf(stdout,
-                        "%% rd_kafka_share_consume_batch() took "
+                        "%% rd_kafka_share_poll() took "
                         "%.3f ms\n",
                         __elapsed_ms);
 
@@ -222,19 +220,21 @@ int main(int argc, char **argv) {
                         fprintf(stderr, "%% Consume error: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(rkmessages);
                         continue;
                 }
 
+                rcvd_msgs = rd_kafka_messages_count(rkmessages);
                 fprintf(stderr, "%% Received %zu messages\n", rcvd_msgs);
-                for (i = 0; i < (int)rcvd_msgs; i++) {
-                        rkm = rkmessages[i];
+                for (i = 0; i < rcvd_msgs; i++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(rkmessages, i);
 
                         if (rkm->err) {
                                 fprintf(stderr,
                                         "%% Consumer error: %d: "
                                         "%s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
-                                rd_kafka_message_destroy(rkm);
                                 continue;
                         }
 
@@ -258,9 +258,8 @@ int main(int argc, char **argv) {
                                        (const char *)rkm->payload);
                         else if (rkm->payload)
                                 printf(" - Value: (%d bytes)\n", (int)rkm->len);
-
-                        rd_kafka_message_destroy(rkm);
                 }
+                rd_kafka_messages_destroy(rkmessages);
         }
 
 

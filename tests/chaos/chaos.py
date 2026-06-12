@@ -2596,15 +2596,26 @@ def main():
                          'records before tearing everything down')
     ap.add_argument('--consume-mode',
                     choices=['share-consumer-verify',
+                             'py-share-consumer-verify',
                              'rdkafka-perf-share',
                              'rdkafka-perf-group'],
                     default='share-consumer-verify',
                     help='[--mode auto only] Which producer + '
                          'consumer + verification bundle to run.\n'
                          '  share-consumer-verify (default): bundled '
-                         'share_consume_verify binary; emits per-'
+                         'share_consume_verify C binary; emits per-'
                          'record JSON events; verify.txt bookkeeping '
                          'report at the end.\n'
+                         '  py-share-consumer-verify: confluent-kafka-python '
+                         'share_consume_verify.py, run under the same '
+                         'interpreter as chaos.py (sys.executable). '
+                         'Emits the same per-record JSON events, so it '
+                         'produces the same verify.txt bookkeeping report. '
+                         'NOTE: the Python '
+                         'Message has no topic_id accessor yet, so the '
+                         'id field is the zero UUID; do not trust '
+                         'per-generation bookkeeping under --topic-chaos '
+                         'recreate-* with this mode.\n'
                          '  rdkafka-perf-share: rdkafka_performance '
                          '-S (KIP-932 share consumer); conservation + '
                          'partition-coverage reports.\n'
@@ -2778,6 +2789,7 @@ def main():
             extra_conf_args += ['-X', kv]
 
         verify_bin = None
+        py_verify_cmd = None
         if args.consume_mode == 'share-consumer-verify':
             verify_bin = os.path.join(_HERE, 'share_consume_verify')
             if not os.access(verify_bin, os.X_OK):
@@ -2786,14 +2798,51 @@ def main():
                       f'(or `make -C tests/chaos`).',
                       file=sys.stderr)
                 sys.exit(2)
+        elif args.consume_mode == 'py-share-consumer-verify':
+            # Run the Python workload under the same interpreter that runs
+            # chaos.py (sys.executable).
+            script = os.path.join(_HERE, 'share_consume_verify.py')
+            if not os.path.isfile(script):
+                print(f'[orch] FATAL: Python verify workload {script} not '
+                      f'found (expected next to chaos.py).',
+                      file=sys.stderr)
+                sys.exit(2)
+            # Fail fast with a clear message if ShareConsumer isn't
+            # importable in this interpreter, rather than letting every
+            # consumer subprocess crash-loop on the import.
+            try:
+                from confluent_kafka import (  # noqa: F401
+                    ShareConsumer as _Probe_ShareConsumer,
+                    AcknowledgeType as _Probe_AcknowledgeType,
+                )
+            except ImportError as e:
+                print(f'[orch] FATAL: cannot import '
+                      f'confluent_kafka.ShareConsumer in this interpreter '
+                      f'({sys.executable}): {e}\n'
+                      f'        Install a confluent-kafka-python build with '
+                      f'the KIP-932 ShareConsumer into the Python running '
+                      f'chaos.py.',
+                      file=sys.stderr)
+                sys.exit(2)
+            py_verify_cmd = [sys.executable, script]
 
         def spawn_consumer(idx):
             """Construct + start a ShareConsumer for the configured
             consume_mode. Called for the baseline pool and by the
             add-consumer REPL command / --rebalance triggers."""
             c = ShareConsumer(idx, args.log_dir, per_consumer_budget)
-            if args.consume_mode == 'share-consumer-verify':
-                cons_cmd = [verify_bin]
+            if args.consume_mode in ('share-consumer-verify',
+                                     'py-share-consumer-verify'):
+                # Both verify workloads parse the identical CLI
+                # (-d <debug>, -X k=v..., bootstrap group topics...) and
+                # emit the identical per-record JSON, so they share one
+                # arg tail. They differ only in the launch prefix: the C
+                # binary is invoked directly; the Python workload via
+                # [interp, script].
+                if args.consume_mode == 'share-consumer-verify':
+                    cons_cmd = [verify_bin]
+                else:
+                    cons_cmd = list(py_verify_cmd)
                 if args.consumer_debug:
                     cons_cmd += ['-d', args.consumer_debug]
                 cons_cmd += extra_conf_args
@@ -2959,10 +3008,8 @@ def main():
     summarize(consumers, os.path.join(args.log_dir, 'summary.txt'))
     metadata_trigger_report(
         consumers, os.path.join(args.log_dir, 'metadata_triggers.txt'))
-    if args.consume_mode == 'share-consumer-verify':
-        # This mode skips the rdkafka_performance-based reports
-        # (no `% N messages consumed` lines, no stats JSON file).
-        # The per-record bookkeeping subsumes both.
+    if args.consume_mode in ('share-consumer-verify',
+                             'py-share-consumer-verify'):
         bookkeeping_report(
             producers, consumers, topics, args.partitions,
             partition_hwms, drain_end_ts,

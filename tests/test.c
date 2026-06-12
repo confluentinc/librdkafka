@@ -315,7 +315,10 @@ _TEST_DECL(0185_share_consumer_max_poll_interval);
 _TEST_DECL(0186_share_consumer_fatal_error);
 _TEST_DECL(0187_share_consumer_assignment_routing);
 _TEST_DECL(0188_share_consumer_consume_batch_timeout);
+_TEST_DECL(0189_share_consumer_fanout_no_broker_mock);
 _TEST_DECL(0190_share_consumer_telemetry);
+_TEST_DECL(0191_share_consumer_consume_flow_mock);
+_TEST_DECL(0192_share_consumer_decommission_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -615,9 +618,12 @@ struct test tests[] = {
     _TEST(0188_share_consumer_consume_batch_timeout,
           0,
           TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0189_share_consumer_fanout_no_broker_mock, TEST_F_LOCAL),
     _TEST(0190_share_consumer_telemetry,
           TEST_F_MANUAL,
           TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0191_share_consumer_consume_flow_mock, TEST_F_LOCAL),
+    _TEST(0192_share_consumer_decommission_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

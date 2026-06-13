@@ -848,7 +848,6 @@ static void test_consume_batch_at_epoch_zero_strips_piggyback_acks(void) {
         size_t rcvd                      = 0;
         size_t share_ack_cnt;
         size_t share_fetch_cnt;
-        size_t j;
         int i;
         test_ack_cb_state_t cb_state = {0};
 
@@ -1057,7 +1056,6 @@ static void test_strip_pre_set_survives_sharefetch_err(void) {
         size_t rcvd                      = 0;
         size_t share_ack_cnt;
         size_t share_fetch_cnt;
-        size_t j;
         int i;
         test_ack_cb_state_t cb_state = {0};
 

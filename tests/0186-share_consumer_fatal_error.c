@@ -283,9 +283,9 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
          *    the synchronization point for that handling. */
         attempts = 0;
         while (attempts++ < 50) {
-                size_t rcvd = 0;
-                error       = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
-                rcvd        = rd_kafka_messages_count(rkmessages);
+                rd_kafka_messages_destroy(rkmessages);
+                rkmessages = NULL;
+                error      = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
                 if (error) {
                         TEST_ASSERT(rd_kafka_error_is_fatal(error),
                                     "expected a fatal error, got non-fatal %s",

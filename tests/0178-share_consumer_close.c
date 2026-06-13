@@ -762,14 +762,13 @@ static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
         rd_kafka_messages_t *batch = NULL;
-        size_t rcvd                = 0;
         rd_kafka_topic_partition_list_t *subs, *sub_result = NULL;
         rd_kafka_topic_partition_list_t *commit_results = NULL;
         rd_kafka_queue_t *queue                         = NULL;
 
         /* 1. consume_batch */
         error = rd_kafka_share_poll(consumer, 100, &batch);
-        rcvd  = rd_kafka_messages_count(batch);
+        rd_kafka_messages_destroy(batch);
         assert_state_error(error, "consume_batch");
 
         /* 2. commit_async */

@@ -195,7 +195,6 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
         size_t consumed_idx = 0;
         size_t share_ack_cnt;
         size_t metadata_cnt;
-        size_t j;
 
         SUB_TEST_QUICK();
 

@@ -2473,7 +2473,6 @@ reentrancy_check_cb(rd_kafka_share_t *rkshare,
         rd_kafka_error_t *error_obj;
         rd_kafka_resp_err_t resp_err;
         rd_kafka_messages_t *batch = NULL;
-        size_t rcvd                = 0;
         rd_kafka_topic_partition_list_t *subs;
 
         /* Update base state for callback tracking */
@@ -2488,7 +2487,7 @@ reentrancy_check_cb(rd_kafka_share_t *rkshare,
 
         /* Try rd_kafka_share_poll - should fail with _STATE */
         error_obj = rd_kafka_share_poll(rkshare, 100, &batch);
-        rcvd      = rd_kafka_messages_count(batch);
+        rd_kafka_messages_destroy(batch);
         if (error_obj &&
             rd_kafka_error_code(error_obj) == RD_KAFKA_RESP_ERR__STATE) {
                 st->rejections++;

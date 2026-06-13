@@ -893,17 +893,16 @@ typedef struct {
 static int consume_blocker_thread(void *arg) {
         blocker_arg_t *ba          = arg;
         rd_kafka_messages_t *batch = NULL;
-        size_t rcvd                = 0;
         rd_kafka_error_t *err;
 
         rd_atomic32_set(&ba->entering, 1);
 
         /* Blocks for ~5s waiting for messages that never arrive.
          * The share access gate is held for the full duration. */
-        err  = rd_kafka_share_poll(ba->consumer, 5000, &batch);
-        rcvd = rd_kafka_messages_count(batch);
+        err = rd_kafka_share_poll(ba->consumer, 5000, &batch);
         if (err)
                 rd_kafka_error_destroy(err);
+        rd_kafka_messages_destroy(batch);
         return 0;
 }
 
@@ -920,7 +919,6 @@ static void do_test_concurrent_thread_access_rejected(void) {
         thrd_t blocker;
         blocker_arg_t ba;
         rd_kafka_messages_t *batch = NULL;
-        size_t rcvd                = 0;
         rd_kafka_error_t *err      = NULL;
         int probe_attempt;
         const int probe_max_attempts = 50; /* 50 × 100ms = 5 s budget */
@@ -975,9 +973,9 @@ static void do_test_concurrent_thread_access_rejected(void) {
          * single-shot assertion flakes. */
         for (probe_attempt = 0; probe_attempt < probe_max_attempts;
              probe_attempt++) {
-                rcvd = 0;
-                err  = rd_kafka_share_poll(consumer, 0, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 0, &batch);
                 if (err &&
                     rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__CONFLICT)
                         break; /* observed the conflict — done */
@@ -1004,14 +1002,15 @@ static void do_test_concurrent_thread_access_rejected(void) {
         /* Sequential ownership transfer: gate is now free, the same
          * main thread should be able to call consume_batch without
          * hitting the gate. */
-        rcvd = 0;
-        err  = rd_kafka_share_poll(consumer, 0, &batch);
-        rcvd = rd_kafka_messages_count(batch);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        err   = rd_kafka_share_poll(consumer, 0, &batch);
         TEST_ASSERT(!err, "After blocker returned, gate should be free; got %s",
                     err ? rd_kafka_err2str(rd_kafka_error_code(err))
                         : "no error");
         if (err)
                 rd_kafka_error_destroy(err);
+        rd_kafka_messages_destroy(batch);
 
         TEST_SAY("Sequential ownership transfer works after release\n");
 
@@ -1574,7 +1573,6 @@ static void do_test_zero_byte_payload_and_key(void) {
         const char *topic;
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_messages_t *batch = NULL;
         rd_kafka_resp_err_t err;
         size_t rcvd = 0;
         int attempts;
@@ -1816,7 +1814,6 @@ static void do_test_many_and_large_headers(void) {
         const char *topic;
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_messages_t *batch = NULL;
         rd_kafka_resp_err_t err;
         const int hdr_cnt         = 100;
         const size_t big_hdr_size = 64 * 1024;

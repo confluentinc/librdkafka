@@ -94,8 +94,10 @@ static size_t _invalid_topic_cb(const rd_kafka_topic_partition_t *rktpar,
 
 
 /** @returns 1 if the topic is empty (invalid for the share consumer),
- *           else 0. Share consumer does not support regex/wildcard
- *           subscriptions; entries are forwarded verbatim to the broker. */
+ *           else 0. Share consumer subscriptions are plain topic names:
+ *           entries are forwarded to the broker verbatim and are never
+ *           expanded as regex/wildcards, so a leading '^' is treated as a
+ *           literal character rather than a pattern marker. */
 static size_t _share_invalid_topic_cb(const rd_kafka_topic_partition_t *rktpar,
                                       void *opaque) {
         if (!*rktpar->topic)
@@ -168,9 +170,10 @@ rd_kafka_share_subscribe(rd_kafka_share_t *rkshare,
                 goto done;
         }
 
-        /* Share consumer subscriptions are literal topic names only:
-         * regex/wildcard entries are not supported. Reject empty
-         * entries; pass everything else through to the broker via the
+        /* Share consumer subscriptions are plain topic names forwarded to
+         * the broker verbatim; entries are never expanded as regex/wildcards
+         * (a leading '^' is a literal character, not a pattern marker).
+         * Reject only empty entries; pass everything else through via the
          * heartbeat. */
         if (rd_kafka_topic_partition_list_sum(topics, _share_invalid_topic_cb,
                                               NULL) > 0) {

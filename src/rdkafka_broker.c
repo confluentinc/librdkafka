@@ -4565,9 +4565,7 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
 }
 
 /**
- * Consumer serving
- *
- * TODO KIP-932: Fix timeouts.
+ * @brief Share consumer serving
  */
 static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                                                  rd_ts_t abs_timeout) {
@@ -4585,9 +4583,9 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
 
                 rd_kafka_broker_unlock(rkb);
 
-                /*
-                 * TODO KIP-932: Check the below connection handling properly.
-                 */
+                /* Drives reconnection: requests a persistent connection so a
+                 * down broker reconnects on its own (fetches are op-driven and
+                 * ops only target UP brokers). */
                 if (rkb->rkb_toppar_cnt > 0 &&
                     rkb->rkb_share_fetch_session.epoch >= 0 &&
                     rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
@@ -4596,12 +4594,10 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                         rkb->rkb_persistconn.internal++;
                 }
 
-                /**
-                 * TODO KIP-932: Check if the below is needed. Currently, used
-                 *               as it is from the original consumer serve
-                 * function.
-                 */
-                /* Check and move retry buffers */
+                /* Move due retry buffers back to the output queue and shorten
+                 * the wakeup to the next pending retry. Used by
+                 * connection-setup and metadata requests (ApiVersion, SASL,
+                 * Metadata), not by ShareFetch/ShareAcknowledge. */
                 if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
                         rd_kafka_broker_retry_bufs_move(rkb, &min_backoff);
 

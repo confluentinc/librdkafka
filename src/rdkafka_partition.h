@@ -1094,11 +1094,6 @@ rd_kafka_toppar_ver_destroy(struct rd_kafka_toppar_ver *tver) {
  */
 static RD_INLINE RD_UNUSED int rd_kafka_op_version_outdated(rd_kafka_op_t *rko,
                                                             int version) {
-        rd_dassert(
-            !rko->rko_rktp ||
-            !RD_KAFKA_IS_SHARE_CONSUMER(rko->rko_rktp->rktp_rkt->rkt_rk) ||
-            rko->rko_version == 0);
-
         if (!rko->rko_version)
                 return 0;
 

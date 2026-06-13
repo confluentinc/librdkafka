@@ -387,7 +387,7 @@ static int consume_and_track(rd_kafka_share_t *rkshare,
                              rd_bool_t do_acknowledge,
                              tracked_msg_t *tracked_msgs,
                              int *tracked_cnt) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         int attempt;
         rd_kafka_error_t *error;
         int tracked = 0;
@@ -403,8 +403,8 @@ static int consume_and_track(rd_kafka_share_t *rkshare,
                 size_t rcvd_msgs = 0;
                 int i;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000, batch,
-                                                     &rcvd_msgs);
+                error     = rd_kafka_share_poll(rkshare, 3000, &batch);
+                rcvd_msgs = rd_kafka_messages_count(batch);
 
                 if (error) {
                         TEST_SAY("%s: Attempt %d/%d: error: %s\n",
@@ -423,7 +423,8 @@ static int consume_and_track(rd_kafka_share_t *rkshare,
                          (int)rcvd_msgs);
 
                 for (i = 0; i < (int)rcvd_msgs && tracked < target_count; i++) {
-                        rd_kafka_message_t *rkm = batch[i];
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, i);
 
                         if (rkm->err) {
                                 TEST_SAY(
@@ -456,7 +457,6 @@ static int consume_and_track(rd_kafka_share_t *rkshare,
                 }
 
                 for (; i < (int)rcvd_msgs; i++) {
-                        rd_kafka_message_destroy(batch[i]);
                 }
 
                 if (tracked >= target_count) {
@@ -582,7 +582,7 @@ static void verify_tracked_messages(rd_kafka_share_t *rkshare,
                                     int tracked_cnt,
                                     rd_bool_t expect_redelivery,
                                     const char *context_label) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        test_share_batch_t batch;
         size_t total_rcvd = 0;
         int attempt;
         rd_kafka_error_t *error;
@@ -590,6 +590,8 @@ static void verify_tracked_messages(rd_kafka_share_t *rkshare,
         rd_bool_t *tracked_seen =
             tracked_cnt > 0 ? rd_calloc(tracked_cnt, sizeof(*tracked_seen))
                             : NULL;
+
+        test_share_batch_init(&batch, (size_t)max_total_msgs);
 
         TEST_SAY(
             "%s: Consuming for verification (up to %d messages, max %d "
@@ -604,8 +606,7 @@ static void verify_tracked_messages(rd_kafka_share_t *rkshare,
                 size_t rcvd_msgs = 0;
                 size_t i;
 
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, batch + total_rcvd, &rcvd_msgs);
+                error = test_share_batch_poll(&batch, rkshare, 3000);
 
                 if (error) {
                         TEST_SAY("%s: Attempt %d/%d: error: %s\n",
@@ -615,6 +616,7 @@ static void verify_tracked_messages(rd_kafka_share_t *rkshare,
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd_msgs = batch.cnt - total_rcvd;
 
                 if (rcvd_msgs == 0)
                         continue;
@@ -626,7 +628,7 @@ static void verify_tracked_messages(rd_kafka_share_t *rkshare,
 
                 /* Match each new message against the tracked list */
                 for (i = total_rcvd; i < total_rcvd + rcvd_msgs; i++) {
-                        rd_kafka_message_t *rkm = batch[i];
+                        rd_kafka_message_t *rkm = batch.msgs[i];
                         const char *topic;
                         int32_t partition;
                         int64_t offset;
@@ -715,10 +717,7 @@ static void verify_tracked_messages(rd_kafka_share_t *rkshare,
                     consumer_name);
         }
 
-        /* Destroy all consumed messages */
-        for (size_t i = 0; i < total_rcvd; i++)
-                rd_kafka_message_destroy(batch[i]);
-
+        test_share_batch_destroy(&batch);
         if (tracked_seen)
                 rd_free(tracked_seen);
 }
@@ -762,14 +761,14 @@ static void verify_all_apis_return_error(rd_kafka_share_t *consumer,
                                          const char *topic) {
         rd_kafka_error_t *error;
         rd_kafka_resp_err_t err;
-        rd_kafka_message_t *batch[4];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_topic_partition_list_t *subs, *sub_result = NULL;
         rd_kafka_topic_partition_list_t *commit_results = NULL;
         rd_kafka_queue_t *queue                         = NULL;
 
         /* 1. consume_batch */
-        error = rd_kafka_share_consume_batch(consumer, 100, batch, &rcvd);
+        error = rd_kafka_share_poll(consumer, 100, &batch);
+        rd_kafka_messages_destroy(batch);
         assert_state_error(error, "consume_batch");
 
         /* 2. commit_async */
@@ -849,7 +848,7 @@ static void setup_3broker_share_consumer(const char *test_name,
         rd_kafka_share_t *consumer;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *error;
         char topic[64], group[64], errstr[512];
         int p, consumed = 0, attempts = 0;
@@ -894,17 +893,16 @@ static void setup_3broker_share_consumer(const char *test_name,
         TEST_SAY("Consuming %d messages across %d partitions...\n", total_msgs,
                  partition_cnt);
         while (consumed < total_msgs && attempts++ < 30) {
-                rcvd = 0;
-                error =
-                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_poll(consumer, 3000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
                 for (i = 0; i < rcvd; i++) {
-                        if (!batch[i]->err)
+                        if (!rd_kafka_messages_get(batch, i)->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[i]);
                 }
         }
 
@@ -1504,7 +1502,7 @@ static void do_test_close_with_broker_busy(void) {
         rd_kafka_share_t *consumer, *c2;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *error, *close_err;
         char topic[64], group[64], errstr[512];
         int iter, p, i;
@@ -1579,16 +1577,15 @@ static void do_test_close_with_broker_busy(void) {
                 TEST_SAY("Iteration %d: consuming %d msgs\n", iter, total_msgs);
                 while (consumed < total_msgs && attempts++ < 30) {
                         rcvd  = 0;
-                        error = rd_kafka_share_consume_batch(consumer, 3000,
-                                                             batch, &rcvd);
+                        error = rd_kafka_share_poll(consumer, 3000, &batch);
+                        rcvd  = rd_kafka_messages_count(batch);
                         if (error) {
                                 rd_kafka_error_destroy(error);
                                 continue;
                         }
                         for (i = 0; i < (int)rcvd; i++) {
-                                if (!batch[i]->err)
+                                if (!rd_kafka_messages_get(batch, i)->err)
                                         consumed++;
-                                rd_kafka_message_destroy(batch[i]);
                         }
                         TEST_ASSERT(rd_kafka_share_commit_async(consumer) ==
                                         NULL,
@@ -1634,7 +1631,8 @@ static void do_test_close_with_broker_busy(void) {
         TEST_SAY("c2: verifying no msgs redelivered (5 fetch attempts)\n");
         for (i = 0; i < 5; i++) {
                 rcvd  = 0;
-                error = rd_kafka_share_consume_batch(c2, 2000, batch, &rcvd);
+                error = rd_kafka_share_poll(c2, 2000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         TEST_SAY("c2 attempt %d: error: %s\n", i + 1,
                                  rd_kafka_error_string(error));
@@ -1676,7 +1674,7 @@ static void do_test_close_with_broker_down(void) {
         const char *group           = "sg-close-broker-down";
         const int msgcnt            = 10;
         const int socket_timeout_ms = 20000;
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch  = NULL;
         rd_kafka_error_t *error;
         rd_kafka_error_t *close_err;
         size_t rcvd;
@@ -1729,9 +1727,9 @@ static void do_test_close_with_broker_down(void) {
          */
         TEST_SAY("Consuming until first non-empty batch...\n");
         while (!got_msgs && attempts++ < 30) {
-                rcvd = 0;
-                error =
-                    rd_kafka_share_consume_batch(consumer, 3000, batch, &rcvd);
+                rcvd  = 0;
+                error = rd_kafka_share_poll(consumer, 3000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
@@ -1740,8 +1738,7 @@ static void do_test_close_with_broker_down(void) {
                 if (rcvd > 0) {
                         TEST_SAY("Received %d messages\n", (int)rcvd);
                         for (i = 0; i < rcvd; i++)
-                                rd_kafka_message_destroy(batch[i]);
-                        got_msgs = rd_true;
+                                got_msgs = rd_true;
                         break;
                 }
         }
@@ -1892,18 +1889,19 @@ static void do_test_api_calls_during_closing(void) {
 
         /* Consume one batch so there's state to flush on close. */
         {
-                rd_kafka_message_t *batch[4];
-                size_t rcvd            = 0;
-                int attempts           = 0;
-                rd_kafka_error_t *cerr = NULL;
+                rd_kafka_messages_t *batch = NULL;
+                size_t rcvd                = 0;
+                int attempts               = 0;
+                rd_kafka_error_t *cerr     = NULL;
                 while (attempts++ < 20 && rcvd == 0) {
-                        cerr = rd_kafka_share_consume_batch(consumer, 500,
-                                                            batch, &rcvd);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        cerr  = rd_kafka_share_poll(consumer, 500, &batch);
+                        rcvd  = rd_kafka_messages_count(batch);
                         if (cerr)
                                 rd_kafka_error_destroy(cerr);
                 }
-                for (size_t i = 0; i < rcvd; i++)
-                        rd_kafka_message_destroy(batch[i]);
+                rd_kafka_messages_destroy(batch);
         }
 
         /* Inject 5s delay on ShareAcknowledge so close() stays in flight. */
@@ -1953,7 +1951,7 @@ static void do_test_implicit_ack_callback_fires_on_close(void) {
         const char *group;
         char group_id[64];
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *raw_batch[16];
+        rd_kafka_messages_t *raw_batch = NULL;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_error_t *error;
         ack_receipts_t receipts;
@@ -1987,16 +1985,15 @@ static void do_test_implicit_ack_callback_fires_on_close(void) {
         /* First poll: fetch the record (auto-ack pending for next poll) */
         while (consumed < 1 && attempts++ < 30) {
                 rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 2000, raw_batch,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 2000, &raw_batch);
+                rcvd  = rd_kafka_messages_count(raw_batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!raw_batch[j]->err)
+                        if (!rd_kafka_messages_get(raw_batch, j)->err)
                                 consumed++;
-                        rd_kafka_message_destroy(raw_batch[j]);
                 }
         }
         TEST_ASSERT(consumed == 1, "Expected 1 record, got %d", consumed);
@@ -2004,14 +2001,16 @@ static void do_test_implicit_ack_callback_fires_on_close(void) {
         /* Second poll: drives the piggybacked implicit ack to the broker */
         attempts = 5;
         while (attempts-- > 0) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 1000, raw_batch,
-                                                     &rcvd);
+                rd_kafka_messages_destroy(raw_batch);
+                raw_batch = NULL;
+                error     = rd_kafka_share_poll(rkshare, 1000, &raw_batch);
+                rcvd      = rd_kafka_messages_count(raw_batch);
+                (void)rcvd;
                 if (error)
                         rd_kafka_error_destroy(error);
-                for (j = 0; j < rcvd; j++)
-                        rd_kafka_message_destroy(raw_batch[j]);
         }
+        rd_kafka_messages_destroy(raw_batch);
+        raw_batch = NULL;
 
         /* Close - any pending ack-completion callbacks must be flushed */
         TEST_SAY("Closing share consumer without explicit commit\n");

@@ -3376,9 +3376,9 @@ void rd_kafka_broker_share_rpc(rd_kafka_broker_t *rkb,
             rkb->rkb_rk->rk_conf.fetch_wait_max_ms,
             rkb->rkb_rk->rk_conf.fetch_min_bytes,
             rkb->rkb_rk->rk_conf.fetch_max_bytes, max_records,
-            max_records,    /* TODO KIP-932: Check if this is correct for batch
-                               size or not */
-            toppars_to_add, /* toppars to add to session */
+            max_records,       /* batch_size: same value as max_records,
+                                * both sourced from max.poll.records */
+            toppars_to_add,    /* toppars to add to session */
             toppars_to_forget, /* forgetting toppars */
             rko_orig,          /* rko (carries ack_details) */
             now);

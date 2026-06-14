@@ -268,7 +268,7 @@ static void track_ack_type(ack_test_state_t *state,
  */
 static void consume_and_acknowledge(ack_test_config_t *config,
                                     ack_test_state_t *state) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
         int attempts = config->max_attempts > 0 ? config->max_attempts : 50;
@@ -294,40 +294,40 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(state->consumers[0],
-                                                   poll_timeout, batch, &rcvd);
+                err = rd_kafka_share_poll(state->consumers[0], poll_timeout,
+                                          &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
 
                 for (m = 0; m < rcvd; m++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
                         rd_kafka_share_AcknowledgeType_t ack_type;
                         rd_kafka_resp_err_t ack_err;
                         int16_t delivery_count =
-                            rd_kafka_message_delivery_count(batch[m]);
+                            rd_kafka_message_delivery_count(msg);
 
                         /* Error messages must use acknowledge_offset API */
-                        if (batch[m]->err) {
+                        if (msg->err) {
                                 ack_type = determine_ack_type(config);
                                 ack_err  = rd_kafka_share_acknowledge_offset(
                                     state->consumers[0],
-                                    rd_kafka_topic_name(batch[m]->rkt),
-                                    batch[m]->partition, batch[m]->offset,
-                                    ack_type);
+                                    rd_kafka_topic_name(msg->rkt),
+                                    msg->partition, msg->offset, ack_type);
                                 TEST_ASSERT(
                                     ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                                     "acknowledge_offset failed for error msg: "
                                     "%s",
                                     rd_kafka_err2str(ack_err));
-                                rd_kafka_message_destroy(batch[m]);
                                 continue;
                         }
 
                         /* Redelivered message (delivery_count == 2) */
                         if (delivery_count == 2) {
-                                handle_redelivered_message(state, batch[m]);
-                                rd_kafka_message_destroy(batch[m]);
+                                handle_redelivered_message(state, msg);
                                 continue;
                         }
 
@@ -337,25 +337,27 @@ static void consume_and_acknowledge(ack_test_config_t *config,
                                     delivery_count);
 
                         ack_type = determine_ack_type(config);
-                        track_ack_type(state, batch[m], ack_type);
+                        track_ack_type(state, msg, ack_type);
 
                         ack_err = rd_kafka_share_acknowledge_type(
-                            state->consumers[0], batch[m], ack_type);
+                            state->consumers[0], msg, ack_type);
                         TEST_ASSERT(
                             ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                             "Acknowledge failed: %s (topic=%s, partition=%d, "
                             "offset=%" PRId64 ", type=%d)",
                             rd_kafka_err2str(ack_err),
-                            rd_kafka_topic_name(batch[m]->rkt),
-                            batch[m]->partition, batch[m]->offset, ack_type);
+                            rd_kafka_topic_name(msg->rkt), msg->partition,
+                            msg->offset, ack_type);
 
                         if (state->original_cnt < 1000)
                                 state->original_offsets[state->original_cnt++] =
-                                    batch[m]->offset;
+                                    msg->offset;
 
                         total_consumed++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 if (config->use_random_acks) {
                         if (total_consumed % 500 == 0 || rcvd > 0)
@@ -391,7 +393,7 @@ static void consume_and_acknowledge(ack_test_config_t *config,
  */
 static void poll_for_redelivery(ack_test_config_t *config,
                                 ack_test_state_t *state) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         int poll_timeout =
             config->poll_timeout_ms > 0 ? config->poll_timeout_ms : 3000;
         int attempts       = 10;
@@ -421,22 +423,25 @@ static void poll_for_redelivery(ack_test_config_t *config,
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(state->consumers[0],
-                                                   poll_timeout, batch, &rcvd);
+                err = rd_kafka_share_poll(state->consumers[0], poll_timeout,
+                                          &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err) {
                                 rd_kafka_topic_partition_t *rktpar;
                                 int16_t delivery_count =
-                                    rd_kafka_message_delivery_count(batch[m]);
+                                    rd_kafka_message_delivery_count(msg);
                                 const char *msg_topic =
-                                    rd_kafka_topic_name(batch[m]->rkt);
-                                int32_t msg_partition = batch[m]->partition;
-                                int64_t msg_offset    = batch[m]->offset;
+                                    rd_kafka_topic_name(msg->rkt);
+                                int32_t msg_partition = msg->partition;
+                                int64_t msg_offset    = msg->offset;
                                 int released_idx;
 
                                 /* Verify delivery_count >= 2 on redelivery */
@@ -471,11 +476,13 @@ static void poll_for_redelivery(ack_test_config_t *config,
                                 state->msgs_redelivered++;
 
                                 rd_kafka_share_acknowledge_type(
-                                    state->consumers[0], batch[m],
+                                    state->consumers[0], msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                         }
-                        rd_kafka_message_destroy(batch[m]);
                 }
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 if (rcvd > 0) {
                         TEST_SAY("Redelivered so far: %d/%d\n",
@@ -731,7 +738,7 @@ static void do_test_ack_null_rkshare(void) {
  */
 static void do_test_ack_invalid_type(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[10];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         rd_kafka_resp_err_t ack_err;
         rd_kafka_topic_partition_list_t *subs;
@@ -739,6 +746,7 @@ static void do_test_ack_invalid_type(void) {
         const char *topic;
         size_t rcvd = 0;
         int attempts;
+        rd_kafka_message_t *msg0;
 
         SUB_TEST();
 
@@ -759,31 +767,39 @@ static void do_test_ack_invalid_type(void) {
 
         attempts = 20;
         while (rcvd == 0 && attempts-- > 0) {
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch, &rcvd);
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (err)
                         rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
         }
 
         TEST_ASSERT(rcvd == 1, "Expected exactly 1 message, got %zu", rcvd);
 
+        msg0 = rd_kafka_messages_get(batch, 0);
+
         /* Try invalid type (99) */
         ack_err = rd_kafka_share_acknowledge_type(
-            rkshare, batch[0], (rd_kafka_share_AcknowledgeType_t)99);
+            rkshare, msg0, (rd_kafka_share_AcknowledgeType_t)99);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG for type 99, got %s",
                     rd_kafka_err2str(ack_err));
 
         /* Try GAP type (0) - internal only */
         ack_err = rd_kafka_share_acknowledge_type(
-            rkshare, batch[0], (rd_kafka_share_AcknowledgeType_t)0);
+            rkshare, msg0, (rd_kafka_share_AcknowledgeType_t)0);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__INVALID_ARG,
                     "Expected INVALID_ARG for type 0 (GAP), got %s",
                     rd_kafka_err2str(ack_err));
 
         /* Clean up with valid acknowledge */
-        rd_kafka_share_acknowledge_type(rkshare, batch[0],
+        rd_kafka_share_acknowledge_type(rkshare, msg0,
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-        rd_kafka_message_destroy(batch[0]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -798,7 +814,9 @@ static void do_test_ack_invalid_type(void) {
  */
 static void do_test_release_then_reject_no_redelivery(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[100];
+        rd_kafka_messages_t *batches[30] = {NULL};
+        int batch_cnt                    = 0;
+        rd_kafka_messages_t *batch       = NULL;
         rd_kafka_error_t *err;
         rd_kafka_resp_err_t ack_err;
         rd_kafka_topic_partition_list_t *subs;
@@ -808,6 +826,8 @@ static void do_test_release_then_reject_no_redelivery(void) {
         size_t m;
         int attempts;
         int redelivered = 0;
+        int i;
+        rd_kafka_message_t *first_msg = NULL;
 
         SUB_TEST();
 
@@ -828,59 +848,87 @@ static void do_test_release_then_reject_no_redelivery(void) {
 
         /* Consume all messages */
         attempts = 30;
-        while (rcvd < 5 && attempts-- > 0) {
-                size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
-                                                   &batch_rcvd);
+        while (rcvd < 5 && attempts-- > 0 && batch_cnt < 30) {
+                rd_kafka_messages_t *b = NULL;
+                size_t batch_rcvd;
+                err = rd_kafka_share_poll(rkshare, 2000, &b);
                 if (err)
                         rd_kafka_error_destroy(err);
-                rcvd += batch_rcvd;
+                batch_rcvd = rd_kafka_messages_count(b);
+                if (batch_rcvd > 0) {
+                        batches[batch_cnt++] = b;
+                        rcvd += batch_rcvd;
+                } else {
+                        rd_kafka_messages_destroy(b);
+                }
         }
 
         TEST_ASSERT(rcvd == 5, "Expected 5 messages, got %zu", rcvd);
 
+        /* Locate the first message across batches */
+        first_msg = rd_kafka_messages_get(batches[0], 0);
+
         /* First RELEASE offset 0, then override with REJECT */
         ack_err = rd_kafka_share_acknowledge_type(
-            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+            rkshare, first_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR, "RELEASE failed: %s",
                     rd_kafka_err2str(ack_err));
 
         ack_err = rd_kafka_share_acknowledge_type(
-            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+            rkshare, first_msg, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR, "REJECT failed: %s",
                     rd_kafka_err2str(ack_err));
 
-        /* ACCEPT remaining messages */
-        for (m = 1; m < rcvd; m++) {
-                rd_kafka_share_acknowledge_type(
-                    rkshare, batch[m], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+        /* ACCEPT remaining messages - skip the very first one (index 0 of
+         * batches[0]) which is already REJECT'd above */
+        {
+                rd_bool_t skipped_first = rd_false;
+                for (i = 0; i < batch_cnt; i++) {
+                        size_t bcnt = rd_kafka_messages_count(batches[i]);
+                        for (m = 0; m < bcnt; m++) {
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batches[i], m);
+                                if (!skipped_first) {
+                                        skipped_first = rd_true;
+                                        continue;
+                                }
+                                rd_kafka_share_acknowledge_type(
+                                    rkshare, msg,
+                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                        }
+                }
         }
 
-        /* Destroy batch */
-        for (m = 0; m < rcvd; m++) {
-                rd_kafka_message_destroy(batch[m]);
+        /* Destroy batches */
+        for (i = 0; i < batch_cnt; i++) {
+                rd_kafka_messages_destroy(batches[i]);
+                batches[i] = NULL;
         }
+        batch_cnt = 0;
 
         /* Poll for redelivery - should get 0 */
         TEST_SAY("Polling for redelivery (expecting 0)...\n");
         attempts = 5;
         while (attempts-- > 0) {
-                size_t redeliv_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
-                                                   &redeliv_rcvd);
+                size_t redeliv_rcvd;
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                redeliv_rcvd = rd_kafka_messages_count(batch);
 
                 for (m = 0; m < redeliv_rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 redelivered++;
                         rd_kafka_share_acknowledge_type(
-                            rkshare, batch[m],
+                            rkshare, msg,
                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-                        rd_kafka_message_destroy(batch[m]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         TEST_ASSERT(redelivered == 0,
@@ -904,7 +952,7 @@ static void do_test_release_then_reject_no_redelivery(void) {
  */
 static void do_test_change_ack_type_before_commit(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[10];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         rd_kafka_resp_err_t ack_err;
         rd_kafka_topic_partition_list_t *subs;
@@ -936,15 +984,17 @@ static void do_test_change_ack_type_before_commit(void) {
         /* Consume one message */
         attempts = 30;
         while (rcvd == 0 && attempts-- > 0) {
-                size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
-                                                   &batch_rcvd);
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (err)
                         rd_kafka_error_destroy(err);
-                rcvd += batch_rcvd;
+                rcvd = rd_kafka_messages_count(batch);
                 if (rcvd > 0) {
                         rd_kafka_share_acknowledge_type(
-                            rkshare, batch[0],
+                            rkshare, rd_kafka_messages_get(batch, 0),
                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                 }
         }
@@ -953,12 +1003,14 @@ static void do_test_change_ack_type_before_commit(void) {
 
         /* Second: Change to RELEASE for first message before commit */
         ack_err = rd_kafka_share_acknowledge_type(
-            rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+            rkshare, rd_kafka_messages_get(batch, 0),
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "RELEASE (changing from ACCEPT) failed: %s",
                     rd_kafka_err2str(ack_err));
 
-        rd_kafka_message_destroy(batch[0]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         /* Commit async - should succeed with RELEASE as final ack type */
         err = rd_kafka_share_commit_async(rkshare);
@@ -970,17 +1022,20 @@ static void do_test_change_ack_type_before_commit(void) {
         rcvd     = 0;
         attempts = 30;
         while (rcvd == 0 && attempts-- > 0) {
-                size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
-                                                   &batch_rcvd);
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (err)
                         rd_kafka_error_destroy(err);
-                rcvd += batch_rcvd;
+                rcvd = rd_kafka_messages_count(batch);
                 if (rcvd > 0) {
                         rd_kafka_share_acknowledge_type(
-                            rkshare, batch[0],
+                            rkshare, rd_kafka_messages_get(batch, 0),
                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-                        rd_kafka_message_destroy(batch[0]);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                 }
         }
 
@@ -1028,7 +1083,7 @@ static void do_test_change_ack_type_before_commit(void) {
  */
 static void do_test_ack_after_commit(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[10];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         rd_kafka_resp_err_t ack_err;
         rd_kafka_topic_partition_list_t *subs;
@@ -1040,6 +1095,7 @@ static void do_test_ack_after_commit(void) {
         int32_t saved_partition   = -1;
         int64_t saved_offset      = -1;
         test_ack_cb_state_t state = {0};
+        rd_kafka_message_t *msg0;
 
         SUB_TEST();
 
@@ -1063,15 +1119,17 @@ static void do_test_ack_after_commit(void) {
         /* Consume and acknowledge messages, save first message info */
         attempts = 30;
         while (rcvd == 0 && attempts-- > 0) {
-                size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
-                                                   &batch_rcvd);
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (err)
                         rd_kafka_error_destroy(err);
-                rcvd += batch_rcvd;
+                rcvd = rd_kafka_messages_count(batch);
                 if (rcvd > 0) {
                         rd_kafka_share_acknowledge_type(
-                            rkshare, batch[0],
+                            rkshare, rd_kafka_messages_get(batch, 0),
                             RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                 }
         }
@@ -1079,11 +1137,13 @@ static void do_test_ack_after_commit(void) {
         TEST_ASSERT(rcvd == 1, "Expected 1 message, got %zu", rcvd);
 
         /* Save first message info and acknowledge all */
+        msg0            = rd_kafka_messages_get(batch, 0);
         saved_topic     = topic;
-        saved_partition = batch[0]->partition;
-        saved_offset    = batch[0]->offset;
+        saved_partition = msg0->partition;
+        saved_offset    = msg0->offset;
 
-        rd_kafka_message_destroy(batch[0]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         /* Explicit commit */
         err = rd_kafka_share_commit_async(rkshare);
@@ -1133,7 +1193,7 @@ static void do_test_ack_after_commit(void) {
  */
 static void do_test_max_delivery_attempts(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[100];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         rd_kafka_topic_partition_list_t *subs;
         const char *group = "share-max-delivery-attempts";
@@ -1142,6 +1202,7 @@ static void do_test_max_delivery_attempts(void) {
         int delivery_attempt;
         int attempts;
         const int max_deliveries = 5;
+        rd_kafka_message_t *msg0;
 
         SUB_TEST();
 
@@ -1172,34 +1233,39 @@ static void do_test_max_delivery_attempts(void) {
                 attempts = 30;
 
                 while (rcvd == 0 && attempts-- > 0) {
-                        err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
-                                                           &rcvd);
+                        if (batch) {
+                                rd_kafka_messages_destroy(batch);
+                                batch = NULL;
+                        }
+                        err = rd_kafka_share_poll(rkshare, 2000, &batch);
                         if (err)
                                 rd_kafka_error_destroy(err);
+                        rcvd = rd_kafka_messages_count(batch);
                 }
 
                 TEST_ASSERT(rcvd == 1,
                             "Delivery attempt %d: expected 1 message, got %zu",
                             delivery_attempt, rcvd);
 
+                msg0 = rd_kafka_messages_get(batch, 0);
+
                 /* Verify delivery_count matches attempt number */
                 TEST_ASSERT(
-                    rd_kafka_message_delivery_count(batch[0]) ==
-                        delivery_attempt,
+                    rd_kafka_message_delivery_count(msg0) == delivery_attempt,
                     "Delivery attempt %d: expected delivery_count=%d, got %d",
                     delivery_attempt, delivery_attempt,
-                    rd_kafka_message_delivery_count(batch[0]));
+                    rd_kafka_message_delivery_count(msg0));
 
                 TEST_SAY(
                     "Delivery attempt %d: received message "
                     "(delivery_count=%d), sending RELEASE\n",
-                    delivery_attempt,
-                    rd_kafka_message_delivery_count(batch[0]));
+                    delivery_attempt, rd_kafka_message_delivery_count(msg0));
 
                 /* RELEASE to trigger redelivery */
                 rd_kafka_share_acknowledge_type(
-                    rkshare, batch[0], RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
-                rd_kafka_message_destroy(batch[0]);
+                    rkshare, msg0, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Now poll again - message should NOT be redelivered (max attempts
@@ -1208,20 +1274,23 @@ static void do_test_max_delivery_attempts(void) {
         rcvd     = 0;
         attempts = 5;
         while (attempts-- > 0) {
-                size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch,
-                                                   &batch_rcvd);
+                size_t batch_rcvd;
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (err)
                         rd_kafka_error_destroy(err);
+                batch_rcvd = rd_kafka_messages_count(batch);
 
                 if (batch_rcvd > 0) {
                         size_t m;
                         for (m = 0; m < batch_rcvd; m++) {
-                                if (!batch[m]->err)
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!msg->err)
                                         rcvd++;
-                                rd_kafka_message_destroy(batch[m]);
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         TEST_ASSERT(rcvd == 0,
@@ -1423,8 +1492,8 @@ static void do_test_scale_10_topics_3_partitions(void) {
  */
 static void do_test_ack_message_from_earlier_batch(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch1[10];
-        rd_kafka_message_t *batch2[10];
+        rd_kafka_messages_t *batch1 = NULL;
+        rd_kafka_messages_t *batch2 = NULL;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_resp_err_t ack_err;
         const char *group = "share-cross-batch-ack";
@@ -1433,6 +1502,7 @@ static void do_test_ack_message_from_earlier_batch(void) {
         size_t r       = 0;
         rd_kafka_error_t *e;
         int attempts;
+        rd_kafka_message_t *b1_msg0;
 
         SUB_TEST();
 
@@ -1453,38 +1523,45 @@ static void do_test_ack_message_from_earlier_batch(void) {
         /* Poll batch 1 */
         attempts = 30;
         while (b1_rcvd < 1 && attempts-- > 0) {
-                r = 0;
-                e = rd_kafka_share_consume_batch(rkshare, 2000,
-                                                 batch1 + b1_rcvd, &r);
+                if (batch1) {
+                        rd_kafka_messages_destroy(batch1);
+                        batch1 = NULL;
+                }
+                e = rd_kafka_share_poll(rkshare, 2000, &batch1);
                 if (e)
                         rd_kafka_error_destroy(e);
-                b1_rcvd += r;
+                b1_rcvd = rd_kafka_messages_count(batch1);
         }
         TEST_ASSERT(b1_rcvd == 1, "Expected 1 record in batch1, got %zu",
                     b1_rcvd);
 
-        ack_err = rd_kafka_share_acknowledge(rkshare, batch1[0]);
+        b1_msg0 = rd_kafka_messages_get(batch1, 0);
+
+        ack_err = rd_kafka_share_acknowledge(rkshare, b1_msg0);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "First ack failed: %s", rd_kafka_err2name(ack_err));
 
         /* Poll batch 2 - must be empty (we already consumed and acked
          * the only record). */
-        r = 0;
-        e = rd_kafka_share_consume_batch(rkshare, 2000, batch2, &r);
+        e = rd_kafka_share_poll(rkshare, 2000, &batch2);
         if (e)
                 rd_kafka_error_destroy(e);
+        r = rd_kafka_messages_count(batch2);
         TEST_ASSERT(r == 0,
                     "Expected batch 2 to be empty after acking the only "
                     "record, got %zu records",
                     r);
+        rd_kafka_messages_destroy(batch2);
+        batch2 = NULL;
 
         /* Re-acknowledge from batch1 - should fail with _STATE */
-        ack_err = rd_kafka_share_acknowledge(rkshare, batch1[0]);
+        ack_err = rd_kafka_share_acknowledge(rkshare, b1_msg0);
         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
                     "Expected _STATE for re-ack across batches, got %s",
                     rd_kafka_err2name(ack_err));
 
-        rd_kafka_message_destroy(batch1[0]);
+        rd_kafka_messages_destroy(batch1);
+        batch1 = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -1551,7 +1628,7 @@ static void do_test_ack_offset_before_consume(void) {
  */
 static void do_test_ack_offset_wrong_params(void) {
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[10];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_resp_err_t err;
         const char *group = "share-ack-wrong-params";
@@ -1560,6 +1637,7 @@ static void do_test_ack_offset_wrong_params(void) {
         int attempts;
         int32_t partition;
         int64_t offset;
+        rd_kafka_message_t *msg0;
 
         SUB_TEST();
 
@@ -1579,17 +1657,21 @@ static void do_test_ack_offset_wrong_params(void) {
 
         attempts = 30;
         while (rcvd < 1 && attempts-- > 0) {
-                size_t r            = 0;
-                rd_kafka_error_t *e = rd_kafka_share_consume_batch(
-                    rkshare, 2000, batch + rcvd, &r);
+                rd_kafka_error_t *e;
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                e = rd_kafka_share_poll(rkshare, 2000, &batch);
                 if (e)
                         rd_kafka_error_destroy(e);
-                rcvd += r;
+                rcvd = rd_kafka_messages_count(batch);
         }
         TEST_ASSERT(rcvd == 1, "Expected 1 record, got %zu", rcvd);
 
-        partition = batch[0]->partition;
-        offset    = batch[0]->offset;
+        msg0      = rd_kafka_messages_get(batch, 0);
+        partition = msg0->partition;
+        offset    = msg0->offset;
 
         /* Wrong offset */
         err = rd_kafka_share_acknowledge_offset(
@@ -1623,7 +1705,8 @@ static void do_test_ack_offset_wrong_params(void) {
                     "Expected success for correct params, got %s",
                     rd_kafka_err2name(err));
 
-        rd_kafka_message_destroy(batch[0]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -1652,10 +1735,10 @@ static void do_test_mixed_ack_mode_same_group(void) {
         rd_kafka_share_t *implicit_c;
         rd_kafka_share_t *explicit_c;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[BATCH_SIZE];
-        const int total_msgs = 400;
-        int implicit_cnt     = 0;
-        int explicit_cnt     = 0;
+        rd_kafka_messages_t *batch = NULL;
+        const int total_msgs       = 400;
+        int implicit_cnt           = 0;
+        int explicit_cnt           = 0;
         int attempts;
         rd_kafka_error_t *cerr;
         test_ack_cb_state_t exp_state = {0};
@@ -1694,39 +1777,45 @@ static void do_test_mixed_ack_mode_same_group(void) {
                 rd_kafka_error_t *err;
 
                 /* Implicit consumer */
-                err = rd_kafka_share_consume_batch(implicit_c, 1000, batch,
-                                                   &rcvd);
+                err = rd_kafka_share_poll(implicit_c, 1000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                 } else {
+                        rcvd = rd_kafka_messages_count(batch);
                         for (m = 0; m < rcvd; m++) {
-                                if (!batch[m]->err)
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!msg->err)
                                         implicit_cnt++;
-                                rd_kafka_message_destroy(batch[m]);
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 /* Explicit consumer */
                 rcvd = 0;
-                err  = rd_kafka_share_consume_batch(explicit_c, 1000, batch,
-                                                    &rcvd);
+                err  = rd_kafka_share_poll(explicit_c, 1000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err) {
                                 rd_kafka_resp_err_t ack_err =
                                     rd_kafka_share_acknowledge_type(
-                                        explicit_c, batch[m],
+                                        explicit_c, msg,
                                         RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                 TEST_ASSERT(!ack_err,
                                             "explicit ACCEPT failed: %s",
                                             rd_kafka_err2str(ack_err));
                                 explicit_cnt++;
                         }
-                        rd_kafka_message_destroy(batch[m]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         TEST_SAY("Consumed: implicit=%d explicit=%d total=%d/%d\n",
@@ -1748,14 +1837,11 @@ static void do_test_mixed_ack_mode_same_group(void) {
 
         /* Final flush poll on the implicit consumer so the last batch's
          * piggybacked acks reach the broker. */
-        size_t rcvd = 0;
-        size_t m;
-        rd_kafka_error_t *err =
-            rd_kafka_share_consume_batch(implicit_c, 1000, batch, &rcvd);
+        rd_kafka_error_t *err = rd_kafka_share_poll(implicit_c, 1000, &batch);
         if (err)
                 rd_kafka_error_destroy(err);
-        for (m = 0; m < rcvd; m++)
-                rd_kafka_message_destroy(batch[m]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(implicit_cnt + explicit_cnt == total_msgs,
                     "Expected exactly %d total records across both consumers, "

@@ -1629,7 +1629,7 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                                  * acquired-range filter would drop any op
                                  * without a valid offset. Enqueue the error
                                  * directly onto the cgrp queue served by
-                                 * rd_kafka_share_consume_batch so the app
+                                 * rd_kafka_share_poll so the app
                                  * sees the partition-level failure. */
                                 rd_kafka_consumer_err(
                                     msetr->msetr_rkb->rkb_rk->rk_cgrp->rkcg_q,

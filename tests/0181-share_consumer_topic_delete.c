@@ -174,38 +174,34 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
          * also flushes the previous broker's acknowledgements. Verify all
          * records and that every partition is represented. */
         while (total < TD_TOTAL && attempts-- > 0) {
-                size_t n = 0;
-                error    = rd_kafka_share_poll(rkshare, 2000, &batch);
-                n        = rd_kafka_messages_count(batch);
-                TEST_ASSERT(!error, "consume_batch failed: %s",
+                size_t n;
+                error = rd_kafka_share_poll(rkshare, 2000, &batch);
+                TEST_ASSERT(!error, "share_poll failed: %s",
                             rd_kafka_error_string(error));
+                n = rd_kafka_messages_count(batch);
                 TEST_SAY("Phase 1: got %" PRIusz " record(s), total %d/%d\n", n,
                          total + (int)n, TD_TOTAL);
                 for (m = 0; m < n; m++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
                         TEST_ASSERT(
-                            !strcmp(rd_kafka_topic_name(
-                                        rd_kafka_messages_get(batch, m)->rkt),
-                                    topic_del),
+                            !strcmp(rd_kafka_topic_name(msg->rkt), topic_del),
                             "Phase 1 record from unexpected topic %s",
-                            rd_kafka_topic_name(
-                                rd_kafka_messages_get(batch, m)->rkt));
+                            rd_kafka_topic_name(msg->rkt));
                         TEST_ASSERT(
-                            rd_kafka_messages_get(batch, m)->partition >= 0 &&
-                                rd_kafka_messages_get(batch, m)->partition <
-                                    TD_NPART,
-                            "Unexpected partition %" PRId32,
-                            rd_kafka_messages_get(batch, m)->partition);
-                        part_cnt[rd_kafka_messages_get(batch, m)->partition]++;
+                            msg->partition >= 0 && msg->partition < TD_NPART,
+                            "Unexpected partition %" PRId32, msg->partition);
+                        part_cnt[msg->partition]++;
                         if (explicit_ack) {
                                 rd_kafka_resp_err_t ack_err =
-                                    rd_kafka_share_acknowledge(
-                                        rkshare,
-                                        rd_kafka_messages_get(batch, m));
+                                    rd_kafka_share_acknowledge(rkshare, msg);
                                 TEST_ASSERT(!ack_err, "acknowledge failed: %s",
                                             rd_kafka_err2str(ack_err));
                         }
                         total++;
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(total == TD_TOTAL, "Expected %d records, got %d", TD_TOTAL,
                     total);
@@ -284,11 +280,11 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
          * Revert to a plain drain loop once the broker is fixed. */
         attempts = 60;
         while (attempts-- > 0) {
-                size_t got = 0;
-                error      = rd_kafka_share_poll(rkshare, 1000, &batch);
-                got        = rd_kafka_messages_count(batch);
-                TEST_ASSERT(!error, "consume_batch failed: %s",
+                size_t got;
+                error = rd_kafka_share_poll(rkshare, 1000, &batch);
+                TEST_ASSERT(!error, "share_poll failed: %s",
                             rd_kafka_error_string(error));
+                got = rd_kafka_messages_count(batch);
                 TEST_SAY("Phase 2: got %" PRIusz
                          " record(s), kept %d/%d (idle %d)\n",
                          got, keep_rcvd, TD_KEEP_MSGS, idle_polls);
@@ -296,26 +292,27 @@ static void do_test_topic_delete_ack(const char *mode, ack_timing_t timing) {
                         /* An empty poll counts as drained only after every
                          * record has arrived; earlier ones are the session
                          * still recovering. */
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         if (keep_rcvd >= TD_KEEP_MSGS && ++idle_polls >= 3)
                                 break;
                         continue;
                 }
                 idle_polls = 0;
                 for (m = 0; m < got; m++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
                         TEST_ASSERT(
-                            !strcmp(rd_kafka_topic_name(
-                                        rd_kafka_messages_get(batch, m)->rkt),
-                                    topic_keep),
+                            !strcmp(rd_kafka_topic_name(msg->rkt), topic_keep),
                             "Phase 2 returned a record from %s; only %s "
                             "should remain",
-                            rd_kafka_topic_name(
-                                rd_kafka_messages_get(batch, m)->rkt),
-                            topic_keep);
+                            rd_kafka_topic_name(msg->rkt), topic_keep);
                         if (explicit_ack)
-                                rd_kafka_share_acknowledge(
-                                    rkshare, rd_kafka_messages_get(batch, m));
+                                rd_kafka_share_acknowledge(rkshare, msg);
                         keep_rcvd++;
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(keep_rcvd == TD_KEEP_MSGS,
                     "Expected to drain exactly %d records from surviving "

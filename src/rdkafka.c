@@ -3884,8 +3884,14 @@ void rd_kafka_messages_destroy(rd_kafka_messages_t *messages) {
         size_t i;
         if (!messages)
                 return;
-        for (i = 0; i < messages->cnt; i++)
-                rd_kafka_message_destroy(messages->elems[i]);
+        for (i = 0; i < messages->cnt; i++) {
+                /* Skip slots the caller has already destroyed individually
+                 * via rd_kafka_message_destroy() and NULLed; mixing
+                 * per-message and bulk destroy is permitted as long as
+                 * destroyed slots are NULLed out by the caller. */
+                if (messages->elems[i])
+                        rd_kafka_message_destroy(messages->elems[i]);
+        }
         rd_free(messages);
 }
 
@@ -3907,7 +3913,6 @@ rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
                                       rd_kafka_messages_t **rkmessages) {
         rd_kafka_t *rk = rkshare->rkshare_rk;
         rd_kafka_cgrp_t *rkcg;
-        size_t max_poll_records = (size_t)rk->rk_conf.share.max_poll_records;
         rd_bool_t has_records;
         rd_bool_t has_pending_acks;
         rd_kafka_error_t *error = NULL;
@@ -3979,9 +3984,13 @@ rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
                 rd_kafka_share_fetch_fanout(rk, need_fetch_more_records,
                                             ack_batches);
 
-        scratch = rd_malloc(max_poll_records * sizeof(*scratch));
-        error   = rd_kafka_q_serve_share_rkmessages(
-            rkcg->rkcg_q, timeout_ms, scratch, max_poll_records, &cnt);
+        /* q_serve_share_rkmessages allocates the scratch buffer
+         * internally, sized to the actual op's message count, so it
+         * never overflows regardless of how many records a single
+         * SHARE_FETCH_RESPONSE aggregates (max.poll.records is enforced
+         * upstream during fetch scheduling, not here). */
+        error = rd_kafka_q_serve_share_rkmessages(rkcg->rkcg_q, timeout_ms,
+                                                  &scratch, &cnt);
 
         /* Drain rk_rep for callbacks again before returning */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,

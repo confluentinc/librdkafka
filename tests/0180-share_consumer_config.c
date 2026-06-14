@@ -361,7 +361,7 @@ static int consume_record_batches(rd_kafka_share_t *rkshare,
                                   int batch_sizes_cap,
                                   int per_call_timeout_ms,
                                   int max_calls) {
-        rd_kafka_messages_t *rkmessages = NULL;
+        rd_kafka_messages_t *batch = NULL;
         size_t rcvd;
         size_t j;
         rd_kafka_error_t *error;
@@ -370,26 +370,32 @@ static int consume_record_batches(rd_kafka_share_t *rkshare,
         int call;
 
         for (call = 0; call < max_calls && got < target; call++) {
-                rcvd  = 0;
-                error = rd_kafka_share_poll(rkshare, per_call_timeout_ms,
-                                            &rkmessages);
-                rcvd  = rd_kafka_messages_count(rkmessages);
+                error =
+                    rd_kafka_share_poll(rkshare, per_call_timeout_ms, &batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
-                if (rcvd == 0)
+                rcvd = rd_kafka_messages_count(batch);
+                if (rcvd == 0) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
+                }
 
                 if (batches < batch_sizes_cap)
                         batch_sizes[batches] = (int)rcvd;
                 batches++;
 
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(rkmessages, j)->err)
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (!rkm->err)
                                 got++;
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         return batches;
 }

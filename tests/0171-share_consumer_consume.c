@@ -210,17 +210,21 @@ static void consume_messages(share_test_config_t *config,
                         size_t m;
                         rd_kafka_error_t *err;
 
-                        err  = rd_kafka_share_poll(state->consumers[i],
-                                                   poll_timeout, &batch);
-                        rcvd = rd_kafka_messages_count(batch);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        err   = rd_kafka_share_poll(state->consumers[i],
+                                                    poll_timeout, &batch);
 
                         if (err) {
                                 rd_kafka_error_destroy(err);
                                 continue;
                         }
 
+                        rcvd = rd_kafka_messages_count(batch);
                         for (m = 0; m < rcvd; m++) {
-                                if (!rd_kafka_messages_get(batch, m)->err) {
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!msg->err) {
                                         state->per_consumer_count[i]++;
                                         state->total_consumed++;
                                 }
@@ -250,6 +254,9 @@ static void consume_messages(share_test_config_t *config,
                                  dist);
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 }
 
 /**
@@ -606,15 +613,19 @@ static void do_test_rapid_produce_consume_cycles(void) {
                         size_t m;
                         rd_kafka_error_t *err;
 
-                        err  = rd_kafka_share_poll(consumer, 1000, &batch);
-                        rcvd = rd_kafka_messages_count(batch);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        err   = rd_kafka_share_poll(consumer, 1000, &batch);
                         if (err) {
                                 rd_kafka_error_destroy(err);
                                 continue;
                         }
 
+                        rcvd = rd_kafka_messages_count(batch);
                         for (m = 0; m < rcvd; m++) {
-                                if (!rd_kafka_messages_get(batch, m)->err)
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!msg->err)
                                         round_consumed++;
                         }
                 }
@@ -624,6 +635,9 @@ static void do_test_rapid_produce_consume_cycles(void) {
                          round_consumed, msgs_per_round, total_consumed,
                          (round + 1) * msgs_per_round);
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(total_consumed == total_expected,
                     "Expected %d messages, consumed %d", total_expected,
@@ -672,10 +686,12 @@ static void do_test_empty_then_produce(void) {
                 size_t rcvd = 0;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 1000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
                 if (err)
                         rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
                 TEST_SAY("Empty poll %d: received %zu\n", attempts + 1, rcvd);
         }
 
@@ -690,18 +706,25 @@ static void do_test_empty_then_produce(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 1000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(consumed == 100, "Expected 100 messages, consumed %d",
                     consumed);
@@ -760,20 +783,27 @@ static void do_test_sparse_partitions(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 1000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
                 }
 
                 TEST_SAY("Progress: %d/%d\n", consumed, expected);
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(consumed == expected, "Expected %d messages, consumed %d",
                     expected, consumed);
@@ -833,18 +863,25 @@ static void do_test_poll_callback_piggybacked_acks(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 2000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 2000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY("Consumed %d messages\n", consumed);
         TEST_ASSERT(consumed > 0, "Expected to consume some messages");
@@ -988,7 +1025,7 @@ static void do_test_concurrent_thread_access_rejected(void) {
 
         TEST_ASSERT(
             err && rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__CONFLICT,
-            "Expected __CONFLICT from concurrent consume_batch while blocker "
+            "Expected __CONFLICT from concurrent share_poll while blocker "
             "thread holds the gate after %d probe attempts; got: %s",
             probe_attempt + 1,
             err ? rd_kafka_err2name(rd_kafka_error_code(err)) : "no error");
@@ -1000,7 +1037,7 @@ static void do_test_concurrent_thread_access_rejected(void) {
         thrd_join(blocker, NULL);
 
         /* Sequential ownership transfer: gate is now free, the same
-         * main thread should be able to call consume_batch without
+         * main thread should be able to call share_poll without
          * hitting the gate. */
         rd_kafka_messages_destroy(batch);
         batch = NULL;
@@ -1011,6 +1048,7 @@ static void do_test_concurrent_thread_access_rejected(void) {
         if (err)
                 rd_kafka_error_destroy(err);
         rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY("Sequential ownership transfer works after release\n");
 
@@ -1033,6 +1071,7 @@ static void do_test_concurrent_thread_access_rejected(void) {
 static void do_test_headers_preserved(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_messages_t *batch = NULL;
+        rd_kafka_message_t *msg0;
         const char *topic;
         const char *group = "share-headers";
         rd_kafka_topic_partition_list_t *subs;
@@ -1072,17 +1111,18 @@ static void do_test_headers_preserved(void) {
         attempts = 30;
         while (rcvd < 1 && attempts-- > 0) {
                 rd_kafka_error_t *e;
+
                 rd_kafka_messages_destroy(batch);
                 batch = NULL;
-
-                e = rd_kafka_share_poll(consumer, 2000, &batch);
+                e     = rd_kafka_share_poll(consumer, 2000, &batch);
                 if (e)
                         rd_kafka_error_destroy(e);
                 rcvd = rd_kafka_messages_count(batch);
         }
         TEST_ASSERT(rcvd == 1, "Expected 1 record, got %zu", rcvd);
 
-        herr = rd_kafka_message_headers(rd_kafka_messages_get(batch, 0), &hdrs);
+        msg0 = rd_kafka_messages_get(batch, 0);
+        herr = rd_kafka_message_headers(msg0, &hdrs);
         TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR && hdrs,
                     "Failed to get headers: %s", rd_kafka_err2name(herr));
 
@@ -1100,6 +1140,9 @@ static void do_test_headers_preserved(void) {
         TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR, "h3 not present: %s",
                     rd_kafka_err2name(herr));
         TEST_ASSERT(vsz == 2 && memcmp(val, "v3", 2) == 0, "h3 value mismatch");
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
@@ -1345,18 +1388,25 @@ static void do_test_consumer_close_releases_to_group(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumers[0], 2000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumers[0], 2000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 c0_fetched++;
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
         TEST_ASSERT(c0_fetched > 0,
                     "Consumer 0 should have fetched some records, got %d",
                     c0_fetched);
@@ -1376,21 +1426,28 @@ static void do_test_consumer_close_releases_to_group(void) {
                         size_t m;
                         rd_kafka_error_t *err;
 
-                        err  = rd_kafka_share_poll(consumers[i], 1000, &batch);
-                        rcvd = rd_kafka_messages_count(batch);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        err   = rd_kafka_share_poll(consumers[i], 1000, &batch);
                         if (err) {
                                 rd_kafka_error_destroy(err);
                                 continue;
                         }
 
+                        rcvd = rd_kafka_messages_count(batch);
                         for (m = 0; m < rcvd; m++) {
-                                if (!rd_kafka_messages_get(batch, m)->err) {
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!msg->err) {
                                         per_consumer[i]++;
                                         total_consumed++;
                                 }
                         }
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY(
             "Distribution: c0=%d (lost on close), c1=%d, c2=%d, c3=%d "
@@ -1488,15 +1545,19 @@ static void do_test_partition_increase_during_consume(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 1000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
                 }
         }
@@ -1533,18 +1594,25 @@ static void do_test_partition_increase_during_consume(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 1000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(consumed == total_expected,
                     "Expected exactly %d total records after partition grow, "
@@ -1573,6 +1641,7 @@ static void do_test_zero_byte_payload_and_key(void) {
         const char *topic;
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_resp_err_t err;
         size_t rcvd = 0;
         int attempts;
@@ -1633,24 +1702,26 @@ static void do_test_zero_byte_payload_and_key(void) {
         rd_kafka_share_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        {
-                test_share_batch_t acc;
-                test_share_batch_init(&acc, 4);
-                attempts = 30;
-                while (acc.cnt < 4 && attempts-- > 0) {
-                        rd_kafka_error_t *e =
-                            test_share_batch_poll(&acc, consumer, 2000);
-                        if (e)
-                                rd_kafka_error_destroy(e);
-                }
-                rcvd = acc.cnt;
-                TEST_ASSERT(rcvd == 4, "Expected 4 records, got %zu", rcvd);
+        attempts = 30;
+        while (rcvd < 4 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                rd_kafka_error_t *e;
 
-                for (i = 0; i < rcvd; i++) {
-                        key_null  = acc.msgs[i]->key == NULL;
-                        key_empty = acc.msgs[i]->key_len == 0 && !key_null;
-                        val_null  = acc.msgs[i]->payload == NULL;
-                        val_empty = acc.msgs[i]->len == 0 && !val_null;
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                e     = rd_kafka_share_poll(consumer, 2000, &batch);
+                if (e)
+                        rd_kafka_error_destroy(e);
+                batch_rcvd = rd_kafka_messages_count(batch);
+
+                for (i = 0; i < batch_rcvd; i++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+
+                        key_null  = msg->key == NULL;
+                        key_empty = msg->key_len == 0 && !key_null;
+                        val_null  = msg->payload == NULL;
+                        val_empty = msg->len == 0 && !val_null;
 
                         /* Brokers may normalize empty buffers to NULL; accept
                          * either. */
@@ -1666,23 +1737,26 @@ static void do_test_zero_byte_payload_and_key(void) {
                                         saw_empty_kv++;
                         } else if (!key_is_empty_or_null &&
                                    val_is_empty_or_null) {
-                                TEST_ASSERT(
-                                    acc.msgs[i]->key_len == 1 &&
-                                        memcmp(acc.msgs[i]->key, "k", 1) == 0,
-                                    "key-only record: key mismatch");
+                                TEST_ASSERT(msg->key_len == 1 &&
+                                                memcmp(msg->key, "k", 1) == 0,
+                                            "key-only record: key mismatch");
                                 saw_key_only++;
                         } else if (key_is_empty_or_null &&
                                    !val_is_empty_or_null) {
                                 TEST_ASSERT(
-                                    acc.msgs[i]->len == 1 &&
-                                        memcmp(acc.msgs[i]->payload, "v", 1) ==
-                                            0,
+                                    msg->len == 1 &&
+                                        memcmp(msg->payload, "v", 1) == 0,
                                     "value-only record: value mismatch");
                                 saw_value_only++;
                         }
                 }
-                test_share_batch_destroy(&acc);
+                rcvd += batch_rcvd;
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+
+        TEST_ASSERT(rcvd == 4, "Expected 4 records, got %zu", rcvd);
 
         TEST_SAY("Counts: empty_kv=%d null_kv=%d key_only=%d value_only=%d\n",
                  saw_empty_kv, saw_null_kv, saw_key_only, saw_value_only);
@@ -1757,25 +1831,29 @@ static void do_test_compression_codec(const char *codec) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(consumer, 2000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 2000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (m = 0; m < rcvd; m++) {
-                        if (!rd_kafka_messages_get(batch, m)->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_messages_get(batch, m)->len ==
-                                        (size_t)msg_sz,
-                                    "[%s] msg size %zu != expected %d", codec,
-                                    rd_kafka_messages_get(batch, m)->len,
-                                    msg_sz);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err) {
+                                TEST_ASSERT(msg->len == (size_t)msg_sz,
+                                            "[%s] msg size %zu != expected %d",
+                                            codec, msg->len, msg_sz);
                                 consumed++;
                         }
                 }
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(consumed == msg_cnt,
                     "[%s] expected %d records, consumed %d", codec, msg_cnt,
@@ -1814,6 +1892,7 @@ static void do_test_many_and_large_headers(void) {
         const char *topic;
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_resp_err_t err;
         const int hdr_cnt         = 100;
         const size_t big_hdr_size = 64 * 1024;
@@ -1887,79 +1966,92 @@ static void do_test_many_and_large_headers(void) {
         rd_kafka_share_subscribe(consumer, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        test_share_batch_t acc;
-        test_share_batch_init(&acc, 2);
         attempts = 30;
-        while (acc.cnt < 2 && attempts-- > 0) {
-                rd_kafka_error_t *e =
-                    test_share_batch_poll(&acc, consumer, 2000);
+        while (rcvd < 2 && attempts-- > 0) {
+                size_t batch_rcvd = 0;
+                rd_kafka_error_t *e;
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                e     = rd_kafka_share_poll(consumer, 2000, &batch);
                 if (e)
                         rd_kafka_error_destroy(e);
-        }
-        rcvd = acc.cnt;
+                batch_rcvd = rd_kafka_messages_count(batch);
 
-        TEST_ASSERT(rcvd == 2, "Expected 2 records, got %zu", rcvd);
+                for (i = 0; i < batch_rcvd; i++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        msg_hdrs = NULL;
+                        herr     = rd_kafka_message_headers(msg, &msg_hdrs);
+                        TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR &&
+                                        msg_hdrs,
+                                    "headers not available: %s",
+                                    rd_kafka_err2name(herr));
 
-        for (i = 0; i < rcvd; i++) {
-                msg_hdrs = NULL;
-                herr     = rd_kafka_message_headers(acc.msgs[i], &msg_hdrs);
-                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR && msg_hdrs,
-                            "headers not available: %s",
-                            rd_kafka_err2name(herr));
+                        if (msg->key_len == 4 &&
+                            memcmp(msg->key, "many", 4) == 0) {
+                                n = rd_kafka_header_cnt(msg_hdrs);
 
-                if (acc.msgs[i]->key_len == 4 &&
-                    memcmp(acc.msgs[i]->key, "many", 4) == 0) {
-                        n = rd_kafka_header_cnt(msg_hdrs);
+                                TEST_ASSERT(n == (size_t)hdr_cnt,
+                                            "many-headers record: expected %d "
+                                            "headers, got %zu",
+                                            hdr_cnt, n);
 
-                        TEST_ASSERT(n == (size_t)hdr_cnt,
-                                    "many-headers record: expected %d "
-                                    "headers, got %zu",
-                                    hdr_cnt, n);
-
-                        /* Verify every header name+value present. */
-                        for (j = 0; j < (size_t)hdr_cnt; j++) {
-                                rd_snprintf(name, sizeof(name), "h-%zu", j);
-                                rd_snprintf(expected, sizeof(expected), "v-%zu",
-                                            j);
-                                herr = rd_kafka_header_get_last(msg_hdrs, name,
-                                                                &val, &vsz);
-                                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                /* Verify every header name+value present. */
+                                for (j = 0; j < (size_t)hdr_cnt; j++) {
+                                        rd_snprintf(name, sizeof(name), "h-%zu",
+                                                    j);
+                                        rd_snprintf(expected, sizeof(expected),
+                                                    "v-%zu", j);
+                                        herr = rd_kafka_header_get_last(
+                                            msg_hdrs, name, &val, &vsz);
+                                        TEST_ASSERT(
+                                            herr == RD_KAFKA_RESP_ERR_NO_ERROR,
                                             "%s missing: %s", name,
                                             rd_kafka_err2name(herr));
-                                TEST_ASSERT(vsz == strlen(expected) &&
+                                        TEST_ASSERT(
+                                            vsz == strlen(expected) &&
                                                 memcmp(val, expected, vsz) == 0,
                                             "%s value mismatch", name);
-                        }
-                        verified_many = rd_true;
-                } else if (acc.msgs[i]->key_len == 3 &&
-                           memcmp(acc.msgs[i]->key, "big", 3) == 0) {
-                        herr = rd_kafka_header_get_last(msg_hdrs, "big-hdr",
-                                                        &val, &vsz);
-                        TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
-                                    "big-hdr missing: %s",
-                                    rd_kafka_err2name(herr));
-                        TEST_ASSERT(vsz == big_hdr_size,
-                                    "big-hdr size mismatch: expected %zu, "
-                                    "got %zu",
-                                    big_hdr_size, vsz);
+                                }
+                                verified_many = rd_true;
+                        } else if (msg->key_len == 3 &&
+                                   memcmp(msg->key, "big", 3) == 0) {
+                                herr = rd_kafka_header_get_last(
+                                    msg_hdrs, "big-hdr", &val, &vsz);
+                                TEST_ASSERT(herr == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                            "big-hdr missing: %s",
+                                            rd_kafka_err2name(herr));
+                                TEST_ASSERT(vsz == big_hdr_size,
+                                            "big-hdr size mismatch: expected "
+                                            "%zu, got %zu",
+                                            big_hdr_size, vsz);
 
-                        /* Spot-check the content pattern at a few offsets. */
-                        bytes = (const char *)val;
-                        for (k = 0; k < vsz; k += vsz / 16) {
-                                expected_byte = (char)('A' + (k % 26));
-                                TEST_ASSERT(bytes[k] == expected_byte,
+                                /* Spot-check the content pattern at a few
+                                 * offsets. */
+                                bytes = (const char *)val;
+                                for (k = 0; k < vsz; k += vsz / 16) {
+                                        expected_byte = (char)('A' + (k % 26));
+                                        TEST_ASSERT(
+                                            bytes[k] == expected_byte,
                                             "big-hdr byte %zu: expected %c, "
                                             "got %c",
                                             k, expected_byte, bytes[k]);
+                                }
+                                verified_big = rd_true;
                         }
-                        verified_big = rd_true;
                 }
+                rcvd += batch_rcvd;
         }
+
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+
+        TEST_ASSERT(rcvd == 2, "Expected 2 records, got %zu", rcvd);
 
         TEST_ASSERT(verified_many, "many-headers record was not verified");
         TEST_ASSERT(verified_big, "big-header record was not verified");
 
-        test_share_batch_destroy(&acc);
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
 

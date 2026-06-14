@@ -844,7 +844,7 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
         const char *topic = "kip932_fetch_error";
         test_ctx_t ctx    = test_ctx_new();
         rd_kafka_share_t *consumer;
-        rd_kafka_messages_t *rkmessages = NULL;
+        rd_kafka_messages_t *batch = NULL;
         size_t rcvd  = 0;
         int consumed = 0;
         size_t i;
@@ -860,12 +860,15 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
         consumer = new_share_consumer(ctx.bootstraps, "sg-fetch-error");
         subscribe_topics(consumer, &topic, 1);
 
-        rd_kafka_share_poll(consumer, 2000, &rkmessages);
-            rcvd = rd_kafka_messages_count(rkmessages);
+        rd_kafka_share_poll(consumer, 2000, &batch);
+        rcvd = rd_kafka_messages_count(batch);
         for (i = 0; i < rcvd; i++) {
-                if (!rd_kafka_messages_get(rkmessages, i)->err)
+                rd_kafka_message_t *rkm = rd_kafka_messages_get(batch, i);
+                if (rkm && !rkm->err)
                         consumed++;
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY("fetch_error(%s): consumed=%d rcvd=%zu\n",
                  rd_kafka_err2name(err), consumed, rcvd);
@@ -935,7 +938,7 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         const char *topic = "kip932_disconnect";
         test_ctx_t ctx;
         rd_kafka_share_t *consumer;
-        rd_kafka_messages_t *rkmessages = NULL;
+        rd_kafka_messages_t *batch = NULL;
         size_t rcvd  = 0;
         int consumed = 0;
         size_t i;
@@ -955,12 +958,15 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         consumer = new_share_consumer(ctx.bootstraps, "sg-disconnect");
         subscribe_topics(consumer, &topic, 1);
 
-        rd_kafka_share_poll(consumer, 2000, &rkmessages);
-            rcvd = rd_kafka_messages_count(rkmessages);
+        rd_kafka_share_poll(consumer, 2000, &batch);
+        rcvd = rd_kafka_messages_count(batch);
         for (i = 0; i < rcvd; i++) {
-                if (!rd_kafka_messages_get(rkmessages, i)->err)
+                rd_kafka_message_t *rkm = rd_kafka_messages_get(batch, i);
+                if (rkm && !rkm->err)
                         consumed++;
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY("fetch_disconnected: consumed=%d rcvd=%zu\n", consumed, rcvd);
 

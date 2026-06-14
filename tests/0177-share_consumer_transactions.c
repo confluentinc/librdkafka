@@ -117,17 +117,21 @@ static int consume_share_messages(rd_kafka_share_t *rkshare,
                 size_t i;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(rkshare, poll_timeout_ms, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                err = rd_kafka_share_poll(rkshare, poll_timeout_ms, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < rcvd; i++) {
-                        if (!rd_kafka_messages_get(batch, i)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        if (!msg->err)
                                 consumed++;
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         return consumed;
@@ -152,17 +156,21 @@ static int consume_share_no_msgs(rd_kafka_share_t *rkshare,
                 size_t i;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(rkshare, poll_timeout_ms, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                err = rd_kafka_share_poll(rkshare, poll_timeout_ms, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < rcvd; i++) {
-                        if (!rd_kafka_messages_get(batch, i)->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        if (!msg->err)
                                 consumed++;
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         return consumed;
@@ -204,25 +212,25 @@ static void consume_and_verify_offsets(rd_kafka_share_t *rkshare,
                 size_t rcvd = 0;
                 rd_kafka_error_t *err;
 
-                err  = rd_kafka_share_poll(rkshare, 3000, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                err = rd_kafka_share_poll(rkshare, 3000, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < (int)rcvd; i++) {
-                        if (!rd_kafka_messages_get(batch, i)->err &&
-                            consumed < 10) {
-                                received_offsets[consumed] =
-                                    rd_kafka_messages_get(batch, i)->offset;
-                                TEST_SAY(
-                                    "  Message %d: offset=%" PRId64 "\n",
-                                    consumed,
-                                    rd_kafka_messages_get(batch, i)->offset);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        if (!msg->err && consumed < 10) {
+                                received_offsets[consumed] = msg->offset;
+                                TEST_SAY("  Message %d: offset=%" PRId64 "\n",
+                                         consumed, msg->offset);
                                 consumed++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Verify no forbidden offsets were received */
@@ -1171,21 +1179,21 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
         while (consumed == 0 && attempts++ < 30) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 3000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_messages_get(batch, j)->offset ==
-                                        0,
-                                    "Phase 1: expected offset 0, "
-                                    "got %" PRId64,
-                                    rd_kafka_messages_get(batch, j)->offset);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                TEST_ASSERT(msg->offset == 0,
+                                            "Phase 1: expected offset 0, "
+                                            "got %" PRId64,
+                                            msg->offset);
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1194,6 +1202,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
                                 consumed++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(consumed == 1, "Phase 1: expected 1 record, got %d",
                     consumed);
@@ -1208,16 +1218,18 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
         while (attempts-- > 0) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 500, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error)
                         rd_kafka_error_destroy(error);
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        TEST_ASSERT(
-                            rd_kafka_messages_get(batch, j)->err ||
-                                rd_kafka_messages_get(batch, j)->offset != 2,
-                            "Phase 2: aborted Msg2 leaked at "
-                            "offset 2 in read_committed");
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        TEST_ASSERT(msg->err || msg->offset != 2,
+                                    "Phase 2: aborted Msg2 leaked at "
+                                    "offset 2 in read_committed");
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Phase 3: committed Msg3 -> RELEASE */
@@ -1228,21 +1240,21 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
         while (consumed == 0 && attempts++ < 30) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 3000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_messages_get(batch, j)->offset ==
-                                        4,
-                                    "Phase 3: expected offset 4 "
-                                    "(Msg3), got %" PRId64,
-                                    rd_kafka_messages_get(batch, j)->offset);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                TEST_ASSERT(msg->offset == 4,
+                                            "Phase 3: expected offset 4 "
+                                            "(Msg3), got %" PRId64,
+                                            msg->offset);
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1251,6 +1263,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
                                 consumed++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(consumed == 1, "Phase 3: expected 1 record, got %d",
                     consumed);
@@ -1270,24 +1284,25 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
         while (attempts-- > 0) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 1000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
                                 /* Should only be Msg3 (offset 4) re-delivered;
                                  * Msg4 at offset 6 is aborted in
                                  * read_committed.
                                  */
                                 TEST_ASSERT(
-                                    rd_kafka_messages_get(batch, j)->offset ==
-                                        4,
+                                    msg->offset == 4,
                                     "Phase 4: unexpected offset %" PRId64,
-                                    rd_kafka_messages_get(batch, j)->offset);
+                                    msg->offset);
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1295,6 +1310,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
                                             rd_kafka_err2name(ack_err));
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 if (rcvd > 0) {
                         error = rd_kafka_share_commit_async(consumer);
                         if (error)
@@ -1322,19 +1339,20 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
                 rd_bool_t all_seen;
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 2000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
-                                int64_t off =
-                                    rd_kafka_messages_get(batch, j)->offset;
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                int64_t off = msg->offset;
                                 if (off >= 0 && off < 20)
                                         seen[off] = rd_true;
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1343,6 +1361,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_release(void) {
                                 new_acks++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 if (new_acks > 0) {
                         error = rd_kafka_share_commit_async(consumer);
                         if (error)
@@ -1426,21 +1446,21 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
         while (consumed == 0 && attempts++ < 30) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 3000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_messages_get(batch, j)->offset ==
-                                        0,
-                                    "Phase 1: expected offset 0, "
-                                    "got %" PRId64,
-                                    rd_kafka_messages_get(batch, j)->offset);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                TEST_ASSERT(msg->offset == 0,
+                                            "Phase 1: expected offset 0, "
+                                            "got %" PRId64,
+                                            msg->offset);
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1449,6 +1469,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
                                 consumed++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(consumed == 1, "Phase 1: expected 1 record, got %d",
                     consumed);
@@ -1462,16 +1484,18 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
         while (attempts-- > 0) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 500, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error)
                         rd_kafka_error_destroy(error);
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        TEST_ASSERT(
-                            rd_kafka_messages_get(batch, j)->err ||
-                                rd_kafka_messages_get(batch, j)->offset != 2,
-                            "Phase 2: aborted Msg2 leaked at "
-                            "offset 2 in read_committed");
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        TEST_ASSERT(msg->err || msg->offset != 2,
+                                    "Phase 2: aborted Msg2 leaked at "
+                                    "offset 2 in read_committed");
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Phase 3: committed Msg3 -> REJECT */
@@ -1482,21 +1506,21 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
         while (consumed == 0 && attempts++ < 30) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 3000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
-                                TEST_ASSERT(
-                                    rd_kafka_messages_get(batch, j)->offset ==
-                                        4,
-                                    "Phase 3: expected offset 4 "
-                                    "(Msg3), got %" PRId64,
-                                    rd_kafka_messages_get(batch, j)->offset);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                TEST_ASSERT(msg->offset == 4,
+                                            "Phase 3: expected offset 4 "
+                                            "(Msg3), got %" PRId64,
+                                            msg->offset);
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1505,6 +1529,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
                                 consumed++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(consumed == 1, "Phase 3: expected 1 record, got %d",
                     consumed);
@@ -1519,19 +1545,23 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
         while (attempts-- > 0) {
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 500, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error)
                         rd_kafka_error_destroy(error);
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
                                 TEST_FAIL(
                                     "Phase 4: unexpected record at "
                                     "offset %" PRId64
                                     " (Msg3 was REJECTed, Msg4 is "
                                     "aborted in read_committed)",
-                                    rd_kafka_messages_get(batch, j)->offset);
+                                    msg->offset);
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Phase 5: alter isolation level to read_uncommitted */
@@ -1554,15 +1584,16 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
                 rd_bool_t all_seen;
                 rcvd  = 0;
                 error = rd_kafka_share_poll(consumer, 2000, &batch);
-                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(batch, j)->err) {
-                                int64_t off =
-                                    rd_kafka_messages_get(batch, j)->offset;
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                int64_t off = msg->offset;
                                 TEST_ASSERT(off != 4,
                                             "Phase 7: Msg3 (offset 4) "
                                             "should not be redelivered "
@@ -1570,7 +1601,7 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
                                 if (off >= 0 && off < 20)
                                         seen[off] = rd_true;
                                 ack_err = rd_kafka_share_acknowledge_type(
-                                    consumer, rd_kafka_messages_get(batch, j),
+                                    consumer, msg,
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
                                 TEST_ASSERT(ack_err ==
                                                 RD_KAFKA_RESP_ERR_NO_ERROR,
@@ -1579,6 +1610,8 @@ static void do_test_dynamic_committed_to_uncommitted_with_reject(void) {
                                 new_acks++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 if (new_acks > 0) {
                         error = rd_kafka_share_commit_async(consumer);
                         if (error)

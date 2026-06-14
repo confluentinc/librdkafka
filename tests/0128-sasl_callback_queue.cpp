@@ -177,13 +177,14 @@ static void do_test_share_consumer(bool use_background_queue) {
       rd_kafka_topic_partition_list_destroy(sub);
 
   } else {
-    /* Poll via share_poll — this serves the main queue which should
-     * trigger the OAUTHBEARER refresh callback. */
-    rd_kafka_messages_t *msgs = NULL;
-    rd_kafka_error_t *err     = rd_kafka_share_poll(rkshare, 1000, &msgs);
+    /* Poll via share_poll — this serves the main queue
+     * which should trigger the OAUTHBEARER refresh callback. */
+    rd_kafka_messages_t *batch = NULL;
+    rd_kafka_error_t *err      = rd_kafka_share_poll(rkshare, 1000, &batch);
     if (err)
       rd_kafka_error_destroy(err);
-    rd_kafka_messages_destroy(msgs);
+    rd_kafka_messages_destroy(batch);
+    batch = NULL;
   }
 
   Test::Say(tostr() << "share_cb_called = " << rd_atomic32_get(&share_cb_called)

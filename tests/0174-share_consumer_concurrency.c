@@ -266,16 +266,16 @@ static int consumer_thread_func(void *arg) {
                 if (!keep_running)
                         break;
 
-                rcvd = 0;
-                err  = rd_kafka_share_poll(consumer, 500, &batch);
-                rcvd = rd_kafka_messages_count(batch);
+                err = rd_kafka_share_poll(consumer, 500, &batch);
                 if (err) {
-                        TEST_SAY(
-                            "Consumer thread %d: consume_batch error: %s\n",
-                            args->consumer_id, rd_kafka_error_string(err));
+                        TEST_SAY("Consumer thread %d: share_poll error: %s\n",
+                                 args->consumer_id, rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
 
                 /* Per-record atomic step:
                  *   ACK → process (count into shared state under lock) →
@@ -289,6 +289,9 @@ static int consumer_thread_func(void *arg) {
                         rd_kafka_message_t *msg =
                             rd_kafka_messages_get(batch, m);
 
+                        if (!msg)
+                                continue;
+
                         if (msg->err) {
                                 const char *msg_topic =
                                     msg->rkt ? rd_kafka_topic_name(msg->rkt)
@@ -300,7 +303,6 @@ static int consumer_thread_func(void *arg) {
                                     args->consumer_id, msg_topic,
                                     msg->partition, msg->offset,
                                     rd_kafka_err2name(msg->err));
-                                rd_kafka_message_destroy(msg);
                                 continue;
                         }
 
@@ -317,7 +319,6 @@ static int consumer_thread_func(void *arg) {
                                             "for this record\n",
                                             args->consumer_id, msg->offset,
                                             rd_kafka_err2name(ack_err));
-                                        rd_kafka_message_destroy(msg);
                                         continue;
                                 }
                                 acked_in_batch++;
@@ -336,9 +337,10 @@ static int consumer_thread_func(void *arg) {
                                 state->total_consumed++;
                                 mtx_unlock(&state->lock);
                         }
-
-                        rd_kafka_message_destroy(msg);
                 }
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 /* Flush the per-record acks to the broker before the
                  * next consume_batch or stop check. Per-partition

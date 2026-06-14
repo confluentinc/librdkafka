@@ -93,7 +93,7 @@ static void do_test_no_records_after_fatal_error(void) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_messages_t *rkmessages = NULL;
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "sg-0186-no-records-after-fatal";
@@ -140,13 +140,15 @@ static void do_test_no_records_after_fatal_error(void) {
 
         attempts = 0;
         while (attempts++ < 50) {
-                size_t rcvd = 0;
-                error       = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
-                rcvd        = rd_kafka_messages_count(rkmessages);
+                size_t rcvd;
+                error = rd_kafka_share_poll(rkshare, 1000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 TEST_ASSERT(rcvd == 0,
                             "no records expected while waiting for the fatal "
                             "error, got %d",
                             (int)rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 if (error) {
                         TEST_ASSERT(rd_kafka_error_is_fatal(error),
                                     "expected a fatal error, got non-fatal %s",
@@ -170,12 +172,14 @@ static void do_test_no_records_after_fatal_error(void) {
         /* 5. Every subsequent consume_batch call must keep returning zero
          *    records, even though new messages are available. */
         for (i = 0; i < 10; i++) {
-                size_t rcvd = 0;
-                error       = rd_kafka_share_poll(rkshare, 500, &rkmessages);
-                rcvd        = rd_kafka_messages_count(rkmessages);
+                size_t rcvd;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 TEST_ASSERT(rcvd == 0,
                             "expected 0 records on post-fatal call %d, got %d",
                             i, (int)rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 if (error)
                         rd_kafka_error_destroy(error);
         }
@@ -212,7 +216,7 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         const char *bootstraps;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_messages_t *rkmessages = NULL;
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *error;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "sg-0186-close-no-leave-after-fatal";
@@ -249,22 +253,27 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
         /* 2. Consume at least one batch and acknowledge every record.
          *    Break out as soon as we have received some records. */
         while (consumed == 0 && attempts++ < 30) {
-                size_t rcvd = 0;
+                size_t rcvd;
                 size_t j;
-                error = rd_kafka_share_poll(rkshare, 3000, &rkmessages);
-                rcvd  = rd_kafka_messages_count(rkmessages);
+                error = rd_kafka_share_poll(rkshare, 3000, &batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rd_kafka_messages_get(rkmessages, j)->err) {
-                                TEST_CALL_ERR__(rd_kafka_share_acknowledge(
-                                    rkshare,
-                                    rd_kafka_messages_get(rkmessages, j)));
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (!rkm->err) {
+                                TEST_CALL_ERR__(
+                                    rd_kafka_share_acknowledge(rkshare, rkm));
                                 consumed++;
                         }
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(consumed > 0, "expected to consume and ack > 0 records");
         TEST_SAY("Consumed and acknowledged %d records\n", consumed);
@@ -283,9 +292,9 @@ static void do_test_close_flushes_acks_after_fatal_error(void) {
          *    the synchronization point for that handling. */
         attempts = 0;
         while (attempts++ < 50) {
-                rd_kafka_messages_destroy(rkmessages);
-                rkmessages = NULL;
-                error      = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
+                error = rd_kafka_share_poll(rkshare, 1000, &batch);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 if (error) {
                         TEST_ASSERT(rd_kafka_error_is_fatal(error),
                                     "expected a fatal error, got non-fatal %s",

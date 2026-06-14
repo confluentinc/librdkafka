@@ -1050,44 +1050,6 @@ int test_share_consume_msgs(rd_kafka_share_t *rk,
                             const char **expected_topics,
                             int expected_topic_cnt);
 
-/**
- * @brief Flat view of messages collected across one or more
- *        rd_kafka_share_poll() calls.
- *
- * Owns the rd_kafka_messages_t handles returned by each poll, so that the
- * rd_kafka_message_t* pointers in \c msgs[] stay valid until
- * test_share_batch_destroy() is called. Use this when test logic needs
- * indexed access to records that may have arrived across multiple polls
- * (e.g. to ack records 0..N out-of-order, or to compare against tracked
- * offsets after a drain loop).
- */
-typedef struct test_share_batch_s {
-        rd_kafka_message_t **msgs;     /**< flat array of message pointers,
-                                        *   size capacity */
-        size_t cnt;                    /**< number of messages collected */
-        size_t capacity;               /**< maximum messages we will keep */
-        rd_kafka_messages_t **handles; /**< owned message-list handles */
-        size_t handle_cnt;
-        size_t handle_capacity;
-} test_share_batch_t;
-
-void test_share_batch_init(test_share_batch_t *batch, size_t capacity);
-
-/**
- * @brief Poll the share consumer once and append the returned messages
- *        to \p batch.
- *
- * @returns The error from rd_kafka_share_poll() (caller must destroy if
- *          non-NULL). \p batch always takes ownership of the messages
- *          handle, even on error or empty poll.
- */
-rd_kafka_error_t *test_share_batch_poll(test_share_batch_t *batch,
-                                        rd_kafka_share_t *rk,
-                                        int timeout_ms);
-
-/** @brief Destroy all owned handles and free \p batch's storage. */
-void test_share_batch_destroy(test_share_batch_t *batch);
-
 void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
                                          int topic_count,
                                          ...);

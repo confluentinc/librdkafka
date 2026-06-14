@@ -215,16 +215,12 @@ static void do_test_share_consumer(bool set_after_auth_failure) {
   if (set_after_auth_failure) {
     Test::Say("Awaiting share consumer auth failure\n");
     while (!share_error_seen) {
-      rd_kafka_messages_destroy(batch);
-      batch = NULL;
-      err   = rd_kafka_share_poll(sc, 1000, &batch);
-      rcvd  = rd_kafka_messages_count(batch);
-      (void)rcvd;
+      err = rd_kafka_share_poll(sc, 1000, &batch);
       if (err)
         rd_kafka_error_destroy(err);
+      rd_kafka_messages_destroy(batch);
+      batch = NULL;
     }
-    rd_kafka_messages_destroy(batch);
-    batch = NULL;
     Test::Say("Share consumer authentication error seen\n");
   }
 
@@ -238,16 +234,22 @@ static void do_test_share_consumer(bool set_after_auth_failure) {
   attempts = 100;
   rcvd     = 0;
   while (rcvd == 0 && attempts-- > 0) {
-    err  = rd_kafka_share_poll(sc, 3000, &batch);
-    rcvd = rd_kafka_messages_count(batch);
+    err = rd_kafka_share_poll(sc, 3000, &batch);
     if (err)
       rd_kafka_error_destroy(err);
+    rcvd = rd_kafka_messages_count(batch);
+    if (rcvd == 0) {
+      rd_kafka_messages_destroy(batch);
+      batch = NULL;
+    }
   }
   TEST_ASSERT(rcvd > 0,
               "Share consumer failed to consume message after "
               "credential update");
-  for (size_t i = 0; i < rcvd; i++)
-    Test::Say("Share consumer successfully consumed after credential update\n");
+  rd_kafka_messages_destroy(batch);
+  batch = NULL;
+
+  Test::Say("Share consumer successfully consumed after credential update\n");
 
   rd_kafka_share_consumer_close(sc);
   rd_kafka_share_destroy(sc);

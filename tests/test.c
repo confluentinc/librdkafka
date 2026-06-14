@@ -8052,37 +8052,39 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id,
  *
  * @returns 0 on success, -1 if message from unexpected topic received.
  */
-int test_share_consume_batch(rd_kafka_share_t *rk,
-                             int timeout_ms,
-                             const char **expected_topics,
-                             int expected_topic_cnt,
-                             int *out_valid) {
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+int test_share_poll(rd_kafka_share_t *rk,
+                    int timeout_ms,
+                    const char **expected_topics,
+                    int expected_topic_cnt,
+                    int *out_valid) {
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
-        size_t rcvd = 0;
-        int valid   = 0;
-        size_t i;
+        size_t rcvd, i;
+        int valid = 0;
         int j;
         int ret = 0;
 
-        err = rd_kafka_share_consume_batch(rk, timeout_ms, batch, &rcvd);
+        err = rd_kafka_share_poll(rk, timeout_ms, &batch);
         if (err) {
                 rd_kafka_error_destroy(err);
+                rd_kafka_messages_destroy(batch);
                 *out_valid = 0;
                 return 0;
         }
 
+        rcvd = rd_kafka_messages_count(batch);
         for (i = 0; i < rcvd; i++) {
-                if (batch[i]->err) {
-                        /* Skip error messages */
-                        rd_kafka_message_destroy(batch[i]);
+                rd_kafka_message_t *msg = rd_kafka_messages_get(batch, i);
+
+                if (msg->err) {
+                        /* Skip error messages (destroyed by
+                         * rd_kafka_messages_destroy() below) */
                         continue;
                 }
 
                 if (expected_topics) {
-                        const char *msg_topic =
-                            rd_kafka_topic_name(batch[i]->rkt);
-                        int found = 0;
+                        const char *msg_topic = rd_kafka_topic_name(msg->rkt);
+                        int found             = 0;
 
                         /* Verify message is from expected topic */
                         for (j = 0; j < expected_topic_cnt; j++) {
@@ -8102,9 +8104,9 @@ int test_share_consume_batch(rd_kafka_share_t *rk,
                         }
                 }
                 valid++;
-                rd_kafka_message_destroy(batch[i]);
         }
 
+        rd_kafka_messages_destroy(batch);
         *out_valid = valid;
         return ret;
 }
@@ -8135,8 +8137,8 @@ int test_share_consume_msgs(rd_kafka_share_t *rk,
                 int batch_cnt = 0;
                 int ret;
 
-                ret = test_share_consume_batch(rk, timeout_ms, expected_topics,
-                                               expected_topic_cnt, &batch_cnt);
+                ret = test_share_poll(rk, timeout_ms, expected_topics,
+                                      expected_topic_cnt, &batch_cnt);
                 if (ret < 0)
                         return -1; /* Wrong topic detected */
 
@@ -8348,23 +8350,21 @@ rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
         rd_bool_t success = rd_false;
         int elapsed       = 0;
         int poll_interval = 100;
-        rd_kafka_message_t *rkmessages[100];
-        size_t rcvd;
 
         while (elapsed < timeout_ms) {
-                rd_kafka_error_t *error = rd_kafka_share_consume_batch(
-                    rkshare, poll_interval, rkmessages, &rcvd);
+                rd_kafka_messages_t *batch = NULL;
+                rd_kafka_error_t *error =
+                    rd_kafka_share_poll(rkshare, poll_interval, &batch);
                 if (error) {
                         TEST_SAY(
                             "test_wait_for_cb_with_poll: "
-                            "consume_batch err=%s (%s) rcvd=%zu\n",
+                            "share_poll err=%s (%s) rcvd=%zu\n",
                             rd_kafka_err2name(rd_kafka_error_code(error)),
-                            rd_kafka_error_string(error), rcvd);
+                            rd_kafka_error_string(error),
+                            rd_kafka_messages_count(batch));
                         rd_kafka_error_destroy(error);
                 }
-
-                for (size_t i = 0; i < rcvd; i++)
-                        rd_kafka_message_destroy(rkmessages[i]);
+                rd_kafka_messages_destroy(batch);
 
                 if (state->callback_cnt >= min_callbacks) {
                         success = rd_true;

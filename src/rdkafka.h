@@ -266,6 +266,7 @@ typedef struct rd_kafka_Uuid_s rd_kafka_Uuid_t;
 typedef struct rd_kafka_topic_partition_result_s
     rd_kafka_topic_partition_result_t;
 typedef struct rd_kafka_share_s rd_kafka_share_t;
+typedef struct rd_kafka_messages_s rd_kafka_messages_t;
 /* @endcond */
 
 
@@ -3265,20 +3266,77 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                                               size_t errstr_size);
 
 /**
- * @brief Consume a batch of messages from the share consumer instance.
+ * @brief Poll the share consumer for a batch of messages. It is different from
+ *        normal consumer poll where a single record is returned, this API
+ *        returns a batch of messages in a single call.
  *
  * @param rkshare    Share consumer instance.
  * @param timeout_ms Maximum time to block waiting for messages.
- * @param rkmessages Output array of messages - this must be preallocated with
- * at least enough capacity for size max.poll.records.
- * @param rkmessages_size Output number of messages returned in rkmessages.
+ * @param rkmessages Output pointer to a newly-allocated message list (callee
+ *                   allocates). On return:
+ *                   - On success with at least one message: \c *rkmessages
+ *                     points to an \c rd_kafka_messages_t handle owned by the
+ *                     caller, who must release it with
+ *                     rd_kafka_messages_destroy().
+ *                   - On error or timeout with no messages:
+ *                     \c *rkmessages is set to NULL.
+ *                   \c rd_kafka_messages_destroy(NULL) is a safe no-op so
+ *                   callers may unconditionally destroy.
+ *
+ * Use rd_kafka_messages_count() and rd_kafka_messages_get() to access the
+ * returned messages.
+ *
+ * @note The rkmessages should always be pointing to NULL otherwise it will
+ *       be lost and there will be memory leak.
+ *
+ * @returns NULL on success or an \c rd_kafka_error_t (caller must
+ *          rd_kafka_error_destroy()) on failure.
  */
 RD_EXPORT
-rd_kafka_error_t *
-rd_kafka_share_consume_batch(rd_kafka_share_t *rkshare,
-                             int timeout_ms,
-                             rd_kafka_message_t **rkmessages /* out */,
-                             size_t *rkmessages_size /* out */);
+rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
+                                      int timeout_ms,
+                                      rd_kafka_messages_t **rkmessages);
+
+/**
+ * @brief Returns the number of messages in \p messages.
+ *
+ * @param messages Message list returned by rd_kafka_share_poll().
+ *                 May be NULL, in which case 0 is returned.
+ *
+ * @returns The number of messages in \p messages.
+ */
+RD_EXPORT
+size_t rd_kafka_messages_count(const rd_kafka_messages_t *messages);
+
+/**
+ * @brief Returns the message at zero-based \p index in \p messages.
+ *
+ * The returned message is owned by \p messages and remains valid until
+ * rd_kafka_messages_destroy() is called.
+ *
+ * @param messages Message list returned by rd_kafka_share_poll().
+ * @param index    Zero-based index of the message to return.
+ *
+ * @returns The message at \p index, or NULL if \p messages is NULL or
+ *          \p index is out of bounds.
+ */
+RD_EXPORT
+rd_kafka_message_t *rd_kafka_messages_get(const rd_kafka_messages_t *messages,
+                                          size_t index);
+
+/**
+ * @brief Destroys \p messages and all messages it contains.
+ *
+ * After this call any \c rd_kafka_message_t pointer previously obtained via
+ * rd_kafka_messages_get() on \p messages is invalid. Users should only use
+ * this method to destroy the \p messages handle returned by
+ * rd_kafka_share_poll() and set the pointer to NULL after destroying to avoid
+ * use-after-free bugs.
+ *
+ * @param messages Message list to destroy. NULL is a safe no-op.
+ */
+RD_EXPORT
+void rd_kafka_messages_destroy(rd_kafka_messages_t *messages);
 
 /**
  * @enum rd_kafka_share_AcknowledgeType_t
@@ -4025,7 +4083,7 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
  * @param rkshare Share consumer instance.
  * @param rkqu    Queue to forward logs to. If NULL the logs are forwarded
  *                to the share consumer's internal rk_rep, which is drained
- *                by rd_kafka_share_consume_batch() /
+ *                by rd_kafka_share_poll() /
  *                rd_kafka_share_commit_sync() / rd_kafka_share_commit_async()
  *                on the application's poll thread.
  *
@@ -5165,7 +5223,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  * @remark Topic names are forwarded verbatim to the broker via the share
  *         group heartbeat. The broker validates them; unavailable or
  *         unauthorized topics will surface as errors via
- *         rd_kafka_share_consume_batch().
+ *         rd_kafka_share_poll().
  *
  * @remark If \p topics is empty (cnt == 0), the call is equivalent to
  *         rd_kafka_share_unsubscribe(): the subscription is cleared and

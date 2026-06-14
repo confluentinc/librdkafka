@@ -1788,12 +1788,6 @@ int main(int argc, char **argv) {
         } else if (mode == 'S') {
                 /* Share Consumer */
                 rd_kafka_share_t *rkshare;
-                rd_kafka_message_t **rkmessages = NULL;
-                /* TODO: integrate with max.poll.records once we decide
-                 * how -B should map to share consumer batch sizing. */
-                int share_batch_size = 10001;
-
-                rkmessages = malloc(sizeof(*rkmessages) * share_batch_size);
 
                 /* Create share consumer instance. */
                 rkshare =
@@ -1817,14 +1811,14 @@ int main(int argc, char **argv) {
 
                 while (run && (msgcnt == -1 || msgcnt > (int)cnt.msgs)) {
                         uint64_t fetch_latency;
-                        size_t rcvd_msgs = 0;
+                        rd_kafka_messages_t *rkmessages = NULL;
+                        size_t rcvd_msgs;
                         size_t i;
                         rd_kafka_error_t *error;
 
                         fetch_latency = rd_clock();
 
-                        error = rd_kafka_share_consume_batch(
-                            rkshare, 1000, rkmessages, &rcvd_msgs);
+                        error = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
 
                         cnt.t_fetch_latency += rd_clock() - fetch_latency;
 
@@ -1832,13 +1826,15 @@ int main(int argc, char **argv) {
                                 fprintf(stderr, "%% Share consume error: %s\n",
                                         rd_kafka_error_string(error));
                                 rd_kafka_error_destroy(error);
+                                rd_kafka_messages_destroy(rkmessages);
                                 continue;
                         }
 
-                        for (i = 0; i < rcvd_msgs; i++) {
-                                msg_consume(rkmessages[i], NULL);
-                                rd_kafka_message_destroy(rkmessages[i]);
-                        }
+                        rcvd_msgs = rd_kafka_messages_count(rkmessages);
+                        for (i = 0; i < rcvd_msgs; i++)
+                                msg_consume(
+                                    rd_kafka_messages_get(rkmessages, i), NULL);
+                        rd_kafka_messages_destroy(rkmessages);
 
                         if (rcvd_msgs > 0 && rate_sleep)
                                 do_sleep(rate_sleep);
@@ -1850,8 +1846,6 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "%% Closing share consumer\n");
                 rd_kafka_share_consumer_close(rkshare);
                 rd_kafka_share_destroy(rkshare);
-
-                free(rkmessages);
         }
 
         if (hdrs)

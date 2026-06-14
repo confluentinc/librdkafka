@@ -1035,13 +1035,11 @@ rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare);
 rd_kafka_share_t *test_create_share_consumer(const char *group_id,
                                              const char *ack_mode);
 
-#define TEST_SHARE_BATCH_SIZE 10001
-
-int test_share_consume_batch(rd_kafka_share_t *rk,
-                             int timeout_ms,
-                             const char **expected_topics,
-                             int expected_topic_cnt,
-                             int *out_valid);
+int test_share_poll(rd_kafka_share_t *rk,
+                    int timeout_ms,
+                    const char **expected_topics,
+                    int expected_topic_cnt,
+                    int *out_valid);
 
 int test_share_consume_msgs(rd_kafka_share_t *rk,
                             int expected,

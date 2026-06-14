@@ -933,6 +933,24 @@ struct rd_kafka_share_s {
         rd_bool_t rkshare_subscribed;
 };
 
+/**
+ * @brief Opaque message list returned by rd_kafka_share_poll().
+ *
+ * The struct is allocated as a flexible array sized to the exact message
+ * count returned by a single poll. The caller releases the list and all
+ * contained messages via rd_kafka_messages_destroy().
+ */
+/**
+ * TODO KIP-932: GA: Fix this to use FAM with message struct not
+ * pointer to messages.
+ */
+struct rd_kafka_messages_s {
+        size_t cnt;                  /**< Number of messages. */
+        rd_kafka_message_t *elems[]; /**< Message pointer array. */
+};
+
+rd_kafka_messages_t *rd_kafka_messages_new(size_t cnt);
+
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
 #define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk) rwlock_rdunlock(&(rk)->rk_lock)

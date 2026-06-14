@@ -3668,39 +3668,34 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                            rd_kafka_broker_name(rkb),
                            rko->rko_u.share_fetch.should_fetch,
                            rko->rko_u.share_fetch.should_leave);
-                /* This is only temporary handling for testing to avoid crashing
-                 * on assert  - the code below will automatically enqueue a
-                 * reply which is not the final behaviour. */
-                /* Insert errors randomly for testing, remove this code once
-                 * actual errors can be tested via the mock broker. */
-                // if (rd_jitter(0, 10) > 7) {
-                //         rd_rkb_dbg(rkb, CGRP, "SHAREFETCH",
-                //                    "Injecting error! %s : %d",
-                //                    rd_kafka_broker_name(rkb),
-                //                    rko->rko_u.share_fetch.should_fetch);
 
-                //         rd_kafka_op_reply(rko, RD_KAFKA_RESP_ERR__STATE);
-                //         rko = NULL;
-                // }
-                /* TODO KIP-932: Verify handling of this op */
                 if (rd_kafka_broker_or_instance_terminating(rkb)) {
                         rd_kafka_dbg(rkb->rkb_rk, BROKER, "SHAREFETCH",
                                      "Ignoring SHARE_FETCH op: "
                                      "instance or broker is terminating");
                         rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
                             rko, rd_kafka_broker_destroy_error(rkb->rkb_rk));
-                } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
-                        /* Backstop: the main thread filters on rkb_state
-                         * in rd_kafka_share_select_broker, so this only
-                         * fires when the broker transitioned to !UP
-                         * after that unlocked check. */
+                } else if (rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP &&
+                           !rkb->rkb_reauth_in_progress) {
+                        /* Broker not usable for a share RPC yet.
+                         *
+                         * Exception: during SASL reauthentication the
+                         * connection and share session stay live, so the op is
+                         * let through (it waits in the output queue until
+                         * reauth completes) instead of being bounced, to avoid
+                         * failing acks for records already acquired on the
+                         * broker, which would otherwise be redelivered when
+                         * their lock lapses.
+                         *
+                         * __TRANSPORT signals the caller that the broker is
+                         * transiently unwritable and the op may be retried. */
                         rd_kafka_dbg(
                             rkb->rkb_rk, BROKER, "SHAREFETCH",
                             "Ignoring SHARE_FETCH op: "
                             "broker not up (state %s)",
                             rd_kafka_broker_state_names[rkb->rkb_state]);
                         rd_kafka_share_fetch_op_reply_and_update_ack_details_with_err(
-                            rko, RD_KAFKA_RESP_ERR__STATE);
+                            rko, RD_KAFKA_RESP_ERR__TRANSPORT);
                 } else if (rko->rko_u.share_fetch.should_leave) {
                         rd_kafka_broker_share_fetch_session_leave(rkb, rko,
                                                                   rd_clock());
@@ -4570,9 +4565,7 @@ static void rd_kafka_broker_producer_serve(rd_kafka_broker_t *rkb,
 }
 
 /**
- * Consumer serving
- *
- * TODO KIP-932: Fix timeouts.
+ * @brief Share consumer serving
  */
 static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                                                  rd_ts_t abs_timeout) {
@@ -4590,9 +4583,9 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
 
                 rd_kafka_broker_unlock(rkb);
 
-                /*
-                 * TODO KIP-932: Check the below connection handling properly.
-                 */
+                /* Drives reconnection: requests a persistent connection so a
+                 * down broker reconnects on its own (fetches are op-driven and
+                 * ops only target UP brokers). */
                 if (rkb->rkb_toppar_cnt > 0 &&
                     rkb->rkb_share_fetch_session.epoch >= 0 &&
                     rkb->rkb_state != RD_KAFKA_BROKER_STATE_UP) {
@@ -4601,19 +4594,15 @@ static void rd_kafka_broker_share_consumer_serve(rd_kafka_broker_t *rkb,
                         rkb->rkb_persistconn.internal++;
                 }
 
-                /**
-                 * TODO KIP-932: Check if the below is needed. Currently, used
-                 *               as it is from the original consumer serve
-                 * function.
-                 */
-                /* Check and move retry buffers */
+                /* Move due retry buffers back to the output queue and shorten
+                 * the wakeup to the next pending retry. Used by
+                 * connection-setup and metadata requests (ApiVersion, SASL,
+                 * Metadata), not by ShareFetch/ShareAcknowledge. */
                 if (unlikely(rd_atomic32_get(&rkb->rkb_retrybufs.rkbq_cnt) > 0))
                         rd_kafka_broker_retry_bufs_move(rkb, &min_backoff);
 
                 if (min_backoff > abs_timeout)
                         min_backoff = abs_timeout;
-
-                // rd_kafka_broker_update_share_fetch_session(rkb);
 
                 if (rd_kafka_broker_ops_io_serve(rkb, min_backoff))
                         return; /* Wakeup */

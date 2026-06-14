@@ -3885,12 +3885,7 @@ void rd_kafka_messages_destroy(rd_kafka_messages_t *messages) {
         if (!messages)
                 return;
         for (i = 0; i < messages->cnt; i++) {
-                /* Skip slots the caller has already destroyed individually
-                 * via rd_kafka_message_destroy() and NULLed; mixing
-                 * per-message and bulk destroy is permitted as long as
-                 * destroyed slots are NULLed out by the caller. */
-                if (messages->elems[i])
-                        rd_kafka_message_destroy(messages->elems[i]);
+                rd_kafka_message_destroy(messages->elems[i]);
         }
         rd_free(messages);
 }

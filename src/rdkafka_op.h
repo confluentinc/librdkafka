@@ -772,7 +772,6 @@ struct rd_kafka_op_s {
                         rd_bool_t should_fetch;
 
                         /** Absolute timeout left to complete this share-fetch.
-                         * TODO KIP-932: Use timeout properly.
                          */
                         rd_ts_t abs_timeout;
 

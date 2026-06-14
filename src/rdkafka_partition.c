@@ -2164,6 +2164,8 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
         rd_kafka_toppar_t *rktp = NULL;
         int outdated            = 0;
 
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rk));
+
         if (rko->rko_rktp)
                 rktp = rko->rko_rktp;
 
@@ -2368,6 +2370,16 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
                                                    rd_kafka_replyq_t replyq) {
         int32_t version;
 
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
+                             "consume_start is not supported for share "
+                             "consumers: %s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
         rd_kafka_q_lock(rktp->rktp_fetchq);
         if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
                 rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
@@ -2400,6 +2412,16 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop(rd_kafka_toppar_t *rktp,
                                                   rd_kafka_replyq_t replyq) {
         int32_t version;
 
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
+                             "consume_stop is not supported for share "
+                             "consumers: %s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
 
@@ -2428,6 +2450,16 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_seek(rd_kafka_toppar_t *rktp,
                                             rd_kafka_fetch_pos_t pos,
                                             rd_kafka_replyq_t replyq) {
         int32_t version;
+
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
+                             "seek is not supported for share consumers: "
+                             "%s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
@@ -2458,7 +2490,20 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                                                     int flag,
                                                     rd_kafka_replyq_t replyq) {
         int32_t version;
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
+        rd_kafka_op_t *rko;
+
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC,
+                             pause ? "PAUSE" : "RESUME",
+                             "Pause/resume is not supported for share "
+                             "consumers: %s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
 
         if (!pause) {
                 /* If partitions isn't paused, avoid bumping its version,

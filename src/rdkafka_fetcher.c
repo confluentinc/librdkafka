@@ -2253,38 +2253,15 @@ static void rd_kafka_broker_share_acknowledge_reply(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH:
                 case RD_KAFKA_RESP_ERR__TRANSPORT:
                 case RD_KAFKA_RESP_ERR__TIMED_OUT:
-                        /* __TRANSPORT means connection is already
-                         * dead.
-                         * TODO KIP-932: For __TIMED_OUT:
-                         * 1) Ensure socket.max.fails cannot be set
-                         *    for share consumer, or if it can be set,
-                         *    tear down the connection for each
-                         *    ShareFetch/ShareAcknowledge timed out
-                         *    request regardless of the threshold so
-                         *    that timeouts always force a reconnect.
-                         * 2) Ensure reconnect after teardown. Verify
-                         *    that sparse connection's need_connection
-                         *    is updated after the connection is torn
-                         *    down so that the broker reconnects. */
+                        /* __TRANSPORT means connection is already dead.
+                         * On __TIMED_OUT the connection is torn down by the
+                         * request-timeout scan (socket.max.fails is forced to
+                         * 1 for share consumers and cannot be changed) and the
+                         * broker reconnects via the share-serve persistent
+                         * connection driver; here we only reset the session so
+                         * it re-establishes at epoch 0. */
                         rd_kafka_broker_session_reset(rkb);
                         break;
-
-                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART:
-                case RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION:
-                case RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID: {
-                        char tmp[128];
-                        /* TODO KIP-932: The response already carries
-                         * per-partition currentLeader + nodeEndpoints;
-                         * use that to update partition leadership
-                         * directly instead of triggering a full
-                         * metadata refresh RPC. */
-                        rd_snprintf(tmp, sizeof(tmp),
-                                    "ShareAcknowledge failed: %s",
-                                    rd_kafka_err2str(err));
-                        rd_kafka_metadata_refresh_known_topics(
-                            rkb->rkb_rk, NULL, rd_true /*force*/, tmp);
-                        break;
-                }
 
                 case RD_KAFKA_RESP_ERR__BAD_MSG:
                 case RD_KAFKA_RESP_ERR__UNDERFLOW:
@@ -2388,19 +2365,12 @@ static void rd_kafka_broker_share_fetch_reply(rd_kafka_t *rk,
                          * or connection/request failed.
                          * Reset session state so the next request
                          * re-establishes a new session (epoch 0).
-                         * __TRANSPORT means connection is already
-                         * dead.
-                         * TODO KIP-932: For __TIMED_OUT:
-                         * 1) Ensure socket.max.fails cannot be set
-                         *    for share consumer, or if it can be set,
-                         *    tear down the connection for each
-                         *    ShareFetch/ShareAcknowledge timed out
-                         *    request regardless of the threshold so
-                         *    that timeouts always force a reconnect.
-                         * 2) Ensure reconnect after teardown. Verify
-                         *    that sparse connection's need_connection
-                         *    is updated after the connection is torn
-                         *    down so that the broker reconnects. */
+                         * __TRANSPORT means connection is already dead.
+                         * On __TIMED_OUT the connection is torn down by the
+                         * request-timeout scan (socket.max.fails is forced to
+                         * 1 for share consumers and cannot be changed) and the
+                         * broker reconnects via the share-serve persistent
+                         * connection driver. */
                         rd_kafka_broker_session_reset(rkb);
                         break;
 

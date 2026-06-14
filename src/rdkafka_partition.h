@@ -284,6 +284,12 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
          *   Broker thread: Recv IO FetchResponse with tver=2 which
          *                  is same as rktp_version so message is forwarded
          *                  to app.
+         *
+         * Share consumers: all three versions remain 0 for the toppar's
+         * lifetime. rktp_version is initialised to 0 and
+         * rd_kafka_toppar_op_version_bump() short-circuits, so no op ever
+         * carries a non-zero rko_version. Any code that bumps rktp_version
+         * directly MUST guard on RD_KAFKA_IS_SHARE_CONSUMER.
          */
         rd_atomic32_t rktp_version; /* Latest op version.
                                      * Authoritative (app thread)*/

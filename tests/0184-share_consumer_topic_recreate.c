@@ -141,25 +141,27 @@ static int consume_into_msgver(rd_kafka_share_t *rkshare,
                                test_msgver_t *mv,
                                int exp_cnt,
                                int timeout_ms) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
-        rd_ts_t deadline = test_clock() + (rd_ts_t)timeout_ms * 1000;
-        rd_kafka_t *rk   = test_share_consumer_get_rk(rkshare);
+        rd_kafka_messages_t *batch = NULL;
+        rd_ts_t deadline           = test_clock() + (rd_ts_t)timeout_ms * 1000;
+        rd_kafka_t *rk             = test_share_consumer_get_rk(rkshare);
 
         while (mv->msgcnt < exp_cnt && test_clock() < deadline) {
                 rd_kafka_error_t *err;
                 size_t rcvd = 0;
                 size_t i;
 
-                err = rd_kafka_share_consume_batch(rkshare, 500, batch, &rcvd);
+                err = rd_kafka_share_poll(rkshare, 500, &batch);
                 if (err) {
-                        TEST_SAY("share_consume_batch error: %s\n",
+                        TEST_SAY("share_poll error: %s\n",
                                  rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
+
                 for (i = 0; i < rcvd; i++) {
-                        rd_kafka_message_t *m = batch[i];
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
 
                         if (m->err) {
                                 TEST_SAY(
@@ -169,7 +171,6 @@ static int consume_into_msgver(rd_kafka_share_t *rkshare,
                                     m->rkt ? rd_kafka_topic_name(m->rkt)
                                            : "(none)",
                                     m->partition);
-                                rd_kafka_message_destroy(m);
                                 continue;
                         }
 
@@ -186,8 +187,10 @@ static int consume_into_msgver(rd_kafka_share_t *rkshare,
                          * dropped. */
                         test_msgver_add_msg(rk, mv, m);
                         rd_kafka_share_acknowledge(rkshare, m);
-                        rd_kafka_message_destroy(m);
                 }
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         return mv->msgcnt;
@@ -624,7 +627,7 @@ static void do_test_recreate_survives_concurrent_producer(void) {
         const int producer_period_ms  = 100; /* ~10 msgs/sec */
         const int phase_duration_ms   = 10000;
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         struct producer_thread_args producer_args;
         thrd_t producer_thrd;
         rd_kafka_Uuid_t *id_initial, *id_final;
@@ -667,22 +670,24 @@ static void do_test_recreate_survives_concurrent_producer(void) {
                 rd_kafka_error_t *err;
                 size_t rcvd = 0;
                 size_t i;
-                err = rd_kafka_share_consume_batch(rkshare, 200, batch, &rcvd);
+                err = rd_kafka_share_poll(rkshare, 200, &batch);
                 if (err) {
                         TEST_SAY(
-                            "Phase BEFORE: share_consume_batch error: "
+                            "Phase BEFORE: share_poll error: "
                             "%s\n",
                             rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < rcvd; i++) {
-                        rd_kafka_message_t *m = batch[i];
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
                         if (!m->err && m->payload && m->len >= 7 &&
                             !strncmp((const char *)m->payload, "before:", 7))
                                 before_cnt++;
-                        rd_kafka_message_destroy(m);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_SAY("Phase BEFORE: consumed %d \"before:\" record(s)\n",
                  before_cnt);
@@ -702,22 +707,24 @@ static void do_test_recreate_survives_concurrent_producer(void) {
                 rd_kafka_error_t *err;
                 size_t rcvd = 0;
                 size_t i;
-                err = rd_kafka_share_consume_batch(rkshare, 200, batch, &rcvd);
+                err = rd_kafka_share_poll(rkshare, 200, &batch);
                 if (err) {
                         TEST_SAY(
-                            "Phase DURING: share_consume_batch error: "
+                            "Phase DURING: share_poll error: "
                             "%s\n",
                             rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < rcvd; i++) {
-                        rd_kafka_message_t *m = batch[i];
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
                         if (!m->err && m->payload && m->len >= 7 &&
                             !strncmp((const char *)m->payload, "during:", 7))
                                 during_cnt++;
-                        rd_kafka_message_destroy(m);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_SAY(
             "Phase DURING: consumed %d \"during:\" record(s) "
@@ -753,22 +760,24 @@ static void do_test_recreate_survives_concurrent_producer(void) {
                 rd_kafka_error_t *err;
                 size_t rcvd = 0;
                 size_t i;
-                err = rd_kafka_share_consume_batch(rkshare, 500, batch, &rcvd);
+                err = rd_kafka_share_poll(rkshare, 500, &batch);
                 if (err) {
                         TEST_SAY(
-                            "Phase AFTER: share_consume_batch error: "
+                            "Phase AFTER: share_poll error: "
                             "%s\n",
                             rd_kafka_error_string(err));
                         rd_kafka_error_destroy(err);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < rcvd; i++) {
-                        rd_kafka_message_t *m = batch[i];
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
                         if (!m->err && m->payload && m->len >= 6 &&
                             !strncmp((const char *)m->payload, "after:", 6))
                                 after_cnt++;
-                        rd_kafka_message_destroy(m);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_SAY("Phase AFTER: consumed %d \"after:\" record(s)\n", after_cnt);
 
@@ -812,6 +821,8 @@ static void test_recreate_during_close(void) {
         const int n_msgs   = 10;
         const int delay_ms = 5000;
         rd_kafka_message_t *rkmessages[64];
+        rd_kafka_messages_t *batches[64];
+        size_t batches_cnt = 0;
         struct recreate_thread_args thread_args;
         thrd_t recreate_thrd;
         rd_kafka_conf_t *conf;
@@ -848,16 +859,30 @@ static void test_recreate_during_close(void) {
 
         TEST_SAY("Consuming up to %d messages\n", n_msgs);
         while (rcvd < (size_t)n_msgs && attempts < max_attempt) {
-                size_t batch_rcvd =
-                    sizeof(rkmessages) / sizeof(rkmessages[0]) - rcvd;
-                error = rd_kafka_share_consume_batch(
-                    rkshare, 3000, rkmessages + rcvd, &batch_rcvd);
+                rd_kafka_messages_t *batch = NULL;
+                size_t batch_rcvd;
+                size_t k;
+                error = rd_kafka_share_poll(rkshare, 3000, &batch);
                 if (error) {
                         TEST_SAY("Consume attempt %d: %s\n", attempts,
                                  rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
-                } else if (batch_rcvd > 0) {
+                        rd_kafka_messages_destroy(batch);
+                        attempts++;
+                        continue;
+                }
+                batch_rcvd = rd_kafka_messages_count(batch);
+                if (batch_rcvd > 0 &&
+                    batches_cnt < sizeof(batches) / sizeof(batches[0]) &&
+                    rcvd + batch_rcvd <=
+                        sizeof(rkmessages) / sizeof(rkmessages[0])) {
+                        for (k = 0; k < batch_rcvd; k++)
+                                rkmessages[rcvd + k] =
+                                    rd_kafka_messages_get(batch, k);
                         rcvd += batch_rcvd;
+                        batches[batches_cnt++] = batch;
+                } else {
+                        rd_kafka_messages_destroy(batch);
                 }
                 attempts++;
         }
@@ -910,8 +935,8 @@ static void test_recreate_during_close(void) {
 
         thrd_join(recreate_thrd, NULL);
 
-        for (i = 0; i < (int)rcvd; i++)
-                rd_kafka_message_destroy(rkmessages[i]);
+        for (i = 0; i < (int)batches_cnt; i++)
+                rd_kafka_messages_destroy(batches[i]);
 
         test_share_destroy(rkshare);
         test_mock_cluster_destroy(mcluster);

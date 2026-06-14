@@ -1591,14 +1591,6 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 } else if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
-                        /**
-                         * TODO KIP-932: Check how to handle fetch_msg_max_bytes
-                         * for share consumer. We keep on bringing up the msg
-                         * for normal consumers, then it is fine but in share
-                         * consumers the delivery count will keep on increasing
-                         * for the same message and it will keep on coming back
-                         * and we will recieve the max delivery attempt limit.
-                         */
                         rktp->rktp_fetch_msg_max_bytes *= 2;
                         rd_rkb_dbg(msetr->msetr_rkb, FETCH, "CONSUME",
                                    "Topic %s [%" PRId32

@@ -182,20 +182,19 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        const char *topic         = "0183-shareack-nlof";
-        const char *group         = "sg-0183-shareack-nlof";
-        const int broker1         = 1;
-        const int broker2         = 2;
-        const int msgcnt          = 10;
-        const int acks_per_commit = 2;
-        const int commit_rounds   = msgcnt / acks_per_commit;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        const char *topic          = "0183-shareack-nlof";
+        const char *group          = "sg-0183-shareack-nlof";
+        const int broker1          = 1;
+        const int broker2          = 2;
+        const int msgcnt           = 10;
+        const int acks_per_commit  = 2;
+        const int commit_rounds    = msgcnt / acks_per_commit;
+        rd_kafka_messages_t *batch = NULL;
         int round;
         size_t rcvd         = 0;
         size_t consumed_idx = 0;
         size_t share_ack_cnt;
         size_t metadata_cnt;
-        size_t j;
 
         SUB_TEST_QUICK();
 
@@ -222,9 +221,10 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
         subscribe_one(rkshare, topic);
 
         /* Consume one batch — expect all 10 records in a single call. */
-        error = rd_kafka_share_consume_batch(rkshare, 10000, rkmessages, &rcvd);
-        TEST_ASSERT(!error, "consume_batch failed: %s",
+        error = rd_kafka_share_poll(rkshare, 10000, &batch);
+        TEST_ASSERT(!error, "share_poll failed: %s",
                     error ? rd_kafka_error_string(error) : "");
+        rcvd = rd_kafka_messages_count(batch);
         TEST_ASSERT(rcvd == (size_t)msgcnt,
                     "expected %d records in first batch, got %" PRIusz, msgcnt,
                     rcvd);
@@ -249,7 +249,8 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
                      k++, consumed_idx++) {
                         rd_kafka_resp_err_t ack_err;
                         ack_err = rd_kafka_share_acknowledge(
-                            rkshare, rkmessages[consumed_idx]);
+                            rkshare,
+                            rd_kafka_messages_get(batch, consumed_idx));
                         TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                                     "round %d: acknowledge failed: %s", round,
                                     rd_kafka_err2str(ack_err));
@@ -311,8 +312,8 @@ static void test_shareack_leader_change_reduces_rpcs(void) {
         rd_kafka_mock_stop_request_tracking(ctx.mcluster);
 
         /* Clean up held message handles. */
-        for (j = 0; j < rcvd; j++)
-                rd_kafka_message_destroy(rkmessages[j]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -347,17 +348,17 @@ static void test_partition_not_leader_or_follower_silent(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        const char *topic = "0183-nlof-silent";
-        const char *group = "sg-0183-nlof-silent";
-        const int broker1 = 1;
-        const int broker2 = 2;
-        const int msgcnt  = 5;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-        int phase1_consumed = 0;
-        int phase2_consumed = 0;
-        int error_cnt       = 0;
-        int attempts        = 0;
-        size_t rcvd         = 0;
+        const char *topic          = "0183-nlof-silent";
+        const char *group          = "sg-0183-nlof-silent";
+        const int broker1          = 1;
+        const int broker2          = 2;
+        const int msgcnt           = 5;
+        rd_kafka_messages_t *batch = NULL;
+        int phase1_consumed        = 0;
+        int phase2_consumed        = 0;
+        int error_cnt              = 0;
+        int attempts               = 0;
+        size_t rcvd                = 0;
         size_t share_fetch_cnt;
         size_t metadata_cnt;
         size_t j;
@@ -396,18 +397,19 @@ static void test_partition_not_leader_or_follower_silent(void) {
         subscribe_one(rkshare, topic);
 
         while (phase1_consumed < msgcnt && attempts++ < 30) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 3000, &batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, j);
+                        if (m && !m->err)
                                 phase1_consumed++;
-                        rd_kafka_message_destroy(rkmessages[j]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(phase1_consumed == msgcnt,
                     "Phase 1: expected %d records from broker %d, got %d",
@@ -437,19 +439,20 @@ static void test_partition_not_leader_or_follower_silent(void) {
          * handling must keep that return NULL throughout recovery. */
         attempts = 0;
         while (phase2_consumed < msgcnt && attempts++ < 30) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 3000, &batch);
                 if (error) {
                         error_cnt++;
                         rd_kafka_error_destroy(error);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, j);
+                        if (m && !m->err)
                                 phase2_consumed++;
-                        rd_kafka_message_destroy(rkmessages[j]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(phase2_consumed >= msgcnt,
                     "Phase 2: expected >= %d records from broker %d after "
@@ -508,10 +511,10 @@ static int consume_phase(rd_kafka_share_t *rkshare,
                          int expected,
                          int post_first_batch_settle_ms,
                          const char *phase_name) {
-        int consumed     = 0;
-        int attempts     = 0;
-        int max_attempts = expected * 3 + 60;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
+        int consumed                                   = 0;
+        int attempts                                   = 0;
+        int max_attempts                               = expected * 3 + 60;
+        rd_kafka_messages_t *batch                     = NULL;
         rd_kafka_topic_partition_list_t *flush_results = NULL;
         rd_kafka_error_t *flush_err;
         rd_bool_t first_batch = rd_true;
@@ -522,31 +525,30 @@ static int consume_phase(rd_kafka_share_t *rkshare,
                 rd_kafka_error_t *error;
                 size_t j;
 
-                error = rd_kafka_share_consume_batch(rkshare, 3000, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 3000, &batch);
                 if (error) {
-                        TEST_SAY("%s: consume_batch err %s\n", phase_name,
+                        TEST_SAY("%s: share_poll err %s\n", phase_name,
                                  rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
                         continue;
                 }
 
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, j);
+                        if (m && !m->err) {
                                 consumed++;
-                                TEST_SAY(
-                                    "%s: record #%d: %s [%" PRId32
-                                    "] offset %" PRId64 "\n",
-                                    phase_name, consumed,
-                                    rd_kafka_topic_name(rkmessages[j]->rkt),
-                                    rkmessages[j]->partition,
-                                    rkmessages[j]->offset);
+                                TEST_SAY("%s: record #%d: %s [%" PRId32
+                                         "] offset %" PRId64 "\n",
+                                         phase_name, consumed,
+                                         rd_kafka_topic_name(m->rkt),
+                                         m->partition, m->offset);
                                 if (explicit_mode)
-                                        rd_kafka_share_acknowledge(
-                                            rkshare, rkmessages[j]);
+                                        rd_kafka_share_acknowledge(rkshare, m);
                         }
-                        rd_kafka_message_destroy(rkmessages[j]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 if (explicit_mode && rcvd > 0) {
                         if (use_commit_sync) {
@@ -1078,8 +1080,8 @@ do_test_records_survive_leaderless_transit(rd_bool_t explicit_mode) {
         test_ctx_t ctx;
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-        size_t drain_rcvd = 0;
+        rd_kafka_messages_t *drain_batch = NULL;
+        size_t drain_rcvd                = 0;
         char *topic;
         const int part_cnt  = 1;
         const char *group   = "sg-0183-leaderless-transit";
@@ -1147,13 +1149,15 @@ do_test_records_survive_leaderless_transit(rd_bool_t explicit_mode) {
          * NOT_LEADER_OR_FOLLOWER, refreshes metadata, sees
          * leader_id=-1, and delegates the rktp to the :0/internal
          * pseudo-broker. No records expected (leader-less). */
-        TEST_ASSERT(!rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
-                                                  &drain_rcvd),
-                    "mid consume_batch unexpected err");
+        TEST_ASSERT(!rd_kafka_share_poll(rkshare, 500, &drain_batch),
+                    "mid share_poll unexpected err");
+        drain_rcvd = rd_kafka_messages_count(drain_batch);
         TEST_ASSERT(drain_rcvd == 0,
-                    "mid consume_batch expected 0 records during the "
+                    "mid share_poll expected 0 records during the "
                     "leader-less window, got %" PRIusz,
                     drain_rcvd);
+        rd_kafka_messages_destroy(drain_batch);
+        drain_batch = NULL;
 
         /* Settle: pre-fix, :0/internal's broker_internal_serve loop
          * runs consumer_toppars_serve here, which calls fetch_decide

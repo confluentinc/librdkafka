@@ -99,8 +99,8 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
 static int share_consume_once(rd_kafka_share_t *rkshare,
                               int timeout_ms,
                               rd_bool_t *max_poll_exceeded) {
-        rd_kafka_message_t *batch[BATCH_SIZE];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *batch = NULL;
+        size_t rcvd                = 0;
         size_t i;
         int valid = 0;
         rd_kafka_error_t *error;
@@ -108,7 +108,7 @@ static int share_consume_once(rd_kafka_share_t *rkshare,
         if (max_poll_exceeded)
                 *max_poll_exceeded = rd_false;
 
-        error = rd_kafka_share_consume_batch(rkshare, timeout_ms, batch, &rcvd);
+        error = rd_kafka_share_poll(rkshare, timeout_ms, &batch);
         if (error) {
                 if (max_poll_exceeded &&
                     rd_kafka_error_code(error) ==
@@ -118,11 +118,14 @@ static int share_consume_once(rd_kafka_share_t *rkshare,
                 return 0;
         }
 
+        rcvd = rd_kafka_messages_count(batch);
         for (i = 0; i < rcvd; i++) {
-                if (!batch[i]->err)
+                rd_kafka_message_t *msg = rd_kafka_messages_get(batch, i);
+                if (!msg->err)
                         valid++;
-                rd_kafka_message_destroy(batch[i]);
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         return valid;
 }

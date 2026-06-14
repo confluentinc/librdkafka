@@ -574,15 +574,15 @@ static void exec_create_consumer(sub_test_state_t *state, const test_op_t *op) {
  * subscribed" message when no subscription is active.
  */
 static void exec_poll_no_sub(sub_test_state_t *state, const test_op_t *op) {
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         size_t rcvd = 0;
         int cidx    = op->consumer_idx;
 
         TEST_SAY("  POLL_NO_SUB: consumer=%d\n", cidx);
 
-        err = rd_kafka_share_consume_batch(state->consumers[cidx], 2000, batch,
-                                           &rcvd);
+        err  = rd_kafka_share_poll(state->consumers[cidx], 2000, &batch);
+        rcvd = rd_kafka_messages_count(batch);
         TEST_ASSERT(err != NULL,
                     "POLL_NO_SUB consumer=%d: expected error, got NULL", cidx);
         TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
@@ -596,6 +596,7 @@ static void exec_poll_no_sub(sub_test_state_t *state, const test_op_t *op) {
                     "POLL_NO_SUB consumer=%d: expected 0 messages, got %zu",
                     cidx, rcvd);
         rd_kafka_error_destroy(err);
+        rd_kafka_messages_destroy(batch);
 }
 
 /**
@@ -919,7 +920,7 @@ static void test_topic_deletion_does_not_surface_error(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *error;
         char errstr[512];
         char *topic_dup;
@@ -970,21 +971,25 @@ static void test_topic_deletion_does_not_surface_error(void) {
          * record so the rktp materialises on rkt_desp (precondition
          * for the metadata-error propagation path to fire). */
         while (consumed < 1 && attempts++ < 30) {
-                rcvd = 0;
-                error =
-                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                error = rd_kafka_share_poll(consumer, 1000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_error_destroy(error);
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!batch[j]->err) {
-                                rd_kafka_share_acknowledge(consumer, batch[j]);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err) {
+                                rd_kafka_share_acknowledge(consumer, msg);
                                 consumed++;
                         }
-                        rd_kafka_message_destroy(batch[j]);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
         TEST_ASSERT(consumed >= 1,
                     "Pre-condition: expected to consume + ack at least one "
                     "record before deleting the topic");
@@ -1004,9 +1009,10 @@ static void test_topic_deletion_does_not_surface_error(void) {
          * (no more records); only the metadata-derived topic codes
          * must not surface. */
         for (post_attempts = 0; post_attempts < 30; post_attempts++) {
-                rcvd = 0;
-                error =
-                    rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                error = rd_kafka_share_poll(consumer, 500, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (error) {
                         rd_kafka_resp_err_t code = rd_kafka_error_code(error);
                         TEST_SAY("Post-delete consume_batch: %s\n",
@@ -1023,11 +1029,14 @@ static void test_topic_deletion_does_not_surface_error(void) {
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!batch[j]->err)
-                                rd_kafka_share_acknowledge(consumer, batch[j]);
-                        rd_kafka_message_destroy(batch[j]);
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        if (!msg->err)
+                                rd_kafka_share_acknowledge(consumer, msg);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(!surfaced_topic_err,
                     "Topic-level metadata errors must not surface to "
@@ -1058,8 +1067,8 @@ static void do_test_subscribe_15_topics(void) {
         char *topics[15];
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[10000];
-        int consumed = 0;
+        rd_kafka_messages_t *batch = NULL;
+        int consumed               = 0;
         int attempts;
         int t;
 
@@ -1103,21 +1112,27 @@ static void do_test_subscribe_15_topics(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(rkshare, 2000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
 
                 if (rcvd > 0)
                         TEST_SAY("Progress: %d/%d\n", consumed, total_expected);
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(consumed == total_expected,
                     "Expected %d messages, consumed %d", total_expected,
@@ -1143,7 +1158,7 @@ static void do_test_subscribe_15_topics(void) {
  */
 static void do_test_auto_offset_reset_earliest(void) {
         rd_kafka_share_t *consumer;
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         const char *topic;
         const char *group = "share-offset-earliest-test";
         rd_kafka_topic_partition_list_t *subs;
@@ -1181,22 +1196,27 @@ static void do_test_auto_offset_reset_earliest(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 2000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
 
                 if (rcvd > 0)
                         TEST_SAY("Progress: %d/%d\n", consumed, msg_cnt);
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(consumed == msg_cnt, "Expected %d messages, got %d",
                     msg_cnt, consumed);
@@ -1219,7 +1239,7 @@ static void do_test_auto_offset_reset_earliest(void) {
  */
 static void do_test_auto_offset_reset_default_latest(void) {
         rd_kafka_share_t *consumer;
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         const char *topic;
         const char *group = "share-offset-default-test";
         rd_kafka_topic_partition_list_t *subs;
@@ -1259,19 +1279,24 @@ static void do_test_auto_offset_reset_default_latest(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed_before++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY(
             "Consumed %d messages from before subscription (expected: 0)\n",
@@ -1294,19 +1319,24 @@ static void do_test_auto_offset_reset_default_latest(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 1000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
                         continue;
                 }
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 consumed_after++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY("Consumed %d messages after subscription (expected: %d)\n",
                  consumed_after, later_msgs);
@@ -1416,7 +1446,7 @@ static void do_test_subscribe_input_validation(void) {
 static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         const char *topic;
         const char *group = "share-caret-literal-e2e";
         const int msg_cnt = 50;
@@ -1462,17 +1492,22 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 2000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 records_phase1++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
         TEST_ASSERT(records_phase1 == 0,
                     "Phase 1: expected 0 records for '%s' literal "
                     "subscription, got %zu",
@@ -1507,17 +1542,22 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
                 size_t m;
                 rd_kafka_error_t *err;
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 2000, batch, &rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 2000, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
 
                 for (m = 0; m < rcvd; m++) {
-                        if (!batch[m]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, m);
+                        if (!msg->err)
                                 records_phase2++;
-                        rd_kafka_message_destroy(batch[m]);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
         TEST_ASSERT(records_phase2 == (size_t)msg_cnt,
                     "Phase 2: expected %d records, got %zu", msg_cnt,
                     records_phase2);
@@ -1543,10 +1583,9 @@ static void do_test_subscribe_caret_treated_as_literal_e2e(void) {
 static void do_test_consume_batch_without_subscription(void) {
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
-        size_t rcvd = 0;
-        size_t i;
+        size_t rcvd       = 0;
         const char *group = "share-no-subscription";
         const char *topic;
 
@@ -1558,8 +1597,10 @@ static void do_test_consume_batch_without_subscription(void) {
         consumer = test_create_share_consumer(group, NULL);
 
         /* Case 1: never subscribed. */
-        rcvd = 0;
-        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        err   = rd_kafka_share_poll(consumer, 500, &batch);
+        rcvd  = rd_kafka_messages_count(batch);
         TEST_ASSERT(err != NULL,
                     "Case 1 (never subscribed): expected error, got NULL");
         TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
@@ -1577,8 +1618,10 @@ static void do_test_consume_batch_without_subscription(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rcvd = 0;
-        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        err   = rd_kafka_share_poll(consumer, 500, &batch);
+        rcvd  = rd_kafka_messages_count(batch);
         if (err) {
                 TEST_ASSERT(rd_kafka_error_code(err) !=
                                 RD_KAFKA_RESP_ERR__STATE,
@@ -1586,14 +1629,14 @@ static void do_test_consume_batch_without_subscription(void) {
                             rd_kafka_error_string(err));
                 rd_kafka_error_destroy(err);
         }
-        for (i = 0; i < rcvd; i++)
-                rd_kafka_message_destroy(batch[i]);
 
         /* Case 3: unsubscribed -> __STATE again. */
         TEST_CALL_ERR__(rd_kafka_share_unsubscribe(consumer));
 
-        rcvd = 0;
-        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        err   = rd_kafka_share_poll(consumer, 500, &batch);
+        rcvd  = rd_kafka_messages_count(batch);
         TEST_ASSERT(err != NULL,
                     "Case 3 (after unsubscribe): expected error, got NULL");
         TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
@@ -1612,8 +1655,10 @@ static void do_test_consume_batch_without_subscription(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(consumer, subs));
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rcvd = 0;
-        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        err   = rd_kafka_share_poll(consumer, 500, &batch);
+        rcvd  = rd_kafka_messages_count(batch);
         if (err) {
                 TEST_ASSERT(rd_kafka_error_code(err) !=
                                 RD_KAFKA_RESP_ERR__STATE,
@@ -1621,8 +1666,6 @@ static void do_test_consume_batch_without_subscription(void) {
                             rd_kafka_error_string(err));
                 rd_kafka_error_destroy(err);
         }
-        for (i = 0; i < rcvd; i++)
-                rd_kafka_message_destroy(batch[i]);
 
         /* Case 5: subscribe([]) is equivalent to unsubscribe — must
          * return NO_ERROR and clear the F_SUBSCRIPTION flag, so the
@@ -1637,8 +1680,10 @@ static void do_test_consume_batch_without_subscription(void) {
                     rd_kafka_err2name(empty_err));
         rd_kafka_topic_partition_list_destroy(subs);
 
-        rcvd = 0;
-        err  = rd_kafka_share_consume_batch(consumer, 500, batch, &rcvd);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        err   = rd_kafka_share_poll(consumer, 500, &batch);
+        rcvd  = rd_kafka_messages_count(batch);
         TEST_ASSERT(err != NULL,
                     "Case 5 (after subscribe([])): expected error, got NULL");
         TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
@@ -1649,6 +1694,8 @@ static void do_test_consume_batch_without_subscription(void) {
                     rd_kafka_error_string(err));
         TEST_ASSERT(rcvd == 0, "Case 5: expected 0 msgs, got %zu", rcvd);
         rd_kafka_error_destroy(err);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(consumer);
         test_share_destroy(consumer);
@@ -1717,7 +1764,7 @@ static void do_test_subscription_change_acks_pending(void) {
         char *t2;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[10];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         subchg_ack_state_t state = {0};
         size_t rcvd              = 0;
@@ -1759,14 +1806,17 @@ static void do_test_subscription_change_acks_pending(void) {
         attempts = 30;
         while (rcvd < 1 && attempts-- > 0) {
                 size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch + rcvd,
-                                                   &batch_rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch      = NULL;
+                err        = rd_kafka_share_poll(rkshare, 2000, &batch);
+                batch_rcvd = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
                 rcvd += batch_rcvd;
         }
         TEST_ASSERT(rcvd == 1, "Expected 1 record from t1, got %zu", rcvd);
-        rd_kafka_message_destroy(batch[0]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_ASSERT(state.base.callback_cnt == 0,
                     "Did not expect callback before subscription change, "
@@ -1790,8 +1840,10 @@ static void do_test_subscription_change_acks_pending(void) {
         attempts = 30;
         while ((rcvd < 1 || state.base.callback_cnt < 1) && attempts-- > 0) {
                 size_t batch_rcvd = 0;
-                err = rd_kafka_share_consume_batch(rkshare, 1000, batch + rcvd,
-                                                   &batch_rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch      = NULL;
+                err        = rd_kafka_share_poll(rkshare, 1000, &batch);
+                batch_rcvd = rd_kafka_messages_count(batch);
                 if (err)
                         rd_kafka_error_destroy(err);
                 rcvd += batch_rcvd;
@@ -1811,7 +1863,8 @@ static void do_test_subscription_change_acks_pending(void) {
                     "Expected first ack callback to be for t1 (%s), got %s", t1,
                     state.first_callback_topic);
 
-        rd_kafka_message_destroy(batch[0]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -1956,7 +2009,7 @@ static void do_test_delete_records_advances_lso(void) {
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_share_t *rkshare;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_message_t *batch[TEST_SHARE_BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err_obj;
         rd_kafka_resp_err_t err;
         int64_t first_offset = -1;
@@ -2004,22 +2057,26 @@ static void do_test_delete_records_advances_lso(void) {
 
         attempts = 30;
         while (consumed < 5 && attempts-- > 0) {
-                batch_cnt = 0;
-                err_obj   = rd_kafka_share_consume_batch(rkshare, 2000, batch,
-                                                         &batch_cnt);
+                rd_kafka_messages_destroy(batch);
+                batch     = NULL;
+                err_obj   = rd_kafka_share_poll(rkshare, 2000, &batch);
+                batch_cnt = rd_kafka_messages_count(batch);
                 if (err_obj) {
                         rd_kafka_error_destroy(err_obj);
                         continue;
                 }
                 for (k = 0; k < batch_cnt; k++) {
-                        if (!batch[k]->err) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, k);
+                        if (!msg->err) {
                                 if (first_offset == -1)
-                                        first_offset = batch[k]->offset;
+                                        first_offset = msg->offset;
                                 consumed++;
                         }
-                        rd_kafka_message_destroy(batch[k]);
                 }
         }
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
         TEST_ASSERT(consumed == 5,
                     "Expected 5 records (offsets 5..9) after DeleteRecords, "
                     "consumed %d",
@@ -2030,16 +2087,17 @@ static void do_test_delete_records_advances_lso(void) {
                     first_offset);
 
         /* Verify no additional records show up */
-        batch_cnt = 0;
-        err_obj =
-            rd_kafka_share_consume_batch(rkshare, 1000, batch, &batch_cnt);
+        rd_kafka_messages_destroy(batch);
+        batch     = NULL;
+        err_obj   = rd_kafka_share_poll(rkshare, 1000, &batch);
+        batch_cnt = rd_kafka_messages_count(batch);
         if (err_obj)
                 rd_kafka_error_destroy(err_obj);
-        for (k = 0; k < batch_cnt; k++)
-                rd_kafka_message_destroy(batch[k]);
         TEST_ASSERT(batch_cnt == 0,
                     "Did not expect more records after consuming 5, got %zu",
                     batch_cnt);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);

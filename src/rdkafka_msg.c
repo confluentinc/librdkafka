@@ -1313,7 +1313,7 @@ rd_kafka_message_t *rd_kafka_message_new(void) {
  */
 rd_kafka_messages_t *rd_kafka_messages_new(size_t cnt) {
         rd_kafka_messages_t *messages =
-            rd_malloc(sizeof(*messages) + cnt * sizeof(*messages->elems));
+            rd_calloc(1, (sizeof(*messages) + cnt * sizeof(*messages->elems)));
         messages->cnt = cnt;
         return messages;
 }

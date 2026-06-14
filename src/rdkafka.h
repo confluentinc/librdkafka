@@ -3286,6 +3286,9 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
  * Use rd_kafka_messages_count() and rd_kafka_messages_get() to access the
  * returned messages.
  *
+ * @note The rkmessages should always be pointing to NULL otherwise it will
+ *       be lost and there will be memory leak.
+ *
  * @returns NULL on success or an \c rd_kafka_error_t (caller must
  *          rd_kafka_error_destroy()) on failure.
  */

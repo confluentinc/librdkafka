@@ -3875,7 +3875,7 @@ size_t rd_kafka_messages_count(const rd_kafka_messages_t *messages) {
 
 rd_kafka_message_t *rd_kafka_messages_get(const rd_kafka_messages_t *messages,
                                           size_t index) {
-        if (!messages || index >= messages->cnt)
+        if (index >= messages->cnt)
                 return NULL;
         return messages->elems[index];
 }
@@ -3965,10 +3965,6 @@ rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
                 rd_kafka_share_fetch_fanout(rk, need_fetch_more_records,
                                             ack_batches);
 
-        /* q_serve_share_rkmessages allocates the caller-visible
-         * rd_kafka_messages_t directly, sized to the actual op's message
-         * count, so it never overflows regardless of how many records a
-         * single SHARE_FETCH_RESPONSE aggregates */
         error = rd_kafka_q_serve_share_rkmessages(rkcg->rkcg_q, timeout_ms,
                                                   rkmessages);
 

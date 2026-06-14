@@ -946,6 +946,10 @@ struct rd_kafka_share_s {
  * count returned by a single poll. The caller releases the list and all
  * contained messages via rd_kafka_messages_destroy().
  */
+/**
+ * TODO KIP-932: GA: Fix this to use FAM with message struct not
+ * pointer to messages.
+ */
 struct rd_kafka_messages_s {
         size_t cnt;                  /**< Number of messages. */
         rd_kafka_message_t *elems[]; /**< Message pointer array. */

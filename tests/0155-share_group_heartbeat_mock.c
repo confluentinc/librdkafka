@@ -51,7 +51,7 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
 }
 
 /**
- * @brief Poll rd_kafka_share_consume_batch() until it returns a fatal
+ * @brief Poll rd_kafka_share_poll() until it returns a fatal
  *        error or \p timeout_ms elapses.
  *
  * While waiting for the fatal error no records are expected, and any

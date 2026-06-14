@@ -8052,11 +8052,11 @@ rd_kafka_share_t *test_create_share_consumer(const char *group_id,
  *
  * @returns 0 on success, -1 if message from unexpected topic received.
  */
-int test_share_consume_batch(rd_kafka_share_t *rk,
-                             int timeout_ms,
-                             const char **expected_topics,
-                             int expected_topic_cnt,
-                             int *out_valid) {
+int test_share_poll(rd_kafka_share_t *rk,
+                    int timeout_ms,
+                    const char **expected_topics,
+                    int expected_topic_cnt,
+                    int *out_valid) {
         rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         size_t rcvd, i;
@@ -8137,8 +8137,8 @@ int test_share_consume_msgs(rd_kafka_share_t *rk,
                 int batch_cnt = 0;
                 int ret;
 
-                ret = test_share_consume_batch(rk, timeout_ms, expected_topics,
-                                               expected_topic_cnt, &batch_cnt);
+                ret = test_share_poll(rk, timeout_ms, expected_topics,
+                                      expected_topic_cnt, &batch_cnt);
                 if (ret < 0)
                         return -1; /* Wrong topic detected */
 

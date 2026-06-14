@@ -209,7 +209,7 @@ share_refresh_cb(rd_kafka_t *rk, const char *oauthbearer_config, void *opaque) {
  * @brief Verify that the oauthbearer_refresh_cb() is triggered
  *        when using rd_kafka_share_poll() with a share consumer.
  */
-static void do_test_share_consume_batch_oauthbearer_cb(void) {
+static void do_test_share_poll_oauthbearer_cb(void) {
         rd_kafka_share_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_messages_t *batch = NULL;
@@ -323,7 +323,7 @@ int main_0022_consume_batch(int argc, char **argv) {
 int main_0022_consume_batch_local(int argc, char **argv) {
 #if WITH_SASL_OAUTHBEARER
         do_test_consume_batch_oauthbearer_cb();
-        do_test_share_consume_batch_oauthbearer_cb();
+        do_test_share_poll_oauthbearer_cb();
 #else
         TEST_SKIP("No OAUTHBEARER support\n");
 #endif

@@ -34,7 +34,7 @@
  *   share_consumer_commit_sync <broker> <group.id> <topic1> [topic2 ...]
  *
  * This example demonstrates:
- *  - Consuming records with rd_kafka_share_consume_batch()
+ *  - Consuming records with rd_kafka_share_poll()
  *  - Explicitly acknowledging individual records with
  *    rd_kafka_share_acknowledge_type() using ACCEPT, RELEASE, or REJECT
  *  - Committing acknowledgements synchronously with

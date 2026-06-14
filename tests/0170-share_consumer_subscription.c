@@ -872,14 +872,12 @@ static void do_test_multi_consumer_overlap(void) {
                 int batch_cnt = 0;
                 int ret;
 
-                ret = test_share_consume_batch(rkshare0, 2000, c0_topics, 2,
-                                               &batch_cnt);
+                ret = test_share_poll(rkshare0, 2000, c0_topics, 2, &batch_cnt);
                 TEST_ASSERT(ret >= 0, "C0 wrong topic");
                 c0_cnt += batch_cnt;
 
                 batch_cnt = 0;
-                ret = test_share_consume_batch(rkshare1, 2000, c1_topics, 2,
-                                               &batch_cnt);
+                ret = test_share_poll(rkshare1, 2000, c1_topics, 2, &batch_cnt);
                 TEST_ASSERT(ret >= 0, "C1 wrong topic");
                 c1_cnt += batch_cnt;
         }
@@ -1945,11 +1943,11 @@ static void do_test_two_groups_earliest_vs_latest(void) {
         attempts = 30;
         while (attempts-- > 0 && countA < 5) {
                 int batch_cnt = 0;
-                test_share_consume_batch(consA, 1000, NULL, 0, &batch_cnt);
+                test_share_poll(consA, 1000, NULL, 0, &batch_cnt);
                 countA += batch_cnt;
 
                 batch_cnt = 0;
-                test_share_consume_batch(consB, 500, NULL, 0, &batch_cnt);
+                test_share_poll(consB, 500, NULL, 0, &batch_cnt);
                 countB += batch_cnt;
         }
         TEST_ASSERT(countA == 5, "groupA (earliest) expected 5 records, got %d",
@@ -1967,11 +1965,11 @@ static void do_test_two_groups_earliest_vs_latest(void) {
         attempts = 30;
         while (attempts-- > 0 && countB < 3) {
                 int batch_cnt = 0;
-                test_share_consume_batch(consA, 500, NULL, 0, &batch_cnt);
+                test_share_poll(consA, 500, NULL, 0, &batch_cnt);
                 countA += batch_cnt;
 
                 batch_cnt = 0;
-                test_share_consume_batch(consB, 1000, NULL, 0, &batch_cnt);
+                test_share_poll(consB, 1000, NULL, 0, &batch_cnt);
                 countB += batch_cnt;
         }
         TEST_ASSERT(countA == 8, "groupA expected 8 records total, got %d",

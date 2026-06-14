@@ -4075,7 +4075,7 @@ rd_kafka_resp_err_t rd_kafka_set_log_queue(rd_kafka_t *rk,
  * @param rkshare Share consumer instance.
  * @param rkqu    Queue to forward logs to. If NULL the logs are forwarded
  *                to the share consumer's internal rk_rep, which is drained
- *                by rd_kafka_share_consume_batch() /
+ *                by rd_kafka_share_poll() /
  *                rd_kafka_share_commit_sync() / rd_kafka_share_commit_async()
  *                on the application's poll thread.
  *
@@ -5215,7 +5215,7 @@ RD_EXPORT rd_kafka_error_t *rd_kafka_consumer_group_metadata_read(
  * @remark Topic names are forwarded verbatim to the broker via the share
  *         group heartbeat. The broker validates them; unavailable or
  *         unauthorized topics will surface as errors via
- *         rd_kafka_share_consume_batch().
+ *         rd_kafka_share_poll().
  *
  * @remark If \p topics is empty (cnt == 0), the call is equivalent to
  *         rd_kafka_share_unsubscribe(): the subscription is cleared and

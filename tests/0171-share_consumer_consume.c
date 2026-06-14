@@ -1227,7 +1227,7 @@ static void do_test_fetch_max_bytes_small(void) {
         attempts = 30;
         while (consumed < msgcnt && attempts-- > 0) {
                 int batch_cnt = 0;
-                test_share_consume_batch(consumer, 2000, NULL, 0, &batch_cnt);
+                test_share_poll(consumer, 2000, NULL, 0, &batch_cnt);
                 consumed += batch_cnt;
                 if (batch_cnt > 0) {
                         TEST_ASSERT(batch_cnt == 1,
@@ -1319,7 +1319,7 @@ static void do_test_record_larger_than_fetch_max_bytes(void) {
         attempts = 30;
         while (consumed < total && attempts-- > 0) {
                 int batch_cnt = 0;
-                test_share_consume_batch(consumer, 3000, NULL, 0, &batch_cnt);
+                test_share_poll(consumer, 3000, NULL, 0, &batch_cnt);
                 consumed += batch_cnt;
                 if (batch_cnt > 0)
                         TEST_SAY("Progress: %d/%d\n", consumed, total);

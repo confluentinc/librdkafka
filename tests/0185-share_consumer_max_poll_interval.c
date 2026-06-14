@@ -35,13 +35,13 @@
  * Recreates, for the share consumer, the applicable cases from
  * 0089-max_poll_interval.c and 0091-max_poll_interval_timeout.c:
  *
- *  - A share consumer that stops calling rd_kafka_share_consume_batch() for
+ *  - A share consumer that stops calling rd_kafka_share_poll() for
  *    longer than max.poll.interval.ms is considered failed, leaves the share
  *    group, and surfaces RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED — even if it
  *    never polled once.
- *  - The interval is reset only by rd_kafka_share_consume_batch(); other calls
+ *  - The interval is reset only by rd_kafka_share_poll(); other calls
  *    (rd_kafka_poll(), polling the log queue) do not reset it.
- *  - A blocking rd_kafka_share_consume_batch() that waits longer than
+ *  - A blocking rd_kafka_share_poll() that waits longer than
  *    max.poll.interval.ms is not counted against the interval.
  *  - Steady consumption within the interval never triggers the timeout.
  *  - After a timeout the consumer rejoins on the next batch poll.
@@ -49,7 +49,7 @@
  *
  */
 
-/* rd_kafka_share_consume_batch() fills the caller's array with up to
+/* rd_kafka_share_poll() fills the caller's array with up to
  * `share.max.poll.records` messages and reports the count via an *output*
  * parameter — it does not know the array capacity. The buffer must therefore
  * be large enough to hold a full batch. */
@@ -462,7 +462,7 @@ static void do_test_log_queue_no_reset(void) {
 /**
  * @brief rd_kafka_poll() on the underlying handle must NOT reset the share
  *        consumer's max.poll.interval.ms timer; only
- *        rd_kafka_share_consume_batch() does.
+ *        rd_kafka_share_poll() does.
  *
  * Inverse of 0089 do_test_max_poll_reset_with_consumer_cb(): the regular
  * consumer's poll resets the timer, the share consumer's does not.
@@ -501,7 +501,7 @@ static void do_test_rd_kafka_poll_does_not_reset(void) {
 
 
 /**
- * @brief A single blocking rd_kafka_share_consume_batch() that waits longer
+ * @brief A single blocking rd_kafka_share_poll() that waits longer
  *        than max.poll.interval.ms must NOT trip the timeout (the wait is time
  *        spent inside librdkafka, not application processing time).
  */

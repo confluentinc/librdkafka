@@ -963,7 +963,7 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 
 //         while (phase1_consumed < msgcnt && attempts++ < 30) {
 //                 rcvd  = 0;
-//                 error = rd_kafka_share_consume_batch(rkshare, 3000,
+//                 error = rd_kafka_share_poll(rkshare, 3000,
 //                 rkmessages,
 //                                                      &rcvd);
 //                 if (error) {
@@ -997,7 +997,7 @@ do_test_leader_change_consume_recovery(rd_bool_t explicit_mode,
 //          * an error (silent handling requires zero). */
 //         while (poll_cnt++ < 5) {
 //                 rcvd  = 0;
-//                 error = rd_kafka_share_consume_batch(rkshare, 1000,
+//                 error = rd_kafka_share_poll(rkshare, 1000,
 //                 rkmessages,
 //                                                      &rcvd);
 //                 if (error) {

@@ -6065,7 +6065,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                    be handled from this cb in Share Consumer except maybe in
                    case of closing as this op we don't forward rk_rep queue to
                    rkcg.q. This op is handled separately in
-                   rd_kafka_share_consume_batch() during normal working of Share
+                   rd_kafka_share_poll() during normal working of Share
                    Consumer. Check what is the correct way to handle this op
                    while closing. */
                 rd_kafka_assert(rk, rk->rk_rkshare->rkshare_consumer_closing);

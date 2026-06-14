@@ -876,25 +876,22 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 rd_kafka_error_t *
 rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                                   int timeout_ms,
-                                  rd_kafka_message_t ***rkmessages_out,
-                                  size_t *rkmessages_size_out) {
+                                  rd_kafka_messages_t **rkmessages_out) {
         rd_kafka_op_t *rko;
         rd_kafka_t *rk = rkq->rkq_rk;
         rd_kafka_q_t *fwdq;
         rd_ts_t abs_timeout;
         rd_kafka_error_t *error = NULL;
-        unsigned int cnt        = 0;
         rd_kafka_resp_err_t fatal_err;
         char fatal_errstr[512];
 
-        *rkmessages_out      = NULL;
-        *rkmessages_size_out = 0;
+        *rkmessages_out = NULL;
 
         mtx_lock(&rkq->rkq_lock);
         if ((fwdq = rd_kafka_q_fwd_get(rkq, 0))) {
                 mtx_unlock(&rkq->rkq_lock);
-                error = rd_kafka_q_serve_share_rkmessages(
-                    fwdq, timeout_ms, rkmessages_out, rkmessages_size_out);
+                error = rd_kafka_q_serve_share_rkmessages(fwdq, timeout_ms,
+                                                          rkmessages_out);
                 rd_kafka_q_destroy(fwdq);
                 return error;
         }
@@ -927,18 +924,18 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                      rd_kafka_op2str(rko->rko_type), rko->rko_type);
 
         if (rko->rko_type == RD_KAFKA_OP_SHARE_FETCH_RESPONSE) {
-                /* Allocate the messages buffer sized exactly to this op's
+                /* Allocate the messages handle sized exactly to this op's
                  * payload — the response may contain more records than
                  * max.poll.records when multiple partitions are aggregated
                  * into a single fetch response, so any caller-side
                  * pre-allocation against max.poll.records would overflow. */
-                int total_msgs =
-                    rd_list_cnt(rko->rko_u.share_fetch_response.message_rkos);
+                size_t total_msgs = (size_t)rd_list_cnt(
+                    rko->rko_u.share_fetch_response.message_rkos);
                 if (total_msgs > 0) {
-                        *rkmessages_out = rd_malloc((size_t)total_msgs *
-                                                    sizeof(**rkmessages_out));
-                        cnt = rd_kafka_op_process_share_fetch_response(
-                            rko, rkq->rkq_rk->rk_rkshare, *rkmessages_out, 0);
+                        *rkmessages_out = rd_kafka_messages_new(total_msgs);
+                        rd_kafka_op_process_share_fetch_response(
+                            rko, rkq->rkq_rk->rk_rkshare,
+                            (*rkmessages_out)->elems, 0);
                 }
                 rkq->rkq_rk->rk_rkshare->rkshare_fetch_more_records_requested =
                     rd_false;
@@ -976,7 +973,6 @@ rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
         }
 
         rd_kafka_op_destroy(rko);
-        *rkmessages_size_out = cnt;
         return error;
 }
 

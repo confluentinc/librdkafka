@@ -863,8 +863,8 @@ static void do_test_sharefetch_fetch_error(rd_kafka_resp_err_t err) {
         rd_kafka_share_poll(consumer, 2000, &batch);
         rcvd = rd_kafka_messages_count(batch);
         for (i = 0; i < rcvd; i++) {
-                rd_kafka_message_t *rkm = rd_kafka_messages_get(batch, i);
-                if (rkm && !rkm->err)
+                rd_kafka_message_t *msg = rd_kafka_messages_get(batch, i);
+                if (!msg->err)
                         consumed++;
         }
         rd_kafka_messages_destroy(batch);
@@ -961,8 +961,8 @@ static void do_test_sharefetch_fetch_disconnected(void) {
         rd_kafka_share_poll(consumer, 2000, &batch);
         rcvd = rd_kafka_messages_count(batch);
         for (i = 0; i < rcvd; i++) {
-                rd_kafka_message_t *rkm = rd_kafka_messages_get(batch, i);
-                if (rkm && !rkm->err)
+                rd_kafka_message_t *msg = rd_kafka_messages_get(batch, i);
+                if (!msg->err)
                         consumed++;
         }
         rd_kafka_messages_destroy(batch);

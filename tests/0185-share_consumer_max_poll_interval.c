@@ -49,12 +49,6 @@
  *
  */
 
-/* rd_kafka_share_poll() fills the caller's array with up to
- * `share.max.poll.records` messages and reports the count via an *output*
- * parameter — it does not know the array capacity. The buffer must therefore
- * be large enough to hold a full batch. */
-#define BATCH_SIZE TEST_SHARE_BATCH_SIZE
-
 /* Longer interval for the real-broker tests (matches 0089/0091), giving the
  * group join/assignment enough headroom not to falsely trip. */
 #define REAL_MAX_POLL_INTERVAL_MS 10000

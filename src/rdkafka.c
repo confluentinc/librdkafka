@@ -3890,18 +3890,6 @@ void rd_kafka_messages_destroy(rd_kafka_messages_t *messages) {
         rd_free(messages);
 }
 
-/**
- * @brief Allocate an rd_kafka_messages_t sized to hold exactly \p cnt
- *        message pointers, copied from \p src.
- */
-static rd_kafka_messages_t *rd_kafka_messages_new(rd_kafka_message_t **src,
-                                                  size_t cnt) {
-        rd_kafka_messages_t *messages =
-            rd_malloc(sizeof(*messages) + cnt * sizeof(*messages->elems));
-        messages->cnt = cnt;
-        memcpy(messages->elems, src, cnt * sizeof(*messages->elems));
-        return messages;
-}
 
 rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
                                       int timeout_ms,
@@ -3913,8 +3901,6 @@ rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
         rd_kafka_error_t *error = NULL;
         rd_list_t *ack_batches  = NULL;
         rd_bool_t need_fetch_more_records;
-        rd_kafka_message_t **rkshare_accumulated_msgs = NULL;
-        size_t cnt                                    = 0;
 
         /* Always NULL the out param so error/empty paths are well-defined. */
         *rkmessages = NULL;
@@ -3979,13 +3965,12 @@ rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
                 rd_kafka_share_fetch_fanout(rk, need_fetch_more_records,
                                             ack_batches);
 
-        /* q_serve_share_rkmessages allocates the accumulated-msgs buffer
-         * internally, sized to the actual op's message count, so it
-         * never overflows regardless of how many records a single
-         * SHARE_FETCH_RESPONSE aggregates (max.poll.records is enforced
-         * upstream during fetch scheduling, not here). */
-        error = rd_kafka_q_serve_share_rkmessages(
-            rkcg->rkcg_q, timeout_ms, &rkshare_accumulated_msgs, &cnt);
+        /* q_serve_share_rkmessages allocates the caller-visible
+         * rd_kafka_messages_t directly, sized to the actual op's message
+         * count, so it never overflows regardless of how many records a
+         * single SHARE_FETCH_RESPONSE aggregates */
+        error = rd_kafka_q_serve_share_rkmessages(rkcg->rkcg_q, timeout_ms,
+                                                  rkmessages);
 
         /* Drain rk_rep for callbacks again before returning */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
@@ -3993,23 +3978,7 @@ rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
 
         rd_kafka_share_record_poll_end(rk);
 
-        if (cnt > 0) {
-                if (error) {
-                        /* Defensive: queue contract makes this unreachable
-                         * (a single op produces either messages or an error,
-                         * never both). Destroy messages to avoid leaks. */
-                        size_t i;
-                        for (i = 0; i < cnt; i++)
-                                rd_kafka_message_destroy(
-                                    rkshare_accumulated_msgs[i]);
-                } else {
-                        *rkmessages = rd_kafka_messages_new(
-                            rkshare_accumulated_msgs, cnt);
-                }
-        }
 done:
-        if (rkshare_accumulated_msgs)
-                rd_free(rkshare_accumulated_msgs);
         rd_kafka_share_release(rkshare);
         return error;
 }

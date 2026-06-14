@@ -881,21 +881,18 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
 /**
  * @brief Serve up to one share-consumer op from \p rkq.
  *
- * On success with a SHARE_FETCH_RESPONSE op, \c *rkmessages_out is set to
- * an rd_malloc()ed array sized exactly to the op's payload (so it always
- * fits, regardless of max.poll.records); \c *rkmessages_size_out is the
- * count. The caller takes ownership of the array (rd_free) and of each
- * contained rd_kafka_message_t (rd_kafka_message_destroy).
+ * On success with a non-empty SHARE_FETCH_RESPONSE op, \c *rkmessages_out
+ * is set to a newly-allocated rd_kafka_messages_t sized exactly to the op's
+ * payload. The caller takes ownership and must release it with
+ * rd_kafka_messages_destroy().
  *
- * On error / empty queue / non-fetch ops, \c *rkmessages_out is NULL and
- * \c *rkmessages_size_out is 0. The returned rd_kafka_error_t (if non-NULL)
- * is owned by the caller.
+ * On error / empty queue / non-fetch ops, \c *rkmessages_out is NULL.
+ * The returned rd_kafka_error_t (if non-NULL) is owned by the caller.
  */
 rd_kafka_error_t *
 rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
                                   int timeout_ms,
-                                  rd_kafka_message_t ***rkmessages_out,
-                                  size_t *rkmessages_size_out);
+                                  rd_kafka_messages_t **rkmessages_out);
 rd_kafka_resp_err_t rd_kafka_q_wait_result(rd_kafka_q_t *rkq, int timeout_ms);
 
 int rd_kafka_q_apply(rd_kafka_q_t *rkq,

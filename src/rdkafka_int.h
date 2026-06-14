@@ -951,6 +951,8 @@ struct rd_kafka_messages_s {
         rd_kafka_message_t *elems[]; /**< Message pointer array. */
 };
 
+rd_kafka_messages_t *rd_kafka_messages_new(size_t cnt);
+
 #define rd_kafka_wrlock(rk)   rwlock_wrlock(&(rk)->rk_lock)
 #define rd_kafka_rdlock(rk)   rwlock_rdlock(&(rk)->rk_lock)
 #define rd_kafka_rdunlock(rk) rwlock_rdunlock(&(rk)->rk_lock)

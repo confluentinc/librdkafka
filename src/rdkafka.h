@@ -3266,7 +3266,9 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                                               size_t errstr_size);
 
 /**
- * @brief Poll the share consumer for a batch of messages.
+ * @brief Poll the share consumer for a batch of messages. It is different from
+ *        normal consumer poll where a single record is returned, this API
+ *        returns a batch of messages in a single call.
  *
  * @param rkshare    Share consumer instance.
  * @param timeout_ms Maximum time to block waiting for messages.
@@ -3276,7 +3278,7 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
  *                     points to an \c rd_kafka_messages_t handle owned by the
  *                     caller, who must release it with
  *                     rd_kafka_messages_destroy().
- *                   - On error, empty poll, or timeout with no messages:
+ *                   - On error or timeout with no messages:
  *                     \c *rkmessages is set to NULL.
  *                   \c rd_kafka_messages_destroy(NULL) is a safe no-op so
  *                   callers may unconditionally destroy.
@@ -3323,7 +3325,10 @@ rd_kafka_message_t *rd_kafka_messages_get(const rd_kafka_messages_t *messages,
  * @brief Destroys \p messages and all messages it contains.
  *
  * After this call any \c rd_kafka_message_t pointer previously obtained via
- * rd_kafka_messages_get() on \p messages is invalid.
+ * rd_kafka_messages_get() on \p messages is invalid. Users should only use
+ * this method to destroy the \p messages handle returned by
+ * rd_kafka_share_poll() and set the pointer to NULL after destroying to avoid
+ * use-after-free bugs.
  *
  * @param messages Message list to destroy. NULL is a safe no-op.
  */

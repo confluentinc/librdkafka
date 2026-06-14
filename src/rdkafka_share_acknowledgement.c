@@ -295,9 +295,6 @@ rd_kafka_share_find_ack_batch(rd_list_t *ack_list,
         int i;
 
         RD_LIST_FOREACH(existing, ack_list, i) {
-                /* TODO KIP-932: We might need to use leader id and epoch
-                 * as well to understand about the stale topic partition
-                 * information */
                 if (rd_kafka_topic_partition_by_id_cmp(existing->rktpar,
                                                        rktpar) == 0)
                         return existing;

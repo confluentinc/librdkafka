@@ -968,10 +968,9 @@ static void do_test_concurrent_thread_access_rejected(void) {
          * waiting indefinitely (see logs.txt: subtest ran ~4000s
          * before the suite watchdog killed it). */
         if (!strcmp(test_mode, "valgrind")) {
-                TEST_SKIP(
+                SUB_TEST_SKIP(
                     "Concurrent-thread gate test is scheduling-sensitive "
                     "under Valgrind\n");
-                SUB_TEST_PASS();
                 return;
         }
 

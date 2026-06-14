@@ -169,21 +169,25 @@ static void produce_and_share_consume(const char *topic, const char *group_id) {
 
         deadline_us = test_clock() + 20 * 1000000;
         while (test_clock() < deadline_us) {
-                rd_kafka_message_t *batch[100];
+                rd_kafka_messages_t *batch = NULL;
                 rd_kafka_error_t *e;
                 size_t rcvd = 0;
                 size_t i;
 
-                e = rd_kafka_share_consume_batch(rkshare, 1000, batch, &rcvd);
+                e = rd_kafka_share_poll(rkshare, 1000, &batch);
                 if (e) {
                         rd_kafka_error_destroy(e);
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (i = 0; i < rcvd; i++) {
-                        if (!batch[i]->err)
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        if (msg && !msg->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[i]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_SAY("Share-consumed %d messages\n", consumed);
 

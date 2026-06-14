@@ -1304,6 +1304,22 @@ rd_kafka_message_t *rd_kafka_message_new(void) {
 
 
 /**
+ * @brief Allocate an rd_kafka_messages_t whose flex \c elems[] array has
+ *        room for exactly \p cnt message pointers, with \c cnt populated.
+ *
+ * The caller is responsible for filling \c elems[0..cnt). Internal helper
+ * used by the share-consumer queue serve to allocate the caller-visible
+ * messages handle in a single step (no intermediate buffer).
+ */
+rd_kafka_messages_t *rd_kafka_messages_new(size_t cnt) {
+        rd_kafka_messages_t *messages =
+            rd_calloc(1, (sizeof(*messages) + cnt * sizeof(*messages->elems)));
+        messages->cnt = cnt;
+        return messages;
+}
+
+
+/**
  * @brief Set up a rkmessage from an rko for passing to the application.
  * @remark Will trigger on_consume() interceptors if any.
  */

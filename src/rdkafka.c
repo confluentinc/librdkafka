@@ -3867,26 +3867,57 @@ static void rd_kafka_share_record_poll_end(rd_kafka_t *rk) {
         }
 }
 
-rd_kafka_error_t *rd_kafka_share_consume_batch(
-    rd_kafka_share_t *rkshare,
-    int timeout_ms,
-    /* There is some benefit to making this ***rkmessages and allocating it
-       within this function, but on the flipside this means that it will always
-       be allocated on the heap. */
-    rd_kafka_message_t **rkmessages /* out */,
-    size_t *rkmessages_size /* out */) {
+size_t rd_kafka_messages_count(const rd_kafka_messages_t *messages) {
+        if (!messages)
+                return 0;
+        return messages->cnt;
+}
+
+rd_kafka_message_t *rd_kafka_messages_get(const rd_kafka_messages_t *messages,
+                                          size_t index) {
+        if (!messages || index >= messages->cnt)
+                return NULL;
+        return messages->elems[index];
+}
+
+void rd_kafka_messages_destroy(rd_kafka_messages_t *messages) {
+        size_t i;
+        if (!messages)
+                return;
+        for (i = 0; i < messages->cnt; i++) {
+                rd_kafka_message_destroy(messages->elems[i]);
+        }
+        rd_free(messages);
+}
+
+/**
+ * @brief Allocate an rd_kafka_messages_t sized to hold exactly \p cnt
+ *        message pointers, copied from \p src.
+ */
+static rd_kafka_messages_t *rd_kafka_messages_new(rd_kafka_message_t **src,
+                                                  size_t cnt) {
+        rd_kafka_messages_t *messages =
+            rd_malloc(sizeof(*messages) + cnt * sizeof(*messages->elems));
+        messages->cnt = cnt;
+        memcpy(messages->elems, src, cnt * sizeof(*messages->elems));
+        return messages;
+}
+
+rd_kafka_error_t *rd_kafka_share_poll(rd_kafka_share_t *rkshare,
+                                      int timeout_ms,
+                                      rd_kafka_messages_t **rkmessages) {
         rd_kafka_t *rk = rkshare->rkshare_rk;
         rd_kafka_cgrp_t *rkcg;
-        size_t max_poll_records = (size_t)rk->rk_conf.share.max_poll_records;
         rd_bool_t has_records;
         rd_bool_t has_pending_acks;
         rd_kafka_error_t *error = NULL;
         rd_list_t *ack_batches  = NULL;
         rd_bool_t need_fetch_more_records;
+        rd_kafka_message_t **rkshare_accumulated_msgs = NULL;
+        size_t cnt                                    = 0;
 
-        /* Default the out count to 0 so error returns leave it
-         * well-defined. */
-        *rkmessages_size = 0;
+        /* Always NULL the out param so error/empty paths are well-defined. */
+        *rkmessages = NULL;
 
         if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
                 return error;
@@ -3894,11 +3925,11 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
         /* TODO KIP-932: the non-fatal errors returned from the other paths
          * below (consumer-group-not-initialized, consumer-closed, and the
          * not-all-acknowledged guard) should be marked retriable so the app
-         * knows it can retry the consume_batch call, consistent with the
+         * knows it can retry the share_poll call, consistent with the
          * retriable errors built in rd_kafka_q_serve_share_rkmessages(). */
         if (unlikely(!(rkcg = rd_kafka_cgrp_get(rk)))) {
                 error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__STATE,
-                                           "rd_kafka_share_consume_batch(): "
+                                           "rd_kafka_share_poll(): "
                                            "Consumer group not initialized");
                 goto done;
         }
@@ -3948,16 +3979,37 @@ rd_kafka_error_t *rd_kafka_share_consume_batch(
                 rd_kafka_share_fetch_fanout(rk, need_fetch_more_records,
                                             ack_batches);
 
-        error = rd_kafka_q_serve_share_rkmessages(rkcg->rkcg_q, timeout_ms,
-                                                  rkmessages, max_poll_records,
-                                                  rkmessages_size);
+        /* q_serve_share_rkmessages allocates the accumulated-msgs buffer
+         * internally, sized to the actual op's message count, so it
+         * never overflows regardless of how many records a single
+         * SHARE_FETCH_RESPONSE aggregates (max.poll.records is enforced
+         * upstream during fetch scheduling, not here). */
+        error = rd_kafka_q_serve_share_rkmessages(
+            rkcg->rkcg_q, timeout_ms, &rkshare_accumulated_msgs, &cnt);
 
         /* Drain rk_rep for callbacks again before returning */
         rd_kafka_q_serve(rk->rk_rep, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
                          rd_kafka_poll_cb, NULL);
 
         rd_kafka_share_record_poll_end(rk);
+
+        if (cnt > 0) {
+                if (error) {
+                        /* Defensive: queue contract makes this unreachable
+                         * (a single op produces either messages or an error,
+                         * never both). Destroy messages to avoid leaks. */
+                        size_t i;
+                        for (i = 0; i < cnt; i++)
+                                rd_kafka_message_destroy(
+                                    rkshare_accumulated_msgs[i]);
+                } else {
+                        *rkmessages = rd_kafka_messages_new(
+                            rkshare_accumulated_msgs, cnt);
+                }
+        }
 done:
+        if (rkshare_accumulated_msgs)
+                rd_free(rkshare_accumulated_msgs);
         rd_kafka_share_release(rkshare);
         return error;
 }
@@ -6010,7 +6062,7 @@ rd_kafka_op_res_t rd_kafka_poll_cb(rd_kafka_t *rk,
                    be handled from this cb in Share Consumer except maybe in
                    case of closing as this op we don't forward rk_rep queue to
                    rkcg.q. This op is handled separately in
-                   rd_kafka_share_consume_batch() during normal working of Share
+                   rd_kafka_share_poll() during normal working of Share
                    Consumer. Check what is the correct way to handle this op
                    while closing. */
                 rd_kafka_assert(rk, rk->rk_rkshare->rkshare_consumer_closing);

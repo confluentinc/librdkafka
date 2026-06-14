@@ -51,7 +51,7 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
 }
 
 /**
- * @brief Poll rd_kafka_share_consume_batch() until it returns a fatal
+ * @brief Poll rd_kafka_share_poll() until it returns a fatal
  *        error or \p timeout_ms elapses.
  *
  * While waiting for the fatal error no records are expected, and any
@@ -62,20 +62,22 @@ static rd_kafka_share_t *create_share_consumer(const char *bootstraps,
  */
 static rd_kafka_error_t *wait_fatal_error(rd_kafka_share_t *share_c,
                                           int timeout_ms) {
-        int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
-        rd_kafka_message_t *rkmessages[10];
+        int64_t deadline           = test_clock() + (int64_t)timeout_ms * 1000;
+        rd_kafka_messages_t *batch = NULL;
         size_t rcvd;
         rd_kafka_error_t *error;
 
         while (test_clock() < deadline) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(share_c, 100, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(share_c, 100, &batch);
+                rcvd  = rd_kafka_messages_count(batch);
 
                 TEST_ASSERT(rcvd == 0,
                             "Expected no records while waiting for fatal "
                             "error, got %d",
                             (int)rcvd);
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 if (error) {
                         TEST_ASSERT(rd_kafka_error_is_fatal(error),

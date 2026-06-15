@@ -3288,6 +3288,14 @@ err:
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 return;
 
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
+                /* If the leave heartbeat has already been sent the member is
+                 * on its way out of the group, so a GROUP_ID_NOT_FOUND on a
+                 * still-in-flight regular heartbeat is expected and benign.
+                 * Otherwise the group is genuinely gone and this is fatal. */
+                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE)
+                        return;
+                /* FALLTHRU */
         case RD_KAFKA_RESP_ERR_INVALID_REQUEST:
         case RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED:
         case RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR:
@@ -5180,9 +5188,14 @@ rd_kafka_cgrp_max_poll_interval_check_tmr_cb(rd_kafka_timers_t *rkts,
                             1 /*lock*/);
 
         if (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CONSUMER) {
-                rd_kafka_cgrp_consumer_leave(rkcg);
+                /* Do not send the leave heartbeat immediately: defer it until
+                 * the assignment has been revoked (F_LEAVE_ON_UNASSIGN_DONE).
+                 * Sending it now races the rejoin -- a fast leave reply runs
+                 * consumer_reset, clearing F_WAIT_REJOIN before the serve loop
+                 * acts on it, stranding the member at epoch 0. */
                 rkcg->rkcg_consumer_flags |=
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
+                rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
                 rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                     rkcg,
                     "max poll interval "

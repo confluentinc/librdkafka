@@ -1145,10 +1145,13 @@ void rd_kafka_oidc_token_metadata_aws_iam_refresh_cb(
          */
         rd_kafka_oauthbearer_set_token_failure(
             rk,
-            "aws_iam authentication is handled by the high-level "
-            "client. Reaching this code path means no token-refresh "
-            "callback was registered. Verify that the AWS OAUTHBEARER "
-            "package is installed and configured.");
+            "aws_iam OAUTHBEARER token retrieval is not implemented "
+            "natively in librdkafka; a token-refresh callback must supply "
+            "the token. High-level clients wire this automatically when "
+            "their AWS OAUTHBEARER package/extra is installed and "
+            "configured. Reaching this code path means method=oidc and "
+            "metadata.authentication.type=aws_iam were set but no "
+            "token-refresh callback is registered.");
 }
 
 /**

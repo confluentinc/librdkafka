@@ -1474,10 +1474,14 @@ static void do_test_mock_commit_sync_timeout(void) {
 
         /* May return top-level error or per-partition timeout error.
          * Accept either:
-         * - REQUEST_TIMED_OUT: main thread commit_sync deadline fired
-         *   first (typical when commit_sync timeout is shorter than
-         *   socket.timeout.ms).
-         * - __TIMED_OUT: broker thread socket.timeout.ms fired first. */
+         * - top-level error: main thread commit_sync deadline fired
+         *   first; rd_kafka_error_code(error) can be __TIMED_OUT
+         *   (raw — top-level errors are not run through the per-
+         *   partition translation funnel).
+         * - per-partition REQUEST_TIMED_OUT: broker-thread reply
+         *   path stamped __TIMED_OUT on batches, translated to
+         *   REQUEST_TIMED_OUT at the app-facing funnel; or the api
+         *   timer cb wrote REQUEST_TIMED_OUT directly. */
         if (error) {
                 TEST_SAY("Phase 1: top-level error: %s\n",
                          rd_kafka_error_string(error));
@@ -1492,9 +1496,7 @@ static void do_test_mock_commit_sync_timeout(void) {
                         TEST_SAY("Phase 1: %s [%" PRId32 "]: %s\n",
                                  rktpar->topic, rktpar->partition,
                                  rd_kafka_err2str(rktpar->err));
-                        if (rktpar->err ==
-                                RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT ||
-                            rktpar->err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                        if (rktpar->err == RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT)
                                 got_timed_out = rd_true;
                 }
                 rd_kafka_topic_partition_list_destroy(partitions);

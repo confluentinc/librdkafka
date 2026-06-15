@@ -2490,6 +2490,12 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
                             &rk->rk_conf,
                             rd_kafka_oidc_token_metadata_azure_imds_refresh_cb);
                 } else if (
+                    rk->rk_conf.sasl.oauthbearer.metadata_authentication.type ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AWS_IAM) {
+                        rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+                            &rk->rk_conf,
+                            rd_kafka_oidc_token_metadata_aws_iam_refresh_cb);
+                } else if (
                     rk->rk_conf.sasl.oauthbearer.grant_type ==
                     RD_KAFKA_SASL_OAUTHBEARER_GRANT_TYPE_CLIENT_CREDENTIALS) {
                         rd_kafka_conf_set_oauthbearer_token_refresh_cb(

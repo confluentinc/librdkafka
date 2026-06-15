@@ -78,20 +78,20 @@ typedef struct {
  * @brief Shared state for concurrent test threads
  */
 typedef struct {
-        mtx_t lock;               /**< Mutex for state access */
-        int total_produced;       /**< Total messages produced */
-        int total_consumed;       /**< Total messages consumed
-                                   *   (includes redeliveries) */
-        int total_first_delivery; /**< Messages with delivery_count == 1 */
-        int total_duplicates;     /**< Messages with delivery_count > 1 */
-        int expected_total;       /**< Expected total messages */
-        rd_bool_t producers_done; /**< All producers finished */
-        int producers_remaining;  /**< Producer threads still running */
-        rd_bool_t test_failed;    /**< Test failure flag */
-        char *topics[MAX_TOPICS]; /**< Topic names */
-        int topic_cnt;            /**< Number of topics */
-        const char *group_name;   /**< Share group name */
-        rd_bool_t explicit_ack;   /**< Use explicit acknowledgement */
+        mtx_t lock;                   /**< Mutex for state access */
+        int total_produced;           /**< Total messages produced */
+        int total_consumed;           /**< Total messages consumed
+                                       *   (includes redeliveries) */
+        int total_first_delivery;     /**< Messages with delivery_count == 1 */
+        int total_duplicates;         /**< Messages with delivery_count > 1 */
+        int expected_total;           /**< Expected total messages */
+        rd_bool_t producers_done;     /**< All producers finished */
+        int producers_remaining;      /**< Producer threads still running */
+        rd_bool_t test_failed;        /**< Test failure flag */
+        char topics[MAX_TOPICS][128]; /**< Topic names */
+        int topic_cnt;                /**< Number of topics */
+        const char *group_name;       /**< Share group name */
+        rd_bool_t explicit_ack;       /**< Use explicit acknowledgement */
 } concurrent_test_state_t;
 
 /**
@@ -487,8 +487,8 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         /* Create topics */
         for (t = 0; t < config->topic_cnt; t++) {
-                state.topics[t] =
-                    rd_strdup(test_mk_topic_name("0174-concurrent", 1));
+                rd_snprintf(state.topics[t], sizeof(state.topics[t]), "%s",
+                            test_mk_topic_name("0174-concurrent", 1));
                 test_create_topic_wait_exists(NULL, state.topics[t],
                                               config->partitions[t], -1,
                                               60 * 1000);
@@ -625,8 +625,6 @@ static void run_concurrent_test(const concurrent_test_config_t *config) {
 
         TEST_SAY("SUCCESS: %s\n", unique_test_name);
 
-        for (t = 0; t < config->topic_cnt; t++)
-                rd_free(state.topics[t]);
         mtx_destroy(&state.lock);
 }
 
@@ -1112,8 +1110,8 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
         TEST_SAY("Expected messages: %d\n", state.expected_total);
 
         for (t = 0; t < config.topic_cnt; t++) {
-                state.topics[t] =
-                    rd_strdup(test_mk_topic_name("0174-chaos", 1));
+                rd_snprintf(state.topics[t], sizeof(state.topics[t]), "%s",
+                            test_mk_topic_name("0174-chaos", 1));
                 test_create_topic_wait_exists(
                     NULL, state.topics[t], config.partitions[t], -1, 60 * 1000);
         }
@@ -1371,8 +1369,6 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
             "every record first-delivered exactly once\n",
             started_threads);
 
-        for (t = 0; t < config.topic_cnt; t++)
-                rd_free(state.topics[t]);
         mtx_destroy(&state.lock);
 
         SUB_TEST_PASS();

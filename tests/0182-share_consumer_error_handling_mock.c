@@ -2748,23 +2748,24 @@ static void do_test_no_bounce_loop_on_down_broker(void) {
         /* Drain the pre-fetched records. They're already on the
          * consumer queue, so share_poll returns them directly
          * without enqueueing a FANOUT and no new ShareFetch fires. */
-        error = rd_kafka_share_poll(rkshare, 100, &batch);
+        error                       = rd_kafka_share_poll(rkshare, 100, &batch);
+        rcvd                        = rd_kafka_messages_count(batch);
+        share_fetch_cnt_after_drain = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_fetch_request, NULL);
+        /* Destroy the batch before asserting so a failed assert can't
+         * leak it (TEST_FAIL longjmps past any later destroy). */
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+
         TEST_ASSERT(!error, "post-recovery share_poll error: %s",
                     error ? rd_kafka_error_string(error) : "NULL");
-        rcvd = rd_kafka_messages_count(batch);
         TEST_ASSERT(rcvd == (size_t)msgcnt_phase2,
                     "expected %d records from queue, got %" PRIusz,
                     msgcnt_phase2, rcvd);
-
-        share_fetch_cnt_after_drain = test_mock_get_matching_request_cnt(
-            ctx.mcluster, is_share_fetch_request, NULL);
         TEST_ASSERT(share_fetch_cnt_after_drain == share_fetch_cnt_before_drain,
                     "share_poll should drain the queue without firing "
                     "a new ShareFetch; pre=%" PRIusz " post=%" PRIusz,
                     share_fetch_cnt_before_drain, share_fetch_cnt_after_drain);
-
-        rd_kafka_messages_destroy(batch);
-        batch = NULL;
 
         rd_kafka_mock_clear_requests(ctx.mcluster);
 

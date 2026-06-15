@@ -3315,10 +3315,12 @@ size_t rd_kafka_messages_count(const rd_kafka_messages_t *messages);
  * rd_kafka_messages_destroy() is called.
  *
  * @param messages Message list returned by rd_kafka_share_poll().
+ *                 Must be non-NULL.
  * @param index    Zero-based index of the message to return.
+ *                 Must be strictly less than rd_kafka_messages_count(messages);
+ *                 behavior is undefined otherwise.
  *
- * @returns The message at \p index, or NULL if \p messages is NULL or
- *          \p index is out of bounds.
+ * @returns The message at \p index.
  */
 RD_EXPORT
 rd_kafka_message_t *rd_kafka_messages_get(const rd_kafka_messages_t *messages,

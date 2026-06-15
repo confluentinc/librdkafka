@@ -1049,10 +1049,3 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_fetch_min_bytes_regular_consumer_range_rejected();
         return 0;
 }
-
-
-/*
- * 1. receive.message.max.bytes - using normal consumer, we produce the record
- * with 5KB size and set this to 1KB and try to see if we are getting the record
- * or not
- */

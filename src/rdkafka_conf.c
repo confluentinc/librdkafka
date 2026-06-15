@@ -1482,7 +1482,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Minimum number of bytes the broker responds with. "
      "If fetch.wait.max.ms expires the accumulated data will "
      "be sent to the client regardless of this setting.",
-     1, 100000000, 1},
+     0, 100000000, 1},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
      _RK(fetch_error_backoff_ms),
      "How long to postpone the next fetch request for a "
@@ -4273,7 +4273,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                  * end of the block, before the downstream
                  * group-protocol validation runs so its
                  * CONSUMER-branch checks also apply to share
-                 * consumers. */
+                 * consumers.
+                 *
+                 * TODO KIP-932: evaluate, per property, whether
+                 * rejecting is the right behavior or whether some
+                 * should instead be silently ignored (as the Java
+                 * client does for several of these). */
                 if (conf->share.is_share_consumer) {
                         if (conf->rebalance_cb)
                                 return "`rebalance_cb` is not applicable "
@@ -4312,6 +4317,36 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`partition.assignment.strategy` is "
                                        "not applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(
+                                conf, "fetch.message.max.bytes"))
+                                return "`fetch.message.max.bytes` "
+                                       "(`max.partition.fetch.bytes`) is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "message.max.bytes"))
+                                return "`message.max.bytes` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "receive.message.max.bytes"))
+                                return "`receive.message.max.bytes` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.instance.id"))
+                                return "`group.instance.id` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "isolation.level"))
+                                return "`isolation.level` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.remote.assignor"))
+                                return "`group.remote.assignor` is not "
+                                       "applicable for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
@@ -4321,6 +4356,17 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
                         conf->socket_max_fails = 1;
+                        /* This allows fetch.max.bytes to be set as low as 0 */
+                        conf->max_msg_size = 0;
+                        /* This is only a ceiling check, not a pre-allocation,
+                         * so it does not increase memory usage. */
+                        conf->recv_max_msg_size = INT_MAX;
+                } else if (conf->fetch_min_bytes < 1) {
+                        /* `fetch.min.bytes=0` (broker responds immediately,
+                         * no long-poll) is only supported for share
+                         * consumers. */
+                        return "`fetch.min.bytes` must be >= 1 for non-share "
+                               "consumers";
                 }
 
                 if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {

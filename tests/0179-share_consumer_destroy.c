@@ -846,9 +846,13 @@ static void test_broker_decommission_with_commit_sync(int destroy_flags,
                             "Expected partition %" PRId32
                             " in result, got %" PRId32,
                             target_partition, p->partition);
-                /* TODO KIP-932: Fix error code */
-                TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR__DESTROY_BROKER,
-                            "Expected __DESTROY_BROKER for partition %" PRId32
+                /* __DESTROY_BROKER from the broker-thread decommission
+                 * path is translated to __TRANSPORT at the app-facing
+                 * funnel (rd_kafka_share_commit_sync_apply_result), to
+                 * match the Java NetworkException/DisconnectException
+                 * terminal surface. */
+                TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR__TRANSPORT,
+                            "Expected __TRANSPORT for partition %" PRId32
                             " (broker %" PRId32 ", decommissioned), got %s",
                             target_partition, target_broker_id,
                             rd_kafka_err2str(p->err));
@@ -1050,16 +1054,17 @@ static void test_broker_decommission_with_consume_batch(int destroy_flags) {
          *   Second consume_batch: the piggybacked ShareAck for the
          *   target partition's ACQUIRED batch parks on the target
          *   broker and gets stamped __DESTROY_BROKER when the
-         *   decommission fires.
+         *   decommission fires; __DESTROY_BROKER is translated to
+         *   __TRANSPORT at the app-facing funnel.
          *
          *   surviving_partition: TEST_MSGS/2 offsets, NO_ERROR
-         *   target_partition:    TEST_MSGS/2 offsets, __DESTROY_BROKER */
+         *   target_partition:    TEST_MSGS/2 offsets, __TRANSPORT */
         surviving_part = (target_partition == 0) ? 1 : 0;
         expected[0]    = (expected_ack_t) {
             topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
         expected[1] =
             (expected_ack_t) {topic, target_partition,
-                              RD_KAFKA_RESP_ERR__DESTROY_BROKER, TEST_MSGS / 2};
+                              RD_KAFKA_RESP_ERR__TRANSPORT, TEST_MSGS / 2};
         verify_ack_receipts(&receipts, expected, 2, "consume_batch");
 
         rd_kafka_messages_destroy(rkmessages);
@@ -1259,18 +1264,19 @@ static void test_broker_decommission_during_close(int destroy_flags,
          * Those explicit acks are queued and shipped during close.
          * The target broker's ack request parks behind the injected
          * delay; when the decommission fires, the parked request is
-         * stamped __DESTROY_BROKER and the callback fires with that
-         * err. surviving_partition records that weren't piggyback-
-         * acked during drain are also shipped at close and succeed
-         * with NO_ERROR.
+         * stamped __DESTROY_BROKER, which the app-facing funnel
+         * translates to __TRANSPORT before the callback fires.
+         * surviving_partition records that weren't piggyback-acked
+         * during drain are also shipped at close and succeed with
+         * NO_ERROR.
          */
         surviving_part = (target_partition == 0) ? 1 : 0;
         expected[0]    = (expected_ack_t) {
             topic, surviving_part, RD_KAFKA_RESP_ERR_NO_ERROR, TEST_MSGS / 2};
         if (explicit_ack) {
-                expected[1] = (expected_ack_t) {
-                    topic, target_partition, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
-                    TEST_MSGS / 2};
+                expected[1] = (expected_ack_t) {topic, target_partition,
+                                                RD_KAFKA_RESP_ERR__TRANSPORT,
+                                                TEST_MSGS / 2};
                 verify_ack_receipts(&receipts, expected, 2, "close explicit");
         } else {
                 verify_ack_receipts(&receipts, expected, 1, "close implicit");
@@ -1479,9 +1485,11 @@ static void test_broker_decommission_with_commit_async(int destroy_flags,
                 verify_ack_receipts(&receipts, expected, 1,
                                     "commit_async NO_CONSUMER_CLOSE");
         } else {
-                expected[1] = (expected_ack_t) {
-                    topic, target_partition, RD_KAFKA_RESP_ERR__DESTROY_BROKER,
-                    TEST_MSGS / 2};
+                /* __DESTROY_BROKER stamped on parked acks is translated
+                 * to __TRANSPORT at the app-facing funnel. */
+                expected[1] = (expected_ack_t) {topic, target_partition,
+                                                RD_KAFKA_RESP_ERR__TRANSPORT,
+                                                TEST_MSGS / 2};
                 verify_ack_receipts(&receipts, expected, 2,
                                     "commit_async full close");
         }

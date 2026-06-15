@@ -3288,6 +3288,14 @@ err:
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 return;
 
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
+                /* If the leave heartbeat has already been sent the member is
+                 * on its way out of the group, so a GROUP_ID_NOT_FOUND on a
+                 * still-in-flight regular heartbeat is expected and benign.
+                 * Otherwise the group is genuinely gone and this is fatal. */
+                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE)
+                        return;
+                /* FALLTHRU */
         case RD_KAFKA_RESP_ERR_INVALID_REQUEST:
         case RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED:
         case RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR:
@@ -3295,7 +3303,6 @@ err:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
-        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
         default:

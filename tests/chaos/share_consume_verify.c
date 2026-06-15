@@ -120,7 +120,7 @@ int main(int argc, char **argv) {
         int topic_cnt;
         const char *debug = NULL;
         rd_kafka_topic_partition_list_t *subscription;
-        rd_kafka_message_t *rkmessages[MAX_BATCH];
+        rd_kafka_messages_t *rkmessages = NULL;
         struct acked_offset acked[MAX_BATCH];
         int i;
         int opt;
@@ -226,20 +226,26 @@ int main(int argc, char **argv) {
                 rd_kafka_error_t *error;
                 rd_kafka_topic_partition_list_t *results = NULL;
 
-                error = rd_kafka_share_consume_batch(rkshare, 1000, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 1000, &rkmessages);
                 if (error) {
-                        fprintf(stderr, "%% consume_batch error: %s\n",
+                        fprintf(stderr, "%% share_poll error: %s\n",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(rkmessages);
+                        rkmessages = NULL;
                         continue;
                 }
 
-                if (rcvd == 0)
+                rcvd = rd_kafka_messages_count(rkmessages);
+                if (rcvd == 0) {
+                        rd_kafka_messages_destroy(rkmessages);
+                        rkmessages = NULL;
                         continue;
+                }
 
                 for (i = 0; i < (int)rcvd; i++) {
-                        rd_kafka_message_t *rkm = rkmessages[i];
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(rkmessages, i);
                         rd_kafka_Uuid_t *id;
                         const char *id_str;
 
@@ -250,7 +256,6 @@ int main(int argc, char **argv) {
                                                  : "?",
                                         rkm->partition,
                                         rd_kafka_message_errstr(rkm));
-                                rd_kafka_message_destroy(rkm);
                                 continue;
                         }
 
@@ -283,7 +288,6 @@ int main(int argc, char **argv) {
                                         rkm->partition, rkm->offset,
                                         rd_kafka_err2str(err));
                                 rd_kafka_Uuid_destroy(id);
-                                rd_kafka_message_destroy(rkm);
                                 continue;
                         }
 
@@ -303,8 +307,12 @@ int main(int argc, char **argv) {
                         acked_cnt++;
 
                         rd_kafka_Uuid_destroy(id);
-                        rd_kafka_message_destroy(rkm);
                 }
+
+                /* Messages are owned by the rkmessages_t container;
+                 * destroy it once to free all of them. */
+                rd_kafka_messages_destroy(rkmessages);
+                rkmessages = NULL;
 
                 if (acked_cnt == 0)
                         continue;

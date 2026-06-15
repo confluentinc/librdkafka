@@ -6254,6 +6254,16 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                             RD_KAFKA_OFFSET_INVALID, "Group is %s",
                             rkcg->rkcg_reply_rko ? "terminating"
                                                  : "terminated");
+
+                        /* For share consumers the TERMINATE op may carry the
+                         * final pending-ack batches. */
+                        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk) &&
+                            rko->rko_u.share_fetch_fanout.ack_batches) {
+                                rd_list_destroy(
+                                    rko->rko_u.share_fetch_fanout.ack_batches);
+                                rko->rko_u.share_fetch_fanout.ack_batches =
+                                    NULL;
+                        }
                         rd_kafka_q_destroy(rkq);
                         rd_kafka_op_destroy(rko);
                 }

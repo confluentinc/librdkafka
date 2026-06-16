@@ -5105,6 +5105,40 @@ static map_toppar_member_info_t *rd_kafka_toppar_list_to_toppar_member_info_map(
 
 
 /**
+ * @brief Same as rd_kafka_toppar_list_to_toppar_member_info_map but keyed by
+ *        (topic_id, partition). Used by the share-consumer cooperative
+ *        reconciler where every entry carries a topic_id and a same-name
+ *        topic recreate can put OLD-id and NEW-id entries for the same
+ *        (name, partition) into the diff inputs; the by-id key keeps them
+ *        as distinct partitions so the diff correctly produces a revoke
+ *        for the OLD-id and an add for the NEW-id.
+ *
+ * @remark \p rktparlist may be NULL.
+ */
+static map_toppar_member_info_t *
+rd_kafka_toppar_list_to_toppar_member_info_map_by_id(
+    rd_kafka_topic_partition_list_t *rktparlist) {
+        map_toppar_member_info_t *map = rd_calloc(1, sizeof(*map));
+        const rd_kafka_topic_partition_t *rktpar;
+
+        RD_MAP_INIT(map, rktparlist ? rktparlist->cnt : 0,
+                    rd_kafka_topic_partition_by_id_cmp,
+                    rd_kafka_topic_partition_hash_by_id,
+                    rd_kafka_topic_partition_destroy_free,
+                    PartitionMemberInfo_free);
+
+        if (!rktparlist)
+                return map;
+
+        RD_KAFKA_TPLIST_FOREACH(rktpar, rktparlist)
+        RD_MAP_SET(map, rd_kafka_topic_partition_copy(rktpar),
+                   PartitionMemberInfo_new(NULL, rd_false));
+
+        return map;
+}
+
+
+/**
  * @brief Construct a toppar list from map \p map with elements corresponding
  *        to the keys of \p map.
  */
@@ -5136,11 +5170,26 @@ static void rd_kafka_cgrp_handle_assignment_cooperative(
         rd_kafka_topic_partition_list_t *newly_added;
         rd_kafka_topic_partition_list_t *revoked;
 
-        new_assignment_set =
-            rd_kafka_toppar_list_to_toppar_member_info_map(assignment);
-
-        old_assignment_set = rd_kafka_toppar_list_to_toppar_member_info_map(
-            rkcg->rkcg_group_assignment);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk)) {
+                /* Share-consumer assignment lists always carry topic_id
+                 * (set in rd_kafka_cgrp_consumer_assignment_with_metadata).
+                 * Key the diff maps by (topic_id, partition) so a
+                 * same-name topic recreate produces a revoke for the
+                 * OLD-id and an add for the NEW-id instead of collapsing
+                 * them under a shared (name, partition) bucket. */
+                new_assignment_set =
+                    rd_kafka_toppar_list_to_toppar_member_info_map_by_id(
+                        assignment);
+                old_assignment_set =
+                    rd_kafka_toppar_list_to_toppar_member_info_map_by_id(
+                        rkcg->rkcg_group_assignment);
+        } else {
+                new_assignment_set =
+                    rd_kafka_toppar_list_to_toppar_member_info_map(assignment);
+                old_assignment_set =
+                    rd_kafka_toppar_list_to_toppar_member_info_map(
+                        rkcg->rkcg_group_assignment);
+        }
 
         newly_added_set = rd_kafka_member_partitions_subtract(
             new_assignment_set, old_assignment_set);
@@ -5288,9 +5337,20 @@ static void rd_kafka_cgrp_group_assignment_modify(
         RD_KAFKA_TPLIST_FOREACH(rktpar, partitions) {
                 int idx;
 
-                idx = rd_kafka_topic_partition_list_find_idx(
-                    rkcg->rkcg_group_assignment, rktpar->topic,
-                    rktpar->partition);
+                /* Share-consumer assignment lists carry topic_id;
+                 * key the lookup by (topic_id, partition) so a
+                 * same-name topic recreate doesn't collide an OLD-id
+                 * entry with a NEW-id entry that share name and
+                 * partition. */
+                if (RD_KAFKA_IS_SHARE_CONSUMER(rkcg->rkcg_rk))
+                        idx = rd_kafka_topic_partition_list_find_idx_by_id(
+                            rkcg->rkcg_group_assignment,
+                            rd_kafka_topic_partition_get_topic_id(rktpar),
+                            rktpar->partition);
+                else
+                        idx = rd_kafka_topic_partition_list_find_idx(
+                            rkcg->rkcg_group_assignment, rktpar->topic,
+                            rktpar->partition);
 
                 if (add) {
                         rd_assert(idx == -1);

@@ -940,12 +940,15 @@ static int max_poll_inject_done = 0;
  *        race from the test, without modifying library code.
  *
  * The "Expediting next heartbeat ... max poll interval exceeded" line is
- * emitted on the main thread right after the leave-group heartbeat has been
- * enqueued and F_WAIT_REJOIN has been set. Sleeping here (synchronously, on
- * the main thread) lets the broker thread deliver the leave reply: it is then
- * processed on the next serve -- running consumer_reset, which clears
- * F_WAIT_REJOIN -- BEFORE consumer_serve acts on the flag. The member is then
- * stranded steady at epoch 0 and its next heartbeat is a malformed (re-)join.
+ * emitted on the main thread when the poll interval is exceeded and
+ * F_WAIT_REJOIN is set. This sleep reproduces the *pre-fix* race: back then the
+ * leave-group heartbeat was sent immediately at that point, and sleeping here
+ * (synchronously, on the main thread) let the broker thread deliver the leave
+ * reply, which was then processed on the next serve -- running consumer_reset
+ * and clearing F_WAIT_REJOIN BEFORE consumer_serve acted on it -- stranding the
+ * member steady at epoch 0 so its next heartbeat was a malformed (re-)join.
+ * The fix defers the leave until the assignment is revoked, so the consumer
+ * now rejoins cleanly even with this injected delay.
  */
 static void max_poll_rejoin_delay_log_cb(const rd_kafka_t *rk,
                                          int level,
@@ -974,6 +977,7 @@ static void do_test_max_poll_interval_rejoin(void) {
         rd_kafka_conf_t *conf;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         rd_kafka_topic_partition_list_t *assignment = NULL;
+        rd_bool_t assigned                          = rd_false;
         rd_kafka_resp_err_t fatal_err;
         char errstr[512];
         int64_t deadline;
@@ -1008,11 +1012,15 @@ static void do_test_max_poll_interval_rejoin(void) {
                     assignment->cnt > 0) {
                         rd_kafka_topic_partition_list_destroy(assignment);
                         assignment = NULL;
+                        assigned   = rd_true;
                         break;
                 }
                 RD_IF_FREE(assignment, rd_kafka_topic_partition_list_destroy);
                 assignment = NULL;
         }
+        TEST_ASSERT(assigned,
+                    "Timed out waiting for steady assignment before the test "
+                    "could proceed");
         TEST_SAY("Steady assignment reached\n");
 
         TEST_SAY("Stalling for 4s (> max.poll.interval.ms=3s)\n");
@@ -1067,6 +1075,7 @@ static void do_test_max_poll_interval_rejoin_consume(void) {
         int64_t deadline;
         rd_kafka_message_t *rkm;
         rd_kafka_topic_partition_list_t *assignment = NULL;
+        rd_bool_t assigned                          = rd_false;
         int received                                = 0;
 
         SUB_TEST_QUICK();
@@ -1104,11 +1113,15 @@ static void do_test_max_poll_interval_rejoin_consume(void) {
                     assignment->cnt > 0) {
                         rd_kafka_topic_partition_list_destroy(assignment);
                         assignment = NULL;
+                        assigned   = rd_true;
                         break;
                 }
                 RD_IF_FREE(assignment, rd_kafka_topic_partition_list_destroy);
                 assignment = NULL;
         }
+        TEST_ASSERT(assigned,
+                    "Timed out waiting for steady assignment before the test "
+                    "could proceed");
 
         TEST_SAY("Stalling for 4s (> max.poll.interval.ms=3s)\n");
         rd_sleep(4);
@@ -1172,6 +1185,7 @@ static void do_test_group_id_not_found_while_leaving(void) {
         rd_kafka_t *c;
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         rd_kafka_topic_partition_list_t *assignment = NULL;
+        rd_bool_t assigned                          = rd_false;
         rd_kafka_resp_err_t fatal_err;
         char errstr[512];
         int64_t deadline;
@@ -1197,11 +1211,15 @@ static void do_test_group_id_not_found_while_leaving(void) {
                     assignment->cnt > 0) {
                         rd_kafka_topic_partition_list_destroy(assignment);
                         assignment = NULL;
+                        assigned   = rd_true;
                         break;
                 }
                 RD_IF_FREE(assignment, rd_kafka_topic_partition_list_destroy);
                 assignment = NULL;
         }
+        TEST_ASSERT(assigned,
+                    "Timed out waiting for steady assignment before the test "
+                    "could proceed");
         TEST_SAY("Steady assignment reached\n");
 
         /* Answer the next regular heartbeat with GROUP_ID_NOT_FOUND, holding

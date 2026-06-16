@@ -653,6 +653,85 @@ def get_partition_hwms(cluster, topics):
     return result
 
 
+def wait_for_drain_quiescent(consumers, drain_s, idle_threshold_s):
+    """Wait up to `drain_s` seconds, returning early once consumers
+    go quiescent.
+
+    "Quiescent" = no growth in any consumer's stdout file for
+    `idle_threshold_s` consecutive seconds. When the threshold is
+    `0` (or negative), behave like time.sleep(drain_s) — full wait,
+    matching legacy semantics.
+
+    Returns the seconds actually waited. Robust to consumer-stdout
+    files that don't exist yet (e.g. consumer crashed early): size
+    treated as 0 in that case, so an absent file looks idle.
+    """
+    if idle_threshold_s <= 0 or not consumers:
+        time.sleep(drain_s)
+        return float(drain_s)
+    deadline = time.time() + drain_s
+    last_sizes = {c.idx: 0 for c in consumers}
+    idle_since = None
+    started_at = time.time()
+    while True:
+        now = time.time()
+        if now >= deadline:
+            return now - started_at
+        grew = False
+        for c in consumers:
+            try:
+                sz = os.path.getsize(c.stdout_path)
+            except OSError:
+                sz = 0
+            if sz > last_sizes[c.idx]:
+                last_sizes[c.idx] = sz
+                grew = True
+        if grew:
+            idle_since = None
+        else:
+            if idle_since is None:
+                idle_since = now
+            elif now - idle_since >= idle_threshold_s:
+                print(f'[orch] drain-quiescent: consumers idle for '
+                      f'{idle_threshold_s}s, exiting drain early '
+                      f'after {now - started_at:.1f}s '
+                      f'(cap was {drain_s}s)', flush=True)
+                return now - started_at
+        time.sleep(1)
+
+
+def restart_dead_brokers(cluster, timeout=60):
+    """Restart any broker not currently in the 'started' state and
+    wait for it to become operational. No-op when every broker is
+    already up.
+
+    Called at teardown so HWM capture (`get_partition_hwms`) reaches
+    every leader; otherwise partitions led by a still-stopped broker
+    return no offset line, which downgrades the cumulative verdict
+    to "trust per-partition signal" instead of giving a clean check.
+    """
+    dead = [(i, b) for i, b in enumerate(cluster.brokers)
+            if b.status() != 'started']
+    if not dead:
+        return
+    print(f'[orch] restarting {len(dead)} broker(s) before HWM '
+          f'capture: indices {[i for i, _ in dead]}', flush=True)
+    for _, b in dead:
+        try:
+            b.start()
+        except Exception as e:
+            print(f'[orch] broker {b.appid} start failed: {e}',
+                  flush=True)
+    for _, b in dead:
+        try:
+            b.wait_operational(timeout=timeout)
+            print(f'[orch] broker {b.appid} operational again',
+                  flush=True)
+        except Exception as e:
+            print(f'[orch] broker {b.appid} wait_operational '
+                  f'failed: {e}', flush=True)
+
+
 def create_topic(cluster, topic, partitions, replication):
     broker = cluster.brokers[0]
     bindir = broker.conf['bindir']
@@ -2414,9 +2493,13 @@ _TOPIC_CHAOS_DELAYED_DWELL_MAX_S = 30
 
 def _topic_chaos_thread(cluster, topics, partitions, replication,
                         mode, rng, stop_event, leader_log_path,
-                        chaos_state, restart_producer_fn):
-    fire_after = rng.uniform(_TOPIC_CHAOS_FIRE_MIN_S,
-                             _TOPIC_CHAOS_FIRE_MAX_S)
+                        chaos_state, restart_producer_fn,
+                        fire_at_s=None):
+    if fire_at_s is not None:
+        fire_after = float(fire_at_s)
+    else:
+        fire_after = rng.uniform(_TOPIC_CHAOS_FIRE_MIN_S,
+                                 _TOPIC_CHAOS_FIRE_MAX_S)
     if stop_event.wait(fire_after):
         return
     if not topics:
@@ -2475,11 +2558,13 @@ def _topic_chaos_thread(cluster, topics, partitions, replication,
 
 def start_topic_chaos(cluster, topics, partitions, replication,
                       mode, rng, leader_log_path, chaos_state,
-                      restart_producer_fn):
-    """Start a daemon thread that, after a random delay, executes the
-    chosen topic-chaos action on a randomly picked topic. Returns
-    (stop_event, thread). `mode` is one of 'delete',
-    'recreate-immediate', 'recreate-delayed' (or None to disable).
+                      restart_producer_fn, fire_at_s=None):
+    """Start a daemon thread that executes the chosen topic-chaos
+    action on a randomly picked topic. Returns (stop_event, thread).
+    `mode` is one of 'delete', 'recreate-immediate',
+    'recreate-delayed' (or None to disable). `fire_at_s` pins the
+    firing time to a fixed offset (for deterministic repros);
+    `None` uses the default random window.
 
     On recreate modes, `restart_producer_fn(topic)` is invoked after
     the re-create completes so the producer rebinds to the new
@@ -2494,12 +2579,16 @@ def start_topic_chaos(cluster, topics, partitions, replication,
         target=_topic_chaos_thread,
         args=(cluster, topics, partitions, replication, mode, rng,
               stop_event, leader_log_path, chaos_state,
-              restart_producer_fn),
+              restart_producer_fn, fire_at_s),
         daemon=True)
     t.start()
+    if fire_at_s is not None:
+        when_msg = f'fire at {fire_at_s:.1f}s (deterministic)'
+    else:
+        when_msg = (f'fire in {_TOPIC_CHAOS_FIRE_MIN_S}-'
+                    f'{_TOPIC_CHAOS_FIRE_MAX_S}s')
     print(f'[orch] topic-chaos thread armed (mode={mode}, '
-          f'fire in {_TOPIC_CHAOS_FIRE_MIN_S}-'
-          f'{_TOPIC_CHAOS_FIRE_MAX_S}s)', flush=True)
+          f'{when_msg})', flush=True)
     return stop_event, t
 
 
@@ -2718,7 +2807,24 @@ def main():
     ap.add_argument('--drain-s', type=int, default=30,
                     help='After cooldown, stop the producer and let '
                          'consumers run for this long to drain remaining '
-                         'records before tearing everything down')
+                         'records before tearing everything down. With '
+                         '--idle-threshold-s set, this is the cap, not a '
+                         'fixed wait.')
+    ap.add_argument('--idle-threshold-s', type=int, default=0,
+                    help='When > 0, drain exits early once consumers go '
+                         'idle (no new stdout bytes) for this many '
+                         'consecutive seconds, instead of waiting the '
+                         'full --drain-s. Recommended: 10. Default 0 '
+                         'preserves legacy "sleep drain_s" behaviour.')
+    ap.add_argument('--topic-chaos-fire-at-s', type=float, default=None,
+                    help='Pin the topic-chaos firing time to this many '
+                         'seconds after the chaos thread is armed, '
+                         'overriding the default 15-45s random window. '
+                         'Use for deterministic timing repros — pick a '
+                         'value small enough that cooldown_s + drain_s '
+                         '- value leaves the consumer enough time to '
+                         'rebind after recreate (roughly 2 heartbeat '
+                         'intervals).')
     ap.add_argument('--consume-mode',
                     choices=['share-consumer-verify',
                              'py-share-consumer-verify',
@@ -3056,7 +3162,8 @@ def main():
                         replication, args.topic_chaos,
                         random.Random(seed ^ 0xC0FFEE),
                         leader_log_path, chaos_state,
-                        restart_producer_for_topic))
+                        restart_producer_for_topic,
+                        fire_at_s=args.topic_chaos_fire_at_s))
             if args.leader_change_mode == 'broker-roll':
                 roll(cluster, args.cycles, args.stop_s, args.up_s,
                      random.Random(seed), topics, args.unclean_stop,
@@ -3089,10 +3196,24 @@ def main():
               '(drain phase starts)...', flush=True)
         for prod in producers:
             prod.stop()
-        print(f'[orch] drain {args.drain_s}s '
-              '(consumers running, producers stopped)', flush=True)
-        time.sleep(args.drain_s)
+        if args.idle_threshold_s > 0:
+            print(f'[orch] drain up to {args.drain_s}s '
+                  f'(consumers running; exit early on '
+                  f'{args.idle_threshold_s}s idle)', flush=True)
+        else:
+            print(f'[orch] drain {args.drain_s}s '
+                  '(consumers running, producers stopped)',
+                  flush=True)
+        wait_for_drain_quiescent(consumers, args.drain_s,
+                                 args.idle_threshold_s)
         drain_end_ts = time.time()
+
+        # Restart any broker that's still down (e.g. last roll cycle
+        # left one stopped) so the HWM snapshot below can reach every
+        # leader. Otherwise partitions led by a dead broker come back
+        # as hwm=? and the verdict has to downgrade to "trust per-
+        # partition coverage" instead of a clean cumulative check.
+        restart_dead_brokers(cluster)
 
         # Snapshot per-partition high-water-marks *before* tearing
         # down the cluster, so the bookkeeping report can compare

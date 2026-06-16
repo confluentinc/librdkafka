@@ -3875,8 +3875,6 @@ size_t rd_kafka_messages_count(const rd_kafka_messages_t *messages) {
 
 rd_kafka_message_t *rd_kafka_messages_get(const rd_kafka_messages_t *messages,
                                           size_t index) {
-        if (index >= messages->cnt)
-                return NULL;
         return messages->elems[index];
 }
 

@@ -919,8 +919,10 @@ void rd_kafka_share_filter_acquired_records_and_update_ack_type(
                 if (in_acquired_range) {
                         /* Set ack type based on op type */
                         rd_kafka_msg_t *rkm = NULL;
-                        if (unlikely(rd_kafka_op_is_ctrl_msg(rko)))
+                        if (unlikely(rd_kafka_op_is_ctrl_msg(rko))) {
+                                rd_kafka_op_destroy(rko);
                                 continue;
+                        }
                         if (rko->rko_type == RD_KAFKA_OP_FETCH) {
                                 rkm = &rko->rko_u.fetch.rkm;
                                 rkm->rkm_u.consumer.ack_type =
@@ -1093,6 +1095,7 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                                     "No ack entry found for offset %" PRId64
                                     " on [%" PRId32 "], skipping",
                                     offset, batches->rktpar->partition);
+                                rd_kafka_op_destroy(msg_rko);
                                 continue;
                         }
 
@@ -1563,10 +1566,6 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
                 rd_kafka_share_filter_acquired_records_and_update_ack_type(
                     temp_fetchq, filtered_msgs, FirstOffsets, LastOffsets,
                     DeliveryCounts, AcquiredRecordsArrayCnt);
-
-                rd_free(FirstOffsets);
-                rd_free(LastOffsets);
-                rd_free(DeliveryCounts);
         } else {
                 /* No acquired ranges: drop everything */
                 rd_kafka_op_t *rko;
@@ -1582,6 +1581,9 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 done:
+        RD_IF_FREE(FirstOffsets, rd_free);
+        RD_IF_FREE(LastOffsets, rd_free);
+        RD_IF_FREE(DeliveryCounts, rd_free);
         RD_IF_FREE(temp_fetchq, rd_kafka_q_destroy_owner);
         if (rktp)
                 rd_kafka_toppar_destroy(rktp); /* from toppar_get() */
@@ -1749,7 +1751,9 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
                                                          inflight_acks);
 
         rd_list_destroy(inflight_acks);
+        inflight_acks = NULL;
         rd_list_destroy(filtered_msgs);
+        filtered_msgs = NULL;
 
         /* Top level tags */
         rd_kafka_buf_skip_tags(rkbuf);
@@ -1774,9 +1778,18 @@ err_parse:
         err = rkbuf->rkbuf_err;
 
 done:
-        /* Free inflight_acks list on error (destructor handles cleanup) */
-        rd_list_destroy(inflight_acks);
-        rd_list_destroy(filtered_msgs);
+        /* Lists are NULLed on the success path after their inline destroy;
+         * here they're only non-NULL on the error path. filtered_msgs uses a
+         * NULL destructor, so any ops accumulated from earlier partitions
+         * before err_parse fired must be destroyed explicitly. */
+        RD_IF_FREE(inflight_acks, rd_list_destroy);
+        if (filtered_msgs) {
+                rd_kafka_op_t *leaked_rko;
+                int li;
+                RD_LIST_FOREACH(leaked_rko, filtered_msgs, li)
+                rd_kafka_op_destroy(leaked_rko);
+                rd_list_destroy(filtered_msgs);
+        }
 
         RD_IF_FREE(response_rko, rd_kafka_op_destroy);
         *response_rko_out = NULL;

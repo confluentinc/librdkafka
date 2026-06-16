@@ -1479,7 +1479,7 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
                       const struct rd_kafka_toppar_ver *tver) {
         rd_kafka_msgset_reader_t msetr;
         rd_kafka_resp_err_t err;
-        int flexver_flag;
+        int saved_flags;
 
         rd_kafka_msgset_reader_init(&msetr, rkbuf, rktp, tver, aborted_txns,
                                     rktp->rktp_fetchq);
@@ -1495,13 +1495,19 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
          * Clear the flag for the duration of message-set parsing and
          * restore it afterwards so the caller's subsequent (flexible) tag
          * reads still work. */
-        flexver_flag = rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER;
+        saved_flags = rkbuf->rkbuf_flags;
         rkbuf->rkbuf_flags &= ~RD_KAFKA_OP_F_FLEXVER;
 
         /* Parse and handle the message set */
         err = rd_kafka_msgset_reader_run(&msetr);
 
-        rkbuf->rkbuf_flags |= flexver_flag;
+        /* Restore the pre-parse FLEXVER state exactly.  Using |= with the
+         * saved bit would be a no-op when the bit was originally clear,
+         * leaving any spurious set of FLEXVER during parsing uncleared.
+         * The mask-merge below unconditionally writes back the original bit
+         * while preserving any other flag changes made during parsing. */
+        rkbuf->rkbuf_flags = (rkbuf->rkbuf_flags & ~RD_KAFKA_OP_F_FLEXVER) |
+                             (saved_flags & RD_KAFKA_OP_F_FLEXVER);
 
         rd_atomic64_add(&rktp->rktp_c.rx_msgs, msetr.msetr_msgcnt);
         rd_atomic64_add(&rktp->rktp_c.rx_msg_bytes, msetr.msetr_msg_bytes);

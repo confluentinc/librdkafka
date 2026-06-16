@@ -2265,12 +2265,17 @@ rd_kafka_mock_partition_push_msgset_raw(rd_kafka_mock_cluster_t *mcluster,
                                         const void *msgset,
                                         size_t size,
                                         int32_t msgcnt) {
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+        rd_kafka_op_t *rko;
+
+        if (size > INT32_MAX)
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
 
         rko->rko_u.mock.name      = rd_strdup(topic);
         rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_PART_PUSH_MSGSET_RAW;
         rko->rko_u.mock.partition = partition;
-        rko->rko_u.mock.data      = rd_memdup(msgset, size);
+        rko->rko_u.mock.data      = size > 0 ? rd_memdup(msgset, size) : NULL;
         rko->rko_u.mock.size      = size;
         rko->rko_u.mock.lo        = msgcnt;
 
@@ -2657,6 +2662,9 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                              "%" PRIusz " bytes, %" PRId64 " message(s)",
                              rko->rko_u.mock.name, rko->rko_u.mock.partition,
                              rko->rko_u.mock.size, rko->rko_u.mock.lo);
+
+                if (rko->rko_u.mock.size > INT32_MAX)
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
                 memset(&bytes, 0, sizeof(bytes));
                 bytes.data = rko->rko_u.mock.data;

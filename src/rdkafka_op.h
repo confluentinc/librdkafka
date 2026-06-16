@@ -759,6 +759,13 @@ struct rd_kafka_op_s {
                         /** Termination callback to trigger
                          * on the op handler's thread. */
                         void (*cb)(rd_kafka_t *rk, void *rkb);
+
+                        /** Share-consumer final pending-ack batches carried
+                         *  on the cgrp TERMINATE op. NULL for non-share
+                         *  consumers and once the list has been dispatched.
+                         *  Type: rd_kafka_share_ack_batches_t* (rd_list_t).
+                         *  Freed by the op destructor if still set. */
+                        rd_list_t *ack_batches;
                 } terminated;
 
                 struct {

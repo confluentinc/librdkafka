@@ -584,6 +584,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
                                 RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
+                                RD_KAFKA_MOCK_CMD_PART_PUSH_MSGSET_RAW,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
@@ -605,15 +606,21 @@ struct rd_kafka_op_s {
                                                   *    BROKER_SET_RACK
                                                   *    COORD_SET (key_type)
                                                   *    PART_PUSH_LEADER_RESPONSE
+                                                  *    PART_PUSH_MSGSET_RAW
                                                   */
                         char *str;               /**< For:
                                                   *    COORD_SET (key) */
+                        void *data;              /**< Raw payload bytes, for:
+                                                  *    PART_PUSH_MSGSET_RAW */
+                        size_t size;             /**< Raw payload size, for:
+                                                  *    PART_PUSH_MSGSET_RAW */
                         int32_t partition;       /**< For:
                                                   *    PART_SET_FOLLOWER
                                                   *    PART_SET_FOLLOWER_WMARKS
                                                   *    PART_SET_LEADER
                                                   *    APIVERSION_SET (ApiKey)
                                                   *    PART_PUSH_LEADER_RESPONSE
+                                                  *    PART_PUSH_MSGSET_RAW
                                                   */
                         int32_t broker_id;       /**< For:
                                                   *    PART_SET_FOLLOWER
@@ -629,6 +636,8 @@ struct rd_kafka_op_s {
                                                   *    BROKER_SET_UPDOWN
                                                   *    APIVERSION_SET (minver)
                                                   *    BROKER_SET_RTT
+                                                  *    PART_PUSH_MSGSET_RAW
+                                                  *      (msgcnt)
                                                   */
                         int64_t hi;              /**< High offset, for:
                                                   *    TOPIC_CREATE (repl fact)

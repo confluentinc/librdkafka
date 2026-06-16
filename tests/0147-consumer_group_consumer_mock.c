@@ -296,7 +296,12 @@ static void do_test_consumer_group_heartbeat_fatal_errors(void) {
             RD_KAFKA_RESP_ERR_UNSUPPORTED_ASSIGNOR,
             RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
             RD_KAFKA_RESP_ERR_UNRELEASED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED};
+            RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED,
+            /* Group no longer exists and the member is not leaving. */
+            RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND,
+            /* Unexpected broker-level error not handled explicitly: an
+             * unrecognized permanent error must be fatal, not ignored. */
+            RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED};
         size_t i;
         test_variation_t j;
         for (i = 0; i < RD_ARRAY_SIZE(fatal_errors); i++) {
@@ -1147,6 +1152,103 @@ static void do_test_max_poll_interval_rejoin_consume(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief A GROUP_ID_NOT_FOUND received on a regular heartbeat that is still in
+ *        flight when the leave heartbeat has already been sent must be ignored
+ *        (the member is on its way out of the group), not turned into a fatal
+ *        error.
+ *
+ * The window is forced deterministically: the next regular heartbeat is
+ * answered with GROUP_ID_NOT_FOUND, but its response is held back with a large
+ * RTT. While it is in flight the consumer unsubscribes, which sends the leave
+ * heartbeat and enters the leaving state. The mock sends a connection's
+ * responses in order (head-of-line), so the delayed GROUP_ID_NOT_FOUND is
+ * processed before the leave response leaves the leaving state -- exercising
+ * the skip path. A regression treats it as fatal instead.
+ */
+static void do_test_group_id_not_found_while_leaving(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_t *c;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 0);
+        rd_kafka_topic_partition_list_t *assignment = NULL;
+        rd_kafka_resp_err_t fatal_err;
+        char errstr[512];
+        int64_t deadline;
+        rd_kafka_message_t *rkm;
+        int found_heartbeats;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 500);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        c = create_consumer(bootstraps, topic, rd_false);
+        test_consumer_subscribe(c, topic);
+
+        TEST_SAY("Waiting for steady assignment\n");
+        deadline = test_clock() + 10 * 1000000;
+        while (test_clock() < deadline) {
+                rkm = rd_kafka_consumer_poll(c, 200);
+                if (rkm)
+                        rd_kafka_message_destroy(rkm);
+                if (!rd_kafka_assignment(c, &assignment) && assignment &&
+                    assignment->cnt > 0) {
+                        rd_kafka_topic_partition_list_destroy(assignment);
+                        assignment = NULL;
+                        break;
+                }
+                RD_IF_FREE(assignment, rd_kafka_topic_partition_list_destroy);
+                assignment = NULL;
+        }
+        TEST_SAY("Steady assignment reached\n");
+
+        /* Answer the next regular heartbeat with GROUP_ID_NOT_FOUND, holding
+         * its response back long enough to land after the leave heartbeat is
+         * sent (which happens within milliseconds of unsubscribe) but well
+         * below the in-flight request timeout so the response is not discarded
+         * as a client-side timeout. While that heartbeat is in flight no
+         * further regular heartbeat is sent, so it is the one that will carry
+         * the error. */
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_mock_broker_push_request_error_rtts(
+            mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
+            RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND, 500);
+
+        TEST_SAY("Driving the poisoned heartbeat in flight\n");
+        found_heartbeats = wait_all_heartbeats_done(mcluster, 1, 100);
+        TEST_ASSERT(found_heartbeats == 1, "Expected 1 heartbeat, got %d",
+                    found_heartbeats);
+
+        TEST_SAY("Unsubscribing while the heartbeat is in flight\n");
+        TEST_CALL_ERR__(rd_kafka_unsubscribe(c));
+
+        /* Poll past the RTT so the delayed GROUP_ID_NOT_FOUND is processed
+         * (must be skipped) followed by the leave response. */
+        deadline  = test_clock() + 4 * 1000000;
+        fatal_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        while (test_clock() < deadline) {
+                rkm = rd_kafka_consumer_poll(c, 200);
+                if (rkm)
+                        rd_kafka_message_destroy(rkm);
+                fatal_err = rd_kafka_fatal_error(c, errstr, sizeof(errstr));
+                if (fatal_err)
+                        break;
+        }
+
+        TEST_ASSERT(!fatal_err,
+                    "GROUP_ID_NOT_FOUND while leaving must be ignored, but the "
+                    "consumer went fatal: %s: %s",
+                    rd_kafka_err2name(fatal_err), errstr);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
+
 int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -1160,6 +1262,8 @@ int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         do_test_max_poll_interval_rejoin_consume();
 
         do_test_consumer_group_heartbeat_fatal_errors();
+
+        do_test_group_id_not_found_while_leaving();
 
         do_test_consumer_group_heartbeat_retriable_errors();
 

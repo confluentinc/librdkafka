@@ -366,6 +366,33 @@ static void test_group_remote_assignor_rejected_at_construction(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief `queued.min.messages` tunes the per-partition prefetch queue,
+ *        which share consumers (broker-driven via max.poll.records) do
+ *        not use; it is rejected for share consumers.
+ */
+static void test_queued_min_messages_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("queued.min.messages", "1000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `queued.max.messages.kbytes` tunes the per-partition prefetch
+ *        queue, which share consumers do not use; it is rejected for
+ *        share consumers.
+ */
+static void test_queued_max_messages_kbytes_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("queued.max.messages.kbytes",
+                                                 "1024");
+
+        SUB_TEST_PASS();
+}
+
 
 /**
  * @brief Build a producer with linger.ms=0 so each rd_kafka_produce()
@@ -823,5 +850,7 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_group_instance_id_rejected_at_construction();
         test_isolation_level_rejected_at_construction();
         test_group_remote_assignor_rejected_at_construction();
+        test_queued_min_messages_rejected_at_construction();
+        test_queued_max_messages_kbytes_rejected_at_construction();
         return 0;
 }

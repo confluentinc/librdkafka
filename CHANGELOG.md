@@ -1,3 +1,26 @@
+# librdkafka v2.14.3
+
+librdkafka v2.14.3 is a maintenance release:
+
+* Fix data loss/corruption when consuming legacy (magic v0/v1) message-format
+  topics over the modern flexible Fetch protocol. Happening since 2.5.0.
+
+
+## Fixes
+
+### Consumer fixes
+
+* Fix data loss/corruption when consuming a topic stored on disk in the legacy
+  message format (magic v0/v1, i.e. `log.message.format.version` <= 0.10.x).
+  The records were decoded with compact (uvarint) Key/Value length prefixes
+  instead of the int32 prefixes the format actually uses whenever the
+  FetchResponse used the flexible (KIP-482) framing, misaligning the parse and
+  silently dropping/corrupting records. The message-set/records payload is now
+  always parsed as a non-flexible structure regardless of the FetchResponse
+  framing. Happening since 2.5.0 (when the consumer started using flexible
+  Fetch).
+
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:

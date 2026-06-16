@@ -312,6 +312,36 @@ rd_kafka_mock_partition_push_leader_response(rd_kafka_mock_cluster_t *mcluster,
                                              int32_t leader_epoch);
 
 /**
+ * @brief Append a verbatim message set (\p msgset of \p size bytes,
+ *        containing \p msgcnt messages) to the partition log exactly as
+ *        provided, without the MsgVersion 2 RecordBatch header rewrite that
+ *        the normal Produce path performs.
+ *
+ * This is primarily intended for tests that need the broker to serve a
+ * message set in a specific on-disk format (e.g. a legacy magic v0/v1
+ * message set) to a modern consumer. The caller is responsible for baking
+ * the correct absolute offsets into the message set; push into a fresh
+ * partition so the first message's offset is 0.
+ *
+ * @param mcluster Mock cluster instance.
+ * @param topic Topic to append to (auto-created if needed).
+ * @param partition Partition to append to.
+ * @param msgset Raw message set bytes.
+ * @param size Size of \p msgset in bytes.
+ * @param msgcnt Number of messages contained in \p msgset.
+ *
+ * @return Push operation error code.
+ */
+RD_EXPORT
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_push_msgset_raw(rd_kafka_mock_cluster_t *mcluster,
+                                        const char *topic,
+                                        int32_t partition,
+                                        const void *msgset,
+                                        size_t size,
+                                        int32_t msgcnt);
+
+/**
  * @brief Disconnects the broker and disallows any new connections.
  *        This does NOT trigger leader change.
  *

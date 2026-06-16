@@ -1479,12 +1479,29 @@ rd_kafka_msgset_parse(rd_kafka_buf_t *rkbuf,
                       const struct rd_kafka_toppar_ver *tver) {
         rd_kafka_msgset_reader_t msetr;
         rd_kafka_resp_err_t err;
+        int flexver_flag;
 
         rd_kafka_msgset_reader_init(&msetr, rkbuf, rktp, tver, aborted_txns,
                                     rktp->rktp_fetchq);
 
+        /* The FetchResponse Records/MessageSet payload is encoded in the
+         * fixed Kafka record format, independent of the FetchResponse's
+         * flexible-version (KIP-482) framing. In particular, legacy magic
+         * v0/v1 Message Key and Value use plain int32 length prefixes, not
+         * compact (uvarint) ones. If the response buffer's FLEXVER flag is
+         * left set while parsing, rd_kafka_buf_read_kbytes() would decode
+         * those lengths as compact bytes and misalign the entire parse
+         * (silent data loss/corruption and bogus offsets).
+         * Clear the flag for the duration of message-set parsing and
+         * restore it afterwards so the caller's subsequent (flexible) tag
+         * reads still work. */
+        flexver_flag = rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER;
+        rkbuf->rkbuf_flags &= ~RD_KAFKA_OP_F_FLEXVER;
+
         /* Parse and handle the message set */
         err = rd_kafka_msgset_reader_run(&msetr);
+
+        rkbuf->rkbuf_flags |= flexver_flag;
 
         rd_atomic64_add(&rktp->rktp_c.rx_msgs, msetr.msetr_msgcnt);
         rd_atomic64_add(&rktp->rktp_c.rx_msg_bytes, msetr.msetr_msg_bytes);

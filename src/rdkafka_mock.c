@@ -96,9 +96,10 @@ static void rd_kafka_mock_msgset_destroy(rd_kafka_mock_partition_t *mpart,
  *        and appends it to the partition log.
  */
 static rd_kafka_mock_msgset_t *
-rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
-                         const rd_kafkap_bytes_t *bytes,
-                         size_t msgcnt) {
+rd_kafka_mock_msgset_new0(rd_kafka_mock_partition_t *mpart,
+                          const rd_kafkap_bytes_t *bytes,
+                          size_t msgcnt,
+                          rd_bool_t rewrite_v2_header) {
         rd_kafka_mock_msgset_t *mset;
         size_t totsize = sizeof(*mset) + RD_KAFKAP_BYTES_LEN(bytes);
         int64_t BaseOffset;
@@ -125,15 +126,24 @@ rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
         memcpy((void *)mset->bytes.data, bytes->data, mset->bytes.len);
         mpart->size += mset->bytes.len;
 
-        /* Update the base Offset in the MessageSet with the
-         * actual absolute log offset. */
-        BaseOffset = htobe64(mset->first_offset);
-        memcpy((void *)mset->bytes.data, &BaseOffset, sizeof(BaseOffset));
-        /* Update the base PartitionLeaderEpoch in the MessageSet with the
-         * actual partition leader epoch. */
-        PartitionLeaderEpoch = htobe32(mset->leader_epoch);
-        memcpy(((char *)mset->bytes.data) + 12, &PartitionLeaderEpoch,
-               sizeof(PartitionLeaderEpoch));
+        /* For a regular (MsgVersion 2) RecordBatch, rewrite the BaseOffset
+         * and PartitionLeaderEpoch in the header with the actual absolute
+         * log offset and partition leader epoch.
+         * For verbatim/raw message sets (e.g. legacy magic v0/v1 sets used
+         * by regression tests) the bytes are served exactly as provided and
+         * the absolute offsets are expected to be baked in by the caller. */
+        if (rewrite_v2_header) {
+                /* Update the base Offset in the MessageSet with the
+                 * actual absolute log offset. */
+                BaseOffset = htobe64(mset->first_offset);
+                memcpy((void *)mset->bytes.data, &BaseOffset,
+                       sizeof(BaseOffset));
+                /* Update the base PartitionLeaderEpoch in the MessageSet with
+                 * the actual partition leader epoch. */
+                PartitionLeaderEpoch = htobe32(mset->leader_epoch);
+                memcpy(((char *)mset->bytes.data) + 12, &PartitionLeaderEpoch,
+                       sizeof(PartitionLeaderEpoch));
+        }
 
         /* Remove old msgsets until within limits */
         while (mpart->cnt > 1 &&
@@ -156,6 +166,14 @@ rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
                      mpart->start_offset, mpart->end_offset, orig_start_offset);
 
         return mset;
+}
+
+static rd_kafka_mock_msgset_t *
+rd_kafka_mock_msgset_new(rd_kafka_mock_partition_t *mpart,
+                         const rd_kafkap_bytes_t *bytes,
+                         size_t msgcnt) {
+        return rd_kafka_mock_msgset_new0(mpart, bytes, msgcnt,
+                                         rd_true /*rewrite v2 header*/);
 }
 
 /**
@@ -2241,6 +2259,26 @@ rd_kafka_mock_partition_push_leader_response(rd_kafka_mock_cluster_t *mcluster,
 }
 
 rd_kafka_resp_err_t
+rd_kafka_mock_partition_push_msgset_raw(rd_kafka_mock_cluster_t *mcluster,
+                                        const char *topic,
+                                        int32_t partition,
+                                        const void *msgset,
+                                        size_t size,
+                                        int32_t msgcnt) {
+        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
+
+        rko->rko_u.mock.name      = rd_strdup(topic);
+        rko->rko_u.mock.cmd       = RD_KAFKA_MOCK_CMD_PART_PUSH_MSGSET_RAW;
+        rko->rko_u.mock.partition = partition;
+        rko->rko_u.mock.data      = rd_memdup(msgset, size);
+        rko->rko_u.mock.size      = size;
+        rko->rko_u.mock.lo        = msgcnt;
+
+        return rd_kafka_op_err_destroy(
+            rd_kafka_op_req(mcluster->ops, rko, RD_POLL_INFINITE));
+}
+
+rd_kafka_resp_err_t
 rd_kafka_mock_broker_set_down(rd_kafka_mock_cluster_t *mcluster,
                               int32_t broker_id) {
         rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_MOCK);
@@ -2605,6 +2643,34 @@ rd_kafka_mock_cluster_cmd(rd_kafka_mock_cluster_t *mcluster,
                     mpart, rko->rko_u.mock.leader_id,
                     rko->rko_u.mock.leader_epoch);
                 break;
+
+        case RD_KAFKA_MOCK_CMD_PART_PUSH_MSGSET_RAW: {
+                rd_kafkap_bytes_t bytes;
+                mpart = rd_kafka_mock_partition_get(
+                    mcluster, rko->rko_u.mock.name, rko->rko_u.mock.partition);
+                if (!mpart)
+                        return RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART;
+
+                rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
+                             "Push %s [%" PRId32
+                             "] verbatim message set: "
+                             "%" PRIusz " bytes, %" PRId64 " message(s)",
+                             rko->rko_u.mock.name, rko->rko_u.mock.partition,
+                             rko->rko_u.mock.size, rko->rko_u.mock.lo);
+
+                memset(&bytes, 0, sizeof(bytes));
+                bytes.data = rko->rko_u.mock.data;
+                bytes.len  = (int32_t)rko->rko_u.mock.size;
+
+                /* Store the message set verbatim (no MsgVersion 2 header
+                 * rewrite) so legacy magic v0/v1 sets are served exactly as
+                 * provided. Absolute offsets are expected to be baked in by
+                 * the caller. */
+                rd_kafka_mock_msgset_new0(mpart, &bytes,
+                                          (size_t)rko->rko_u.mock.lo,
+                                          rd_false /*verbatim*/);
+                break;
+        }
 
                 /* Broker commands */
         case RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN:

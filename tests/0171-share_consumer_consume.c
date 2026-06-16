@@ -1203,12 +1203,11 @@ static void do_test_fetch_max_bytes_small(void) {
         rd_kafka_destroy(prod);
 
         /* Create share consumer with a small session-level fetch cap.
-         * fetch.max.bytes must be >= message.max.bytes per librdkafka
-         * config validation, so lower both to 1500. */
+         * For share consumers `message.max.bytes` does not floor
+         * `fetch.max.bytes` (and is rejected), so set `fetch.max.bytes`
+         * directly to 1500. */
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-        rd_kafka_conf_set(conf, "message.max.bytes", "1500", errstr,
-                          sizeof(errstr));
         rd_kafka_conf_set(conf, "fetch.max.bytes", "1500", errstr,
                           sizeof(errstr));
 
@@ -1297,11 +1296,6 @@ static void do_test_record_larger_than_fetch_max_bytes(void) {
 
         test_conf_init(&conf, NULL, 60);
         rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
-
-        char val[32];
-        rd_snprintf(val, sizeof(val), "%d", MAX_BYTES);
-        rd_kafka_conf_set(conf, "message.max.bytes", "1500", errstr,
-                          sizeof(errstr));
         rd_kafka_conf_set(conf, "fetch.max.bytes", "1500", errstr,
                           sizeof(errstr));
 

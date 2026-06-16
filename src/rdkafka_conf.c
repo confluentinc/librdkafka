@@ -4347,11 +4347,27 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`group.remote.assignor` is not "
                                        "applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "queued.min.messages"))
+                                return "`queued.min.messages` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "queued.max.messages.kbytes"))
+                                return "`queued.max.messages.kbytes` is not "
+                                       "applicable for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
                                 return "`auto.offset.reset` is not "
                                        "applicable for share consumer";
+
+                        /* The Azure heuristic (which lowers it to <4 minutes)
+                         * still overrides this for Azure brokers. */
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "connections.max.idle.ms"))
+                                conf->connections_max_idle_ms = 9 * 60 * 1000;
 
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;

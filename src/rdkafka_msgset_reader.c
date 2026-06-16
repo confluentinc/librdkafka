@@ -1591,6 +1591,11 @@ rd_kafka_msgset_reader_run(rd_kafka_msgset_reader_t *msetr) {
                                 err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
                 } else if (rktp->rktp_fetch_msg_max_bytes < (1 << 30)) {
+                        /* TODO KIP-932: Skip this branch for share consumers.
+                         * ShareFetch has no per-partition MaxBytes field, so
+                         * growing rktp_fetch_msg_max_bytes never changes what
+                         * the broker returns.
+                         */
                         rktp->rktp_fetch_msg_max_bytes *= 2;
                         rd_rkb_dbg(msetr->msetr_rkb, FETCH, "CONSUME",
                                    "Topic %s [%" PRId32

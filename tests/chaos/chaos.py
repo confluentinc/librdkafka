@@ -653,18 +653,29 @@ def get_partition_hwms(cluster, topics):
     return result
 
 
-def wait_for_drain_quiescent(consumers, drain_s, idle_threshold_s):
-    """Wait up to `drain_s` seconds, returning early once consumers
-    go quiescent.
+def wait_for_drain_quiescent(consumers, drain_s, idle_threshold_s,
+                             producers=None, chaos_thread=None):
+    """Wait up to `drain_s` seconds, returning early once the system
+    is genuinely quiescent.
 
-    "Quiescent" = no growth in any consumer's stdout file for
-    `idle_threshold_s` consecutive seconds. When the threshold is
-    `0` (or negative), behave like time.sleep(drain_s) — full wait,
-    matching legacy semantics.
+    Quiescent = all of:
+      - no growth in any consumer's stdout file
+      - no producer is currently alive (proc has exited)
+      - the chaos thread (if any) is no longer alive
+
+    Each condition that's false resets the idle clock. Returns early
+    once all three have held for `idle_threshold_s` consecutive
+    seconds. When the threshold is `0` (or negative), behave like
+    time.sleep(drain_s) — full wait, matching legacy semantics.
+
+    Watching producers + chaos_thread (not just consumers) closes a
+    race: under --topic-chaos recreate, consumers naturally go idle
+    in the brief window between topic delete and producer-2 spawn.
+    Without these gates the harness would exit drain right then,
+    HWM-capture before producer-2 produces, and orphan its records.
 
     Returns the seconds actually waited. Robust to consumer-stdout
-    files that don't exist yet (e.g. consumer crashed early): size
-    treated as 0 in that case, so an absent file looks idle.
+    files that don't exist yet (size treated as 0).
     """
     if idle_threshold_s <= 0 or not consumers:
         time.sleep(drain_s)
@@ -686,13 +697,19 @@ def wait_for_drain_quiescent(consumers, drain_s, idle_threshold_s):
             if sz > last_sizes[c.idx]:
                 last_sizes[c.idx] = sz
                 grew = True
-        if grew:
+        prod_alive = bool(producers) and any(
+            p.proc is not None and p.proc.poll() is None
+            for p in producers)
+        chaos_alive = (chaos_thread is not None
+                       and chaos_thread.is_alive())
+        if grew or prod_alive or chaos_alive:
             idle_since = None
         else:
             if idle_since is None:
                 idle_since = now
             elif now - idle_since >= idle_threshold_s:
-                print(f'[orch] drain-quiescent: consumers idle for '
+                print(f'[orch] drain-quiescent: consumers + '
+                      f'producers + chaos idle for '
                       f'{idle_threshold_s}s, exiting drain early '
                       f'after {now - started_at:.1f}s '
                       f'(cap was {drain_s}s)', flush=True)
@@ -3205,7 +3222,9 @@ def main():
                   '(consumers running, producers stopped)',
                   flush=True)
         wait_for_drain_quiescent(consumers, args.drain_s,
-                                 args.idle_threshold_s)
+                                 args.idle_threshold_s,
+                                 producers=producers,
+                                 chaos_thread=topic_chaos_thread)
         drain_end_ts = time.time()
 
         # Restart any broker that's still down (e.g. last roll cycle

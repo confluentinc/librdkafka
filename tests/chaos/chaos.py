@@ -1819,6 +1819,12 @@ def bookkeeping_report(producers, consumers, topics,
     # FAIL signal under --topic-chaos.
     chaos_offsets_by_id_part = collections.defaultdict(
         lambda: collections.defaultdict(set))
+    # Earliest consume timestamp observed for each (topic, topic_id)
+    # whose topic appears in chaos_state. Used to classify a tid as
+    # OLD (first_seen < delete_ts) vs NEW (first_seen > recreate_ts).
+    # Replaces the brittle "largest max offset" heuristic that
+    # silently picks OLD as NEW when NEW has no events.
+    chaos_tid_first_seen = {}
 
     for c in consumers:
         for ts, ev in _iter_event_lines(c):
@@ -1854,6 +1860,10 @@ def bookkeeping_report(producers, consumers, topics,
                     chaos_offsets_by_id_part[t][(tid, int(p))].add(
                         int(o))
                     if ts is not None:
+                        tid_key = (t, tid)
+                        prev = chaos_tid_first_seen.get(tid_key)
+                        if prev is None or ts < prev:
+                            chaos_tid_first_seen[tid_key] = ts
                         if ts < cs['delete_ts']:
                             consumed_pre_delete_per_topic[t] += 1
                         elif (cs.get('recreate_ts')
@@ -1983,11 +1993,35 @@ def bookkeeping_report(producers, consumers, topics,
         lines.append(f'  consumer-{c.idx}: '
                      f'{delivered_per_consumer.get(c.idx, 0)}')
 
+    # Resolve the NEW topic_id per chaos'd-recreate topic. NEW =
+    # earliest consume ts > recreate_ts. If multiple candidates (only
+    # possible under hypothetical multi-recreate runs), pick the one
+    # with the latest first-seen ts. Empty when no NEW-id events were
+    # observed at all — interpreted as "consumer never rebound".
+    chaos_new_tid_per_topic = {}
+    for t, cs in chaos_state.items():
+        recreate_ts = cs.get('recreate_ts')
+        if recreate_ts is None:
+            continue
+        candidates = [(tid, ts)
+                      for (t_, tid), ts in
+                      chaos_tid_first_seen.items()
+                      if t_ == t and ts > recreate_ts]
+        if candidates:
+            candidates.sort(key=lambda x: x[1], reverse=True)
+            chaos_new_tid_per_topic[t] = candidates[0][0]
+
     lines.append('')
     lines.append('Per-(topic, partition) coverage:')
     lines.append('  format: consumed | broker_hwm | missing | '
                  'first_consume_at | last_consume_at | '
                  'sec_idle_at_drain_end')
+    lines.append('  note: under --topic-chaos recreate, `consumed` '
+                 'spans OLD+NEW generations while `hwm` reflects '
+                 'NEW only — `missing` is misleading on these '
+                 'rows. See the [new_distinct/old_distinct] '
+                 'annotation for the meaningful per-generation '
+                 'coverage.')
     expected = [(t, p) for t in topics
                 for p in range(partitions_per_topic)]
     total_partition_missing = 0
@@ -2012,15 +2046,47 @@ def bookkeeping_report(producers, consumers, topics,
             idle = f'{drain_end_ts - last_consume_ts[tp]:.1f}'
 
         marker = ''
-        if cnt == 0:
-            marker = '  <-- NEVER CONSUMED (orphan partition)'
-        elif hwm is not None and (hwm - cnt) > 0:
-            marker = '  <-- under-consumed'
+        chaos_suffix = ''
+        cs_t = chaos_state.get(tp[0]) if chaos_state else None
+        is_chaos_recreate = (cs_t is not None
+                             and cs_t.get('recreate_ts') is not None)
+        if is_chaos_recreate:
+            # Generation-aware split: `consumed` above counts OLD+NEW
+            # events together, which makes `missing` (= hwm - consumed)
+            # look negative and meaningless. Show distinct-offset
+            # counts per generation so the real coverage signal is
+            # legible.
+            new_tid = chaos_new_tid_per_topic.get(tp[0])
+            t_offsets = chaos_offsets_by_id_part.get(tp[0], {})
+            new_distinct = (len(t_offsets.get((new_tid, tp[1]), set()))
+                            if new_tid is not None else 0)
+            old_distinct = sum(
+                len(s) for (tid_, p_), s in t_offsets.items()
+                if p_ == tp[1] and tid_ != new_tid)
+            new_missing_str = ('?' if hwm is None
+                               else str(hwm - new_distinct))
+            chaos_suffix = (f' [new_distinct={new_distinct} '
+                            f'new_missing={new_missing_str} '
+                            f'old_distinct={old_distinct}]')
+            if cnt == 0:
+                marker = '  <-- NEVER CONSUMED (orphan partition)'
+            elif hwm is not None and hwm > 0 and new_distinct < hwm:
+                if new_tid is None:
+                    marker = ('  <-- consumer never observed NEW '
+                              'topic_id (rebind missed)')
+                else:
+                    marker = (f'  <-- NEW-gen short by '
+                              f'{hwm - new_distinct}')
+        else:
+            if cnt == 0:
+                marker = '  <-- NEVER CONSUMED (orphan partition)'
+            elif hwm is not None and (hwm - cnt) > 0:
+                marker = '  <-- under-consumed'
         lines.append(f'  {tp[0]}[{tp[1]}] '
                      f'consumed={cnt} hwm={hwm if hwm is not None else "?"}'
                      f' missing={missing_str} '
                      f'first={first} last={last} '
-                     f'idle@drain_end={idle}s{marker}')
+                     f'idle@drain_end={idle}s{chaos_suffix}{marker}')
 
     if hwms:
         lines.append(f'\nSum missing across partitions: '
@@ -2073,12 +2139,29 @@ def bookkeeping_report(producers, consumers, topics,
             if cs['mode'] in ('recreate-immediate',
                               'recreate-delayed') \
                     and cs.get('recreate_ts'):
-                # Per-partition coverage check: for each partition,
-                # find the topic_id whose distinct-offset set has the
-                # largest max offset (= new generation) and verify
-                # it covers [0..hwm-1]. Aggregating across consumers
-                # is what catches records consumed by a re-joining
-                # consumer during the share-group rebalance.
+                # Identify NEW generation by first-seen consume ts
+                # (computed up front), not by max-offset. The old
+                # max-offset heuristic silently misidentified OLD as
+                # NEW when NEW had zero events — OLD's larger offsets
+                # trivially covered the short NEW range, hiding real
+                # rebind failures behind a "missing=0" verdict.
+                new_tid = chaos_new_tid_per_topic.get(t)
+                # If chaos fired but the consumer never observed a
+                # NEW topic_id AND the broker has no NEW-gen records,
+                # the rebind path simply wasn't exercised — note it
+                # explicitly so the run isn't mistaken for a clean
+                # validation of the bug-fix path. Informational only;
+                # does not affect VERDICT (no rebind needed when
+                # there were no NEW-gen records to lose).
+                if post_hwm == 0 and new_tid is None:
+                    lines.append(
+                        f'  WARN [{t}]: chaos fired but NEW '
+                        f'generation had zero records AND consumer '
+                        f'never observed a NEW topic_id — '
+                        f'recreate-rebind path not exercised in '
+                        f'this run. Consider increasing --drain-s '
+                        f'or chaos fire-window so producer-2 + '
+                        f'consumer rebind have time to converge.')
                 topic_offsets = chaos_offsets_by_id_part.get(t, {})
                 partitions = sorted({p for (_tid, p)
                                      in topic_offsets})
@@ -2091,19 +2174,21 @@ def bookkeeping_report(producers, consumers, topics,
                         continue
                     if hwm_p == 0:
                         continue
-                    candidates = [(tid, s) for (tid, pp), s in
-                                  topic_offsets.items() if pp == p]
-                    if not candidates:
+                    new_set = (topic_offsets.get((new_tid, p), set())
+                               if new_tid is not None else set())
+                    if not new_set:
                         chaos_per_partition_loss.append(
                             (t, p, hwm_p, []))
+                        reason = (
+                            'no NEW-id consume events'
+                            if new_tid is None
+                            else 'NEW-id present but no events on '
+                                 'this partition')
                         cov_lines.append(
                             f'    [{p}] hwm={hwm_p} '
                             f'covered=0 missing={hwm_p} '
-                            f'(no consumer events)')
+                            f'({reason})')
                         continue
-                    new_tid, new_set = max(
-                        candidates,
-                        key=lambda x: (max(x[1]) if x[1] else -1))
                     expected = set(range(hwm_p))
                     missing = sorted(expected - new_set)
                     cov_lines.append(

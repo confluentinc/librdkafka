@@ -3313,6 +3313,12 @@ err:
                     RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
 
                     RD_KAFKA_ERR_ACTION_END);
+
+                if (actions & RD_KAFKA_ERR_ACTION_PERMANENT &&
+                    err >= RD_KAFKA_RESP_ERR_UNKNOWN) {
+                        actions |= RD_KAFKA_ERR_ACTION_FATAL;
+                }
+
                 break;
         }
 

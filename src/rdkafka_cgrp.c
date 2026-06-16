@@ -6282,8 +6282,7 @@ void rd_kafka_cgrp_terminate0(rd_kafka_cgrp_t *rkcg, rd_kafka_op_t *rko) {
                 rkcg->rkcg_share.share_session_leave_remaining_cnt = 0;
                 if (rko->rko_u.terminated.ack_batches) {
                         rd_kafka_share_segregate_acks_by_leader(
-                            rkcg->rkcg_rk,
-                            rko->rko_u.terminated.ack_batches);
+                            rkcg->rkcg_rk, rko->rko_u.terminated.ack_batches);
                         /* Ownership of elements transferred to broker
                          * ack_details. Destroy the container. */
                         rd_list_destroy(rko->rko_u.terminated.ack_batches);

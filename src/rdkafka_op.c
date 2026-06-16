@@ -551,6 +551,10 @@ void rd_kafka_op_destroy(rd_kafka_op_t *rko) {
                 break;
         }
 
+        case RD_KAFKA_OP_TERMINATE:
+                RD_IF_FREE(rko->rko_u.terminated.ack_batches, rd_list_destroy);
+                break;
+
         case RD_KAFKA_OP_SHARE_FETCH_FANOUT:
                 RD_IF_FREE(rko->rko_u.share_fetch_fanout.ack_batches,
                            rd_list_destroy);

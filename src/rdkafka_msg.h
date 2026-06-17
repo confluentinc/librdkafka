@@ -31,6 +31,7 @@
 
 #include "rdkafka_proto.h"
 #include "rdkafka_header.h"
+#include "rdkafka_share_acknowledgement.h"
 
 
 /**
@@ -154,6 +155,20 @@ typedef struct rd_kafka_msg_s {
                                                     *   protocol msg */
                         int32_t leader_epoch;      /**< Leader epoch at the time
                                                     *   the message was fetched. */
+                        int32_t wire_size;         /**< wire-format size of this
+                                                    *   record including the
+                                                    *   length-prefix varint and all
+                                                    *   per-record framing.
+                                                    *   Used by share consumer
+                                                    *   fetch.size telemetry.
+                                                    */
+                        rd_kafka_share_internal_acknowledgement_type
+                            ack_type; /**< Share consumer: acknowledgement
+                                       *   type
+                                       * (rd_kafka_share_internal_acknowledgement_type).
+                                       *   Set during response processing. */
+                        int16_t delivery_count; /**< Share consumer: delivery
+                                                 *   count. */
                 } consumer;
         } rkm_u;
 } rd_kafka_msg_t;

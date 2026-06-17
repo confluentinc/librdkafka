@@ -976,9 +976,250 @@ int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
         return 0;
 }
 
+/**
+ * @brief Same-name topic recreate where a single consumer owns the same
+ *        (name, partition) tuples in both generations.
+ *
+ * The cooperative-assignment reconciler in rd_kafka_cgrp.c builds set
+ * subtraction maps keyed by (topic_name, partition), so OLD-id and
+ * NEW-id entries for the same (name, partition) collide in the diff.
+ * When a single consumer owns every partition of a same-name recreated
+ * topic, no partition lands in newly_added, no PARTITION_JOIN ->
+ * share_session_toppar_add fires for the NEW rktp, and ShareFetch
+ * never asks for the NEW generation.
+ *
+ * To deterministically expose the bug we need the consumer's heartbeat
+ * to deliver a direct OLD-id -> NEW-id target transition with no
+ * intermediate empty assignment. The mock cluster's heartbeat handler
+ * normally only recalculates assignments on member events (join,
+ * leave, subscription change) -- not on topic delete/recreate -- so a
+ * naive delete + recreate would leave the mock emitting the stale
+ * OLD-id assignment forever, never reaching the reconciler bug
+ * condition. Instead, the test uses
+ * rd_kafka_mock_sharegroup_target_assignment to manually inject the
+ * NEW-id assignment after the recreate. The mock resolves the
+ * partition list's topic name to the NEW topic_id at assignment-set
+ * time, so the consumer's next heartbeat carries
+ * (NEW-id, partition) tuples while its current assignment still holds
+ * the (OLD-id, partition) tuples from PHASE 1 -- exactly the input
+ * that triggers the (topic_name, partition) hash collision.
+ *
+ * Pre-fix: PHASE 2 times out with zero NEW records consumed.
+ * Post-fix: PHASE 2 consumes all NEW records.
+ */
+static void do_test_recreate_same_name_partition_collision(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        rd_kafka_conf_t *producer_conf;
+        rd_kafka_t *producer;
+        const char *topic          = "0184-recreate-collision";
+        const char *group          = "0184-share-recreate-collision";
+        const int n_partitions     = 3;
+        const int n_msgs_per_part  = 10;
+        const int total_per_phase  = n_partitions * n_msgs_per_part;
+        rd_kafka_messages_t *batch = NULL;
+        int old_got                = 0;
+        int new_got                = 0;
+        rd_ts_t deadline;
+        int32_t p;
+        char **member_ids;
+        size_t member_cnt;
+        size_t mi;
+        rd_kafka_resp_err_t err;
+        rd_kafka_topic_partition_list_t *new_assignment;
+        rd_kafka_topic_partition_list_t *member_assignments[1];
+        const char *member_id_arr[1];
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_sharegroup_set_auto_offset_reset(mcluster, 1);
+
+        /* Short heartbeat keeps the post-injection latency tight; the
+         * consumer's next heartbeat after the manual assignment-set
+         * delivers the NEW-id target within ~1s. */
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(mcluster, 1000);
+
+        /* Persistent producer for the whole test. The mock cluster
+         * destroys every share-group session on the broker when any
+         * client connection closes (see
+         * rd_kafka_mock_sharegrps_node_connection_closed in
+         * rdkafka_mock_sharegrp.c), so spinning up a fresh producer
+         * instance per produce call would invalidate the consumer's
+         * session as collateral damage and break PHASE 2's fetch.
+         * Keeping one producer alive end-to-end avoids that. */
+        test_conf_init(&producer_conf, NULL, 0);
+        test_conf_set(producer_conf, "bootstrap.servers", bootstraps);
+        rd_kafka_conf_set_dr_msg_cb(producer_conf, test_dr_msg_cb);
+        producer = test_create_handle(RD_KAFKA_PRODUCER, producer_conf);
+        TEST_ASSERT(producer != NULL, "producer create failed");
+
+        /* Initial topic generation. */
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, n_partitions,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "mock_topic_create (initial) failed");
+
+        /* Produce n_msgs_per_part records to every partition of the
+         * initial generation so PHASE 1 has something to drain. */
+        for (p = 0; p < n_partitions; p++)
+                test_produce_msgs2(producer, topic, 0 /*testid*/, p,
+                                   0 /*msg_base*/, n_msgs_per_part,
+                                   NULL /*payload*/, 0);
+
+        /* Long topic.metadata.refresh.interval.ms forces the heartbeat
+         * to be the channel that carries topic_id changes, which is
+         * what the reconciler bug rides on. */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "300000");
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "share_consumer_new failed");
+
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* ---- PHASE 1: drain the OLD generation ----
+         * Single consumer in the share group => it owns every
+         * partition in this generation. Explicit-ack each record so
+         * the next consume_batch can proceed. */
+        TEST_SAY("PHASE 1: draining %d OLD-generation record(s)\n",
+                 total_per_phase);
+        deadline = test_clock() + (rd_ts_t)30 * 1000 * 1000;
+        while (old_got < total_per_phase && test_clock() < deadline) {
+                rd_kafka_error_t *error;
+                size_t cnt;
+                size_t i;
+
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                cnt = rd_kafka_messages_count(batch);
+                for (i = 0; i < cnt; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        if (!m->err) {
+                                old_got++;
+                                rd_kafka_share_acknowledge(rkshare, m);
+                        }
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+        TEST_ASSERT(old_got == total_per_phase,
+                    "PHASE 1: expected %d OLD records, got %d", total_per_phase,
+                    old_got);
+
+        /* Capture the consumer's member id so we can pin a target
+         * assignment for it after the recreate. */
+        err = rd_kafka_mock_sharegroup_get_member_ids(mcluster, group,
+                                                      &member_ids, &member_cnt);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "mock_sharegroup_get_member_ids failed: %s",
+                    rd_kafka_err2str(err));
+        TEST_ASSERT(member_cnt == 1,
+                    "expected exactly 1 member in share group, got %zu",
+                    member_cnt);
+
+        /* ---- Delete + recreate ----
+         * Mock generates a fresh topic_id for the recreated topic. The
+         * existing share-group member's stored assignment still
+         * references the destroyed OLD topic; we override it below. */
+        TEST_SAY("Recreating topic same name, same partition count\n");
+        TEST_ASSERT(rd_kafka_mock_topic_delete(mcluster, topic) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "mock_topic_delete failed");
+        TEST_ASSERT(rd_kafka_mock_topic_create(mcluster, topic, n_partitions,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "mock_topic_create (recreate) failed");
+
+        /* Pin the member's target assignment to the recreated topic.
+         * mock_sharegroup_target_assignment resolves the topic name
+         * to the current mtopic's id at set-time, so the partition
+         * list ends up carrying the NEW topic_id. The mock bumps the
+         * member epoch on set so the consumer's next heartbeat
+         * receives this assignment. From the consumer's point of
+         * view: current rkcg_group_assignment still has the OLD-id
+         * partitions from PHASE 1; the next HB target carries the
+         * NEW-id partitions. That is the precise input that triggers
+         * the reconciler's (topic_name, partition) hash collision. */
+        new_assignment = rd_kafka_topic_partition_list_new(n_partitions);
+        for (p = 0; p < n_partitions; p++)
+                rd_kafka_topic_partition_list_add(new_assignment, topic, p);
+        member_id_arr[0]      = member_ids[0];
+        member_assignments[0] = new_assignment;
+        rd_kafka_mock_sharegroup_target_assignment(
+            mcluster, group, member_id_arr, member_assignments, 1);
+        rd_kafka_topic_partition_list_destroy(new_assignment);
+
+        /* Produce records to every partition of the recreated topic.
+         * Pre-fix these never reach the consumer. */
+        for (p = 0; p < n_partitions; p++)
+                test_produce_msgs2(producer, topic, 0 /*testid*/, p,
+                                   0 /*msg_base*/, n_msgs_per_part,
+                                   NULL /*payload*/, 0);
+
+        /* ---- PHASE 2: drain the NEW generation ----
+         * Generous deadline so the heartbeat has time to deliver the
+         * NEW target, metadata to resolve for the new topic_id, and
+         * the share session to start fetching when the fix is in
+         * place. Pre-fix the reconciler diff collapses
+         * (name, partition) so the NEW rktps are never added to the
+         * share session; this loop hits the deadline at zero. */
+        TEST_SAY("PHASE 2: draining %d NEW-generation record(s)\n",
+                 total_per_phase);
+        deadline = test_clock() + (rd_ts_t)10 * 1000 * 1000;
+        while (new_got < total_per_phase && test_clock() < deadline) {
+                rd_kafka_error_t *error;
+                size_t cnt;
+                size_t i;
+
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                cnt = rd_kafka_messages_count(batch);
+                for (i = 0; i < cnt; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        if (!m->err) {
+                                new_got++;
+                                rd_kafka_share_acknowledge(rkshare, m);
+                        }
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(new_got == total_per_phase,
+                    "PHASE 2: expected %d NEW records after same-name "
+                    "recreate, got %d. Cooperative reconciler likely "
+                    "suppressed the NEW rktp adds because (name, partition) "
+                    "collided with OLD-id entries in rkcg_group_assignment.",
+                    total_per_phase, new_got);
+
+        for (mi = 0; mi < member_cnt; mi++)
+                rd_free(member_ids[mi]);
+        rd_free(member_ids);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        rd_kafka_destroy(producer);
+        test_mock_cluster_destroy(mcluster);
+        SUB_TEST_PASS();
+}
+
 int main_0184_share_consumer_topic_recreate_local(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
-        test_timeout_set(120);
+        test_timeout_set(180);
         test_recreate_during_close();
+        do_test_recreate_same_name_partition_collision();
         return 0;
 }

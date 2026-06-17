@@ -1130,9 +1130,7 @@ done:
 /**
  * @brief OIDC token refresh callback for aws_iam metadata
  *        authentication. As of now, librdkafka does not implement AWS IAM
- *        natively; the high-level client is expected to register
- *        its own token-refresh callback. If this stub fires, that
- *        registration did not happen.
+ *        natively.
  */
 void rd_kafka_oidc_token_metadata_aws_iam_refresh_cb(
     rd_kafka_t *rk,

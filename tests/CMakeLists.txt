@@ -144,6 +144,28 @@ set(
     0151-purge-brokers.c
     0152-rebootstrap.c
     0153-memberid.c
+    0155-share_group_heartbeat_mock.c
+    0156-share_consumer_fetch_mock.c
+    0157-share_consumer_ack_mock.c
+    0158-share_consumer_transactions_mock.c
+    0170-share_consumer_subscription.c
+    0171-share_consumer_consume.c
+    0172-share_consumer_acknowledge.c
+    0173-share_consumer_commit_async.c
+    0174-share_consumer_concurrency.c
+    0175-share_consumer_groups.c
+    0176-share_consumer_commit_sync.c
+    0177-share_consumer_transactions.c
+    0178-share_consumer_close.c
+    0179-share_consumer_destroy.c
+    0180-share_consumer_config.c
+    0181-share_consumer_topic_delete.c
+    0182-share_consumer_error_handling_mock.c
+    0183-share_consumer_leader_change_mock.c
+    0184-share_consumer_topic_recreate.c
+    0185-share_consumer_max_poll_interval.c
+    0186-share_consumer_fatal_error.c
+    0190-share_consumer_telemetry.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

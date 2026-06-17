@@ -1551,15 +1551,17 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
          *     callback gets broker's per-partition result (NO_ERROR,
          *     the records were applied).
          *   - socket_timeout_ms < rtt_ms: wire torn down before broker
-         *     could reply — helper stamps __TIMED_OUT on batches and
-         *     callbacks fire with __TIMED_OUT.
+         *     could reply — helper stamps __TIMED_OUT on batches; the
+         *     app-facing funnel translates it to REQUEST_TIMED_OUT
+         *     before the callback fires.
          *
          * The expected commit_sync result err comes from which layer
          * stamped results first:
          *   - api_timeout_ms < min_between(rtt_ms, socket_timeout_ms):
          *     api timer cb wrote REQUEST_TIMED_OUT into results.
          *   - socket_timeout_ms <= api_timeout_ms: broker-thread reply
-         *     path wrote __TIMED_OUT into results via apply_result. */
+         *     path wrote __TIMED_OUT into results via apply_result;
+         *     the funnel translates it to REQUEST_TIMED_OUT. */
         min_between_rtt_ms_socket_timeout_ms =
             socket_timeout_ms < rtt_ms ? socket_timeout_ms : rtt_ms;
         min_between_api_timeout_ms_rtt_ms_socket_timeout_ms = api_timeout_ms;
@@ -1588,11 +1590,13 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
                  * outcome is non-deterministic across runs; that
                  * boundary case is not in the matrix.)
                  *
-                 * TODO KIP-932: when __TIMED_OUT is translated to
-                 * REQUEST_TIMED_OUT at the ack callback boundary,
-                 * both expected codes here become REQUEST_TIMED_OUT. */
-                expected_phase1_commit_err   = RD_KAFKA_RESP_ERR__TIMED_OUT;
-                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                 * __TIMED_OUT from the broker-thread socket timer is
+                 * translated to REQUEST_TIMED_OUT at the app-facing
+                 * funnel. */
+                expected_phase1_commit_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+                expected_phase1_callback_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
         } else if (rtt_ms < socket_timeout_ms) {
                 /* api wins (api <= socket AND rtt < socket; api
                  * fires no later than broker reply at rtt). Late
@@ -1604,15 +1608,13 @@ static void do_test_socket_timeout_full_ack_then_more(int api_timeout_ms,
                 expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
                 /* api wins (api <= socket AND rtt >= socket). Socket
-                 * fires before broker can reply, wire torn down;
-                 * callback fires with the wire-failure err.
-                 *
-                 * TODO KIP-932: when __TIMED_OUT is translated to
-                 * REQUEST_TIMED_OUT at the ack callback boundary,
-                 * the late callback err becomes REQUEST_TIMED_OUT. */
+                 * fires before broker can reply, wire torn down; the
+                 * late wire-failure err is __TIMED_OUT, translated to
+                 * REQUEST_TIMED_OUT at the app-facing funnel. */
                 expected_phase1_commit_err =
                     RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
-                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                expected_phase1_callback_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
         }
 
         ctx = test_ctx_new();
@@ -1852,22 +1854,25 @@ do_test_socket_timeout_partial_ack_then_remaining(int api_timeout_ms,
                 expected_phase1_commit_err   = RD_KAFKA_RESP_ERR_NO_ERROR;
                 expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else if (socket_timeout_ms < api_timeout_ms) {
-                /* TODO KIP-932: when __TIMED_OUT is translated to
-                 * REQUEST_TIMED_OUT at the ack callback boundary, both
-                 * expected codes here become REQUEST_TIMED_OUT. */
-                expected_phase1_commit_err   = RD_KAFKA_RESP_ERR__TIMED_OUT;
-                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                /* __TIMED_OUT from the broker-thread socket timer is
+                 * translated to REQUEST_TIMED_OUT at the app-facing
+                 * funnel. */
+                expected_phase1_commit_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+                expected_phase1_callback_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
         } else if (rtt_ms < socket_timeout_ms) {
                 expected_phase1_commit_err =
                     RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
                 expected_phase1_callback_err = RD_KAFKA_RESP_ERR_NO_ERROR;
         } else {
-                /* TODO KIP-932: when __TIMED_OUT is translated to
-                 * REQUEST_TIMED_OUT at the ack callback boundary, the
-                 * late callback err becomes REQUEST_TIMED_OUT. */
+                /* Late wire-failure callback err __TIMED_OUT is
+                 * translated to REQUEST_TIMED_OUT at the app-facing
+                 * funnel. */
                 expected_phase1_commit_err =
                     RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
-                expected_phase1_callback_err = RD_KAFKA_RESP_ERR__TIMED_OUT;
+                expected_phase1_callback_err =
+                    RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
         }
 
         /* Connection torn down iff socket fires before broker reply.

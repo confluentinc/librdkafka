@@ -4274,11 +4274,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                  * group-protocol validation runs so its
                  * CONSUMER-branch checks also apply to share
                  * consumers.
-                 *
-                 * TODO KIP-932: evaluate, per property, whether
-                 * rejecting is the right behavior or whether some
-                 * should instead be silently ignored (as the Java
-                 * client does for several of these). */
+                 */
                 if (conf->share.is_share_consumer) {
                         if (conf->rebalance_cb)
                                 return "`rebalance_cb` is not applicable "
@@ -4344,10 +4340,21 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                        "applicable for share consumer";
 
                         /* The Azure heuristic (which lowers it to <4 minutes)
-                         * still overrides this for Azure brokers. */
+                         * still overrides this for Azure brokers.
+                         *
+                         * TODO KIP-932: this 9-min default is currently
+                         * undermined because a share consumer reconnects
+                         * immediately after an idle close while it still has
+                         * assigned toppars (see
+                         * rd_kafka_broker_share_consumer_serve). Fix so the
+                         * connection stays closed until a fetch is actually
+                         * required. */
                         if (!rd_kafka_conf_is_modified(
                                 conf, "connections.max.idle.ms"))
                                 conf->connections_max_idle_ms = 9 * 60 * 1000;
+
+                        /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
+                         * keep it at par with Java client */
 
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
@@ -4356,15 +4363,18 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                          * so it does not increase memory usage. Java client
                          * has no client-side receive cap*/
                         conf->recv_max_msg_size = INT_MAX;
-                } else if (conf->fetch_min_bytes < 1 ||
-                           conf->fetch_min_bytes > 100000000) {
-                        /* For non-share consumers preserve librdkafka's
-                         * historical `fetch.min.bytes` range of 1..100000000.
-                         * The property max was raised to INT_MAX so share
-                         * consumers can match the Java client; share consumers
-                         * are exempt from this check. */
-                        return "`fetch.min.bytes` must be in range "
-                               "1..100000000 for non-share consumers";
+                } else {
+                        if (conf->fetch_min_bytes < 1 ||
+                            conf->fetch_min_bytes > 100000000) {
+                                /* For non-share consumers preserve librdkafka's
+                                 * historical `fetch.min.bytes` range
+                                 * of 1..100000000. The property max was raised
+                                 * to INT_MAX so share consumers can match the
+                                 * Java client; share consumers are exempt from
+                                 * this check. */
+                                return "`fetch.min.bytes` must be in range "
+                                       "1..100000000 for non-share consumers";
+                        }
                 }
 
                 if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {

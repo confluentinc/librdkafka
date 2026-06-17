@@ -1784,10 +1784,10 @@ done:
          * before err_parse fired must be destroyed explicitly. */
         RD_IF_FREE(inflight_acks, rd_list_destroy);
         if (filtered_msgs) {
-                rd_kafka_op_t *leaked_rko;
+                rd_kafka_op_t *rko;
                 int li;
-                RD_LIST_FOREACH(leaked_rko, filtered_msgs, li)
-                rd_kafka_op_destroy(leaked_rko);
+                RD_LIST_FOREACH(rko, filtered_msgs, li)
+                rd_kafka_op_destroy(rko);
                 rd_list_destroy(filtered_msgs);
         }
 

@@ -4289,7 +4289,22 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                                 }
 
                                 /* Release ACQUIRED records for this
-                                 * member on this partition. */
+                                 * member on this partition, but only
+                                 * if this broker currently leads it:
+                                 * forgetting a partition that moved to
+                                 * another leader must not release the
+                                 * locks now held through the new
+                                 * leader's session. */
+                                rd_kafka_mock_topic_t *ftopic =
+                                    rd_kafka_mock_topic_find_by_id(mcluster,
+                                                                   ftid);
+                                rd_kafka_mock_partition_t *fpart =
+                                    ftopic ? rd_kafka_mock_partition_find(
+                                                 ftopic, ftp->partition)
+                                           : NULL;
+                                if (!fpart || fpart->leader != mconn->broker)
+                                        continue;
+
                                 pmeta = rd_kafka_mock_sgrp_partmeta_find(
                                     sgrp, ftid, ftp->partition);
                                 if (pmeta) {
@@ -4590,8 +4605,7 @@ static int rd_kafka_mock_handle_ShareFetch(rd_kafka_mock_connection_t *mconn,
                 /* epoch=-1 (final fetch) → release remaining acquired
                  * records and close the session. */
                 if (!err && session && SessionEpoch == -1) {
-                        rd_kafka_mock_sgrp_release_member_locks(
-                            sgrp, session->member_id);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);
@@ -4838,8 +4852,7 @@ rd_kafka_mock_handle_ShareAcknowledge(rd_kafka_mock_connection_t *mconn,
                 /* epoch=-1 (final ack) → release remaining
                  * acquired records and close the session. */
                 if (!err && session && SessionEpoch == -1) {
-                        rd_kafka_mock_sgrp_release_member_locks(
-                            sgrp, session->member_id);
+                        rd_kafka_mock_sgrp_release_session_locks(sgrp, session);
                         TAILQ_REMOVE(&sgrp->fetch_sessions, session, link);
                         sgrp->fetch_session_cnt--;
                         rd_kafka_mock_sgrp_fetch_session_destroy(session);

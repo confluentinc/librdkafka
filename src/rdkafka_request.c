@@ -562,6 +562,9 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         int32_t i;
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
+        // printf(" ---------------------------------------
+        // rd_kafka_buf_read_NodeEndpoints: NodeEndpointCnt=%d\n",
+        //        NodeEndpoints->NodeEndpointCnt);
         rd_dassert(!NodeEndpoints->NodeEndpoints);
         NodeEndpoints->NodeEndpoints =
             rd_calloc(NodeEndpoints->NodeEndpointCnt,
@@ -2442,7 +2445,101 @@ void rd_kafka_ConsumerGroupHeartbeatRequest(
                 rd_kafkap_str_destroy(subscribed_topic_regex_to_send);
 }
 
+void rd_kafka_ShareGroupHeartbeatRequest(
+    rd_kafka_broker_t *rkb,
+    const rd_kafkap_str_t *group_id,
+    const rd_kafkap_str_t *member_id,
+    int32_t member_epoch,
+    const rd_kafkap_str_t *rack_id,
+    const rd_kafka_topic_partition_list_t *subscribed_topics,
+    rd_kafka_replyq_t replyq,
+    rd_kafka_resp_cb_t *resp_cb,
+    void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = 0;
+        int features;
+        size_t rkbuf_size = 0;
 
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_ShareGroupHeartbeat, 1, 1, &features);
+
+        rd_rkb_dbg(rkb, CGRP, "SHAREHEARTBEAT",
+                   "ShareGroupHeartbeat version %d for group \"%s\", member id "
+                   "\"%s\", topic count = %d",
+                   ApiVersion, group_id ? group_id->str : "NULL",
+                   member_id ? member_id->str : "NULL",
+                   subscribed_topics ? subscribed_topics->cnt : -1);
+
+        if (ApiVersion == -1) {
+                rd_kafka_cgrp_coord_dead(rkb->rkb_rk->rk_cgrp,
+                                         RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE,
+                                         "ShareGroupHeartbeatRequest not "
+                                         "supported by broker");
+                return;
+        }
+
+        // debug log all the fields
+        if (rd_rkb_is_dbg(rkb, CGRP)) {
+                char subscribed_topics_str[512] = "NULL";
+                if (subscribed_topics) {
+                        rd_kafka_topic_partition_list_str(
+                            subscribed_topics, subscribed_topics_str,
+                            sizeof(subscribed_topics_str), 0);
+                }
+                rd_rkb_dbg(rkb, CGRP, "SHAREHEARTBEAT",
+                           "ShareGroupHeartbeat of group id \"%s\", "
+                           "member id \"%s\", member epoch %d, rack id \"%s\""
+                           ", subscribed topics \"%s\"",
+                           group_id ? group_id->str : "NULL",
+                           member_id ? member_id->str : "NULL", member_epoch,
+                           rack_id ? rack_id->str : "NULL",
+                           subscribed_topics_str);
+        }
+
+        if (group_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(group_id);
+        if (member_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(member_id);
+        rkbuf_size += 4; /* MemberEpoch */
+        if (rack_id)
+                rkbuf_size += RD_KAFKAP_STR_SIZE(rack_id);
+        if (subscribed_topics) {
+                rkbuf_size +=
+                    ((subscribed_topics->cnt * (4 + 50)) + 4 /* array size */);
+        }
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_ShareGroupHeartbeat, 1, rkbuf_size, rd_true);
+
+        rd_kafka_buf_write_kstr(rkbuf, group_id);
+        rd_kafka_buf_write_kstr(rkbuf, member_id);
+        rd_kafka_buf_write_i32(rkbuf, member_epoch);
+        rd_kafka_buf_write_kstr(rkbuf, rack_id);
+
+        if (subscribed_topics) {
+                int topics_cnt = subscribed_topics->cnt;
+
+                /* write Topics */
+                rd_kafka_buf_write_arraycnt(rkbuf, topics_cnt);
+                while (--topics_cnt >= 0) {
+                        if (rd_rkb_is_dbg(rkb, CGRP))
+                                rd_rkb_dbg(
+                                    rkb, CGRP, "SHAREHEARTBEAT",
+                                    "ShareGroupHeartbeat subscribed "
+                                    "topic %s",
+                                    subscribed_topics->elems[topics_cnt].topic);
+                        rd_kafka_buf_write_str(
+                            rkbuf, subscribed_topics->elems[topics_cnt].topic,
+                            -1);
+                }
+        } else {
+                rd_kafka_buf_write_arraycnt(rkbuf, -1);
+        }
+
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, features);
+
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+}
 
 /**
  * @brief Construct and send ListGroupsRequest to \p rkb
@@ -3632,6 +3729,107 @@ void rd_kafkap_leader_discovery_set_CurrentLeader(
         mdpi->id           = partition_id;
         mdpi->leader_epoch = CurrentLeader->LeaderEpoch;
 }
+
+/**
+ * @brief Apply inline metadata updates from a Share* response.
+ *
+ * Builds a synthetic metadata-internal struct from collected
+ * per-partition CurrentLeader hints plus top-level NodeEndpoints,
+ * and enqueues it as OP_METADATA_UPDATE.
+ *
+ * Entries in \p leader_changes must be grouped by topic_id in
+ * iteration order — naturally satisfied when a parser walks
+ * topic-then-partition.
+ *
+ * @locality broker thread
+ */
+void rd_kafkap_share_leader_changes_apply(
+    rd_kafka_broker_t *rkb,
+    rd_list_t *leader_changes,
+    rd_kafkap_NodeEndpoints_t *NodeEndpoints) {
+        rd_kafkap_share_leader_change_t *lc;
+        int *partitions_per_topic;
+        int distinct_topic_cnt;
+        rd_kafka_Uuid_t prev_topic;
+        rd_tmpabuf_t tbuf;
+        rd_kafka_metadata_internal_t *mdi;
+        rd_kafka_op_t *rko;
+        int32_t nodeid;
+        int k, t_idx, p_idx;
+
+        if (!leader_changes || rd_list_cnt(leader_changes) == 0 ||
+            NodeEndpoints->NodeEndpointCnt == 0)
+                return;
+
+        rd_rkb_dbg(rkb, METADATA, "LEADER",
+                   "Applying inline metadata update from Share response: "
+                   "%d partition leader change(s), %" PRId32
+                   " node endpoint(s)",
+                   rd_list_cnt(leader_changes), NodeEndpoints->NodeEndpointCnt);
+
+        partitions_per_topic =
+            rd_calloc(rd_list_cnt(leader_changes), sizeof(int));
+
+        prev_topic = RD_KAFKA_UUID_ZERO;
+        t_idx      = -1;
+        RD_LIST_FOREACH(lc, leader_changes, k) {
+                if (t_idx < 0 ||
+                    rd_kafka_Uuid_cmp(lc->topic_id, prev_topic) != 0) {
+                        t_idx++;
+                        prev_topic = lc->topic_id;
+                }
+                partitions_per_topic[t_idx]++;
+        }
+        distinct_topic_cnt = t_idx + 1;
+
+        rd_kafka_broker_lock(rkb);
+        nodeid = rkb->rkb_nodeid;
+        rd_kafka_broker_unlock(rkb);
+
+        rd_tmpabuf_new(&tbuf, 0, rd_true /*assert on fail*/);
+        rd_tmpabuf_add_alloc(&tbuf, sizeof(*mdi));
+        rd_kafkap_leader_discovery_tmpabuf_add_alloc_brokers(&tbuf,
+                                                             NodeEndpoints);
+        rd_kafkap_leader_discovery_tmpabuf_add_alloc_topics(&tbuf,
+                                                            distinct_topic_cnt);
+        for (t_idx = 0; t_idx < distinct_topic_cnt; t_idx++)
+                rd_kafkap_leader_discovery_tmpabuf_add_alloc_topic(
+                    &tbuf, NULL, partitions_per_topic[t_idx]);
+        rd_tmpabuf_finalize(&tbuf);
+
+        mdi = rd_tmpabuf_alloc(&tbuf, sizeof(*mdi));
+        rd_kafkap_leader_discovery_metadata_init(mdi, nodeid);
+        rd_kafkap_leader_discovery_set_brokers(&tbuf, mdi, NodeEndpoints);
+        rd_kafkap_leader_discovery_set_topic_cnt(&tbuf, mdi,
+                                                 distinct_topic_cnt);
+
+        prev_topic = RD_KAFKA_UUID_ZERO;
+        t_idx      = -1;
+        p_idx      = 0;
+        RD_LIST_FOREACH(lc, leader_changes, k) {
+                if (t_idx < 0 ||
+                    rd_kafka_Uuid_cmp(lc->topic_id, prev_topic) != 0) {
+                        t_idx++;
+                        p_idx      = 0;
+                        prev_topic = lc->topic_id;
+                        rd_kafkap_leader_discovery_set_topic(
+                            &tbuf, mdi, t_idx, lc->topic_id, NULL,
+                            partitions_per_topic[t_idx]);
+                }
+                rd_kafkap_leader_discovery_set_CurrentLeader(
+                    &tbuf, mdi, t_idx, p_idx, lc->partition,
+                    &lc->current_leader);
+                p_idx++;
+        }
+
+        rd_free(partitions_per_topic);
+
+        rko                     = rd_kafka_op_new(RD_KAFKA_OP_METADATA_UPDATE);
+        rko->rko_u.metadata.md  = &mdi->metadata;
+        rko->rko_u.metadata.mdi = mdi;
+        rd_kafka_q_enq(rkb->rkb_rk->rk_ops, rko);
+}
+
 /**@}*/
 
 static int rd_kafkap_Produce_reply_tags_partition_parse(

@@ -227,4 +227,47 @@ static RD_INLINE int64_t RD_UNUSED rd_atomic64_set(rd_atomic64_t *ra,
 #endif
 }
 
+/**
+ * @brief Atomic compare-and-swap on a 64-bit value.
+ *
+ *        If *ra == @p expected, atomically replace it with @p desired
+ *        and return 1. Otherwise leave *ra unchanged and return 0.
+ */
+static RD_INLINE int RD_UNUSED rd_atomic64_cas(rd_atomic64_t *ra,
+                                               int64_t expected,
+                                               int64_t desired) {
+#ifdef __SUNPRO_C
+        return atomic_cas_64((volatile uint64_t *)&ra->val, (uint64_t)expected,
+                             (uint64_t)desired) == (uint64_t)expected;
+#elif defined(_WIN32)
+        return InterlockedCompareExchange64((LONG64 *)&ra->val, (LONG64)desired,
+                                            (LONG64)expected) ==
+               (LONG64)expected;
+#elif !HAVE_ATOMICS_64
+        int r;
+        mtx_lock(&ra->lock);
+        if (ra->val == expected) {
+                ra->val = desired;
+                r       = 1;
+        } else {
+                r = 0;
+        }
+        mtx_unlock(&ra->lock);
+        return r;
+#elif HAVE_ATOMICS_64_ATOMIC
+        return __atomic_compare_exchange_n(&ra->val, &expected, desired,
+                                           0 /* strong */, __ATOMIC_SEQ_CST,
+                                           __ATOMIC_SEQ_CST);
+#elif HAVE_ATOMICS_64_SYNC
+        return __sync_bool_compare_and_swap(&ra->val, expected, desired);
+#else
+        // FIXME
+        if (ra->val == expected) {
+                ra->val = desired;
+                return 1;
+        }
+        return 0;
+#endif
+}
+
 #endif /* _RDATOMIC_H_ */

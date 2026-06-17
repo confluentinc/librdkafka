@@ -111,6 +111,135 @@ void do_test_producer(int64_t reauth_time, const char *topic) {
         SUB_TEST_PASS();
 }
 
+/* Test share consumer message loss while reauth happens between consume. */
+void do_test_share_consumer(int64_t reauth_time) {
+        rd_kafka_t *p1;
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        const char *group      = "share-reauth-test";
+        const char *topic      = test_mk_topic_name("share_reauth", 1);
+        int64_t start_time     = 0;
+        int64_t wait_time      = reauth_time * 1.2 * 1000;
+        int recv_cnt = 0, sent_cnt = 0;
+        int attempts;
+        size_t rcvd, m;
+
+        SUB_TEST("test share consumer message loss while reauthenticating");
+
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+        TEST_SAY("Topic: %s is created\n", topic);
+
+        /* Create share consumer */
+        sc1 = test_create_share_consumer(group, NULL);
+
+        /* Set group config for earliest offset */
+        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
+                                            grp_conf, 1);
+
+        /* Subscribe */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Wait for the share consumer to join the group by producing
+         * a message and polling until it is received. */
+        test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
+        rd_kafka_flush(p1, 10 * 1000);
+        attempts = 50;
+        rcvd     = 0;
+        while (rcvd == 0 && attempts-- > 0) {
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(sc1, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+        }
+        TEST_ASSERT(rcvd > 0,
+                    "Share consumer failed to join group "
+                    "and consume warmup message");
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        TEST_SAY("Share consumer joined group, starting reauth test\n");
+
+        start_time = test_clock();
+        while ((test_clock() - start_time) <= wait_time) {
+                rcvd = 0;
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+
+                /* Produce one message. */
+                test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
+                sent_cnt++;
+
+                err = rd_kafka_share_poll(sc1, 100, &batch);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        rd_kafka_flush(p1, 50);
+                } else {
+                        rcvd = rd_kafka_messages_count(batch);
+                        for (m = 0; m < rcvd; m++) {
+                                rd_kafka_message_t *rkm =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!rkm->err)
+                                        recv_cnt++;
+                        }
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+
+                /* Maintain the message rate at ~200 msg/s regardless
+                 * of consume errors during reauthentication. */
+                rd_usleep(1000 * 50, NULL);
+        }
+
+        /* Final flush and receive any remaining messages. */
+        rd_kafka_flush(p1, 10 * 1000);
+        attempts = 100;
+        while (recv_cnt < sent_cnt && attempts-- > 0) {
+                rcvd = 0;
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+
+                err = rd_kafka_share_poll(sc1, 3000, &batch);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                rcvd = rd_kafka_messages_count(batch);
+                for (m = 0; m < rcvd; m++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, m);
+                        if (!rkm->err)
+                                recv_cnt++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        rd_kafka_share_consumer_close(sc1);
+
+        TEST_ASSERT(sent_cnt == recv_cnt,
+                    "did not receive as many messages as sent (%d vs %d)",
+                    sent_cnt, recv_cnt);
+
+        rd_kafka_destroy(p1);
+        rd_kafka_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
+
 /* Test consumer message loss while reauth happens between consume. */
 void do_test_consumer(int64_t reauth_time, const char *topic) {
         uint64_t testid;
@@ -261,6 +390,182 @@ void do_test_txn_producer(int64_t reauth_time,
 
 /* Check reauthentication in case of OAUTHBEARER mechanism, with different
  * reauth times and token lifetimes. */
+void do_test_share_oauthbearer(int64_t reauth_time,
+                               int64_t token_lifetime_ms,
+                               rd_bool_t use_sasl_queue) {
+        rd_kafka_t *p1;
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        const char *group      = "share-oauthbearer-reauth-test";
+        const char *topic      = test_mk_topic_name("share_oauth_reauth", 1);
+        char *mechanism, *oauthbearer_method;
+        char errstr[512];
+        int token_lifetime_s = token_lifetime_ms / 1000;
+        int64_t start_time   = 0;
+        int64_t wait_time    = reauth_time * 1.2 * 1000;
+        int recv_cnt = 0, sent_cnt = 0;
+        int attempts;
+        size_t rcvd, m;
+
+        SUB_TEST(
+            "test share consumer reauthentication with oauthbearer, "
+            "reauth_time = %ld, token_lifetime = %ld, use_sasl_queue = %s",
+            reauth_time, token_lifetime_ms, use_sasl_queue ? "yes" : "no");
+
+        /* Producer */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        mechanism = test_conf_get(conf, "sasl.mechanism");
+        if (rd_strcasecmp(mechanism, "oauthbearer")) {
+                rd_kafka_conf_destroy(conf);
+                SUB_TEST_SKIP(
+                    "`sasl.mechanism=OAUTHBEARER` is required, have %s\n",
+                    mechanism);
+        }
+
+        oauthbearer_method = test_conf_get(conf, "sasl.oauthbearer.method");
+        if (rd_strcasecmp(oauthbearer_method, "oidc")) {
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    tsprintf(
+                        "principal=admin scope=requiredScope lifeSeconds=%d",
+                        token_lifetime_s));
+                test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt",
+                              "true");
+        }
+
+        p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+
+        /* Share consumer */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_enable_sasl_queue(conf, use_sasl_queue);
+
+        oauthbearer_method = test_conf_get(conf, "sasl.oauthbearer.method");
+        if (rd_strcasecmp(oauthbearer_method, "oidc")) {
+                test_conf_set(
+                    conf, "sasl.oauthbearer.config",
+                    tsprintf(
+                        "principal=admin scope=requiredScope lifeSeconds=%d",
+                        token_lifetime_s));
+                test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt",
+                              "true");
+        }
+
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1 != NULL, "Failed to create share consumer: %s", errstr);
+
+        if (use_sasl_queue) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_sasl_background_callbacks_enable(sc1);
+                TEST_ASSERT(!error,
+                            "share_sasl_background_callbacks_enable failed: %s",
+                            error ? rd_kafka_error_string(error) : "");
+        }
+
+        /* Set group config for earliest offset */
+        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
+                                            grp_conf, 1);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Wait for the share consumer to join the group by producing
+         * a message and polling until it is received. */
+        test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
+        rd_kafka_flush(p1, 10 * 1000);
+        attempts = 50;
+        rcvd     = 0;
+        while (rcvd == 0 && attempts-- > 0) {
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(sc1, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+        }
+        TEST_ASSERT(rcvd > 0,
+                    "Share consumer failed to join group "
+                    "and consume warmup message");
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        TEST_SAY(
+            "Share consumer joined group, starting oauthbearer "
+            "reauth test\n");
+
+        start_time = test_clock();
+        while ((test_clock() - start_time) <= wait_time) {
+                rcvd = 0;
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+
+                test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
+                sent_cnt++;
+
+                err = rd_kafka_share_poll(sc1, 100, &batch);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        rd_kafka_flush(p1, 50);
+                } else {
+                        rcvd = rd_kafka_messages_count(batch);
+                        for (m = 0; m < rcvd; m++) {
+                                rd_kafka_message_t *rkm =
+                                    rd_kafka_messages_get(batch, m);
+                                if (!rkm->err)
+                                        recv_cnt++;
+                        }
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+
+                rd_usleep(1000 * 50, NULL);
+        }
+
+        /* Final flush and receive any remaining messages. */
+        rd_kafka_flush(p1, 10 * 1000);
+        attempts = 100;
+        while (recv_cnt < sent_cnt && attempts-- > 0) {
+                rcvd = 0;
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+
+                err = rd_kafka_share_poll(sc1, 3000, &batch);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+
+                rcvd = rd_kafka_messages_count(batch);
+                for (m = 0; m < rcvd; m++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, m);
+                        if (!rkm->err)
+                                recv_cnt++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        rd_kafka_share_consumer_close(sc1);
+
+        TEST_ASSERT(sent_cnt == recv_cnt,
+                    "did not receive as many messages as sent (%d vs %d)",
+                    sent_cnt, recv_cnt);
+
+        rd_kafka_destroy(p1);
+        rd_kafka_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
+
 void do_test_oauthbearer(int64_t reauth_time,
                          const char *topic,
                          int64_t token_lifetime_ms,
@@ -408,6 +713,109 @@ void do_test_reauth_failure(int64_t reauth_time, const char *topic) {
 }
 
 
+/* Test share consumer reauth failure with wrong PLAIN/SCRAM credentials. */
+void do_test_share_reauth_failure(int64_t reauth_time) {
+        rd_kafka_t *p1;
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        const char *group = "share-reauth-failure-test";
+        const char *topic = test_mk_topic_name("share_reauth_fail", 1);
+        char *mechanism;
+        char errstr[512];
+        int64_t start_time = 0;
+        int64_t wait_time  = reauth_time * 1.2 * 1000;
+        int attempts;
+        size_t rcvd;
+
+        error_seen = 0;
+        expect_err = 0;
+
+        SUB_TEST("test share consumer reauth failure with wrong credentials");
+
+        test_conf_init(&conf, NULL, 30);
+        mechanism = test_conf_get(conf, "sasl.mechanism");
+        if (!rd_strcasecmp(mechanism, "oauthbearer")) {
+                rd_kafka_conf_destroy(conf);
+                SUB_TEST_SKIP(
+                    "PLAIN or SCRAM mechanism is required, have "
+                    "OAUTHBEARER");
+        }
+
+        /* Create producer with correct credentials */
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+        p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_create_topic_wait_exists(p1, topic, 1, 3, 5000);
+
+        /* Create share consumer with correct credentials + error callback */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_error_cb(conf, auth_error_cb);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1 != NULL, "Failed to create share consumer: %s", errstr);
+
+        /* Set group config for earliest offset */
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        test_produce_msgs_simple(p1, topic, 0, 1);
+        attempts = 50;
+        rcvd     = 0;
+        while (rcvd == 0 && attempts-- > 0) {
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(sc1, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+        }
+        TEST_ASSERT(rcvd > 0,
+                    "Share consumer failed to consume warmup message");
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+        TEST_SAY("Share consumer connected, producing messages\n");
+
+        test_produce_msgs_simple(p1, topic, 0, 200);
+        TEST_SAY("Produced messages\n");
+
+        /* Corrupt credentials */
+        TEST_SAY("Corrupting credentials\n");
+        rd_kafka_share_sasl_set_credentials(sc1, "somethingwhich",
+                                            "isnotright");
+        expect_err = 1;
+
+        /* Consume for 1.2x reauth interval.
+         * Reauth happens during consumption and fails with wrong creds. */
+        start_time = test_clock();
+        while ((test_clock() - start_time) <= wait_time) {
+                rcvd = 0;
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+
+                err = rd_kafka_share_poll(sc1, 100, &batch);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                } else {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+        }
+
+        TEST_ASSERT(error_seen, "should have had an authentication error");
+
+        rd_kafka_share_consumer_close(sc1);
+        rd_kafka_destroy(p1);
+        rd_kafka_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
+
 int main_0142_reauthentication(int argc, char **argv) {
         size_t broker_id_cnt;
         int32_t *broker_ids   = NULL;
@@ -477,12 +885,13 @@ int main_0142_reauthentication(int argc, char **argv) {
                 return 0;
         }
 
-        /* Each test (7 of them) will take slightly more than 1 reauth_time
+        /* Each test (15 of them) will take slightly more than 1 reauth_time
          * interval. Additional 30s provide a reasonable buffer. */
-        test_timeout_set(9 * reauth_time / 1000 + 30);
+        test_timeout_set(17 * reauth_time / 1000 + 30);
 
 
         do_test_consumer(reauth_time, topic);
+        do_test_share_consumer(reauth_time);
         do_test_producer(reauth_time, topic);
         do_test_txn_producer(reauth_time, topic, rd_false /* abort txn */);
         do_test_txn_producer(reauth_time, topic, rd_true /* abort txn */);
@@ -495,6 +904,8 @@ int main_0142_reauthentication(int argc, char **argv) {
          * reauth time. */
         do_test_oauthbearer(reauth_time, topic, reauth_time / 2, rd_true);
         do_test_oauthbearer(reauth_time, topic, reauth_time / 2, rd_false);
+        do_test_share_oauthbearer(reauth_time, reauth_time / 2, rd_true);
+        do_test_share_oauthbearer(reauth_time, reauth_time / 2, rd_false);
 
         /* With OIDC the expiration time is fixed so do the testing only
          * once. */
@@ -507,9 +918,14 @@ int main_0142_reauthentication(int argc, char **argv) {
                                     rd_true);
                 do_test_oauthbearer(reauth_time, topic, reauth_time * 2,
                                     rd_false);
+                do_test_share_oauthbearer(reauth_time, reauth_time * 2,
+                                          rd_true);
+                do_test_share_oauthbearer(reauth_time, reauth_time * 2,
+                                          rd_false);
         }
 
         do_test_reauth_failure(reauth_time, topic);
+        do_test_share_reauth_failure(reauth_time);
 
         return 0;
 }

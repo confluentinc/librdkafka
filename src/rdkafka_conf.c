@@ -1240,6 +1240,10 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         "`azure_imds` authenticates using the Azure IMDS endpoint. "
         "Sets a default value for `sasl.oauthbearer.token.endpoint.url` if "
         "missing. "
+        "`aws_iam` indicates AWS IAM-based authentication handled by an "
+        "external high-level client. "
+        "librdkafka does not implement the aws_iam token flow natively as of "
+        "now. "
         "Configuration values specific of chosen authentication type can be "
         "passed "
         "through `sasl.oauthbearer.config`.",
@@ -1249,7 +1253,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
             {{RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_NONE,
               "none"},
              {RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AZURE_IMDS,
-              "azure_imds"}},
+              "azure_imds"},
+             {RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AWS_IAM,
+              "aws_iam"}},
     },
 
     /* Plugins */
@@ -4136,6 +4142,11 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
                                        "authentication "
                                        "when `query` isn't set";
                         rd_free(query);
+                } else if (
+                    conf->sasl.oauthbearer.metadata_authentication.type ==
+                    RD_KAFKA_SASL_OAUTHBEARER_METADATA_AUTHENTICATION_TYPE_AWS_IAM) {
+                        /* AWS IAM uses region url for metadata authentication,
+                         * so the OIDC token endpoint URL is unused. */
                 } else {
                         return errstr;
                 }

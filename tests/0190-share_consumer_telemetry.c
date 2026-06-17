@@ -92,7 +92,7 @@ static void seen_metrics_add(seen_metrics_t *seen, const char *name) {
         if (seen_metrics_contains(seen, name))
                 return;
         if (seen->cnt >= MAX_SEEN_METRICS) {
-                TEST_WARN(
+                TEST_FAIL(
                     "seen_metrics capacity (%d) exceeded; dropping '%s'\n",
                     MAX_SEEN_METRICS, name);
                 return;

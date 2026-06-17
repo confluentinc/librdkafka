@@ -69,6 +69,38 @@ static const char *telemetry_topic(void) {
         return env && *env ? env : TELEMETRY_TOPIC_DEFAULT;
 }
 
+/* Fixed-capacity set of unique metric names. */
+#define MAX_SEEN_METRICS    64
+#define MAX_METRIC_NAME_LEN 256
+
+typedef struct {
+        char names[MAX_SEEN_METRICS][MAX_METRIC_NAME_LEN];
+        int cnt;
+} seen_metrics_t;
+
+static rd_bool_t seen_metrics_contains(const seen_metrics_t *seen,
+                                       const char *name) {
+        int i;
+        for (i = 0; i < seen->cnt; i++) {
+                if (strcmp(seen->names[i], name) == 0)
+                        return rd_true;
+        }
+        return rd_false;
+}
+
+static void seen_metrics_add(seen_metrics_t *seen, const char *name) {
+        if (seen_metrics_contains(seen, name))
+                return;
+        if (seen->cnt >= MAX_SEEN_METRICS) {
+                TEST_WARN(
+                    "seen_metrics capacity (%d) exceeded; dropping '%s'\n",
+                    MAX_SEEN_METRICS, name);
+                return;
+        }
+        rd_snprintf(seen->names[seen->cnt], MAX_METRIC_NAME_LEN, "%s", name);
+        seen->cnt++;
+}
+
 /**
  * @name End-to-end share-consumer telemetry integration test.
  *
@@ -89,7 +121,7 @@ static const char *telemetry_topic(void) {
  * field tag is binary but the string payload is uncompressed.
  */
 static void
-extract_share_metric_names(const void *data, size_t len, rd_list_t *names) {
+extract_share_metric_names(const void *data, size_t len, seen_metrics_t *seen) {
         const char *p           = (const char *)data;
         const char *end         = p + len;
         const char prefix[]     = METRIC_PREFIX "consumer.share.";
@@ -115,18 +147,11 @@ extract_share_metric_names(const void *data, size_t len, rd_list_t *names) {
                 }
 
                 size_t name_len = (size_t)(name_end - match);
-                if (name_len > 0 && name_len < 256) {
-                        char *name = rd_malloc(name_len + 1);
+                if (name_len > 0 && name_len < MAX_METRIC_NAME_LEN) {
+                        char name[MAX_METRIC_NAME_LEN];
                         memcpy(name, match, name_len);
                         name[name_len] = '\0';
-
-                        if (!rd_list_find(
-                                names, name,
-                                (int (*)(const void *, const void *))strcmp)) {
-                                rd_list_add(names, name);
-                        } else {
-                                rd_free(name);
-                        }
+                        seen_metrics_add(seen, name);
                 }
 
                 p = name_end;
@@ -200,11 +225,11 @@ static void produce_and_share_consume(const char *topic, const char *group_id) {
  *        up to the given number of seconds, returning a list of every
  *        distinct "consumer.share.*" metric name seen across all messages.
  */
-static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
+static void
+consume_telemetry_topic(const char *topic, int seconds, seen_metrics_t *seen) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_topic_partition_list_t *subs;
-        rd_list_t *seen;
         int64_t deadline_us;
         int msgs_seen = 0;
 
@@ -223,8 +248,6 @@ static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
         rd_kafka_subscribe(rk, subs);
         rd_kafka_topic_partition_list_destroy(subs);
 
-        seen = rd_list_new(0, rd_free);
-
         deadline_us = test_clock() + (int64_t)seconds * 1000000;
         while (test_clock() < deadline_us) {
                 rd_kafka_message_t *msg = rd_kafka_consumer_poll(rk, 1000);
@@ -242,12 +265,10 @@ static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
         TEST_SAY(
             "Read %d telemetry messages, observed %d distinct share metric "
             "names\n",
-            msgs_seen, rd_list_cnt(seen));
+            msgs_seen, seen->cnt);
 
         rd_kafka_consumer_close(rk);
         rd_kafka_destroy(rk);
-
-        return seen;
 }
 
 /**
@@ -255,24 +276,20 @@ static rd_list_t *consume_telemetry_topic(const char *topic, int seconds) {
  *        TEST_ASSERT that every expected name appears with the full
  *        "org.apache.kafka." prefix.
  */
-static void verify_metrics(rd_list_t *seen) {
+static void verify_metrics(const seen_metrics_t *seen) {
         int missing      = 0;
         int expected_cnt = 0;
         size_t i;
 
         TEST_SAY("Verifying expected share-consumer metric names:\n");
         for (i = 0; i < EXPECTED_SHARE_CONSUMER_METRICS_CNT; i++) {
-                char full_name[512];
+                char full_name[MAX_METRIC_NAME_LEN];
                 const char *short_name = EXPECTED_SHARE_CONSUMER_METRICS[i];
                 int found;
 
                 rd_snprintf(full_name, sizeof(full_name), METRIC_PREFIX "%s",
                             short_name);
-                found =
-                    rd_list_find(seen, full_name,
-                                 (int (*)(const void *, const void *))strcmp)
-                        ? 1
-                        : 0;
+                found = seen_metrics_contains(seen, full_name) ? 1 : 0;
                 expected_cnt++;
                 TEST_SAY("  %s  %s\n", found ? "[OK]" : "[MISSING]", full_name);
                 if (!found)
@@ -340,15 +357,14 @@ static int telemetry_infra_available(const char *topic) {
 static void do_test_produce_share_consume_verify_metrics(void) {
         const char *data_topic = test_mk_topic_name("0190-data", 1);
         const char *group_id   = test_mk_topic_name("0190-share-grp", 0);
-        rd_list_t *seen;
+        seen_metrics_t seen    = {0};
 
         SUB_TEST();
 
         produce_and_share_consume(data_topic, group_id);
 
-        seen = consume_telemetry_topic(telemetry_topic(), 30);
-        verify_metrics(seen);
-        rd_list_destroy(seen);
+        consume_telemetry_topic(telemetry_topic(), 30, &seen);
+        verify_metrics(&seen);
 
         SUB_TEST_PASS();
 }

@@ -528,6 +528,12 @@ typedef struct rd_kafka_mock_partition_s {
         /**< Leader responses */
         TAILQ_HEAD(, rd_kafka_mock_partition_leader_s)
         leader_responses;
+
+        /**< Per-ApiKey request error stack.
+         *   Pushed via RD_KAFKA_MOCK_CMD_PART_PUSH_REQUEST_ERRORS and
+         *   popped by the protocol request handlers.
+         *   Only accessed from the mock cluster thread, no locks needed. */
+        rd_kafka_mock_error_stack_head_t errstacks;
 } rd_kafka_mock_partition_t;
 
 
@@ -757,8 +763,9 @@ void rd_kafka_mock_sgrp_record_release(
     rd_kafka_mock_sharegroup_t *mshgrp,
     rd_kafka_mock_sgrp_partmeta_t *pmeta,
     rd_kafka_mock_sgrp_record_state_t *state);
-void rd_kafka_mock_sgrp_release_member_locks(rd_kafka_mock_sharegroup_t *mshgrp,
-                                             const char *member_id);
+void rd_kafka_mock_sgrp_release_session_locks(
+    rd_kafka_mock_sharegroup_t *mshgrp,
+    const rd_kafka_mock_sgrp_fetch_session_t *session);
 void rd_kafka_mock_sgrp_fetch_session_tmr_cb(rd_kafka_timers_t *rkts,
                                              void *arg);
 
@@ -784,6 +791,10 @@ rd_kafka_mock_msgset_find(const rd_kafka_mock_partition_t *mpart,
 rd_kafka_resp_err_t
 rd_kafka_mock_next_request_error(rd_kafka_mock_connection_t *mconn,
                                  rd_kafka_buf_t *resp);
+
+rd_kafka_resp_err_t
+rd_kafka_mock_partition_next_request_error(rd_kafka_mock_partition_t *mpart,
+                                           int16_t ApiKey);
 
 rd_kafka_resp_err_t
 rd_kafka_mock_partition_log_append(rd_kafka_mock_partition_t *mpart,

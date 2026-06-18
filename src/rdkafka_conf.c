@@ -1634,7 +1634,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "this is the first backoff time, "
      "and will be backed off exponentially until number of retries is "
      "exhausted, and it's capped by retry.backoff.max.ms.",
-     1, 300 * 1000, 100},
+     0, 300 * 1000, 100},
 
     {_RK_GLOBAL | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
      _RK(retry_backoff_max_ms),
@@ -1642,7 +1642,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "request, "
      "this is the atmost backoff allowed for exponentially backed off "
      "requests.",
-     1, 300 * 1000, 1000},
+     0, 300 * 1000, 1000},
 
     {_RK_GLOBAL | _RK_PRODUCER, "queue.buffering.backpressure.threshold",
      _RK_C_INT, _RK(queue_backpressure_thres),
@@ -4333,6 +4333,21 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`queued.max.messages.kbytes` is not "
                                        "applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "fetch.queue.backoff.ms"))
+                                return "`fetch.queue.backoff.ms` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "fetch.error.backoff.ms"))
+                                return "`fetch.error.backoff.ms` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "enable.partition.eof"))
+                                return "`enable.partition.eof` is not "
+                                       "applicable for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
@@ -4352,6 +4367,18 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (!rd_kafka_conf_is_modified(
                                 conf, "connections.max.idle.ms"))
                                 conf->connections_max_idle_ms = 9 * 60 * 1000;
+
+                        /* Match the Java client's reconnect-backoff defaults
+                         * for share consumers (librdkafka's client-wide
+                         * defaults are 100 / 10000). Only when unset, so a
+                         * user-provided value still wins; regular consumers
+                         * and producers keep the librdkafka defaults. */
+                        if (!rd_kafka_conf_is_modified(conf,
+                                                       "reconnect.backoff.ms"))
+                                conf->reconnect_backoff_ms = 50;
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "reconnect.backoff.max.ms"))
+                                conf->reconnect_backoff_max_ms = 1000;
 
                         /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
                          * keep it at par with Java client */
@@ -4581,6 +4608,19 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         conf->allow_auto_create_topics = rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)
                         conf->allow_auto_create_topics = rd_true;
+        }
+
+        /* `retry.backoff.ms=0` / `retry.backoff.max.ms=0` are only supported
+         * for share consumers (matching the Java client, which allows 0).
+         * The property minimums were lowered to 0 for that; re-impose
+         * librdkafka's historical minimum of 1 for every other client type
+         * (producer, admin, regular consumer) so their behavior is
+         * unchanged. */
+        if (!(cltype == RD_KAFKA_CONSUMER && conf->share.is_share_consumer)) {
+                if (conf->retry_backoff_ms < 1)
+                        return "`retry.backoff.ms` must be >= 1";
+                if (conf->retry_backoff_max_ms < 1)
+                        return "`retry.backoff.max.ms` must be >= 1";
         }
 
         /* Finalize and verify the default.topic.config */

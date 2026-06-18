@@ -1235,6 +1235,31 @@ size_t rd_kafka_share_partition_offsets_offsets_cnt(
 }
 
 
+/**
+ * @brief Translate librdkafka-internal err sentinels into the broker-equivalent
+ *        codes the application is expected to handle.
+ *
+ *   __TIMED_OUT, __TIMED_OUT_QUEUE -> REQUEST_TIMED_OUT
+ *   __DESTROY, __DESTROY_BROKER    -> __TRANSPORT
+ *
+ * All other codes are returned unchanged.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_share_translate_app_err(rd_kafka_resp_err_t err) {
+        switch (err) {
+        case RD_KAFKA_RESP_ERR__TIMED_OUT:
+        case RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE:
+                return RD_KAFKA_RESP_ERR_REQUEST_TIMED_OUT;
+        case RD_KAFKA_RESP_ERR__DESTROY:
+        case RD_KAFKA_RESP_ERR__DESTROY_BROKER:
+                return RD_KAFKA_RESP_ERR__TRANSPORT;
+        case RD_KAFKA_RESP_ERR__BAD_MSG:
+                return RD_KAFKA_RESP_ERR_INVALID_MSG;
+        default:
+                return err;
+        }
+}
+
 void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
                                            rd_list_t *ack_details) {
         rd_kafka_share_ack_batches_t *ack_batch;
@@ -1248,8 +1273,12 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
             !ack_details || rd_list_cnt(ack_details) == 0)
                 return;
 
-        /* Use per-partition error from each batch */
+        /* Use per-partition error from each batch, translating internal
+         * sentinels to their broker-equivalent codes before the app sees
+         * them. */
         RD_LIST_FOREACH(ack_batch, ack_details, k) {
+                ack_batch->rktpar->err =
+                    rd_kafka_share_translate_app_err(ack_batch->rktpar->err);
                 rd_kafka_share_enqueue_ack_commit_cb_op(rk, ack_batch,
                                                         ack_batch->rktpar->err);
         }
@@ -1268,10 +1297,21 @@ void rd_kafka_share_dispatch_ack_callbacks(rd_kafka_t *rk,
  */
 void rd_kafka_share_commit_sync_send_response(rd_kafka_cgrp_t *rkcg) {
         rd_kafka_op_t *rko_reply;
+        rd_kafka_topic_partition_list_t *results =
+            rkcg->rkcg_commit_sync_request.results;
+        int i;
+
+        /* Translate internal sentinels to broker-equivalent codes before
+         * the app sees them. This is the unique fan-in for every
+         * commit_sync result: every writer (apply_result, segregate-fail,
+         * api-timer-cb, broker decommission) lands its err in this list
+         * before we ship it back to the caller. */
+        for (i = 0; i < results->cnt; i++)
+                results->elems[i].err =
+                    rd_kafka_share_translate_app_err(results->elems[i].err);
 
         rko_reply = rd_kafka_op_new(RD_KAFKA_OP_SHARE_COMMIT_SYNC_FANOUT_REPLY);
-        rko_reply->rko_u.share_commit_sync_fanout_reply.results =
-            rkcg->rkcg_commit_sync_request.results;
+        rko_reply->rko_u.share_commit_sync_fanout_reply.results = results;
 
         rd_kafka_q_enq(rkcg->rkcg_commit_sync_request.replyq, rko_reply);
         rd_kafka_q_destroy(rkcg->rkcg_commit_sync_request.replyq);

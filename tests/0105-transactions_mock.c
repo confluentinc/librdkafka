@@ -3025,6 +3025,84 @@ static void do_test_disconnected_group_coord(rd_bool_t switch_coord) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Verify that send_offsets_to_transaction() recovers when the
+ *        group coordinator is decommissioned (removed from metadata)
+ *        and a new coordinator is elected.
+ */
+static void do_test_txn_group_coord_decommission(void) {
+        const char *topic = "mytopic";
+        const char *txnid = "myTxnId";
+        const char *grpid = "myGrpId";
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        test_timing_t timing;
+
+        SUB_TEST_QUICK();
+
+        test_curr->is_fatal_cb = error_is_fatal_cb;
+        allowed_error          = RD_KAFKA_RESP_ERR__TRANSPORT;
+
+        rk = create_txn_producer(&mcluster, txnid, 3,
+                                 /* Speed up metadata refresh so client
+                                  * decommissions broker 2 quickly. */
+                                 "topic.metadata.refresh.interval.ms", "1000",
+                                 NULL);
+
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        /* Broker 1: txn coordinator
+         * Broker 2: group coordinator (will be decommissioned)
+         * Broker 3: partition leader & new group coordinator */
+        rd_kafka_mock_coordinator_set(mcluster, "transaction", txnid, 1);
+        rd_kafka_mock_coordinator_set(mcluster, "group", grpid, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 3);
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+        test_flush(rk, -1);
+
+        /* Populate the coord cache with broker 2. */
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset = 1;
+        cgmetadata = rd_kafka_consumer_group_metadata_new(grpid);
+
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+
+        /* Bring broker 2 down and switch coordinator to broker 3. */
+        rd_kafka_mock_coordinator_set(mcluster, "group", grpid, 3);
+        rd_kafka_mock_broker_set_down(mcluster, 2);
+
+        /* Wait for metadata refresh to decommission broker 2. */
+        rd_sleep(3);
+
+        /* Should complete quickly after discovering broker 3. */
+        TEST_SAY("Calling send_offsets_to_transaction()\n");
+
+        TIMING_START(&timing, "send_offsets_to_transaction(-1)");
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+        TIMING_STOP(&timing);
+        TIMING_ASSERT(&timing, 0, 5 * 1000);
+
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+
+        rd_kafka_destroy(rk);
+
+        allowed_error          = RD_KAFKA_RESP_ERR_NO_ERROR;
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
 
 /**
  * @brief Test that a NULL coordinator is not fatal when
@@ -3902,6 +3980,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_disconnected_group_coord(rd_false);
 
         do_test_disconnected_group_coord(rd_true);
+
+        do_test_txn_group_coord_decommission();
 
         do_test_txn_coordinator_null_not_fatal();
 

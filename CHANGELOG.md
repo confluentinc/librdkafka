@@ -1,3 +1,13 @@
+# Unreleased
+
+## Fixes
+
+### Transactional producer fixes
+
+* Fix `rd_kafka_send_offsets_to_transaction()` hanging indefinitely after the
+  group coordinator goes down. Happening since v2.9.0.
+
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:

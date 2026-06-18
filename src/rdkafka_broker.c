@@ -3484,6 +3484,15 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                                      rd_kafka_broker_destroy_error(rkb->rkb_rk),
                                      "Decommissioning this broker");
 
+                /* If something is awaiting this coordinator to come up
+                 * then trigger the monitors so that rd_kafka_coord_req_fsm()
+                 * is triggered, which in turn will trigger a new coordinator
+                 * query. */
+                rd_kafka_broker_lock(rkb);
+                if (rd_atomic32_get(&rkb->rkb_persistconn.coord) > 0)
+                        rd_kafka_broker_trigger_monitors(rkb);
+                rd_kafka_broker_unlock(rkb);
+
                 rd_kafka_broker_prepare_destroy(rkb);
                 /* Release main thread reference here */
                 rd_kafka_broker_destroy(rkb);
@@ -6218,6 +6227,9 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                 rd_kafka_cgrp_coord_dead(rk->rk_cgrp,
                                          RD_KAFKA_RESP_ERR__DESTROY_BROKER,
                                          "Group coordinator decommissioned");
+
+        rd_kafka_coord_cache_evict(&rk->rk_coord_cache, rkb);
+
         /* Send op to trigger queue/io wake-up.
          * Broker thread will destroy this thread reference.
          * WARNING: This is last time we can read from rkb in this thread! */

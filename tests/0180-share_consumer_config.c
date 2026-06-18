@@ -390,6 +390,60 @@ static void test_queued_max_messages_kbytes_rejected_at_construction(void) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief `fetch.queue.backoff.ms` backs off the per-partition prefetch
+ *        queue throttle (queued.min.messages / queued.max.messages.kbytes),
+ *        which share consumers do not use; it is rejected for share
+ *        consumers. No Java equivalent.
+ */
+static void test_fetch_queue_backoff_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("fetch.queue.backoff.ms",
+                                                 "1000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `fetch.error.backoff.ms` postpones the next Fetch after a fetch
+ *        error, but it is only consulted on the regular (non-share) Fetch
+ *        RPC path (rd_kafka_broker_fetch_backoff /
+ *        rd_kafka_toppar_fetch_backoff). The ShareFetch path does not use
+ *        it: ShareFetch/ShareAcknowledge RPC-level errors are not retried
+ *        with a fetch backoff (they are handled via session reset or the
+ *        next poll), and connection failures reconnect via
+ *        reconnect.backoff.ms. It is also librdkafka-specific (no Java
+ *        equivalent; Java uses the generic retry.backoff.ms). So it is
+ *        rejected for share consumers.
+ */
+static void test_fetch_error_backoff_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("fetch.error.backoff.ms",
+                                                 "1000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `enable.partition.eof` emits a synthetic PARTITION_EOF event
+ *        when the client's per-partition fetch cursor reaches the
+ *        broker-reported high-water mark. Share consumers do not
+ *        maintain a per-partition fetch cursor (the broker manages the
+ *        share-group offset / acquired ranges), so the EOF event is
+ *        never produced on the ShareFetch path. librdkafka-specific (no
+ *        Java equivalent). It is rejected for share consumers.
+ */
+static void test_enable_partition_eof_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("enable.partition.eof",
+                                                 "true");
+
+        SUB_TEST_PASS();
+}
+
 struct idle_reconnect_counters {
         rd_atomic32_t idle_closes;
         rd_atomic32_t reconnects_after_idle;
@@ -1046,6 +1100,9 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_group_remote_assignor_rejected_at_construction();
         test_queued_min_messages_rejected_at_construction();
         test_queued_max_messages_kbytes_rejected_at_construction();
+        test_fetch_queue_backoff_ms_rejected_at_construction();
+        test_fetch_error_backoff_ms_rejected_at_construction();
+        test_enable_partition_eof_rejected_at_construction();
         test_fetch_min_bytes_regular_consumer_range_rejected();
         return 0;
 }

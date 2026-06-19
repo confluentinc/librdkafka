@@ -2941,6 +2941,201 @@ static void do_test_one_log_on_broker_down_during_active_empty_poll(void) {
 }
 
 
+/* ===================================================================
+ *  Partition-level error injection: API basics.
+ * =================================================================== */
+static void test_partition_error_injection_general(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        char topic[64];
+        char group[64];
+        const int msgcnt = 3;
+        int acked;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        rd_snprintf(topic, sizeof(topic), "0182-part_err_general");
+        rd_snprintf(group, sizeof(group), "sg-0182-part_err_general");
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        /* Unknown topics are auto-created. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, "0182-no-such-topic", 0,
+                        RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push to unknown topic");
+
+        /* Out-of-range partition is rejected. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 99, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR) ==
+                        RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+                    "push to unknown partition");
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgcnt);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* The injected error is transient: all records are delivered
+         * once it has been consumed off the stack. */
+        acked = consume_and_ack_all(rkshare, msgcnt);
+        TEST_ASSERT(acked == msgcnt, "expected %d acked, got %d", msgcnt,
+                    acked);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  ShareFetch partition error injection: errors on one partition
+ *  must not affect the other, and the partition recovers once the
+ *  error stack drains.
+ * =================================================================== */
+static void test_partition_error_injection_share_fetch(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        char topic[64];
+        char group[64];
+        const int msgs_per_part = 5;
+        int acked;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        rd_snprintf(topic, sizeof(topic), "0182-part_err_sharefetch");
+        rd_snprintf(group, sizeof(group), "sg-0182-part_err_sharefetch");
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 1, RD_KAFKAP_ShareFetch, 2,
+                        RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER,
+                        RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition errors");
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Partition 0 is unaffected and partition 1 recovers after
+         * the two errored fetches: nothing is lost. */
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "expected %d acked, got %d",
+                    2 * msgs_per_part, acked);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/* ===================================================================
+ *  ShareAcknowledge partition error injection: the injected error
+ *  surfaces in commit_sync results for that partition only.
+ * =================================================================== */
+static void test_partition_error_injection_share_ack(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        char topic[64];
+        char group[64];
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR;
+        int acked;
+        int i;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        rd_snprintf(topic, sizeof(topic), "0182-part_err_shareack");
+        rd_snprintf(group, sizeof(group), "sg-0182-part_err_shareack");
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "expected %d acked, got %d",
+                    2 * msgs_per_part, acked);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL, "expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == 2,
+                    "expected results for 2 partitions, got %d",
+                    partitions->cnt);
+
+        /* Partition 0 carries the injected error, partition 1 is
+         * unaffected. */
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                rd_kafka_resp_err_t exp_err        = rktpar->partition == 0
+                                                         ? injected_err
+                                                         : RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                TEST_SAY("%s [%" PRId32 "]: %s\n", rktpar->topic,
+                         rktpar->partition, rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == exp_err,
+                            "partition [%" PRId32 "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(exp_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -3018,6 +3213,11 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
          * race-window flavours. */
         do_test_no_bounce_loop_on_down_broker();
         do_test_one_log_on_broker_down_during_active_empty_poll();
+
+        /* Partition-level error injection. */
+        test_partition_error_injection_general();
+        test_partition_error_injection_share_fetch();
+        test_partition_error_injection_share_ack();
 
         return 0;
 }

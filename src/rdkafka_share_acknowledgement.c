@@ -1250,8 +1250,8 @@ rd_kafka_share_translate_app_err(rd_kafka_resp_err_t err) {
                 return RD_KAFKA_RESP_ERR__TRANSPORT;
         case RD_KAFKA_RESP_ERR__BAD_MSG:
                 return RD_KAFKA_RESP_ERR_INVALID_MSG;
-        case RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED:
-                return RD_KAFKA_RESP_ERR__AUTHENTICATION;
+        case RD_KAFKA_RESP_ERR__AUTHENTICATION:
+                return RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED;
         default:
                 return err;
         }

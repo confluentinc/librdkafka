@@ -4186,6 +4186,7 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
 const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                    rd_kafka_conf_t *conf) {
         const char *errstr;
+        static RD_TLS char errstr_buf[256];
 
         if (!conf->sw_name)
                 rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
@@ -4304,12 +4305,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`partition.assignment.strategy` is "
                                        "not applicable for share consumer";
 
-                        if (rd_kafka_conf_is_modified(
-                                conf, "receive.message.max.bytes"))
-                                return "`receive.message.max.bytes` must be "
-                                       "INT_MAX for share consumer; changing "
-                                       "it is not allowed";
-
                         if (rd_kafka_conf_is_modified(conf,
                                                       "group.instance.id"))
                                 return "`group.instance.id` is not applicable "
@@ -4334,6 +4329,21 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`queued.max.messages.kbytes` is not "
                                        "applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "fetch.queue.backoff.ms"))
+                                return "`fetch.queue.backoff.ms` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "fetch.error.backoff.ms"))
+                                return "`fetch.error.backoff.ms` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "enable.partition.eof"))
+                                return "`enable.partition.eof` is not "
+                                       "applicable for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
@@ -4354,16 +4364,37 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 conf, "connections.max.idle.ms"))
                                 conf->connections_max_idle_ms = 9 * 60 * 1000;
 
+                        /* Match the Java client's reconnect-backoff defaults
+                         * for share consumers (librdkafka's client-wide
+                         * defaults are 100 / 10000). Only when unset, so a
+                         * user-provided value still wins; regular consumers
+                         * and producers keep the librdkafka defaults. */
+                        if (!rd_kafka_conf_is_modified(conf,
+                                                       "reconnect.backoff.ms"))
+                                conf->reconnect_backoff_ms = 50;
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "reconnect.backoff.max.ms"))
+                                conf->reconnect_backoff_max_ms = 1000;
+
+                        /* TODO KIP-932: Java client has no client-side receive
+                         * cap so we are defaulting this value to INT_MAX. To be
+                         * at par with Java, this check should not exist
+                         * altogether for share consumers. Currently, we are
+                         * allowing the user to set if they want to reject
+                         * oversize msgs gracefully. Check
+                         * rd_buf_write_ensure_contig().
+                         */
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "receive.message.max.bytes"))
+                                conf->recv_max_msg_size = INT_MAX;
+
                         /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
-                         * keep it at par with Java client */
+                         * keep it at par with Java client. Remember that
+                         * raising the cap can overflow */
 
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
                         conf->socket_max_fails = 1;
-                        /* This is only a ceiling check, not a pre-allocation,
-                         * so it does not increase memory usage. Java client
-                         * has no client-side receive cap*/
-                        conf->recv_max_msg_size = INT_MAX;
                 } else {
                         if (conf->fetch_min_bytes < 1 ||
                             conf->fetch_min_bytes > 100000000) {
@@ -4373,8 +4404,14 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                  * to INT_MAX so share consumers can match the
                                  * Java client; share consumers are exempt from
                                  * this check. */
-                                return "`fetch.min.bytes` must be in range "
-                                       "1..100000000 for non-share consumers";
+                                rd_snprintf(errstr_buf, sizeof(errstr_buf),
+                                            "Configuration property "
+                                            "\"fetch.min.bytes\" value "
+                                            "%i is outside allowed range "
+                                            "%i..%i\n",
+                                            conf->fetch_min_bytes, 1,
+                                            100000000);
+                                return errstr_buf;
                         }
                 }
 

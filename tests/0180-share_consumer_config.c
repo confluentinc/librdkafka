@@ -229,6 +229,8 @@ static void test_fetch_min_bytes_regular_consumer_range_rejected(void) {
         /* INT_MAX exceeds the regular-consumer maximum of 100000000. */
         verify_regular_consumer_conf_prop_rejected("fetch.min.bytes",
                                                    "2147483647");
+        verify_regular_consumer_conf_prop_rejected("fetch.min.bytes",
+                                                   "100000001");
 
         SUB_TEST_PASS();
 }

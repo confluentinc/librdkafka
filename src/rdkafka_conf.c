@@ -1635,7 +1635,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "this is the first backoff time, "
      "and will be backed off exponentially until number of retries is "
      "exhausted, and it's capped by retry.backoff.max.ms.",
-     0, 300 * 1000, 100},
+     1, 300 * 1000, 100},
 
     {_RK_GLOBAL | _RK_MED, "retry.backoff.max.ms", _RK_C_INT,
      _RK(retry_backoff_max_ms),
@@ -1643,7 +1643,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "request, "
      "this is the atmost backoff allowed for exponentially backed off "
      "requests.",
-     0, 300 * 1000, 1000},
+     1, 300 * 1000, 1000},
 
     {_RK_GLOBAL | _RK_PRODUCER, "queue.buffering.backpressure.threshold",
      _RK_C_INT, _RK(queue_backpressure_thres),
@@ -4186,6 +4186,7 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
 const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                    rd_kafka_conf_t *conf) {
         const char *errstr;
+        char errstr_buf[256];
 
         if (!conf->sw_name)
                 rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
@@ -4382,14 +4383,17 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 conf->reconnect_backoff_max_ms = 1000;
 
                         /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
-                         * keep it at par with Java client */
+                         * keep it at par with Java client. Remember that raising
+                         * the cap can overflow */
 
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
                         conf->socket_max_fails = 1;
                         /* This is only a ceiling check, not a pre-allocation,
-                         * so it does not increase memory usage. Java client
-                         * has no client-side receive cap*/
+                         * so it does not increase memory usage.
+                         * TODO KIP-932: Java client has no client-side receive cap
+                         * Ensure there is no check in librdkafka as well.
+                         */
                         conf->recv_max_msg_size = INT_MAX;
                 } else {
                         if (conf->fetch_min_bytes < 1 ||
@@ -4400,8 +4404,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                  * to INT_MAX so share consumers can match the
                                  * Java client; share consumers are exempt from
                                  * this check. */
-                                return "`fetch.min.bytes` must be in range "
-                                       "1..100000000 for non-share consumers";
+                                rd_snprintf(errstr_buf, sizeof(errstr_buf),
+                                            "Configuration property \"fetch.min.bytes\" value "
+                                            "%i is outside allowed range "
+                                            "%i..%i\n",
+                                            conf->fetch_min_bytes, 1, 100000000);
+                                return errstr_buf;
                         }
                 }
 
@@ -4609,19 +4617,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         conf->allow_auto_create_topics = rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)
                         conf->allow_auto_create_topics = rd_true;
-        }
-
-        /* `retry.backoff.ms=0` / `retry.backoff.max.ms=0` are only supported
-         * for share consumers (matching the Java client, which allows 0).
-         * The property minimums were lowered to 0 for that; re-impose
-         * librdkafka's historical minimum of 1 for every other client type
-         * (producer, admin, regular consumer) so their behavior is
-         * unchanged. */
-        if (!(cltype == RD_KAFKA_CONSUMER && conf->share.is_share_consumer)) {
-                if (conf->retry_backoff_ms < 1)
-                        return "`retry.backoff.ms` must be >= 1";
-                if (conf->retry_backoff_max_ms < 1)
-                        return "`retry.backoff.max.ms` must be >= 1";
         }
 
         /* Finalize and verify the default.topic.config */

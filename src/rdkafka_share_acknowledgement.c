@@ -1238,8 +1238,6 @@ size_t rd_kafka_share_partition_offsets_offsets_cnt(
 /**
  * @brief Translate librdkafka-internal err sentinels into the broker-equivalent
  *        codes the application is expected to handle.
- *
- * All other codes are returned unchanged.
  */
 static rd_kafka_resp_err_t
 rd_kafka_share_translate_app_err(rd_kafka_resp_err_t err) {

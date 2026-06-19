@@ -311,21 +311,6 @@ static void test_heartbeat_interval_ms_rejected_at_construction(void) {
 }
 
 /**
- * @brief `receive.message.max.bytes` is forced to INT_MAX for share
- *        consumers (a ShareFetch response can exceed fetch.max.bytes,
- *        which is a soft limit); any explicit set by the app is
- *        rejected.
- */
-static void test_receive_message_max_bytes_rejected_at_construction(void) {
-        SUB_TEST_QUICK();
-
-        verify_share_consumer_conf_prop_rejected("receive.message.max.bytes",
-                                                 "100000000");
-
-        SUB_TEST_PASS();
-}
-
-/**
  * @brief Static membership (`group.instance.id`) is not supported for
  *        share groups; the property is rejected for share consumers.
  */
@@ -1096,7 +1081,6 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_partition_assignment_strategy_rejected_at_construction();
         test_group_protocol_type_rejected_at_construction();
         test_heartbeat_interval_ms_rejected_at_construction();
-        test_receive_message_max_bytes_rejected_at_construction();
         test_group_instance_id_rejected_at_construction();
         test_isolation_level_rejected_at_construction();
         test_group_remote_assignor_rejected_at_construction();

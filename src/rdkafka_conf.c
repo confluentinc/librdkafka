@@ -4186,7 +4186,7 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
 const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                    rd_kafka_conf_t *conf) {
         const char *errstr;
-        char errstr_buf[256];
+        static RD_TLS char errstr_buf[256];
 
         if (!conf->sw_name)
                 rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
@@ -4305,12 +4305,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`partition.assignment.strategy` is "
                                        "not applicable for share consumer";
 
-                        if (rd_kafka_conf_is_modified(
-                                conf, "receive.message.max.bytes"))
-                                return "`receive.message.max.bytes` must be "
-                                       "INT_MAX for share consumer; changing "
-                                       "it is not allowed";
-
                         if (rd_kafka_conf_is_modified(conf,
                                                       "group.instance.id"))
                                 return "`group.instance.id` is not applicable "
@@ -4382,19 +4376,25 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 conf, "reconnect.backoff.max.ms"))
                                 conf->reconnect_backoff_max_ms = 1000;
 
+                        /* TODO KIP-932: Java client has no client-side receive
+                         * cap so we are defaulting this value to INT_MAX. To be
+                         * at par with Java, this check should not exist
+                         * altogether for share consumers. Currently, we are
+                         * allowing the user to set if they want to reject
+                         * oversize msgs gracefully. Check
+                         * rd_buf_write_ensure_contig().
+                         */
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "receive.message.max.bytes"))
+                                conf->recv_max_msg_size = INT_MAX;
+
                         /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
-                         * keep it at par with Java client. Remember that raising
-                         * the cap can overflow */
+                         * keep it at par with Java client. Remember that
+                         * raising the cap can overflow */
 
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
                         conf->socket_max_fails = 1;
-                        /* This is only a ceiling check, not a pre-allocation,
-                         * so it does not increase memory usage.
-                         * TODO KIP-932: Java client has no client-side receive cap
-                         * Ensure there is no check in librdkafka as well.
-                         */
-                        conf->recv_max_msg_size = INT_MAX;
                 } else {
                         if (conf->fetch_min_bytes < 1 ||
                             conf->fetch_min_bytes > 100000000) {
@@ -4405,10 +4405,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                  * Java client; share consumers are exempt from
                                  * this check. */
                                 rd_snprintf(errstr_buf, sizeof(errstr_buf),
-                                            "Configuration property \"fetch.min.bytes\" value "
+                                            "Configuration property "
+                                            "\"fetch.min.bytes\" value "
                                             "%i is outside allowed range "
                                             "%i..%i\n",
-                                            conf->fetch_min_bytes, 1, 100000000);
+                                            conf->fetch_min_bytes, 1,
+                                            100000000);
                                 return errstr_buf;
                         }
                 }

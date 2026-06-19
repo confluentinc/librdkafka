@@ -1482,7 +1482,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Minimum number of bytes the broker responds with. "
      "If fetch.wait.max.ms expires the accumulated data will "
      "be sent to the client regardless of this setting.",
-     1, 100000000, 1},
+     0, INT_MAX, 1},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
      _RK(fetch_error_backoff_ms),
      "How long to postpone the next fetch request for a "
@@ -4273,7 +4273,8 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                  * end of the block, before the downstream
                  * group-protocol validation runs so its
                  * CONSUMER-branch checks also apply to share
-                 * consumers. */
+                 * consumers.
+                 */
                 if (conf->share.is_share_consumer) {
                         if (conf->rebalance_cb)
                                 return "`rebalance_cb` is not applicable "
@@ -4281,16 +4282,6 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
                         if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
                                 return "`RD_KAFKA_EVENT_REBALANCE` is not "
-                                       "applicable for share consumer";
-
-                        /* TODO KIP-932: verify whether stats_cb should also
-                         * be rejected. Today we only reject the interval
-                         * because the test framework sets stats_cb
-                         * defensively; with interval=0 the callback is
-                         * never invoked, so the callback alone is inert. */
-                        if (rd_kafka_conf_is_modified(conf,
-                                                      "statistics.interval.ms"))
-                                return "`statistics.interval.ms` is not "
                                        "applicable for share consumer";
 
                         if (rd_kafka_conf_is_modified(conf,
@@ -4312,15 +4303,78 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`partition.assignment.strategy` is "
                                        "not applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(
+                                conf, "receive.message.max.bytes"))
+                                return "`receive.message.max.bytes` must be "
+                                       "INT_MAX for share consumer; changing "
+                                       "it is not allowed";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.instance.id"))
+                                return "`group.instance.id` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "isolation.level"))
+                                return "`isolation.level` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.remote.assignor"))
+                                return "`group.remote.assignor` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "queued.min.messages"))
+                                return "`queued.min.messages` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "queued.max.messages.kbytes"))
+                                return "`queued.max.messages.kbytes` is not "
+                                       "applicable for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
                                 return "`auto.offset.reset` is not "
                                        "applicable for share consumer";
 
+                        /* The Azure heuristic (which lowers it to <4 minutes)
+                         * still overrides this for Azure brokers.
+                         *
+                         * TODO KIP-932: this 9-min default is currently
+                         * undermined because a share consumer reconnects
+                         * immediately after an idle close while it still has
+                         * assigned toppars (see
+                         * rd_kafka_broker_share_consumer_serve). Fix so the
+                         * connection stays closed until a fetch is actually
+                         * required. */
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "connections.max.idle.ms"))
+                                conf->connections_max_idle_ms = 9 * 60 * 1000;
+
+                        /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
+                         * keep it at par with Java client */
+
                         conf->enable_auto_commit = 0;
                         conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
                         conf->socket_max_fails = 1;
+                        /* This is only a ceiling check, not a pre-allocation,
+                         * so it does not increase memory usage. Java client
+                         * has no client-side receive cap*/
+                        conf->recv_max_msg_size = INT_MAX;
+                } else {
+                        if (conf->fetch_min_bytes < 1 ||
+                            conf->fetch_min_bytes > 100000000) {
+                                /* For non-share consumers preserve librdkafka's
+                                 * historical `fetch.min.bytes` range
+                                 * of 1..100000000. The property max was raised
+                                 * to INT_MAX so share consumers can match the
+                                 * Java client; share consumers are exempt from
+                                 * this check. */
+                                return "`fetch.min.bytes` must be in range "
+                                       "1..100000000 for non-share consumers";
+                        }
                 }
 
                 if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
@@ -4370,16 +4424,24 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
-                 * unless set by user. */
-                if (rd_kafka_conf_is_modified(conf, "fetch.max.bytes")) {
-                        if (conf->fetch_max_bytes < conf->max_msg_size)
-                                return "`fetch.max.bytes` must be >= "
-                                       "`message.max.bytes`";
-                } else {
-                        conf->fetch_max_bytes =
-                            RD_MAX(RD_MIN(conf->fetch_max_bytes,
-                                          conf->queued_max_msg_kbytes * 1024),
-                                   conf->max_msg_size);
+                 * unless set by user.
+                 */
+                /* Share consumers are exempt: neither the message.max.bytes
+                 * floor nor the queued.max.messages.kbytes clamp applies
+                 * (both are rejected / not applicable), so fetch.max.bytes is
+                 * used as configured. */
+                if (!conf->share.is_share_consumer) {
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "fetch.max.bytes")) {
+                                if (conf->fetch_max_bytes < conf->max_msg_size)
+                                        return "`fetch.max.bytes` must be >= "
+                                               "`message.max.bytes`";
+                        } else {
+                                conf->fetch_max_bytes = RD_MAX(
+                                    RD_MIN(conf->fetch_max_bytes,
+                                           conf->queued_max_msg_kbytes * 1024),
+                                    conf->max_msg_size);
+                        }
                 }
 
                 /* Automatically adjust 'receive.message.max.bytes' to

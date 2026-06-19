@@ -187,8 +187,8 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
             "--partitions %d "
             "--replication-factor 1 "
             "--config cleanup.policy=compact "
-            "--config segment.ms=10000 "
-            "--config segment.bytes=10000 "
+            "--config segment.ms=500 "
+            "--config segment.bytes=1048576 "
             "--config min.cleanable.dirty.ratio=0.01 "
             "--config delete.retention.ms=86400 "
             "--config file.delete.delay.ms=10000 "
@@ -209,8 +209,10 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
 
         /* The low watermark is not updated on message deletion(compaction)
          * but on segment deletion, so fill up the first segment with
-         * random messages eligible for hasty compaction. */
-        produce_compactable_msgs(topic, 0, partition, fillcnt, 1000);
+         * random messages eligible for hasty compaction.
+         * Use 60KB messages so that 20 of them (~1.2MB) exceed
+         * segment.bytes (1MB min in Kafka 4.1+) and force segment rolls. */
+        produce_compactable_msgs(topic, 0, partition, fillcnt, 60000);
 
         /* Populate a correct msgver for later comparison after compact. */
         test_msgver_init(&mv_correct, testid);
@@ -290,13 +292,14 @@ static void do_test_compaction(int msgs_per_key, const char *compression) {
         msgcounter = cnt;
         test_wait_delivery(rk, &msgcounter);
 
-        /* Trigger compaction by filling up the segment with dummy messages,
+        /* Trigger compaction by filling up segments with dummy messages,
          * do it in chunks to avoid too good compression which then won't
          * fill up the segments..
          * We can't reuse the existing producer instance because it
          * might be using compression which makes it hard to know how
-         * much data we need to produce to trigger compaction. */
-        produce_compactable_msgs(topic, 0, partition, 20, 1024);
+         * much data we need to produce to trigger compaction.
+         * Use 60KB messages to exceed segment.bytes (1MB min in 4.1+). */
+        produce_compactable_msgs(topic, 0, partition, 20, 60000);
 
         /* Wait for compaction:
          * this doesn't really work because the low watermark offset

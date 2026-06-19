@@ -106,6 +106,61 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         /* Toppars handled by this broker */
         TAILQ_HEAD(, rd_kafka_toppar_s) rkb_toppars;
+
+        /**
+         * TODO KIP-932: Consider using a map instead of rd_list_t for
+         *               some of the partition lists to optimize
+         *               add/remove performance.
+         */
+        struct {
+                rd_list_t *toppars_in_session; /* List of toppars in the current
+                                                * fetch session. Any new added
+                                                * toppar in rkb_toppars will be
+                                                * added here after successful
+                                                * share fetch request. Any
+                                                * removed toppar from
+                                                * rkb_toppars will be removed
+                                                * from here after successful
+                                                * share fetch request. */
+                rd_list_t
+                    *toppars_to_add; /* TODO KIP-932: Consider using a map
+                                      * for performance improvements. List
+                                      * of toppars that are to be added to
+                                      * the fetch session. `adding_toppars`
+                                      * are removed from this when fetch
+                                      * request is successful. */
+
+                rd_list_t
+                    *adding_toppars; /* List of toppars that are being added to
+                                      * the session. These are already sent in
+                                      * the fetch request. Will be removed from
+                                      * `toppars_to_add` when fetch request is
+                                      * successful. This is cleared and set to
+                                      * NULL after the response.
+                                      */
+
+                rd_list_t
+                    *toppars_to_forget; /* TODO KIP-932: Consider using a map
+                                         * for performance improvements. List
+                                         * of toppars that are removed from
+                                         * the session. `forgetting_toppars`
+                                         * are removed from this when fetch
+                                         * request is successful. */
+
+                rd_list_t *forgetting_toppars; /* List of toppars that are being
+                                                * removed from the session.
+                                                * These are already sent in the
+                                                * fetch request. Will be removed
+                                                * from `toppars_to_forget` when
+                                                * fetch request is successful.
+                                                * This is cleared and set to
+                                                * NULL after the response.
+                                                */
+                int32_t epoch;                 /* Current fetch session
+                                                * epoch, or -1 if leaving the session
+                                                */
+        } rkb_share_fetch_session;
+
         int rkb_toppar_cnt;
 
         /* Active toppars that are eligible for:
@@ -220,12 +275,19 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                         rd_avg_t rkb_avg_rtt;      /* Current RTT avg */
                         rd_avg_t rkb_avg_throttle; /* Current throttle avg */
                         rd_avg_t
-                            rkb_avg_outbuf_latency;       /**< Current latency
-                                                           *   between buf_enq0
-                                                           *   and writing to socket
-                                                           */
-                        rd_avg_t rkb_avg_fetch_latency;   /**< Current fetch
-                                                           *   latency avg */
+                            rkb_avg_outbuf_latency;     /**< Current latency
+                                                         *   between buf_enq0
+                                                         *   and writing to socket
+                                                         */
+                        rd_avg_t rkb_avg_fetch_latency; /**< Current fetch
+                                                         *   latency avg */
+                        rd_avg_t rkb_avg_share_fetch_latency; /**< Current share
+                                                               *   fetch latency
+                                                               *   avg */
+                        rd_avg_t rkb_avg_share_fetch_size;    /**< Current share
+                                                               *   fetch response
+                                                               *   size avg
+                                                               *   (bytes) */
                         rd_avg_t rkb_avg_produce_latency; /**< Current produce
                                                            *   latency avg */
                 } rd_avg_current;
@@ -238,6 +300,14 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
                                                           *   latency avg */
                         rd_avg_t rkb_avg_fetch_latency;  /**< Rolled over fetch
                                                           *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_latency; /**< Rolled over
+                                                          *   share fetch
+                                                          *   latency avg */
+                        rd_avg_t
+                            rkb_avg_share_fetch_size; /**< Rolled over
+                                                       *   share fetch response
+                                                       *   size avg (bytes) */
                         rd_avg_t
                             rkb_avg_produce_latency; /**< Rolled over produce
                                                       *   latency avg */
@@ -387,6 +457,43 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         /** > 0 if this broker thread is terminating */
         rd_atomic32_t termination_in_progress;
+
+        /**
+         * Whether a share fetch should_fetch set is enqueued on
+         * this broker's op queue or not.
+         */
+        rd_bool_t rkb_share_fetch_enqueued;
+
+        rd_list_t
+            *rkb_share_async_ack_details; /**< Pending ack batches for
+                                           *   this broker (as partition
+                                           *   leader). Type:
+                                           *   rd_kafka_share_ack_batches_t*.
+                                           *   Allocated by main thread
+                                           *   FANOUT handler, moved to
+                                           *   SHARE_FETCH op and set to
+                                           *   NULL. Freed by broker
+                                           *   thread after use.
+                                           *   @locality main thread */
+
+        /**
+         * Pending commit_sync ack details for this broker.
+         * Stored when a commit_sync request arrives but the broker
+         * already has an inflight request. Takes priority over
+         * rkb_share_async_ack_details when dispatching.
+         * @locality main thread
+         */
+        struct {
+                rd_list_t *sync_ack_details;    /**< Ack batches waiting to be
+                                                 *   sent. Type:
+                                                 *   rd_kafka_share_ack_batches_t*.
+                                                 */
+                rd_ts_t abs_timeout;            /**< Absolute timeout from
+                                                 *   the commit_sync request. */
+                int64_t commit_sync_request_id; /**< Request ID this
+                                                 *   pending data
+                                                 *   belongs to. */
+        } rkb_pending_commit_sync;
 };
 
 #define rd_kafka_broker_keep(rkb) rd_refcnt_add(&(rkb)->rkb_refcnt)

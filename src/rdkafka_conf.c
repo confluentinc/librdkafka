@@ -453,7 +453,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "case of protocol hickups. "
      "This value must be at least `fetch.max.bytes`  + 512 to allow "
      "for protocol overhead; the value is adjusted automatically "
-     "unless the configuration property is explicitly set.",
+     "unless the configuration property is explicitly set. For share "
+     "consumers, the default value is INT_MAX.",
      1000, INT_MAX, 100000000},
     {_RK_GLOBAL, "max.in.flight.requests.per.connection", _RK_C_INT,
      _RK(max_inflight),
@@ -633,7 +634,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(connections_max_idle_ms),
      "Close broker connections after the specified time of "
      "inactivity. "
-     "Disable with 0. "
+     "Disable with 0. For share consumers, the default value is 32400 (9 mins)."
      "If this property is left at its default value some heuristics are "
      "performed to determine a suitable default value, this is currently "
      "limited to identifying brokers on Azure "
@@ -660,12 +661,14 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The time is increased exponentially until "
      "`reconnect.backoff.max.ms` is reached. "
      "-25% to +50% jitter is applied to each reconnect backoff. "
-     "A value of 0 disables the backoff and reconnects immediately.",
+     "A value of 0 disables the backoff and reconnects immediately. For share "
+     "consumers, the default value is 50.",
      0, 60 * 60 * 1000, 100},
     {_RK_GLOBAL | _RK_MED, "reconnect.backoff.max.ms", _RK_C_INT,
      _RK(reconnect_backoff_max_ms),
      "The maximum time to wait before reconnecting to a broker "
-     "after the connection has been closed.",
+     "after the connection has been closed. For share consumers, the default "
+     "value is 1000.",
      0, 60 * 60 * 1000, 10 * 1000},
     {_RK_GLOBAL | _RK_HIGH, "statistics.interval.ms", _RK_C_INT,
      _RK(stats_interval_ms),
@@ -1310,7 +1313,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "group rebalance. This should be used in combination with a larger "
      "`session.timeout.ms` to avoid group rebalances caused by transient "
      "unavailability (e.g. process restarts). "
-     "Requires broker version >= 2.3.0."},
+     "Requires broker version >= 2.3.0. This property is not supported for "
+     "share consumers."},
     {_RK_GLOBAL | _RK_CGRP | _RK_MED, "partition.assignment.strategy",
      _RK_C_STR, _RK(partition_assignment_strategy),
      "The name of one or more partition assignment strategies. The "
@@ -1375,7 +1379,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(group_remote_assignor),
      "Server side assignor to use. Keep it null to make server select a "
      "suitable assignor for the group. "
-     "Available assignors: uniform or range. Default is null",
+     "Available assignors: uniform or range. Default is null. This property is "
+     "not supported for share consumers.",
      .sdef = NULL},
     {_RK_GLOBAL | _RK_CGRP, "coordinator.query.interval.ms", _RK_C_INT,
      _RK(coord_query_intvl_ms),
@@ -1426,7 +1431,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "queued.min.messages", _RK_C_INT,
      _RK(queued_min_msgs),
      "Minimum number of messages per topic+partition "
-     "librdkafka tries to maintain in the local consumer queue.",
+     "librdkafka tries to maintain in the local consumer queue. This property "
+     "is not supported for share consumers.",
      1, 10000000, 100000},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "queued.max.messages.kbytes",
      _RK_C_INT, _RK(queued_max_msg_kbytes),
@@ -1437,7 +1443,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "When using the legacy simple consumer or when separate "
      "partition queues are used this setting applies per partition. "
      "This value may be overshot by fetch.message.max.bytes. "
-     "This property has higher priority than queued.min.messages.",
+     "This property has higher priority than queued.min.messages. This "
+     "property is not supported for share consumers.",
      1, INT_MAX / 1024, 0x10000 /*64MB*/},
     {_RK_GLOBAL | _RK_CONSUMER, "fetch.wait.max.ms", _RK_C_INT,
      _RK(fetch_wait_max_ms),
@@ -1452,7 +1459,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "been exceded. "
      "This property may need to be decreased if the queue thresholds are "
      "set low and the application is experiencing long (~1s) delays "
-     "between messages. Low values may increase CPU utilization.",
+     "between messages. Low values may increase CPU utilization. This property "
+     "is not supported for share consumers.",
      0, 300 * 1000, 1000},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.message.max.bytes", _RK_C_INT,
      _RK(fetch_msg_max_bytes),
@@ -1460,7 +1468,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "fetching messages from the broker. "
      "If the client encounters a message larger than this value "
      "it will gradually try to increase it until the "
-     "entire message can be fetched.",
+     "entire message can be fetched. This property is ignored for share "
+     "consumers.",
      1, 1000000000, 1024 * 1024},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "max.partition.fetch.bytes",
      _RK_C_ALIAS, .sdef = "fetch.message.max.bytes"},
@@ -1474,7 +1483,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The maximum message batch size accepted by the broker is defined "
      "via `message.max.bytes` (broker config) or "
      "`max.message.bytes` (broker topic config). "
-     "`fetch.max.bytes` is automatically adjusted upwards to be "
+     "For regular consumers, `fetch.max.bytes` is automatically adjusted "
+     "upwards to be "
      "at least `message.max.bytes` (consumer config).",
      0, INT_MAX - 512, 50 * 1024 * 1024 /* 50MB */},
     {_RK_GLOBAL | _RK_CONSUMER, "fetch.min.bytes", _RK_C_INT,
@@ -1487,7 +1497,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
      _RK(fetch_error_backoff_ms),
      "How long to postpone the next fetch request for a "
-     "topic+partition in case of a fetch error.",
+     "topic+partition in case of a fetch error. This property is not supported "
+     "for share consumers.",
      0, 300 * 1000, 500},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_DEPRECATED, "offset.store.method",
      _RK_C_S2I, _RK(offset_store_method),
@@ -1504,7 +1515,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Controls how to read messages written transactionally: "
      "`read_committed` - only return transactional messages which have "
      "been committed. `read_uncommitted` - return all messages, even "
-     "transactional messages which have been aborted.",
+     "transactional messages which have been aborted. This property is not "
+     "supported for share consumers.",
      .vdef = RD_KAFKA_READ_COMMITTED,
      .s2i  = {{RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted"},
               {RD_KAFKA_READ_COMMITTED, "read_committed"}}},
@@ -1520,7 +1532,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_CONSUMER, "enable.partition.eof", _RK_C_BOOL,
      _RK(enable_partition_eof),
      "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
-     "consumer reaches the end of a partition.",
+     "consumer reaches the end of a partition. This property is not supported "
+     "for share consumers.",
      0, 1, 0},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "check.crcs", _RK_C_BOOL,
      _RK(check_crcs),

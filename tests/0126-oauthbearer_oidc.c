@@ -252,6 +252,8 @@ static void do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
         rd_kafka_messages_t *batch = NULL;
         size_t rcvd                = 0;
         rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *subs;
+        int attempts;
         char errstr[512];
 
         const char *expired_url = test_getenv("EXPIRED_TOKEN_OIDC_URL", NULL);
@@ -278,20 +280,34 @@ static void do_test_produce_share_consumer_with_OIDC_expired_token_should_fail(
         sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
 
-        /* Poll — should trigger auth error callback, no messages expected */
-        err = rd_kafka_share_poll(sc1, 10 * 1000, &batch);
-        if (err)
-                rd_kafka_error_destroy(err);
-        rcvd = rd_kafka_messages_count(batch);
+        /* Subscribe so share_poll drives a connection/heartbeat instead of
+         * short-circuiting on the !subscribed guard and returning before the
+         * asynchronous SASL auth failure is delivered to the error callback. */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "oidc-share-fail-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
 
-        TEST_ASSERT(rcvd == 0,
-                    "Expected no messages with expired token, got %zu", rcvd);
+        /* Poll in a loop until the auth error callback fires or attempts are
+         * exhausted; no messages are ever expected. */
+        attempts = 10;
+        while (!error_seen && attempts-- > 0) {
+                err = rd_kafka_share_poll(sc1, 3000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                TEST_ASSERT(rcvd == 0,
+                            "Expected no messages with expired token, got %zu",
+                            rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer "
                     "with expired token");
 
-        rd_kafka_messages_destroy(batch);
-        batch = NULL;
         rd_kafka_share_consumer_close(sc1);
         rd_kafka_share_destroy(sc1);
         SUB_TEST_PASS();
@@ -395,6 +411,8 @@ do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
         rd_kafka_messages_t *batch = NULL;
         size_t rcvd                = 0;
         rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *subs;
+        int attempts;
         char errstr[512];
 
         const char *invalid_url = test_getenv("INVALID_OIDC_URL", NULL);
@@ -420,22 +438,35 @@ do_test_produce_share_consumer_with_OIDC_should_fail_invalid_token_endpoint(
         sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
 
-        /* Poll — should trigger auth error callback, no messages expected */
-        err = rd_kafka_share_poll(sc1, 10 * 1000, &batch);
-        if (err)
-                rd_kafka_error_destroy(err);
-        rcvd = rd_kafka_messages_count(batch);
+        /* Subscribe so share_poll drives a connection/heartbeat instead of
+         * short-circuiting on the !subscribed guard and returning before the
+         * asynchronous SASL auth failure is delivered to the error callback. */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "oidc-share-fail-invalid-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
 
-        TEST_ASSERT(rcvd == 0,
-                    "Expected no messages with invalid token endpoint, "
-                    "got %zu",
-                    rcvd);
+        /* Poll in a loop until the auth error callback fires or attempts are
+         * exhausted; no messages are ever expected. */
+        attempts = 10;
+        while (!error_seen && attempts-- > 0) {
+                err = rd_kafka_share_poll(sc1, 3000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                TEST_ASSERT(rcvd == 0,
+                            "Expected no messages with invalid token "
+                            "endpoint, got %zu",
+                            rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer "
                     "with invalid token endpoint");
 
-        rd_kafka_messages_destroy(batch);
-        batch = NULL;
         rd_kafka_share_consumer_close(sc1);
         rd_kafka_share_destroy(sc1);
         SUB_TEST_PASS();
@@ -579,6 +610,8 @@ static void do_test_produce_share_consumer_with_OIDC_should_fail(
         rd_kafka_messages_t *batch = NULL;
         size_t rcvd                = 0;
         rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *subs;
+        int attempts;
         char errstr[512];
 
         const char *url = test_getenv("VALID_OIDC_URL", NULL);
@@ -602,18 +635,33 @@ static void do_test_produce_share_consumer_with_OIDC_should_fail(
         sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(sc1, "Failed to create share consumer: %s", errstr);
 
-        err = rd_kafka_share_poll(sc1, 5 * 1000, &batch);
-        if (err)
-                rd_kafka_error_destroy(err);
-        rcvd = rd_kafka_messages_count(batch);
+        /* Subscribe so share_poll drives a connection/heartbeat instead of
+         * short-circuiting on the !subscribed guard and returning before the
+         * asynchronous SASL auth failure is delivered to the error callback. */
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "oidc-share-should-fail-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
 
-        TEST_ASSERT(rcvd == 0, "Expected no messages on auth failure, got %zu",
-                    rcvd);
+        /* Poll in a loop until the auth error callback fires or attempts are
+         * exhausted; no messages are ever expected. */
+        attempts = 10;
+        while (!error_seen && attempts-- > 0) {
+                err = rd_kafka_share_poll(sc1, 3000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                TEST_ASSERT(rcvd == 0,
+                            "Expected no messages on auth failure, got %zu",
+                            rcvd);
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
         TEST_ASSERT(error_seen,
                     "Expected authentication error for share consumer");
 
-        rd_kafka_messages_destroy(batch);
-        batch = NULL;
         rd_kafka_share_consumer_close(sc1);
         rd_kafka_share_destroy(sc1);
         SUB_TEST_PASS();

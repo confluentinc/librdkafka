@@ -1746,7 +1746,11 @@ static void do_test_partial_batch_commit_async(void) {
         const int msg_cnt         = 5;
         int attempts              = 0;
         size_t to_ack_first;
-        size_t acked = 0;
+        size_t acked                    = 0;
+        size_t seen                     = 0;
+        int wait_elapsed                = 0;
+        rd_kafka_messages_t *wait_batch = NULL;
+        rd_kafka_error_t *wait_err      = NULL;
 
         SUB_TEST();
 
@@ -1816,28 +1820,24 @@ static void do_test_partial_batch_commit_async(void) {
         rd_kafka_messages_destroy(dummy);
 
         /* Acknowledge the remaining records across the batches. */
-        {
-                size_t seen = 0;
-                for (j = 0; j < batch_cnt; j++) {
-                        size_t k, n = rd_kafka_messages_count(batches[j]);
-                        for (k = 0; k < n; k++) {
-                                rd_kafka_message_t *rkm;
-                                if (seen < to_ack_first) {
-                                        seen++;
-                                        continue;
-                                }
-                                rkm     = rd_kafka_messages_get(batches[j], k);
-                                ack_err = rd_kafka_share_acknowledge_type(
-                                    rkshare, rkm,
-                                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
-                                TEST_ASSERT(
-                                    ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+        for (j = 0; j < batch_cnt; j++) {
+                size_t k, n = rd_kafka_messages_count(batches[j]);
+                for (k = 0; k < n; k++) {
+                        rd_kafka_message_t *rkm;
+                        if (seen < to_ack_first) {
+                                seen++;
+                                continue;
+                        }
+                        rkm     = rd_kafka_messages_get(batches[j], k);
+                        ack_err = rd_kafka_share_acknowledge_type(
+                            rkshare, rkm,
+                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR_NO_ERROR,
                                     "Second-half ACCEPT %zu (offset=%" PRId64
                                     ") failed: %s",
                                     seen, rkm->offset,
                                     rd_kafka_err2str(ack_err));
-                                seen++;
-                        }
+                        seen++;
                 }
         }
 
@@ -1846,10 +1846,20 @@ static void do_test_partial_batch_commit_async(void) {
         TEST_ASSERT(!error, "Second commit_async failed: %s",
                     error ? rd_kafka_error_string(error) : "");
 
-        /* Now share_poll can proceed and drive piggybacked acks; the
-         * callback should fire at least once and report all acked
-         * offsets across the two commits. */
-        test_wait_for_cb_with_poll(&state, rkshare, 1, 15000);
+        /* Now share_poll can proceed and drive piggybacked acks. The two
+         * commits may surface as one or two callbacks depending on broker
+         * coalescing, so wait on total_offsets rather than callback_cnt:
+         * the first commit's callback can fire during the _STATE-returning
+         * poll above, which would short-circuit a callback_cnt>=1 wait
+         * before the second commit lands. */
+        while (state.total_offsets < (size_t)total && wait_elapsed < 15000) {
+                wait_batch = NULL;
+                wait_err   = rd_kafka_share_poll(rkshare, 100, &wait_batch);
+                if (wait_err)
+                        rd_kafka_error_destroy(wait_err);
+                rd_kafka_messages_destroy(wait_batch);
+                wait_elapsed += 100;
+        }
         TEST_ASSERT(state.callback_cnt >= 1,
                     "Expected ack commit callback to fire after full batch "
                     "ack + commit_async, got %d",

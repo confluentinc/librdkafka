@@ -4199,7 +4199,6 @@ const char *rd_kafka_conf_finalize_oauthbearer_oidc(rd_kafka_conf_t *conf) {
 const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                    rd_kafka_conf_t *conf) {
         const char *errstr;
-        static RD_TLS char errstr_buf[256];
 
         if (!conf->sw_name)
                 rd_kafka_conf_set(conf, "client.software.name", "librdkafka",
@@ -4417,14 +4416,12 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                  * to INT_MAX so share consumers can match the
                                  * Java client; share consumers are exempt from
                                  * this check. */
-                                rd_snprintf(errstr_buf, sizeof(errstr_buf),
-                                            "Configuration property "
-                                            "\"fetch.min.bytes\" value "
-                                            "%i is outside allowed range "
-                                            "%i..%i\n",
-                                            conf->fetch_min_bytes, 1,
-                                            100000000);
-                                return errstr_buf;
+                                /* TODO KIP-932: Ensure error msg is exactly
+                                 * same as returned by rd_kafka_anyconf_set_prop
+                                 */
+                                return "Configuration property "
+                                       "\"fetch.min.bytes\" value is outside "
+                                       "allowed range 1..100000000";
                         }
                 }
 

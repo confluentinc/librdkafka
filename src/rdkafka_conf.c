@@ -1481,7 +1481,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(fetch_min_bytes),
      "Minimum number of bytes the broker responds with. "
      "If fetch.wait.max.ms expires the accumulated data will "
-     "be sent to the client regardless of this setting.",
+     "be sent to the client regardless of this setting. For regular consumers, "
+     "this value must be in range 1..100000000",
      0, INT_MAX, 1},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
      _RK(fetch_error_backoff_ms),

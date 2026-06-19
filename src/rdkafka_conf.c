@@ -1468,7 +1468,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "fetching messages from the broker. "
      "If the client encounters a message larger than this value "
      "it will gradually try to increase it until the "
-     "entire message can be fetched. This property is ignored for share "
+     "entire message can be fetched. This property is not supported for share "
      "consumers.",
      1, 1000000000, 1024 * 1024},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "max.partition.fetch.bytes",

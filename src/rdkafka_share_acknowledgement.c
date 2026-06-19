@@ -1239,9 +1239,6 @@ size_t rd_kafka_share_partition_offsets_offsets_cnt(
  * @brief Translate librdkafka-internal err sentinels into the broker-equivalent
  *        codes the application is expected to handle.
  *
- *   __TIMED_OUT, __TIMED_OUT_QUEUE -> REQUEST_TIMED_OUT
- *   __DESTROY, __DESTROY_BROKER    -> __TRANSPORT
- *
  * All other codes are returned unchanged.
  */
 static rd_kafka_resp_err_t
@@ -1255,6 +1252,8 @@ rd_kafka_share_translate_app_err(rd_kafka_resp_err_t err) {
                 return RD_KAFKA_RESP_ERR__TRANSPORT;
         case RD_KAFKA_RESP_ERR__BAD_MSG:
                 return RD_KAFKA_RESP_ERR_INVALID_MSG;
+        case RD_KAFKA_RESP_ERR_SASL_AUTHENTICATION_FAILED:
+                return RD_KAFKA_RESP_ERR__AUTHENTICATION;
         default:
                 return err;
         }

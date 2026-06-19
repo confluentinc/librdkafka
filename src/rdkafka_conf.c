@@ -1481,8 +1481,9 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(fetch_min_bytes),
      "Minimum number of bytes the broker responds with. "
      "If fetch.wait.max.ms expires the accumulated data will "
-     "be sent to the client regardless of this setting.",
-     1, 100000000, 1},
+     "be sent to the client regardless of this setting. For regular consumers, "
+     "this value must be in range 1..100000000",
+     0, INT_MAX, 1},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "fetch.error.backoff.ms", _RK_C_INT,
      _RK(fetch_error_backoff_ms),
      "How long to postpone the next fetch request for a "
@@ -1532,6 +1533,16 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "which indicates where this client is physically located. It "
      "corresponds with the broker config `broker.rack`.",
      .sdef = ""},
+    {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
+     _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},
+    {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "share.acknowledgement.mode",
+     _RK_C_STR, _RK(share.share_acknowledgement_mode),
+     "Acknowledgement mode for share consumers. "
+     "'implicit' - messages are implicitly acknowledged when the next poll "
+     "is called. 'explicit' - messages must be explicitly acknowledged "
+     "using rd_kafka_share_acknowledge*() APIs.",
+     .sdef = "implicit"},
+
 
     /* Global producer properties */
     {_RK_GLOBAL | _RK_PRODUCER | _RK_HIGH, "transactional.id", _RK_C_STR,
@@ -2989,7 +3000,6 @@ void rd_kafka_conf_set_offset_commit_cb(
 }
 
 
-
 void rd_kafka_conf_set_error_cb(rd_kafka_conf_t *conf,
                                 void (*error_cb)(rd_kafka_t *rk,
                                                  int err,
@@ -4253,6 +4263,121 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (cltype == RD_KAFKA_CONSUMER) {
 
+                /* Share-consumer-specific config validation.
+                 *
+                 * The share consumer is broker-driven
+                 * (ShareGroupHeartbeat), so a number of client-side
+                 * properties have no meaning or must take
+                 * library-mandatory values. The checks below reject
+                 * any explicit set of those properties; the
+                 * library-mandatory values are then applied at the
+                 * end of the block, before the downstream
+                 * group-protocol validation runs so its
+                 * CONSUMER-branch checks also apply to share
+                 * consumers.
+                 */
+                if (conf->share.is_share_consumer) {
+                        if (conf->rebalance_cb)
+                                return "`rebalance_cb` is not applicable "
+                                       "for share consumer";
+
+                        if (conf->enabled_events & RD_KAFKA_EVENT_REBALANCE)
+                                return "`RD_KAFKA_EVENT_REBALANCE` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "enable.auto.commit"))
+                                return "`enable.auto.commit` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "group.protocol"))
+                                return "`group.protocol` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "socket.max.fails"))
+                                return "`socket.max.fails` must be 1 for "
+                                       "share consumer; changing it is not "
+                                       "allowed";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "partition.assignment.strategy"))
+                                return "`partition.assignment.strategy` is "
+                                       "not applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "receive.message.max.bytes"))
+                                return "`receive.message.max.bytes` must be "
+                                       "INT_MAX for share consumer; changing "
+                                       "it is not allowed";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.instance.id"))
+                                return "`group.instance.id` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "isolation.level"))
+                                return "`isolation.level` is not applicable "
+                                       "for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "group.remote.assignor"))
+                                return "`group.remote.assignor` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "queued.min.messages"))
+                                return "`queued.min.messages` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(
+                                conf, "queued.max.messages.kbytes"))
+                                return "`queued.max.messages.kbytes` is not "
+                                       "applicable for share consumer";
+
+                        if (conf->topic_conf &&
+                            rd_kafka_topic_conf_is_modified(
+                                conf->topic_conf, "auto.offset.reset"))
+                                return "`auto.offset.reset` is not "
+                                       "applicable for share consumer";
+
+                        /* The Azure heuristic (which lowers it to <4 minutes)
+                         * still overrides this for Azure brokers.
+                         *
+                         * TODO KIP-932: this 9-min default is currently
+                         * undermined because a share consumer reconnects
+                         * immediately after an idle close while it still has
+                         * assigned toppars (see
+                         * rd_kafka_broker_share_consumer_serve). Fix so the
+                         * connection stays closed until a fetch is actually
+                         * required. */
+                        if (!rd_kafka_conf_is_modified(
+                                conf, "connections.max.idle.ms"))
+                                conf->connections_max_idle_ms = 9 * 60 * 1000;
+
+                        /* TODO KIP-932: Fix max value for fetch.wait.max.ms to
+                         * keep it at par with Java client */
+
+                        conf->enable_auto_commit = 0;
+                        conf->group_protocol = RD_KAFKA_GROUP_PROTOCOL_CONSUMER;
+                        conf->socket_max_fails = 1;
+                        /* This is only a ceiling check, not a pre-allocation,
+                         * so it does not increase memory usage. Java client
+                         * has no client-side receive cap*/
+                        conf->recv_max_msg_size = INT_MAX;
+                } else {
+                        if (conf->fetch_min_bytes < 1 ||
+                            conf->fetch_min_bytes > 100000000) {
+                                /* For non-share consumers preserve librdkafka's
+                                 * historical `fetch.min.bytes` range
+                                 * of 1..100000000. The property max was raised
+                                 * to INT_MAX so share consumers can match the
+                                 * Java client; share consumers are exempt from
+                                 * this check. */
+                                return "`fetch.min.bytes` must be in range "
+                                       "1..100000000 for non-share consumers";
+                        }
+                }
+
                 if (conf->group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC) {
                         if (conf->max_poll_interval_ms <
                             conf->group_session_timeout_ms)
@@ -4268,8 +4393,9 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (rd_kafka_conf_is_modified(conf,
                                                       "session.timeout.ms")) {
                                 return "`session.timeout.ms` is not supported "
-                                       "for `group.protocol=consumer`. It is "
-                                       "defined broker side";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer. It is defined broker "
+                                       "side";
                         }
 
                         if (rd_kafka_conf_is_modified(
@@ -4283,30 +4409,40 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                         if (rd_kafka_conf_is_modified(conf,
                                                       "group.protocol.type")) {
                                 return "`group.protocol.type` is not supported "
-                                       "for `group.protocol=consumer`";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer";
                         }
 
                         if (rd_kafka_conf_is_modified(
                                 conf, "heartbeat.interval.ms")) {
                                 return "`heartbeat.interval.ms` is not "
                                        "supported "
-                                       "for `group.protocol=consumer`. It is "
-                                       "defined broker side";
+                                       "for `group.protocol=consumer` or "
+                                       "share consumer. It is defined broker "
+                                       "side";
                         }
                 }
 
                 /* Automatically adjust `fetch.max.bytes` to be >=
                  * `message.max.bytes` and <= `queued.max.message.kbytes`
-                 * unless set by user. */
-                if (rd_kafka_conf_is_modified(conf, "fetch.max.bytes")) {
-                        if (conf->fetch_max_bytes < conf->max_msg_size)
-                                return "`fetch.max.bytes` must be >= "
-                                       "`message.max.bytes`";
-                } else {
-                        conf->fetch_max_bytes =
-                            RD_MAX(RD_MIN(conf->fetch_max_bytes,
-                                          conf->queued_max_msg_kbytes * 1024),
-                                   conf->max_msg_size);
+                 * unless set by user.
+                 */
+                /* Share consumers are exempt: neither the message.max.bytes
+                 * floor nor the queued.max.messages.kbytes clamp applies
+                 * (both are rejected / not applicable), so fetch.max.bytes is
+                 * used as configured. */
+                if (!conf->share.is_share_consumer) {
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "fetch.max.bytes")) {
+                                if (conf->fetch_max_bytes < conf->max_msg_size)
+                                        return "`fetch.max.bytes` must be >= "
+                                               "`message.max.bytes`";
+                        } else {
+                                conf->fetch_max_bytes = RD_MAX(
+                                    RD_MIN(conf->fetch_max_bytes,
+                                           conf->queued_max_msg_kbytes * 1024),
+                                    conf->max_msg_size);
+                        }
                 }
 
                 /* Automatically adjust 'receive.message.max.bytes' to

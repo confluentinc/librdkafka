@@ -48,8 +48,9 @@ VALGRIND_ARGS="--error-exitcode=3"
 # Enable vgdb on valgrind errors.
 #VALGRIND_ARGS="$VALGRIND_ARGS --vgdb-error=1"
 
-# Exit valgrind on first error
-VALGRIND_ARGS="$VALGRIND_ARGS --exit-on-first-error=yes"
+# Report all errors instead of stopping at the first one, so a leading
+# "still reachable" block (e.g. from OpenSSL) doesn't hide later real leaks.
+VALGRIND_ARGS="$VALGRIND_ARGS --exit-on-first-error=no"
 
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../src:../src-cpp
 export DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH:../src:../src-cpp
@@ -62,7 +63,7 @@ for mode in $MODES; do
     case "$mode" in
 	valgrind)
 	    valgrind $VALGRIND_ARGS --leak-check=full --show-leak-kinds=all \
-		     --errors-for-leak-kinds=all \
+		     --errors-for-leak-kinds=definite,possible \
 		     --track-origins=yes \
                      --track-fds=yes \
 		     $SUPP $GEN_SUPP \

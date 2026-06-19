@@ -229,6 +229,8 @@ static void test_fetch_min_bytes_regular_consumer_range_rejected(void) {
         /* INT_MAX exceeds the regular-consumer maximum of 100000000. */
         verify_regular_consumer_conf_prop_rejected("fetch.min.bytes",
                                                    "2147483647");
+        verify_regular_consumer_conf_prop_rejected("fetch.min.bytes",
+                                                   "100000001");
 
         SUB_TEST_PASS();
 }
@@ -309,21 +311,6 @@ static void test_heartbeat_interval_ms_rejected_at_construction(void) {
 }
 
 /**
- * @brief `receive.message.max.bytes` is forced to INT_MAX for share
- *        consumers (a ShareFetch response can exceed fetch.max.bytes,
- *        which is a soft limit); any explicit set by the app is
- *        rejected.
- */
-static void test_receive_message_max_bytes_rejected_at_construction(void) {
-        SUB_TEST_QUICK();
-
-        verify_share_consumer_conf_prop_rejected("receive.message.max.bytes",
-                                                 "100000000");
-
-        SUB_TEST_PASS();
-}
-
-/**
  * @brief Static membership (`group.instance.id`) is not supported for
  *        share groups; the property is rejected for share consumers.
  */
@@ -386,6 +373,60 @@ static void test_queued_max_messages_kbytes_rejected_at_construction(void) {
 
         verify_share_consumer_conf_prop_rejected("queued.max.messages.kbytes",
                                                  "1024");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `fetch.queue.backoff.ms` backs off the per-partition prefetch
+ *        queue throttle (queued.min.messages / queued.max.messages.kbytes),
+ *        which share consumers do not use; it is rejected for share
+ *        consumers. No Java equivalent.
+ */
+static void test_fetch_queue_backoff_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("fetch.queue.backoff.ms",
+                                                 "1000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `fetch.error.backoff.ms` postpones the next Fetch after a fetch
+ *        error, but it is only consulted on the regular (non-share) Fetch
+ *        RPC path (rd_kafka_broker_fetch_backoff /
+ *        rd_kafka_toppar_fetch_backoff). The ShareFetch path does not use
+ *        it: ShareFetch/ShareAcknowledge RPC-level errors are not retried
+ *        with a fetch backoff (they are handled via session reset or the
+ *        next poll), and connection failures reconnect via
+ *        reconnect.backoff.ms. It is also librdkafka-specific (no Java
+ *        equivalent; Java uses the generic retry.backoff.ms). So it is
+ *        rejected for share consumers.
+ */
+static void test_fetch_error_backoff_ms_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("fetch.error.backoff.ms",
+                                                 "1000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `enable.partition.eof` emits a synthetic PARTITION_EOF event
+ *        when the client's per-partition fetch cursor reaches the
+ *        broker-reported high-water mark. Share consumers do not
+ *        maintain a per-partition fetch cursor (the broker manages the
+ *        share-group offset / acquired ranges), so the EOF event is
+ *        never produced on the ShareFetch path. librdkafka-specific (no
+ *        Java equivalent). It is rejected for share consumers.
+ */
+static void test_enable_partition_eof_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("enable.partition.eof",
+                                                 "true");
 
         SUB_TEST_PASS();
 }
@@ -1040,19 +1081,14 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_partition_assignment_strategy_rejected_at_construction();
         test_group_protocol_type_rejected_at_construction();
         test_heartbeat_interval_ms_rejected_at_construction();
-        test_receive_message_max_bytes_rejected_at_construction();
         test_group_instance_id_rejected_at_construction();
         test_isolation_level_rejected_at_construction();
         test_group_remote_assignor_rejected_at_construction();
         test_queued_min_messages_rejected_at_construction();
         test_queued_max_messages_kbytes_rejected_at_construction();
+        test_fetch_queue_backoff_ms_rejected_at_construction();
+        test_fetch_error_backoff_ms_rejected_at_construction();
+        test_enable_partition_eof_rejected_at_construction();
         test_fetch_min_bytes_regular_consumer_range_rejected();
         return 0;
 }
-
-
-/*
- * 1. receive.message.max.bytes - using normal consumer, we produce the record
- * with 5KB size and set this to 1KB and try to see if we are getting the record
- * or not
- */

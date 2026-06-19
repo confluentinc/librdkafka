@@ -3490,8 +3490,6 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
 
         rd_dassert(rkcg->rkcg_flags & RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT);
 
-        if (rd_kafka_cgrp_will_leave(rkcg))
-                err = RD_KAFKA_RESP_ERR__OUTDATED;
         if (err)
                 goto err;
 
@@ -3518,6 +3516,11 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
 
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
         rkcg->rkcg_generation_id = member_epoch;
+
+        if (rd_kafka_cgrp_will_leave(rkcg)) {
+                err = RD_KAFKA_RESP_ERR__OUTDATED;
+                goto err;
+        }
 
         rd_kafka_buf_read_i32(rkbuf, &heartbeat_interval_ms);
         if (heartbeat_interval_ms > 0) {
@@ -3701,20 +3704,22 @@ err:
                     RD_KAFKA_CGRP_CONSUMER_F_WAIT_REJOIN;
                 return;
 
+        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
+                /* If the leave heartbeat has already been sent the member is
+                 * on its way out of the group, so a GROUP_ID_NOT_FOUND on a
+                 * still-in-flight regular heartbeat is expected and benign.
+                 * Otherwise the group is genuinely gone and this is fatal. */
+                if (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_WAIT_LEAVE)
+                        return;
+                /* FALLTHRU */
         case RD_KAFKA_RESP_ERR_INVALID_REQUEST:
         case RD_KAFKA_RESP_ERR_GROUP_MAX_SIZE_REACHED:
         case RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION:
         case RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE:
         case RD_KAFKA_RESP_ERR_GROUP_AUTHORIZATION_FAILED:
-        case RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND:
                 actions = RD_KAFKA_ERR_ACTION_FATAL;
                 break;
 
-        /* TODO KIP-932: unrecognized error codes currently fall through to
-         * the generic action (retried if retriable, otherwise logged and
-         * ignored) and the consumer keeps heartbeating. Consider treating an
-         * unexpected code as fatal so a protocol mismatch surfaces to the
-         * application instead of looping silently. */
         default:
                 actions = rd_kafka_err_action(
                     rkb, err, request,
@@ -3723,6 +3728,11 @@ err:
                     RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
 
                     RD_KAFKA_ERR_ACTION_END);
+
+                if (actions & RD_KAFKA_ERR_ACTION_PERMANENT &&
+                    err >= RD_KAFKA_RESP_ERR_UNKNOWN) {
+                        actions |= RD_KAFKA_ERR_ACTION_FATAL;
+                }
                 break;
         }
 

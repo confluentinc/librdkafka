@@ -2920,11 +2920,32 @@ rd_kafka_topic_partition_update(rd_kafka_topic_partition_t *dst,
 
                 dstpriv->topic_id = srcpriv->topic_id;
 
+                /* Deep-copy offsets array if attached. */
+                if (dstpriv->offsets) {
+                        rd_free(dstpriv->offsets);
+                        dstpriv->offsets     = NULL;
+                        dstpriv->offsets_cnt = 0;
+                }
+
+                if (srcpriv->offsets && srcpriv->offsets_cnt > 0) {
+                        dstpriv->offsets     = rd_calloc(srcpriv->offsets_cnt,
+                                                         sizeof(*srcpriv->offsets));
+                        dstpriv->offsets_cnt = srcpriv->offsets_cnt;
+                        memcpy(dstpriv->offsets, srcpriv->offsets,
+                               srcpriv->offsets_cnt *
+                                   sizeof(*srcpriv->offsets));
+                }
+
         } else if ((dstpriv = dst->_private)) {
                 /* No private object in source, reset the fields. */
                 dstpriv->leader_epoch         = -1;
                 dstpriv->current_leader_epoch = -1;
                 dstpriv->topic_id             = RD_KAFKA_UUID_ZERO;
+                if (dstpriv->offsets) {
+                        rd_free(dstpriv->offsets);
+                        dstpriv->offsets     = NULL;
+                        dstpriv->offsets_cnt = 0;
+                }
         }
 }
 
@@ -2963,6 +2984,8 @@ static void rd_kafka_topic_partition_private_destroy(
     rd_kafka_topic_partition_private_t *parpriv) {
         if (parpriv->rktp)
                 rd_kafka_toppar_destroy(parpriv->rktp);
+        if (parpriv->offsets)
+                rd_free(parpriv->offsets);
         rd_free(parpriv);
 }
 
@@ -3058,6 +3081,33 @@ void rd_kafka_topic_partition_set_current_leader_epoch(
 
         parpriv->current_leader_epoch = current_leader_epoch;
 }
+
+void rd_kafka_topic_partition_set_offsets(rd_kafka_topic_partition_t *rktpar,
+                                          const int64_t *offsets,
+                                          size_t offsets_cnt) {
+        rd_kafka_topic_partition_private_t *parpriv;
+
+        /* Clearing (NULL/0): only allocate the private glue if one already
+         * exists. */
+        if ((offsets == NULL || offsets_cnt == 0) && !rktpar->_private)
+                return;
+
+        parpriv = rd_kafka_topic_partition_get_private(rktpar);
+
+        if (parpriv->offsets) {
+                rd_free(parpriv->offsets);
+                parpriv->offsets     = NULL;
+                parpriv->offsets_cnt = 0;
+        }
+
+        if (offsets && offsets_cnt > 0) {
+                parpriv->offsets     = rd_calloc(offsets_cnt, sizeof(*offsets));
+                parpriv->offsets_cnt = offsets_cnt;
+                memcpy(parpriv->offsets, offsets,
+                       offsets_cnt * sizeof(*offsets));
+        }
+}
+
 
 /**
  * @brief Set offset and leader epoch from a fetchpos.

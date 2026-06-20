@@ -1014,6 +1014,31 @@ int32_t rd_kafka_topic_partition_get_leader_epoch(
     const rd_kafka_topic_partition_t *rktpar);
 
 /**
+ * @brief Attach an array of offsets to a topic_partition.
+ *
+ * Stores a deep copy of \p offsets on \p rktpar. The offsets array is
+ * currently consumed only by
+ * rd_kafka_share_acknowledge_deserialization_failure().
+ *
+ * Calling this function with \p offsets == NULL or \p offsets_cnt == 0
+ * clears any previously attached offsets without allocating.
+ *
+ * @param rktpar Partition object.
+ * @param offsets Array of offsets. Deep-copied; may be NULL if
+ *                \p offsets_cnt is 0.
+ * @param offsets_cnt Number of entries in \p offsets.
+ *
+ * @remark This function is intended for internal use by client libraries
+ *         built on top of librdkafka to feed
+ *         rd_kafka_share_acknowledge_deserialization_failure(); it is
+ *         not intended for end-user application code.
+ */
+RD_EXPORT
+void rd_kafka_topic_partition_set_offsets(rd_kafka_topic_partition_t *rktpar,
+                                          const int64_t *offsets,
+                                          size_t offsets_cnt);
+
+/**
  * @brief A growable list of Topic+Partitions.
  *
  */
@@ -3418,6 +3443,51 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
                                   int32_t partition,
                                   int64_t offset,
                                   rd_kafka_share_AcknowledgeType_t type);
+
+/**
+ * @brief Release a batch of offsets that failed client-side deserialization.
+ *
+ * Marks every (topic, partition, offset) tuple in \p partitions as RELEASE
+ * so the broker can redeliver those records. Intended for higher-level client
+ * libraries that perform record deserialization on top of librdkafka and need
+ * to release a batch of records whose payloads could not be deserialized.
+ *
+ * Each entry in \p partitions describes one (topic, partition) and carries
+ * its set of offsets via rd_kafka_topic_partition_set_offsets(). The
+ * \c offset field of each entry is ignored — only the array attached via
+ * rd_kafka_topic_partition_set_offsets() is consumed.
+ *
+ * Intended to be used in implicit acknowledgement mode to release offsets
+ * that hit a deserialization failure.
+ *
+ * Best-effort: every offset is attempted. If some offsets fail (e.g.
+ * partition or offset not currently acquired, or offset is a GAP record),
+ * the remaining offsets are still processed and the returned error
+ * describes the first failure together with aggregate counts of failed
+ * offsets and partitions.
+ *
+ * The caller retains ownership of \p partitions.
+ *
+ * @param rkshare Share consumer instance.
+ * @param partitions Topic-partition list. Each entry's offsets array is
+ *                   set via rd_kafka_topic_partition_set_offsets().
+ *                   Entries without an offsets array attached are skipped.
+ *
+ * @returns NULL on success, or an rd_kafka_error_t* on failure.
+ *          Possible underlying errors include
+ *          RD_KAFKA_RESP_ERR__INVALID_ARG (NULL list) and
+ *          RD_KAFKA_RESP_ERR__STATE (offset not currently acquired, or
+ *          offset is a GAP record). The caller must free the returned
+ *          error with rd_kafka_error_destroy().
+ *
+ * @remark This function is intended for internal use by client libraries
+ *         built on top of librdkafka to release records whose payloads they
+ * could not deserialize; it is not intended for end-user application code.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_share_acknowledge_deserialization_failure(
+    rd_kafka_share_t *rkshare,
+    const rd_kafka_topic_partition_list_t *partitions);
 
 /**
  * @brief Asynchronously commit all pending acknowledgements.

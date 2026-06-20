@@ -1062,6 +1062,119 @@ rd_kafka_share_acknowledge_offset(rd_kafka_share_t *rkshare,
         return err;
 }
 
+rd_kafka_error_t *rd_kafka_share_acknowledge_deserialization_failure(
+    rd_kafka_share_t *rkshare,
+    const rd_kafka_topic_partition_list_t *partitions) {
+        rd_kafka_error_t *error       = NULL;
+        rd_kafka_resp_err_t first_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+        size_t failed_partitions      = 0;
+        size_t failed_offsets         = 0;
+        int i;
+
+        if (unlikely((error = rd_kafka_share_acquire(rkshare)) != NULL))
+                return error;
+
+        if (!partitions) {
+                error = rd_kafka_error_new(RD_KAFKA_RESP_ERR__INVALID_ARG,
+                                           "partitions is NULL");
+                goto done;
+        }
+
+        if (unlikely((first_err = rd_kafka_share_consumer_closed_err(
+                          rkshare)) != RD_KAFKA_RESP_ERR_NO_ERROR)) {
+                error = rd_kafka_error_new(first_err,
+                                           "Share consumer is closed: %s",
+                                           rd_kafka_err2str(first_err));
+                goto done;
+        }
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                const rd_kafka_topic_partition_private_t *parpriv;
+                const int64_t *offsets = NULL;
+                size_t offsets_cnt     = 0;
+                size_t j;
+                rd_bool_t partition_failed = rd_false;
+
+                if (!rktpar->topic || rktpar->partition < 0) {
+                        rktpar->err      = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                        partition_failed = rd_true;
+                        if (first_err == RD_KAFKA_RESP_ERR_NO_ERROR)
+                                first_err = rktpar->err;
+                        failed_partitions++;
+                        continue;
+                }
+
+                if ((parpriv = rktpar->_private)) {
+                        offsets     = parpriv->offsets;
+                        offsets_cnt = parpriv->offsets_cnt;
+                }
+                /* No offsets attached: skip silently (no-op). */
+                if (!offsets || offsets_cnt == 0) {
+                        rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        continue;
+                }
+
+                rktpar->err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                for (j = 0; j < offsets_cnt; j++) {
+                        int64_t offset = offsets[j];
+                        rd_kafka_share_ack_batch_entry_t *entry;
+                        int64_t idx;
+                        rd_kafka_resp_err_t err;
+
+                        if (offset < 0) {
+                                err = RD_KAFKA_RESP_ERR__INVALID_ARG;
+                                goto record_err;
+                        }
+
+                        err = rd_kafka_share_find_ack_entry(
+                            rkshare, rktpar->topic, rktpar->partition, offset,
+                            &entry, &idx);
+                        if (err)
+                                goto record_err;
+
+                        /* GAP records cannot be released. */
+                        if (entry->types[idx] ==
+                            RD_KAFKA_SHARE_INTERNAL_ACK_GAP) {
+                                err = RD_KAFKA_RESP_ERR__STATE;
+                                goto record_err;
+                        }
+
+                        rd_kafka_share_update_acknowledgement_type(
+                            rkshare, entry, idx,
+                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+                        continue;
+
+                record_err:
+                        failed_offsets++;
+                        partition_failed = rd_true;
+                        /* Record the partition-level err with the first
+                         * per-offset failure for this partition. */
+                        if (rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR)
+                                rktpar->err = err;
+                        if (first_err == RD_KAFKA_RESP_ERR_NO_ERROR)
+                                first_err = err;
+                }
+
+                if (partition_failed)
+                        failed_partitions++;
+        }
+
+        if (first_err != RD_KAFKA_RESP_ERR_NO_ERROR)
+                error = rd_kafka_error_new(first_err,
+                                           "Failed to release %" PRIusz
+                                           " offset(s) across "
+                                           "%" PRIusz
+                                           " partition(s) (first error: %s)",
+                                           failed_offsets, failed_partitions,
+                                           rd_kafka_err2str(first_err));
+
+done:
+        rd_kafka_share_release(rkshare);
+        return error;
+}
+
 
 /**
  * @brief Initialize a partition offsets element with topicid,topic, partition,

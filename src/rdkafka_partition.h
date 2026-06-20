@@ -507,6 +507,13 @@ typedef struct rd_kafka_topic_partition_private_s {
         int32_t leader_epoch;
         /** Topic id. */
         rd_kafka_Uuid_t topic_id;
+        /** Optional array of offsets attached via
+         *  rd_kafka_topic_partition_set_offsets(). Currently consumed
+         *  only by rd_kafka_share_acknowledge_deserialization_failure();
+         *  ignored by all other APIs. NULL when unset. */
+        int64_t *offsets;
+        /** Number of entries in \c offsets. Zero when offsets is NULL. */
+        size_t offsets_cnt;
 } rd_kafka_topic_partition_private_t;
 
 

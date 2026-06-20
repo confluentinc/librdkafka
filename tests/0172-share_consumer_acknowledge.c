@@ -1866,6 +1866,342 @@ static void do_test_mixed_ack_mode_same_group(void) {
 }
 
 
+/***************************************************************************
+ * rd_kafka_share_acknowledge_deserialization_failure() tests
+ *
+ * The API releases a batch of offsets (attached via
+ * rd_kafka_topic_partition_set_offsets()) without going through the
+ * implicit-mode gate that the per-message acknowledge APIs enforce.
+ * Verification reuses the RELEASE-causes-redelivery contract.
+ ***************************************************************************/
+
+/**
+ * @brief Explicit mode: bulk-release all polled offsets via the new API,
+ *        verify every one comes back on redelivery.
+ */
+static void do_test_deser_failure_explicit(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_topic_partition_list_t *parts;
+        rd_kafka_topic_partition_t *rktpar;
+        const char *group = "share-deser-failure-explicit";
+        const char *topic;
+        int64_t offsets[5];
+        int collected   = 0;
+        int redelivered = 0;
+        int attempts;
+        int i;
+
+        SUB_TEST();
+        TEST_SAY("\n=== test_deser_failure_explicit ===\n");
+
+        rkshare = test_create_share_consumer(group, "explicit");
+        topic   = test_mk_topic_name("0172-deser-failure-explicit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 5);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll all 5 messages without acknowledging. */
+        attempts = 30;
+        while (collected < 5 && attempts-- > 0) {
+                size_t rcvd;
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                for (i = 0; i < (int)rcvd && collected < 5; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        offsets[collected++]  = m->offset;
+                }
+        }
+        TEST_ASSERT(collected == 5, "expected 5 polled messages, got %d",
+                    collected);
+        if (batch) {
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        /* Release all 5 offsets via the new bulk API. */
+        parts  = rd_kafka_topic_partition_list_new(1);
+        rktpar = rd_kafka_topic_partition_list_add(parts, topic, 0);
+        rd_kafka_topic_partition_set_offsets(rktpar, offsets, 5);
+
+        err =
+            rd_kafka_share_acknowledge_deserialization_failure(rkshare, parts);
+        TEST_ASSERT(!err, "deserialization-failure call returned: %s",
+                    err ? rd_kafka_error_string(err) : "(none)");
+        TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "rktpar->err: %s", rd_kafka_err2str(rktpar->err));
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        /* Verify all 5 redeliver. */
+        attempts = 30;
+        while (redelivered < 5 && attempts-- > 0) {
+                size_t rcvd;
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                for (i = 0; i < (int)rcvd; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        int16_t dc = rd_kafka_message_delivery_count(m);
+                        TEST_ASSERT(dc >= 2,
+                                    "expected delivery_count >= 2, got %d", dc);
+                        rd_kafka_share_acknowledge_type(
+                            rkshare, m, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                        redelivered++;
+                }
+        }
+        TEST_ASSERT(redelivered == 5, "expected 5 redeliveries, got %d",
+                    redelivered);
+
+        if (batch)
+                rd_kafka_messages_destroy(batch);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_deser_failure_explicit: PASSED ===\n");
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Implicit mode: bulk-releasing only some of the polled offsets
+ *        must (a) bypass the implicit-mode gate that rejects
+ *        per-message RELEASE, (b) redeliver exactly the released
+ *        offset(s), and (c) NOT redeliver the rest (they are implicitly
+ *        ACCEPTed on the next poll).
+ */
+static void do_test_deser_failure_implicit_partial(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_topic_partition_list_t *parts;
+        rd_kafka_topic_partition_t *rktpar;
+        const char *group = "share-deser-failure-implicit";
+        const char *topic;
+        int64_t offsets[4];
+        int64_t target_offset;
+        rd_kafka_resp_err_t ack_err;
+        int collected          = 0;
+        int redelivered_target = 0;
+        int unexpected         = 0;
+        int attempts;
+        int i;
+
+        SUB_TEST();
+        TEST_SAY("\n=== test_deser_failure_implicit_partial ===\n");
+
+        rkshare = test_create_share_consumer(group, "implicit");
+        topic   = test_mk_topic_name("0172-deser-failure-implicit", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        test_produce_msgs_simple(common_producer, topic, 0, 4);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll all 4 messages (implicit mode: caller does not ack). */
+        attempts = 30;
+        while (collected < 4 && attempts-- > 0) {
+                size_t rcvd;
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                for (i = 0; i < (int)rcvd && collected < 4; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        offsets[collected++]  = m->offset;
+                }
+        }
+        TEST_ASSERT(collected == 4, "expected 4 polled messages, got %d",
+                    collected);
+
+        /* Sanity: per-message RELEASE must be rejected in implicit mode. */
+        ack_err = rd_kafka_share_acknowledge_offset(
+            rkshare, topic, 0, offsets[1],
+            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+        TEST_ASSERT(ack_err == RD_KAFKA_RESP_ERR__STATE,
+                    "implicit mode: per-message RELEASE should be __STATE, "
+                    "got %s",
+                    rd_kafka_err2str(ack_err));
+
+        /* Release ONLY the second polled offset via the new bulk API. */
+        target_offset = offsets[1];
+        parts         = rd_kafka_topic_partition_list_new(1);
+        rktpar        = rd_kafka_topic_partition_list_add(parts, topic, 0);
+        rd_kafka_topic_partition_set_offsets(rktpar, &target_offset, 1);
+
+        err =
+            rd_kafka_share_acknowledge_deserialization_failure(rkshare, parts);
+        TEST_ASSERT(!err, "deserialization-failure call returned: %s",
+                    err ? rd_kafka_error_string(err) : "(none)");
+        TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "rktpar->err: %s", rd_kafka_err2str(rktpar->err));
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        if (batch) {
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        /* Only the released offset should redeliver; the other three were
+         * implicitly ACCEPTed. */
+        attempts = 30;
+        while (redelivered_target == 0 && attempts-- > 0) {
+                size_t rcvd;
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                err = rd_kafka_share_poll(rkshare, 2000, &batch);
+                if (err)
+                        rd_kafka_error_destroy(err);
+                rcvd = rd_kafka_messages_count(batch);
+                for (i = 0; i < (int)rcvd; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        if (m->offset == target_offset) {
+                                int16_t dc = rd_kafka_message_delivery_count(m);
+                                TEST_ASSERT(dc >= 2,
+                                            "expected delivery_count >= 2 "
+                                            "on redelivery, got %d",
+                                            dc);
+                                redelivered_target++;
+                        } else {
+                                unexpected++;
+                        }
+                }
+        }
+        TEST_ASSERT(redelivered_target == 1,
+                    "expected exactly 1 redelivery of offset %" PRId64
+                    ", got %d",
+                    target_offset, redelivered_target);
+        TEST_ASSERT(unexpected == 0,
+                    "auto-ACCEPTed offsets should not redeliver, "
+                    "got %d unexpected records",
+                    unexpected);
+
+        if (batch)
+                rd_kafka_messages_destroy(batch);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_deser_failure_implicit_partial: PASSED ===\n");
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Error surface for
+ *        rd_kafka_share_acknowledge_deserialization_failure().
+ *
+ * - NULL rkshare → __STATE (rejected up-front by share_acquire).
+ * - NULL list → __INVALID_ARG.
+ * - Empty list (cnt == 0) → success, no-op.
+ * - Entry with no offsets attached → silent no-op for that entry.
+ * - Entry with offsets not in the inflight map → __STATE on the
+ *   entry's rktpar->err and on the aggregated error.
+ */
+static void do_test_deser_failure_errors(void) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *err;
+        rd_kafka_topic_partition_list_t *parts;
+        rd_kafka_topic_partition_t *rktpar;
+        const char *group        = "share-deser-failure-errors";
+        int64_t bogus_offsets[2] = {0, 1};
+
+        SUB_TEST();
+        TEST_SAY("\n=== test_deser_failure_errors ===\n");
+
+        /* NULL rkshare → __STATE. */
+        err = rd_kafka_share_acknowledge_deserialization_failure(NULL, NULL);
+        TEST_ASSERT(err != NULL, "expected error for NULL rkshare");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+                    "expected __STATE for NULL rkshare, got %s",
+                    rd_kafka_error_string(err));
+        rd_kafka_error_destroy(err);
+
+        rkshare = test_create_share_consumer(group, "explicit");
+
+        /* NULL partitions list → __INVALID_ARG. */
+        err = rd_kafka_share_acknowledge_deserialization_failure(rkshare, NULL);
+        TEST_ASSERT(err != NULL, "expected error for NULL partitions");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected __INVALID_ARG for NULL partitions, got %s",
+                    rd_kafka_error_string(err));
+        rd_kafka_error_destroy(err);
+
+        /* Empty list (cnt == 0) → success, no-op. */
+        parts = rd_kafka_topic_partition_list_new(0);
+        err =
+            rd_kafka_share_acknowledge_deserialization_failure(rkshare, parts);
+        TEST_ASSERT(!err, "empty list should be a no-op, got: %s",
+                    err ? rd_kafka_error_string(err) : "(ok)");
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        /* Entry with no offsets attached → silent no-op, success. */
+        parts  = rd_kafka_topic_partition_list_new(1);
+        rktpar = rd_kafka_topic_partition_list_add(parts, "any-topic", 0);
+        err =
+            rd_kafka_share_acknowledge_deserialization_failure(rkshare, parts);
+        TEST_ASSERT(!err, "no-offsets entry should be a silent no-op, got: %s",
+                    err ? rd_kafka_error_string(err) : "(ok)");
+        TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "no-offsets entry should leave rktpar->err untouched, "
+                    "got %s",
+                    rd_kafka_err2str(rktpar->err));
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        /* Entry with offsets that are not in the inflight map → per-entry
+         * __STATE + aggregated __STATE. */
+        parts = rd_kafka_topic_partition_list_new(1);
+        rktpar =
+            rd_kafka_topic_partition_list_add(parts, "nonexistent-topic", 0);
+        rd_kafka_topic_partition_set_offsets(rktpar, bogus_offsets, 2);
+
+        err =
+            rd_kafka_share_acknowledge_deserialization_failure(rkshare, parts);
+        TEST_ASSERT(err != NULL,
+                    "expected aggregated error for unknown offsets");
+        TEST_ASSERT(rd_kafka_error_code(err) == RD_KAFKA_RESP_ERR__STATE,
+                    "expected aggregated __STATE, got %s",
+                    rd_kafka_error_string(err));
+        rd_kafka_error_destroy(err);
+        TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR__STATE,
+                    "expected __STATE in rktpar->err, got %s",
+                    rd_kafka_err2str(rktpar->err));
+        rd_kafka_topic_partition_list_destroy(parts);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        TEST_SAY("=== test_deser_failure_errors: PASSED ===\n");
+        SUB_TEST_PASS();
+}
+
+
 int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
         test_timeout_set(600); /* 10 minutes for all tests */
@@ -1910,6 +2246,11 @@ int main_0172_share_consumer_acknowledge(int argc, char **argv) {
 
         /* Mixed ack-mode within the same share group */
         do_test_mixed_ack_mode_same_group();
+
+        /* rd_kafka_share_acknowledge_deserialization_failure() */
+        do_test_deser_failure_explicit();
+        do_test_deser_failure_implicit_partial();
+        do_test_deser_failure_errors();
 
         /* Cleanup common handles */
         rd_kafka_destroy(common_admin);

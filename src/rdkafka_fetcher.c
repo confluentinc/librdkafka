@@ -1628,10 +1628,7 @@ rd_kafka_share_fetch_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_str(rkbuf, &ErrorStr);
 
         if (ErrorCode) {
-                /**
-                 * TODO KIP_932: Change err log here to debug log
-                 */
-                rd_rkb_log(rkb, LOG_ERR, "SHAREFETCH",
+                rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                            "ShareFetch response error %s: '%.*s'",
                            rd_kafka_err2name(ErrorCode),
                            RD_KAFKAP_STR_PR(&ErrorStr));
@@ -2088,7 +2085,7 @@ rd_kafka_share_acknowledge_reply_handle(rd_kafka_broker_t *rkb,
         rd_kafka_buf_read_str(rkbuf, &ErrorStr);
 
         if (ErrorCode) {
-                rd_rkb_log(rkb, LOG_ERR, "SHAREACK",
+                rd_rkb_dbg(rkb, FETCH, "SHAREACK",
                            "ShareAcknowledge response error %s: '%.*s'",
                            rd_kafka_err2name(ErrorCode),
                            RD_KAFKAP_STR_PR(&ErrorStr));

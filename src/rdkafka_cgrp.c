@@ -3771,6 +3771,11 @@ err:
                     (rd_clock() >
                      rkcg->rkcg_ts_last_err + min_error_interval)) {
                         rd_kafka_cgrp_set_last_err(rkcg, err);
+                        rd_kafka_log(rkcg->rkcg_rk, LOG_ERR, "HEARTBEAT",
+                                     "ShareGroupHeartbeat failed: %s%s%.*s",
+                                     rd_kafka_err2str(err),
+                                     RD_KAFKAP_STR_LEN(&error_str) ? ": " : "",
+                                     RD_KAFKAP_STR_PR(&error_str));
                         rd_kafka_consumer_err(
                             rkcg->rkcg_q, rd_kafka_broker_id(rkb), err, 0, NULL,
                             NULL, err, "ShareGroupHeartbeat failed: %s%s%.*s",

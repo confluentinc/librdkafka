@@ -1235,9 +1235,8 @@ static void rd_kafka_share_fetch_reply_handle_partition_error(
 
         default:
                 rd_kafka_consumer_err(
-                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb),
-                    RD_KAFKA_RESP_ERR__STATE, 0, NULL, rktp,
-                    RD_KAFKA_OFFSET_INVALID,
+                    rkb->rkb_rk->rk_cgrp->rkcg_q, rd_kafka_broker_id(rkb), err,
+                    0, NULL, rktp, RD_KAFKA_OFFSET_INVALID,
                     "Unexpected error code %" PRId16
                     " (%s) while fetching from topic-partition "
                     "%.*s-%" PRId32 ": %.*s",

@@ -378,14 +378,22 @@ void do_test_share_set_token(rd_bool_t fail_mode) {
         ctx.logical_cluster = logical_cluster;
         ctx.identity_pool   = identity_pool;
 
-        /* Producer: authenticates with a real token (same URL) so it can create
-         * the topic, set the group config and produce. */
+        /* Producer: authenticates with a real token (from the token command)
+         * so it can create the topic, set the group config and produce. The
+         * SASL callback queue is enabled and served on a background thread so
+         * the token refresh callback fires without the app polling (the admin
+         * CreateTopics path below does not poll the producer handle). */
         test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_enable_sasl_queue(conf, rd_true);
         rd_kafka_conf_set_oauthbearer_token_refresh_cb(
             conf, producer_token_refresh_cb);
         rd_kafka_conf_set_opaque(conf, &ctx);
         rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
-        p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        p1    = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        error = rd_kafka_sasl_background_callbacks_enable(p1);
+        TEST_ASSERT(!error,
+                    "producer sasl_background_callbacks_enable failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
         test_create_topic_wait_exists(p1, topic, 1, -1, 5000);
         test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
                                             grp_conf, 1);

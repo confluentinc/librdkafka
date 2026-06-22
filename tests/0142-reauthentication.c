@@ -258,6 +258,7 @@ static void share_token_error_cb(rd_kafka_t *rk,
 /* Argument validation (no broker required): the exposed share APIs must
  * reject invalid arguments with _INVALID_ARG. */
 static void do_test_share_set_token_invalid_args(void) {
+        rd_kafka_conf_t *conf;
         rd_kafka_share_t *sc1;
         rd_kafka_queue_t *saslq;
         char errstr[512];
@@ -277,14 +278,20 @@ static void do_test_share_set_token_invalid_args(void) {
                 return;
         }
 
-        sc1 = test_create_share_consumer("share-set-token-args", NULL);
+        /* Enable the SASL callback queue so rd_kafka_share_queue_get_sasl()
+         * returns it — the queue is only created when enable.sasl.queue is
+         * set; otherwise SASL callbacks go to the main queue and it is NULL. */
+        test_conf_init(&conf, NULL, 20);
+        rd_kafka_conf_enable_sasl_queue(conf, 1);
+        rd_kafka_conf_set(conf, "group.id", "share-set-token-args", errstr,
+                          sizeof(errstr));
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1 != NULL, "Failed to create share consumer: %s", errstr);
 
-        /* rd_kafka_share_queue_get_sasl() must return the SASL callback queue
-         * for an OAUTHBEARER share consumer (NULL otherwise). */
+        /* rd_kafka_share_queue_get_sasl() returns the SASL callback queue for
+         * an OAUTHBEARER share consumer when the SASL queue is enabled. */
         saslq = rd_kafka_share_queue_get_sasl(sc1);
-        TEST_ASSERT(saslq != NULL,
-                    "share_queue_get_sasl returned NULL for an OAUTHBEARER "
-                    "share consumer");
+        TEST_ASSERT(saslq != NULL, "share_queue_get_sasl returned NULL");
         rd_kafka_queue_destroy(saslq);
 
         /* set_token_failure() with no error string -> _INVALID_ARG. */

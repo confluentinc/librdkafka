@@ -198,6 +198,9 @@ static void rd_kafka_toppar_consumer_lag_tmr_cb(rd_kafka_timers_t *rkts,
 void rd_kafka_toppar_op_version_bump(rd_kafka_toppar_t *rktp, int32_t version) {
         rd_kafka_op_t *rko;
 
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+                return;
+
         rktp->rktp_op_version = version;
         rko                   = rd_kafka_op_new(RD_KAFKA_OP_BARRIER);
         rko->rko_version      = version;
@@ -260,7 +263,11 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
         rktp->rktp_ops             = rd_kafka_q_new(rkt->rkt_rk);
         rktp->rktp_ops->rkq_serve  = rd_kafka_toppar_op_serve;
         rktp->rktp_ops->rkq_opaque = rktp;
-        rd_atomic32_init(&rktp->rktp_version, 1);
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rkt->rkt_rk)) {
+                rd_atomic32_init(&rktp->rktp_version, 0);
+        } else {
+                rd_atomic32_init(&rktp->rktp_version, 1);
+        }
         rktp->rktp_op_version = rd_atomic32_get(&rktp->rktp_version);
 
         rd_atomic32_init(&rktp->rktp_msgs_inflight, 0);
@@ -458,6 +465,65 @@ rd_kafka_toppar_t *rd_kafka_toppar_get2(rd_kafka_t *rk,
                         rd_kafka_log(rk, LOG_ERR, "TOPIC",
                                      "Failed to create local topic \"%s\": %s",
                                      topic, rd_strerror(errno));
+                        return NULL;
+                }
+        }
+
+        rd_kafka_wrunlock(rk);
+
+        rd_kafka_topic_wrlock(rkt);
+        rktp = rd_kafka_toppar_desired_add(rkt, partition);
+        rd_kafka_topic_wrunlock(rkt);
+
+        rd_kafka_topic_destroy0(rkt);
+
+        return rktp;
+}
+
+
+/**
+ * @brief Same as rd_kafka_toppar_get2() but looks up (or creates) the
+ *        topic by topic_id rather than by name.
+ *
+ *        Used by share-consumer paths where the heartbeat-derived
+ *        assignment is the source of truth and the topic id is the
+ *        canonical identity. Looking up by id avoids matching a
+ *        recreated topic's response to a different rkt that happens
+ *        to share its name.
+ *
+ *        topic_id must be non-zero; topic name may be NULL.
+ *
+ * @locality any
+ * @locks none
+ */
+rd_kafka_toppar_t *rd_kafka_toppar_get_by_id2(rd_kafka_t *rk,
+                                              const char *topic,
+                                              rd_kafka_Uuid_t topic_id,
+                                              int32_t partition,
+                                              int create_on_miss) {
+        rd_kafka_topic_t *rkt;
+        rd_kafka_toppar_t *rktp;
+
+        rd_dassert(!RD_KAFKA_UUID_IS_ZERO(topic_id));
+
+        rd_kafka_wrlock(rk);
+
+        rkt = rd_kafka_topic_find_by_topic_id(rk, topic_id);
+        if (unlikely(!rkt)) {
+                if (!create_on_miss) {
+                        rd_kafka_wrunlock(rk);
+                        return NULL;
+                }
+                rkt = rd_kafka_topic_new_with_id(rk, topic, topic_id,
+                                                 0 /*no-lock*/);
+                if (!rkt) {
+                        rd_kafka_wrunlock(rk);
+                        rd_kafka_log(rk, LOG_ERR, "TOPIC",
+                                     "Failed to create local topic \"%s\" "
+                                     "(id %s): %s",
+                                     topic ? topic : "(null)",
+                                     rd_kafka_Uuid_base64str(&topic_id),
+                                     rd_strerror(errno));
                         return NULL;
                 }
         }
@@ -1131,8 +1197,13 @@ static void rd_kafka_toppar_broker_migrate(rd_kafka_toppar_t *rktp,
          * prior to leaving the broker to avoid stalling
          * on the new broker waiting for a offset reply from
          * this old broker (that might not come and thus need
-         * to time out..slowly) */
-        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+         * to time out..slowly).
+         *
+         * Share consumers never enter OFFSET_WAIT so this branch is
+         * unreachable for them today; guard regardless so the offset
+         * machinery stays out of the share leader-change path. */
+        if (!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk) &&
+            rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
                 rd_kafka_toppar_offset_retry(rktp, 500,
                                              "migrating to new broker");
 
@@ -1196,7 +1267,8 @@ void rd_kafka_toppar_broker_leave_for_remove(rd_kafka_toppar_t *rktp) {
          * on the new broker waiting for a offset reply from
          * this old broker (that might not come and thus need
          * to time out..slowly) */
-        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT)
+        if (rktp->rktp_fetch_state == RD_KAFKA_TOPPAR_FETCH_OFFSET_WAIT &&
+            !RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
                 rd_kafka_toppar_set_fetch_state(
                     rktp, RD_KAFKA_TOPPAR_FETCH_OFFSET_QUERY);
 
@@ -1574,6 +1646,13 @@ static void rd_kafka_toppar_offset_retry(rd_kafka_toppar_t *rktp,
                                          const char *reason) {
         rd_ts_t tmr_next;
         int restart_tmr;
+
+        /* Share consumers never use the offset-query state machine.
+         * Callers must guard; this early-return is belt-and-suspenders
+         * so a stray future call doesn't arm the offset-query timer
+         * for a share-assigned rktp. */
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk))
+                return;
 
         /* (Re)start timer if not started or the current timeout
          * is larger than \p backoff_ms. */
@@ -2085,6 +2164,8 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
         rd_kafka_toppar_t *rktp = NULL;
         int outdated            = 0;
 
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rk));
+
         if (rko->rko_rktp)
                 rktp = rko->rko_rktp;
 
@@ -2289,6 +2370,16 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_start(rd_kafka_toppar_t *rktp,
                                                    rd_kafka_replyq_t replyq) {
         int32_t version;
 
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
+                             "consume_start is not supported for share "
+                             "consumers: %s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
         rd_kafka_q_lock(rktp->rktp_fetchq);
         if (fwdq && !(rktp->rktp_fetchq->rkq_flags & RD_KAFKA_Q_F_FWD_APP))
                 rd_kafka_q_fwd_set0(rktp->rktp_fetchq, fwdq, 0, /* no do_lock */
@@ -2321,6 +2412,16 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_fetch_stop(rd_kafka_toppar_t *rktp,
                                                   rd_kafka_replyq_t replyq) {
         int32_t version;
 
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
+                             "consume_stop is not supported for share "
+                             "consumers: %s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
 
@@ -2349,6 +2450,16 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_seek(rd_kafka_toppar_t *rktp,
                                             rd_kafka_fetch_pos_t pos,
                                             rd_kafka_replyq_t replyq) {
         int32_t version;
+
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC, "CONSUMER",
+                             "seek is not supported for share consumers: "
+                             "%s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
 
         /* Bump version barrier. */
         version = rd_kafka_toppar_version_new_barrier(rktp);
@@ -2379,7 +2490,20 @@ rd_kafka_resp_err_t rd_kafka_toppar_op_pause_resume(rd_kafka_toppar_t *rktp,
                                                     int flag,
                                                     rd_kafka_replyq_t replyq) {
         int32_t version;
-        rd_kafka_op_t *rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
+        rd_kafka_op_t *rko;
+
+        rd_dassert(!RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk));
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_dbg(rktp->rktp_rkt->rkt_rk, TOPIC,
+                             pause ? "PAUSE" : "RESUME",
+                             "Pause/resume is not supported for share "
+                             "consumers: %s [%" PRId32 "]: ignored",
+                             rd_kafka_topic_name_safe(rktp->rktp_rkt),
+                             rktp->rktp_partition);
+                return RD_KAFKA_RESP_ERR_NO_ERROR;
+        }
+
+        rko = rd_kafka_op_new(RD_KAFKA_OP_PAUSE);
 
         if (!pause) {
                 /* If partitions isn't paused, avoid bumping its version,
@@ -2517,6 +2641,39 @@ rd_kafka_toppars_pause_resume(rd_kafka_t *rk,
 }
 
 
+/**
+ * @brief Share-consumer variant of rd_kafka_toppar_enq_error.
+ *
+ *        Records the (topic, err) on the cgrp's per-cycle accumulator
+ *        for delivery or logging at the end of the metadata cycle.
+ *        Multiple calls for the same topic in one cycle collapse to
+ *        a single entry.
+ *
+ * @locality rdkafka main thread
+ */
+static void rd_kafka_share_toppar_enq_error(rd_kafka_toppar_t *rktp,
+                                            rd_kafka_resp_err_t err) {
+        rd_kafka_cgrp_t *rkcg    = rktp->rktp_rkt->rkt_rk->rk_cgrp;
+        rd_kafka_topic_t *rkt    = rktp->rktp_rkt;
+        const char *topic        = rkt->rkt_topic->str;
+        rd_kafka_Uuid_t topic_id = rkt->rkt_topic_id;
+        rd_kafka_topic_partition_t *prev;
+
+        if (!rkcg || !rkcg->rkcg_errored_topics)
+                return;
+
+        prev = rd_kafka_topic_partition_list_find_topic_by_id(
+            rkcg->rkcg_errored_topics, topic_id);
+        if (prev) {
+                prev->err = err;
+        } else {
+                rd_kafka_topic_partition_list_add_with_topic_name_and_id(
+                    rkcg->rkcg_errored_topics, topic_id, topic,
+                    RD_KAFKA_PARTITION_UA)
+                    ->err = err;
+        }
+}
+
 
 /**
  * Propagate error for toppar
@@ -2526,6 +2683,11 @@ void rd_kafka_toppar_enq_error(rd_kafka_toppar_t *rktp,
                                const char *reason) {
         rd_kafka_op_t *rko;
         char buf[512];
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rktp->rktp_rkt->rkt_rk)) {
+                rd_kafka_share_toppar_enq_error(rktp, err);
+                return;
+        }
 
         rko           = rd_kafka_op_new(RD_KAFKA_OP_ERR);
         rko->rko_err  = err;
@@ -2592,6 +2754,32 @@ void rd_kafka_toppar_leader_unavailable(rd_kafka_toppar_t *rktp,
 
         rd_kafka_topic_fast_leader_query(rkt->rkt_rk,
                                          rd_false /* don't force */);
+}
+
+/**
+ * @locality any
+ */
+rd_bool_t rd_kafka_toppar_is_on_cgrp(rd_kafka_toppar_t *rktp,
+                                     rd_bool_t do_lock) {
+        rd_bool_t on_cgrp;
+        if (do_lock) {
+                rd_kafka_toppar_lock(rktp);
+        }
+        on_cgrp =
+            (rktp->rktp_flags & RD_KAFKA_TOPPAR_F_ON_CGRP) ? rd_true : rd_false;
+
+        if (do_lock) {
+                rd_kafka_toppar_unlock(rktp);
+        }
+
+        return on_cgrp;
+}
+
+/**
+ * @brief Toppar copier for rd_list_copy()
+ */
+void *rd_kafka_toppar_list_copy(const void *elem, void *opaque) {
+        return rd_kafka_toppar_keep((rd_kafka_toppar_t *)elem);
 }
 
 
@@ -2682,6 +2870,16 @@ rd_kafka_topic_partition_t *rd_kafka_topic_partition_new(const char *topic,
         rktpar->topic     = rd_strdup(topic);
         rktpar->partition = partition;
 
+        return rktpar;
+}
+
+rd_kafka_topic_partition_t *
+rd_kafka_topic_partition_new_with_id_and_name(rd_kafka_Uuid_t topic_id,
+                                              const char *topic,
+                                              int32_t partition) {
+        rd_kafka_topic_partition_t *rktpar =
+            rd_kafka_topic_partition_new(topic, partition);
+        rd_kafka_topic_partition_set_topic_id(rktpar, topic_id);
         return rktpar;
 }
 
@@ -3172,10 +3370,24 @@ rd_kafka_topic_partition_ensure_toppar(rd_kafka_t *rk,
 
         parpriv = rd_kafka_topic_partition_get_private(rktpar);
 
-        if (!parpriv->rktp)
+        if (parpriv->rktp)
+                return parpriv->rktp;
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Share consumer identifies topics by id; looking up
+                 * the topic by name risks matching a stale rkt that
+                 * a recreated topic shares its name with. */
+                rd_dassert(!RD_KAFKA_UUID_IS_ZERO(parpriv->topic_id));
+                if (RD_KAFKA_UUID_IS_ZERO(parpriv->topic_id))
+                        return NULL;
+                parpriv->rktp = rd_kafka_toppar_get_by_id2(
+                    rk, rktpar->topic, parpriv->topic_id, rktpar->partition,
+                    create_on_miss);
+        } else {
                 parpriv->rktp = rd_kafka_toppar_get2(
                     rk, rktpar->topic, rktpar->partition,
                     0 /* not ua on miss */, create_on_miss);
+        }
 
         return parpriv->rktp;
 }
@@ -4269,9 +4481,10 @@ const char *rd_kafka_topic_partition_list_str(
                                 "]"
                                 "%s"
                                 "%s",
-                                of == 0 ? "" : ", ", rktpar->topic,
-                                topic_id_str, rktpar->partition, offsetstr,
-                                errstr);
+                                of == 0 ? "" : ", ",
+                                rd_kafka_topic_name_str_safe(rktpar->topic),
+                                topic_id_str ? topic_id_str : "(null)",
+                                rktpar->partition, offsetstr, errstr);
 
                 if ((size_t)r >= dest_size - of) {
                         rd_snprintf(&dest[dest_size - 4], 4, "...");

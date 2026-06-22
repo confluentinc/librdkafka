@@ -197,7 +197,7 @@ typedef enum {
 
 /* Increase in steps of 64 as needed.
  * This must be larger than sizeof(rd_kafka_[topic_]conf_t) */
-#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 35)
+#define RD_KAFKA_CONF_PROPS_IDX_MAX (64 * 36)
 
 /**
  * @struct rd_kafka_anyconf_t
@@ -471,6 +471,18 @@ struct rd_kafka_conf_s {
         int enable_partition_eof;
 
         rd_kafkap_str_t *client_rack;
+
+        struct {
+                rd_bool_t is_share_consumer; /**< Is this a share consumer?
+                                              *   Set directly by
+                                              *   rd_kafka_share_consumer_new
+                                              *   on the conf before
+                                              *   rd_kafka_new is called.
+                                              *   No property table entry. */
+                int max_poll_records; /**< Max records returned per poll */
+                char *share_acknowledgement_mode; /**< "implicit" (default)
+                                                   *   or "explicit" */
+        } share;
 
         /*
          * Producer configuration

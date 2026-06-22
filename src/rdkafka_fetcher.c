@@ -1953,9 +1953,6 @@ static void rd_kafka_broker_session_update_toppars_list(
             add ? "added to" : "removed from");
 
         RD_LIST_FOREACH(rktp, request_toppars, i) {
-                rd_rkb_dbg(rkb, FETCH, "SHARESESSION", "    %s [%" PRId32 "]",
-                           rktp->rktp_rkt->rkt_topic->str,
-                           rktp->rktp_partition);
                 rd_kafka_broker_session_update_toppars_in_session(rkb, rktp,
                                                                   add);
                 if (toppars_to_remove_from) {
@@ -3091,12 +3088,6 @@ void rd_kafka_ShareAcknowledgeRequest(rd_kafka_broker_t *rkb,
 
                         /* Partition tags */
                         rd_kafka_buf_write_tags_empty(rkbuf);
-
-                        rd_rkb_dbg(rkb, FETCH, "SHAREACK",
-                                   "ShareAcknowledge ack for topic %s [%" PRId32
-                                   "] with %d entries",
-                                   batches->rktpar->topic,
-                                   batches->rktpar->partition, entries_cnt);
 
                         cnt++;
                 }

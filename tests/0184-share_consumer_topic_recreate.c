@@ -943,6 +943,136 @@ static void test_recreate_during_close(void) {
         SUB_TEST_PASS();
 }
 
+/* ===================================================================
+ *  Log callback: counts the "no partitions are assigned" fetch-stall
+ *  log emitted while the share consumer's assignment is empty.
+ * =================================================================== */
+static void recreate_stall_log_cb(const rd_kafka_t *rk,
+                                  int level,
+                                  const char *fac,
+                                  const char *buf) {
+        rd_atomic32_t *cnt = rd_kafka_opaque(rk);
+        if (cnt && !strcmp(fac, "FETCHMORE") &&
+            strstr(buf, "no partitions are assigned"))
+                rd_atomic32_add(cnt, 1);
+}
+
+/**
+ * @brief Delete the consumer's only topic so the broker revokes its
+ *        assignment to empty, verify the consumer reports the
+ *        no-partitions fetch stall, then recreate the topic and verify
+ *        records flow again.
+ *
+ * Reproduces the observed delete/recreate latency: with no partitions
+ * assigned the consumer keeps wanting to fetch and emits the
+ * rate-limited "Fetch stalled: ... no partitions are assigned" log
+ * until the recreated topic (fresh topic_id) is reassigned.
+ */
+static void do_test_recreate_stall_then_recover(void) {
+        const char *topic;
+        const char *group = "0184-share-recreate-stall";
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        rd_atomic32_t stall_cnt;
+        test_msgver_t mv_before, mv_after;
+        uint64_t testid_before, testid_after;
+        rd_kafka_Uuid_t *id_before, *id_after;
+        rd_kafka_messages_t *batch = NULL;
+        rd_ts_t deadline;
+        int got, stalls;
+        char errstr[512];
+
+        SUB_TEST_QUICK();
+
+        rd_atomic32_init(&stall_cnt, 0);
+        testid_before = test_id_generate();
+        testid_after  = test_id_generate();
+
+        topic = test_mk_topic_name("0184-recreate-stall", 1);
+        test_create_topic_wait_exists(common_admin, topic, PARTITION_CNT, -1,
+                                      60 * 1000);
+
+        id_before = fetch_topic_id(topic);
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        /* Fast metadata refresh + debug=consumer so the no-partitions
+         * stall log is emitted and observable via the log callback. */
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        test_conf_set(conf, "debug", "consumer");
+        rd_kafka_conf_set_log_cb(conf, recreate_stall_log_cb);
+        rd_kafka_conf_set_opaque(conf, &stall_cnt);
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* ---- Phase 1: consume the original generation ---- */
+        produce_phase(topic, testid_before, PARTITION_CNT);
+        test_msgver_init(&mv_before, testid_before);
+        got =
+            consume_into_msgver(rkshare, &mv_before, MSGS_PER_PHASE, 30 * 1000);
+        TEST_ASSERT(got == MSGS_PER_PHASE, "Phase 1: expected %d msgs, got %d",
+                    MSGS_PER_PHASE, got);
+        test_msgver_clear(&mv_before);
+
+        /* ---- Delete: the broker revokes the assignment to empty ---- */
+        TEST_SAY("Deleting topic %s; expecting a no-partitions fetch stall\n",
+                 topic);
+        test_delete_topic(common_admin, topic);
+
+        /* Poll until the no-partitions stall is logged. The log is
+         * rate-limited, so a single occurrence confirms the path. */
+        deadline = test_clock() + (rd_ts_t)60 * 1000 * 1000;
+        while (rd_atomic32_get(&stall_cnt) < 1 && test_clock() < deadline) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                } else {
+                        /* Ack any straggler so the next poll can proceed
+                         * in explicit mode. */
+                        size_t i, n = rd_kafka_messages_count(batch);
+                        for (i = 0; i < n; i++)
+                                rd_kafka_share_acknowledge(
+                                    rkshare, rd_kafka_messages_get(batch, i));
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+        stalls = rd_atomic32_get(&stall_cnt);
+        TEST_SAY("\"no partitions assigned\" stall log count: %d\n", stalls);
+        TEST_ASSERT(stalls >= 1,
+                    "expected the no-partitions stall to be logged, got %d",
+                    stalls);
+
+        /* ---- Recreate (fresh topic_id): the broker reassigns ---- */
+        rd_sleep(5); /* let DeleteTopics settle, as in recreate_topic() */
+        test_create_topic_wait_exists(common_admin, topic, PARTITION_CNT, -1,
+                                      60 * 1000);
+        id_after = fetch_topic_id(topic);
+        assert_topic_id_changed(id_before, id_after);
+
+        /* ---- Phase 2: records flow again ---- */
+        produce_phase(topic, testid_after, PARTITION_CNT);
+        test_msgver_init(&mv_after, testid_after);
+        got =
+            consume_into_msgver(rkshare, &mv_after, MSGS_PER_PHASE, 60 * 1000);
+        TEST_ASSERT(got == MSGS_PER_PHASE,
+                    "Phase 2: expected %d msgs after recreate, got %d",
+                    MSGS_PER_PHASE, got);
+        test_msgver_clear(&mv_after);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        rd_kafka_Uuid_destroy(id_before);
+        rd_kafka_Uuid_destroy(id_after);
+
+        SUB_TEST_PASS();
+}
+
 int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
         /* Topic deletion is not supported against Windows brokers. */
         if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
@@ -969,6 +1099,7 @@ int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
                                    create_consumer_md_first, 2);
         do_test_recreate_chaos();
         do_test_recreate_survives_concurrent_producer();
+        do_test_recreate_stall_then_recover();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

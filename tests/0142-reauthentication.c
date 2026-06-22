@@ -29,7 +29,8 @@
 #include "test.h"
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is built from within the librdkafka source tree and thus differs. */
-#include "rdkafka.h" /* for Kafka driver */
+#include "rdkafka.h"  /* for Kafka driver */
+#include "rdatomic.h" /* for the share set_token callback counters */
 
 static int delivered_msg = 0;
 static int expect_err    = 0;
@@ -58,6 +59,410 @@ auth_error_cb(rd_kafka_t *rk, int err, const char *reason, void *opaque) {
         rd_kafka_yield(rk);
 }
 
+
+/* ------------------------------------------------------------------------
+ * Tests for the share-consumer OAUTHBEARER APIs added in this commit:
+ *   rd_kafka_share_oauthbearer_set_token()
+ *   rd_kafka_share_oauthbearer_set_token_failure()
+ *   rd_kafka_share_queue_get_sasl()
+ *
+ * These exercise OAUTHBEARER DEFAULT mode against the *real* setup (the AWS
+ * IAM / Confluent Cloud configuration validated with the Python oauth_cb
+ * tests): the application obtains a real bearer token out-of-band and hands it
+ * to librdkafka through the share APIs above. The C equivalent of the Python
+ * boto3-STS step is to run a token command (e.g. `aws sts
+ * get-web-identity-token ...` or a boto3 python one-liner) and read the token
+ * from its stdout.
+ *
+ * Cluster config (bootstrap, SASL_SSL, sasl.mechanism=OAUTHBEARER,
+ * sasl.oauthbearer.method=default) comes from test.conf; the token command and
+ * the Confluent Cloud routing extensions come from env vars:
+ *
+ *   OAUTHBEARER_TOKEN_CMD         shell command that prints the token to stdout
+ *   OAUTHBEARER_LOGICAL_CLUSTER   logicalCluster SASL extension (lkc-xxxxx)
+ *   OAUTHBEARER_IDENTITY_POOL_ID  identityPoolId SASL extension (pool-xxxxx)
+ *
+ * The functional tests self-skip unless that real setup is configured. The
+ * argument-validation test runs against any OAUTHBEARER/default config and
+ * needs no broker or token command.
+ * ------------------------------------------------------------------------ */
+
+#define SHARE_TOKEN_LIFETIME_S 300
+
+typedef enum {
+        TOKEN_MODE_SUCCESS = 0, /* fetch a real token, call set_token */
+        TOKEN_MODE_FAILURE = 1  /* report failure via set_token_failure */
+} share_token_mode_t;
+
+struct share_token_ctx {
+        rd_kafka_share_t *rkshare; /* assigned right after creation */
+        share_token_mode_t mode;
+        const char *token_cmd;       /* command whose stdout is the token */
+        const char *logical_cluster; /* logicalCluster SASL extension */
+        const char *identity_pool;   /* identityPoolId SASL extension */
+        rd_atomic32_t set_token_calls;
+        rd_atomic32_t set_token_failure_calls;
+        rd_atomic32_t auth_error_seen;
+};
+
+/* Run the token command and return its stdout as a NUL-terminated bearer
+ * token (caller frees), or NULL on failure. This is the C equivalent of the
+ * Python oauth_cb's boto3-STS step: the real token is minted out-of-band (e.g.
+ * `aws sts get-web-identity-token ...` or a boto3 one-liner) and read from the
+ * command's stdout, then handed to librdkafka via the share APIs. */
+static char *share_exec_token(const char *cmd) {
+        FILE *fp;
+        char *token;
+        size_t cap = 16384, len = 0;
+        int rc;
+
+#ifdef _WIN32
+        fp = _popen(cmd, "r");
+#else
+        fp = popen(cmd, "r");
+#endif
+        if (!fp) {
+                TEST_SAY("token command popen() failed for: %s\n", cmd);
+                return NULL;
+        }
+
+        token = malloc(cap);
+        for (;;) {
+                size_t n;
+                if (len + 1 >= cap) {
+                        cap *= 2;
+                        token = realloc(token, cap);
+                }
+                n = fread(token + len, 1, cap - len - 1, fp);
+                len += n;
+                if (n == 0)
+                        break;
+        }
+        token[len] = '\0';
+
+#ifdef _WIN32
+        rc = _pclose(fp);
+#else
+        rc = pclose(fp);
+#endif
+        if (rc != 0) {
+                TEST_SAY("token command exited non-zero (%d): %s\n", rc, cmd);
+                free(token);
+                return NULL;
+        }
+
+        /* Trim trailing whitespace the command may append. */
+        while (len > 0 && (token[len - 1] == '\n' || token[len - 1] == '\r' ||
+                           token[len - 1] == ' ' || token[len - 1] == '\t'))
+                token[--len] = '\0';
+
+        if (len == 0) {
+                free(token);
+                return NULL;
+        }
+        return token;
+}
+
+/* Producer OAUTHBEARER refresh callback: fetch a real token and set it on the
+ * producer's own handle via the non-share API, so the producer can
+ * authenticate to the same cluster/pool and create the topic + produce. */
+static void producer_token_refresh_cb(rd_kafka_t *rk,
+                                      const char *oauthbearer_config,
+                                      void *opaque) {
+        struct share_token_ctx *ctx = opaque;
+        const char *ext[]           = {"logicalCluster", ctx->logical_cluster,
+                                       "identityPoolId", ctx->identity_pool};
+        char errstr[512];
+        char *token;
+        rd_kafka_resp_err_t err;
+
+        token = share_exec_token(ctx->token_cmd);
+        if (!token) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "producer: token command failed");
+                return;
+        }
+        err = rd_kafka_oauthbearer_set_token(
+            rk, token, (int64_t)(time(NULL) + SHARE_TOKEN_LIFETIME_S) * 1000,
+            "", ext, 4, errstr, sizeof(errstr));
+        if (err)
+                TEST_FAIL("producer oauthbearer_set_token failed: %s (%s)",
+                          errstr, rd_kafka_err2name(err));
+        free(token);
+}
+
+/* Share consumer OAUTHBEARER refresh callback. SUCCESS mode fetches a real
+ * token and supplies it via rd_kafka_share_oauthbearer_set_token(); FAILURE
+ * mode reports failure via rd_kafka_share_oauthbearer_set_token_failure().
+ * These are the two token APIs under test. */
+static void share_token_refresh_cb(rd_kafka_t *rk,
+                                   const char *oauthbearer_config,
+                                   void *opaque) {
+        struct share_token_ctx *ctx = opaque;
+        rd_kafka_resp_err_t err;
+
+        /* Refresh may fire before the share handle is assigned; report a
+         * transient failure so librdkafka retries. */
+        if (!ctx->rkshare) {
+                rd_kafka_oauthbearer_set_token_failure(
+                    rk, "share handle not ready yet");
+                return;
+        }
+
+        if (ctx->mode == TOKEN_MODE_FAILURE) {
+                err = rd_kafka_share_oauthbearer_set_token_failure(
+                    ctx->rkshare, "test: simulated token acquisition failure");
+                TEST_ASSERT(!err,
+                            "share_oauthbearer_set_token_failure returned %s",
+                            rd_kafka_err2name(err));
+                rd_atomic32_add(&ctx->set_token_failure_calls, 1);
+                return;
+        }
+
+        {
+                const char *ext[] = {"logicalCluster", ctx->logical_cluster,
+                                     "identityPoolId", ctx->identity_pool};
+                char errstr[512];
+                char *token = share_exec_token(ctx->token_cmd);
+
+                if (!token) {
+                        rd_kafka_share_oauthbearer_set_token_failure(
+                            ctx->rkshare, "token command failed");
+                        rd_atomic32_add(&ctx->set_token_failure_calls, 1);
+                        return;
+                }
+                err = rd_kafka_share_oauthbearer_set_token(
+                    ctx->rkshare, token,
+                    (int64_t)(time(NULL) + SHARE_TOKEN_LIFETIME_S) * 1000, "",
+                    ext, 4, errstr, sizeof(errstr));
+                TEST_ASSERT(!err, "share_oauthbearer_set_token failed: %s (%s)",
+                            errstr, rd_kafka_err2name(err));
+                free(token);
+                rd_atomic32_add(&ctx->set_token_calls, 1);
+        }
+}
+
+static void share_token_error_cb(rd_kafka_t *rk,
+                                 int err,
+                                 const char *reason,
+                                 void *opaque) {
+        struct share_token_ctx *ctx = opaque;
+        if (err == RD_KAFKA_RESP_ERR__AUTHENTICATION ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                rd_atomic32_add(&ctx->auth_error_seen, 1);
+                TEST_SAY("share set_token: expected error %s: %s\n",
+                         rd_kafka_err2name(err), reason);
+        }
+}
+
+/* Argument validation (no broker required): the exposed share APIs must
+ * reject invalid arguments with _INVALID_ARG. */
+static void do_test_share_set_token_invalid_args(void) {
+        rd_kafka_share_t *sc1;
+        rd_kafka_queue_t *saslq;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        const char *odd_ext[] = {"keyWithoutValue"}; /* size 1: not even */
+
+        SUB_TEST("share OAUTHBEARER set_token/_failure argument validation");
+
+        if (rd_strcasecmp(test_conf_get(NULL, "sasl.mechanism"),
+                          "oauthbearer")) {
+                SUB_TEST_SKIP("`sasl.mechanism=OAUTHBEARER` required\n");
+                return;
+        }
+        if (!rd_strcasecmp(test_conf_get(NULL, "sasl.oauthbearer.method"),
+                           "oidc")) {
+                SUB_TEST_SKIP("requires sasl.oauthbearer.method=default\n");
+                return;
+        }
+
+        sc1 = test_create_share_consumer("share-set-token-args", NULL);
+
+        /* rd_kafka_share_queue_get_sasl() must return the SASL callback queue
+         * for an OAUTHBEARER share consumer (NULL otherwise). */
+        saslq = rd_kafka_share_queue_get_sasl(sc1);
+        TEST_ASSERT(saslq != NULL,
+                    "share_queue_get_sasl returned NULL for an OAUTHBEARER "
+                    "share consumer");
+        rd_kafka_queue_destroy(saslq);
+
+        /* set_token_failure() with no error string -> _INVALID_ARG. */
+        err = rd_kafka_share_oauthbearer_set_token_failure(sc1, NULL);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "set_token_failure(NULL) expected _INVALID_ARG, got %s",
+                    rd_kafka_err2name(err));
+
+        /* set_token() with an already-expired lifetime -> _INVALID_ARG. */
+        err = rd_kafka_share_oauthbearer_set_token(
+            sc1, "header.payload.", 1000 /* ms since epoch: long expired */,
+            "admin", NULL, 0, errstr, sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "set_token(expired) expected _INVALID_ARG, got %s",
+                    rd_kafka_err2name(err));
+
+        /* set_token() with an odd extension_size -> _INVALID_ARG. */
+        err = rd_kafka_share_oauthbearer_set_token(
+            sc1, "header.payload.", (int64_t)(time(NULL) + 300) * 1000, "admin",
+            odd_ext, 1, errstr, sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "set_token(odd extension_size) expected _INVALID_ARG, "
+                    "got %s",
+                    rd_kafka_err2name(err));
+
+        test_share_destroy(sc1);
+        SUB_TEST_PASS();
+}
+
+/* Functional test against the real OAUTHBEARER setup (Confluent Cloud + token
+ * command). A real bearer token is obtained by running OAUTHBEARER_TOKEN_CMD
+ * and supplied to the share consumer through the APIs under test.
+ *   fail_mode=rd_false: set_token with a real token -> auth + consume works
+ *   fail_mode=rd_true : set_token_failure           -> auth fails, no consume
+ * Skips unless OAUTHBEARER/default + the token command and routing extensions
+ * are configured. */
+void do_test_share_set_token(rd_bool_t fail_mode) {
+        rd_kafka_t *p1;
+        rd_kafka_share_t *sc1;
+        rd_kafka_conf_t *conf;
+        rd_kafka_queue_t *saslq;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_error_t *error;
+        const char *grp_conf[] = {"share.auto.offset.reset", "SET", "earliest"};
+        const char *group      = "share-set-token-test";
+        const char *topic      = test_mk_topic_name("share_set_token", 1);
+        const char *expected_topics[1];
+        const char *token_cmd, *logical_cluster, *identity_pool;
+        char errstr[512];
+        struct share_token_ctx ctx;
+        int consumed;
+
+        SUB_TEST("share consumer rd_kafka_share_oauthbearer_set_token%s (%s)",
+                 fail_mode ? "_failure" : "",
+                 fail_mode ? "expect auth failure" : "expect auth + consume");
+
+        if (rd_strcasecmp(test_conf_get(NULL, "sasl.mechanism"),
+                          "oauthbearer")) {
+                SUB_TEST_SKIP("`sasl.mechanism=OAUTHBEARER` required\n");
+                return;
+        }
+        if (!rd_strcasecmp(test_conf_get(NULL, "sasl.oauthbearer.method"),
+                           "oidc")) {
+                SUB_TEST_SKIP("requires sasl.oauthbearer.method=default\n");
+                return;
+        }
+        token_cmd       = test_getenv("OAUTHBEARER_TOKEN_CMD", NULL);
+        logical_cluster = test_getenv("OAUTHBEARER_LOGICAL_CLUSTER", NULL);
+        identity_pool   = test_getenv("OAUTHBEARER_IDENTITY_POOL_ID", NULL);
+        if (!token_cmd || !logical_cluster || !identity_pool) {
+                SUB_TEST_SKIP(
+                    "set OAUTHBEARER_TOKEN_CMD, OAUTHBEARER_LOGICAL_CLUSTER "
+                    "and "
+                    "OAUTHBEARER_IDENTITY_POOL_ID to run against the real "
+                    "OAUTHBEARER setup\n");
+                return;
+        }
+
+        test_timeout_set(120);
+
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.mode      = fail_mode ? TOKEN_MODE_FAILURE : TOKEN_MODE_SUCCESS;
+        ctx.token_cmd = token_cmd;
+        ctx.logical_cluster = logical_cluster;
+        ctx.identity_pool   = identity_pool;
+
+        /* Producer: authenticates with a real token (same URL) so it can create
+         * the topic, set the group config and produce. */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_set_oauthbearer_token_refresh_cb(
+            conf, producer_token_refresh_cb);
+        rd_kafka_conf_set_opaque(conf, &ctx);
+        rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb);
+        p1 = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        test_create_topic_wait_exists(p1, topic, 1, -1, 5000);
+        test_IncrementalAlterConfigs_simple(p1, RD_KAFKA_RESOURCE_GROUP, group,
+                                            grp_conf, 1);
+
+        /* Share consumer: the token is supplied ONLY through the share APIs
+         * under test, served on a background SASL callback thread. */
+        test_conf_init(&conf, NULL, 30);
+        rd_kafka_conf_enable_sasl_queue(conf, rd_true);
+        rd_kafka_conf_set_oauthbearer_token_refresh_cb(conf,
+                                                       share_token_refresh_cb);
+        rd_kafka_conf_set_error_cb(conf, share_token_error_cb);
+        rd_kafka_conf_set_opaque(conf, &ctx);
+        rd_kafka_conf_set(conf, "group.id", group, errstr, sizeof(errstr));
+
+        sc1 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(sc1 != NULL, "Failed to create share consumer: %s", errstr);
+        ctx.rkshare = sc1; /* the refresh callback may now use the handle */
+
+        /* rd_kafka_share_queue_get_sasl(): exercise the third new API. */
+        saslq = rd_kafka_share_queue_get_sasl(sc1);
+        TEST_ASSERT(saslq != NULL, "share_queue_get_sasl returned NULL");
+        rd_kafka_queue_destroy(saslq);
+
+        error = rd_kafka_share_sasl_background_callbacks_enable(sc1);
+        TEST_ASSERT(!error, "share_sasl_background_callbacks_enable failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(sc1, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        expected_topics[0] = topic;
+
+        if (!fail_mode) {
+                /* Produce one message and consume it: proves the real token
+                 * supplied via set_token authenticated end-to-end. */
+                test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
+                rd_kafka_flush(p1, 10 * 1000);
+
+                consumed = test_share_consume_msgs(sc1, 1, 30, 1000,
+                                                   expected_topics, 1);
+
+                TEST_ASSERT(rd_atomic32_get(&ctx.set_token_calls) > 0,
+                            "expected share_oauthbearer_set_token to be "
+                            "called");
+                TEST_ASSERT(consumed > 0,
+                            "expected to consume after set_token, consumed=%d",
+                            consumed);
+                TEST_SAY("set_token OK: %d call(s), consumed %d msg(s)\n",
+                         rd_atomic32_get(&ctx.set_token_calls), consumed);
+
+                test_share_consumer_close(sc1);
+        } else {
+                /* No valid token is ever supplied -> auth fails, nothing
+                 * consumed. test_share_poll() swallows poll errors -> 0. */
+                consumed = test_share_consume_msgs(sc1, 1, 15, 1000,
+                                                   expected_topics, 1);
+
+                TEST_ASSERT(rd_atomic32_get(&ctx.set_token_failure_calls) > 0,
+                            "expected share_oauthbearer_set_token_failure to "
+                            "be called");
+                TEST_ASSERT(consumed == 0,
+                            "expected NO messages consumed on token failure, "
+                            "consumed=%d",
+                            consumed);
+                TEST_SAY(
+                    "set_token_failure OK: %d call(s), auth_error_seen=%d,"
+                    " consumed=%d\n",
+                    rd_atomic32_get(&ctx.set_token_failure_calls),
+                    rd_atomic32_get(&ctx.auth_error_seen), consumed);
+
+                /* A never-authenticated consumer's close() may return an error;
+                 * ignore it (don't use test_share_consumer_close(), which
+                 * TEST_FAILs on error). */
+                error = rd_kafka_share_consumer_close(sc1);
+                if (error)
+                        rd_kafka_error_destroy(error);
+        }
+
+        test_share_destroy(sc1);
+        rd_kafka_destroy(p1);
+        SUB_TEST_PASS();
+}
 
 /* Test producer message loss while reauth happens between produce. */
 void do_test_producer(int64_t reauth_time, const char *topic) {
@@ -842,9 +1247,14 @@ int main_0142_reauthentication(int argc, char **argv) {
             test_conf_get(NULL, "sasl.mechanism"), "oauthbearer");
         oauthbearer_method_default = !rd_strcasecmp(
             test_conf_get(NULL, "sasl.oauthbearer.method"), "default");
-        if (sasl_mechanism_oauthbearer && oauthbearer_method_default)
+        if (sasl_mechanism_oauthbearer && oauthbearer_method_default) {
                 test_conf_set(conf, "enable.sasl.oauthbearer.unsecure.jwt",
                               "true");
+
+                do_test_share_set_token_invalid_args();
+                do_test_share_set_token(rd_false /* success */);
+                do_test_share_set_token(rd_true /* failure */);
+        }
 
         rd_kafka_t *rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 

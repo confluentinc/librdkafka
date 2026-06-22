@@ -1375,6 +1375,149 @@ static void do_test_chaos_consumer_lifecycle(rd_bool_t explicit_ack) {
 }
 
 
+/**
+ * @brief Verify two share consumers in the same group do not
+ *        head-of-line-block each other: one consumer goes idle
+ *        while the other polls, and no transport-class error
+ *        surfaces to the polling consumer.
+ */
+static void do_test_share_holb_two_consumers(void) {
+        const char *topic = test_mk_topic_name("0174-share_holb", 1);
+        const char *group = "share-0174-holb";
+        const int msgcnt  = 100;
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *c1, *c2;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        int c1_consumed = 0;
+        int c2_consumed = 0;
+        int64_t ts_start;
+        char errstr[512];
+
+        SUB_TEST();
+
+        test_create_topic_wait_exists(NULL, topic, 1, 1, 10 * 1000);
+        test_produce_msgs_easy(topic, 0, 0, msgcnt);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "socket.timeout.ms", "3000");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        c1 = rd_kafka_share_consumer_new(rd_kafka_conf_dup(conf), errstr,
+                                         sizeof(errstr));
+        TEST_ASSERT(c1, "share consumer 1 create failed: %s", errstr);
+        c2 = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(c2, "share consumer 2 create failed: %s", errstr);
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(c1, subs));
+        TEST_CALL_ERR__(rd_kafka_share_subscribe(c2, subs));
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        err = rd_kafka_share_poll(c1, 1000, &batch);
+        if (err)
+                rd_kafka_error_destroy(err);
+        if (batch) {
+                size_t rcvd = rd_kafka_messages_count(batch);
+                size_t i;
+                for (i = 0; i < rcvd; i++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        if (!msg->err) {
+                                rd_kafka_share_acknowledge(c1, msg);
+                                c1_consumed++;
+                        }
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_SAY("c1 idle; polling c2 for ~10s\n");
+        ts_start = test_clock();
+        while (test_clock() < ts_start + 10 * 1000000) {
+                size_t rcvd;
+                size_t i;
+
+                err = rd_kafka_share_poll(c2, 500, &batch);
+                if (err) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(err);
+                        TEST_ASSERT(code != RD_KAFKA_RESP_ERR__TRANSPORT &&
+                                        code !=
+                                            RD_KAFKA_RESP_ERR__TIMED_OUT_QUEUE,
+                                    "c2 surfaced transport-class err %s while "
+                                    "c1 was idle",
+                                    rd_kafka_err2name(code));
+                        rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (i = 0; i < rcvd; i++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, i);
+                        if (!msg->err) {
+                                rd_kafka_share_acknowledge(c2, msg);
+                                c2_consumed++;
+                        }
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        while (c1_consumed + c2_consumed < msgcnt) {
+                rd_kafka_share_t *cs[2] = {c1, c2};
+                int *cnts[2]            = {&c1_consumed, &c2_consumed};
+                int progress            = 0;
+                int idx;
+                for (idx = 0; idx < 2; idx++) {
+                        size_t rcvd;
+                        size_t i;
+                        err = rd_kafka_share_poll(cs[idx], 500, &batch);
+                        if (err) {
+                                rd_kafka_error_destroy(err);
+                                rd_kafka_messages_destroy(batch);
+                                batch = NULL;
+                                continue;
+                        }
+                        rcvd = rd_kafka_messages_count(batch);
+                        for (i = 0; i < rcvd; i++) {
+                                rd_kafka_message_t *msg =
+                                    rd_kafka_messages_get(batch, i);
+                                if (!msg->err) {
+                                        rd_kafka_share_acknowledge(cs[idx],
+                                                                   msg);
+                                        (*cnts[idx])++;
+                                        progress++;
+                                }
+                        }
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+                if (!progress)
+                        break;
+        }
+
+        TEST_SAY("c1 consumed %d, c2 consumed %d (total %d/%d)\n", c1_consumed,
+                 c2_consumed, c1_consumed + c2_consumed, msgcnt);
+        TEST_ASSERT(c1_consumed + c2_consumed >= msgcnt,
+                    "expected at least %d records across both consumers, "
+                    "got %d",
+                    msgcnt, c1_consumed + c2_consumed);
+
+        test_share_consumer_close(c1);
+        test_share_destroy(c1);
+        test_share_consumer_close(c2);
+        test_share_destroy(c2);
+
+        SUB_TEST_PASS();
+}
+
+
 /***************************************************************************
  * Main Entry Point
  ***************************************************************************/
@@ -1429,6 +1572,8 @@ int main_0174_share_consumer_concurrency(int argc, char **argv) {
          * acknowledgement to cover both ack flows under churn. */
         do_test_chaos_consumer_lifecycle(rd_true);
         do_test_chaos_consumer_lifecycle(rd_false);
+
+        do_test_share_holb_two_consumers();
 
         return 0;
 }

@@ -429,10 +429,15 @@ void do_test_share_set_token(rd_bool_t fail_mode) {
         expected_topics[0] = topic;
 
         if (!fail_mode) {
+                int remains = 0;
                 /* Produce one message and consume it: proves the real token
-                 * supplied via set_token authenticated end-to-end. */
-                test_produce_msgs2(p1, topic, 0, 0, 0, 1, NULL, 0);
-                rd_kafka_flush(p1, 10 * 1000);
+                 * supplied via set_token authenticated end-to-end. Use the
+                 * no-wait producer + a generous flush; the plain helper's
+                 * built-in delivery wait is too short for Confluent Cloud's
+                 * first-connect latency to the partition leader. */
+                test_produce_msgs2_nowait(p1, topic, 0, 0, 0, 1, NULL, 0,
+                                          &remains);
+                rd_kafka_flush(p1, 30 * 1000);
 
                 consumed = test_share_consume_msgs(sc1, 1, 30, 1000,
                                                    expected_topics, 1);

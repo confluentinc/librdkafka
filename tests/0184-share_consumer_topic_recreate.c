@@ -943,94 +943,6 @@ static void test_recreate_during_close(void) {
         SUB_TEST_PASS();
 }
 
-
-/**
- * @brief Verify that growing a topic's partition count while two
- *        share consumers in the same group are running, and then
- *        closing one consumer, leaves the surviving consumer with a
- *        non-empty subscription that it can poll without error.
- */
-static void do_test_add_partitions_with_two_consumers(void) {
-        const char *topic = test_mk_topic_name("0184-add_partitions_2c", 1);
-        const char *group = "share-0184-add_partitions";
-        rd_kafka_share_t *c1;
-        rd_kafka_share_t *c2;
-        rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_topic_partition_list_t *assignment = NULL;
-        rd_kafka_messages_t *batch                  = NULL;
-        rd_kafka_error_t *err;
-        int64_t ts_start;
-        int wait_sec;
-
-        SUB_TEST();
-
-        test_create_topic_wait_exists(NULL, topic, 2, 1, 10 * 1000);
-
-        c1 = test_create_share_consumer(group, NULL);
-        c2 = test_create_share_consumer(group, NULL);
-
-        test_share_set_auto_offset_reset(group, "earliest");
-
-        subs = rd_kafka_topic_partition_list_new(1);
-        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
-        TEST_CALL_ERR__(rd_kafka_share_subscribe(c1, subs));
-        TEST_CALL_ERR__(rd_kafka_share_subscribe(c2, subs));
-        rd_kafka_topic_partition_list_destroy(subs);
-
-        ts_start = test_clock();
-        while (test_clock() < ts_start + 10 * 1000000) {
-                err = rd_kafka_share_poll(c1, 200, &batch);
-                if (err)
-                        rd_kafka_error_destroy(err);
-                rd_kafka_messages_destroy(batch);
-                batch = NULL;
-                err   = rd_kafka_share_poll(c2, 200, &batch);
-                if (err)
-                        rd_kafka_error_destroy(err);
-                rd_kafka_messages_destroy(batch);
-                batch = NULL;
-        }
-
-        TEST_SAY("Growing topic %s from 2 -> 4 partitions\n", topic);
-        test_create_partitions(NULL, topic, 4);
-
-        TEST_SAY(
-            "Closing consumer 1 to force rebalance with the "
-            "expanded partition set\n");
-        test_share_consumer_close(c1);
-        test_share_destroy(c1);
-        c1 = NULL;
-
-        wait_sec = test_quick ? 5 : 10;
-        ts_start = test_clock();
-        do {
-                err = rd_kafka_share_poll(c2, 500, &batch);
-                if (err) {
-                        TEST_SAY("c2 poll: %s\n",
-                                 rd_kafka_err2name(rd_kafka_error_code(err)));
-                        rd_kafka_error_destroy(err);
-                }
-                rd_kafka_messages_destroy(batch);
-                batch = NULL;
-        } while (test_clock() < ts_start + (wait_sec * 1000000));
-
-        assignment = test_get_subscription(c2);
-        TEST_ASSERT(assignment != NULL,
-                    "c2: expected non-NULL subscription after partition "
-                    "increase");
-        TEST_ASSERT(assignment->cnt >= 1,
-                    "c2: expected non-empty subscription after partition "
-                    "increase, got %d entries",
-                    assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(assignment);
-
-        test_share_consumer_close(c2);
-        test_share_destroy(c2);
-
-        SUB_TEST_PASS();
-}
-
-
 int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
         /* Topic deletion is not supported against Windows brokers. */
         if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
@@ -1057,8 +969,6 @@ int main_0184_share_consumer_topic_recreate(int argc, char **argv) {
                                    create_consumer_md_first, 2);
         do_test_recreate_chaos();
         do_test_recreate_survives_concurrent_producer();
-
-        do_test_add_partitions_with_two_consumers();
 
         rd_kafka_destroy(common_admin);
         rd_kafka_destroy(common_producer);

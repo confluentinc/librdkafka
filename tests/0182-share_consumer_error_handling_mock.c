@@ -3136,10 +3136,1685 @@ static void test_partition_error_injection_share_ack(void) {
 }
 
 
+static int test_ack_cb_state_count_err(const test_ack_cb_state_t *state,
+                                       rd_kafka_resp_err_t err) {
+        int n = 0;
+        int i;
+        for (i = 0; i < state->callback_cnt; i++) {
+                if (state->errs[i] == err)
+                        n++;
+        }
+        return n;
+}
+
+/**
+ * @brief Inject a per-partition err on ShareAcknowledge for partition
+ *        0 of a 2-partition topic and verify the err propagates to
+ *        commit_sync results and the ack callback for the affected
+ *        partition only; partition 1 remains NO_ERROR.
+ */
+static void do_test_partition_error_injection_share_ack_code(
+    rd_kafka_resp_err_t injected_err) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        char topic[64];
+        char group[64];
+        const int msgs_per_part = 5;
+        int acked;
+        int i;
+        int err_cb_cnt;
+        int ok_cb_cnt;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK("%s", rd_kafka_err2name(injected_err));
+
+        ctx = test_ctx_new();
+
+        rd_snprintf(topic, sizeof(topic), "0182-part_ack_err_%s",
+                    rd_kafka_err2name(injected_err));
+        rd_snprintf(group, sizeof(group), "sg-0182-part_ack_err_%s",
+                    rd_kafka_err2name(injected_err));
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "expected %d acked, got %d",
+                    2 * msgs_per_part, acked);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL, "expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == 2,
+                    "expected results for 2 partitions, got %d",
+                    partitions->cnt);
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                rd_kafka_resp_err_t exp_err        = rktpar->partition == 0
+                                                         ? injected_err
+                                                         : RD_KAFKA_RESP_ERR_NO_ERROR;
+
+                TEST_SAY("%s [%" PRId32 "]: %s\n", rktpar->topic,
+                         rktpar->partition, rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == exp_err,
+                            "partition [%" PRId32 "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(exp_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* One callback per partition; one carries injected_err, one
+         * carries NO_ERROR. Callback order is not deterministic so
+         * count rather than indexing. */
+        TEST_ASSERT(cb_state.callback_cnt == 2,
+                    "expected 2 callbacks (one per partition), got %d",
+                    cb_state.callback_cnt);
+        err_cb_cnt = test_ack_cb_state_count_err(&cb_state, injected_err);
+        ok_cb_cnt =
+            test_ack_cb_state_count_err(&cb_state, RD_KAFKA_RESP_ERR_NO_ERROR);
+        TEST_ASSERT(err_cb_cnt == 1, "expected 1 callback with %s, got %d",
+                    rd_kafka_err2name(injected_err), err_cb_cnt);
+        TEST_ASSERT(ok_cb_cnt == 1, "expected 1 callback with NO_ERROR, got %d",
+                    ok_cb_cnt);
+        TEST_ASSERT(cb_state.total_offsets == (size_t)(2 * msgs_per_part),
+                    "expected callback total_offsets %d, got %zu",
+                    2 * msgs_per_part, cb_state.total_offsets);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+static void test_partition_error_injection_share_ack_matrix(void) {
+        do_test_partition_error_injection_share_ack_code(
+            RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
+        do_test_partition_error_injection_share_ack_code(
+            RD_KAFKA_RESP_ERR_INVALID_RECORD_STATE);
+        do_test_partition_error_injection_share_ack_code(
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
+        do_test_partition_error_injection_share_ack_code(
+            RD_KAFKA_RESP_ERR_INVALID_REQUEST);
+        do_test_partition_error_injection_share_ack_code(
+            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        do_test_partition_error_injection_share_ack_code(
+            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID);
+}
+
+
+/**
+ * @brief Verify a per-partition ShareFetch err on the surface arm
+ *        (TOPIC_AUTHORIZATION_FAILED) reaches the app via share_poll
+ *        while records from unaffected partitions are still
+ *        delivered.
+ */
+static void test_partition_error_injection_share_fetch_surfaces_err(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic       = "0182-part_fetch_err_surface";
+        const char *group       = "sg-0182-part_fetch_err_surface";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        rd_bool_t saw_err = rd_false;
+        int p0_consumed   = 0;
+        int attempts      = 0;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        /* Stack TOPIC_AUTHORIZATION_FAILED on partition 1 so the
+         * client sees it on every ShareFetch reply until the test
+         * times out — partition 0 is unaffected. The depth covers
+         * all retries the client may issue in the polling window. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 1, RD_KAFKAP_ShareFetch, 5,
+                        injected_err, injected_err, injected_err, injected_err,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition errors");
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Drain: collect all partition-0 records and watch for the
+         * partition-1 surface err. Both paths must observe within
+         * a bounded number of polls. */
+        while (attempts++ < 40 && (!saw_err || p0_consumed < msgs_per_part)) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        TEST_SAY("share_poll returned %s: %s\n",
+                                 rd_kafka_err2name(code),
+                                 rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        if (code == injected_err)
+                                saw_err = rd_true;
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        /* Partition-0 records: ack inline so the
+                         * next share_poll passes the explicit-mode
+                         * unacked gate. */
+                        TEST_ASSERT(rkm->partition == 0,
+                                    "unexpected record from partition %" PRId32
+                                    " (partition 1 has only error in stack)",
+                                    rkm->partition);
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        p0_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(p0_consumed == msgs_per_part,
+                    "expected %d records from partition 0, got %d",
+                    msgs_per_part, p0_consumed);
+        TEST_ASSERT(saw_err,
+                    "expected %s to surface from share_poll within %d polls",
+                    rd_kafka_err2name(injected_err), attempts);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify per-partition error stacks are scoped per ApiKey:
+ *        a ShareFetch err and a ShareAcknowledge err on the same
+ *        partition each drain on their own path without
+ *        cross-contamination.
+ */
+static void test_partition_error_injection_per_apikey_stack_isolation(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic       = "0182-part_err_apikey_isolation";
+        const char *group       = "sg-0182-part_err_apikey_isolation";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t fetch_err =
+            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
+        const rd_kafka_resp_err_t ack_err = RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        int acked;
+        int i;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+
+        /* One transient ShareFetch err: drained on the first fetch,
+         * the second fetch succeeds and records are delivered. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 1,
+                        fetch_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push fetch error");
+
+        /* One ShareAck err: drained on commit_sync. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        ack_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push ack error");
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Fetch err drains transparently: all records delivered. */
+        acked = consume_and_ack_all(rkshare, msgs_per_part);
+        TEST_ASSERT(acked == msgs_per_part, "expected %d acked, got %d",
+                    msgs_per_part, acked);
+
+        /* Ack err drains on commit_sync. */
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL, "expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == 1, "expected 1 partition result, got %d",
+                    partitions->cnt);
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_ASSERT(rktpar->err == ack_err,
+                            "partition [%" PRId32 "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(ack_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        TEST_ASSERT(cb_state.callback_cnt == 1, "expected 1 callback, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(test_ack_cb_state_first_err(&cb_state) == ack_err,
+                    "expected callback err %s, got %s",
+                    rd_kafka_err2name(ack_err),
+                    rd_kafka_err2name(test_ack_cb_state_first_err(&cb_state)));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify distinct per-partition ShareAcknowledge errs on
+ *        different partitions in the same commit_sync are each
+ *        propagated to the matching partition's result and ack
+ *        callback.
+ */
+static void
+test_partition_error_injection_share_ack_heterogeneous_multi_partition(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic       = "0182-part_ack_err_heterogeneous";
+        const char *group       = "sg-0182-part_ack_err_heterogeneous";
+        const int partition_cnt = 3;
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t p0_err =
+            RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH;
+        const rd_kafka_resp_err_t p2_err =
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR;
+        int acked;
+        int i;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic,
+                                               partition_cnt,
+                                               1) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic with %d partitions", partition_cnt);
+
+        for (i = 0; i < partition_cnt; i++)
+                mock_produce_partition(ctx.producer, topic, i, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        acked = consume_and_ack_all(rkshare, partition_cnt * msgs_per_part);
+        TEST_ASSERT(acked == partition_cnt * msgs_per_part,
+                    "expected %d acked, got %d", partition_cnt * msgs_per_part,
+                    acked);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        p0_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition 0 error");
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 2, RD_KAFKAP_ShareAcknowledge, 1,
+                        p2_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition 2 error");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL, "expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == partition_cnt,
+                    "expected results for %d partitions, got %d", partition_cnt,
+                    partitions->cnt);
+
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                rd_kafka_resp_err_t exp_err;
+
+                switch (rktpar->partition) {
+                case 0:
+                        exp_err = p0_err;
+                        break;
+                case 2:
+                        exp_err = p2_err;
+                        break;
+                default:
+                        exp_err = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        break;
+                }
+
+                TEST_SAY("%s [%" PRId32 "]: %s\n", rktpar->topic,
+                         rktpar->partition, rd_kafka_err2name(rktpar->err));
+                TEST_ASSERT(rktpar->err == exp_err,
+                            "partition [%" PRId32 "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(exp_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* One callback per partition; one each carries p0_err, p2_err,
+         * NO_ERROR. */
+        TEST_ASSERT(cb_state.callback_cnt == partition_cnt,
+                    "expected %d callbacks (one per partition), got %d",
+                    partition_cnt, cb_state.callback_cnt);
+        TEST_ASSERT(test_ack_cb_state_count_err(&cb_state, p0_err) == 1,
+                    "expected 1 callback with %s", rd_kafka_err2name(p0_err));
+        TEST_ASSERT(test_ack_cb_state_count_err(&cb_state, p2_err) == 1,
+                    "expected 1 callback with %s", rd_kafka_err2name(p2_err));
+        TEST_ASSERT(test_ack_cb_state_count_err(
+                        &cb_state, RD_KAFKA_RESP_ERR_NO_ERROR) == 1,
+                    "expected 1 callback with NO_ERROR");
+        TEST_ASSERT(cb_state.total_offsets ==
+                        (size_t)(partition_cnt * msgs_per_part),
+                    "expected callback total_offsets %d, got %zu",
+                    partition_cnt * msgs_per_part, cb_state.total_offsets);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+static rd_bool_t is_metadata_request(rd_kafka_mock_request_t *request,
+                                     void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Metadata;
+}
+
+static rd_bool_t
+is_share_group_heartbeat_request(rd_kafka_mock_request_t *request,
+                                 void *opaque) {
+        return rd_kafka_mock_request_api_key(request) ==
+               RD_KAFKAP_ShareGroupHeartbeat;
+}
+
+/**
+ * @brief Verify a leader-unavailable-class err
+ *        (NOT_LEADER_OR_FOLLOWER, FENCED_LEADER_EPOCH,
+ *        KAFKA_STORAGE_ERROR, OFFSET_NOT_AVAILABLE,
+ *        REPLICA_NOT_AVAILABLE) on a per-partition ShareFetch
+ *        triggers a Metadata refresh and recovers transparently:
+ *        records arrive without the err surfacing to share_poll.
+ */
+static void do_test_share_fetch_partition_err_triggers_metadata_refresh(
+    rd_kafka_resp_err_t injected_err) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        char topic[64];
+        char group[64];
+        const int msgs_per_part    = 5;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        int p0_consumed = 0;
+        int p1_consumed = 0;
+        int attempts    = 0;
+        size_t metadata_cnt;
+        rd_bool_t saw_surface = rd_false;
+
+        SUB_TEST_QUICK("%s", rd_kafka_err2name(injected_err));
+
+        ctx = test_ctx_new();
+
+        rd_snprintf(topic, sizeof(topic), "0182-fetch_refresh_%s",
+                    rd_kafka_err2name(injected_err));
+        rd_snprintf(group, sizeof(group), "sg-0182-fetch_refresh_%s",
+                    rd_kafka_err2name(injected_err));
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Start request tracking AFTER subscribe so we don't count
+         * the initial subscription-driven metadata fetch. Clear
+         * accumulated requests so the count window starts empty. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        /* Stack 3 errs to keep the err arm armed across multiple
+         * fetch attempts. Each fetch pops one off the stack until
+         * the partition recovers. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 3,
+                        injected_err, injected_err,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition errors");
+
+        /* Drain until all records arrive from both partitions (recovery
+         * must succeed). Bound the attempts to keep the test quick. */
+        while (attempts++ < 40 &&
+               (p0_consumed < msgs_per_part || p1_consumed < msgs_per_part)) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        if (code == injected_err)
+                                saw_surface = rd_true;
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        if (rkm->partition == 0)
+                                p0_consumed++;
+                        else if (rkm->partition == 1)
+                                p1_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(p0_consumed == msgs_per_part,
+                    "expected %d records from partition 0, got %d",
+                    msgs_per_part, p0_consumed);
+        TEST_ASSERT(p1_consumed == msgs_per_part,
+                    "expected %d records from partition 1, got %d",
+                    msgs_per_part, p1_consumed);
+        TEST_ASSERT(!saw_surface,
+                    "leader-unavailable arm must NOT surface %s to app",
+                    rd_kafka_err2name(injected_err));
+
+        metadata_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_metadata_request, NULL);
+        TEST_SAY("metadata requests during recovery window: %" PRIusz "\n",
+                 metadata_cnt);
+        TEST_ASSERT(metadata_cnt >= 1,
+                    "leader-unavailable arm must trigger >= 1 Metadata "
+                    "request, got %" PRIusz,
+                    metadata_cnt);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+static void
+test_share_fetch_partition_err_triggers_metadata_refresh_matrix(void) {
+        do_test_share_fetch_partition_err_triggers_metadata_refresh(
+            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER);
+        do_test_share_fetch_partition_err_triggers_metadata_refresh(
+            RD_KAFKA_RESP_ERR_FENCED_LEADER_EPOCH);
+        do_test_share_fetch_partition_err_triggers_metadata_refresh(
+            RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
+        do_test_share_fetch_partition_err_triggers_metadata_refresh(
+            RD_KAFKA_RESP_ERR_OFFSET_NOT_AVAILABLE);
+        do_test_share_fetch_partition_err_triggers_metadata_refresh(
+            RD_KAFKA_RESP_ERR_REPLICA_NOT_AVAILABLE);
+}
+
+
+/**
+ * @brief Verify a silent-await-class err (UNKNOWN_TOPIC_OR_PART,
+ *        UNKNOWN_TOPIC_ID, INCONSISTENT_TOPIC_ID) on a per-partition
+ *        ShareFetch does not surface to share_poll; records are
+ *        delivered once the err stack drains.
+ */
+static void do_test_share_fetch_partition_err_silent_await(
+    rd_kafka_resp_err_t injected_err) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        char topic[64];
+        char group[64];
+        const int msgs_per_part    = 5;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        int p0_consumed       = 0;
+        int p1_consumed       = 0;
+        int attempts          = 0;
+        rd_bool_t saw_surface = rd_false;
+
+        SUB_TEST_QUICK("%s", rd_kafka_err2name(injected_err));
+
+        ctx = test_ctx_new();
+
+        rd_snprintf(topic, sizeof(topic), "0182-fetch_silent_%s",
+                    rd_kafka_err2name(injected_err));
+        rd_snprintf(group, sizeof(group), "sg-0182-fetch_silent_%s",
+                    rd_kafka_err2name(injected_err));
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Single err on partition 0; recovery requires no client
+         * action — the err just drains and the next fetch succeeds. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        while (attempts++ < 40 &&
+               (p0_consumed < msgs_per_part || p1_consumed < msgs_per_part)) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        if (code == injected_err)
+                                saw_surface = rd_true;
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        if (rkm->partition == 0)
+                                p0_consumed++;
+                        else if (rkm->partition == 1)
+                                p1_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(p0_consumed == msgs_per_part,
+                    "expected %d records from partition 0 after stack "
+                    "drain, got %d",
+                    msgs_per_part, p0_consumed);
+        TEST_ASSERT(p1_consumed == msgs_per_part,
+                    "expected %d records from partition 1, got %d",
+                    msgs_per_part, p1_consumed);
+        TEST_ASSERT(!saw_surface, "silent-await arm must NOT surface %s to app",
+                    rd_kafka_err2name(injected_err));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+static void test_share_fetch_partition_err_silent_await_matrix(void) {
+        do_test_share_fetch_partition_err_silent_await(
+            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART);
+        do_test_share_fetch_partition_err_silent_await(
+            RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID);
+        do_test_share_fetch_partition_err_silent_await(
+            RD_KAFKA_RESP_ERR_INCONSISTENT_TOPIC_ID);
+}
+
+
+/**
+ * @brief Verify the default arm of the per-partition ShareFetch
+ *        error handler translates an unmapped err code to __STATE
+ *        before surfacing it to share_poll; the original broker
+ *        code is never visible to the app.
+ */
+static void test_share_fetch_partition_err_default_translates_to_state(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic       = "0182-fetch_default_state";
+        const char *group       = "sg-0182-fetch_default_state";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_LOG_DIR_NOT_FOUND;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        rd_bool_t saw_state    = rd_false;
+        rd_bool_t saw_original = rd_false;
+        int p0_consumed        = 0;
+        int attempts           = 0;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        /* Stack on partition 1 so partition 0 is unaffected. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 1, RD_KAFKAP_ShareFetch, 5,
+                        injected_err, injected_err, injected_err, injected_err,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition errors");
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        while (attempts++ < 40 && (!saw_state || p0_consumed < msgs_per_part)) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        TEST_SAY("share_poll returned %s: %s\n",
+                                 rd_kafka_err2name(code),
+                                 rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                        if (code == RD_KAFKA_RESP_ERR__STATE)
+                                saw_state = rd_true;
+                        else if (code == injected_err)
+                                saw_original = rd_true;
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        TEST_ASSERT(rkm->partition == 0,
+                                    "unexpected record from partition %" PRId32,
+                                    rkm->partition);
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        p0_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(p0_consumed == msgs_per_part,
+                    "expected %d records from partition 0, got %d",
+                    msgs_per_part, p0_consumed);
+        TEST_ASSERT(saw_state,
+                    "expected __STATE to surface from default arm "
+                    "translation");
+        TEST_ASSERT(!saw_original,
+                    "default arm must translate %s to __STATE, not "
+                    "surface the original code",
+                    rd_kafka_err2name(injected_err));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify the UNKNOWN_LEADER_EPOCH arm of the per-partition
+ *        ShareFetch error handler does not surface the err to
+ *        share_poll; records are delivered once the err stack drains.
+ */
+static void test_share_fetch_partition_err_unknown_leader_epoch_log_only(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic       = "0182-fetch_unknown_leader_epoch";
+        const char *group       = "sg-0182-fetch_unknown_leader_epoch";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        int p0_consumed       = 0;
+        int p1_consumed       = 0;
+        int attempts          = 0;
+        rd_bool_t saw_surface = rd_false;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        while (attempts++ < 40 &&
+               (p0_consumed < msgs_per_part || p1_consumed < msgs_per_part)) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        if (code == injected_err)
+                                saw_surface = rd_true;
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        if (rkm->partition == 0)
+                                p0_consumed++;
+                        else if (rkm->partition == 1)
+                                p1_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(p0_consumed == msgs_per_part,
+                    "expected %d records from partition 0, got %d",
+                    msgs_per_part, p0_consumed);
+        TEST_ASSERT(p1_consumed == msgs_per_part,
+                    "expected %d records from partition 1, got %d",
+                    msgs_per_part, p1_consumed);
+        TEST_ASSERT(!saw_surface,
+                    "UNKNOWN_LEADER_EPOCH arm must NOT surface to app");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify a per-partition ShareAcknowledge err does not reset
+ *        the share session: after the failed ack, a subsequent
+ *        fetch + ack + commit_sync cycle succeeds with NO_ERROR for
+ *        every partition and no extra ShareGroupHeartbeat rejoin
+ *        fires.
+ */
+static void test_share_ack_partition_err_preserves_session(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic       = "0182-ack_err_preserves_session";
+        const char *group       = "sg-0182-ack_err_preserves_session";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        int acked;
+        int i;
+        size_t heartbeat_cnt;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Phase 1: consume + ack all, inject per-partition err on
+         * partition 0 only, commit_sync. */
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "Phase 1: expected %d acked",
+                    2 * msgs_per_part);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 1: expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == 2,
+                    "Phase 1: expected 2 partition results, got %d",
+                    partitions->cnt);
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                rd_kafka_resp_err_t exp_err        = rktpar->partition == 0
+                                                         ? injected_err
+                                                         : RD_KAFKA_RESP_ERR_NO_ERROR;
+                TEST_ASSERT(rktpar->err == exp_err,
+                            "Phase 1 partition [%" PRId32
+                            "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(exp_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Start tracking AFTER Phase 1 to count only Phase-2 wire
+         * activity. Session reset would force a member rejoin via an
+         * extra ShareGroupHeartbeat; in the happy preserved-session
+         * path the consumer continues with its existing member id
+         * and no rejoin heartbeat is needed in this short window. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        /* Phase 2: fresh records on partition 1. If session was
+         * reset, commit_sync here would surface
+         * INVALID_SHARE_SESSION_EPOCH for every partition (epoch-0
+         * strip). NO_ERROR means the session is intact. The lower
+         * bound on acked count is msgs_per_part (the new p1 records);
+         * p0 may also contribute if its lock has expired by the time
+         * we poll. */
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        acked = consume_and_ack_all(rkshare, msgs_per_part);
+        TEST_ASSERT(acked >= msgs_per_part,
+                    "Phase 2: expected >= %d acked, got %d", msgs_per_part,
+                    acked);
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 2: expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt >= 1,
+                    "Phase 2: expected at least 1 partition result, got %d",
+                    partitions->cnt);
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                TEST_ASSERT(rktpar->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Phase 2 partition [%" PRId32
+                            "]: session should be intact, expected "
+                            "NO_ERROR, got %s",
+                            rktpar->partition, rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Heartbeat count check: a session reset would push the
+         * client to rejoin (extra heartbeat with new member id /
+         * reset epoch). Allow up to 1 for a natural-interval
+         * heartbeat that may fire during the Phase 2 window; any
+         * additional heartbeats here suggest a forced rejoin. */
+        heartbeat_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_group_heartbeat_request, NULL);
+        TEST_SAY("Phase 2 ShareGroupHeartbeat count: %" PRIusz "\n",
+                 heartbeat_cnt);
+        TEST_ASSERT(heartbeat_cnt <= 1,
+                    "Phase 2: ShareGroupHeartbeat count > 1 suggests a "
+                    "rejoin (per-partition ack err should not reset "
+                    "session); got %" PRIusz,
+                    heartbeat_cnt);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify the client does not silently retry a failed
+ *        per-partition ack: after a commit_sync surfaces the
+ *        injected err, an immediate follow-up commit_sync with no
+ *        new acks must send zero ShareAcknowledge requests on the
+ *        wire.
+ */
+static void test_share_ack_partition_err_not_auto_retried(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic       = "0182-ack_err_no_auto_retry";
+        const char *group       = "sg-0182-ack_err_no_auto_retry";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        int acked;
+        size_t share_ack_cnt;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        acked = consume_and_ack_all(rkshare, msgs_per_part);
+        TEST_ASSERT(acked == msgs_per_part, "expected %d acked", msgs_per_part);
+
+        /* Inject only one err: if the client retried, the second
+         * commit_sync would consume the still-injected err — but
+         * after this single err drains, the stack is empty. So the
+         * test result is unambiguous regardless of whether the err
+         * arm is "transient" or "permanent". */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        /* First commit_sync: surfaces the err. */
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "1st commit_sync: expected non-NULL results");
+        TEST_ASSERT(partitions->cnt == 1,
+                    "1st commit_sync: expected 1 partition, got %d",
+                    partitions->cnt);
+        TEST_ASSERT(partitions->elems[0].err == injected_err,
+                    "1st commit_sync: expected %s, got %s",
+                    rd_kafka_err2name(injected_err),
+                    rd_kafka_err2name(partitions->elems[0].err));
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        /* Start tracking AFTER the 1st commit_sync so we count only
+         * wire traffic from the 2nd commit_sync window. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        /* Second commit_sync immediately, with no new acks. If the
+         * client auto-retried the failed ack, a ShareAcknowledge
+         * would fire here to deliver the re-queued ack. Zero
+         * ShareAck requests confirms no retry. The partitions
+         * pointer may be NULL or point to an empty list — both
+         * mean "nothing to commit", which is the success signal. */
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 5000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        share_ack_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_ack_request, NULL);
+        TEST_SAY("2nd commit_sync wire counts: ShareAck=%" PRIusz "\n",
+                 share_ack_cnt);
+        TEST_ASSERT(share_ack_cnt == 0,
+                    "2nd commit_sync: expected 0 ShareAck requests (no "
+                    "auto-retry of failed ack), got %" PRIusz,
+                    share_ack_cnt);
+
+        if (partitions) {
+                TEST_ASSERT(partitions->cnt == 0,
+                            "2nd commit_sync: expected empty partitions "
+                            "list when present, got %d entries",
+                            partitions->cnt);
+                rd_kafka_topic_partition_list_destroy(partitions);
+        }
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify a leader-unavailable err on a ShareFetch issued
+ *        after a clean fetch + ack cycle (mid-session) still
+ *        triggers a Metadata refresh and recovers transparently.
+ */
+static void test_share_fetch_partition_err_on_subsequent_fetch_recovers(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic       = "0182-fetch_err_subsequent_fetch";
+        const char *group       = "sg-0182-fetch_err_subsequent_fetch";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        int p0_consumed = 0;
+        int attempts    = 0;
+        int acked;
+        size_t metadata_cnt;
+        rd_bool_t saw_surface = rd_false;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Phase 1: clean fetch + ack establishes the session. */
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "Phase 1: expected %d acked",
+                    2 * msgs_per_part);
+
+        /* Phase 2: produce more on partition 0, inject err on its
+         * next ShareFetch, verify recovery. Tracking starts here so
+         * only Phase 2 metadata fanout is counted. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 3,
+                        injected_err, injected_err,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition errors");
+
+        while (attempts++ < 40 && p0_consumed < msgs_per_part) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t code = rd_kafka_error_code(error);
+                        if (code == injected_err)
+                                saw_surface = rd_true;
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        if (rkm->partition == 0)
+                                p0_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(p0_consumed == msgs_per_part,
+                    "expected %d records from partition 0 after recovery, "
+                    "got %d",
+                    msgs_per_part, p0_consumed);
+        TEST_ASSERT(!saw_surface,
+                    "leader-unavailable arm must NOT surface to app on a "
+                    "subsequent fetch");
+
+        metadata_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_metadata_request, NULL);
+        TEST_SAY("metadata requests during recovery window: %" PRIusz "\n",
+                 metadata_cnt);
+        TEST_ASSERT(metadata_cnt >= 1,
+                    "leader-unavailable arm on subsequent fetch must "
+                    "trigger >= 1 Metadata request, got %" PRIusz,
+                    metadata_cnt);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify a per-partition ShareAck err on a second commit_sync
+ *        (after a clean prior cycle) propagates to the matching
+ *        partition's result and ack callback, while unaffected
+ *        partitions remain NO_ERROR.
+ */
+static void test_share_ack_partition_err_after_clean_ack_surfaces(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *partitions = NULL;
+        rd_kafka_error_t *error;
+        const char *topic       = "0182-ack_err_after_clean";
+        const char *group       = "sg-0182-ack_err_after_clean";
+        const int msgs_per_part = 5;
+        const rd_kafka_resp_err_t injected_err =
+            RD_KAFKA_RESP_ERR_INVALID_REQUEST;
+        int acked;
+        int i;
+        test_ack_cb_state_t cb_state = {0};
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             &cb_state, test_share_ack_cb);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Phase 1: clean ack cycle. */
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "Phase 1: expected %d acked",
+                    2 * msgs_per_part);
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 1: expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == 2,
+                    "Phase 1: expected 2 partition results, got %d",
+                    partitions->cnt);
+        for (i = 0; i < partitions->cnt; i++) {
+                TEST_ASSERT(partitions->elems[i].err ==
+                                RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Phase 1 partition [%" PRId32
+                            "]: expected NO_ERROR, got %s",
+                            partitions->elems[i].partition,
+                            rd_kafka_err2name(partitions->elems[i].err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        TEST_ASSERT(cb_state.callback_cnt == 2,
+                    "Phase 1: expected 2 callbacks, got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(test_ack_cb_state_count_err(
+                        &cb_state, RD_KAFKA_RESP_ERR_NO_ERROR) == 2,
+                    "Phase 1: expected 2 NO_ERROR callbacks");
+
+        /* Phase 2: fresh batch + err on partition 0 ShareAck. */
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+        mock_produce_partition(ctx.producer, topic, 1, msgs_per_part);
+
+        acked = consume_and_ack_all(rkshare, 2 * msgs_per_part);
+        TEST_ASSERT(acked == 2 * msgs_per_part, "Phase 2: expected %d acked",
+                    2 * msgs_per_part);
+
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareAcknowledge, 1,
+                        injected_err) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push partition error");
+
+        partitions = NULL;
+        error      = rd_kafka_share_commit_sync(rkshare, 30000, &partitions);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        TEST_ASSERT(partitions != NULL,
+                    "Phase 2: expected non-NULL partition results");
+        TEST_ASSERT(partitions->cnt == 2,
+                    "Phase 2: expected 2 partition results, got %d",
+                    partitions->cnt);
+        for (i = 0; i < partitions->cnt; i++) {
+                rd_kafka_topic_partition_t *rktpar = &partitions->elems[i];
+                rd_kafka_resp_err_t exp_err        = rktpar->partition == 0
+                                                         ? injected_err
+                                                         : RD_KAFKA_RESP_ERR_NO_ERROR;
+                TEST_ASSERT(rktpar->err == exp_err,
+                            "Phase 2 partition [%" PRId32
+                            "]: expected %s, got %s",
+                            rktpar->partition, rd_kafka_err2name(exp_err),
+                            rd_kafka_err2name(rktpar->err));
+        }
+        rd_kafka_topic_partition_list_destroy(partitions);
+
+        TEST_ASSERT(cb_state.callback_cnt == 4,
+                    "expected 4 callbacks total (2 per phase), got %d",
+                    cb_state.callback_cnt);
+        TEST_ASSERT(test_ack_cb_state_count_err(
+                        &cb_state, RD_KAFKA_RESP_ERR_NO_ERROR) == 3,
+                    "expected 3 NO_ERROR callbacks total (2 Phase 1 + 1 "
+                    "Phase 2 partition 1)");
+        TEST_ASSERT(test_ack_cb_state_count_err(&cb_state, injected_err) == 1,
+                    "expected 1 callback with the injected err");
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ack_cb_state_destroy(&cb_state);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify the share consumer fires ShareGroupHeartbeat
+ *        requests at the configured interval: with a 1000ms
+ *        interval, expect 3-5 heartbeats over ~2s.
+ */
+static void test_share_group_adherence_to_hb_interval(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic = "0182-hb_interval_adherence";
+        const char *group = "sg-0182-hb_interval_adherence";
+        size_t hb_cnt;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        rd_kafka_mock_sharegroup_set_heartbeat_interval(ctx.mcluster, 1000);
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 3, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        rd_sleep(2);
+
+        hb_cnt = test_mock_get_matching_request_cnt(
+            ctx.mcluster, is_share_group_heartbeat_request, NULL);
+        TEST_SAY("ShareGroupHeartbeat count over ~2s: %" PRIusz "\n", hb_cnt);
+        TEST_ASSERT(hb_cnt >= 3 && hb_cnt <= 5,
+                    "Expected 3–5 ShareGroupHeartbeats at 1000ms interval "
+                    "over ~2s, got %" PRIusz,
+                    hb_cnt);
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify the share consumer cannot fetch from a topic while
+ *        its Metadata response carries UNKNOWN_TOPIC_ID, and that
+ *        records arrive once the err clears. With two topics, a
+ *        clean topic must still deliver records while the other is
+ *        blocked.
+ */
+static void
+do_test_share_group_metadata_unknown_topic_id(rd_bool_t two_topics) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic          = "0182-meta_unk_topic_id";
+        const char *topic2         = "0182-meta_unk_topic_id_2";
+        const int msgs_per_topic   = 5;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        int attempts;
+        int blocked_topic_consumed = 0;
+        int other_topic_consumed   = 0;
+        char group[64];
+
+        SUB_TEST_QUICK("%s", two_topics ? "two topics" : "one topic");
+
+        rd_snprintf(group, sizeof(group), "sg-0182-meta_unk_topic_id_%s",
+                    two_topics ? "two" : "one");
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+        if (two_topics) {
+                TEST_ASSERT(
+                    rd_kafka_mock_topic_create(ctx.mcluster, topic2, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic2");
+        }
+
+        mock_produce(ctx.producer, topic, msgs_per_topic);
+        if (two_topics)
+                mock_produce(ctx.producer, topic2, msgs_per_topic);
+
+        /* Inject UNKNOWN_TOPIC_ID on the blocked topic's Metadata. */
+        rd_kafka_mock_topic_set_error(ctx.mcluster, topic,
+                                      RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_ID);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        if (two_topics)
+                test_share_consumer_subscribe_multi(rkshare, 2, topic, topic2);
+        else
+                test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* While the err is injected the blocked topic delivers nothing.
+         * In the two-topic case the clean topic should still deliver. */
+        for (attempts = 0; attempts < 4; attempts++) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        if (!strcmp(rd_kafka_topic_name(rkm->rkt), topic))
+                                blocked_topic_consumed++;
+                        else
+                                other_topic_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(blocked_topic_consumed == 0,
+                    "Expected 0 records from blocked topic while err "
+                    "injected, got %d",
+                    blocked_topic_consumed);
+        if (two_topics)
+                TEST_ASSERT(other_topic_consumed == msgs_per_topic,
+                            "Expected %d records from the clean topic, got %d",
+                            msgs_per_topic, other_topic_consumed);
+
+        /* Clear the err. Reconciliation should now complete and the
+         * blocked topic's records should arrive. */
+        rd_kafka_mock_topic_set_error(ctx.mcluster, topic,
+                                      RD_KAFKA_RESP_ERR_NO_ERROR);
+
+        attempts = 0;
+        while (attempts++ < 40 && blocked_topic_consumed < msgs_per_topic) {
+                size_t rcvd, j;
+                error = rd_kafka_share_poll(rkshare, 500, &batch);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (rkm->err)
+                                continue;
+                        rd_kafka_share_acknowledge(rkshare, rkm);
+                        if (!strcmp(rd_kafka_topic_name(rkm->rkt), topic))
+                                blocked_topic_consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_ASSERT(blocked_topic_consumed == msgs_per_topic,
+                    "After clearing err: expected %d records from "
+                    "blocked topic, got %d",
+                    msgs_per_topic, blocked_topic_consumed);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+static void test_share_group_metadata_unknown_topic_id_tests(void) {
+        do_test_share_group_metadata_unknown_topic_id(rd_false /* one topic */);
+        do_test_share_group_metadata_unknown_topic_id(rd_true /* two topics */);
+}
+
+
+/**
+ * @brief Verify rapid rd_kafka_share_subscribe /
+ *        rd_kafka_share_unsubscribe cycles do not trip any
+ *        assertion and the consumer can be cleanly destroyed
+ *        afterwards, both with a ready mock cluster and against an
+ *        unreachable bootstrap.
+ */
+static void do_test_share_group_quick_unsubscribe(rd_bool_t cluster_ready) {
+        test_ctx_t ctx                    = {0};
+        rd_kafka_mock_cluster_t *mcluster = NULL;
+        const char *bootstraps            = "localhost:9999";
+        const char *topic                 = "0182-quick_unsub";
+        const char *group                 = "sg-0182-quick_unsub";
+        rd_kafka_topic_partition_list_t *subscription;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_resp_err_t err;
+        int i;
+
+        SUB_TEST_QUICK("%s",
+                       cluster_ready ? "mock cluster ready" : "no cluster");
+
+        if (cluster_ready) {
+                ctx = test_ctx_new();
+                TEST_ASSERT(
+                    rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+                bootstraps = ctx.bootstraps;
+                mcluster   = ctx.mcluster;
+        }
+
+        rkshare = create_mock_share_consumer(bootstraps, group, "explicit",
+                                             NULL, NULL);
+
+        subscription = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subscription, topic,
+                                          RD_KAFKA_PARTITION_UA);
+
+        for (i = 0; i < 2; i++) {
+                err = rd_kafka_share_subscribe(rkshare, subscription);
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "iter %d: subscribe failed: %s", i,
+                            rd_kafka_err2name(err));
+                err = rd_kafka_share_unsubscribe(rkshare);
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "iter %d: unsubscribe failed: %s", i,
+                            rd_kafka_err2name(err));
+        }
+
+        rd_kafka_topic_partition_list_destroy(subscription);
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        if (cluster_ready)
+                test_ctx_destroy(&ctx);
+        else
+                RD_IF_FREE(mcluster, test_mock_cluster_destroy);
+
+        SUB_TEST_PASS();
+}
+
+static void test_share_group_quick_unsubscribe_tests(void) {
+        do_test_share_group_quick_unsubscribe(rd_false /* no cluster */);
+        do_test_share_group_quick_unsubscribe(rd_true /* cluster ready */);
+}
+
+
+/**
+ * @brief Verify a NOT_LEADER_OR_FOLLOWER err on ShareFetch triggers
+ *        a fast-leader-query Metadata request after the failing
+ *        ShareFetch.
+ */
+static void test_share_fetch_fast_leader_query_backoff(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        const char *topic          = "0182-fast_leader_query_backoff";
+        const char *group          = "sg-0182-fast_leader_query_backoff";
+        const int msgs_per_part    = 5;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        rd_kafka_mock_request_t **requests  = NULL;
+        size_t request_cnt                  = 0;
+        rd_bool_t previous_was_ShareFetch   = rd_false;
+        rd_bool_t metadata_after_ShareFetch = rd_false;
+        size_t i;
+        int acked;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        mock_produce_partition(ctx.producer, topic, 0, msgs_per_part);
+
+        rkshare = create_mock_share_consumer(ctx.bootstraps, group, "explicit",
+                                             NULL, NULL);
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Drive a clean consume cycle so the share session is fully
+         * established and any subscription-driven metadata traffic is
+         * out of the way before we start tracking. */
+        acked = consume_and_ack_all(rkshare, msgs_per_part);
+        TEST_ASSERT(acked == msgs_per_part,
+                    "Phase 1: expected %d acked, got %d", msgs_per_part, acked);
+
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+        rd_kafka_mock_clear_requests(ctx.mcluster);
+
+        /* Inject one NOT_LEADER_OR_FOLLOWER on the next ShareFetch.
+         * The arm triggers rd_kafka_toppar_leader_unavailable →
+         * topic_fast_leader_query → Metadata refresh. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push fetch error");
+
+        /* Drive a poll so the ShareFetch goes out and consumes the
+         * injected err. */
+        error = rd_kafka_share_poll(rkshare, 500, &batch);
+        if (error)
+                rd_kafka_error_destroy(error);
+        rd_kafka_messages_destroy(batch);
+
+        /* Give the fast-leader-query Metadata request a chance to
+         * fire. */
+        rd_sleep(3);
+
+        requests = rd_kafka_mock_get_requests(ctx.mcluster, &request_cnt);
+        for (i = 0; i < request_cnt; i++) {
+                int16_t api = rd_kafka_mock_request_api_key(requests[i]);
+                TEST_SAY("Request: api=%d ts=%" PRId64 "\n", (int)api,
+                         rd_kafka_mock_request_timestamp(requests[i]));
+
+                if (api == RD_KAFKAP_ShareFetch) {
+                        previous_was_ShareFetch = rd_true;
+                } else if (api == RD_KAFKAP_Metadata &&
+                           previous_was_ShareFetch) {
+                        metadata_after_ShareFetch = rd_true;
+                        break;
+                } else if (api != RD_KAFKAP_ShareGroupHeartbeat) {
+                        previous_was_ShareFetch = rd_false;
+                }
+        }
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
+
+        TEST_ASSERT(metadata_after_ShareFetch,
+                    "expected a Metadata request after a failing "
+                    "ShareFetch");
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
-        test_timeout_set(120);
+        test_timeout_set(300);
 
         test_commit_sync_share_session_not_found();
         test_commit_sync_invalid_share_session_epoch();
@@ -3218,6 +4893,27 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         test_partition_error_injection_general();
         test_partition_error_injection_share_fetch();
         test_partition_error_injection_share_ack();
+
+        test_partition_error_injection_share_ack_matrix();
+        test_partition_error_injection_share_fetch_surfaces_err();
+        test_partition_error_injection_per_apikey_stack_isolation();
+        test_partition_error_injection_share_ack_heterogeneous_multi_partition();
+
+        test_share_fetch_partition_err_triggers_metadata_refresh_matrix();
+        test_share_fetch_partition_err_silent_await_matrix();
+        test_share_fetch_partition_err_default_translates_to_state();
+        test_share_fetch_partition_err_unknown_leader_epoch_log_only();
+        test_share_ack_partition_err_preserves_session();
+        test_share_ack_partition_err_not_auto_retried();
+
+        test_share_fetch_partition_err_on_subsequent_fetch_recovers();
+        test_share_ack_partition_err_after_clean_ack_surfaces();
+
+        test_share_group_adherence_to_hb_interval();
+        test_share_group_metadata_unknown_topic_id_tests();
+        test_share_group_quick_unsubscribe_tests();
+
+        test_share_fetch_fast_leader_query_backoff();
 
         return 0;
 }

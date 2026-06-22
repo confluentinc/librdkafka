@@ -1123,8 +1123,6 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
 
         test_conf_init(&conf, NULL, 60);
 
-        do_test_OIDC_aws_iam_conf_roundtrip();  // no broker connection needed
-
         sec = test_conf_get(conf, "security.protocol");
         if (!strstr(sec, "sasl")) {
                 TEST_SKIP("Apache Kafka cluster not configured for SASL\n");
@@ -1156,6 +1154,7 @@ int main_0126_oauthbearer_oidc(int argc, char **argv) {
         do_test_produce_consumer_with_OIDC_sub_claim(conf);
         do_test_produce_share_consumer_with_OIDC_sub_claim(conf);
 
+        do_test_OIDC_aws_iam_conf_roundtrip();
         do_test_OIDC_aws_iam_stub_fires_without_callback(conf);
         do_test_OIDC_aws_iam_user_callback_wins(conf);
 

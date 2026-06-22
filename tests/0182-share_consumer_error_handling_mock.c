@@ -2941,6 +2941,140 @@ static void do_test_one_log_on_broker_down_during_active_empty_poll(void) {
 }
 
 
+/* ===================================================================
+ *  Log callback for do_test_fetch_stall_logged_on_no_broker. Counts
+ *  the main-thread "Fetch stalled: no eligible broker" debug log.
+ * =================================================================== */
+static void fetch_stall_log_cb(const rd_kafka_t *rk,
+                               int level,
+                               const char *fac,
+                               const char *buf) {
+        rd_atomic32_t *cnt = rd_kafka_opaque(rk);
+        if (cnt && !strcmp(fac, "FETCHMORE") &&
+            strstr(buf, "Fetch stalled: no eligible broker"))
+                rd_atomic32_add(cnt, 1);
+}
+
+/* ===================================================================
+ *  do_test_fetch_stall_logged_on_no_broker
+ *
+ *  With a partition assigned but the only broker down, the main-thread
+ *  re-trigger loop wants to fetch (share_fetch_more_records set, no op
+ *  in-flight) yet select_broker returns NULL. Verify it emits the
+ *  rate-limited "Fetch stalled: no eligible broker" log: at least once
+ *  (the stall is reported) and bounded (the throttle prevents a flood
+ *  while the empty-poll loop is hot).
+ * =================================================================== */
+static void do_test_fetch_stall_logged_on_no_broker(void) {
+        test_ctx_t ctx;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        rd_atomic32_t stall_cnt;
+        const char *topic          = "0182-fetch-stall";
+        const char *group          = "sg-0182-fetch-stall";
+        const int msgcnt_recovery  = 5;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        size_t rcvd;
+        int acked, cnt;
+
+        SUB_TEST_QUICK();
+
+        /* Taking the only broker down raises __ALL_BROKERS_DOWN /
+         * __TRANSPORT on the callbacks; none should fail the test. */
+        test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
+
+        ctx = test_ctx_new();
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+
+        rd_atomic32_init(&stall_cnt, 0);
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        /* The stall log is emitted on the CONSUMER debug context. */
+        test_conf_set(conf, "debug", "consumer");
+        test_conf_set(conf, "reconnect.backoff.ms", "100");
+        test_conf_set(conf, "reconnect.backoff.max.ms", "500");
+        rd_kafka_conf_set_log_cb(conf, fetch_stall_log_cb);
+        rd_kafka_conf_set_opaque(conf, &stall_cnt);
+
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare != NULL, "Failed to create share consumer");
+
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Prime so the share group joins and the partition is assigned —
+         * otherwise the stall reason would be "no partitions assigned". */
+        mock_produce(ctx.producer, topic, 1);
+        acked = consume_and_ack_all(rkshare, 1);
+        TEST_ASSERT(acked == 1, "prime: expected 1 acked, got %d", acked);
+
+        /* Flush the primed ack so the down broker doesn't get an
+         * ack-only op unrelated to the stall we're measuring. */
+        error = rd_kafka_share_commit_async(rkshare);
+        TEST_ASSERT(!error, "commit_async error: %s",
+                    error ? rd_kafka_error_string(error) : "NULL");
+
+        /* Kickstart a poll while the broker is still up so the primed ack
+         * is flushed to the broker — otherwise it is redelivered after
+         * recovery and inflates the post-recovery count. */
+        error = rd_kafka_share_poll(rkshare, 500, &batch);
+        TEST_ASSERT(!error, "kickstart share_poll error: %s",
+                    error ? rd_kafka_error_string(error) : "NULL");
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+
+        /* Reset to drop any bring-up noise. */
+        rd_atomic32_set(&stall_cnt, 0);
+
+        /* Take the only broker down, then poll. With the partition still
+         * assigned and no broker reachable, the main-thread loop keeps
+         * wanting to fetch but select_broker returns NULL. The 2s poll
+         * stays inside the throttle window. */
+        rd_kafka_mock_broker_set_down(ctx.mcluster, 1);
+
+        error = rd_kafka_share_poll(rkshare, 2000, &batch);
+        TEST_ASSERT(!error, "down share_poll error: %s",
+                    error ? rd_kafka_error_string(error) : "NULL");
+        rcvd = rd_kafka_messages_count(batch);
+        TEST_ASSERT(rcvd == 0, "expected 0 records, got %zu", rcvd);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
+
+        cnt = rd_atomic32_get(&stall_cnt);
+        TEST_SAY("\"Fetch stalled: no eligible broker\" log count: %d\n", cnt);
+        TEST_ASSERT(cnt >= 1,
+                    "expected the stall to be logged at least once, got %d",
+                    cnt);
+        /* Throttled: a 2s hot loop must not flood. Allow a small margin
+         * for a race-window reset + re-log around set_down. */
+        TEST_ASSERT(cnt <= 3,
+                    "stall log must be throttled (<=3 in a 2s window), got %d",
+                    cnt);
+
+        /* Recovery: bring the broker back and confirm the consumer
+         * drains. */
+        rd_kafka_mock_broker_set_up(ctx.mcluster, 1);
+        mock_produce(ctx.producer, topic, msgcnt_recovery);
+        acked = consume_and_ack_all(rkshare, msgcnt_recovery);
+        TEST_ASSERT(acked == msgcnt_recovery,
+                    "post-recovery: expected %d acked, got %d", msgcnt_recovery,
+                    acked);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -3018,6 +3152,7 @@ int main_0182_share_consumer_error_handling_mock(int argc, char **argv) {
          * race-window flavours. */
         do_test_no_bounce_loop_on_down_broker();
         do_test_one_log_on_broker_down_during_active_empty_poll();
+        do_test_fetch_stall_logged_on_no_broker();
 
         return 0;
 }

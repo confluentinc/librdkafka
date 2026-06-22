@@ -2363,6 +2363,24 @@ static rd_kafka_broker_t *rd_kafka_share_select_broker(rd_kafka_t *rk,
                                                        rd_kafka_cgrp_t *rkcg);
 
 /**
+ * @brief Rate-limited log for a stalled share fetch (no progress on the
+ *        main-thread re-trigger path).
+ * @locality main thread
+ */
+static void rd_kafka_share_log_fetch_stall(rd_kafka_t *rk, const char *reason) {
+        rd_kafka_cgrp_t *rkcg = rk->rk_cgrp;
+        rd_ts_t now           = rd_clock();
+
+        if (rkcg->rkcg_share.fetch_stall_logged_last_ts == 0 ||
+            now >
+                rkcg->rkcg_share.fetch_stall_logged_last_ts + 5000000 /*5s*/) {
+                rd_kafka_dbg(rk, CONSUMER, "FETCHMORE", "Fetch stalled: %s",
+                             reason);
+                rkcg->rkcg_share.fetch_stall_logged_last_ts = now;
+        }
+}
+
+/**
  * Main loop for Kafka handler thread.
  */
 static int rd_kafka_thread_main(void *arg) {
@@ -2426,19 +2444,35 @@ static int rd_kafka_thread_main(void *arg) {
                     !(rk->rk_cgrp->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
                     rk->rk_cgrp->rkcg_share.share_fetch_more_records &&
                     rk->rk_cgrp->rkcg_share
-                            .share_should_fetch_ops_in_flight_cnt == 0 &&
-                    rd_list_cnt(&rk->rk_cgrp->rkcg_toppars) > 0) {
-                        rd_kafka_broker_t *rkb_sel;
-
-                        rkb_sel = rd_kafka_share_select_broker(rk, rk->rk_cgrp);
-                        if (rkb_sel) {
-                                rd_kafka_dbg(rk, CONSUMER, "FETCHMORE",
-                                             "Re-triggering fetch for "
-                                             "share_fetch_more_records=true "
-                                             "and no fetch in-flight");
-                                rd_kafka_share_enqueue_fetch_op(
-                                    rk, rkb_sel, rd_true, rd_false);
-                                rd_kafka_broker_destroy(rkb_sel);
+                            .share_should_fetch_ops_in_flight_cnt == 0) {
+                        if (rd_list_cnt(&rk->rk_cgrp->rkcg_toppars) == 0) {
+                                rd_kafka_share_log_fetch_stall(
+                                    rk,
+                                    "share_fetch_more_records set but no "
+                                    "partitions are assigned");
+                        } else {
+                                rd_kafka_broker_t *rkb_sel =
+                                    rd_kafka_share_select_broker(rk,
+                                                                 rk->rk_cgrp);
+                                if (rkb_sel) {
+                                        rd_kafka_dbg(
+                                            rk, CONSUMER, "FETCHMORE",
+                                            "Re-triggering fetch for "
+                                            "share_fetch_more_records=true "
+                                            "and no fetch in-flight");
+                                        rd_kafka_share_enqueue_fetch_op(
+                                            rk, rkb_sel, rd_true, rd_false);
+                                        rd_kafka_broker_destroy(rkb_sel);
+                                        rk->rk_cgrp->rkcg_share
+                                            .fetch_stall_logged_last_ts = 0;
+                                } else {
+                                        rd_kafka_share_log_fetch_stall(
+                                            rk,
+                                            "no eligible broker (assigned "
+                                            "partition leaders are down, "
+                                            "terminating, or already have a "
+                                            "fetch in flight)");
+                                }
                         }
                 }
 

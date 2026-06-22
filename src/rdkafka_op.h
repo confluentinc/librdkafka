@@ -617,6 +617,7 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER,
                                 RD_KAFKA_MOCK_CMD_PART_SET_FOLLOWER_WMARKS,
                                 RD_KAFKA_MOCK_CMD_PART_PUSH_LEADER_RESPONSE,
+                                RD_KAFKA_MOCK_CMD_PART_PUSH_REQUEST_ERRORS,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_UPDOWN,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RTT,
                                 RD_KAFKA_MOCK_CMD_BROKER_SET_RACK,
@@ -629,59 +630,63 @@ struct rd_kafka_op_s {
                                 RD_KAFKA_MOCK_CMD_TELEMETRY_PUSH_INTERVAL_SET,
                         } cmd;
 
-                        rd_kafka_resp_err_t err; /**< Error for:
-                                                  *    TOPIC_SET_ERROR */
-                        char *name;              /**< For:
-                                                  *    TOPIC_SET_ERROR
-                                                  *    TOPIC_CREATE
-                                                  *    PART_SET_FOLLOWER
-                                                  *    PART_SET_FOLLOWER_WMARKS
-                                                  *    BROKER_SET_RACK
-                                                  *    COORD_SET (key_type)
-                                                  *    PART_PUSH_LEADER_RESPONSE
-                                                  */
-                        char *str;               /**< For:
-                                                  *    COORD_SET (key)
-                                                  */
-                        int32_t partition;       /**< For:
-                                                  *    PART_SET_FOLLOWER
-                                                  *    PART_SET_FOLLOWER_WMARKS
-                                                  *    PART_SET_LEADER
-                                                  *    APIVERSION_SET (ApiKey)
-                                                  *    PART_PUSH_LEADER_RESPONSE
-                                                  */
-                        int32_t broker_id;       /**< For:
-                                                  *    PART_SET_FOLLOWER
-                                                  *    PART_SET_LEADER
-                                                  *    BROKER_SET_UPDOWN
-                                                  *    BROKER_SET_RACK
-                                                  *    BROKER_DECOMMISSION
-                                                  *    BROKER_ADD
-                                                  *    COORD_SET */
-                        int64_t lo;              /**< Low offset, for:
-                                                  *    TOPIC_CREATE (part cnt)
-                                                  *    PART_SET_FOLLOWER_WMARKS
-                                                  *    BROKER_SET_UPDOWN
-                                                  *    APIVERSION_SET (minver)
-                                                  *    BROKER_SET_RTT
-                                                  *    PART_DELETE_RECORDS
-                                                  *      (before_offset)
-                                                  */
-                        int64_t hi;              /**< High offset, for:
-                                                  *    TOPIC_CREATE (repl fact)
-                                                  *    PART_SET_FOLLOWER_WMARKS
-                                                  *    APIVERSION_SET (maxver)
-                                                  *    REQUESTED_METRICS_SET (metrics_cnt)
-                                                  *    TELEMETRY_PUSH_INTERVAL_SET (interval)
-                                                  */
-                        int32_t leader_id;       /**< Leader id, for:
-                                                  *   PART_PUSH_LEADER_RESPONSE
-                                                  */
-                        int32_t leader_epoch;    /**< Leader epoch, for:
-                                                  *   PART_PUSH_LEADER_RESPONSE
-                                                  */
-                        char **metrics;          /**< Metrics requested, for:
-                                                  *   REQUESTED_METRICS_SET */
+                        rd_kafka_resp_err_t err;   /**< Error for:
+                                                    *    TOPIC_SET_ERROR */
+                        char *name;                /**< For:
+                                                    *    TOPIC_SET_ERROR
+                                                    *    TOPIC_CREATE
+                                                    *    PART_SET_FOLLOWER
+                                                    *    PART_SET_FOLLOWER_WMARKS
+                                                    *    BROKER_SET_RACK
+                                                    *    COORD_SET (key_type)
+                                                    *    PART_PUSH_LEADER_RESPONSE
+                                                    */
+                        char *str;                 /**< For:
+                                                    *    COORD_SET (key)
+                                                    */
+                        int32_t partition;         /**< For:
+                                                    *    PART_SET_FOLLOWER
+                                                    *    PART_SET_FOLLOWER_WMARKS
+                                                    *    PART_SET_LEADER
+                                                    *    APIVERSION_SET (ApiKey)
+                                                    *    PART_PUSH_LEADER_RESPONSE
+                                                    */
+                        int32_t broker_id;         /**< For:
+                                                    *    PART_SET_FOLLOWER
+                                                    *    PART_SET_LEADER
+                                                    *    BROKER_SET_UPDOWN
+                                                    *    BROKER_SET_RACK
+                                                    *    BROKER_DECOMMISSION
+                                                    *    BROKER_ADD
+                                                    *    COORD_SET */
+                        int64_t lo;                /**< Low offset, for:
+                                                    *    TOPIC_CREATE (part cnt)
+                                                    *    PART_SET_FOLLOWER_WMARKS
+                                                    *    BROKER_SET_UPDOWN
+                                                    *    APIVERSION_SET (minver)
+                                                    *    BROKER_SET_RTT
+                                                    *    PART_DELETE_RECORDS
+                                                    *      (before_offset)
+                                                    */
+                        int64_t hi;                /**< High offset, for:
+                                                    *    TOPIC_CREATE (repl fact)
+                                                    *    PART_SET_FOLLOWER_WMARKS
+                                                    *    APIVERSION_SET (maxver)
+                                                    *    REQUESTED_METRICS_SET (metrics_cnt)
+                                                    *    TELEMETRY_PUSH_INTERVAL_SET (interval)
+                                                    */
+                        int32_t leader_id;         /**< Leader id, for:
+                                                    *   PART_PUSH_LEADER_RESPONSE
+                                                    */
+                        int32_t leader_epoch;      /**< Leader epoch, for:
+                                                    *   PART_PUSH_LEADER_RESPONSE
+                                                    */
+                        char **metrics;            /**< Metrics requested, for:
+                                                    *   REQUESTED_METRICS_SET */
+                        rd_kafka_resp_err_t *errs; /**< Errors to push, for:
+                                                    *   PART_PUSH_REQUEST_ERRORS
+                                                    *   (ApiKey in .lo,
+                                                    *    count in .hi) */
                 } mock;
 
                 struct {

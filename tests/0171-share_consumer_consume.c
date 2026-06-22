@@ -2078,8 +2078,15 @@ static void do_test_timestamp_preserved(void) {
         consumer = test_create_share_consumer(group, NULL);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
+        /* Base timestamps on the current wall-clock time rather than a
+         * fixed past value: records stamped far in the past trip the
+         * broker's time-based log retention, which deletes the segment.
+         * On Windows that segment deletion crashes the broker (NTFS file
+         * locking). Fresh timestamps keep the segment alive while still
+         * letting us assert CreateTime is preserved end-to-end. */
+        int64_t base_ts = (int64_t)time(NULL) * 1000LL;
         for (i = 0; i < msgcnt; i++) {
-                produced_ts[i] = 1700000000000LL + i * 1000LL;
+                produced_ts[i] = base_ts + i * 1000LL;
                 err            = rd_kafka_producev(
                     common_producer, RD_KAFKA_V_TOPIC(topic),
                     RD_KAFKA_V_KEY((char *)&i, sizeof(i)),

@@ -3585,15 +3585,15 @@ rd_kafka_queue_t *rd_kafka_share_queue_get_sasl(rd_kafka_share_t *rkshare);
  * @sa rd_kafka_conf_set_oauthbearer_token_refresh_cb()
  */
 RD_EXPORT
-rd_kafka_resp_err_t rd_kafka_share_oauthbearer_set_token(
-    rd_kafka_share_t *rkshare,
-    const char *token_value,
-    int64_t md_lifetime_ms,
-    const char *md_principal_name,
-    const char **extensions,
-    size_t extension_size,
-    char *errstr,
-    size_t errstr_size);
+rd_kafka_resp_err_t
+rd_kafka_share_oauthbearer_set_token(rd_kafka_share_t *rkshare,
+                                     const char *token_value,
+                                     int64_t md_lifetime_ms,
+                                     const char *md_principal_name,
+                                     const char **extensions,
+                                     size_t extension_size,
+                                     char *errstr,
+                                     size_t errstr_size);
 
 /**
  * @brief SASL/OAUTHBEARER token refresh failure indicator for a share

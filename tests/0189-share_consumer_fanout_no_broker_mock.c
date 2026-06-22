@@ -85,11 +85,11 @@
  *       The main-thread re-trigger is the only recovery path.
  */
 
-#define CONSUME_ARRAY    256
-#define PHASE1_MSGS      10
-#define PHASE2_MSGS      10
-#define POLL_IDLE_MS     200   /* timeout per poll during broker-down window */
-#define POLL_IDLE_ATTEMPTS 15  /* polls while broker is DOWN */
+#define CONSUME_ARRAY       256
+#define PHASE1_MSGS         10
+#define PHASE2_MSGS         10
+#define POLL_IDLE_MS        200 /* timeout per poll during broker-down window */
+#define POLL_IDLE_ATTEMPTS  15  /* polls while broker is DOWN */
 #define RECOVERY_TIMEOUT_MS 20000
 
 /* ===================================================================
@@ -126,8 +126,8 @@ static test_ctx_t ctx_new(void) {
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
 
-        ctx.producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
-                                    sizeof(errstr));
+        ctx.producer =
+            rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(ctx.producer != NULL, "Failed to create producer: %s",
                     errstr);
         return ctx;
@@ -222,9 +222,8 @@ static rd_kafka_share_t *create_consumer(const char *bootstraps,
  *        DOWN during Phase 2. Allow it through as a non-fatal log entry so
  *        the test framework doesn't abort on it.
  */
-static int is_not_fatal_cb(rd_kafka_t *rk,
-                           rd_kafka_resp_err_t err,
-                           const char *reason) {
+static int
+is_not_fatal_cb(rd_kafka_t *rk, rd_kafka_resp_err_t err, const char *reason) {
         if (err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
                 TEST_SAY("Ignoring expected error: %s: %s\n",
                          rd_kafka_err2str(err), reason);
@@ -251,24 +250,30 @@ static void subscribe_one(rd_kafka_share_t *rkshare, const char *topic) {
  *        Times out after \p timeout_ms total.
  */
 static int consume_msgs(rd_kafka_share_t *rkshare, int want, int timeout_ms) {
-        rd_kafka_message_t *batch[CONSUME_ARRAY];
-        rd_ts_t deadline = test_clock() + (rd_ts_t)timeout_ms * 1000;
-        int got          = 0;
+        rd_kafka_messages_t *batch = NULL;
+        rd_ts_t deadline           = test_clock() + (rd_ts_t)timeout_ms * 1000;
+        int got                    = 0;
 
         while (got < want && test_clock() < deadline) {
                 rd_kafka_error_t *err;
                 size_t rcvd = 0, i;
 
-                err = rd_kafka_share_consume_batch(rkshare, 500, batch, &rcvd);
+                err  = rd_kafka_share_poll(rkshare, 500, &batch);
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
                 if (err) {
                         rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
                 for (i = 0; i < rcvd; i++) {
-                        if (!batch[i]->err)
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, i);
+                        if (!rkm->err)
                                 got++;
-                        rd_kafka_message_destroy(batch[i]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         return got;
 }
@@ -309,8 +314,8 @@ static void do_test_fanout_no_broker_recovery(void) {
         subscribe_one(rkshare, topic);
 
         got = consume_msgs(rkshare, PHASE1_MSGS, 30000);
-        TEST_ASSERT(got == PHASE1_MSGS,
-                    "Phase 1: expected %d records, got %d", PHASE1_MSGS, got);
+        TEST_ASSERT(got == PHASE1_MSGS, "Phase 1: expected %d records, got %d",
+                    PHASE1_MSGS, got);
         TEST_SAY("Phase 1: OK, %d records consumed\n", got);
 
         /* ---- Phase 2: take broker down, trigger early-return path ---- */
@@ -320,7 +325,7 @@ static void do_test_fanout_no_broker_recovery(void) {
                     "broker_set_down failed");
 
         /*
-         * Poll POLL_IDLE_ATTEMPTS times. The first consume_batch call
+         * Poll POLL_IDLE_ATTEMPTS times. The first share_poll call
          * after Phase 1 (when rkshare_fetch_more_records_requested was
          * reset to rd_false) enqueues a FANOUT. The main thread processes
          * it, rd_kafka_share_select_broker() returns NULL (broker is DOWN),
@@ -331,16 +336,17 @@ static void do_test_fanout_no_broker_recovery(void) {
          * subsequent polls skip the FANOUT entirely and just time out.
          * No error must surface from these polls.
          */
-        TEST_SAY("Phase 2: polling %d times while broker is down "
-                 "(early-return path)\n",
-                 POLL_IDLE_ATTEMPTS);
+        TEST_SAY(
+            "Phase 2: polling %d times while broker is down "
+            "(early-return path)\n",
+            POLL_IDLE_ATTEMPTS);
         for (idle_pass = 0; idle_pass < POLL_IDLE_ATTEMPTS; idle_pass++) {
-                rd_kafka_message_t *batch[CONSUME_ARRAY];
+                rd_kafka_messages_t *batch = NULL;
                 rd_kafka_error_t *err;
                 size_t rcvd = 0;
 
-                err = rd_kafka_share_consume_batch(rkshare, POLL_IDLE_MS,
-                                                   batch, &rcvd);
+                err  = rd_kafka_share_poll(rkshare, POLL_IDLE_MS, &batch);
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
 
                 /* No error expected during this window: the early-return
                  * path silently returns without dispatching any RPC. */
@@ -349,10 +355,13 @@ static void do_test_fanout_no_broker_recovery(void) {
                         rd_kafka_error_destroy(err);
                         /* Non-fatal transport / session errors are
                          * acceptable; fail only on unexpected fatal err. */
-                        TEST_SAY("Phase 2 poll %d: error %s (non-fatal, "
-                                 "continuing)\n",
-                                 idle_pass, rd_kafka_err2name(code));
+                        TEST_SAY(
+                            "Phase 2 poll %d: error %s (non-fatal, "
+                            "continuing)\n",
+                            idle_pass, rd_kafka_err2name(code));
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
                 TEST_ASSERT(rcvd == 0,
                             "Phase 2 poll %d: expected 0 records, got %zu",
                             idle_pass, rcvd);
@@ -402,14 +411,16 @@ static void do_test_fanout_no_broker_recovery(void) {
         TEST_SAY("Phase 3: waiting up to %dms for at least %d records\n",
                  RECOVERY_TIMEOUT_MS, PHASE2_MSGS);
         got = consume_msgs(rkshare, PHASE2_MSGS, RECOVERY_TIMEOUT_MS);
-        TEST_ASSERT(got >= PHASE2_MSGS,
-                    "Phase 3: consumer did not recover — expected >= %d "
-                    "records, got %d (consumer stuck after FANOUT early-return)",
-                    PHASE2_MSGS, got);
+        TEST_ASSERT(
+            got >= PHASE2_MSGS,
+            "Phase 3: consumer did not recover — expected >= %d "
+            "records, got %d (consumer stuck after FANOUT early-return)",
+            PHASE2_MSGS, got);
 
-        TEST_SAY("Phase 3: OK, consumer recovered — %d records received "
-                 "(>= %d expected)\n",
-                 got, PHASE2_MSGS);
+        TEST_SAY(
+            "Phase 3: OK, consumer recovered — %d records received "
+            "(>= %d expected)\n",
+            got, PHASE2_MSGS);
 
         /* Ensure broker is UP before closing the consumer so the leave
          * request can complete and broker threads are not left hanging. */

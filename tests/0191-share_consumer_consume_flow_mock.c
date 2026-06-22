@@ -32,16 +32,16 @@
 /**
  * @name Share consumer end-to-end flow invariant tests (mock).
  *
- * Covers minute behaviours at each step of rd_kafka_share_consume_batch()
+ * Covers minute behaviours at each step of rd_kafka_share_poll()
  * and the FANOUT / SHARE_FETCH / ack paths that regression tests on the
  * individual sub-operations might miss.
  *
- * GAP-A  Explicit ack gate: second consume_batch before acking previous
+ * GAP-A  Explicit ack gate: second share_poll before acking previous
  *        batch returns __STATE error, not a deadlock.
  *
  * GAP-C  CONSUMER_ERR does not permanently set rkshare_fetch_more_records
  *        _requested: after a propagated topic error is surfaced, subsequent
- *        consume_batch calls can get records again (recovery via main-thread
+ *        share_poll calls can get records again (recovery via main-thread
  *        re-trigger or new FANOUT once SHARE_FETCH_RESPONSE resets the flag).
  *
  * GAP-E  SHARE_SESSION_NOT_FOUND triggers a session reset (epoch → 0) and
@@ -97,8 +97,8 @@ static ctx_t ctx_new(int nbrok) {
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
-        ctx.producer = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
-                                    sizeof(errstr));
+        ctx.producer =
+            rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         TEST_ASSERT(ctx.producer, "create producer: %s", errstr);
         return ctx;
 }
@@ -112,9 +112,9 @@ static void ctx_destroy(ctx_t *ctx) {
 }
 
 static void produce_to_partition(rd_kafka_t *producer,
-                                  const char *topic,
-                                  int32_t partition,
-                                  int msgcnt) {
+                                 const char *topic,
+                                 int32_t partition,
+                                 int msgcnt) {
         int i;
         for (i = 0; i < msgcnt; i++) {
                 char payload[64];
@@ -132,8 +132,8 @@ static void produce_to_partition(rd_kafka_t *producer,
 }
 
 static rd_kafka_share_t *create_consumer(const char *bootstraps,
-                                          const char *group_id,
-                                          const char *ack_mode) {
+                                         const char *group_id,
+                                         const char *ack_mode) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
         char errstr[512];
@@ -166,32 +166,39 @@ static void subscribe_one(rd_kafka_share_t *rkshare, const char *topic) {
  *        Caller must ack in EXPLICIT mode.
  */
 static int drain_batch(rd_kafka_share_t *rkshare,
-                        int want,
-                        int timeout_ms,
-                        rd_kafka_resp_err_t *first_err) {
-        rd_kafka_message_t *batch[CONSUME_ARRAY];
-        rd_ts_t deadline = test_clock() + (rd_ts_t)timeout_ms * 1000;
-        int got          = 0;
+                       int want,
+                       int timeout_ms,
+                       rd_kafka_resp_err_t *first_err) {
+        rd_kafka_messages_t *batch = NULL;
+        rd_ts_t deadline           = test_clock() + (rd_ts_t)timeout_ms * 1000;
+        int got                    = 0;
 
         if (first_err)
                 *first_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
         while (got < want && test_clock() < deadline) {
                 rd_kafka_error_t *err;
-                size_t rcvd = 0, i;
+                size_t rcvd, i;
 
-                err = rd_kafka_share_consume_batch(rkshare, 500, batch, &rcvd);
+                err = rd_kafka_share_poll(rkshare, 500, &batch);
                 if (err) {
-                        if (first_err && *first_err == RD_KAFKA_RESP_ERR_NO_ERROR)
+                        if (first_err &&
+                            *first_err == RD_KAFKA_RESP_ERR_NO_ERROR)
                                 *first_err = rd_kafka_error_code(err);
                         rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
                 for (i = 0; i < rcvd; i++) {
-                        if (!batch[i]->err)
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, i);
+                        if (!rkm->err)
                                 got++;
-                        rd_kafka_message_destroy(batch[i]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         return got;
 }
@@ -212,9 +219,9 @@ static int is_not_fatal_broker_down_cb(rd_kafka_t *rk,
  *  GAP-A: Explicit ack gate
  *  rd_kafka_share_ensure_all_acknowledged_if_explicit()
  *
- *  In explicit ack mode, calling consume_batch a second time before
+ *  In explicit ack mode, calling share_poll a second time before
  *  acknowledging the first batch must return __STATE (not block or silently
- *  proceed).  After acking, the next consume_batch must succeed.
+ *  proceed).  After acking, the next share_poll must succeed.
  *
  *  This pins the behaviour of rdkafka_share_acknowledgement.c:86-95:
  *    if (explicit && rkshare_unacked_cnt > 0)
@@ -223,7 +230,7 @@ static int is_not_fatal_broker_down_cb(rd_kafka_t *rk,
 static void do_test_explicit_ack_gate(void) {
         ctx_t ctx;
         rd_kafka_share_t *rkshare;
-        rd_kafka_message_t *batch[CONSUME_ARRAY];
+        rd_kafka_messages_t *batch = NULL;
         rd_kafka_error_t *err;
         const char *topic = "0191-explicit-ack-gate";
         const char *group = "sg-0191-explicit-ack-gate";
@@ -242,13 +249,14 @@ static void do_test_explicit_ack_gate(void) {
         rkshare = create_consumer(ctx.bootstraps, group, "explicit");
         subscribe_one(rkshare, topic);
 
-        /* First consume_batch — should return 5 records. */
-        err = NULL;
+        /* First share_poll — should return 5 records. */
+        err  = NULL;
         rcvd = 0;
         while (!rcvd) {
                 if (err)
                         rd_kafka_error_destroy(err);
-                err = rd_kafka_share_consume_batch(rkshare, 2000, batch, &rcvd);
+                err  = rd_kafka_share_poll(rkshare, 2000, &batch);
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
                 if (err) {
                         TEST_ASSERT(rd_kafka_error_code(err) !=
                                         RD_KAFKA_RESP_ERR__STATE,
@@ -260,49 +268,46 @@ static void do_test_explicit_ack_gate(void) {
                     err ? rd_kafka_error_string(err) : "");
         TEST_SAY("First batch: %zu records\n", rcvd);
 
-        /* Second consume_batch WITHOUT acking first batch.
+        /* Second share_poll WITHOUT acking first batch.
          * Must return __STATE error (not records, not deadlock). */
-        rd_kafka_message_t *batch2[CONSUME_ARRAY];
-        size_t rcvd2 = 0;
+        rd_kafka_messages_t *batch2 = NULL;
+        size_t rcvd2;
         rd_kafka_error_t *err2;
 
-        err2 = rd_kafka_share_consume_batch(rkshare, 200, batch2,
-                                                    &rcvd2);
+        err2  = rd_kafka_share_poll(rkshare, 200, &batch2);
+        rcvd2 = batch2 ? rd_kafka_messages_count(batch2) : 0;
         TEST_ASSERT(err2 != NULL,
-                        "Expected __STATE error when previous batch "
-                        "unacknowledged, got NULL (no error)");
-        TEST_ASSERT(
-                rd_kafka_error_code(err2) == RD_KAFKA_RESP_ERR__STATE,
-                "Expected __STATE, got %s",
-                rd_kafka_err2name(rd_kafka_error_code(err2)));
+                    "Expected __STATE error when previous batch "
+                    "unacknowledged, got NULL (no error)");
+        TEST_ASSERT(rd_kafka_error_code(err2) == RD_KAFKA_RESP_ERR__STATE,
+                    "Expected __STATE, got %s",
+                    rd_kafka_err2name(rd_kafka_error_code(err2)));
         TEST_ASSERT(rcvd2 == 0,
-                        "Expected 0 records with ack-gate error, got %zu",
-                            rcvd2);
+                    "Expected 0 records with ack-gate error, got %zu", rcvd2);
         rd_kafka_error_destroy(err2);
+        rd_kafka_messages_destroy(batch2);
         TEST_SAY("Ack gate: __STATE error returned correctly\n");
 
 
         /* Ack all records from the first batch. */
         for (i = 0; i < rcvd; i++) {
-                if (!batch[i]->err)
-                        rd_kafka_share_acknowledge(rkshare, batch[i]);
-                rd_kafka_message_destroy(batch[i]);
+                rd_kafka_message_t *rkm = rd_kafka_messages_get(batch, i);
+                if (!rkm->err)
+                        rd_kafka_share_acknowledge(rkshare, rkm);
         }
+        rd_kafka_messages_destroy(batch);
 
-        /* Now consume_batch must succeed (gate cleared). */
-        rd_kafka_message_t *batch3[CONSUME_ARRAY];
-        size_t rcvd3 = 0;
+        /* Now share_poll must succeed (gate cleared). */
+        rd_kafka_messages_t *batch3 = NULL;
+        size_t rcvd3;
         rd_kafka_error_t *err3;
 
-        err3 = rd_kafka_share_consume_batch(rkshare, 2000, batch3,
-                                                &rcvd3);
-        TEST_ASSERT(!err3,
-                        "Expected no error after acking, got %s",
-                        err3 ? rd_kafka_error_string(err3) : "");
-        for (i = 0; i < rcvd3; i++)
-                rd_kafka_message_destroy(batch3[i]);
-        TEST_SAY("Post-ack consume: %zu records, no gate error\n",
-                        rcvd3);
+        err3  = rd_kafka_share_poll(rkshare, 2000, &batch3);
+        rcvd3 = batch3 ? rd_kafka_messages_count(batch3) : 0;
+        TEST_ASSERT(!err3, "Expected no error after acking, got %s",
+                    err3 ? rd_kafka_error_string(err3) : "");
+        rd_kafka_messages_destroy(batch3);
+        TEST_SAY("Post-ack consume: %zu records, no gate error\n", rcvd3);
 
 
         test_share_consumer_close(rkshare);
@@ -316,14 +321,14 @@ static void do_test_explicit_ack_gate(void) {
  *  GAP-C: CONSUMER_ERR recovery
  *
  *  When a CONSUMER_ERR (propagated topic error) is surfaced via
- *  consume_batch, rkshare_fetch_more_records_requested is NOT reset
+ *  share_poll, rkshare_fetch_more_records_requested is NOT reset
  *  (only SHARE_FETCH_RESPONSE resets it).  The consumer must still
  *  recover and deliver records via the main-thread re-trigger path.
  *
  *  Mechanism tested:
  *    1. Inject UNKNOWN_TOPIC_OR_PART on one ShareFetch → CONSUMER_ERR
  *       enqueued to rkcg_q.
- *    2. consume_batch dequeues CONSUMER_ERR → returns error.
+ *    2. share_poll dequeues CONSUMER_ERR → returns error.
  *       rkshare_fetch_more_records_requested stays rd_true.
  *    3. The in-flight or next SHARE_FETCH op completes normally.
  *       When it returns records → SHARE_FETCH_RESPONSE enqueued →
@@ -333,9 +338,9 @@ static void do_test_explicit_ack_gate(void) {
  *  the error was actually surfaced, not silently swallowed.
  * =========================================================================*/
 static void consumer_err_log_cb(const rd_kafka_t *rk,
-                                 int level,
-                                 const char *fac,
-                                 const char *buf) {
+                                int level,
+                                const char *fac,
+                                const char *buf) {
         rd_atomic32_t *cnt = rd_kafka_opaque(rk);
         (void)level;
         /* rd_kafka_share_fetch_reply_handle_partition_error logs at
@@ -388,18 +393,17 @@ static void do_test_consumer_err_recovery(void) {
         /* Phase 2: inject per-partition error on the next ShareFetch.
          * UNKNOWN_TOPIC_OR_PART on a per-partition basis triggers a
          * CONSUMER_ERR enqueued to rkcg_q. */
-        TEST_ASSERT(
-            rd_kafka_mock_broker_push_request_error_rtts(
-                ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1,
-                RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART, 0) ==
-                RD_KAFKA_RESP_ERR_NO_ERROR,
-            "push ShareFetch error");
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
+                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push ShareFetch error");
 
         /* Produce more records so recovery is observable. */
         produce_to_partition(ctx.producer, topic, 0, msgcnt);
 
         /* Consume — error may surface once; must recover. */
-        got        = drain_batch(rkshare, msgcnt, 30000, &first_err);
+        got = drain_batch(rkshare, msgcnt, 30000, &first_err);
         TEST_SAY("Phase 2+3: first_err=%s got=%d\n",
                  rd_kafka_err2name(first_err), got);
 
@@ -430,16 +434,15 @@ static void do_test_consumer_err_recovery(void) {
  *  the session epoch actually went back to 0 (epoch N → 1, from 0 = new).
  * =========================================================================*/
 static void session_reset_log_cb(const rd_kafka_t *rk,
-                                  int level,
-                                  const char *fac,
-                                  const char *buf) {
+                                 int level,
+                                 const char *fac,
+                                 const char *buf) {
         rd_atomic32_t *cnt = rd_kafka_opaque(rk);
         (void)level;
         /* rd_kafka_broker_share_fetch_session_* logs "share-fetch session
          * epoch 0 -> 1" when a new session starts. Counting transitions
          * FROM epoch 0 tells us how many fresh sessions were started. */
-        if (cnt && !strcmp(fac, "SHARESESSION") &&
-            strstr(buf, "epoch 0 ->"))
+        if (cnt && !strcmp(fac, "SHARESESSION") && strstr(buf, "epoch 0 ->"))
                 rd_atomic32_add(cnt, 1);
 }
 
@@ -478,18 +481,17 @@ static void do_test_session_not_found_recovery(void) {
 
         /* Phase 1: consume msgcnt records to establish a live session. */
         got_before = drain_batch(rkshare, msgcnt, 20000, NULL);
-        TEST_ASSERT(got_before == msgcnt,
-                    "Phase 1: expected %d got %d", msgcnt, got_before);
+        TEST_ASSERT(got_before == msgcnt, "Phase 1: expected %d got %d", msgcnt,
+                    got_before);
         TEST_SAY("Phase 1: baseline %d records\n", got_before);
 
         /* Inject SHARE_SESSION_NOT_FOUND on the next ShareFetch.
          * The client must reset the session (epoch→0) and re-establish. */
-        TEST_ASSERT(
-            rd_kafka_mock_broker_push_request_error_rtts(
-                ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1,
-                RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND, 0) ==
-                RD_KAFKA_RESP_ERR_NO_ERROR,
-            "push SHARE_SESSION_NOT_FOUND");
+        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
+                        ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND,
+                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push SHARE_SESSION_NOT_FOUND");
 
         /* Produce more records for Phase 2. */
         produce_to_partition(ctx.producer, topic, 0, msgcnt);
@@ -549,7 +551,7 @@ static void do_test_multi_broker_ack_segregation(void) {
         const int broker2            = 2;
         const int msgs_per_partition = 5;
         const int total_msgs         = msgs_per_partition * 2;
-        rd_kafka_message_t *batch[CONSUME_ARRAY];
+        rd_kafka_messages_t *batch   = NULL;
         int total_consumed;
         int attempts;
         size_t share_ack_cnt;
@@ -582,40 +584,43 @@ static void do_test_multi_broker_ack_segregation(void) {
         total_consumed = 0;
         attempts       = 0;
         while (total_consumed < total_msgs && attempts++ < 60) {
-                size_t rcvd = 0;
+                size_t rcvd;
 
-                err = rd_kafka_share_consume_batch(rkshare, 500, batch, &rcvd);
+                err = rd_kafka_share_poll(rkshare, 500, &batch);
                 if (err) {
                         rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
                 for (i = 0; i < (int)rcvd; i++) {
-                        if (!batch[i]->err) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, i);
+                        if (!rkm->err) {
                                 total_consumed++;
-                                rd_kafka_share_acknowledge(rkshare, batch[i]);
+                                rd_kafka_share_acknowledge(rkshare, rkm);
                         }
-                        rd_kafka_message_destroy(batch[i]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
-        TEST_ASSERT(total_consumed == total_msgs,
-                    "Expected %d records, got %d",
+        TEST_ASSERT(total_consumed == total_msgs, "Expected %d records, got %d",
                     total_msgs, total_consumed);
         TEST_SAY("Consumed %d records from 2 partitions\n", total_consumed);
 
         /* commit_sync — acks for p0 must go to broker1, p1 to broker2.
          * If segregation is broken, one broker's ack would fail. */
         err = rd_kafka_share_commit_sync(rkshare, 10000, &results);
-        TEST_ASSERT(!err,
-                    "commit_sync failed: %s",
+        TEST_ASSERT(!err, "commit_sync failed: %s",
                     err ? rd_kafka_error_string(err) : "");
         TEST_ASSERT(results != NULL, "commit_sync: NULL results");
 
         for (i = 0; i < results->cnt; i++) {
                 rd_kafka_topic_partition_t *p = &results->elems[i];
-                TEST_ASSERT(
-                    p->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "Partition %s[%" PRId32 "] ack error: %s",
-                    p->topic, p->partition, rd_kafka_err2name(p->err));
+                TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "Partition %s[%" PRId32 "] ack error: %s", p->topic,
+                            p->partition, rd_kafka_err2name(p->err));
         }
         rd_kafka_topic_partition_list_destroy(results);
         TEST_SAY("commit_sync: both partitions acked successfully\n");
@@ -624,7 +629,7 @@ static void do_test_multi_broker_ack_segregation(void) {
          * separate ShareAcknowledge RPCs. */
         rd_kafka_mock_request_t **reqs;
         size_t req_cnt;
-        reqs = rd_kafka_mock_get_requests(ctx.mcluster, &req_cnt);
+        reqs          = rd_kafka_mock_get_requests(ctx.mcluster, &req_cnt);
         share_ack_cnt = 0;
         for (i = 0; i < (int)req_cnt; i++) {
                 if (is_share_ack_request(reqs[i], NULL))
@@ -657,13 +662,12 @@ static void do_test_multi_broker_ack_segregation(void) {
  *  IS selected after reconnect (not permanently skipped).
  * =========================================================================*/
 static void broker_selected_log_cb(const rd_kafka_t *rk,
-                                    int level,
-                                    const char *fac,
-                                    const char *buf) {
+                                   int level,
+                                   const char *fac,
+                                   const char *buf) {
         rd_atomic32_t *cnt = rd_kafka_opaque(rk);
         (void)level;
-        if (cnt && !strcmp(fac, "SHARE") &&
-            strstr(buf, "Selected broker"))
+        if (cnt && !strcmp(fac, "SHARE") && strstr(buf, "Selected broker"))
                 rd_atomic32_add(cnt, 1);
 }
 
@@ -706,8 +710,8 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
         got = drain_batch(rkshare, msgcnt, 20000, NULL);
         TEST_ASSERT(got == msgcnt, "Phase 1: expected %d got %d", msgcnt, got);
         select_before_down = rd_atomic32_get(&broker_selected_cnt);
-        TEST_SAY("Phase 1: %d records, broker selected %d time(s)\n",
-                 got, select_before_down);
+        TEST_SAY("Phase 1: %d records, broker selected %d time(s)\n", got,
+                 select_before_down);
 
         /* Phase 2: take broker DOWN while a fetch is likely in-flight.
          * The __TRANSPORT error path resets rkb_share_fetch_enqueued. */
@@ -716,12 +720,13 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
                     "broker_set_down");
 
         /* Poll briefly while broker is down. */
-        rd_kafka_message_t *tmp[CONSUME_ARRAY];
+        rd_kafka_messages_t *tmp = NULL;
         rd_kafka_error_t *e;
-        size_t r = 0;
-        e = rd_kafka_share_consume_batch(rkshare, 500, tmp, &r);
+        e = rd_kafka_share_poll(rkshare, 500, &tmp);
         if (e)
                 rd_kafka_error_destroy(e);
+        rd_kafka_messages_destroy(tmp);
+        tmp = NULL;
 
 
         /* Phase 3: bring broker back UP, produce new records. */
@@ -744,8 +749,8 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
                     "Broker was not re-selected after reconnect: "
                     "select_before=%d select_after=%d",
                     select_before_down, select_after_up);
-        TEST_SAY("Phase 3: %d records, broker selected %d more time(s)\n",
-                 got, select_after_up - select_before_down);
+        TEST_SAY("Phase 3: %d records, broker selected %d more time(s)\n", got,
+                 select_after_up - select_before_down);
 
         /* Ensure broker is UP before closing. */
         rd_kafka_mock_broker_set_up(ctx.mcluster, 1);
@@ -780,9 +785,9 @@ typedef struct resub_log_state_s {
 } resub_log_state_t;
 
 static void resub_log_cb(const rd_kafka_t *rk,
-                          int level,
-                          const char *fac,
-                          const char *buf) {
+                         int level,
+                         const char *fac,
+                         const char *buf) {
         resub_log_state_t *s = rd_kafka_opaque(rk);
         (void)level;
         if (!s || strcmp(fac, "SHARE"))
@@ -837,15 +842,15 @@ static void do_test_resubscribe_continuity(void) {
         /* Phase 2: inject broker RTT delay so a fetch is in-flight when
          * we unsubscribe, exercising the rkshare_fetch_more_records_
          * _requested stuck path. */
-        TEST_ASSERT(rd_kafka_mock_broker_set_rtt(ctx.mcluster, broker_id,
-                                                  2000) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "set broker RTT");
+        TEST_ASSERT(
+            rd_kafka_mock_broker_set_rtt(ctx.mcluster, broker_id, 2000) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "set broker RTT");
 
         /* Unsubscribe. */
 
-                rd_kafka_resp_err_t uerr = rd_kafka_share_unsubscribe(rkshare);
-                TEST_ASSERT(!uerr, "unsubscribe: %s", rd_kafka_err2str(uerr));
+        rd_kafka_resp_err_t uerr = rd_kafka_share_unsubscribe(rkshare);
+        TEST_ASSERT(!uerr, "unsubscribe: %s", rd_kafka_err2str(uerr));
 
         TEST_SAY("Phase 2: unsubscribed\n");
 
@@ -866,11 +871,11 @@ static void do_test_resubscribe_continuity(void) {
                     rd_atomic32_get(&log_state.fanout_early_return_cnt),
                     rd_atomic32_get(&log_state.broker_selected_cnt));
 
-        TEST_SAY("Phase 3: %d records after resubscribe "
-                 "(fanout_early_returns=%d broker_selections=%d)\n",
-                 got,
-                 rd_atomic32_get(&log_state.fanout_early_return_cnt),
-                 rd_atomic32_get(&log_state.broker_selected_cnt));
+        TEST_SAY(
+            "Phase 3: %d records after resubscribe "
+            "(fanout_early_returns=%d broker_selections=%d)\n",
+            got, rd_atomic32_get(&log_state.fanout_early_return_cnt),
+            rd_atomic32_get(&log_state.broker_selected_cnt));
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -884,7 +889,7 @@ static void do_test_resubscribe_continuity(void) {
  *                 FANOUTs while a fetch is in-flight.
  *
  *  While the broker is slow (high RTT so the SHARE_FETCH hangs), make
- *  multiple consume_batch calls.  Only the FIRST call should enqueue a
+ *  multiple share_poll calls.  Only the FIRST call should enqueue a
  *  FANOUT ("Selected broker" log).  Subsequent calls should log
  *  "No fetch or acks to fan out" OR skip silently — but must NOT log
  *  "Selected broker" again (that would mean a duplicate SHARE_FETCH was
@@ -897,9 +902,9 @@ typedef struct no_dup_log_state_s {
 } no_dup_log_state_t;
 
 static void no_dup_log_cb(const rd_kafka_t *rk,
-                           int level,
-                           const char *fac,
-                           const char *buf) {
+                          int level,
+                          const char *fac,
+                          const char *buf) {
         no_dup_log_state_t *s = rd_kafka_opaque(rk);
         (void)level;
         if (!s || strcmp(fac, "SHARE"))
@@ -916,11 +921,11 @@ static void do_test_no_duplicate_fanout(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         no_dup_log_state_t log_state;
-        const char *topic     = "0191-no-dup-fanout";
-        const char *group     = "sg-0191-no-dup-fanout";
-        const int broker_id   = 1;
-        const int rtt_ms      = 3000; /* slow enough for several polls */
-        const int n_polls     = 8;
+        const char *topic   = "0191-no-dup-fanout";
+        const char *group   = "sg-0191-no-dup-fanout";
+        const int broker_id = 1;
+        const int rtt_ms    = 3000; /* slow enough for several polls */
+        const int n_polls   = 8;
         int i;
         int32_t selected_during_slow;
 
@@ -948,65 +953,59 @@ static void do_test_no_duplicate_fanout(void) {
         subscribe_one(rkshare, topic);
 
         /* Baseline: get assigned and start fetching (normal speed). */
-        rd_kafka_message_t *tmp[CONSUME_ARRAY];
-        size_t r = 0;
+        rd_kafka_messages_t *tmp = NULL;
+        size_t r                 = 0;
         rd_kafka_error_t *e;
         rd_ts_t deadline = test_clock() + 15000000;
         while (!r && test_clock() < deadline) {
-                e = rd_kafka_share_consume_batch(rkshare, 500, tmp, &r);
+                e = rd_kafka_share_poll(rkshare, 500, &tmp);
+                r = tmp ? rd_kafka_messages_count(tmp) : 0;
                 if (e)
                         rd_kafka_error_destroy(e);
-                else {
-                        for (i = 0; i < (int)r; i++)
-                                rd_kafka_message_destroy(tmp[i]);
-                }
+                rd_kafka_messages_destroy(tmp);
+                tmp = NULL;
         }
-        
+
 
         /* Reset counter after baseline. */
         rd_atomic32_init(&log_state.selected_cnt, 0);
         rd_atomic32_init(&log_state.early_return_cnt, 0);
 
         /* Apply high RTT so the in-flight fetch takes several seconds. */
-        TEST_ASSERT(rd_kafka_mock_broker_set_rtt(ctx.mcluster, broker_id,
-                                                  rtt_ms) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "set RTT");
+        TEST_ASSERT(
+            rd_kafka_mock_broker_set_rtt(ctx.mcluster, broker_id, rtt_ms) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "set RTT");
 
         /* Make n_polls rapid consume_batch calls while broker is slow.
          * rkshare_fetch_more_records_requested prevents duplicate FANOUTs:
          * only the FIRST call should select a broker; the rest should
          * hit the "no fetch needed" path. */
         for (i = 0; i < n_polls; i++) {
-                rd_kafka_message_t *tmp[CONSUME_ARRAY];
-                size_t r = 0;
+                rd_kafka_messages_t *tmp_poll = NULL;
                 rd_kafka_error_t *e;
-                e = rd_kafka_share_consume_batch(rkshare, 200, tmp, &r);
+                e = rd_kafka_share_poll(rkshare, 200, &tmp_poll);
                 if (e)
                         rd_kafka_error_destroy(e);
-                else {
-                        int j;
-                        for (j = 0; j < (int)r; j++)
-                                rd_kafka_message_destroy(tmp[j]);
-                }
+                rd_kafka_messages_destroy(tmp_poll);
         }
 
         selected_during_slow = rd_atomic32_get(&log_state.selected_cnt);
-        TEST_SAY("During slow broker: selected=%d early_returns=%d "
-                 "(over %d polls)\n",
-                 selected_during_slow,
-                 rd_atomic32_get(&log_state.early_return_cnt),
-                 n_polls);
+        TEST_SAY(
+            "During slow broker: selected=%d early_returns=%d "
+            "(over %d polls)\n",
+            selected_during_slow, rd_atomic32_get(&log_state.early_return_cnt),
+            n_polls);
 
         /* Key invariant: broker should be selected AT MOST ONCE per
          * fetch cycle.  Multiple selections while one is in-flight
          * means duplicate SHARE_FETCH ops are being sent. */
-        TEST_ASSERT(
-            selected_during_slow <= 2, /* <=2 allows for the 0→1 transition
-                                        * and one legitimate re-trigger */
-            "Too many broker selections during slow-broker window: %d "
-            "(expected <= 2); duplicate FANOUTs are being sent",
-            selected_during_slow);
+        TEST_ASSERT(selected_during_slow <=
+                        2, /* <=2 allows for the 0→1 transition
+                            * and one legitimate re-trigger */
+                    "Too many broker selections during slow-broker window: %d "
+                    "(expected <= 2); duplicate FANOUTs are being sent",
+                    selected_during_slow);
 
         /* Remove RTT, let the pending response complete. */
         rd_kafka_mock_broker_set_rtt(ctx.mcluster, broker_id, 0);
@@ -1016,18 +1015,20 @@ static void do_test_no_duplicate_fanout(void) {
         r        = 0;
         deadline = test_clock() + 10000000;
         while (test_clock() < deadline) {
-                e = rd_kafka_share_consume_batch(rkshare, 500, tmp, &r);
-                if (e)
+                e = rd_kafka_share_poll(rkshare, 500, &tmp);
+                if (e) {
                         rd_kafka_error_destroy(e);
-                else {
-                        int j;
-                        for (j = 0; j < (int)r; j++)
-                                rd_kafka_message_destroy(tmp[j]);
+                        rd_kafka_messages_destroy(tmp);
+                        tmp = NULL;
+                } else {
+                        r = tmp ? rd_kafka_messages_count(tmp) : 0;
+                        rd_kafka_messages_destroy(tmp);
+                        tmp = NULL;
                         if (r > 0)
                                 break;
                 }
         }
-        
+
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -1046,7 +1047,8 @@ int main_0191_share_consumer_consume_flow_mock(int argc, char **argv) {
         /* GAP-E: SHARE_SESSION_NOT_FOUND resets session, records delivered */
         do_test_session_not_found_recovery();
 
-        /* GAP-G: acks from multi-partition/multi-broker setup routed correctly */
+        /* GAP-G: acks from multi-partition/multi-broker setup routed correctly
+         */
         do_test_multi_broker_ack_segregation();
 
         /* GAP-F: rkb_share_fetch_enqueued reset after broker reconnect */

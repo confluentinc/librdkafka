@@ -30,9 +30,9 @@
 #include "rdkafka.h"
 
 /**
- * @name Share consumer rd_kafka_share_consume_batch() timeout matrix
+ * @name Share consumer rd_kafka_share_poll() timeout matrix
  *
- * Exercises rd_kafka_share_consume_batch() across the full range of
+ * Exercises rd_kafka_share_poll() across the full range of
  * timeout_ms values that an application can pass:
  *
  *   0, 1, 300, 500, 1000, 3000, 5000, 10000, 30000  (Phase A)
@@ -47,13 +47,13 @@
  * Phase B — consumer still alive
  *   Produce records and consume them with a short timeout. This is the
  *   assertion that the consumer was NOT fenced during the Phase-A polls
- *   that exceeded the heartbeat interval. While inside consume_batch the
+ *   that exceeded the heartbeat interval. While inside share_poll the
  *   client sets rk_ts_last_poll = INT64_MAX so max.poll.interval.ms cannot
  *   fence the consumer regardless of timeout length, and the heartbeat
  *   thread runs independently of the app thread.
  *
  * Phase C — infinite timeout
- *   Produce records, then call consume_batch with timeout_ms = -1. Must
+ *   Produce records, then call share_poll with timeout_ms = -1. Must
  *   return promptly with records, not hang. -1 is intentionally not in
  *   Phase A: an empty topic would block the test forever.
  *
@@ -63,14 +63,12 @@
  * intervals. Phase B's successful consume proves no fencing occurred.
  */
 
-#define BATCH_SIZE 100
-
 /** Common producer reused across tests. */
 static rd_kafka_t *common_producer;
 
 static void do_test_consume_batch_timeout_matrix(void) {
         rd_kafka_share_t *consumer;
-        rd_kafka_message_t *batch[BATCH_SIZE];
+        rd_kafka_messages_t *batch = NULL;
         const char *topic;
         const char *group = "share-timeout-matrix";
         rd_kafka_topic_partition_list_t *subs;
@@ -83,7 +81,7 @@ static void do_test_consume_batch_timeout_matrix(void) {
         SUB_TEST();
 
         TEST_SAY("\n");
-        TEST_SAY("=== consume_batch timeout matrix ===\n");
+        TEST_SAY("=== share_poll timeout matrix ===\n");
 
         consumer = test_create_share_consumer(group, NULL);
         topic    = test_mk_topic_name("0188-timeout-matrix", 1);
@@ -123,9 +121,9 @@ static void do_test_consume_batch_timeout_matrix(void) {
                          timeout_ms, tolerance_ms);
 
                 t_start = test_clock();
-                err = rd_kafka_share_consume_batch(consumer, timeout_ms, batch,
-                                                   &rcvd);
-                t_end = test_clock();
+                err     = rd_kafka_share_poll(consumer, timeout_ms, &batch);
+                rcvd    = batch ? rd_kafka_messages_count(batch) : 0;
+                t_end   = test_clock();
 
                 actual_ms = (int)((t_end - t_start) / 1000);
 
@@ -157,6 +155,9 @@ static void do_test_consume_batch_timeout_matrix(void) {
 
                 TEST_SAY("  timeout_ms=%d -> actual %dms (OK)\n", timeout_ms,
                          actual_ms);
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Phase B — produce records and consume them, proving the consumer
@@ -174,17 +175,22 @@ static void do_test_consume_batch_timeout_matrix(void) {
                 size_t j;
                 rd_kafka_error_t *err;
 
-                err =
-                    rd_kafka_share_consume_batch(consumer, 1000, batch, &rcvd);
+                err  = rd_kafka_share_poll(consumer, 1000, &batch);
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
                 if (err) {
                         rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
                 for (j = 0; j < rcvd; j++) {
-                        if (!batch[j]->err)
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (!rkm->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[j]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
         TEST_ASSERT(consumed == 10,
                     "Expected 10 records after the timeout matrix "
@@ -200,13 +206,13 @@ static void do_test_consume_batch_timeout_matrix(void) {
         test_produce_msgs_simple(common_producer, topic, 0, 5);
 
         size_t rcvd = 0;
-        size_t k;
         rd_ts_t t_start, t_end;
         int actual_ms;
         rd_kafka_error_t *err;
 
         t_start = test_clock();
-        err     = rd_kafka_share_consume_batch(consumer, -1, batch, &rcvd);
+        err     = rd_kafka_share_poll(consumer, -1, &batch);
+        rcvd    = batch ? rd_kafka_messages_count(batch) : 0;
         t_end   = test_clock();
 
         actual_ms = (int)((t_end - t_start) / 1000);
@@ -221,8 +227,8 @@ static void do_test_consume_batch_timeout_matrix(void) {
                     "expected prompt return",
                     actual_ms);
 
-        for (k = 0; k < rcvd; k++)
-                rd_kafka_message_destroy(batch[k]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         TEST_SAY("  timeout_ms=-1 -> %dms, rcvd=%zu (OK)\n", actual_ms, rcvd);
 

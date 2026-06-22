@@ -1219,13 +1219,13 @@ static void do_test_release_with_leader_change(void) {
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        const char *topic = "0183-release-leader-change";
-        const char *group = "sg-0183-release-leader-change";
-        const int broker1 = 1;
-        const int broker2 = 2;
-        const int msgcnt  = 5;
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-        size_t rcvd = 0;
+        const char *topic               = "0183-release-leader-change";
+        const char *group               = "sg-0183-release-leader-change";
+        const int broker1               = 1;
+        const int broker2               = 2;
+        const int msgcnt                = 5;
+        rd_kafka_messages_t *rkmessages = NULL;
+        size_t rcvd                     = 0;
         size_t j;
         rd_kafka_topic_partition_list_t *results = NULL;
         int err_partitions                       = 0;
@@ -1255,16 +1255,17 @@ static void do_test_release_with_leader_change(void) {
         subscribe_one(rkshare, topic);
 
         /* Acquire all records from the original leader. */
-        error = rd_kafka_share_consume_batch(rkshare, 10000, rkmessages, &rcvd);
-        TEST_ASSERT(!error, "consume_batch failed: %s",
+        error = rd_kafka_share_poll(rkshare, 10000, &rkmessages);
+        TEST_ASSERT(!error, "share_poll failed: %s",
                     error ? rd_kafka_error_string(error) : "");
+        rcvd = rkmessages ? rd_kafka_messages_count(rkmessages) : 0;
         TEST_ASSERT(rcvd == (size_t)msgcnt, "expected %d records, got %" PRIusz,
                     msgcnt, rcvd);
 
         /* RELEASE every record (do not ACCEPT). */
         for (j = 0; j < rcvd; j++) {
                 rd_kafka_resp_err_t aerr = rd_kafka_share_acknowledge_type(
-                    rkshare, rkmessages[j],
+                    rkshare, rd_kafka_messages_get(rkmessages, j),
                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
                 TEST_ASSERT(aerr == RD_KAFKA_RESP_ERR_NO_ERROR,
                             "RELEASE acknowledge failed: %s",
@@ -1321,8 +1322,8 @@ static void do_test_release_with_leader_change(void) {
         if (error)
                 rd_kafka_error_destroy(error);
 
-        for (j = 0; j < rcvd; j++)
-                rd_kafka_message_destroy(rkmessages[j]);
+        rd_kafka_messages_destroy(rkmessages);
+        rkmessages = NULL;
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -1351,7 +1352,7 @@ static void do_test_rapid_leader_churn(void) {
         const int msgcnt   = 30;
         const int n_churns = 15; /* 15 leader migrations across the run */
         const int churn_interval_ms = 300; /* fast leader changes */
-        rd_kafka_message_t *batch[CONSUME_ARRAY];
+        rd_kafka_messages_t *batch  = NULL;
         rd_kafka_error_t *error;
         int consumed    = 0;
         int churn_count = 0;
@@ -1405,8 +1406,7 @@ static void do_test_rapid_leader_churn(void) {
                             test_clock() + (churn_interval_ms * 1000);
                 }
 
-                error =
-                    rd_kafka_share_consume_batch(rkshare, 200, batch, &rcvd);
+                error = rd_kafka_share_poll(rkshare, 200, &batch);
                 if (error) {
                         rd_kafka_resp_err_t ec = rd_kafka_error_code(error);
                         /* Top-level errors are tolerated during churn —
@@ -1416,13 +1416,19 @@ static void do_test_rapid_leader_churn(void) {
                                     "fatal error during leader churn: %s",
                                     rd_kafka_err2name(ec));
                         rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(batch);
                 for (j = 0; j < rcvd; j++) {
-                        if (!batch[j]->err)
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (!rkm->err)
                                 consumed++;
-                        rd_kafka_message_destroy(batch[j]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         TEST_SAY("Rapid churn: produced=%d consumed=%d churns=%d\n", msgcnt,

@@ -2957,10 +2957,10 @@ static void do_test_one_log_on_broker_down_during_active_empty_poll(void) {
 static void test_consume_batch_retriable_error_is_flagged(void) {
         test_ctx_t ctx;
         rd_kafka_share_t *rkshare;
-        const char *topic = "0182-retriable-error-flagged";
-        const char *group = "sg-0182-retriable-error-flagged";
-        rd_kafka_message_t *rkmessages[CONSUME_ARRAY];
-        rd_kafka_error_t *error = NULL;
+        const char *topic               = "0182-retriable-error-flagged";
+        const char *group               = "sg-0182-retriable-error-flagged";
+        rd_kafka_messages_t *rkmessages = NULL;
+        rd_kafka_error_t *error         = NULL;
         size_t rcvd, j;
         int attempts;
         rd_bool_t saw_expected = rd_false;
@@ -2983,9 +2983,7 @@ static void test_consume_batch_retriable_error_is_flagged(void) {
         share_topic_err_force_metadata(rkshare);
 
         for (attempts = 0; attempts < 30 && !saw_expected; attempts++) {
-                rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, 500, rkmessages,
-                                                     &rcvd);
+                error = rd_kafka_share_poll(rkshare, 500, &rkmessages);
                 if (error) {
                         rd_kafka_resp_err_t code = rd_kafka_error_code(error);
                         if (code ==
@@ -2993,29 +2991,34 @@ static void test_consume_batch_retriable_error_is_flagged(void) {
                                 TEST_ASSERT(
                                     rd_kafka_error_is_retriable(error),
                                     "Expected TOPIC_AUTHORIZATION_FAILED "
-                                    "surfaced via consume_batch to be marked "
+                                    "surfaced via share_poll to be marked "
                                     "retriable (per rdkafka_queue.c:950-956)");
                                 TEST_ASSERT(
                                     !rd_kafka_error_is_fatal(error),
                                     "Expected non-fatal share-consumer error "
-                                    "surfaced via consume_batch to NOT be "
+                                    "surfaced via share_poll to NOT be "
                                     "marked fatal (per "
                                     "rdkafka_queue.c:950-956)");
                                 saw_expected = rd_true;
                         }
                         rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(rkmessages);
+                        rkmessages = NULL;
                         continue;
                 }
+                rcvd = rd_kafka_messages_count(rkmessages);
                 for (j = 0; j < rcvd; j++) {
-                        if (!rkmessages[j]->err)
-                                rd_kafka_share_acknowledge(rkshare,
-                                                           rkmessages[j]);
-                        rd_kafka_message_destroy(rkmessages[j]);
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(rkmessages, j);
+                        if (!rkm->err)
+                                rd_kafka_share_acknowledge(rkshare, rkm);
                 }
+                rd_kafka_messages_destroy(rkmessages);
+                rkmessages = NULL;
         }
 
         TEST_ASSERT(saw_expected,
-                    "Expected consume_batch to surface "
+                    "Expected share_poll to surface "
                     "TOPIC_AUTHORIZATION_FAILED within 30 attempts");
 
         test_share_consumer_close(rkshare);

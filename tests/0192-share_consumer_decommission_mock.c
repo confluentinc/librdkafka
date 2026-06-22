@@ -102,22 +102,22 @@ static void subscribe_one(rd_kafka_share_t *consumer, const char *topic) {
 }
 
 static void do_test_decommission_while_inflight(void) {
-        const char *topic = "0192-decommission";
-        const char *group = "sg-0192-decom";
-        const int b1 = 1;
-        const int b2 = 2;
+        const char *topic     = "0192-decommission";
+        const char *group     = "sg-0192-decom";
+        const int b1          = 1;
+        const int b2          = 2;
         const int phase1_msgs = 5;
         const int phase2_msgs = 5;
         test_ctx_t ctx;
         rd_kafka_conf_t *conf;
         rd_kafka_share_t *rkshare;
         rd_kafka_error_t *error;
-        rd_kafka_message_t *batch[CONSUME_ARRAY];
-        size_t rcvd = 0;
+        rd_kafka_messages_t *batch = NULL;
+        size_t rcvd                = 0;
         size_t j;
         rd_kafka_topic_partition_list_t *results = NULL;
-        int saw_err_partition  = 0;
-        int phase2_consumed    = 0;
+        int saw_err_partition                    = 0;
+        int phase2_consumed                      = 0;
         int attempts;
 
         SUB_TEST_QUICK();
@@ -133,10 +133,10 @@ static void do_test_decommission_while_inflight(void) {
         TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "create topic");
-        TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0,
-                                                       b1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "set leader to broker %d", b1);
+        TEST_ASSERT(
+            rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0, b1) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "set leader to broker %d", b1);
 
         test_produce_msgs_simple(ctx.producer, topic, 0, phase1_msgs);
 
@@ -149,26 +149,27 @@ static void do_test_decommission_while_inflight(void) {
         subscribe_one(rkshare, topic);
 
         /* Phase 1: acquire records from broker 1. */
-        error = rd_kafka_share_consume_batch(rkshare, 10000, batch, &rcvd);
-        TEST_ASSERT(!error, "phase1 consume_batch: %s",
+        error = rd_kafka_share_poll(rkshare, 10000, &batch);
+        rcvd  = batch ? rd_kafka_messages_count(batch) : 0;
+        TEST_ASSERT(!error, "phase1 share_poll: %s",
                     error ? rd_kafka_error_string(error) : "");
         TEST_ASSERT(rcvd == (size_t)phase1_msgs,
                     "phase1 expected %d, got %" PRIusz, phase1_msgs, rcvd);
 
         /* Acknowledge all (ACCEPT) but do NOT commit yet. */
         for (j = 0; j < rcvd; j++) {
-                rd_kafka_resp_err_t aerr =
-                    rd_kafka_share_acknowledge(rkshare, batch[j]);
+                rd_kafka_resp_err_t aerr = rd_kafka_share_acknowledge(
+                    rkshare, rd_kafka_messages_get(batch, j));
                 TEST_ASSERT(aerr == RD_KAFKA_RESP_ERR_NO_ERROR,
                             "acknowledge failed: %s", rd_kafka_err2str(aerr));
         }
 
         /* Migrate leader to broker 2 and decommission broker 1. The
          * inflight acks are targeted at a broker that no longer exists. */
-        TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0,
-                                                       b2) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "migrate leader to broker %d", b2);
+        TEST_ASSERT(
+            rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0, b2) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "migrate leader to broker %d", b2);
         TEST_ASSERT(rd_kafka_mock_broker_decommission(ctx.mcluster, b1) ==
                         RD_KAFKA_RESP_ERR_NO_ERROR,
                     "decommission broker %d", b1);
@@ -186,8 +187,7 @@ static void do_test_decommission_while_inflight(void) {
         for (j = 0; j < (size_t)results->cnt; j++) {
                 rd_kafka_resp_err_t per = results->elems[j].err;
                 TEST_SAY("  partition [%" PRId32 "] err=%s\n",
-                         results->elems[j].partition,
-                         rd_kafka_err2name(per));
+                         results->elems[j].partition, rd_kafka_err2name(per));
                 if (per != RD_KAFKA_RESP_ERR_NO_ERROR)
                         saw_err_partition++;
         }
@@ -196,16 +196,17 @@ static void do_test_decommission_while_inflight(void) {
          * partitions surfaced an error. Both outcomes are acceptable —
          * what we explicitly assert is that the consumer is in a sane
          * state and can continue. */
-        TEST_SAY("decommission inflight: err_partitions=%d/%d (any "
-                 "value is acceptable; silent drop would be a bug)\n",
-                 saw_err_partition, results->cnt);
+        TEST_SAY(
+            "decommission inflight: err_partitions=%d/%d (any "
+            "value is acceptable; silent drop would be a bug)\n",
+            saw_err_partition, results->cnt);
 
         rd_kafka_topic_partition_list_destroy(results);
         if (error)
                 rd_kafka_error_destroy(error);
 
-        for (j = 0; j < rcvd; j++)
-                rd_kafka_message_destroy(batch[j]);
+        rd_kafka_messages_destroy(batch);
+        batch = NULL;
 
         /* Phase 2: produce new records (now to broker 2's partition) and
          * verify the consumer keeps working after decommission. */
@@ -216,18 +217,24 @@ static void do_test_decommission_while_inflight(void) {
                 size_t r = 0;
                 rd_kafka_error_t *e;
                 size_t k;
-                e = rd_kafka_share_consume_batch(rkshare, 1000, batch, &r);
+                e = rd_kafka_share_poll(rkshare, 1000, &batch);
                 if (e) {
                         rd_kafka_error_destroy(e);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
                 }
+                r = rd_kafka_messages_count(batch);
                 for (k = 0; k < r; k++) {
-                        if (!batch[k]->err) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, k);
+                        if (!rkm->err) {
                                 phase2_consumed++;
-                                rd_kafka_share_acknowledge(rkshare, batch[k]);
+                                rd_kafka_share_acknowledge(rkshare, rkm);
                         }
-                        rd_kafka_message_destroy(batch[k]);
                 }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
         }
 
         /* Phase 2 expected >= phase2_msgs: the phase-1 acquisition locks

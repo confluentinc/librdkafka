@@ -558,6 +558,71 @@ static void do_test_groups_staggered_join(void) {
         SUB_TEST_PASS();
 }
 
+
+#define MEMBERID_CONSUMER_CNT 100
+
+typedef struct memberid_thread_arg_s {
+        const char *group_id;
+        char *memberid;
+} memberid_thread_arg_t;
+
+static int memberid_consumer_thread(void *arg) {
+        memberid_thread_arg_t *targ = arg;
+        rd_kafka_share_t *rkshare;
+
+        rkshare        = test_create_share_consumer(targ->group_id, NULL);
+        targ->memberid = rd_kafka_memberid(test_share_consumer_get_rk(rkshare));
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        return 0;
+}
+
+/**
+ * @brief Verify each share consumer generates a unique client-side
+ *        member ID. Spin up MEMBERID_CONSUMER_CNT consumers concurrently
+ *        in the same group and assert all collected member IDs are
+ *        non-NULL and pairwise distinct.
+ */
+static void do_test_unique_share_memberid(void) {
+        const char *group_id = test_mk_topic_name("0175-share_memberid", 1);
+        thrd_t thread_id[MEMBERID_CONSUMER_CNT];
+        memberid_thread_arg_t args[MEMBERID_CONSUMER_CNT];
+        int i, j;
+
+        SUB_TEST_QUICK();
+
+        for (i = 0; i < MEMBERID_CONSUMER_CNT; i++) {
+                args[i].group_id = group_id;
+                args[i].memberid = NULL;
+                thrd_create(&thread_id[i], memberid_consumer_thread, &args[i]);
+        }
+
+        for (i = 0; i < MEMBERID_CONSUMER_CNT; i++)
+                thrd_join(thread_id[i], NULL);
+
+        for (i = 0; i < MEMBERID_CONSUMER_CNT; i++) {
+                TEST_ASSERT(args[i].memberid != NULL,
+                            "Consumer %d has NULL member id", i);
+                for (j = i + 1; j < MEMBERID_CONSUMER_CNT; j++) {
+                        TEST_ASSERT(
+                            strcmp(args[i].memberid, args[j].memberid) != 0,
+                            "Consumers %d and %d have the same "
+                            "member id: %s",
+                            i, j, args[i].memberid);
+                }
+        }
+
+        for (i = 0; i < MEMBERID_CONSUMER_CNT; i++)
+                rd_free(args[i].memberid);
+
+        TEST_SAY("All %d share consumers have unique member IDs\n",
+                 MEMBERID_CONSUMER_CNT);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0175_share_consumer_groups(int argc, char **argv) {
 
         /* Basic multiple groups tests */
@@ -569,6 +634,10 @@ int main_0175_share_consumer_groups(int argc, char **argv) {
 
         /* Timing tests */
         do_test_groups_staggered_join();
+
+        /* Client-side member ID uniqueness (KIP-932 analog of 0153). */
+        if (strcmp(test_mode, "valgrind") != 0)
+                do_test_unique_share_memberid();
 
         return 0;
 }

@@ -2054,6 +2054,113 @@ static void do_test_many_and_large_headers(void) {
 }
 
 
+/**
+ * @brief Verify per-record CreateTime is preserved through the share
+ *        consumer: produce N records with explicit timestamps and
+ *        assert each consumed record's timestamp and tstype match.
+ */
+static void do_test_timestamp_preserved(void) {
+        const char *group = "share-timestamp";
+        const char *topic = test_mk_topic_name("0171-timestamp", 1);
+        const int msgcnt  = 10;
+        rd_kafka_share_t *consumer;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_resp_err_t err;
+        int64_t produced_ts[10];
+        int seen[10] = {0};
+        int consumed = 0;
+        int attempts = 30;
+        int i;
+
+        SUB_TEST();
+
+        consumer = test_create_share_consumer(group, NULL);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Base timestamps on the current wall-clock time rather than a
+         * fixed past value: records stamped far in the past trip the
+         * broker's time-based log retention, which deletes the segment.
+         * On Windows that segment deletion crashes the broker (NTFS file
+         * locking). Fresh timestamps keep the segment alive while still
+         * letting us assert CreateTime is preserved end-to-end. */
+        int64_t base_ts = (int64_t)time(NULL) * 1000LL;
+        for (i = 0; i < msgcnt; i++) {
+                produced_ts[i] = base_ts + i * 1000LL;
+                err            = rd_kafka_producev(
+                    common_producer, RD_KAFKA_V_TOPIC(topic),
+                    RD_KAFKA_V_KEY((char *)&i, sizeof(i)),
+                    RD_KAFKA_V_VALUE("ts-payload", 10),
+                    RD_KAFKA_V_TIMESTAMP(produced_ts[i]), RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "producev #%d failed: %s", i,
+                            rd_kafka_err2name(err));
+        }
+        rd_kafka_flush(common_producer, 10 * 1000);
+
+        test_share_set_auto_offset_reset(group, "earliest");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, topic, RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(consumer, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        while (consumed < msgcnt && attempts-- > 0) {
+                rd_kafka_error_t *err;
+                size_t rcvd, j;
+
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+                err   = rd_kafka_share_poll(consumer, 2000, &batch);
+                if (err) {
+                        rd_kafka_error_destroy(err);
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *msg =
+                            rd_kafka_messages_get(batch, j);
+                        rd_kafka_timestamp_type_t tstype;
+                        int64_t ts;
+                        int key_idx;
+
+                        if (msg->err)
+                                continue;
+                        TEST_ASSERT(msg->key_len == sizeof(key_idx),
+                                    "unexpected key size %zu", msg->key_len);
+                        memcpy(&key_idx, msg->key, sizeof(key_idx));
+                        TEST_ASSERT(key_idx >= 0 && key_idx < msgcnt,
+                                    "key out of range: %d", key_idx);
+                        TEST_ASSERT(!seen[key_idx],
+                                    "duplicate delivery for key %d", key_idx);
+                        seen[key_idx] = 1;
+
+                        ts = rd_kafka_message_timestamp(msg, &tstype);
+                        TEST_ASSERT(tstype == RD_KAFKA_TIMESTAMP_CREATE_TIME,
+                                    "expected CREATE_TIME for msg %d, "
+                                    "got tstype=%d",
+                                    key_idx, (int)tstype);
+                        TEST_ASSERT(ts == produced_ts[key_idx],
+                                    "msg %d: expected timestamp %" PRId64
+                                    ", got %" PRId64,
+                                    key_idx, produced_ts[key_idx], ts);
+
+                        rd_kafka_share_acknowledge(consumer, msg);
+                        consumed++;
+                }
+        }
+
+        TEST_ASSERT(consumed == msgcnt, "expected %d records, got %d", msgcnt,
+                    consumed);
+
+        rd_kafka_messages_destroy(batch);
+
+        test_share_consumer_close(consumer);
+        test_share_destroy(consumer);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0171_share_consumer_consume(int argc, char **argv) {
         /* Create common handles for all tests */
         common_producer = test_create_producer();
@@ -2140,6 +2247,9 @@ int main_0171_share_consumer_consume(int argc, char **argv) {
         do_test_zero_byte_payload_and_key();
         do_test_all_compression_codecs();
         do_test_many_and_large_headers();
+
+        /* Timestamp preservation */
+        do_test_timestamp_preserved();
 
 
         /* Cleanup common handles */

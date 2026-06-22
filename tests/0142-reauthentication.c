@@ -1261,6 +1261,16 @@ int main_0142_reauthentication(int argc, char **argv) {
                 do_test_share_set_token_invalid_args();
                 do_test_share_set_token(rd_false /* success */);
                 do_test_share_set_token(rd_true /* failure */);
+
+                /* The set_token tests target a real OAUTHBEARER cluster (token
+                 * supplied via OAUTHBEARER_TOKEN_CMD). The reauthentication
+                 * tests below use the built-in unsecured JWT, which a real
+                 * cluster rejects, so when the real setup is configured run
+                 * only the set_token tests. */
+                if (test_getenv("OAUTHBEARER_TOKEN_CMD", NULL)) {
+                        rd_kafka_conf_destroy(conf);
+                        return 0;
+                }
         }
 
         rd_kafka_t *rk = test_create_handle(RD_KAFKA_PRODUCER, conf);

@@ -1243,7 +1243,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
         "`azure_imds` authenticates using the Azure IMDS endpoint. "
         "Sets a default value for `sasl.oauthbearer.token.endpoint.url` if "
         "missing. "
-        "``aws_iam` indicates AWS IAM-based authentication using "
+        "`aws_iam` indicates AWS IAM-based authentication using "
         "GetWebIdentityToken API. "
         "librdkafka does not implement the aws_iam token flow natively as of "
         "now. "

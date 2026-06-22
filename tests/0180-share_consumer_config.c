@@ -1058,6 +1058,7 @@ static void test_share_consumer_fetch_conn_idle_after_drain(void) {
 
 /* Behavioural tests that require a real broker. */
 int main_0180_share_consumer_config(int argc, char **argv) {
+        test_timeout_set(120);
         test_max_poll_records_caps_batch_at_5();
         test_max_poll_records_allows_full_drain_at_10();
         test_fetch_max_bytes_one_is_soft_limit();

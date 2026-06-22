@@ -4669,6 +4669,12 @@ static void do_test_share_group_quick_unsubscribe(rd_bool_t cluster_ready) {
         SUB_TEST_QUICK("%s",
                        cluster_ready ? "mock cluster ready" : "no cluster");
 
+        /* The no-cluster variant points at an unreachable bootstrap, so the
+         * consumer's background connect legitimately raises __TRANSPORT /
+         * __ALL_BROKERS_DOWN on the error callback. Those must not fail the
+         * test — only the subscribe/unsubscribe return codes matter here. */
+        test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
+
         if (cluster_ready) {
                 ctx = test_ctx_new();
                 TEST_ASSERT(
@@ -4705,6 +4711,8 @@ static void do_test_share_group_quick_unsubscribe(rd_bool_t cluster_ready) {
                 test_ctx_destroy(&ctx);
         else
                 RD_IF_FREE(mcluster, test_mock_cluster_destroy);
+
+        test_curr->is_fatal_cb = NULL;
 
         SUB_TEST_PASS();
 }

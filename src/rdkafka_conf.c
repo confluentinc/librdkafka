@@ -444,7 +444,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "message.copy.max.bytes", _RK_C_INT, _RK(msg_copy_max_size),
      "Maximum size for message to be copied to buffer. "
      "Messages larger than this will be passed by reference (zero-copy) "
-     "at the expense of larger iovecs.",
+     "at the expense of larger iovecs. "
+     "This property is not supported for share consumers.",
      0, 1000000000, 0xffff},
     {_RK_GLOBAL | _RK_MED, "receive.message.max.bytes", _RK_C_INT,
      _RK(recv_max_msg_size),
@@ -462,7 +463,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "This is a generic property applied to all broker communication, "
      "however it is primarily relevant to produce requests. "
      "In particular, note that other mechanisms limit the number "
-     "of outstanding consumer fetch request per broker to one.",
+     "of outstanding consumer fetch request per broker to one. "
+     "This property is ignored for share consumers.",
      1, 1000000, 1000000},
     {_RK_GLOBAL, "max.in.flight", _RK_C_ALIAS,
      .sdef = "max.in.flight.requests.per.connection"},
@@ -544,7 +546,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL, "topic.blacklist", _RK_C_PATLIST, _RK(topic_blacklist),
      "Topic blacklist, a comma-separated list of regular expressions "
      "for matching topic names that should be ignored in "
-     "broker metadata information as if the topics did not exist."},
+     "broker metadata information as if the topics did not exist. "
+     "This property is not supported for share consumers."},
     {_RK_GLOBAL | _RK_MED, "debug", _RK_C_S2F, _RK(debug),
      "A comma-separated list of debug contexts to enable. "
      "Detailed Producer debugging: broker,topic,msg. "
@@ -634,7 +637,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(connections_max_idle_ms),
      "Close broker connections after the specified time of "
      "inactivity. "
-     "Disable with 0. For share consumers, the default value is 32400 (9 mins)."
+     "Disable with 0. For share consumers, the default value is 540000 (9 "
+     "mins)."
      "If this property is left at its default value some heuristics are "
      "performed to determine a suitable default value, this is currently "
      "limited to identifying brokers on Azure "
@@ -1425,7 +1429,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(auto_commit_interval_ms),
      "The frequency in milliseconds that the consumer offsets "
      "are committed (written) to offset storage. (0 = disable). "
-     "This setting is used by the high-level consumer.",
+     "This setting is used by the high-level consumer. "
+     "This property is ignored for share consumers.",
      0, 86400 * 1000, 5 * 1000},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_HIGH, "enable.auto.offset.store",
      _RK_C_BOOL, _RK(enable_auto_offset_store),
@@ -1474,7 +1479,7 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "fetching messages from the broker. "
      "If the client encounters a message larger than this value "
      "it will gradually try to increase it until the "
-     "entire message can be fetched. This property is not supported for share "
+     "entire message can be fetched. This property is ignored for share "
      "consumers.",
      1, 1000000000, 1024 * 1024},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "max.partition.fetch.bytes",
@@ -1489,7 +1494,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "The maximum message batch size accepted by the broker is defined "
      "via `message.max.bytes` (broker config) or "
      "`max.message.bytes` (broker topic config). "
-     "For regular consumers, `fetch.max.bytes` is automatically adjusted "
+     "For regular (not share) consumers, `fetch.max.bytes` is automatically "
+     "adjusted "
      "upwards to be "
      "at least `message.max.bytes` (consumer config).",
      0, INT_MAX - 512, 50 * 1024 * 1024 /* 50MB */},
@@ -1527,14 +1533,17 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      .s2i  = {{RD_KAFKA_READ_UNCOMMITTED, "read_uncommitted"},
               {RD_KAFKA_READ_COMMITTED, "read_committed"}}},
     {_RK_GLOBAL | _RK_CONSUMER, "consume_cb", _RK_C_PTR, _RK(consume_cb),
-     "Message consume callback (set with rd_kafka_conf_set_consume_cb())"},
+     "Message consume callback (set with rd_kafka_conf_set_consume_cb()). "
+     "This property is not supported for share consumers."},
     {_RK_GLOBAL | _RK_CONSUMER, "rebalance_cb", _RK_C_PTR, _RK(rebalance_cb),
      "Called after consumer group has been rebalanced "
-     "(set with rd_kafka_conf_set_rebalance_cb())"},
+     "(set with rd_kafka_conf_set_rebalance_cb()). "
+     "This property is not supported for share consumers."},
     {_RK_GLOBAL | _RK_CONSUMER, "offset_commit_cb", _RK_C_PTR,
      _RK(offset_commit_cb),
      "Offset commit result propagation callback. "
-     "(set with rd_kafka_conf_set_offset_commit_cb())"},
+     "(set with rd_kafka_conf_set_offset_commit_cb()). "
+     "This property is not supported for share consumers."},
     {_RK_GLOBAL | _RK_CONSUMER, "enable.partition.eof", _RK_C_BOOL,
      _RK(enable_partition_eof),
      "Emit RD_KAFKA_RESP_ERR__PARTITION_EOF event whenever the "
@@ -1878,7 +1887,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "consumer only. When using the high-level KafkaConsumer, the "
      "global `auto.commit.interval.ms` property must be used instead]. "
      "The frequency in milliseconds that the consumer offsets "
-     "are committed (written) to offset storage.",
+     "are committed (written) to offset storage. "
+     "This property is ignored for share consumers.",
      10, 86400 * 1000, 60 * 1000},
     {_RK_TOPIC | _RK_CONSUMER | _RK_HIGH, "auto.offset.reset", _RK_C_S2I,
      _RKT(auto_offset_reset),
@@ -1931,7 +1941,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_TOPIC | _RK_CONSUMER, "consume.callback.max.messages", _RK_C_INT,
      _RKT(consume_callback_max_msgs),
      "Maximum number of messages to dispatch in "
-     "one `rd_kafka_consume_callback*()` call (0 = unlimited)",
+     "one `rd_kafka_consume_callback*()` call (0 = unlimited). "
+     "This property is not supported for share consumers.",
      0, 1000000, 0},
 
     {0, /* End */}};
@@ -4309,6 +4320,14 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`RD_KAFKA_EVENT_REBALANCE` is not "
                                        "applicable for share consumer";
 
+                        if (conf->offset_commit_cb)
+                                return "`offset_commit_cb` is not applicable "
+                                       "for share consumer";
+
+                        if (conf->consume_cb)
+                                return "`consume_cb` is not applicable "
+                                       "for share consumer";
+
                         if (rd_kafka_conf_is_modified(conf,
                                                       "enable.auto.commit"))
                                 return "`enable.auto.commit` is not "
@@ -4367,10 +4386,26 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`enable.partition.eof` is not "
                                        "applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(conf,
+                                                      "message.copy.max.bytes"))
+                                return "`message.copy.max.bytes` is not "
+                                       "applicable for share consumer";
+
+                        if (rd_kafka_conf_is_modified(conf, "topic.blacklist"))
+                                return "`topic.blacklist` is not "
+                                       "applicable for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
                                 return "`auto.offset.reset` is not "
+                                       "applicable for share consumer";
+
+                        if (conf->topic_conf &&
+                            rd_kafka_topic_conf_is_modified(
+                                conf->topic_conf,
+                                "consume.callback.max.messages"))
+                                return "`consume.callback.max.messages` is not "
                                        "applicable for share consumer";
 
                         /* The Azure heuristic (which lowers it to <4 minutes)
@@ -4635,9 +4670,13 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (!rd_kafka_conf_is_modified(conf, "allow.auto.create.topics")) {
                 /* Consumer: Do not allow auto create by default.
-                 * Producer: Allow auto create by default. */
+                 * Producer: Allow auto create by default.
+                 * Share consumer: allow auto create by default, to match
+                 * the Java share consumer.
+                 */
                 if (cltype == RD_KAFKA_CONSUMER)
-                        conf->allow_auto_create_topics = rd_false;
+                        conf->allow_auto_create_topics =
+                            conf->share.is_share_consumer ? rd_true : rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)
                         conf->allow_auto_create_topics = rd_true;
         }

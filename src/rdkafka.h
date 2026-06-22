@@ -3532,11 +3532,13 @@ rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
                                                       const char *password);
 
 /**
+ * @brief Get the SASL callback queue for a share consumer.
+ *
  * @returns a reference to the SASL callback queue for the share consumer,
  *          if a SASL mechanism with callbacks is configured
  *          (currently only OAUTHBEARER), else returns NULL.
  *
- * Use rd_kafka_queue_destroy() to loose the reference.
+ * Use rd_kafka_queue_destroy() to lose the reference.
  *
  * @sa rd_kafka_queue_get_sasl()
  * @sa rd_kafka_share_sasl_background_callbacks_enable()

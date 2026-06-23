@@ -822,7 +822,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "Further, the consumer default value is different from the Java "
      "consumer (true), and this property is not supported by the Java "
      "producer. Requires broker version >= 0.11.0.0, for older broker "
-     "versions only the broker configuration applies.",
+     "versions only the broker configuration applies. This property "
+     "is not supported for share consumers.",
      0, 1, 0},
 
     /* Security related global properties */
@@ -4395,6 +4396,10 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`topic.blacklist` is not "
                                        "applicable for share consumer";
 
+                        if (rd_kafka_conf_is_modified(conf, "allow.auto.create.topics"))
+                                return "`allow.auto.create.topics` is not "
+                                       "supported  for share consumer";
+
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
                                 conf->topic_conf, "auto.offset.reset"))
@@ -4675,8 +4680,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                  * the Java share consumer.
                  */
                 if (cltype == RD_KAFKA_CONSUMER)
-                        conf->allow_auto_create_topics =
-                            conf->share.is_share_consumer ? rd_true : rd_false;
+                        conf->allow_auto_create_topics = rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)
                         conf->allow_auto_create_topics = rd_true;
         }

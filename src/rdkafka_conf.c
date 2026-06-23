@@ -4675,10 +4675,7 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
         if (!rd_kafka_conf_is_modified(conf, "allow.auto.create.topics")) {
                 /* Consumer: Do not allow auto create by default.
-                 * Producer: Allow auto create by default.
-                 * Share consumer: allow auto create by default, to match
-                 * the Java share consumer.
-                 */
+                 * Producer: Allow auto create by default. */
                 if (cltype == RD_KAFKA_CONSUMER)
                         conf->allow_auto_create_topics = rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)

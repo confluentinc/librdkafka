@@ -438,6 +438,15 @@ typedef struct rd_kafka_cgrp_s {
                                                          *   INT64_MAX.
                                                          *   @locality main
                                                          *   thread */
+                rd_ts_t
+                    fetch_stall_logged_last_ts; /**< Last time the
+                                                 *   main-thread re-trigger
+                                                 *   loop logged a "fetch
+                                                 *   stalled" condition;
+                                                 *   rate-limits that log.
+                                                 *   0 = not currently
+                                                 *   logged.
+                                                 *   @locality main thread */
         } rkcg_share;
 
         /**

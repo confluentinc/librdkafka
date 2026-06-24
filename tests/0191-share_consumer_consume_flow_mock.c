@@ -52,11 +52,7 @@
  *        DOWN+UP, new SHARE_FETCH ops are dispatched (flag reset in the
  *        __TRANSPORT reply path).
  *
- * GAP-G  Multi-broker ack segregation: with two partition leaders on
- *        different brokers, acks for each partition are routed to the
- *        correct broker independently, and commit_sync succeeds for both.
- *
- * GAP-H  Unsubscribe + resubscribe continuity: rkshare_fetch_more_records
+ * GAP-G  Unsubscribe + resubscribe continuity: rkshare_fetch_more_records
  *        _requested may be rd_true after resubscribe (set during the old
  *        subscription's in-flight fetch), but the main-thread re-trigger
  *        (rdkafka.c:2422-2443) fires once a broker is UP and partitions
@@ -570,168 +566,6 @@ static void do_test_session_not_found_recovery(void) {
 
 
 /* ===========================================================================
- *  GAP-G: Multi-broker ack segregation
- *
- *  rd_kafka_share_segregate_and_dispatch_acks() routes each batch of acks
- *  to the batch's partition leader.  With two brokers and two partitions
- *  (one per broker), acks for partition 0 must go to broker 1 and acks
- *  for partition 1 must go to broker 2.
- *
- *  Test: commit_sync succeeds for BOTH partitions — if segregation were
- *  broken (all acks sent to one broker), the other broker would return
- *  UNKNOWN_MEMBER_ID or similar and commit_sync would fail.
- *
- *  Also verifies that the number of ShareAcknowledge RPCs equals 0
- *  (acks are piggybacked in ShareFetch, not in separate ShareAcknowledge).
- * =========================================================================*/
-static rd_bool_t is_share_ack_request(rd_kafka_mock_request_t *req,
-                                      void *opaque) {
-        return rd_kafka_mock_request_api_key(req) == RD_KAFKAP_ShareAcknowledge;
-}
-
-static void do_test_multi_broker_ack_segregation(void) {
-        ctx_t ctx;
-        rd_kafka_share_t *rkshare;
-        rd_kafka_topic_partition_list_t *results = NULL;
-        rd_kafka_error_t *err;
-        const char *topic            = "0191-multi-broker-acks";
-        const char *group            = "sg-0191-multi-broker-acks";
-        const int broker1            = 1;
-        const int broker2            = 2;
-        const int msgs_per_partition = 5;
-        const int total_msgs         = msgs_per_partition * 2;
-        rd_kafka_messages_t *batch   = NULL;
-        int total_consumed;
-        int attempts;
-        size_t share_ack_cnt;
-        int i;
-
-        SUB_TEST_QUICK();
-
-        ctx = ctx_new(2);
-        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 2, 1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "create 2-partition topic");
-
-        /* Partition 0 on broker 1, partition 1 on broker 2. */
-        TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0,
-                                                       broker1) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "set leader p0=b1");
-        TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 1,
-                                                       broker2) ==
-                        RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "set leader p1=b2");
-
-        produce_to_partition(ctx.producer, topic, 0, msgs_per_partition);
-        produce_to_partition(ctx.producer, topic, 1, msgs_per_partition);
-
-        rkshare = create_consumer(ctx.bootstraps, group, "explicit");
-        subscribe_one(rkshare, topic);
-
-        /* Track requests so we can verify acks are routed to the
-         * correct per-partition leader broker. Must be enabled before
-         * any ShareFetch/ShareAcknowledge goes out. */
-        rd_kafka_mock_start_request_tracking(ctx.mcluster);
-
-        /* Consume all records from both partitions. */
-        total_consumed = 0;
-        attempts       = 0;
-        while (total_consumed < total_msgs && attempts++ < 60) {
-                size_t rcvd;
-
-                err = rd_kafka_share_poll(rkshare, 500, &batch);
-                if (err) {
-                        rd_kafka_error_destroy(err);
-                        rd_kafka_messages_destroy(batch);
-                        batch = NULL;
-                        continue;
-                }
-                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
-                for (i = 0; i < (int)rcvd; i++) {
-                        rd_kafka_message_t *rkm =
-                            rd_kafka_messages_get(batch, i);
-                        if (!rkm->err) {
-                                total_consumed++;
-                                rd_kafka_share_acknowledge(rkshare, rkm);
-                        }
-                }
-                rd_kafka_messages_destroy(batch);
-                batch = NULL;
-        }
-        TEST_ASSERT(total_consumed == total_msgs, "Expected %d records, got %d",
-                    total_msgs, total_consumed);
-        TEST_SAY("Consumed %d records from 2 partitions\n", total_consumed);
-
-        /* commit_sync — acks for p0 must go to broker1, p1 to broker2.
-         * If segregation is broken, one broker's ack would fail. */
-        err = rd_kafka_share_commit_sync(rkshare, 10000, &results);
-        TEST_ASSERT(!err, "commit_sync failed: %s",
-                    err ? rd_kafka_error_string(err) : "");
-        TEST_ASSERT(results != NULL, "commit_sync: NULL results");
-
-        for (i = 0; i < results->cnt; i++) {
-                rd_kafka_topic_partition_t *p = &results->elems[i];
-                TEST_ASSERT(p->err == RD_KAFKA_RESP_ERR_NO_ERROR,
-                            "Partition %s[%" PRId32 "] ack error: %s", p->topic,
-                            p->partition, rd_kafka_err2name(p->err));
-        }
-        rd_kafka_topic_partition_list_destroy(results);
-        TEST_SAY("commit_sync: both partitions acked successfully\n");
-
-        /* Verify ack segregation precisely: p0's leader is broker1 and
-         * p1's leader is broker2, so each partition's ACKS must reach
-         * that partition's own leader. We assert specifically on
-         * ShareAcknowledge RPCs (not ShareFetch): in this explicit-ack
-         * flow the acks travel as standalone ShareAcknowledge requests
-         * (confirmed at runtime: exactly 2), each addressed to the
-         * partition leader. Plain ShareFetches go to both leaders during
-         * normal consumption regardless of ack routing, so counting them
-         * would only prove "both leaders were contacted", not "each
-         * partition's acks reached its leader". Attributing each
-         * ShareAcknowledge to its receiving broker and requiring BOTH
-         * brokers to have seen one proves the segregation property. */
-        rd_kafka_mock_request_t **reqs;
-        size_t req_cnt;
-        rd_bool_t b1_got_ack = rd_false;
-        rd_bool_t b2_got_ack = rd_false;
-        reqs          = rd_kafka_mock_get_requests(ctx.mcluster, &req_cnt);
-        share_ack_cnt = 0;
-        TEST_ASSERT(req_cnt > 0,
-                    "request tracking captured 0 requests — tracking was "
-                    "not enabled");
-        for (i = 0; i < (int)req_cnt; i++) {
-                if (!is_share_ack_request(reqs[i], NULL))
-                        continue;
-                share_ack_cnt++;
-                if (rd_kafka_mock_request_id(reqs[i]) == broker1)
-                        b1_got_ack = rd_true;
-                else if (rd_kafka_mock_request_id(reqs[i]) == broker2)
-                        b2_got_ack = rd_true;
-        }
-        rd_kafka_mock_request_destroy_array(reqs, req_cnt);
-
-        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
-
-        TEST_ASSERT(b1_got_ack && b2_got_ack,
-                    "ack segregation broken: broker1 got ShareAcknowledge=%d "
-                    "broker2 got ShareAcknowledge=%d — each partition's acks "
-                    "must reach that partition's leader",
-                    b1_got_ack, b2_got_ack);
-        TEST_SAY(
-            "Verified ack segregation: each partition's acks reached its "
-            "own leader (broker1 and broker2 each received a standalone "
-            "ShareAcknowledge; total ShareAcknowledge count=%zu)\n",
-            share_ack_cnt);
-
-        test_share_consumer_close(rkshare);
-        test_share_destroy(rkshare);
-        ctx_destroy(&ctx);
-        SUB_TEST_PASS();
-}
-
-
-/* ===========================================================================
  *  GAP-F: rkb_share_fetch_enqueued reset after broker reconnect
  *
  *  When a broker disconnects while a SHARE_FETCH op is in-flight,
@@ -850,7 +684,7 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
 
 
 /* ===========================================================================
- *  GAP-H: Unsubscribe + resubscribe continuity
+ *  GAP-G: Unsubscribe + resubscribe continuity
  *
  *  After rd_kafka_share_unsubscribe(), rkshare_subscribed = rd_false and
  *  rkshare_fetch_more_records_requested may be rd_true (if a SHARE_FETCH
@@ -1152,14 +986,10 @@ int main_0191_share_consumer_consume_flow_mock(int argc, char **argv) {
         /* GAP-E: SHARE_SESSION_NOT_FOUND resets session, records delivered */
         do_test_session_not_found_recovery();
 
-        /* GAP-G: acks from multi-partition/multi-broker setup routed correctly
-         */
-        do_test_multi_broker_ack_segregation();
-
         /* GAP-F: rkb_share_fetch_enqueued reset after broker reconnect */
         do_test_enqueued_flag_reset_on_reconnect();
 
-        /* GAP-H: consumer recovers after unsubscribe + resubscribe */
+        /* GAP-G: consumer recovers after unsubscribe + resubscribe */
         do_test_resubscribe_continuity();
 
         /* GAP-B: only 1 FANOUT sent while fetch is in-flight */

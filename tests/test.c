@@ -8291,6 +8291,17 @@ test_ack_cb_state_first_err(const test_ack_cb_state_t *state) {
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
+int test_ack_cb_state_count_err(const test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err) {
+        int n = 0;
+        int i;
+        for (i = 0; i < state->callback_cnt; i++) {
+                if (state->errs[i] == err)
+                        n++;
+        }
+        return n;
+}
+
 void test_share_ack_cb(rd_kafka_share_t *rkshare,
                        rd_kafka_share_partition_offsets_list_t *partitions,
                        rd_kafka_resp_err_t err,

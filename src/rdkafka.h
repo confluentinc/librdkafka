@@ -5208,8 +5208,7 @@ RD_EXPORT size_t rd_kafka_share_partition_offsets_list_count(
  * @brief Get a partition offsets entry at the specified index.
  * @param list Partition offsets list.
  * @param index Zero-based index of the partition to retrieve.
- * @returns Pointer to the partition offsets entry, or NULL if index is out of
- *          bounds.
+ * @returns Pointer to the partition offsets entry
  */
 RD_EXPORT const rd_kafka_share_partition_offsets_t *
 rd_kafka_share_partition_offsets_list_get(

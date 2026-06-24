@@ -16,6 +16,12 @@ static rd_bool_t is_share_heartbeat_request(rd_kafka_mock_request_t *request,
                RD_KAFKAP_ShareGroupHeartbeat;
 }
 
+static rd_bool_t is_find_coordinator_request(rd_kafka_mock_request_t *request,
+                                             void *opaque) {
+        return rd_kafka_mock_request_api_key(request) ==
+               RD_KAFKAP_FindCoordinator;
+}
+
 /**
  * @brief Wait for at least \p num ShareGroupHeartbeat requests
  *        to be received by the mock cluster.
@@ -28,6 +34,37 @@ static int wait_share_heartbeats(rd_kafka_mock_cluster_t *mcluster,
         return test_mock_wait_matching_requests(
             mcluster, num, confidence_interval, is_share_heartbeat_request,
             NULL);
+}
+
+/**
+ * @brief Poll the mock request log until at least \p num requests
+ *        matching \p match have been recorded, or \p deadline_ms
+ *        elapses. Unlike test_mock_wait_matching_requests this has a
+ *        hard deadline and CANNOT hang — on timeout it simply returns
+ *        the (insufficient) count so the caller's assertion fails
+ *        loudly with a real number.
+ *
+ * @return The matching-request count observed (>= num on success, or
+ *         whatever was seen by the deadline).
+ */
+static size_t wait_for_matching_request_cnt(
+    rd_kafka_mock_cluster_t *mcluster,
+    rd_bool_t (*match)(rd_kafka_mock_request_t *, void *),
+    void *opaque,
+    size_t num,
+    int deadline_ms) {
+        int64_t deadline = test_clock() + (int64_t)deadline_ms * 1000;
+        size_t cnt       = 0;
+
+        do {
+                cnt =
+                    test_mock_get_matching_request_cnt(mcluster, match, opaque);
+                if (cnt >= num)
+                        return cnt;
+                rd_usleep(100 * 1000, 0);
+        } while (test_clock() < deadline);
+
+        return cnt;
 }
 
 /**
@@ -2643,6 +2680,217 @@ static void do_test_empty_topic_list_subscription(void) {
 }
 
 
+/**
+ * @brief Verify FindCoordinator retries follow the intervalled
+ *        ~1s cadence when the coordinator is unavailable: stack 4
+ *        GROUP_COORDINATOR_NOT_AVAILABLE errors and assert at least
+ *        3 FindCoordinator requests fire with inter-arrival >= the
+ *        expected lower bound.
+ */
+static void test_share_group_find_coordinator_backoff(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_mock_request_t **requests = NULL;
+        size_t request_cnt                 = 0;
+        int64_t prev_ts                    = -1;
+        int find_coord_cnt                 = 0;
+        size_t fc_seen;
+        /* The coordinator query fires on a fixed ~1000ms interval
+         * (rkcg_coord_query_intvl, rd_kafka_cgrp.c: rd_interval(...,
+         * 1000*1000, ...)). The first re-query after a triggering event
+         * is reset with up to 500ms jitter, so we accept a two-sided
+         * window around 1000ms: the lower bound absorbs that jitter and
+         * the upper bound catches a regression that stretches the
+         * interval. */
+        const int64_t cadence_lo_ms = 600;
+        const int64_t cadence_hi_ms = 1500;
+        size_t i;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_FindCoordinator, 4,
+            RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE,
+            RD_KAFKA_RESP_ERR_GROUP_COORDINATOR_NOT_AVAILABLE);
+
+        rkshare =
+            create_share_consumer(bootstraps, "sg-0155-find_coord_backoff");
+
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "0155-fc-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Poll (bounded, no hang) until the 4 injected errors have
+         * driven at least 4 FindCoordinator retries, instead of a fixed
+         * sleep that flakes on loaded CI / wastes time on fast boxes. */
+        fc_seen = wait_for_matching_request_cnt(
+            mcluster, is_find_coordinator_request, NULL, 4, 12000 /*ms*/);
+        TEST_ASSERT(fc_seen >= 4,
+                    "expected >= 4 FindCoordinator requests within the "
+                    "deadline, got %" PRIusz,
+                    fc_seen);
+
+        requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+        for (i = 0; i < request_cnt; i++) {
+                if (rd_kafka_mock_request_api_key(requests[i]) !=
+                    RD_KAFKAP_FindCoordinator)
+                        continue;
+
+                /* Only assert intervals on the retries driven by the
+                 * injected err stack (4 errs => 4 err-driven retries).
+                 * Beyond that, post-drain background probes from other
+                 * paths can race and produce non-deterministic
+                 * inter-arrivals. */
+                if (find_coord_cnt >= 4)
+                        break;
+
+                if (prev_ts != -1) {
+                        int64_t diff_ms =
+                            (rd_kafka_mock_request_timestamp(requests[i]) -
+                             prev_ts) /
+                            1000;
+                        TEST_SAY(
+                            "FindCoordinator retry %d: "
+                            "inter-arrival %" PRId64 "ms\n",
+                            find_coord_cnt, diff_ms);
+                        TEST_ASSERT(diff_ms >= cadence_lo_ms &&
+                                        diff_ms <= cadence_hi_ms,
+                                    "retry %d: inter-arrival %" PRId64
+                                    "ms outside expected [%" PRId64 ", %" PRId64
+                                    "]ms window around the "
+                                    "1000ms coordinator-query interval",
+                                    find_coord_cnt, diff_ms, cadence_lo_ms,
+                                    cadence_hi_ms);
+                }
+                prev_ts = rd_kafka_mock_request_timestamp(requests[i]);
+                find_coord_cnt++;
+        }
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
+
+        TEST_ASSERT(find_coord_cnt >= 3,
+                    "expected >= 3 FindCoordinator requests to verify the "
+                    "retry cadence, got %d",
+                    find_coord_cnt);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief Verify a NOT_COORDINATOR_FOR_GROUP error on
+ *        ShareGroupHeartbeat triggers a FindCoordinator request to
+ *        rediscover the coordinator.
+ */
+static void test_share_group_heartbeat_find_coordinator_backoff(void) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_topic_partition_list_t *subs;
+        rd_kafka_mock_request_t **requests = NULL;
+        size_t request_cnt                 = 0;
+        rd_bool_t saw_hb_err               = rd_false;
+        rd_bool_t saw_find_coord_after_hb  = rd_false;
+        int64_t failing_hb_ts              = -1;
+        size_t fc_seen;
+        size_t i;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        rkshare =
+            create_share_consumer(bootstraps, "sg-0155-hb_find_coord_backoff");
+
+        rd_kafka_mock_topic_create(mcluster, "0155-hbfc-topic", 1, 1);
+        subs = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(subs, "0155-hbfc-topic",
+                                          RD_KAFKA_PARTITION_UA);
+        rd_kafka_share_subscribe(rkshare, subs);
+        rd_kafka_topic_partition_list_destroy(subs);
+
+        /* Let the session establish (first HBs / assignment) before we
+         * open a clean tracking window. Bounded wait on the first
+         * heartbeats rather than a fixed sleep. */
+        wait_for_matching_request_cnt(mcluster, is_share_heartbeat_request,
+                                      NULL, 1, 8000 /*ms*/);
+
+        /* start_request_tracking also clears the request log, so the
+         * window starts empty (no redundant clear_requests needed). The
+         * single injected error is therefore consumed by the FIRST
+         * ShareGroupHeartbeat in this window — making that HB
+         * deterministically the failing one we couple to below. */
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        rd_kafka_mock_push_request_errors(
+            mcluster, RD_KAFKAP_ShareGroupHeartbeat, 1,
+            RD_KAFKA_RESP_ERR_NOT_COORDINATOR_FOR_GROUP);
+
+        /* Poll (bounded, no hang) until the failing HB has triggered a
+         * FindCoordinator in this clean window. */
+        fc_seen = wait_for_matching_request_cnt(
+            mcluster, is_find_coordinator_request, NULL, 1, 10000 /*ms*/);
+        TEST_ASSERT(fc_seen >= 1,
+                    "expected >= 1 FindCoordinator after the failing HB "
+                    "within the deadline, got %" PRIusz,
+                    fc_seen);
+
+        requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+        for (i = 0; i < request_cnt; i++) {
+                int16_t api = rd_kafka_mock_request_api_key(requests[i]);
+                int64_t ts  = rd_kafka_mock_request_timestamp(requests[i]);
+                TEST_SAY("Request: api=%d ts=%" PRId64 "\n", (int)api, ts);
+                /* The first HB in this cleared window is the one that
+                 * consumes the single injected NOT_COORDINATOR error —
+                 * capture its timestamp. */
+                if (api == RD_KAFKAP_ShareGroupHeartbeat && !saw_hb_err) {
+                        saw_hb_err    = rd_true;
+                        failing_hb_ts = ts;
+                        continue;
+                }
+                /* Tightly couple: only a FindCoordinator that arrives
+                 * STRICTLY AFTER the failing HB's timestamp counts —
+                 * this rules out an unrelated/earlier FindCoordinator
+                 * false-positive. */
+                if (saw_hb_err && api == RD_KAFKAP_FindCoordinator &&
+                    ts > failing_hb_ts) {
+                        saw_find_coord_after_hb = rd_true;
+                        break;
+                }
+        }
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
+
+        TEST_ASSERT(saw_hb_err,
+                    "expected to observe the ShareGroupHeartbeat that "
+                    "consumes the NOT_COORDINATOR err");
+        TEST_ASSERT(saw_find_coord_after_hb,
+                    "expected a FindCoordinator request strictly after the "
+                    "failing ShareGroupHeartbeat (timestamp-coupled)");
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -2686,6 +2934,9 @@ int main_0155_share_group_heartbeat_mock(int argc, char **argv) {
 
         do_test_group_id_not_found_while_unsubscribed();
         do_test_group_id_not_found_while_stable_is_fatal();
+
+        test_share_group_find_coordinator_backoff();
+        test_share_group_heartbeat_find_coordinator_backoff();
 
         return 0;
 }

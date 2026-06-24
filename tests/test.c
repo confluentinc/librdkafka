@@ -313,7 +313,11 @@ _TEST_DECL(0184_share_consumer_topic_recreate);
 _TEST_DECL(0184_share_consumer_topic_recreate_local);
 _TEST_DECL(0185_share_consumer_max_poll_interval);
 _TEST_DECL(0186_share_consumer_fatal_error);
+_TEST_DECL(0187_share_consumer_assignment_routing);
+_TEST_DECL(0188_share_consumer_consume_batch_timeout);
+_TEST_DECL(0189_share_consumer_decommission_mock);
 _TEST_DECL(0190_share_consumer_telemetry);
+_TEST_DECL(0191_share_consumer_consume_flow_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -609,9 +613,15 @@ struct test tests[] = {
     _TEST(0184_share_consumer_topic_recreate_local, TEST_F_LOCAL),
     _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(4, 2, 0, 0)),
     _TEST(0186_share_consumer_fatal_error, TEST_F_LOCAL),
+    _TEST(0187_share_consumer_assignment_routing, TEST_F_LOCAL),
+    _TEST(0188_share_consumer_consume_batch_timeout,
+          0,
+          TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0189_share_consumer_decommission_mock, TEST_F_LOCAL),
     _TEST(0190_share_consumer_telemetry,
           TEST_F_MANUAL,
           TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0191_share_consumer_consume_flow_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -1065,13 +1075,16 @@ static void test_read_conf_file(const char *conf_path,
 }
 
 /**
- * @brief Log interceptor opaque holding the registered log callback.
+ * @brief Log interceptor opaque holding the registered log callback
+ *        and an optional caller-supplied state pointer.
  */
 typedef struct test_conf_log_interceptor_s {
         void (*log_cb)(const rd_kafka_t *rk,
                        int level,
                        const char *fac,
                        const char *buf);
+        void *opaque; /* Caller-set state, reachable from log_cb via
+                       * rd_kafka_opaque(rk)->opaque. */
 } test_conf_log_interceptor_t;
 
 /**
@@ -8257,6 +8270,331 @@ void test_share_destroy(rd_kafka_share_t *rkshare) {
         TEST_SAY("Calling rd_kafka_share_destroy\n");
         rd_kafka_share_destroy(rkshare);
         TEST_SAY("Completed rd_kafka_share_destroy\n");
+}
+
+/******************************************************************************
+ *
+ * Share consumer assignment observer (log-driven). See test.h for the
+ * public API contract. The parser tails the `cgrp` debug stream:
+ *
+ *   DUMP:       Assignment dump (started_cnt=..., wait_stop_cnt=...)
+ *   DUMP_ALL:   List with N partition(s):
+ *   DUMP_ALL:    <topic> [<part>] offset <off>     (× N)
+ *   DUMP_PND:   ...                                (we ignore)
+ *   DUMP_QRY:   ...
+ *   DUMP_REM:   ...
+ *   ASSIGNMENT: Share assignment served: N partition(s) assigned
+ *
+ * On the "Assignment dump" marker we start fresh; on each DUMP_ALL line
+ * (after the "List with ..." header) we append a parsed partition; on
+ * the "Share assignment served:" terminator we promote the buffer to
+ * `latest` and signal the cnd.
+ *
+ ******************************************************************************/
+
+struct test_share_assignment_log_s {
+        mtx_t lock;
+        rd_kafka_topic_partition_list_t *latest;      /* last committed */
+        rd_kafka_topic_partition_list_t *in_progress; /* current dump */
+        rd_bool_t in_dump_all;                        /* parser state */
+        test_share_assignment_stats_t stats;
+        test_conf_log_interceptor_t *interceptor; /* owned, freed by destroy */
+};
+
+/**
+ * @brief Parse one "DUMP_ALL:  topic [part] offset off..." line.
+ *
+ * Format (from rd_kafka_topic_partition_list_log,
+ * src/rdkafka_partition.c:4254-4259):
+ *
+ *    " %s [%" PRId32 "] offset %s%s%s"
+ *
+ * Topic names cannot contain '[' or whitespace so we slice on the last
+ * " [" before " offset ". Returns 0 on success, -1 on parse failure.
+ */
+static int
+test_share_assignment_parse_dump_line(const char *buf,
+                                      rd_kafka_topic_partition_list_t *out) {
+        const char *p, *bracket_open, *bracket_close;
+        char topic[256];
+        size_t topic_len;
+        int32_t partition;
+
+        /* Skip leading whitespace */
+        for (p = buf; *p == ' ' || *p == '\t'; p++)
+                ;
+        if (!*p)
+                return -1;
+
+        /* Find last " [" that precedes "] offset " */
+        bracket_open = strrchr(p, '[');
+        if (!bracket_open || bracket_open == p)
+                return -1;
+
+        /* Topic ends just before the space preceding '[' */
+        bracket_close = strchr(bracket_open, ']');
+        if (!bracket_close)
+                return -1;
+
+        topic_len = (size_t)(bracket_open - p);
+        /* Trim trailing space(s) between topic and '[' */
+        while (topic_len > 0 && p[topic_len - 1] == ' ')
+                topic_len--;
+        if (topic_len == 0 || topic_len >= sizeof(topic))
+                return -1;
+
+        memcpy(topic, p, topic_len);
+        topic[topic_len] = '\0';
+
+        if (sscanf(bracket_open, "[%" SCNd32 "]", &partition) != 1)
+                return -1;
+
+        rd_kafka_topic_partition_list_add(out, topic, partition);
+        return 0;
+}
+
+/**
+ * @brief log_cb installed via test_conf_set_log_interceptor().
+ *
+ * Runs on the librdkafka log-emitting thread. MUST NOT call any
+ * librdkafka APIs (allowed: mtx_*, cnd_*, list_add/copy on private
+ * data, sscanf, malloc).
+ */
+/**
+ * @brief Strip the leading "[thrd:NAME]: " prefix that rdkafka log
+ *        formatting prepends to every \p buf passed to the log_cb.
+ *        Returns a pointer just past the ": " — or the original
+ *        \p buf if no prefix is present.
+ */
+static const char *test_share_assignment_strip_prefix(const char *buf) {
+        if (buf && buf[0] == '[') {
+                const char *end = strstr(buf, "]: ");
+                if (end)
+                        return end + 3;
+        }
+        return buf;
+}
+
+static void test_share_assignment_log_cb(const rd_kafka_t *rk,
+                                         int level,
+                                         const char *fac,
+                                         const char *buf) {
+        test_conf_log_interceptor_t *interceptor = rd_kafka_opaque(rk);
+        test_share_assignment_log_t *log;
+        const char *msg;
+        int n;
+
+        (void)level;
+        (void)rk;
+
+        if (!interceptor || !interceptor->opaque)
+                return;
+        log = interceptor->opaque;
+
+        if (!fac || !buf)
+                return;
+
+        msg = test_share_assignment_strip_prefix(buf);
+
+        mtx_lock(&log->lock);
+
+        if (!strcmp(fac, "DUMP")) {
+                if (!strncmp(msg, "Assignment dump", 15)) {
+                        if (log->in_progress)
+                                rd_kafka_topic_partition_list_destroy(
+                                    log->in_progress);
+                        log->in_progress = rd_kafka_topic_partition_list_new(8);
+                        log->in_dump_all = rd_false;
+                }
+        } else if (!strcmp(fac, "DUMP_ALL")) {
+                if (!strncmp(msg, "List with ", 10)) {
+                        log->in_dump_all = rd_true;
+                } else if (log->in_dump_all && log->in_progress) {
+                        if (test_share_assignment_parse_dump_line(
+                                msg, log->in_progress) != 0)
+                                log->stats.parser_errors++;
+                }
+        } else if (!strcmp(fac, "DUMP_PND") || !strcmp(fac, "DUMP_QRY") ||
+                   !strcmp(fac, "DUMP_REM")) {
+                /* End of DUMP_ALL block. */
+                log->in_dump_all = rd_false;
+        } else if (!strcmp(fac, "ASSIGNMENT")) {
+                if (!strncmp(msg, "Share assignment served:", 24)) {
+                        if (sscanf(msg, "Share assignment served: %d", &n) ==
+                                1 &&
+                            log->in_progress) {
+                                if (log->in_progress->cnt != n) {
+                                        log->stats.parser_errors++;
+                                }
+                                if (log->latest)
+                                        rd_kafka_topic_partition_list_destroy(
+                                            log->latest);
+                                log->latest      = log->in_progress;
+                                log->in_progress = NULL;
+                                log->in_dump_all = rd_false;
+                                log->stats.serves++;
+                        }
+                } else if (!strncmp(msg, "Added ", 6)) {
+                        int parts = 0;
+                        if (sscanf(msg, "Added %d partition", &parts) == 1) {
+                                log->stats.adds++;
+                                log->stats.add_partitions += parts;
+                        }
+                }
+        } else if (!strcmp(fac, "REMOVEASSIGN")) {
+                if (!strncmp(msg, "Removed ", 8)) {
+                        int parts = 0;
+                        if (sscanf(msg, "Removed %d partition", &parts) == 1) {
+                                log->stats.subtracts++;
+                                log->stats.subtract_partitions += parts;
+                        }
+                }
+        } else if (!strcmp(fac, "CLEARASSIGN")) {
+                if (!strncmp(msg, "Clearing ", 9))
+                        log->stats.clears++;
+        }
+
+        mtx_unlock(&log->lock);
+}
+
+test_share_assignment_log_t *
+test_share_consumer_assignments_install(rd_kafka_conf_t *conf) {
+        test_share_assignment_log_t *log = rd_calloc(1, sizeof(*log));
+        const char *debug_contexts[]     = {"cgrp", NULL};
+
+        mtx_init(&log->lock, mtx_plain);
+
+        log->interceptor = test_conf_set_log_interceptor(
+            conf, test_share_assignment_log_cb, debug_contexts);
+        /* Stash our state on the interceptor opaque so the log_cb can
+         * reach it via rd_kafka_opaque(rk). The interceptor wrapper
+         * already owns conf's opaque field. */
+        log->interceptor->opaque = log;
+
+        return log;
+}
+
+rd_kafka_topic_partition_list_t *
+test_share_consumer_assignments(test_share_assignment_log_t *log,
+                                int timeout_ms) {
+        rd_kafka_topic_partition_list_t *out = NULL;
+        int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
+
+        for (;;) {
+                mtx_lock(&log->lock);
+                if (log->latest) {
+                        out = rd_kafka_topic_partition_list_copy(log->latest);
+                        mtx_unlock(&log->lock);
+                        return out;
+                }
+                mtx_unlock(&log->lock);
+                if (test_clock() >= deadline)
+                        return NULL;
+                rd_usleep(50 * 1000, 0);
+        }
+}
+
+rd_kafka_topic_partition_list_t *
+test_share_consumer_wait_assignment(test_share_assignment_log_t *log,
+                                    int expected_cnt,
+                                    int timeout_ms) {
+        rd_kafka_topic_partition_list_t *out = NULL;
+        int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
+
+        for (;;) {
+                mtx_lock(&log->lock);
+                if (log->latest && log->latest->cnt == expected_cnt) {
+                        out = rd_kafka_topic_partition_list_copy(log->latest);
+                        mtx_unlock(&log->lock);
+                        return out;
+                }
+                mtx_unlock(&log->lock);
+                if (test_clock() >= deadline)
+                        return NULL;
+                rd_usleep(50 * 1000, 0);
+        }
+}
+
+test_share_assignment_stats_t
+test_share_consumer_assignment_stats(test_share_assignment_log_t *log) {
+        test_share_assignment_stats_t snap;
+        mtx_lock(&log->lock);
+        snap = log->stats;
+        mtx_unlock(&log->lock);
+        return snap;
+}
+
+rd_kafka_topic_partition_list_t *
+test_share_consumer_wait_serves_after(test_share_assignment_log_t *log,
+                                      int prev_serves,
+                                      int expected_cnt,
+                                      int timeout_ms) {
+        rd_kafka_topic_partition_list_t *out = NULL;
+        int64_t deadline = test_clock() + (int64_t)timeout_ms * 1000;
+        rd_kafka_topic_partition_list_t *seen = NULL;
+        int seen_serves                       = prev_serves;
+
+        for (;;) {
+                mtx_lock(&log->lock);
+                if (log->latest && log->latest->cnt == expected_cnt &&
+                    log->stats.serves > prev_serves) {
+                        out = rd_kafka_topic_partition_list_copy(log->latest);
+                        mtx_unlock(&log->lock);
+                        if (seen)
+                                rd_kafka_topic_partition_list_destroy(seen);
+                        return out;
+                }
+                /* Track the most recent serve we observed even if cnt
+                 * doesn't match, so callers can see what actually arrived
+                 * on timeout. */
+                if (log->latest && log->stats.serves > seen_serves) {
+                        if (seen)
+                                rd_kafka_topic_partition_list_destroy(seen);
+                        seen = rd_kafka_topic_partition_list_copy(log->latest);
+                        seen_serves = log->stats.serves;
+                }
+                mtx_unlock(&log->lock);
+                if (test_clock() >= deadline) {
+                        if (seen) {
+                                char buf[512] = {0};
+                                size_t off    = 0;
+                                int i;
+                                for (i = 0; i < seen->cnt && off < 480; i++)
+                                        off += rd_snprintf(
+                                            buf + off, sizeof(buf) - off,
+                                            "%s%s[%" PRId32 "]", off ? "," : "",
+                                            seen->elems[i].topic,
+                                            seen->elems[i].partition);
+                                TEST_SAY(
+                                    "wait_serves_after timed out: expected "
+                                    "cnt=%d, last observed serve had "
+                                    "cnt=%d (%s), serves=%d (prev=%d)\n",
+                                    expected_cnt, seen->cnt, buf, seen_serves,
+                                    prev_serves);
+                                rd_kafka_topic_partition_list_destroy(seen);
+                        } else {
+                                TEST_SAY(
+                                    "wait_serves_after timed out: NO new "
+                                    "serves at all (prev=%d)\n",
+                                    prev_serves);
+                        }
+                        return NULL;
+                }
+                rd_usleep(50 * 1000, 0);
+        }
+}
+
+void test_share_consumer_assignments_destroy(test_share_assignment_log_t *log) {
+        if (!log)
+                return;
+        mtx_destroy(&log->lock);
+        if (log->latest)
+                rd_kafka_topic_partition_list_destroy(log->latest);
+        if (log->in_progress)
+                rd_kafka_topic_partition_list_destroy(log->in_progress);
+        if (log->interceptor)
+                rd_free(log->interceptor);
+        rd_free(log);
 }
 
 /**

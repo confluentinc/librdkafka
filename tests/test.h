@@ -1138,6 +1138,98 @@ rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
                                      int min_callbacks,
                                      int timeout_ms);
 
+/****************************************************************************
+ * Share Consumer assignment observer (log-driven)
+ *
+ * Captures the share consumer's assigned partition list by parsing the
+ * `cgrp`-context debug log emitted at the end of every
+ * rd_kafka_share_assignment_serve() call (src/rdkafka_assignment.c:676-696).
+ *
+ * Source of truth is the DUMP_ALL block + the
+ *   "ASSIGNMENT: Share assignment served: N partition(s) assigned"
+ * terminator. This deliberately bypasses rd_kafka_assignment() so tests
+ * verify routing as observed externally, not via the same field
+ * production code mutates.
+ ****************************************************************************/
+
+typedef struct test_share_assignment_stats_s {
+        int adds;
+        int add_partitions;
+        int subtracts;
+        int subtract_partitions;
+        int clears;
+        int serves;
+        int parser_errors;
+} test_share_assignment_stats_t;
+
+typedef struct test_share_assignment_log_s test_share_assignment_log_t;
+
+/**
+ * @brief Install a log interceptor on \p conf that captures every
+ *        "Share assignment served" event. Must be called BEFORE
+ *        creating the share consumer with \p conf.
+ *
+ * @returns Opaque handle (caller frees with
+ *          test_share_consumer_assignments_destroy() AFTER destroying
+ *          the share consumer).
+ */
+test_share_assignment_log_t *
+test_share_consumer_assignments_install(rd_kafka_conf_t *conf);
+
+/**
+ * @brief Return the most recent assignment observed in the log stream.
+ *
+ * Blocks until at least one "Share assignment served" event has been
+ * observed, or \p timeout_ms elapses.
+ *
+ * @returns A fresh copy of the latest assignment (caller frees with
+ *          rd_kafka_topic_partition_list_destroy()), or NULL on timeout.
+ */
+rd_kafka_topic_partition_list_t *
+test_share_consumer_assignments(test_share_assignment_log_t *log,
+                                int timeout_ms);
+
+/**
+ * @brief Block until the latest observed assignment has exactly
+ *        \p expected_cnt partitions, or \p timeout_ms elapses.
+ *
+ * @returns The matching list (caller frees) or NULL on timeout.
+ */
+rd_kafka_topic_partition_list_t *
+test_share_consumer_wait_assignment(test_share_assignment_log_t *log,
+                                    int expected_cnt,
+                                    int timeout_ms);
+
+/**
+ * @brief Snapshot the running counters under the lock.
+ */
+test_share_assignment_stats_t
+test_share_consumer_assignment_stats(test_share_assignment_log_t *log);
+
+/**
+ * @brief Block until the observer records a new "Share assignment
+ *        served" event with exactly \p expected_cnt partitions whose
+ *        `serves` counter is strictly greater than \p prev_serves, or
+ *        \p timeout_ms elapses.
+ *
+ * Use after operations that change the broker-side assignment (e.g.
+ * rd_kafka_mock_sharegroup_target_assignment()): snapshot
+ * stats.serves BEFORE the operation and pass that as \p prev_serves
+ * to wait for the next assignment delivery rather than returning a
+ * stale pre-push observation.
+ */
+rd_kafka_topic_partition_list_t *
+test_share_consumer_wait_serves_after(test_share_assignment_log_t *log,
+                                      int prev_serves,
+                                      int expected_cnt,
+                                      int timeout_ms);
+
+/**
+ * @brief Free the observer. MUST be called AFTER rd_kafka_share_destroy()
+ *        of the share consumer using it.
+ */
+void test_share_consumer_assignments_destroy(test_share_assignment_log_t *log);
+
 /**
  * @name rusage.c
  * @{

@@ -3538,8 +3538,14 @@ rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
  *          if a SASL mechanism with callbacks is configured
  *          (currently only OAUTHBEARER), else returns NULL.
  *
+ * @remark The dedicated SASL callback queue is only created when
+ *         rd_kafka_conf_enable_sasl_queue() was enabled on the configuration
+ *         before creating the share consumer; otherwise SASL callbacks are
+ *         served on the main queue and this returns NULL.
+ *
  * Use rd_kafka_queue_destroy() to lose the reference.
  *
+ * @sa rd_kafka_conf_enable_sasl_queue()
  * @sa rd_kafka_queue_get_sasl()
  * @sa rd_kafka_share_sasl_background_callbacks_enable()
  */
@@ -3558,7 +3564,7 @@ rd_kafka_queue_t *rd_kafka_share_queue_get_sasl(rd_kafka_share_t *rkshare);
  * @param md_principal_name the mandatory Kafka principal name associated
  *  with the token.
  * @param extensions optional SASL extensions key-value array with
- *  \p extensions_size elements (number of keys * 2), where [i] is the key and
+ *  \p extension_size elements (number of keys * 2), where [i] is the key and
  *  [i+1] is the key's value, to be communicated to the broker
  *  as additional key-value pairs during the initial client response as per
  *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are

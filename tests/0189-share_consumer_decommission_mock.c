@@ -102,8 +102,8 @@ static void subscribe_one(rd_kafka_share_t *consumer, const char *topic) {
 }
 
 static void do_test_decommission_while_inflight(void) {
-        const char *topic     = "0192-decommission";
-        const char *group     = "sg-0192-decom";
+        const char *topic     = "0189-decommission";
+        const char *group     = "sg-0189-decom";
         const int b1          = 1;
         const int b2          = 2;
         const int phase1_msgs = 5;
@@ -181,25 +181,50 @@ static void do_test_decommission_while_inflight(void) {
         TEST_SAY("commit_sync after decommission: %s\n",
                  error ? rd_kafka_error_string(error) : "success");
 
-        TEST_ASSERT(results && results->cnt > 0,
-                    "expected per-partition results");
+        /* The topic has exactly 1 partition (partition 0), and every
+         * acked record was for it. A silent drop would manifest as a
+         * MISSING partition row (cnt < 1), not as a spurious NO_ERROR
+         * row — so we pin the exact partition count and require the
+         * single row to be partition 0. */
+        TEST_ASSERT(results != NULL, "expected per-partition results");
+        TEST_ASSERT(results->cnt == 1,
+                    "expected exactly 1 partition result (p0), got %d "
+                    "(a missing row means acks were silently dropped)",
+                    results->cnt);
 
         for (j = 0; j < (size_t)results->cnt; j++) {
                 rd_kafka_resp_err_t per = results->elems[j].err;
                 TEST_SAY("  partition [%" PRId32 "] err=%s\n",
                          results->elems[j].partition, rd_kafka_err2name(per));
+                TEST_ASSERT(results->elems[j].partition == 0,
+                            "unexpected partition %" PRId32 " in results",
+                            results->elems[j].partition);
+                /* Acceptable outcomes per KIP-932 share-consumer
+                 * semantics: either the ack rerouted to the new leader
+                 * (NO_ERROR) or it surfaced a recovery/transport error.
+                 * Because broker 1 was DECOMMISSIONED (not just a leader
+                 * move), the in-flight ack targeted at the now-dead
+                 * broker legitimately surfaces __TRANSPORT/__TIMED_OUT
+                 * in addition to the leader-recovery codes. What is NOT
+                 * acceptable is a silent drop (a missing row) or any
+                 * other unrelated code. */
+                TEST_ASSERT(
+                    per == RD_KAFKA_RESP_ERR_NO_ERROR ||
+                        per == RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER ||
+                        per == RD_KAFKA_RESP_ERR_UNKNOWN_LEADER_EPOCH ||
+                        per == RD_KAFKA_RESP_ERR_SHARE_SESSION_NOT_FOUND ||
+                        per == RD_KAFKA_RESP_ERR__TRANSPORT ||
+                        per == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "partition [%" PRId32
+                    "]: unexpected commit err %s (expected NO_ERROR or a "
+                    "recovery/transport error after decommission)",
+                    results->elems[j].partition, rd_kafka_err2name(per));
                 if (per != RD_KAFKA_RESP_ERR_NO_ERROR)
                         saw_err_partition++;
         }
 
-        /* Either: all rerouted successfully (err == NO_ERROR), or some
-         * partitions surfaced an error. Both outcomes are acceptable —
-         * what we explicitly assert is that the consumer is in a sane
-         * state and can continue. */
-        TEST_SAY(
-            "decommission inflight: err_partitions=%d/%d (any "
-            "value is acceptable; silent drop would be a bug)\n",
-            saw_err_partition, results->cnt);
+        TEST_SAY("decommission inflight: err_partitions=%d/%d\n",
+                 saw_err_partition, results->cnt);
 
         rd_kafka_topic_partition_list_destroy(results);
         if (error)

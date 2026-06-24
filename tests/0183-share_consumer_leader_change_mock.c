@@ -1290,8 +1290,15 @@ static void do_test_release_with_leader_change(void) {
         TEST_SAY("RELEASE commit_sync returned: %s\n",
                  error ? rd_kafka_error_string(error) : "success");
 
-        TEST_ASSERT(results && results->cnt > 0,
+        /* The topic has exactly 1 partition; a silent drop of the
+         * RELEASE would show up as a MISSING row (cnt < 1), so pin the
+         * exact count rather than just cnt > 0. */
+        TEST_ASSERT(results != NULL,
                     "expected per-partition results from commit_sync");
+        TEST_ASSERT(results->cnt == 1,
+                    "expected exactly 1 partition result (p0), got %d "
+                    "(a missing row means the RELEASE was silently dropped)",
+                    results->cnt);
 
         for (j = 0; j < (size_t)results->cnt; j++) {
                 rd_kafka_resp_err_t per_err = results->elems[j].err;

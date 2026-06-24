@@ -1310,6 +1310,41 @@ test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
         return interceptor;
 }
 
+/**
+ * @brief Return the caller-set opaque stashed on the log interceptor that
+ *        owns \p rk's conf opaque. For use from a log_cb installed via
+ *        test_conf_set_log_interceptor(): reach your own state with
+ *        test_conf_log_interceptor_opaque(rk) instead of rd_kafka_opaque(rk)
+ *        (the latter returns the interceptor wrapper, not your state).
+ */
+void *test_conf_log_interceptor_opaque(const rd_kafka_t *rk) {
+        test_conf_log_interceptor_t *interceptor = rd_kafka_opaque(rk);
+        return interceptor ? interceptor->opaque : NULL;
+}
+
+/**
+ * @brief Stash caller state on \p interceptor so a log_cb installed via
+ *        test_conf_set_log_interceptor() can reach it with
+ *        test_conf_log_interceptor_opaque(rk). The interceptor struct is
+ *        opaque to test suites, so this setter is required.
+ */
+void test_conf_log_interceptor_set_opaque(
+    test_conf_log_interceptor_t *interceptor,
+    void *opaque) {
+        if (interceptor)
+                interceptor->opaque = opaque;
+}
+
+/**
+ * @brief Free an interceptor returned by test_conf_set_log_interceptor().
+ *        Must be called only AFTER the client that used it is destroyed.
+ */
+void test_conf_log_interceptor_destroy(
+    test_conf_log_interceptor_t *interceptor) {
+        if (interceptor)
+                rd_free(interceptor);
+}
+
 static RD_INLINE unsigned int test_rand(void) {
         unsigned int r;
 #ifdef _WIN32
@@ -8354,13 +8389,6 @@ test_share_assignment_parse_dump_line(const char *buf,
 }
 
 /**
- * @brief log_cb installed via test_conf_set_log_interceptor().
- *
- * Runs on the librdkafka log-emitting thread. MUST NOT call any
- * librdkafka APIs (allowed: mtx_*, cnd_*, list_add/copy on private
- * data, sscanf, malloc).
- */
-/**
  * @brief Strip the leading "[thrd:NAME]: " prefix that rdkafka log
  *        formatting prepends to every \p buf passed to the log_cb.
  *        Returns a pointer just past the ": " — or the original
@@ -8375,6 +8403,13 @@ static const char *test_share_assignment_strip_prefix(const char *buf) {
         return buf;
 }
 
+/**
+ * @brief log_cb installed via test_conf_set_log_interceptor().
+ *
+ * Runs on the librdkafka log-emitting thread. MUST NOT call any
+ * librdkafka APIs (allowed: mtx_*, cnd_*, list_add/copy on private
+ * data, sscanf, malloc).
+ */
 static void test_share_assignment_log_cb(const rd_kafka_t *rk,
                                          int level,
                                          const char *fac,

@@ -261,6 +261,15 @@ test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
                                              const char *buf),
                               const char **debug_contexts);
 
+void *test_conf_log_interceptor_opaque(const rd_kafka_t *rk);
+
+void test_conf_log_interceptor_set_opaque(
+    test_conf_log_interceptor_t *interceptor,
+    void *opaque);
+
+void test_conf_log_interceptor_destroy(
+    test_conf_log_interceptor_t *interceptor);
+
 void test_msg_fmt(char *dest,
                   size_t dest_size,
                   uint64_t testid,

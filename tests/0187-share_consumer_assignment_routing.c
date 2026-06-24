@@ -119,6 +119,31 @@ static void assert_set_eq(const char *what,
 }
 
 /**
+ * @brief Assert the log-scraping observer is healthy at end of test:
+ *        (1) parser_errors == 0 — the debug-log formats the observer
+ *            sscanf-parses have not drifted (a drift would silently
+ *            break these tests with vacuous passes / timeouts), and
+ *        (2) serves >= 1 — at least one assignment was actually parsed,
+ *            so a total parse failure (0 serves) fails loudly instead
+ *            of passing vacuously.
+ *
+ * Call once per observer just before destroying it.
+ */
+static void assert_observer_healthy(test_share_assignment_log_t *log,
+                                    const char *what) {
+        test_share_assignment_stats_t s =
+            test_share_consumer_assignment_stats(log);
+        TEST_ASSERT(s.parser_errors == 0,
+                    "%s: observer parser_errors=%d — assignment debug-log "
+                    "format drifted; the log-scraping observer is broken",
+                    what, s.parser_errors);
+        TEST_ASSERT(s.serves >= 1,
+                    "%s: observer recorded 0 serves — no assignment was "
+                    "ever parsed (total parse failure / format drift)",
+                    what);
+}
+
+/**
  * @brief Create a share consumer wired to the mock cluster, with the
  *        log-based assignment observer pre-installed on its conf.
  */
@@ -139,6 +164,22 @@ make_share_consumer(const char *bootstraps,
         rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rk, "share_consumer_new: %s", errstr);
         return rk;
+}
+
+/**
+ * @brief Build a run-unique group id from \p func (caller passes
+ *        __FUNCTION__), mirroring how test_mk_topic_name uniquifies
+ *        topic names. Uses its own TLS buffer so it does NOT clobber
+ *        test_mk_topic_name's buffer (which the tests hold a pointer
+ *        to for the topic name). Each test calls this once.
+ */
+static const char *mk_group_name(const char *func) {
+        static RD_TLS char ret[256];
+        if (!strncmp(func, "main_", 5))
+                func += 5;
+        rd_snprintf(ret, sizeof(ret), "sg_rnd%" PRIx64 "_%s",
+                    test_id_generate(), func);
+        return ret;
 }
 
 /** Subscribe to N topics (varargs of const char *). */
@@ -279,7 +320,24 @@ static void bring_up_consumers(rd_kafka_mock_cluster_t *mc,
                 wait_member_count(mc, group_id, (size_t)(i + 1), WAIT_MS);
                 ids[i] = capture_new_member_id(mc, group_id, known, (size_t)i);
                 known[i] = ids[i];
-                rd_usleep(HB_INTERVAL_MS * 2 * 1000, 0);
+
+                /* Wait on a concrete signal — the new member's first
+                 * served assignment — rather than a fixed settle sleep.
+                 * Once its own observer records a serve, the cgrp has
+                 * settled enough for the next join to bump the epoch
+                 * cleanly. Falls back to a short sleep only if no
+                 * observer is installed for this consumer. */
+                if (l[i]) {
+                        rd_ts_t deadline =
+                            test_clock() + (rd_ts_t)WAIT_MS * 1000;
+                        while (
+                            test_share_consumer_assignment_stats(l[i]).serves <
+                                1 &&
+                            test_clock() < deadline)
+                                rd_usleep(HB_INTERVAL_MS * 1000, 0);
+                } else {
+                        rd_usleep(HB_INTERVAL_MS * 2 * 1000, 0);
+                }
         }
 }
 
@@ -340,7 +398,7 @@ static void do_test_force_precise_assignment_single_consumer(void) {
         rd_kafka_topic_partition_list_t *got;
         char *id_c1;
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -368,6 +426,7 @@ static void do_test_force_precise_assignment_single_consumer(void) {
         rd_free(id_c1);
         test_share_consumer_close(c1);
         test_share_destroy(c1);
+        assert_observer_healthy(l1, "c1");
         test_share_consumer_assignments_destroy(l1);
         test_mock_cluster_destroy(mc);
         SUB_TEST_PASS();
@@ -395,7 +454,7 @@ static void do_test_force_shared_partition_between_consumers(void) {
         test_share_assignment_stats_t snap1, snap2;
         char *id_c1, *id_c2, *known[1];
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -460,6 +519,8 @@ static void do_test_force_shared_partition_between_consumers(void) {
         test_share_destroy(c1);
         test_share_consumer_close(c2);
         test_share_destroy(c2);
+        assert_observer_healthy(l1, "c1");
+        assert_observer_healthy(l2, "c2");
         test_share_consumer_assignments_destroy(l1);
         test_share_consumer_assignments_destroy(l2);
         test_mock_cluster_destroy(mc);
@@ -480,7 +541,7 @@ static void do_test_force_change_existing_assignment(void) {
         rd_kafka_topic_partition_list_t *got;
         char *id_c1;
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -509,6 +570,7 @@ static void do_test_force_change_existing_assignment(void) {
         rd_free(id_c1);
         test_share_consumer_close(c1);
         test_share_destroy(c1);
+        assert_observer_healthy(l1, "c1");
         test_share_consumer_assignments_destroy(l1);
         test_mock_cluster_destroy(mc);
         SUB_TEST_PASS();
@@ -527,7 +589,7 @@ static void do_test_force_empty_assignment(void) {
         rd_kafka_topic_partition_list_t *got;
         char *id_c1;
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -554,6 +616,7 @@ static void do_test_force_empty_assignment(void) {
         rd_free(id_c1);
         test_share_consumer_close(c1);
         test_share_destroy(c1);
+        assert_observer_healthy(l1, "c1");
         test_share_consumer_assignments_destroy(l1);
         test_mock_cluster_destroy(mc);
         SUB_TEST_PASS();
@@ -572,7 +635,7 @@ static void do_test_steady_state_no_spurious_serves(void) {
         rd_kafka_topic_partition_list_t *got;
         test_share_assignment_stats_t before, after;
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -588,6 +651,13 @@ static void do_test_steady_state_no_spurious_serves(void) {
         rd_kafka_topic_partition_list_destroy(got);
 
         before = test_share_consumer_assignment_stats(l1);
+        /* Observe a STEADY_MS=2000ms window — ~10 heartbeats at the
+         * HB_INTERVAL_MS=200ms cadence. Once the assignment is steady,
+         * the broker re-serves nothing, so the serve counter must be
+         * unchanged. The exact-equality assertion (not <=) is the
+         * tight form and is flake-free in practice (verified 20/20
+         * runs); 2s is wide enough that a missed re-serve would be
+         * caught, yet short enough not to invite an unrelated reconcile. */
         rd_usleep(STEADY_MS * 1000, 0);
         after = test_share_consumer_assignment_stats(l1);
 
@@ -599,6 +669,7 @@ static void do_test_steady_state_no_spurious_serves(void) {
 
         test_share_consumer_close(c1);
         test_share_destroy(c1);
+        assert_observer_healthy(l1, "c1");
         test_share_consumer_assignments_destroy(l1);
         test_mock_cluster_destroy(mc);
         SUB_TEST_PASS();
@@ -630,7 +701,7 @@ static void do_test_force_reassignment_cycle_three_consumers(void) {
         const char *id_arr[3];
         rd_kafka_topic_partition_list_t *as[3];
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
         int i;
 
         SUB_TEST_QUICK();
@@ -682,6 +753,7 @@ static void do_test_force_reassignment_cycle_three_consumers(void) {
         for (i = 0; i < 3; i++) {
                 test_share_consumer_close(c[i]);
                 test_share_destroy(c[i]);
+                assert_observer_healthy(l[i], "c[i]");
                 test_share_consumer_assignments_destroy(l[i]);
                 rd_free(ids[i]);
         }
@@ -708,7 +780,7 @@ static void do_test_force_chaos_four_consumers(void) {
         const char *id_arr[4];
         rd_kafka_topic_partition_list_t *as[4];
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
         int i;
 
         SUB_TEST_QUICK();
@@ -755,6 +827,7 @@ static void do_test_force_chaos_four_consumers(void) {
         for (i = 0; i < 4; i++) {
                 test_share_consumer_close(c[i]);
                 test_share_destroy(c[i]);
+                assert_observer_healthy(l[i], "c[i]");
                 test_share_consumer_assignments_destroy(l[i]);
                 rd_free(ids[i]);
         }
@@ -787,7 +860,7 @@ static void do_test_force_multi_topic_assignment_two_consumers(void) {
         rd_kafka_topic_partition_list_t *as[2];
         char *T           = rd_strdup(test_mk_topic_name(__FUNCTION__, 0));
         char *U           = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -854,6 +927,8 @@ static void do_test_force_multi_topic_assignment_two_consumers(void) {
         test_share_destroy(c1);
         test_share_consumer_close(c2);
         test_share_destroy(c2);
+        assert_observer_healthy(l1, "c1");
+        assert_observer_healthy(l2, "c2");
         test_share_consumer_assignments_destroy(l1);
         test_share_consumer_assignments_destroy(l2);
         test_mock_cluster_destroy(mc);
@@ -886,7 +961,7 @@ static void do_test_force_same_assignment_twice_no_extra_serve(void) {
         test_share_assignment_stats_t snap_after_first, snap_after_second;
         char *id_c1;
         const char *T     = test_mk_topic_name(__FUNCTION__, 0);
-        const char *group = __FUNCTION__;
+        const char *group = mk_group_name(__FUNCTION__);
 
         SUB_TEST_QUICK();
 
@@ -924,7 +999,13 @@ static void do_test_force_same_assignment_twice_no_extra_serve(void) {
         rd_kafka_mock_sharegroup_target_assignment(mc, group, ids, as, 1);
 
 
-        /* Wait long enough for several heartbeats to fly. */
+        /* Wait a STEADY_MS=2000ms window — ~10 heartbeats at the
+         * HB_INTERVAL_MS=200ms cadence — so several HB responses carry
+         * the (identical) assignment back. The cgrp's
+         * is_new_assignment_different check must suppress every one, so
+         * the serve counter stays exactly equal. The exact-equality
+         * assertion is the tight form and is flake-free in practice
+         * (verified 20/20 runs). */
         rd_usleep(STEADY_MS * 1000, 0);
         snap_after_second = test_share_consumer_assignment_stats(l1);
 
@@ -949,6 +1030,7 @@ static void do_test_force_same_assignment_twice_no_extra_serve(void) {
         rd_free(id_c1);
         test_share_consumer_close(c1);
         test_share_destroy(c1);
+        assert_observer_healthy(l1, "c1");
         test_share_consumer_assignments_destroy(l1);
         test_mock_cluster_destroy(mc);
         SUB_TEST_PASS();
@@ -977,7 +1059,7 @@ static void do_test_force_chaos_three_consumers_three_topics(void) {
         char *U              = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         char *V              = rd_strdup(test_mk_topic_name(__FUNCTION__, 2));
         const char *names[3] = {T, U, V};
-        const char *group    = __FUNCTION__;
+        const char *group    = mk_group_name(__FUNCTION__);
         int i;
 
         SUB_TEST_QUICK();
@@ -1022,6 +1104,7 @@ static void do_test_force_chaos_three_consumers_three_topics(void) {
         for (i = 0; i < 3; i++) {
                 test_share_consumer_close(c[i]);
                 test_share_destroy(c[i]);
+                assert_observer_healthy(l[i], "c[i]");
                 test_share_consumer_assignments_destroy(l[i]);
                 rd_free(ids[i]);
         }
@@ -1055,7 +1138,7 @@ static void do_test_force_chaos_four_consumers_three_topics(void) {
         char *U              = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
         char *V              = rd_strdup(test_mk_topic_name(__FUNCTION__, 2));
         const char *names[3] = {T, U, V};
-        const char *group    = __FUNCTION__;
+        const char *group    = mk_group_name(__FUNCTION__);
         int i;
 
         SUB_TEST_QUICK();
@@ -1104,6 +1187,7 @@ static void do_test_force_chaos_four_consumers_three_topics(void) {
         for (i = 0; i < 4; i++) {
                 test_share_consumer_close(c[i]);
                 test_share_destroy(c[i]);
+                assert_observer_healthy(l[i], "c[i]");
                 test_share_consumer_assignments_destroy(l[i]);
                 rd_free(ids[i]);
         }

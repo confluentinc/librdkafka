@@ -326,22 +326,24 @@ static void do_test_explicit_ack_gate(void) {
  *  recover and deliver records via the main-thread re-trigger path.
  *
  *  Mechanism tested:
- *    1. Inject UNKNOWN_TOPIC_OR_PART on one ShareFetch → CONSUMER_ERR
- *       enqueued to rkcg_q.
+ *    1. Inject a per-partition TOPIC_AUTHORIZATION_FAILED on one
+ *       ShareFetch → CONSUMER_ERR enqueued to rkcg_q (this code is a
+ *       SURFACE arm on the per-partition path; UNKNOWN_TOPIC_OR_PART
+ *       would be silently awaited and never surface).
  *    2. share_poll dequeues CONSUMER_ERR → returns error.
  *       rkshare_fetch_more_records_requested stays rd_true.
  *    3. The in-flight or next SHARE_FETCH op completes normally.
  *       When it returns records → SHARE_FETCH_RESPONSE enqueued →
  *       rkshare_fetch_more_records_requested reset → app gets records.
  *
- *  The log interceptor counts "Consumer error" log messages to confirm
- *  the error was actually surfaced, not silently swallowed.
+ *  The log interceptor counts "per-partition fetch error" log messages
+ *  to confirm the error was actually surfaced, not silently swallowed.
  * =========================================================================*/
 static void consumer_err_log_cb(const rd_kafka_t *rk,
                                 int level,
                                 const char *fac,
                                 const char *buf) {
-        rd_atomic32_t *cnt = rd_kafka_opaque(rk);
+        rd_atomic32_t *cnt = test_conf_log_interceptor_opaque(rk);
         (void)level;
         /* rd_kafka_share_fetch_reply_handle_partition_error logs at
          * LOG_INFO with fac "SHAREFETCH" for per-partition errors. */
@@ -356,9 +358,11 @@ static void do_test_consumer_err_recovery(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         rd_atomic32_t consumer_err_cnt;
-        const char *topic = "0191-consumer-err-recovery";
-        const char *group = "sg-0191-consumer-err-recovery";
-        const int msgcnt  = 10;
+        test_conf_log_interceptor_t *interceptor;
+        const char *debug_contexts[] = {"fetch", NULL};
+        const char *topic            = "0191-consumer-err-recovery";
+        const char *group            = "sg-0191-consumer-err-recovery";
+        const int msgcnt             = 10;
         int got;
         rd_kafka_resp_err_t first_err;
 
@@ -372,14 +376,16 @@ static void do_test_consumer_err_recovery(void) {
                     "create topic");
         produce_to_partition(ctx.producer, topic, 0, msgcnt);
 
-        /* Consumer with log interceptor on fac=SHAREFETCH. */
+        /* Consumer with log interceptor on fac=SHAREFETCH. Route through
+         * the shared interceptor helper so the "fetch" debug context is
+         * MERGED with TEST_DEBUG instead of clobbering it. */
         test_conf_init(&conf, NULL, 0);
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "implicit");
-        test_conf_set(conf, "debug", "fetch");
-        rd_kafka_conf_set_opaque(conf, &consumer_err_cnt);
-        rd_kafka_conf_set_log_cb(conf, consumer_err_log_cb);
+        interceptor = test_conf_set_log_interceptor(conf, consumer_err_log_cb,
+                                                    debug_contexts);
+        test_conf_log_interceptor_set_opaque(interceptor, &consumer_err_cnt);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "create consumer: %s", errstr);
@@ -390,25 +396,51 @@ static void do_test_consumer_err_recovery(void) {
         TEST_ASSERT(got == msgcnt, "Phase 1: expected %d got %d", msgcnt, got);
         TEST_SAY("Phase 1: %d records consumed\n", got);
 
-        /* Phase 2: inject per-partition error on the next ShareFetch.
-         * UNKNOWN_TOPIC_OR_PART on a per-partition basis triggers a
-         * CONSUMER_ERR enqueued to rkcg_q. */
-        TEST_ASSERT(rd_kafka_mock_broker_push_request_error_rtts(
-                        ctx.mcluster, 1, RD_KAFKAP_ShareFetch, 1,
-                        RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART,
-                        0) == RD_KAFKA_RESP_ERR_NO_ERROR,
-                    "push ShareFetch error");
+        /* Phase 2: inject a per-partition error on the next ShareFetch.
+         * We use TOPIC_AUTHORIZATION_FAILED because, on the
+         * per-partition ShareFetch error path
+         * (rd_kafka_handle_ShareFetch_partition_error,
+         * rdkafka_fetcher.c), it is a SURFACE arm — it calls
+         * rd_kafka_consumer_err() to enqueue a CONSUMER_ERR to rkcg_q.
+         * (UNKNOWN_TOPIC_OR_PART is deliberately a SILENT-AWAIT arm
+         * there and would never surface, so it cannot exercise GAP-C.)
+         * A single per-partition injection is deterministic: it surfaces
+         * once, then drains so the next fetch recovers. */
+        TEST_ASSERT(rd_kafka_mock_partition_push_request_errors(
+                        ctx.mcluster, topic, 0, RD_KAFKAP_ShareFetch, 1,
+                        RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "push per-partition ShareFetch error");
 
         /* Produce more records so recovery is observable. */
         produce_to_partition(ctx.producer, topic, 0, msgcnt);
 
-        /* Consume — error may surface once; must recover. */
+        /* Consume — the injected per-partition error surfaces first,
+         * then the consumer must recover and deliver the new records.
+         * Phase-2 production above happens only after the error was
+         * injected, so the error deterministically precedes the
+         * recovery records and drain_batch records it as first_err. */
         got = drain_batch(rkshare, msgcnt, 30000, &first_err);
-        TEST_SAY("Phase 2+3: first_err=%s got=%d\n",
-                 rd_kafka_err2name(first_err), got);
+        TEST_SAY("Phase 2+3: first_err=%s got=%d consumer_err_cnt=%d\n",
+                 rd_kafka_err2name(first_err), got,
+                 rd_atomic32_get(&consumer_err_cnt));
 
-        /* The consumer may or may not surface UNKNOWN_TOPIC_OR_PART as a
-         * CONSUMER_ERR (depends on timing), but it must get the records. */
+        /* The error must actually have been surfaced (GAP-C is only
+         * meaningful if a CONSUMER_ERR was raised, not silently
+         * swallowed): the per-partition error log fired at least once. */
+        TEST_ASSERT(rd_atomic32_get(&consumer_err_cnt) >= 1,
+                    "Expected the injected per-partition error to surface "
+                    "(consumer_err_cnt >= 1), got %d — error was silently "
+                    "swallowed",
+                    rd_atomic32_get(&consumer_err_cnt));
+
+        /* And the surfaced error must be the one we injected. */
+        TEST_ASSERT(first_err == RD_KAFKA_RESP_ERR_TOPIC_AUTHORIZATION_FAILED,
+                    "Expected first surfaced error to be "
+                    "TOPIC_AUTHORIZATION_FAILED, got %s",
+                    rd_kafka_err2name(first_err));
+
+        /* Despite the error, the consumer must recover and deliver. */
         TEST_ASSERT(got >= msgcnt,
                     "Consumer did not recover after injected error: "
                     "expected >= %d records, got %d",
@@ -417,6 +449,7 @@ static void do_test_consumer_err_recovery(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_conf_log_interceptor_destroy(interceptor);
         ctx_destroy(&ctx);
         SUB_TEST_PASS();
 }
@@ -437,7 +470,7 @@ static void session_reset_log_cb(const rd_kafka_t *rk,
                                  int level,
                                  const char *fac,
                                  const char *buf) {
-        rd_atomic32_t *cnt = rd_kafka_opaque(rk);
+        rd_atomic32_t *cnt = test_conf_log_interceptor_opaque(rk);
         (void)level;
         /* rd_kafka_broker_share_fetch_session_* logs "share-fetch session
          * epoch 0 -> 1" when a new session starts. Counting transitions
@@ -452,9 +485,11 @@ static void do_test_session_not_found_recovery(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         rd_atomic32_t session_reset_cnt;
-        const char *topic = "0191-session-not-found";
-        const char *group = "sg-0191-session-not-found";
-        const int msgcnt  = 5;
+        test_conf_log_interceptor_t *interceptor;
+        const char *debug_contexts[] = {"fetch", NULL};
+        const char *topic            = "0191-session-not-found";
+        const char *group            = "sg-0191-session-not-found";
+        const int msgcnt             = 5;
         int got_before, got_after;
 
         SUB_TEST_QUICK();
@@ -471,9 +506,11 @@ static void do_test_session_not_found_recovery(void) {
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "implicit");
-        test_conf_set(conf, "debug", "fetch");
-        rd_kafka_conf_set_opaque(conf, &session_reset_cnt);
-        rd_kafka_conf_set_log_cb(conf, session_reset_log_cb);
+        /* Route through the shared interceptor so "fetch" merges with
+         * TEST_DEBUG instead of clobbering it. */
+        interceptor = test_conf_set_log_interceptor(conf, session_reset_log_cb,
+                                                    debug_contexts);
+        test_conf_log_interceptor_set_opaque(interceptor, &session_reset_cnt);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "create consumer: %s", errstr);
@@ -484,6 +521,13 @@ static void do_test_session_not_found_recovery(void) {
         TEST_ASSERT(got_before == msgcnt, "Phase 1: expected %d got %d", msgcnt,
                     got_before);
         TEST_SAY("Phase 1: baseline %d records\n", got_before);
+
+        /* Snapshot the session-reset counter AFTER the initial session is
+         * established. The first session also logs "epoch 0 -> 1", so a
+         * plain ">= 1" check would be satisfied by the initial session
+         * alone. We assert a STRICT increase past this snapshot, which is
+         * caused only by the injected SHARE_SESSION_NOT_FOUND reset. */
+        int resets_before = rd_atomic32_get(&session_reset_cnt);
 
         /* Inject SHARE_SESSION_NOT_FOUND on the next ShareFetch.
          * The client must reset the session (epoch→0) and re-establish. */
@@ -504,17 +548,22 @@ static void do_test_session_not_found_recovery(void) {
                     msgcnt, got_after);
         TEST_SAY("Phase 2: %d records after session reset\n", got_after);
 
-        /* Verify the session was actually reset: at least one transition
-         * from epoch 0 (fresh session) must have been logged. */
-        TEST_ASSERT(rd_atomic32_get(&session_reset_cnt) >= 1,
-                    "Expected at least 1 session restart from epoch 0, "
-                    "got %d — session may not have been reset",
-                    rd_atomic32_get(&session_reset_cnt));
-        TEST_SAY("Session resets from epoch 0: %d\n",
-                 rd_atomic32_get(&session_reset_cnt));
+        /* Verify the session was actually reset by the injection: the
+         * counter must strictly increase past the post-Phase-1 snapshot.
+         * This excludes the initial session establishment. */
+        int resets_after = rd_atomic32_get(&session_reset_cnt);
+        TEST_ASSERT(resets_after > resets_before,
+                    "Expected a session restart from epoch 0 caused by the "
+                    "injected SHARE_SESSION_NOT_FOUND: resets_before=%d "
+                    "resets_after=%d (no strict increase => session was not "
+                    "reset by the injection)",
+                    resets_before, resets_after);
+        TEST_SAY("Session resets from epoch 0: %d -> %d (delta %d)\n",
+                 resets_before, resets_after, resets_after - resets_before);
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_conf_log_interceptor_destroy(interceptor);
         ctx_destroy(&ctx);
         SUB_TEST_PASS();
 }
@@ -580,6 +629,11 @@ static void do_test_multi_broker_ack_segregation(void) {
         rkshare = create_consumer(ctx.bootstraps, group, "explicit");
         subscribe_one(rkshare, topic);
 
+        /* Track requests so we can verify acks are routed to the
+         * correct per-partition leader broker. Must be enabled before
+         * any ShareFetch/ShareAcknowledge goes out. */
+        rd_kafka_mock_start_request_tracking(ctx.mcluster);
+
         /* Consume all records from both partitions. */
         total_consumed = 0;
         attempts       = 0;
@@ -625,22 +679,50 @@ static void do_test_multi_broker_ack_segregation(void) {
         rd_kafka_topic_partition_list_destroy(results);
         TEST_SAY("commit_sync: both partitions acked successfully\n");
 
-        /* Verify acks were piggybacked in ShareFetch, NOT in
-         * separate ShareAcknowledge RPCs. */
+        /* Verify ack segregation precisely: p0's leader is broker1 and
+         * p1's leader is broker2, so each partition's ACKS must reach
+         * that partition's own leader. We assert specifically on
+         * ShareAcknowledge RPCs (not ShareFetch): in this explicit-ack
+         * flow the acks travel as standalone ShareAcknowledge requests
+         * (confirmed at runtime: exactly 2), each addressed to the
+         * partition leader. Plain ShareFetches go to both leaders during
+         * normal consumption regardless of ack routing, so counting them
+         * would only prove "both leaders were contacted", not "each
+         * partition's acks reached its leader". Attributing each
+         * ShareAcknowledge to its receiving broker and requiring BOTH
+         * brokers to have seen one proves the segregation property. */
         rd_kafka_mock_request_t **reqs;
         size_t req_cnt;
+        rd_bool_t b1_got_ack = rd_false;
+        rd_bool_t b2_got_ack = rd_false;
         reqs          = rd_kafka_mock_get_requests(ctx.mcluster, &req_cnt);
         share_ack_cnt = 0;
+        TEST_ASSERT(req_cnt > 0,
+                    "request tracking captured 0 requests — tracking was "
+                    "not enabled");
         for (i = 0; i < (int)req_cnt; i++) {
-                if (is_share_ack_request(reqs[i], NULL))
-                        share_ack_cnt++;
+                if (!is_share_ack_request(reqs[i], NULL))
+                        continue;
+                share_ack_cnt++;
+                if (rd_kafka_mock_request_id(reqs[i]) == broker1)
+                        b1_got_ack = rd_true;
+                else if (rd_kafka_mock_request_id(reqs[i]) == broker2)
+                        b2_got_ack = rd_true;
         }
         rd_kafka_mock_request_destroy_array(reqs, req_cnt);
-        TEST_ASSERT(share_ack_cnt == 0,
-                    "Expected 0 ShareAcknowledge RPCs "
-                    "(acks should be piggybacked in ShareFetch), got %zu",
-                    share_ack_cnt);
-        TEST_SAY("Verified: 0 standalone ShareAcknowledge RPCs\n");
+
+        rd_kafka_mock_stop_request_tracking(ctx.mcluster);
+
+        TEST_ASSERT(b1_got_ack && b2_got_ack,
+                    "ack segregation broken: broker1 got ShareAcknowledge=%d "
+                    "broker2 got ShareAcknowledge=%d — each partition's acks "
+                    "must reach that partition's leader",
+                    b1_got_ack, b2_got_ack);
+        TEST_SAY(
+            "Verified ack segregation: each partition's acks reached its "
+            "own leader (broker1 and broker2 each received a standalone "
+            "ShareAcknowledge; total ShareAcknowledge count=%zu)\n",
+            share_ack_cnt);
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
@@ -665,7 +747,7 @@ static void broker_selected_log_cb(const rd_kafka_t *rk,
                                    int level,
                                    const char *fac,
                                    const char *buf) {
-        rd_atomic32_t *cnt = rd_kafka_opaque(rk);
+        rd_atomic32_t *cnt = test_conf_log_interceptor_opaque(rk);
         (void)level;
         if (cnt && !strcmp(fac, "SHARE") && strstr(buf, "Selected broker"))
                 rd_atomic32_add(cnt, 1);
@@ -677,9 +759,11 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         rd_atomic32_t broker_selected_cnt;
-        const char *topic = "0191-enqueued-flag-reset";
-        const char *group = "sg-0191-enqueued-flag-reset";
-        const int msgcnt  = 5;
+        test_conf_log_interceptor_t *interceptor;
+        const char *debug_contexts[] = {"cgrp", NULL};
+        const char *topic            = "0191-enqueued-flag-reset";
+        const char *group            = "sg-0191-enqueued-flag-reset";
+        const int msgcnt             = 5;
         int got;
         int32_t select_before_down, select_after_up;
 
@@ -698,9 +782,11 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "implicit");
-        test_conf_set(conf, "debug", "cgrp");
-        rd_kafka_conf_set_opaque(conf, &broker_selected_cnt);
-        rd_kafka_conf_set_log_cb(conf, broker_selected_log_cb);
+        /* Route through the shared interceptor so "cgrp" merges with
+         * TEST_DEBUG instead of clobbering it. */
+        interceptor = test_conf_set_log_interceptor(
+            conf, broker_selected_log_cb, debug_contexts);
+        test_conf_log_interceptor_set_opaque(interceptor, &broker_selected_cnt);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "create consumer: %s", errstr);
@@ -757,6 +843,7 @@ static void do_test_enqueued_flag_reset_on_reconnect(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_conf_log_interceptor_destroy(interceptor);
         ctx_destroy(&ctx);
         SUB_TEST_PASS();
 }
@@ -788,7 +875,7 @@ static void resub_log_cb(const rd_kafka_t *rk,
                          int level,
                          const char *fac,
                          const char *buf) {
-        resub_log_state_t *s = rd_kafka_opaque(rk);
+        resub_log_state_t *s = test_conf_log_interceptor_opaque(rk);
         (void)level;
         if (!s || strcmp(fac, "SHARE"))
                 return;
@@ -804,10 +891,12 @@ static void do_test_resubscribe_continuity(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         resub_log_state_t log_state;
-        const char *topic   = "0191-resubscribe";
-        const char *group   = "sg-0191-resubscribe";
-        const int msgcnt    = 5;
-        const int broker_id = 1;
+        test_conf_log_interceptor_t *interceptor;
+        const char *debug_contexts[] = {"cgrp", NULL};
+        const char *topic            = "0191-resubscribe";
+        const char *group            = "sg-0191-resubscribe";
+        const int msgcnt             = 5;
+        const int broker_id          = 1;
         int got;
 
         SUB_TEST_QUICK();
@@ -826,9 +915,11 @@ static void do_test_resubscribe_continuity(void) {
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "implicit");
-        test_conf_set(conf, "debug", "cgrp");
-        rd_kafka_conf_set_opaque(conf, &log_state);
-        rd_kafka_conf_set_log_cb(conf, resub_log_cb);
+        /* Route through the shared interceptor so "cgrp" merges with
+         * TEST_DEBUG instead of clobbering it. */
+        interceptor =
+            test_conf_set_log_interceptor(conf, resub_log_cb, debug_contexts);
+        test_conf_log_interceptor_set_opaque(interceptor, &log_state);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "create consumer: %s", errstr);
@@ -879,6 +970,7 @@ static void do_test_resubscribe_continuity(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_conf_log_interceptor_destroy(interceptor);
         ctx_destroy(&ctx);
         SUB_TEST_PASS();
 }
@@ -905,7 +997,7 @@ static void no_dup_log_cb(const rd_kafka_t *rk,
                           int level,
                           const char *fac,
                           const char *buf) {
-        no_dup_log_state_t *s = rd_kafka_opaque(rk);
+        no_dup_log_state_t *s = test_conf_log_interceptor_opaque(rk);
         (void)level;
         if (!s || strcmp(fac, "SHARE"))
                 return;
@@ -921,11 +1013,13 @@ static void do_test_no_duplicate_fanout(void) {
         rd_kafka_conf_t *conf;
         char errstr[512];
         no_dup_log_state_t log_state;
-        const char *topic   = "0191-no-dup-fanout";
-        const char *group   = "sg-0191-no-dup-fanout";
-        const int broker_id = 1;
-        const int rtt_ms    = 3000; /* slow enough for several polls */
-        const int n_polls   = 8;
+        test_conf_log_interceptor_t *interceptor;
+        const char *debug_contexts[] = {"cgrp", NULL};
+        const char *topic            = "0191-no-dup-fanout";
+        const char *group            = "sg-0191-no-dup-fanout";
+        const int broker_id          = 1;
+        const int rtt_ms             = 3000; /* slow enough for several polls */
+        const int n_polls            = 8;
         int i;
         int32_t selected_during_slow;
 
@@ -944,9 +1038,11 @@ static void do_test_no_duplicate_fanout(void) {
         test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
         test_conf_set(conf, "group.id", group);
         test_conf_set(conf, "share.acknowledgement.mode", "implicit");
-        test_conf_set(conf, "debug", "cgrp");
-        rd_kafka_conf_set_opaque(conf, &log_state);
-        rd_kafka_conf_set_log_cb(conf, no_dup_log_cb);
+        /* Route through the shared interceptor so "cgrp" merges with
+         * TEST_DEBUG instead of clobbering it. */
+        interceptor =
+            test_conf_set_log_interceptor(conf, no_dup_log_cb, debug_contexts);
+        test_conf_log_interceptor_set_opaque(interceptor, &log_state);
 
         rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
         TEST_ASSERT(rkshare, "create consumer: %s", errstr);
@@ -997,14 +1093,22 @@ static void do_test_no_duplicate_fanout(void) {
             selected_during_slow, rd_atomic32_get(&log_state.early_return_cnt),
             n_polls);
 
-        /* Key invariant: broker should be selected AT MOST ONCE per
-         * fetch cycle.  Multiple selections while one is in-flight
-         * means duplicate SHARE_FETCH ops are being sent. */
-        TEST_ASSERT(selected_during_slow <=
-                        2, /* <=2 allows for the 0→1 transition
-                            * and one legitimate re-trigger */
-                    "Too many broker selections during slow-broker window: %d "
-                    "(expected <= 2); duplicate FANOUTs are being sent",
+        /* Key invariant: while one SHARE_FETCH is in-flight to the slow
+         * broker, no DUPLICATE fetch may be fanned out. Empirically
+         * (20/20 runs) exactly TWO "Selected broker" events occur in
+         * this window: (1) the initial selection that sends the
+         * in-flight fetch, and (2) one legitimate main-thread re-trigger
+         * tick that re-selects the same broker but finds the fetch still
+         * pending (rkshare_fetch_more_records_requested) and does NOT
+         * send a second fetch. A third selection would mean a real
+         * duplicate FANOUT, so we pin the count to exactly 2 — this
+         * catches both a regression to >2 (duplicate fetch) and an
+         * unexpected drop that would indicate the re-trigger path
+         * changed. */
+        TEST_ASSERT(selected_during_slow == 2,
+                    "Expected exactly 2 broker selections during the "
+                    "slow-broker window (1 initial + 1 re-trigger tick), "
+                    "got %d; >2 means duplicate FANOUTs are being sent",
                     selected_during_slow);
 
         /* Remove RTT, let the pending response complete. */
@@ -1032,6 +1136,7 @@ static void do_test_no_duplicate_fanout(void) {
 
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
+        test_conf_log_interceptor_destroy(interceptor);
         ctx_destroy(&ctx);
         SUB_TEST_PASS();
 }

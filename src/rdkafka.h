@@ -3223,7 +3223,7 @@ rd_kafka_queue_t *rd_kafka_share_queue_get_sasl(rd_kafka_share_t *rkshare);
  * @param md_principal_name the mandatory Kafka principal name associated
  *  with the token.
  * @param extensions optional SASL extensions key-value array with
- *  \p extensions_size elements (number of keys * 2), where [i] is the key and
+ *  \p extension_size elements (number of keys * 2), where [i] is the key and
  *  [i+1] is the key's value, to be communicated to the broker
  *  as additional key-value pairs during the initial client response as per
  *  https://tools.ietf.org/html/rfc7628#section-3.1. The key-value pairs are

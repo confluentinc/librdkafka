@@ -36,6 +36,11 @@
 #define MAX_PARTITIONS 32
 #define BATCH_SIZE     10000
 
+/* Record count for do_test_timestamp_preserved. The per-record
+ * tracking arrays (produced_ts[], seen[]) are sized by this so bumping
+ * it can never silently overflow them. */
+#define MSGCNT 10
+
 /** Common producer reused across all tests. */
 static rd_kafka_t *common_producer;
 
@@ -2062,15 +2067,15 @@ static void do_test_many_and_large_headers(void) {
 static void do_test_timestamp_preserved(void) {
         const char *group = "share-timestamp";
         const char *topic = test_mk_topic_name("0171-timestamp", 1);
-        const int msgcnt  = 10;
+        const int msgcnt  = MSGCNT;
         rd_kafka_share_t *consumer;
         rd_kafka_topic_partition_list_t *subs;
         rd_kafka_messages_t *batch = NULL;
         rd_kafka_resp_err_t err;
-        int64_t produced_ts[10];
-        int seen[10] = {0};
-        int consumed = 0;
-        int attempts = 30;
+        int64_t produced_ts[MSGCNT];
+        int seen[MSGCNT] = {0};
+        int consumed     = 0;
+        int attempts     = 30;
         int i;
 
         SUB_TEST();
@@ -2078,8 +2083,15 @@ static void do_test_timestamp_preserved(void) {
         consumer = test_create_share_consumer(group, NULL);
         test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
 
+        /* Base timestamps on the current wall-clock time rather than a
+         * fixed past value: records stamped far in the past trip the
+         * broker's time-based log retention, which deletes the segment.
+         * On Windows that segment deletion crashes the broker (NTFS file
+         * locking). Fresh timestamps keep the segment alive while still
+         * letting us assert CreateTime is preserved end-to-end. */
+        int64_t base_ts = (int64_t)time(NULL) * 1000LL;
         for (i = 0; i < msgcnt; i++) {
-                produced_ts[i] = 1700000000000LL + i * 1000LL;
+                produced_ts[i] = base_ts + i * 1000LL;
                 err            = rd_kafka_producev(
                     common_producer, RD_KAFKA_V_TOPIC(topic),
                     RD_KAFKA_V_KEY((char *)&i, sizeof(i)),

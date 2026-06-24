@@ -1086,11 +1086,14 @@ static void do_test_add_partitions_with_two_consumers(void) {
         rd_kafka_share_t *c1;
         rd_kafka_share_t *c2;
         rd_kafka_topic_partition_list_t *subs;
-        rd_kafka_topic_partition_list_t *assignment = NULL;
-        rd_kafka_messages_t *batch                  = NULL;
+        rd_kafka_topic_partition_list_t *subscription = NULL;
+        rd_kafka_messages_t *batch                    = NULL;
         rd_kafka_error_t *err;
+        uint64_t testid = test_id_generate();
         int64_t ts_start;
         int wait_sec;
+        rd_bool_t c2_saw_p2 = rd_false;
+        rd_bool_t c2_saw_p3 = rd_false;
 
         SUB_TEST();
 
@@ -1124,6 +1127,14 @@ static void do_test_add_partitions_with_two_consumers(void) {
         TEST_SAY("Growing topic %s from 2 -> 4 partitions\n", topic);
         test_create_partitions(NULL, topic, 4);
 
+        /* Produce records to the NEW partitions (2, 3). Delivery from
+         * these is the actual property under test: c2 must pick up the
+         * grown partition set and consume from them. */
+        test_produce_msgs2(common_producer, topic, testid, 2 /*partition*/,
+                           0 /*msg_base*/, MSGS_PER_PARTITION, NULL, 0);
+        test_produce_msgs2(common_producer, topic, testid, 3 /*partition*/,
+                           0 /*msg_base*/, MSGS_PER_PARTITION, NULL, 0);
+
         TEST_SAY(
             "Closing consumer 1 to force rebalance with the "
             "expanded partition set\n");
@@ -1131,28 +1142,59 @@ static void do_test_add_partitions_with_two_consumers(void) {
         test_share_destroy(c1);
         c1 = NULL;
 
-        wait_sec = test_quick ? 5 : 10;
+        /* Drain c2 until it has consumed from BOTH new partitions (2 and
+         * 3), or the deadline elapses. We tolerate broker redelivery
+         * (share semantics: records re-offered after lock expiry are
+         * expected), so we track per-partition coverage rather than an
+         * exact count — but we DO require that both new partitions are
+         * actually consumed, which is the named behavior the old
+         * subscription-count check never verified. */
+        wait_sec = test_quick ? 10 : 20;
         ts_start = test_clock();
         do {
+                size_t rcvd, i;
                 err = rd_kafka_share_poll(c2, 500, &batch);
                 if (err) {
                         TEST_SAY("c2 poll: %s\n",
                                  rd_kafka_err2name(rd_kafka_error_code(err)));
                         rd_kafka_error_destroy(err);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = batch ? rd_kafka_messages_count(batch) : 0;
+                for (i = 0; i < rcvd; i++) {
+                        rd_kafka_message_t *m = rd_kafka_messages_get(batch, i);
+                        if (m->err)
+                                continue;
+                        if (m->partition == 2)
+                                c2_saw_p2 = rd_true;
+                        else if (m->partition == 3)
+                                c2_saw_p3 = rd_true;
+                        rd_kafka_share_acknowledge(c2, m);
                 }
                 rd_kafka_messages_destroy(batch);
                 batch = NULL;
-        } while (test_clock() < ts_start + (wait_sec * 1000000));
+        } while ((!c2_saw_p2 || !c2_saw_p3) &&
+                 test_clock() < ts_start + (wait_sec * 1000000));
 
-        assignment = test_get_subscription(c2);
-        TEST_ASSERT(assignment != NULL,
-                    "c2: expected non-NULL subscription after partition "
-                    "increase");
-        TEST_ASSERT(assignment->cnt >= 1,
-                    "c2: expected non-empty subscription after partition "
-                    "increase, got %d entries",
-                    assignment->cnt);
-        rd_kafka_topic_partition_list_destroy(assignment);
+        /* Sanity: the app-level subscription is still the single
+         * PARTITION_UA entry (subscribe-time list); this is NOT the
+         * assignment and does not reflect the grow — checked only to
+         * keep the subscription API exercised. */
+        subscription = test_get_subscription(c2);
+        TEST_ASSERT(subscription != NULL && subscription->cnt >= 1,
+                    "c2: expected non-NULL/non-empty subscription");
+        rd_kafka_topic_partition_list_destroy(subscription);
+
+        /* The real assertion: c2 consumed from both newly added
+         * partitions after the grow. */
+        TEST_ASSERT(c2_saw_p2,
+                    "c2 did not consume any record from new partition 2 "
+                    "after the 2->4 grow");
+        TEST_ASSERT(c2_saw_p3,
+                    "c2 did not consume any record from new partition 3 "
+                    "after the 2->4 grow");
 
         test_share_consumer_close(c2);
         test_share_destroy(c2);

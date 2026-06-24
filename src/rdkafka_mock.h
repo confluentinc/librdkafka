@@ -221,6 +221,40 @@ rd_kafka_mock_broker_error_stack_cnt(rd_kafka_mock_cluster_t *mcluster,
                                      int16_t ApiKey,
                                      size_t *cntp);
 
+/**
+ * @brief Push \p cnt errors in the \p ... va-arg list onto the partition's
+ *        error stack for the given \p ApiKey.
+ *
+ * \p ApiKey is the Kafka protocol request type, e.g., ProduceRequest (0).
+ *
+ * The injected errors will be returned as the partition-level ErrorCode,
+ * one per request, in the order they were pushed, for requests of type
+ * \p ApiKey referencing this partition. Other partitions in the same
+ * request are not affected.
+ *
+ * @remark Cluster errors (rd_kafka_mock_push_request_errors()) and broker
+ *         errors (rd_kafka_mock_broker_push_request_error_rtts()) take
+ *         precedence over partition errors.
+ *
+ * @remark The error codes are not validated against the set of errors
+ *         the Apache Kafka protocol permits for the given \p ApiKey and
+ *         response field, that is the test's responsibility.
+ *
+ * @remark If \p topic does not exist in the mock cluster it is
+ *         auto-created, same as for the other mock partition APIs.
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or
+ *          RD_KAFKA_RESP_ERR_UNKNOWN_TOPIC_OR_PART if \p topic exists
+ *          and \p partition is out of range.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_mock_partition_push_request_errors(rd_kafka_mock_cluster_t *mcluster,
+                                            const char *topic,
+                                            int32_t partition,
+                                            int16_t ApiKey,
+                                            size_t cnt,
+                                            ...);
+
 
 /**
  * @brief Set the topic error to return in protocol requests.

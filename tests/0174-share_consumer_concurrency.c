@@ -1469,6 +1469,24 @@ static void do_test_share_holb_two_consumers(void) {
                 batch = NULL;
         }
 
+        /* Core HOLB property: c2 must make real progress WHILE c1 sits
+         * idle. c2_consumed started at 0 (it had just subscribed), so
+         * its value here is exactly the records c2 pulled during the
+         * c1-idle window. If c1 (head of line) blocked c2, this would be
+         * 0 (and the later drain loop would still reach the total, hiding
+         * the regression) — so we assert a meaningful floor here, not
+         * just the final total. */
+        TEST_SAY("HOLB check: c2 consumed %d/%d while c1 was idle\n",
+                 c2_consumed, msgcnt);
+        TEST_ASSERT(c2_consumed > 0,
+                    "HOLB: c2 consumed 0 records while c1 was idle — c2 is "
+                    "head-of-line blocked by the idle c1");
+        TEST_ASSERT(c2_consumed >= msgcnt / 4,
+                    "HOLB: c2 only consumed %d/%d while c1 was idle; expected "
+                    "it to advance by at least msgcnt/4=%d (c2 appears "
+                    "head-of-line blocked)",
+                    c2_consumed, msgcnt, msgcnt / 4);
+
         while (c1_consumed + c2_consumed < msgcnt) {
                 rd_kafka_share_t *cs[2] = {c1, c2};
                 int *cnts[2]            = {&c1_consumed, &c2_consumed};

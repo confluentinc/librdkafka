@@ -570,7 +570,13 @@ static int memberid_consumer_thread(void *arg) {
         memberid_thread_arg_t *targ = arg;
         rd_kafka_share_t *rkshare;
 
-        rkshare        = test_create_share_consumer(targ->group_id, NULL);
+        rkshare = test_create_share_consumer(targ->group_id, NULL);
+        /* The member id is a client-generated UUID assigned at cgrp
+         * construction (rd_kafka_cgrp.c: rd_kafka_Uuid_random() ->
+         * set_member_id), BEFORE any join — so reading it immediately
+         * after create is safe and needs no join wait. This test
+         * verifies CLIENT-SIDE member-id uniqueness (the KIP-932 analog
+         * of 0153). */
         targ->memberid = rd_kafka_memberid(test_share_consumer_get_rk(rkshare));
 
         test_share_consumer_close(rkshare);
@@ -595,7 +601,9 @@ static void do_test_unique_share_memberid(void) {
         for (i = 0; i < MEMBERID_CONSUMER_CNT; i++) {
                 args[i].group_id = group_id;
                 args[i].memberid = NULL;
-                thrd_create(&thread_id[i], memberid_consumer_thread, &args[i]);
+                TEST_ASSERT(thrd_create(&thread_id[i], memberid_consumer_thread,
+                                        &args[i]) == thrd_success,
+                            "thrd_create failed for consumer %d", i);
         }
 
         for (i = 0; i < MEMBERID_CONSUMER_CNT; i++)

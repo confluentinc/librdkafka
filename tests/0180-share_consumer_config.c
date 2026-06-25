@@ -28,6 +28,8 @@
 
 #include "test.h"
 
+#include <signal.h> /* for SIGIO (internal.termination.signal test) */
+
 #include "../src/rdkafka_proto.h" /* for RD_KAFKAP_ShareFetch etc. */
 
 /**

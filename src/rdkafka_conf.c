@@ -823,7 +823,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "consumer (true), and this property is not supported by the Java "
      "producer. Requires broker version >= 0.11.0.0, for older broker "
      "versions only the broker configuration applies. This property "
-     "is not supported for share consumers.",
+     "is currently not supported for share consumers and will be enabled in "
+     "the General Availability (GA) release.",
      0, 1, 0},
 
     /* Security related global properties */
@@ -4398,8 +4399,10 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
 
                         if (rd_kafka_conf_is_modified(
                                 conf, "allow.auto.create.topics"))
-                                return "`allow.auto.create.topics` is not "
-                                       "supported  for share consumer";
+                                return "allow.auto.create.topics is currently "
+                                       "not supported for share consumer "
+                                       "and will be enabled in the General "
+                                       "Availability (GA) release";
 
                         if (conf->topic_conf &&
                             rd_kafka_topic_conf_is_modified(
@@ -4677,6 +4680,8 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
         if (!rd_kafka_conf_is_modified(conf, "allow.auto.create.topics")) {
                 /* Consumer: Do not allow auto create by default.
                  * Producer: Allow auto create by default. */
+                /* TODO KIP-932: Add auto topic creation support for share
+                 * consumers */
                 if (cltype == RD_KAFKA_CONSUMER)
                         conf->allow_auto_create_topics = rd_false;
                 else if (cltype == RD_KAFKA_PRODUCER)

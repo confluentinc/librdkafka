@@ -1626,15 +1626,15 @@ static void test_internal_termination_signal_destroy(void) {
 /* Behavioural tests that require a real broker. */
 int main_0180_share_consumer_config(int argc, char **argv) {
         test_timeout_set(120);
-        // test_max_poll_records_caps_batch_at_5();
-        // test_max_poll_records_allows_full_drain_at_10();
-        // test_fetch_max_bytes_one_is_soft_limit();
-        // test_fetch_min_bytes_zero_drains_all();
-        // test_fetch_min_bytes_max_drains_all();
-        // test_fetch_max_bytes_zero_returns_no_records();
-        // test_receive_message_max_bytes_is_honored();
+        test_max_poll_records_caps_batch_at_5();
+        test_max_poll_records_allows_full_drain_at_10();
+        test_fetch_max_bytes_one_is_soft_limit();
+        test_fetch_min_bytes_zero_drains_all();
+        test_fetch_min_bytes_max_drains_all();
+        test_fetch_max_bytes_zero_returns_no_records();
+        test_receive_message_max_bytes_is_honored();
         test_internal_termination_signal_destroy();
-        // test_share_consumer_fetch_conn_idle_after_drain();
+        test_share_consumer_fetch_conn_idle_after_drain();
         return 0;
 }
 

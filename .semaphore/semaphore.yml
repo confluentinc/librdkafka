@@ -561,7 +561,9 @@ promotions:
       env_vars:
         - required: true
           name: TEST_KAFKA_GIT_REF
-          default_value: 4.0.0
+          # TEMP (debug): reverted 4.0.0 -> 3.8.0 to check whether 0097_ssl_verify
+          # passes against the older broker (alert 42 vs 40). Revert before merging.
+          default_value: 3.8.0
         - required: true
           name: TEST_TYPE
           default_value: plaintext,ssl

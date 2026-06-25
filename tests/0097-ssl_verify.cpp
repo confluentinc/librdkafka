@@ -126,8 +126,19 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
 class TestEventCb : public RdKafka::EventCb {
  public:
   bool should_succeed;
+  /* True only for the mutual-TLS client-auth failure scenario: the client
+   * holds a cert it can verify but the broker doesn't trust, the broker
+   * requires client auth, so the broker aborts the handshake with a TLS
+   * alert. Only in this case is a broker-issued alert an expected outcome;
+   * other should_succeed=false scenarios fail client-side with a
+   * broker-certificate verification error instead. Gating the alert
+   * acceptance on this flag keeps a generic handshake_failure from masking
+   * an unrelated SSL failure in the other scenarios. */
+  bool expect_client_auth_fail;
 
-  TestEventCb(bool should_succeed) : should_succeed(should_succeed) {
+  TestEventCb(bool should_succeed, bool expect_client_auth_fail)
+      : should_succeed(should_succeed),
+        expect_client_auth_fail(expect_client_auth_fail) {
   }
 
   void event_cb(RdKafka::Event &event) {
@@ -147,24 +158,23 @@ class TestEventCb : public RdKafka::EventCb {
       else if (event.err() == RdKafka::ERR__SSL) {
         bool expected = false;
         Test::Say("SSL error: " + event.str() + "\n");
-        if (event.str().find("alert number 42") != std::string::npos)
-          /* Verify that certificate isn't sent if not trusted
-           * by the broker. We should receive 42 (bad_certificate)
-           * instead of 46 (certificate_unknown). */
+        if (expect_client_auth_fail) {
+          /* Mutual-TLS: librdkafka declines to send the untrusted client
+           * certificate ("No matching issuer found ... not sending any
+           * client certificates"), so the broker (ssl.client.auth=required)
+           * aborts the handshake. The exact fatal alert depends on the
+           * broker's TLS stack: bad_certificate (42) on some JDK builds, or
+           * the RFC 5246-correct handshake_failure (40) on others (e.g. the
+           * SSL CI runners). Accept either, but only for this scenario. */
+          if (event.str().find("alert number 42") != std::string::npos ||
+              event.str().find("alert number 40") != std::string::npos)
+            expected = true;
+        } else if (event.str().find(
+                       "broker certificate could not be verified") !=
+                   std::string::npos) {
+          /* Broker certificate verification failed client-side. */
           expected = true;
-        else if (event.str().find("alert number 40") != std::string::npos)
-          /* Some broker TLS stacks (e.g. Apache Kafka 4.0 on the SSL CI
-           * runners, OpenSSL 3.0.13) abort with handshake_failure (40)
-           * rather than bad_certificate (42): librdkafka declines to send
-           * the untrusted client certificate ("No matching issuer found
-           * ... not sending any client certificates"), and the
-           * mutual-TLS-required broker then fails the handshake because no
-           * client certificate was presented. Both alerts are valid broker
-           * responses to the same client behavior. */
-          expected = true;
-        else if (event.str().find("broker certificate could not be verified") !=
-                 std::string::npos)
-          expected = true;
+        }
 
         if (!expected)
           Test::Fail("Unexpected SSL error message, got: " + event.str());
@@ -371,7 +381,15 @@ static void do_test_verify(const int line,
   bool should_succeed =
       verify_ok && (!untrusted_client_key || !is_client_auth_required() ||
                     security_protocol != "ssl");
-  TestEventCb eventCb(should_succeed);
+  /* The only should_succeed=false scenario that fails with a broker-issued
+   * TLS alert (rather than a client-side broker-cert verify error) is the
+   * mutual-TLS case: the client cert is verifiable (verify_ok) but untrusted
+   * by the broker, the broker requires client auth, and the endpoint is plain
+   * SSL (SASL_SSL endpoints don't require the client cert). */
+  bool expect_client_auth_fail = verify_ok && untrusted_client_key &&
+                                 is_client_auth_required() &&
+                                 security_protocol == "ssl";
+  TestEventCb eventCb(should_succeed, expect_client_auth_fail);
 
   if (conf->set("event_cb", &eventCb, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to set event_cb: " + errstr);

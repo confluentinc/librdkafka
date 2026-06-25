@@ -69,6 +69,20 @@ static void do_test_plugin() {
       NULL,
   };
 
+  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+  if (conf->set("plugin.library.paths",
+                "interceptor_test/interceptor_test_dummy", errstr) &&
+      errstr.find(
+          "Configuration property \"plugin.library.paths\" not supported") !=
+          std::string::npos) {
+    delete conf;
+    Test::Skip(
+        "Configuration property \"plugin.library.paths\" not supported in this "
+        "build\n");
+    return;
+  }
+  delete conf;
+
   char cwd[512], *pcwd;
 #ifdef _WIN32
   pcwd = _getcwd(cwd, sizeof(cwd) - 1);
@@ -84,7 +98,7 @@ static void do_test_plugin() {
   ictest_cnt_init(&ictest.on_new, 1, 1);
 
   /* Config for intercepted client */
-  RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+  conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
 
   for (int i = 0; config[i]; i += 2) {
     Test::Say(tostr() << "set(" << config[i] << ", " << config[i + 1] << ")\n");

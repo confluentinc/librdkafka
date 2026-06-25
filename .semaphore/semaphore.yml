@@ -18,7 +18,7 @@ global_job_config:
       - mkdir dest
   env_vars:
     - name: CACHE_TAG
-      value: '7'
+      value: '8'
     - name: CI
       value: 'true'
     - name: KAFKA_VERSION
@@ -136,8 +136,11 @@ blocks:
       jobs:
         - name: 'Build configuration checks'
           commands:
-            - packaging/tools/run-in-docker.sh test-runner-amd64-${CACHE_TAG} ./packaging/tools/build-configurations-checks.sh
-
+            - python3 -m pip install -U pip
+            - ./packaging/tools/build-configurations-checks.sh make test-runner-manylinux-amd64-${CACHE_TAG}
+            - ./packaging/tools/build-configurations-checks.sh cmake test-runner-manylinux-amd64-${CACHE_TAG}
+            - ./packaging/tools/build-configurations-checks.sh make test-runner-alpine-amd64-${CACHE_TAG}
+            - ./packaging/tools/build-configurations-checks.sh cmake test-runner-alpine-amd64-${CACHE_TAG}
 
   - name: 'Linux Ubuntu amd64: share consumer tests'
     dependencies: []

@@ -24,3 +24,5 @@ user_scram
 list_offsets
 elect_leaders
 share_consumer
+share_consumer_commit_async
+share_consumer_commit_sync

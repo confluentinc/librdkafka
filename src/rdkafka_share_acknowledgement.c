@@ -1130,14 +1130,13 @@ rd_kafka_share_build_partition_offsets_list(
         rd_kafka_share_partition_offsets_list_t *list;
         rd_kafka_share_partition_offsets_t *elem;
         rd_kafka_share_ack_batch_entry_t *entry;
-        int total_offsets = 0;
-        int offset_idx    = 0;
+        int64_t total_offsets = 0;
+        int64_t offset_idx    = 0;
         int j;
 
         /* Count total offsets */
         RD_LIST_FOREACH(entry, &batches->entries, j) {
-                total_offsets +=
-                    (int)(entry->end_offset - entry->start_offset + 1);
+                total_offsets += entry->end_offset - entry->start_offset + 1;
         }
 
         list = rd_kafka_share_partition_offsets_list_new(1);

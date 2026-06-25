@@ -1,3 +1,13 @@
+# Unreleased
+
+## Fixes
+
+### Transactional producer fixes
+
+* Fix `rd_kafka_send_offsets_to_transaction()` ignoring its `timeout_ms` parameter
+  when it can't find or reach the group coordinator, causing it to block
+  indefinitely. Happening since v1.4.0.
+
 # librdkafka v2.14.2
 
 librdkafka v2.14.2 is a maintenance release:

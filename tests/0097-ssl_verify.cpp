@@ -126,8 +126,14 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
 class TestEventCb : public RdKafka::EventCb {
  public:
   bool should_succeed;
+  /* True only when the broker is expected to reject the client's cert
+   * (untrusted client key + mutual TLS). Used to accept the broker's TLS
+   * alert only in that case. */
+  bool expect_client_auth_fail;
 
-  TestEventCb(bool should_succeed) : should_succeed(should_succeed) {
+  TestEventCb(bool should_succeed, bool expect_client_auth_fail) :
+      should_succeed(should_succeed),
+      expect_client_auth_fail(expect_client_auth_fail) {
   }
 
   void event_cb(RdKafka::Event &event) {
@@ -147,14 +153,18 @@ class TestEventCb : public RdKafka::EventCb {
       else if (event.err() == RdKafka::ERR__SSL) {
         bool expected = false;
         Test::Say("SSL error: " + event.str() + "\n");
-        if (event.str().find("alert number 42") != std::string::npos)
-          /* Verify that certificate isn't sent if not trusted
-           * by the broker. We should receive 42 (bad_certificate)
-           * instead of 46 (certificate_unknown). */
+        if (expect_client_auth_fail) {
+          /* Broker rejects the untrusted client cert. Different broker TLS
+           * stacks send 42 (bad_certificate) or 40 (handshake_failure). */
+          if (event.str().find("alert number 42") != std::string::npos ||
+              event.str().find("alert number 40") != std::string::npos)
+            expected = true;
+        } else if (event.str().find(
+                       "broker certificate could not be verified") !=
+                   std::string::npos) {
+          /* Client couldn't verify the broker's cert. */
           expected = true;
-        else if (event.str().find("broker certificate could not be verified") !=
-                 std::string::npos)
-          expected = true;
+        }
 
         if (!expected)
           Test::Fail("Unexpected SSL error message, got: " + event.str());
@@ -361,7 +371,12 @@ static void do_test_verify(const int line,
   bool should_succeed =
       verify_ok && (!untrusted_client_key || !is_client_auth_required() ||
                     security_protocol != "ssl");
-  TestEventCb eventCb(should_succeed);
+  /* Broker rejects the client cert only when it's untrusted, client auth
+   * is required, and the endpoint is plain SSL. */
+  bool expect_client_auth_fail = verify_ok && untrusted_client_key &&
+                                 is_client_auth_required() &&
+                                 security_protocol == "ssl";
+  TestEventCb eventCb(should_succeed, expect_client_auth_fail);
 
   if (conf->set("event_cb", &eventCb, errstr) != RdKafka::Conf::CONF_OK)
     Test::Fail("Failed to set event_cb: " + errstr);

@@ -166,6 +166,150 @@ static void setter_consume_cb(rd_kafka_conf_t *conf) {
         rd_kafka_conf_set_consume_cb(conf, unused_consume_cb);
 }
 
+/* Records the result of attempting to register the various interceptor
+ * hooks from the on_new interceptor (see interceptor_on_new). All hooks
+ * are expected to be rejected for share consumers. */
+struct interceptor_add_results {
+        rd_kafka_resp_err_t on_destroy_err;
+        rd_kafka_resp_err_t on_consume_err;
+        rd_kafka_resp_err_t on_commit_err;
+        rd_kafka_resp_err_t on_send_err;
+        rd_kafka_resp_err_t on_acknowledgement_err;
+        rd_kafka_resp_err_t on_request_sent_err;
+        rd_kafka_resp_err_t on_response_received_err;
+        rd_kafka_resp_err_t on_thread_start_err;
+        rd_kafka_resp_err_t on_thread_exit_err;
+        rd_kafka_resp_err_t on_broker_state_change_err;
+};
+
+static rd_kafka_resp_err_t unused_on_destroy_ic(rd_kafka_t *rk,
+                                                void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/* Unused interceptor hooks: only used as non-NULL function pointers in the
+ * registration attempts. */
+static rd_kafka_resp_err_t unused_on_consume_ic(rd_kafka_t *rk,
+                                                rd_kafka_message_t *rkmessage,
+                                                void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_commit_ic(rd_kafka_t *rk,
+                    const rd_kafka_topic_partition_list_t *offsets,
+                    rd_kafka_resp_err_t err,
+                    void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t unused_on_send_ic(rd_kafka_t *rk,
+                                             rd_kafka_message_t *rkmessage,
+                                             void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_acknowledgement_ic(rd_kafka_t *rk,
+                             rd_kafka_message_t *rkmessage,
+                             void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t unused_on_request_sent_ic(rd_kafka_t *rk,
+                                                     int sockfd,
+                                                     const char *brokername,
+                                                     int32_t brokerid,
+                                                     int16_t ApiKey,
+                                                     int16_t ApiVersion,
+                                                     int32_t CorrId,
+                                                     size_t size,
+                                                     void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_response_received_ic(rd_kafka_t *rk,
+                               int sockfd,
+                               const char *brokername,
+                               int32_t brokerid,
+                               int16_t ApiKey,
+                               int16_t ApiVersion,
+                               int32_t CorrId,
+                               size_t size,
+                               int64_t rtt,
+                               rd_kafka_resp_err_t err,
+                               void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_thread_start_ic(rd_kafka_t *rk,
+                          rd_kafka_thread_type_t thread_type,
+                          const char *thread_name,
+                          void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_thread_exit_ic(rd_kafka_t *rk,
+                         rd_kafka_thread_type_t thread_type,
+                         const char *thread_name,
+                         void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_broker_state_change_ic(rd_kafka_t *rk,
+                                 int32_t broker_id,
+                                 const char *secproto,
+                                 const char *host,
+                                 int port,
+                                 const char *state,
+                                 void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/* on_new interceptor: tries to register one interceptor of each hook
+ * category (the only point at which the rk-level hooks may be added) and
+ * records the per-hook return codes. For share consumers every hook is
+ * expected to be rejected. Returns NO_ERROR itself so construction is not
+ * failed by this interceptor. */
+static rd_kafka_resp_err_t interceptor_on_new(rd_kafka_t *rk,
+                                              const rd_kafka_conf_t *conf,
+                                              void *ic_opaque,
+                                              char *errstr,
+                                              size_t errstr_size) {
+        struct interceptor_add_results *r = ic_opaque;
+
+        r->on_destroy_err = rd_kafka_interceptor_add_on_destroy(
+            rk, "test-on-destroy", unused_on_destroy_ic, NULL);
+        r->on_consume_err = rd_kafka_interceptor_add_on_consume(
+            rk, "test-on-consume", unused_on_consume_ic, NULL);
+        r->on_commit_err = rd_kafka_interceptor_add_on_commit(
+            rk, "test-on-commit", unused_on_commit_ic, NULL);
+        r->on_send_err = rd_kafka_interceptor_add_on_send(
+            rk, "test-on-send", unused_on_send_ic, NULL);
+        r->on_acknowledgement_err = rd_kafka_interceptor_add_on_acknowledgement(
+            rk, "test-on-acknowledgement", unused_on_acknowledgement_ic, NULL);
+        r->on_request_sent_err = rd_kafka_interceptor_add_on_request_sent(
+            rk, "test-on-request-sent", unused_on_request_sent_ic, NULL);
+        r->on_response_received_err =
+            rd_kafka_interceptor_add_on_response_received(
+                rk, "test-on-response-received", unused_on_response_received_ic,
+                NULL);
+        r->on_thread_start_err = rd_kafka_interceptor_add_on_thread_start(
+            rk, "test-on-thread-start", unused_on_thread_start_ic, NULL);
+        r->on_thread_exit_err = rd_kafka_interceptor_add_on_thread_exit(
+            rk, "test-on-thread-exit", unused_on_thread_exit_ic, NULL);
+        r->on_broker_state_change_err =
+            rd_kafka_interceptor_add_on_broker_state_change(
+                rk, "test-on-broker-state-change",
+                unused_on_broker_state_change_ic, NULL);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 /**
  * @brief Share consumer has no rebalance callback semantics; the
  *        factory rejects rebalance_cb at construction so an app's
@@ -224,6 +368,58 @@ static void test_consume_cb_rejected_at_construction(void) {
 
         verify_share_consumer_conf_set_rejected(
             "consume_cb set", setter_consume_cb, "consume_cb");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Interceptors are not supported for share consumers: registering
+ *        any handle-level interceptor hook (the only opportunity is from an
+ *        on_new interceptor) returns RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED.
+ *        This mirrors the Java share consumer rejecting ConsumerInterceptor.
+ *        The plugin loader (and the on_new interceptor itself) still run, so
+ *        construction succeeds; only the hook registrations are rejected.
+ */
+static void test_interceptors_rejected_for_share_consumer(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        struct interceptor_add_results results;
+        char errstr[512];
+
+        SUB_TEST_QUICK();
+
+        memset(&results, 0, sizeof(results));
+
+        conf = rd_kafka_conf_new();
+        rd_kafka_conf_interceptor_add_on_new(conf, "test-on-new",
+                                             interceptor_on_new, &results);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare,
+                    "share consumer construction should still succeed: %s",
+                    errstr);
+
+#define ASSERT_IC_REJECTED(field)                                              \
+        TEST_ASSERT(results.field == RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,       \
+                    "expected " #field                                         \
+                    " to be rejected with "                                    \
+                    "_NOT_IMPLEMENTED, got %s",                                \
+                    rd_kafka_err2name(results.field))
+
+        ASSERT_IC_REJECTED(on_destroy_err);
+        ASSERT_IC_REJECTED(on_consume_err);
+        ASSERT_IC_REJECTED(on_commit_err);
+        ASSERT_IC_REJECTED(on_send_err);
+        ASSERT_IC_REJECTED(on_acknowledgement_err);
+        ASSERT_IC_REJECTED(on_request_sent_err);
+        ASSERT_IC_REJECTED(on_response_received_err);
+        ASSERT_IC_REJECTED(on_thread_start_err);
+        ASSERT_IC_REJECTED(on_thread_exit_err);
+        ASSERT_IC_REJECTED(on_broker_state_change_err);
+
+#undef ASSERT_IC_REJECTED
+
+        test_share_destroy(rkshare);
 
         SUB_TEST_PASS();
 }
@@ -1377,6 +1573,7 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_event_rebalance_rejected_at_construction();
         test_offset_commit_cb_rejected_at_construction();
         test_consume_cb_rejected_at_construction();
+        test_interceptors_rejected_for_share_consumer();
         test_enable_auto_commit_rejected_at_construction();
         test_group_protocol_rejected_at_construction();
         test_socket_max_fails_rejected_at_construction();

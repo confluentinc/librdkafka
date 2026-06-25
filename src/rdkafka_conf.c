@@ -4396,7 +4396,8 @@ const char *rd_kafka_conf_finalize(rd_kafka_type_t cltype,
                                 return "`topic.blacklist` is not "
                                        "applicable for share consumer";
 
-                        if (rd_kafka_conf_is_modified(conf, "allow.auto.create.topics"))
+                        if (rd_kafka_conf_is_modified(
+                                conf, "allow.auto.create.topics"))
                                 return "`allow.auto.create.topics` is not "
                                        "supported  for share consumer";
 

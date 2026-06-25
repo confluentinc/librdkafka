@@ -28,6 +28,8 @@
 
 #include "test.h"
 
+#include "../src/rdkafka_proto.h" /* for RD_KAFKAP_ShareFetch etc. */
+
 /**
  * @brief Verify that a particular conf shape is rejected by
  *        rd_kafka_share_consumer_new.
@@ -143,6 +145,171 @@ static void setter_event_rebalance(rd_kafka_conf_t *conf) {
         rd_kafka_conf_set_events(conf, RD_KAFKA_EVENT_REBALANCE);
 }
 
+/* Unused stub used only as a non-NULL function-pointer value for
+ * rd_kafka_conf_set_offset_commit_cb in the rejection test. */
+static void unused_offset_commit_cb(rd_kafka_t *rk,
+                                    rd_kafka_resp_err_t err,
+                                    rd_kafka_topic_partition_list_t *offsets,
+                                    void *opaque) {
+}
+
+static void setter_offset_commit_cb(rd_kafka_conf_t *conf) {
+        rd_kafka_conf_set_offset_commit_cb(conf, unused_offset_commit_cb);
+}
+
+/* Unused stub used only as a non-NULL function-pointer value for
+ * rd_kafka_conf_set_consume_cb in the rejection test. */
+static void unused_consume_cb(rd_kafka_message_t *rkmessage, void *opaque) {
+}
+
+static void setter_consume_cb(rd_kafka_conf_t *conf) {
+        rd_kafka_conf_set_consume_cb(conf, unused_consume_cb);
+}
+
+/* Records the result of attempting to register the various interceptor
+ * hooks from the on_new interceptor (see interceptor_on_new). All hooks
+ * are expected to be rejected for share consumers. */
+struct interceptor_add_results {
+        rd_kafka_resp_err_t on_destroy_err;
+        rd_kafka_resp_err_t on_consume_err;
+        rd_kafka_resp_err_t on_commit_err;
+        rd_kafka_resp_err_t on_send_err;
+        rd_kafka_resp_err_t on_acknowledgement_err;
+        rd_kafka_resp_err_t on_request_sent_err;
+        rd_kafka_resp_err_t on_response_received_err;
+        rd_kafka_resp_err_t on_thread_start_err;
+        rd_kafka_resp_err_t on_thread_exit_err;
+        rd_kafka_resp_err_t on_broker_state_change_err;
+};
+
+static rd_kafka_resp_err_t unused_on_destroy_ic(rd_kafka_t *rk,
+                                                void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/* Unused interceptor hooks: only used as non-NULL function pointers in the
+ * registration attempts. */
+static rd_kafka_resp_err_t unused_on_consume_ic(rd_kafka_t *rk,
+                                                rd_kafka_message_t *rkmessage,
+                                                void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_commit_ic(rd_kafka_t *rk,
+                    const rd_kafka_topic_partition_list_t *offsets,
+                    rd_kafka_resp_err_t err,
+                    void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t unused_on_send_ic(rd_kafka_t *rk,
+                                             rd_kafka_message_t *rkmessage,
+                                             void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_acknowledgement_ic(rd_kafka_t *rk,
+                             rd_kafka_message_t *rkmessage,
+                             void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t unused_on_request_sent_ic(rd_kafka_t *rk,
+                                                     int sockfd,
+                                                     const char *brokername,
+                                                     int32_t brokerid,
+                                                     int16_t ApiKey,
+                                                     int16_t ApiVersion,
+                                                     int32_t CorrId,
+                                                     size_t size,
+                                                     void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_response_received_ic(rd_kafka_t *rk,
+                               int sockfd,
+                               const char *brokername,
+                               int32_t brokerid,
+                               int16_t ApiKey,
+                               int16_t ApiVersion,
+                               int32_t CorrId,
+                               size_t size,
+                               int64_t rtt,
+                               rd_kafka_resp_err_t err,
+                               void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_thread_start_ic(rd_kafka_t *rk,
+                          rd_kafka_thread_type_t thread_type,
+                          const char *thread_name,
+                          void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_thread_exit_ic(rd_kafka_t *rk,
+                         rd_kafka_thread_type_t thread_type,
+                         const char *thread_name,
+                         void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t
+unused_on_broker_state_change_ic(rd_kafka_t *rk,
+                                 int32_t broker_id,
+                                 const char *secproto,
+                                 const char *host,
+                                 int port,
+                                 const char *state,
+                                 void *ic_opaque) {
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/* on_new interceptor: tries to register one interceptor of each hook
+ * category (the only point at which the rk-level hooks may be added) and
+ * records the per-hook return codes. For share consumers every hook is
+ * expected to be rejected. Returns NO_ERROR itself so construction is not
+ * failed by this interceptor. */
+static rd_kafka_resp_err_t interceptor_on_new(rd_kafka_t *rk,
+                                              const rd_kafka_conf_t *conf,
+                                              void *ic_opaque,
+                                              char *errstr,
+                                              size_t errstr_size) {
+        struct interceptor_add_results *r = ic_opaque;
+
+        r->on_destroy_err = rd_kafka_interceptor_add_on_destroy(
+            rk, "test-on-destroy", unused_on_destroy_ic, NULL);
+        r->on_consume_err = rd_kafka_interceptor_add_on_consume(
+            rk, "test-on-consume", unused_on_consume_ic, NULL);
+        r->on_commit_err = rd_kafka_interceptor_add_on_commit(
+            rk, "test-on-commit", unused_on_commit_ic, NULL);
+        r->on_send_err = rd_kafka_interceptor_add_on_send(
+            rk, "test-on-send", unused_on_send_ic, NULL);
+        r->on_acknowledgement_err = rd_kafka_interceptor_add_on_acknowledgement(
+            rk, "test-on-acknowledgement", unused_on_acknowledgement_ic, NULL);
+        r->on_request_sent_err = rd_kafka_interceptor_add_on_request_sent(
+            rk, "test-on-request-sent", unused_on_request_sent_ic, NULL);
+        r->on_response_received_err =
+            rd_kafka_interceptor_add_on_response_received(
+                rk, "test-on-response-received", unused_on_response_received_ic,
+                NULL);
+        r->on_thread_start_err = rd_kafka_interceptor_add_on_thread_start(
+            rk, "test-on-thread-start", unused_on_thread_start_ic, NULL);
+        r->on_thread_exit_err = rd_kafka_interceptor_add_on_thread_exit(
+            rk, "test-on-thread-exit", unused_on_thread_exit_ic, NULL);
+        r->on_broker_state_change_err =
+            rd_kafka_interceptor_add_on_broker_state_change(
+                rk, "test-on-broker-state-change",
+                unused_on_broker_state_change_ic, NULL);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
 /**
  * @brief Share consumer has no rebalance callback semantics; the
  *        factory rejects rebalance_cb at construction so an app's
@@ -167,6 +334,107 @@ static void test_event_rebalance_rejected_at_construction(void) {
         verify_share_consumer_conf_set_rejected("RD_KAFKA_EVENT_REBALANCE set",
                                                 setter_event_rebalance,
                                                 "RD_KAFKA_EVENT_REBALANCE");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `offset_commit_cb` reports completion of offset commits. Share
+ *        consumers do not commit offsets (they acknowledge records, with
+ *        enable.auto.commit forced off), so the callback never fires on
+ *        the share path; it is rejected at construction. The Java share
+ *        consumer likewise has no OffsetCommitCallback (its analog is
+ *        AcknowledgementCommitCallback).
+ */
+static void test_offset_commit_cb_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_set_rejected("offset_commit_cb set",
+                                                setter_offset_commit_cb,
+                                                "offset_commit_cb");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `consume_cb` delivers messages via the classic
+ *        rd_kafka_consumer_poll()/rd_kafka_consume_callback*() dispatch
+ *        path. Share consumers use the batch-returning rd_kafka_share_poll()
+ *        and never invoke this callback, so it is rejected at construction.
+ *        Java has no per-message consume callback for either consumer type.
+ */
+static void test_consume_cb_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_set_rejected(
+            "consume_cb set", setter_consume_cb, "consume_cb");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief Interceptors are not supported for share consumers: registering
+ *        any handle-level interceptor hook (the only opportunity is from an
+ *        on_new interceptor) returns RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED.
+ *        This mirrors the Java share consumer rejecting ConsumerInterceptor.
+ *        The plugin loader (and the on_new interceptor itself) still run, so
+ *        construction succeeds; only the hook registrations are rejected.
+ */
+static void test_interceptors_rejected_for_share_consumer(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        struct interceptor_add_results results;
+        char errstr[512];
+
+        SUB_TEST_QUICK();
+
+        memset(&results, 0, sizeof(results));
+
+        conf = rd_kafka_conf_new();
+        rd_kafka_conf_interceptor_add_on_new(conf, "test-on-new",
+                                             interceptor_on_new, &results);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare,
+                    "share consumer construction should still succeed: %s",
+                    errstr);
+
+#define ASSERT_IC_REJECTED(field)                                              \
+        TEST_ASSERT(results.field == RD_KAFKA_RESP_ERR__NOT_IMPLEMENTED,       \
+                    "expected " #field                                         \
+                    " to be rejected with "                                    \
+                    "_NOT_IMPLEMENTED, got %s",                                \
+                    rd_kafka_err2name(results.field))
+
+        ASSERT_IC_REJECTED(on_destroy_err);
+        ASSERT_IC_REJECTED(on_consume_err);
+        ASSERT_IC_REJECTED(on_commit_err);
+        ASSERT_IC_REJECTED(on_send_err);
+        ASSERT_IC_REJECTED(on_acknowledgement_err);
+        ASSERT_IC_REJECTED(on_request_sent_err);
+        ASSERT_IC_REJECTED(on_response_received_err);
+        ASSERT_IC_REJECTED(on_thread_start_err);
+        ASSERT_IC_REJECTED(on_thread_exit_err);
+        ASSERT_IC_REJECTED(on_broker_state_change_err);
+
+#undef ASSERT_IC_REJECTED
+
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `consume.callback.max.messages` caps the batch size dispatched
+ *        per rd_kafka_consume_callback*() call. That callback path is not
+ *        used by share consumers (which use rd_kafka_share_poll()), so the
+ *        property is rejected at construction. No Java equivalent.
+ */
+static void test_consume_callback_max_messages_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected(
+            "consume.callback.max.messages", "100");
 
         SUB_TEST_PASS();
 }
@@ -311,6 +579,61 @@ static void test_heartbeat_interval_ms_rejected_at_construction(void) {
 }
 
 /**
+ * @brief For receive.message.max.bytes, an explicit value below
+ * `fetch.max.bytes` + 512 is rejected at construction so the receive cap can
+ * always hold a full fetch response. Here `fetch.max.bytes` is left at its
+ * default
+ *        (~50 MB), so any value below that + 512 (e.g. 1 MB) is rejected.
+ */
+static void
+test_receive_message_max_bytes_below_floor_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("receive.message.max.bytes",
+                                                 "1000000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `reconnect.backoff.max.ms` must be >= `reconnect.backoff.ms`;
+ *        a smaller max is rejected at construction. This is a common
+ *        (non-share-specific) finalize check, exercised here for the
+ *        share consumer factory.
+ */
+static void
+test_reconnect_backoff_max_below_min_rejected_at_construction(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        char errstr[512];
+
+        SUB_TEST_QUICK();
+
+        conf = rd_kafka_conf_new();
+        TEST_ASSERT(rd_kafka_conf_set(conf, "reconnect.backoff.ms", "1000",
+                                      errstr,
+                                      sizeof(errstr)) == RD_KAFKA_CONF_OK,
+                    "reconnect.backoff.ms: %s", errstr);
+        TEST_ASSERT(rd_kafka_conf_set(conf, "reconnect.backoff.max.ms", "500",
+                                      errstr,
+                                      sizeof(errstr)) == RD_KAFKA_CONF_OK,
+                    "reconnect.backoff.max.ms: %s", errstr);
+
+        errstr[0] = '\0';
+        rkshare   = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare == NULL,
+                    "expected NULL share consumer when "
+                    "reconnect.backoff.max.ms < reconnect.backoff.ms");
+        TEST_ASSERT(strstr(errstr, "reconnect.backoff.max.ms") != NULL,
+                    "errstr should mention reconnect.backoff.max.ms, got: %s",
+                    errstr);
+        TEST_SAY("rejected with: %s\n", errstr);
+        rd_kafka_conf_destroy(conf);
+
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Static membership (`group.instance.id`) is not supported for
  *        share groups; the property is rejected for share consumers.
  */
@@ -427,6 +750,38 @@ static void test_enable_partition_eof_rejected_at_construction(void) {
 
         verify_share_consumer_conf_prop_rejected("enable.partition.eof",
                                                  "true");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `message.copy.max.bytes` is a producer-only copy/zero-copy
+ *        threshold used solely when building ProduceRequests. It is
+ *        flagged _RK_GLOBAL (not _RK_PRODUCER), so unlike linger.ms /
+ *        batch.* it is silently accepted by consumers rather than warned
+ *        about; it does nothing on the share-consumer path. Rejected for
+ *        share consumers. No Java equivalent.
+ */
+static void test_message_copy_max_bytes_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("message.copy.max.bytes",
+                                                 "1000");
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief `topic.blacklist` is a librdkafka-specific metadata filter (no
+ *        Java equivalent) that drops matching topics from broker metadata
+ *        "as if they did not exist". The Apache Kafka Java share consumer
+ *        has no such config, so to keep the share-consumer config surface
+ *        on par with the Java client it is rejected for share consumers.
+ */
+static void test_topic_blacklist_rejected_at_construction(void) {
+        SUB_TEST_QUICK();
+
+        verify_share_consumer_conf_prop_rejected("topic.blacklist", "^test.*");
 
         SUB_TEST_PASS();
 }
@@ -622,6 +977,57 @@ static int drain_count_with_fetch_max_bytes(const char *group,
         test_share_consumer_close(rkshare);
         test_share_destroy(rkshare);
         return batches;
+}
+
+/**
+ * @brief Produce a single record of \p value_size bytes to \p topic
+ *        partition 0. The default producer message.max.bytes (1 MB) and
+ *        broker max.message.bytes (~1 MB) both comfortably exceed the
+ *        sizes used here, so no size overrides are needed.
+ */
+static void
+produce_one_sized(rd_kafka_t *producer, const char *topic, int value_size) {
+        rd_kafka_topic_t *rkt;
+        char *payload;
+
+        rkt = rd_kafka_topic_new(producer, topic, NULL);
+        TEST_ASSERT(rkt, "topic_new(%s) failed: %s", topic,
+                    rd_kafka_err2str(rd_kafka_last_error()));
+
+        payload = rd_malloc(value_size);
+        memset(payload, 'x', value_size);
+
+        if (rd_kafka_produce(rkt, 0, RD_KAFKA_MSG_F_COPY, payload, value_size,
+                             NULL, 0, NULL) == -1)
+                TEST_FAIL("produce (%d bytes) failed: %s", value_size,
+                          rd_kafka_err2str(rd_kafka_last_error()));
+        TEST_ASSERT(!rd_kafka_flush(producer, 30 * 1000), "flush timed out");
+
+        rd_free(payload);
+        rd_kafka_topic_destroy(rkt);
+}
+
+/* Set when the receive-cap test sees the expected _BAD_MSG error via the
+ * client error_cb. The receive-side size check fails the broker
+ * connection (rdkafka_broker.c), so the error is delivered to error_cb,
+ * not as the rd_kafka_share_poll() return value. */
+static rd_atomic32_t recv_max_bad_msg_seen;
+
+/* is_fatal_cb for the receive-cap test: the oversized-response
+ * _BAD_MSG is expected (not test-fatal); record it and let the test
+ * continue. Any other error is still treated as fatal. */
+static int recv_max_is_fatal_cb(rd_kafka_t *rk,
+                                rd_kafka_resp_err_t err,
+                                const char *reason) {
+        if (err == RD_KAFKA_RESP_ERR__BAD_MSG && reason &&
+            strstr(reason, "Invalid response size")) {
+                rd_atomic32_add(&recv_max_bad_msg_seen, 1);
+                return 0; /* not fatal */
+        }
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)
+                return 0; /* expected cascade from the receive-cap failure */
+        return 1;         /* fatal */
 }
 
 /**
@@ -1055,6 +1461,170 @@ static void test_share_consumer_fetch_conn_idle_after_drain(void) {
         rd_kafka_destroy(producer);
 }
 
+/**
+ * @brief A user-set `receive.message.max.bytes` is honored at runtime:
+ *        a record whose batch fits under the cap is consumed normally,
+ *        but a record whose batch alone exceeds the cap trips the
+ *        receive-side size check
+ *        (`Invalid response size ... increase receive.message.max.bytes`,
+ *        rdkafka_broker.c). That fails the broker connection, so the
+ *        error is delivered as RD_KAFKA_RESP_ERR__BAD_MSG via the client
+ *        error_cb (captured here by recv_max_is_fatal_cb), rather than as
+ *        the rd_kafka_share_poll() return.
+ *
+ * `fetch.max.bytes` is set below `receive.message.max.bytes` - 512 so the
+ * config is accepted; the broker still returns at least one full batch per
+ * fetch (minOneMessage), so an oversized batch is delivered in full and
+ * overflows the receive cap.
+ */
+static void test_receive_message_max_bytes_is_honored(void) {
+        const char *topic;
+        const char *group  = "0180-recv-max-bytes";
+        const int recv_max = 100000; /* 100 KB receive cap */
+        const int small_sz = 1000;   /* fits under the cap */
+        const int big_sz   = 200000; /* one batch exceeds the cap */
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *producer;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *error;
+        char errstr[512];
+        char val[32];
+        int small_consumed = 0;
+        int call;
+
+        SUB_TEST();
+
+        rd_atomic32_init(&recv_max_bad_msg_seen, 0);
+        /* The oversized-response _BAD_MSG arrives via error_cb and would
+         * otherwise fail the test; mark it as expected. */
+        test_curr->is_fatal_cb = recv_max_is_fatal_cb;
+
+        topic = test_mk_topic_name("0180-recv-max-bytes", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+
+        /* Small record first, then the oversized one. */
+        producer = create_no_linger_producer();
+        produce_one_sized(producer, topic, small_sz);
+        produce_one_sized(producer, topic, big_sz);
+        rd_kafka_destroy(producer);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "group.id", group);
+        rd_snprintf(val, sizeof(val), "%d", recv_max);
+        test_conf_set(conf, "receive.message.max.bytes", val);
+        /* Must be <= receive.message.max.bytes - 512 to be accepted. */
+        rd_snprintf(val, sizeof(val), "%d", recv_max - 512);
+        test_conf_set(conf, "fetch.max.bytes", val);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Poll: the small record should arrive; fetching the oversized
+         * batch trips the receive cap and surfaces _BAD_MSG via error_cb. */
+        for (call = 0;
+             call < 40 && rd_atomic32_get(&recv_max_bad_msg_seen) == 0;
+             call++) {
+                error = rd_kafka_share_poll(rkshare, 1000, &batch);
+                if (error) {
+                        rd_kafka_error_destroy(error);
+                        continue;
+                }
+                if (batch) {
+                        small_consumed += (int)rd_kafka_messages_count(batch);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+        }
+
+        TEST_SAY("small records consumed=%d, _BAD_MSG seen=%d\n",
+                 small_consumed, rd_atomic32_get(&recv_max_bad_msg_seen));
+        TEST_ASSERT(small_consumed == 1,
+                    "expected the small record to be consumed, got %d",
+                    small_consumed);
+        TEST_ASSERT(rd_atomic32_get(&recv_max_bad_msg_seen) >= 1,
+                    "expected RD_KAFKA_RESP_ERR__BAD_MSG when a batch exceeds "
+                    "receive.message.max.bytes=%d",
+                    recv_max);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_curr->is_fatal_cb = NULL;
+}
+
+
+/**
+ * @brief `internal.termination.signal` makes librdkafka signal its internal
+ *        threads on destroy so they break out of blocking syscalls quickly.
+ *        This is generic thread-lifecycle plumbing (not share-specific), but
+ *        verify a share consumer with the signal configured constructs,
+ *        runs, and closes/destroys cleanly (no hang or crash on the
+ *        signal-driven teardown path).
+ *
+ * The signal must be handled (or ignored) by the application; we set it to
+ * SIG_IGN here as the test framework does for its own clients. Skipped on
+ * platforms without SIGIO.
+ */
+static void test_internal_termination_signal_destroy(void) {
+#ifdef SIGIO
+        const char *topic;
+        const char *group = "0180-term-signal";
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *producer;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_messages_t *batch = NULL;
+        char errstr[512];
+        char sigbuf[32];
+        int i;
+
+        SUB_TEST();
+
+        producer = create_no_linger_producer();
+        topic    = test_mk_topic_name("0180-term-signal", 1);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 60 * 1000);
+        produce_one_per_batch(producer, topic, 5, 100);
+        rd_kafka_destroy(producer);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "group.id", group);
+        /* Explicitly configure the termination signal (test_conf_init also
+         * sets it, but make the intent of this test self-evident). */
+        rd_snprintf(sigbuf, sizeof(sigbuf), "%d", SIGIO);
+        test_conf_set(conf, "internal.termination.signal", sigbuf);
+        signal(SIGIO, SIG_IGN);
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+        test_share_set_auto_offset_reset(group, "earliest");
+        test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        /* Poll a few times so the internal threads are connected and
+         * running (blocked in syscalls) when we tear down -- this is the
+         * case the termination signal is meant to short-circuit. */
+        for (i = 0; i < 5; i++) {
+                rd_kafka_error_t *error =
+                    rd_kafka_share_poll(rkshare, 1000, &batch);
+                if (error)
+                        rd_kafka_error_destroy(error);
+                if (batch) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                }
+        }
+
+        /* The actual assertion is that these complete without hanging or
+         * crashing on the signal-driven teardown path. */
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+
+        SUB_TEST_PASS();
+#else
+        SUB_TEST_SKIP("SIGIO not available on this platform\n");
+#endif
+}
+
 
 /* Behavioural tests that require a real broker. */
 int main_0180_share_consumer_config(int argc, char **argv) {
@@ -1065,6 +1635,8 @@ int main_0180_share_consumer_config(int argc, char **argv) {
         test_fetch_min_bytes_zero_drains_all();
         test_fetch_min_bytes_max_drains_all();
         test_fetch_max_bytes_zero_returns_no_records();
+        test_receive_message_max_bytes_is_honored();
+        test_internal_termination_signal_destroy();
         test_share_consumer_fetch_conn_idle_after_drain();
         return 0;
 }
@@ -1074,10 +1646,14 @@ int main_0180_share_consumer_config(int argc, char **argv) {
 int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_rebalance_cb_rejected_at_construction();
         test_event_rebalance_rejected_at_construction();
+        test_offset_commit_cb_rejected_at_construction();
+        test_consume_cb_rejected_at_construction();
+        test_interceptors_rejected_for_share_consumer();
         test_enable_auto_commit_rejected_at_construction();
         test_group_protocol_rejected_at_construction();
         test_socket_max_fails_rejected_at_construction();
         test_auto_offset_reset_rejected_at_construction();
+        test_consume_callback_max_messages_rejected_at_construction();
         test_session_timeout_ms_rejected_at_construction();
         test_partition_assignment_strategy_rejected_at_construction();
         test_group_protocol_type_rejected_at_construction();
@@ -1090,6 +1666,10 @@ int main_0180_share_consumer_config_local(int argc, char **argv) {
         test_fetch_queue_backoff_ms_rejected_at_construction();
         test_fetch_error_backoff_ms_rejected_at_construction();
         test_enable_partition_eof_rejected_at_construction();
+        test_message_copy_max_bytes_rejected_at_construction();
+        test_topic_blacklist_rejected_at_construction();
+        test_receive_message_max_bytes_below_floor_rejected_at_construction();
         test_fetch_min_bytes_regular_consumer_range_rejected();
+        test_reconnect_backoff_max_below_min_rejected_at_construction();
         return 0;
 }

@@ -126,19 +126,14 @@ class TestVerifyCb : public RdKafka::SslCertificateVerifyCb {
 class TestEventCb : public RdKafka::EventCb {
  public:
   bool should_succeed;
-  /* True only for the mutual-TLS client-auth failure scenario: the client
-   * holds a cert it can verify but the broker doesn't trust, the broker
-   * requires client auth, so the broker aborts the handshake with a TLS
-   * alert. Only in this case is a broker-issued alert an expected outcome;
-   * other should_succeed=false scenarios fail client-side with a
-   * broker-certificate verification error instead. Gating the alert
-   * acceptance on this flag keeps a generic handshake_failure from masking
-   * an unrelated SSL failure in the other scenarios. */
+  /* True only when the broker is expected to reject the client's cert
+   * (untrusted client key + mutual TLS). Used to accept the broker's TLS
+   * alert only in that case. */
   bool expect_client_auth_fail;
 
-  TestEventCb(bool should_succeed, bool expect_client_auth_fail)
-      : should_succeed(should_succeed),
-        expect_client_auth_fail(expect_client_auth_fail) {
+  TestEventCb(bool should_succeed, bool expect_client_auth_fail) :
+      should_succeed(should_succeed),
+      expect_client_auth_fail(expect_client_auth_fail) {
   }
 
   void event_cb(RdKafka::Event &event) {
@@ -159,20 +154,15 @@ class TestEventCb : public RdKafka::EventCb {
         bool expected = false;
         Test::Say("SSL error: " + event.str() + "\n");
         if (expect_client_auth_fail) {
-          /* Mutual-TLS: librdkafka declines to send the untrusted client
-           * certificate ("No matching issuer found ... not sending any
-           * client certificates"), so the broker (ssl.client.auth=required)
-           * aborts the handshake. The exact fatal alert depends on the
-           * broker's TLS stack: bad_certificate (42) on some JDK builds, or
-           * the RFC 5246-correct handshake_failure (40) on others (e.g. the
-           * SSL CI runners). Accept either, but only for this scenario. */
+          /* Broker rejects the untrusted client cert. Different broker TLS
+           * stacks send 42 (bad_certificate) or 40 (handshake_failure). */
           if (event.str().find("alert number 42") != std::string::npos ||
               event.str().find("alert number 40") != std::string::npos)
             expected = true;
         } else if (event.str().find(
                        "broker certificate could not be verified") !=
                    std::string::npos) {
-          /* Broker certificate verification failed client-side. */
+          /* Client couldn't verify the broker's cert. */
           expected = true;
         }
 
@@ -381,11 +371,8 @@ static void do_test_verify(const int line,
   bool should_succeed =
       verify_ok && (!untrusted_client_key || !is_client_auth_required() ||
                     security_protocol != "ssl");
-  /* The only should_succeed=false scenario that fails with a broker-issued
-   * TLS alert (rather than a client-side broker-cert verify error) is the
-   * mutual-TLS case: the client cert is verifiable (verify_ok) but untrusted
-   * by the broker, the broker requires client auth, and the endpoint is plain
-   * SSL (SASL_SSL endpoints don't require the client cert). */
+  /* Broker rejects the client cert only when it's untrusted, client auth
+   * is required, and the endpoint is plain SSL. */
   bool expect_client_auth_fail = verify_ok && untrusted_client_key &&
                                  is_client_auth_required() &&
                                  security_protocol == "ssl";

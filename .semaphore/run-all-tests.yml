@@ -27,6 +27,10 @@ global_job_config:
       - sem-version java 17
 
 blocks:
+  # TEMP (debug): isolate 0097_ssl_verify on the SSL clusters only.
+  # Runs just TESTS=0097 to confirm the SSL alert-number failure on the CI
+  # toolchain (and that the segfault is a downstream effect that only shows
+  # up when later tests run after it). Revert this file before merging.
   - name: "Run all tests (x86_64)"
     dependencies: []
     task:
@@ -37,17 +41,12 @@ blocks:
         commands:
           - if [[ "$TEST_ARCHES" != *"x86_64"* ]]; then exit 0; fi
       jobs:
-        - name: "PLAINTEXT cluster (x86_64)"
-          env_vars:
-            - name: TEST_SSL
-              value: "False"
-          commands:
-            - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - ./tests/run-all-tests.sh
         - name: "SSL cluster (x86_64)"
           env_vars:
             - name: TEST_SSL
               value: "True"
+            - name: TESTS
+              value: "0097"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
             - ./tests/run-all-tests.sh
@@ -61,17 +60,12 @@ blocks:
         commands:
           - if [[ "$TEST_ARCHES" != *"aarch64"* ]]; then exit 0; fi
       jobs:
-        - name: "PLAINTEXT cluster (aarch64)"
-          env_vars:
-            - name: TEST_SSL
-              value: "False"
-          commands:
-            - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - ./tests/run-all-tests.sh
         - name: "SSL cluster (aarch64)"
           env_vars:
             - name: TEST_SSL
               value: "True"
+            - name: TESTS
+              value: "0097"
           commands:
             - if [[ "$TEST_TYPE" != *"ssl"* ]]; then exit 0; fi
             - ./tests/run-all-tests.sh

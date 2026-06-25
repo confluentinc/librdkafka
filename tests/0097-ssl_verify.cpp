@@ -152,6 +152,16 @@ class TestEventCb : public RdKafka::EventCb {
            * by the broker. We should receive 42 (bad_certificate)
            * instead of 46 (certificate_unknown). */
           expected = true;
+        else if (event.str().find("alert number 40") != std::string::npos)
+          /* Some broker TLS stacks (e.g. Apache Kafka 4.0 on the SSL CI
+           * runners, OpenSSL 3.0.13) abort with handshake_failure (40)
+           * rather than bad_certificate (42): librdkafka declines to send
+           * the untrusted client certificate ("No matching issuer found
+           * ... not sending any client certificates"), and the
+           * mutual-TLS-required broker then fails the handshake because no
+           * client certificate was presented. Both alerts are valid broker
+           * responses to the same client behavior. */
+          expected = true;
         else if (event.str().find("broker certificate could not be verified") !=
                  std::string::npos)
           expected = true;

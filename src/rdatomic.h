@@ -239,7 +239,13 @@ static RD_INLINE int RD_UNUSED rd_atomic64_cas(rd_atomic64_t *ra,
         return InterlockedCompareExchange64((LONG64 *)&ra->val, (LONG64)desired,
                                             (LONG64)expected) ==
                (LONG64)expected;
-#elif !HAVE_ATOMICS_64
+#elif HAVE_ATOMICS_64 && HAVE_ATOMICS_64_ATOMIC
+        return __atomic_compare_exchange_n(&ra->val, &expected, desired,
+                                           0 /* strong */, __ATOMIC_SEQ_CST,
+                                           __ATOMIC_SEQ_CST);
+#elif HAVE_ATOMICS_64 && HAVE_ATOMICS_64_SYNC
+        return __sync_bool_compare_and_swap(&ra->val, expected, desired);
+#else
         int r;
         mtx_lock(&ra->lock);
         if (ra->val == expected) {
@@ -250,19 +256,6 @@ static RD_INLINE int RD_UNUSED rd_atomic64_cas(rd_atomic64_t *ra,
         }
         mtx_unlock(&ra->lock);
         return r;
-#elif HAVE_ATOMICS_64_ATOMIC
-        return __atomic_compare_exchange_n(&ra->val, &expected, desired,
-                                           0 /* strong */, __ATOMIC_SEQ_CST,
-                                           __ATOMIC_SEQ_CST);
-#elif HAVE_ATOMICS_64_SYNC
-        return __sync_bool_compare_and_swap(&ra->val, expected, desired);
-#else
-        // FIXME
-        if (ra->val == expected) {
-                ra->val = desired;
-                return 1;
-        }
-        return 0;
 #endif
 }
 

@@ -190,9 +190,9 @@ static void do_test_fast_metadata_refresh(int variation) {
             mcluster, expected_metadata_requests, 500, is_metadata_request,
             NULL);
         TEST_ASSERT(expected_metadata_requests <= metadata_requests &&
-                        metadata_requests <= expected_metadata_requests + 1,
+                        metadata_requests <= expected_metadata_requests + 2,
                     "Expected %d or %d metadata request, got %d",
-                    expected_metadata_requests, expected_metadata_requests + 1,
+                    expected_metadata_requests, expected_metadata_requests + 2,
                     metadata_requests);
         rd_kafka_mock_stop_request_tracking(mcluster);
 

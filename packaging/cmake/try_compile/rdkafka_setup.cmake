@@ -58,7 +58,6 @@ try_compile(
 )
 
 if(_atomics_32)
-  set(HAVE_ATOMICS_32 YES)
   set(HAVE_ATOMICS_32_ATOMIC YES)
 else()
   try_compile(
@@ -68,7 +67,6 @@ else()
       LINK_LIBRARIES "-latomic"
   )
   if(_atomics_32_lib)
-    set(HAVE_ATOMICS_32 YES)
     set(HAVE_ATOMICS_32_ATOMIC YES)
     set(LINK_ATOMIC YES)
   else()
@@ -78,6 +76,9 @@ else()
         "${TRYCOMPILE_SRC_DIR}/sync_32_test.c"
     )
   endif()
+endif()
+if (HAVE_ATOMICS_32_ATOMIC OR HAVE_ATOMICS_32_SYNC)
+  set(HAVE_ATOMICS_32 YES)
 endif()
 # }
 
@@ -93,7 +94,6 @@ try_compile(
 )
 
 if(_atomics_64)
-  set(HAVE_ATOMICS_64 YES)
   set(HAVE_ATOMICS_64_ATOMIC YES)
 else()
   try_compile(
@@ -103,7 +103,6 @@ else()
       LINK_LIBRARIES "-latomic"
   )
   if(_atomics_64_lib)
-    set(HAVE_ATOMICS_64 YES)
     set(HAVE_ATOMICS_64_ATOMIC YES)
     set(LINK_ATOMIC YES)
   else()
@@ -113,6 +112,9 @@ else()
         "${TRYCOMPILE_SRC_DIR}/sync_64_test.c"
     )
   endif()
+endif()
+if (HAVE_ATOMICS_64_ATOMIC OR HAVE_ATOMICS_64_SYNC)
+  set(HAVE_ATOMICS_64 YES)
 endif()
 # }
 

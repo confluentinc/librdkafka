@@ -1024,7 +1024,10 @@ static int recv_max_is_fatal_cb(rd_kafka_t *rk,
                 rd_atomic32_add(&recv_max_bad_msg_seen, 1);
                 return 0; /* not fatal */
         }
-        return 1; /* fatal */
+        if (err == RD_KAFKA_RESP_ERR__TRANSPORT ||
+            err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN)
+                return 0; /* expected cascade from the receive-cap failure */
+        return 1;         /* fatal */
 }
 
 /**

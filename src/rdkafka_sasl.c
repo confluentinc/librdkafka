@@ -490,6 +490,51 @@ rd_kafka_error_t *rd_kafka_share_sasl_set_credentials(rd_kafka_share_t *rkshare,
 }
 
 
+/* TODO KIP-932: add integration tests for the share-consumer OAUTHBEARER
+ * SASL APIs below (set_token, set_token_failure, queue_get_sasl). */
+
+rd_kafka_queue_t *rd_kafka_share_queue_get_sasl(rd_kafka_share_t *rkshare) {
+        if (unlikely(!rkshare || !rkshare->rkshare_rk))
+                return NULL;
+        return rd_kafka_queue_get_sasl(rkshare->rkshare_rk);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_share_oauthbearer_set_token(rd_kafka_share_t *rkshare,
+                                     const char *token_value,
+                                     int64_t md_lifetime_ms,
+                                     const char *md_principal_name,
+                                     const char **extensions,
+                                     size_t extension_size,
+                                     char *errstr,
+                                     size_t errstr_size) {
+        if (unlikely(!rkshare || !rkshare->rkshare_rk)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Share consumer handle is NULL or uninitialized");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        if (unlikely(!token_value || !md_principal_name)) {
+                rd_snprintf(errstr, errstr_size, "%s must not be NULL",
+                            !token_value ? "token_value" : "md_principal_name");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+        return rd_kafka_oauthbearer_set_token(
+            rkshare->rkshare_rk, token_value, md_lifetime_ms, md_principal_name,
+            extensions, extension_size, errstr, errstr_size);
+}
+
+
+rd_kafka_resp_err_t
+rd_kafka_share_oauthbearer_set_token_failure(rd_kafka_share_t *rkshare,
+                                             const char *errstr) {
+        if (unlikely(!rkshare || !rkshare->rkshare_rk))
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        return rd_kafka_oauthbearer_set_token_failure(rkshare->rkshare_rk,
+                                                      errstr);
+}
+
+
 /**
  * Global SASL termination.
  */

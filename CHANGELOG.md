@@ -1,9 +1,52 @@
-# Unreleased
+# librdkafka v2.15.0
 
-librdkafka Unreleased is a maintenance release:
+librdkafka v2.15.0 is a feature release:
 
-* Fix compilation with CMake when CURL is disabled (#5136).
-* Fix `rd_atomic{32,64}_set` returning the new value in CMake builds, restoring the `ALL_BROKERS_DOWN` event (#5136).
+
+## [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka) Queues for Kafka – Now in **Preview**
+
+- Added a preview implementation of the **share consumer** (Queues for Kafka,
+  [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka)).
+  Members of a share group cooperatively consume from the same partitions with
+  per-record acquire/acknowledge semantics and redelivery, providing queue-like
+  consumption on top of Kafka.
+- New `rd_kafka_share_*` public API, with a dedicated `rd_kafka_share_t` handle
+  created via `rd_kafka_share_consumer_new()`:
+  - Subscription: `rd_kafka_share_subscribe()`, `rd_kafka_share_unsubscribe()`,
+    `rd_kafka_share_subscription()`.
+  - Batch polling: `rd_kafka_share_poll()` returns an `rd_kafka_messages_t`
+    batch (`rd_kafka_messages_count()` / `rd_kafka_messages_get()` /
+    `rd_kafka_messages_destroy()`).
+  - Acknowledgement: `rd_kafka_share_acknowledge()`,
+    `rd_kafka_share_acknowledge_type()`, `rd_kafka_share_acknowledge_offset()`
+    with ACCEPT / RELEASE / REJECT types, and
+    `rd_kafka_message_delivery_count()`.
+  - Commit: `rd_kafka_share_commit_sync()`, `rd_kafka_share_commit_async()` and
+    the acknowledgement-commit callback
+    (`rd_kafka_share_set_acknowledgement_commit_cb()`).
+  - Lifecycle: `rd_kafka_share_consumer_close()`,
+    `rd_kafka_share_consumer_close_queue()`, `rd_kafka_share_destroy()`.
+- Two acknowledgement modes selected by `share.acknowledgement.mode`
+  (default `implicit`; `explicit` requires the application to acknowledge every
+  record before the next poll).
+- New `max.poll.records` property (default 500) and adjusted defaults for
+  several network properties for share consumers (`receive.message.max.bytes`,
+  `connections.max.idle.ms`, `reconnect.backoff.ms`,
+  `reconnect.backoff.max.ms`).
+- See the *Share consumers (Queues for Kafka)* section of
+  [INTRODUCTION.md](INTRODUCTION.md#share-consumers-queues-for-kafka), the
+  *Share consumer* section in [rdkafka.h](src/rdkafka.h), and the
+  `examples/share_consumer*` programs.
+
+> [!Note]
+> The [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka)
+> share consumer is currently in **Preview** and should not be used in
+> production environments. The public interfaces may change before General
+> Availability, and known limitations apply (see
+> [INTRODUCTION.md](INTRODUCTION.md#share-consumer-current-limitations)). The
+> share consumer is single-threaded and not thread-safe by design. It requires
+> a broker with share groups enabled (generally available in Apache Kafka
+> 4.2.0).
 
 
 ## Fixes

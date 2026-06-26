@@ -115,7 +115,9 @@ blocks:
             - sudo dpkg -i rapidjson-dev.deb
             - sudo apt update
             - sudo apt remove -y needrestart
-            - python3 -m pip install -U pip setuptools wheel
+            # setuptools >=81 removed the pkg_resources module that trivup still
+            # imports, so pin below it to avoid ModuleNotFoundError: pkg_resources.
+            - python3 -m pip install -U pip "setuptools<81" wheel
             - python3 -m pip install -U trivup jsoncomment
             - ./configure --install-deps --enable-devel
             - make -j all

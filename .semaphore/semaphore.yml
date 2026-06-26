@@ -98,6 +98,31 @@ blocks:
             - '[[ -z $SEMAPHORE_GIT_TAG_NAME ]] || artifact push workflow artifacts/librdkafka-docs.tgz --destination artifacts/librdkafka-docs.tgz'
 
 
+  # TEMP (debug): build the v2.8.0 tree and run ONLY 0097_ssl_verify against an
+  # SSL+KRaft cluster on the current CI runner (ubuntu24-04 + java 17), to observe
+  # the TLS alert (40 vs 42) for 2.8.0 code. v2.8.0 predates the run-all-tests.yml
+  # SSL pipeline, so this is a self-contained block. Remove before merging.
+  - name: 'SSL 0097 check (debug)'
+    dependencies: []
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-1
+      jobs:
+        - name: 'SSL 0097 (v2.8.0 code)'
+          commands:
+            - wget -O rapidjson-dev.deb https://launchpad.net/ubuntu/+archive/primary/+files/rapidjson-dev_1.1.0+dfsg2-3_all.deb
+            - sudo dpkg -i rapidjson-dev.deb
+            - sudo apt update
+            - sudo apt remove -y needrestart
+            - python3 -m pip install -U pip
+            - python3 -m pip install -U trivup jsoncomment
+            - ./configure --install-deps --enable-devel
+            - make -j all
+            - make -j -C tests build
+            - sem-version java 17
+            - (cd tests && python3 -m trivup.clusters.KafkaCluster --ssl --kraft --version 4.0.0 --cpversion 8.0.0 --cmd 'TESTS=0097 ./run-test.sh -p1')
+
   - name: 'Linux Ubuntu x64: source build'
     dependencies: []
     skip:

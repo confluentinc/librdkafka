@@ -183,7 +183,7 @@ real_setup(char *topic, size_t topic_sz, int msgcnt, int max_poll_interval_ms) {
                     test_mk_topic_name("0185_share_max_poll", 1));
         test_str_id_generate(group, sizeof(group));
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
         if (msgcnt > 0)
                 test_produce_msgs_easy(topic, testid, 0, msgcnt);
         test_share_set_auto_offset_reset(group, "earliest");
@@ -347,7 +347,7 @@ static void do_test_two_consumers(void) {
         testid = test_id_generate();
         test_str_id_generate(group, sizeof(group));
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
         test_produce_msgs_easy(topic, testid, 0, 100);
 
         for (i = 0; i < 2; i++)
@@ -411,7 +411,7 @@ static void do_test_log_queue_no_reset(void) {
         testid = test_id_generate();
         test_str_id_generate(group, sizeof(group));
 
-        test_create_topic_wait_exists(NULL, topic, 1, 1, 5000);
+        test_create_topic_wait_exists(NULL, topic, 1, -1, 5000);
         test_produce_msgs_easy(topic, testid, 0, 20);
         test_share_set_auto_offset_reset(group, "earliest");
 

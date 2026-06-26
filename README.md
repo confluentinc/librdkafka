@@ -23,6 +23,7 @@ affiliation with and is not endorsed by The Apache Software Foundation.
   * Full Exactly-Once-Semantics (EOS) support
   * High-level producer, including Idempotent and Transactional producers
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
+  * Share consumer / Queues for Kafka ([KIP-932](INTRODUCTION.md#share-consumers-queues-for-kafka)) — **Preview** (requires a broker with share groups enabled; generally available in Apache Kafka 4.2.0). The share consumer is single-threaded and **not thread-safe by design**, per KIP-932.
   * Simple (legacy) consumer
   * Admin client
   * Compression: snappy, gzip, lz4, zstd
@@ -147,6 +148,7 @@ See [getting Started with Apache Kafka and C/C++](https://developer.confluent.io
 
     * Producers: basic producers, idempotent producers, transactional producers.
     * Consumers: basic consumers, reading batches of messages.
+    * Share consumers (Queues for Kafka, KIP-932, Preview): see the `share_consumer*` examples.
     * Performance and latency testing tools.
 
 2. Refer to the [examples GitHub repo](https://github.com/confluentinc/examples/tree/master/clients/cloud/c) for code connecting to a cloud streaming data service based on Apache Kafka

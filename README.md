@@ -23,7 +23,7 @@ affiliation with and is not endorsed by The Apache Software Foundation.
   * Full Exactly-Once-Semantics (EOS) support
   * High-level producer, including Idempotent and Transactional producers
   * High-level balanced KafkaConsumer (requires broker >= 0.9)
-  * Share consumer / Queues for Kafka ([KIP-932](INTRODUCTION.md#share-consumers-queues-for-kafka)) — **Preview** (requires a broker with share groups enabled; generally available in Apache Kafka 4.2.0). The share consumer is single-threaded and **not thread-safe by design**, per KIP-932.
+  * Share consumer / Queues for Kafka ([KIP-932](INTRODUCTION.md#share-consumers-queues-for-kafka)) — **Preview** (requires broker >= 4.2)
   * Simple (legacy) consumer
   * Admin client
   * Compression: snappy, gzip, lz4, zstd

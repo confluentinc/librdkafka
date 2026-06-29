@@ -1626,6 +1626,7 @@ static void do_test_multiple_members_partition_distribution(void) {
         const char *topic = test_mk_topic_name(__FUNCTION__, 0);
         const char *group = "test-share-group-distribution";
         int total_partitions;
+        rd_bool_t converged;
         int64_t dl;
 
         SUB_TEST_QUICK();
@@ -1649,9 +1650,21 @@ static void do_test_multiple_members_partition_distribution(void) {
         TEST_CALL_ERR__(rd_kafka_share_subscribe(share_c3, subscription));
         rd_kafka_topic_partition_list_destroy(subscription);
 
-        /* Wait for all 3 consumers to get at least 1 partition each
-         * and total >= 6. */
-        dl = test_clock() + 15000 * 1000;
+        /* Wait until all 3 consumers have converged on a fair distribution
+         * (each member holds at least 1 partition and the total is >= 6) and
+         * assert on the snapshot that satisfied that check.
+         *
+         * The assignment is driven by the heartbeat thread and churns while
+         * the three members are still joining, so a member may transiently
+         * hold partitions and then have them reassigned. Re-reading the
+         * assignment after convergence would race against that churn and
+         * observe an intermediate state, so the lists that satisfied the
+         * check are kept and asserted on directly. */
+        TEST_SAY(
+            "Waiting for 3 members to converge on a fair distribution "
+            "of 6 partitions...\n");
+        converged = rd_false;
+        dl        = test_clock() + 15000 * 1000;
         while (test_clock() < dl) {
                 TEST_CALL_ERR__(rd_kafka_assignment(
                     test_share_consumer_get_rk(share_c1), &share_c1_assign));
@@ -1661,39 +1674,29 @@ static void do_test_multiple_members_partition_distribution(void) {
                     test_share_consumer_get_rk(share_c3), &share_c3_assign));
                 total_partitions = share_c1_assign->cnt + share_c2_assign->cnt +
                                    share_c3_assign->cnt;
+                TEST_SAY(
+                    "Current assignment: share consumer 1=%d, "
+                    "share consumer 2=%d, share consumer 3=%d (total=%d)\n",
+                    share_c1_assign->cnt, share_c2_assign->cnt,
+                    share_c3_assign->cnt, total_partitions);
                 if (share_c1_assign->cnt >= 1 && share_c2_assign->cnt >= 1 &&
                     share_c3_assign->cnt >= 1 && total_partitions >= 6) {
-                        rd_kafka_topic_partition_list_destroy(share_c1_assign);
-                        rd_kafka_topic_partition_list_destroy(share_c2_assign);
-                        rd_kafka_topic_partition_list_destroy(share_c3_assign);
+                        converged = rd_true;
+                        TEST_SAY(
+                            "All 3 members converged, fair distribution "
+                            "reached\n");
                         break;
                 }
                 rd_kafka_topic_partition_list_destroy(share_c1_assign);
                 rd_kafka_topic_partition_list_destroy(share_c2_assign);
                 rd_kafka_topic_partition_list_destroy(share_c3_assign);
+                TEST_SAY("Not yet converged, retrying in 200ms...\n");
                 rd_usleep(200 * 1000, 0);
         }
-        /* Final check */
-        TEST_CALL_ERR__(rd_kafka_assignment(
-            test_share_consumer_get_rk(share_c1), &share_c1_assign));
-        TEST_CALL_ERR__(rd_kafka_assignment(
-            test_share_consumer_get_rk(share_c2), &share_c2_assign));
-        TEST_CALL_ERR__(rd_kafka_assignment(
-            test_share_consumer_get_rk(share_c3), &share_c3_assign));
-        total_partitions =
-            share_c1_assign->cnt + share_c2_assign->cnt + share_c3_assign->cnt;
-        TEST_ASSERT(share_c1_assign->cnt >= 1,
-                    "Expected share_c1 to have at least 1 partition, got %d",
-                    share_c1_assign->cnt);
-        TEST_ASSERT(share_c2_assign->cnt >= 1,
-                    "Expected share_c2 to have at least 1 partition, got %d",
-                    share_c2_assign->cnt);
-        TEST_ASSERT(share_c3_assign->cnt >= 1,
-                    "Expected share_c3 to have at least 1 partition, got %d",
-                    share_c3_assign->cnt);
-        TEST_ASSERT(total_partitions >= 6,
-                    "Expected at least 6 total partition assignments, got %d",
-                    total_partitions);
+
+        TEST_ASSERT(converged,
+                    "Consumers did not converge on a fair distribution "
+                    "(each member >= 1 partition, total >= 6) within timeout");
 
         TEST_SAY(
             "Partition distribution: share consumer 1=%d, share consumer 2=%d, "

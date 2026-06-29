@@ -1949,10 +1949,10 @@ for the help with the usage) for the consumer.
 > See [Current limitations](#share-consumer-current-limitations) below.
 
 Share groups ([KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka))
-bring queue-like semantics to Kafka. Where a classic consumer group assigns
+bring queue-like semantics to Kafka. Where a consumer group assigns
 each partition to exactly one member at a time, a *share group* lets multiple
 members consume from the **same** partitions cooperatively. The unit of
-progress is the individual record rather than the partition offset: each
+progress is the individual record rather than the committed offset: each
 delivered record is *acquired* by a member under a time-limited acquisition
 lock, processed, and then *acknowledged*. The lock duration is a broker/group
 setting (`group.share.record.lock.duration.ms`, 30 seconds by default) and is
@@ -1976,10 +1976,9 @@ the **C API only**; there is no C++ (`rdkafkacpp.h`) wrapper yet.
 #### Broker requirement
 
 A share consumer requires a broker with **share groups enabled**. Share groups
-are generally available in **Apache Kafka 4.2.0** (early access in 4.0.0,
-preview in 4.1.0). Partition assignment is entirely broker-driven (via the
-share group heartbeat); there is no client-side rebalance callback or
-`assign()` step.
+are available since **Apache Kafka 4.2.0**. Partition assignment is entirely
+broker-driven (via the share group heartbeat); there is no client-side
+rebalance callback or `assign()` step.
 
 #### Lifecycle
 
@@ -2003,7 +2002,7 @@ property: other share-group settings (acquisition-lock duration, delivery-count
 limit, session/heartbeat timeouts, isolation level, acquire mode and offset
 reset) are broker/group settings and are not exposed by this client.
 
-Several classic-consumer properties do not apply to share consumers and are
+Several regular-consumer properties do not apply to share consumers and are
 rejected or ignored — for example `partition.assignment.strategy`,
 `enable.auto.commit`, `auto.offset.reset` semantics, `isolation.level`,
 `enable.partition.eof`, `group.instance.id`, `group.remote.assignor`, and the
@@ -2017,7 +2016,7 @@ the authoritative list and the share-consumer default values.
 #### Polling and message batches
 
 `rd_kafka_share_poll()` returns a **batch** of messages in a single call
-(unlike the classic single-message poll), as an opaque `rd_kafka_messages_t`
+(unlike the regular single-message poll), as an opaque `rd_kafka_messages_t`
 handle. Iterate it with `rd_kafka_messages_count()` and
 `rd_kafka_messages_get()`, and release it with `rd_kafka_messages_destroy()`
 (which is NULL-safe). `max.poll.records` (default 500) bounds the batch size.
@@ -2066,13 +2065,13 @@ for each partition.
 
 #### Example: explicit acknowledgement
 
-The example below walks the full share-consumer lifecycle in explicit mode
+The example below shows the full share-consumer lifecycle in explicit mode
 (configure, create, subscribe, poll, acknowledge, commit, close, destroy) and
 focuses on the per-record acknowledgement logic. It uses the real librdkafka
 APIs but is not a complete program: call-level error handling (the
 `rd_kafka_error_t` returned by `rd_kafka_share_poll()`, the acknowledge calls
 and the commit calls, and the return value of `rd_kafka_conf_set()`) is omitted
-for brevity. See the [examples](examples/) for complete programs.
+for brevity.
 
 ```c
 char errstr[512];
@@ -2090,7 +2089,7 @@ rd_kafka_share_t *rkshare =
 rd_kafka_share_subscribe(rkshare, topics);
 
 while (run) {
-        rd_kafka_messages_t *batch;
+        rd_kafka_messages_t *batch = NULL;
 
         rd_kafka_share_poll(rkshare, timeout_ms, &batch);
 
@@ -2151,7 +2150,7 @@ The share consumer handle is **not thread-safe by design**: a single
 `rd_kafka_share_t` handle must not be used concurrently from multiple threads.
 This follows the share consumer design in
 [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka),
-where the share consumer — like the classic consumer — is single-threaded and
+where the share consumer — like the regular consumer — is single-threaded and
 the application owns the threading model (typically one handle per thread, or
 serialised access to a handle). Concurrent use is detected on a best-effort
 basis and rejected with `RD_KAFKA_RESP_ERR__CONFLICT`. There is no wakeup
@@ -2623,7 +2622,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-1082 - Require Client-Generated IDs over the ConsumerGroupHeartbeat  | 4.0.0                       | Supported                                                                                     |
 | KIP-1102 - Enable clients to rebootstrap based on timeout or error code  | 4.0.0                       | Supported                                                                                     |
 | KIP-1139 - Add support for OAuth jwt-bearer grant type                   | 4.1.0 (WIP)                 | Supported                                                                                     |
-| KIP-932 - Queues for Kafka (share groups / share consumer)               | 4.0.0                       | Preview (C API; see the [Share consumers](#share-consumers-queues-for-kafka) usage section and the ShareConsumer section in [rdkafka.h](src/rdkafka.h)) |
+| KIP-932 - Queues for Kafka (share groups / share consumer)               | 4.2.0                       | Preview (C API; see the [Share consumers](#share-consumers-queues-for-kafka) usage section and the Share consumer (Queues for Kafka) section in [rdkafka.h](src/rdkafka.h)) |
 
 
 

@@ -5244,11 +5244,11 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  * @par Overview
  * A share consumer lets multiple members of a *share group* cooperatively
  * consume records from the same topic partitions, providing queue-like
- * semantics on top of Kafka. This differs from the classic balanced consumer
- * (\c rd_kafka_subscribe et.al.) where each partition is assigned to exactly
+ * semantics on top of Kafka. This differs from consumers in a consumer group
+ * (rd_kafka_subscribe(), et.al.) where each partition is assigned to exactly
  * one member of the group at a time. In a share group a single partition may
  * be consumed by several members at once, and individual records — rather than
- * partition offsets — are the unit of progress: each delivered record is
+ * the committed offset — are the unit of progress: each delivered record is
  * *acquired* by a member under a time-limited acquisition lock, processed, and
  * then *acknowledged*. The lock duration is a broker/group setting
  * (\c group.share.record.lock.duration.ms, 30 seconds by default) and is not
@@ -5266,15 +5266,14 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *
  * A share consumer is created with rd_kafka_share_consumer_new() rather than
  * rd_kafka_new(), and is represented by the opaque \c rd_kafka_share_t handle.
- * Its lifecycle mirrors the classic consumer:
+ * Its lifecycle mirrors the regular consumer:
  * subscribe -> poll/acknowledge (loop) -> close -> destroy.
  *
  * @par Broker compatibility
- * Requires a broker with share groups enabled. Share groups are generally
- * available in Apache Kafka 4.2.0 (early access in Apache Kafka 4.0.0, preview
- * in 4.1.0). The set of partitions assigned to each member is decided entirely
- * by the broker (driven by the share group heartbeat); there is no client-side
- * rebalance callback or assign() step.
+ * Requires a broker with share groups enabled. Share groups are available
+ * since Apache Kafka 4.2.0. The set of partitions assigned to each member is
+ * decided entirely by the broker (driven by the share group heartbeat); there
+ * is no client-side rebalance callback or assign() step.
  *
  * @par Configuration
  * Configure the handle through the normal \c rd_kafka_conf_t interface before
@@ -5285,7 +5284,7 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  * duration, delivery-count limit, session/heartbeat timeouts, isolation level,
  * acquire mode and offset reset) are broker/group settings and are not exposed
  * by this client.
- * Several classic-consumer properties are not applicable to share consumers
+ * Several regular-consumer properties are not applicable to share consumers
  * (for example \c partition.assignment.strategy, \c enable.auto.commit,
  * \c isolation.level, \c enable.partition.eof and the per-partition fetch
  * queue tuning). A few network-related defaults also differ for share
@@ -5302,7 +5301,7 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *
  * @par Polling
  * rd_kafka_share_poll() returns a *batch* of messages in a single call (unlike
- * the classic single-message poll), as an opaque \c rd_kafka_messages_t handle.
+ * the regular single-message poll), as an opaque \c rd_kafka_messages_t handle.
  * Iterate it with rd_kafka_messages_count() and rd_kafka_messages_get(), and
  * release it with rd_kafka_messages_destroy(). Record-level errors are surfaced
  * as individual messages with a non-zero \c rd_kafka_message_t.err field
@@ -5421,7 +5420,7 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  * threads. This matches the share consumer design in KIP-932. Use one handle
  * per thread, or serialise all access to a handle. Concurrent use is detected
  * on a best-effort basis and rejected with RD_KAFKA_RESP_ERR__CONFLICT. Unlike
- * the classic consumer there is no wakeup mechanism in this preview, so a
+ * the regular consumer there is no wakeup mechanism in this preview, so a
  * blocking poll/commit ends only when its timeout expires.
  *
  * @par Closing

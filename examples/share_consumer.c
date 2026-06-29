@@ -41,25 +41,12 @@
 #include <signal.h>
 #include <string.h>
 #include <ctype.h>
-#include <time.h>
 
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
 // #include <librdkafka/rdkafka.h>
 #include "rdkafka.h"
-
-#define TIME_BLOCK_MS(elapsed_var, expr)                                       \
-        do {                                                                   \
-                struct timespec __t0, __t1;                                    \
-                if (clock_gettime(CLOCK_MONOTONIC, &__t0) != 0)                \
-                        perror("clock_gettime");                               \
-                expr;                                                          \
-                if (clock_gettime(CLOCK_MONOTONIC, &__t1) != 0)                \
-                        perror("clock_gettime");                               \
-                (elapsed_var) = (__t1.tv_sec - __t0.tv_sec) * 1000.0 +         \
-                                (__t1.tv_nsec - __t0.tv_nsec) / 1e6;           \
-        } while (0)
 
 
 static volatile sig_atomic_t run = 1;
@@ -207,14 +194,8 @@ int main(int argc, char **argv) {
                 size_t rcvd_msgs                = 0;
                 size_t i;
                 rd_kafka_error_t *error;
-                double __elapsed_ms;
 
-                TIME_BLOCK_MS(__elapsed_ms, error = rd_kafka_share_poll(
-                                                rkshare, 3000, &rkmessages));
-                fprintf(stdout,
-                        "%% rd_kafka_share_poll() took "
-                        "%.3f ms\n",
-                        __elapsed_ms);
+                error = rd_kafka_share_poll(rkshare, 3000, &rkmessages);
 
                 if (error) {
                         fprintf(stderr, "%% Consume error: %s\n",

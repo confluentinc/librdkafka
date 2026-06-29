@@ -2054,7 +2054,9 @@ There are two acknowledgement modes, selected by `share.acknowledgement.mode`:
   `rd_kafka_share_acknowledge_type()` or `rd_kafka_share_acknowledge_offset()`)
   before the next poll. If any record from the previous batch is still
   unacknowledged, `rd_kafka_share_poll()` returns
-  `RD_KAFKA_RESP_ERR__STATE`.
+  `RD_KAFKA_RESP_ERR__STATE`. Records you have acknowledged but not yet
+  committed are also committed when the consumer is closed (unless it is
+  destroyed with `RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE`).
 
 Acknowledgements are sent to the broker as part of the next poll, or flushed
 explicitly with `rd_kafka_share_commit_async()` (fire-and-forget) or

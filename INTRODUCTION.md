@@ -97,6 +97,7 @@ librdkafka also provides a native C++ interface.
       - [Upgrade and Downgrade](#upgrade-and-downgrade)
       - [Migration Checklist (Next-Gen Protocol / KIP-848)](#migration-checklist-next-gen-protocol--kip-848)
     - [Note on Batch consume APIs](#note-on-batch-consume-apis)
+    - [Share consumers (Queues for Kafka)](#share-consumers-queues-for-kafka)
     - [Topics](#topics)
       - [Unknown or unauthorized topics](#unknown-or-unauthorized-topics)
       - [Topic metadata propagation for newly created topics](#topic-metadata-propagation-for-newly-created-topics)
@@ -1939,6 +1940,260 @@ set `rebalance_cb` configuration property (refer [examples/rdkafka_complex_consu
 for the help with the usage) for the consumer.
 
 
+<a name="share-consumers-queues-for-kafka"></a>
+### Share consumers (Queues for Kafka)
+
+> **Preview feature.** The share consumer is provided as a preview. Its public
+> interfaces (the `rd_kafka_share_*` APIs in [rdkafka.h](src/rdkafka.h)) may
+> change in a future release and it is not recommended for production use.
+> See [Current limitations](#share-consumer-current-limitations) below.
+
+Share groups ([KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka))
+bring queue-like semantics to Kafka. Where a classic consumer group assigns
+each partition to exactly one member at a time, a *share group* lets multiple
+members consume from the **same** partitions cooperatively. The unit of
+progress is the individual record rather than the partition offset: each
+delivered record is *acquired* by a member under a time-limited acquisition
+lock, processed, and then *acknowledged*. The lock duration is a broker/group
+setting (`group.share.record.lock.duration.ms`, 30 seconds by default) and is
+not configured on this client. A record that is not acknowledged before its
+lock expires, or that is explicitly released, becomes available again and may
+be redelivered — possibly to a different member. A record thus moves through the
+states *available* → *acquired* → *acknowledged*; a rejected record, or one that
+exceeds the broker's delivery-count limit, becomes *archived* and is no longer
+delivered. This makes it possible to scale the number of consumers beyond the
+number of partitions and to distribute work like a traditional queue.
+
+For a conceptual overview of share groups and Queues for Kafka, see the
+[Confluent share consumer documentation](https://docs.confluent.io/platform/current/clients/share-consumers.html).
+
+A share consumer is a distinct handle type, `rd_kafka_share_t`, created with
+`rd_kafka_share_consumer_new()` (not `rd_kafka_new()`). The full API reference
+lives in the *Share consumer (Queues for Kafka)* section of
+[rdkafka.h](src/rdkafka.h). The share consumer is currently available through
+the **C API only**; there is no C++ (`rdkafkacpp.h`) wrapper yet.
+
+#### Broker requirement
+
+A share consumer requires a broker with **share groups enabled**. Share groups
+are generally available in **Apache Kafka 4.2.0** (early access in 4.0.0,
+preview in 4.1.0). Partition assignment is entirely broker-driven (via the
+share group heartbeat); there is no client-side rebalance callback or
+`assign()` step.
+
+#### Lifecycle
+
+```
+rd_kafka_share_consumer_new()   # create handle from an rd_kafka_conf_t
+rd_kafka_share_subscribe()      # subscribe to a set of topics
+  loop:
+    rd_kafka_share_poll()       # fetch a batch of messages
+    ... process / acknowledge ...
+    rd_kafka_share_commit_*()   # (optional) flush acknowledgements
+rd_kafka_share_consumer_close() # send pending acks, leave the group
+rd_kafka_share_destroy()        # free the handle
+```
+
+#### Configuration
+
+Configure the handle through the normal `rd_kafka_conf_t` interface before
+creating it. `group.id` is required. `share.acknowledgement.mode` is optional
+and defaults to `implicit` (see below). It is the only share-specific client
+property: other share-group settings (acquisition-lock duration, delivery-count
+limit, session/heartbeat timeouts, isolation level, acquire mode and offset
+reset) are broker/group settings and are not exposed by this client.
+
+Several classic-consumer properties do not apply to share consumers and are
+rejected or ignored — for example `partition.assignment.strategy`,
+`enable.auto.commit`, `auto.offset.reset` semantics, `isolation.level`,
+`enable.partition.eof`, `group.instance.id`, `group.remote.assignor`, and the
+per-partition fetch-queue tuning (`queued.min.messages`,
+`queued.max.messages.kbytes`, `fetch.message.max.bytes`, etc.). A few network
+defaults also differ for share consumers (for example `receive.message.max.bytes`,
+`connections.max.idle.ms`, `reconnect.backoff.ms`). See
+[CONFIGURATION.md](CONFIGURATION.md), where these properties are annotated, for
+the authoritative list and the share-consumer default values.
+
+#### Polling and message batches
+
+`rd_kafka_share_poll()` returns a **batch** of messages in a single call
+(unlike the classic single-message poll), as an opaque `rd_kafka_messages_t`
+handle. Iterate it with `rd_kafka_messages_count()` and
+`rd_kafka_messages_get()`, and release it with `rd_kafka_messages_destroy()`
+(which is NULL-safe). `max.poll.records` (default 500) bounds the batch size.
+
+Record-level errors are surfaced as individual messages with a non-zero
+`rd_kafka_message_t.err` field (the topic, partition and offset remain valid),
+so the application should check each message's `err` before treating it as
+data.
+
+#### Acknowledgement
+
+Every acquired record is acknowledged with one of three types:
+
+* **ACCEPT** (`RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT`) — processed
+  successfully.
+* **RELEASE** (`RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE`) — not processed; make
+  the record available again for redelivery.
+* **REJECT** (`RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT`) — do not deliver the
+  record again.
+
+The number of times a record has already been delivered is available via
+`rd_kafka_message_delivery_count()`, which is useful to detect and reject a
+"poison" record after a threshold. The broker also enforces its own maximum
+delivery count (`group.share.delivery.count.limit`, default 5); once a record
+exceeds it the broker archives the record and stops redelivering it.
+
+There are two acknowledgement modes, selected by `share.acknowledgement.mode`:
+
+* **implicit** (default) — the application does not call the acknowledge APIs.
+  All records returned by a poll are automatically accepted (ACCEPT) on the
+  next `rd_kafka_share_poll()` / `rd_kafka_share_commit_sync()` /
+  `rd_kafka_share_commit_async()`.
+* **explicit** — the application must acknowledge every record returned by a
+  poll (with `rd_kafka_share_acknowledge()`,
+  `rd_kafka_share_acknowledge_type()` or `rd_kafka_share_acknowledge_offset()`)
+  before the next poll. If any record from the previous batch is still
+  unacknowledged, `rd_kafka_share_poll()` returns
+  `RD_KAFKA_RESP_ERR__STATE`.
+
+Acknowledgements are sent to the broker as part of the next poll, or flushed
+explicitly with `rd_kafka_share_commit_async()` (fire-and-forget) or
+`rd_kafka_share_commit_sync()` (blocks for broker replies, reporting
+per-partition results). The acknowledgement-commit callback registered with
+`rd_kafka_share_set_acknowledgement_commit_cb()` is invoked with the outcome
+for each partition.
+
+#### Example: explicit acknowledgement
+
+The example below walks the full share-consumer lifecycle in explicit mode
+(configure, create, subscribe, poll, acknowledge, commit, close, destroy) and
+focuses on the per-record acknowledgement logic. It uses the real librdkafka
+APIs but is not a complete program: call-level error handling (the
+`rd_kafka_error_t` returned by `rd_kafka_share_poll()`, the acknowledge calls
+and the commit calls, and the return value of `rd_kafka_conf_set()`) is omitted
+for brevity. See the [examples](examples/) for complete programs.
+
+```c
+char errstr[512];
+
+rd_kafka_conf_t *conf = rd_kafka_conf_new();
+rd_kafka_conf_set(conf, "bootstrap.servers", "localhost:9092",
+                  errstr, sizeof(errstr));
+rd_kafka_conf_set(conf, "group.id", "my-share-group", errstr, sizeof(errstr));
+rd_kafka_conf_set(conf, "share.acknowledgement.mode", "explicit",
+                  errstr, sizeof(errstr));
+
+rd_kafka_share_t *rkshare =
+    rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+
+rd_kafka_share_subscribe(rkshare, topics);
+
+while (run) {
+        rd_kafka_messages_t *batch;
+
+        rd_kafka_share_poll(rkshare, timeout_ms, &batch);
+
+        size_t cnt = rd_kafka_messages_count(batch);
+        for (size_t i = 0; i < cnt; i++) {
+                rd_kafka_message_t *rkm = rd_kafka_messages_get(batch, i);
+
+                if (rkm->err) {
+                        /* Records carrying a record-level error (rkm->err set)
+                         * have already been acknowledged internally by
+                         * librdkafka: RELEASEd for decompression failures,
+                         * REJECTed for corrupt/unsupported batches. The
+                         * application can re-acknowledge them here if required
+                         * (e.g. to override the internal decision); otherwise
+                         * it only acknowledges the records it received. */
+                        continue;
+                }
+
+                switch (process(rkm)) {
+                case PROCESS_OK:
+                        /* Processed successfully. */
+                        rd_kafka_share_acknowledge_type(
+                            rkshare, rkm, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT);
+                        break;
+                case PROCESS_TEMPORARY_FAILURE:
+                        /* Release for redelivery (possibly to another member). */
+                        rd_kafka_share_acknowledge_type(
+                            rkshare, rkm,
+                            RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+                        break;
+                case PROCESS_PERMANENT_FAILURE:
+                        /* Reject a "poison" record so it is not redelivered. */
+                        rd_kafka_share_acknowledge_type(
+                            rkshare, rkm, RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT);
+                        break;
+                }
+        }
+        rd_kafka_messages_destroy(batch);
+
+        /* Flush the acknowledgements; the next poll would also send them.
+         * Use rd_kafka_share_commit_sync(rkshare, timeout_ms, &partitions)
+         * to block and inspect the per-partition result. */
+        rd_kafka_share_commit_async(rkshare);
+}
+
+rd_kafka_share_consumer_close(rkshare);
+rd_kafka_share_destroy(rkshare);
+```
+
+Complete runnable programs are in the examples directory:
+[share_consumer.c](examples/share_consumer.c),
+[share_consumer_commit_sync.c](examples/share_consumer_commit_sync.c) and
+[share_consumer_commit_async.c](examples/share_consumer_commit_async.c).
+
+#### Thread safety
+
+The share consumer handle is **not thread-safe by design**: a single
+`rd_kafka_share_t` handle must not be used concurrently from multiple threads.
+This follows the share consumer design in
+[KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka),
+where the share consumer — like the classic consumer — is single-threaded and
+the application owns the threading model (typically one handle per thread, or
+serialised access to a handle). Concurrent use is detected on a best-effort
+basis and rejected with `RD_KAFKA_RESP_ERR__CONFLICT`. There is no wakeup
+mechanism in this preview, so a blocking poll/commit ends only when its timeout
+expires.
+
+<a name="share-consumer-current-limitations"></a>
+#### Current limitations (preview)
+
+The preview differs from the Apache Kafka Java share consumer in a number of
+ways. The most important for application authors:
+
+* **Record limit is a soft bound.** `max.poll.records` (default 500) does not
+  strictly bound the number of records returned per poll (the strict-limit and
+  acquire-mode work of KIP-1206 is not implemented).
+* **Acknowledgement types are limited to ACCEPT / RELEASE / REJECT.** There is
+  no acquisition-lock renewal (KIP-1222), so a long-running handler cannot
+  extend a record's lock and the record may be redelivered.
+* **No wakeup API.** A blocking poll/commit can only be ended by its timeout.
+* **`close()` has no timeout argument.** `rd_kafka_share_consumer_close()`
+  takes no timeout argument; close is bounded internally to roughly
+  `socket.timeout.ms`.
+* **No deserialization in the C core**, hence no automatic RELEASE on a
+  deserialization failure.
+* **No share-group admin operations** (describe/list/alter/delete share
+  groups and offsets) and **no share-consumer client-metrics APIs**.
+* **No auto topic creation.** Share topics are resolved by topic id;
+  `allow.auto.create.topics` has no effect.
+* **Failed acknowledgements are not retried** automatically; the error is
+  reported through the acknowledgement-commit callback or the
+  `rd_kafka_share_commit_sync()` per-partition results.
+* **Some error codes differ** because librdkafka generates certain failures
+  locally without a broker round-trip (for example
+  `RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER`, `RD_KAFKA_RESP_ERR__TRANSPORT`,
+  `RD_KAFKA_RESP_ERR_INVALID_SHARE_SESSION_EPOCH`). Applications that branch on
+  error codes should account for this.
+* **Single-broker fetch per poll.** Each poll fetches from one broker
+  (round-robin over the assigned partitions); other brokers' partitions are
+  served on subsequent polls. This is a throughput/latency detail, not a
+  correctness one — all brokers are served across successive polls.
+
+
 <a name="topics"></a>
 ### Topics
 
@@ -2368,6 +2623,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-1082 - Require Client-Generated IDs over the ConsumerGroupHeartbeat  | 4.0.0                       | Supported                                                                                     |
 | KIP-1102 - Enable clients to rebootstrap based on timeout or error code  | 4.0.0                       | Supported                                                                                     |
 | KIP-1139 - Add support for OAuth jwt-bearer grant type                   | 4.1.0 (WIP)                 | Supported                                                                                     |
+| KIP-932 - Queues for Kafka (share groups / share consumer)               | 4.0.0                       | Preview (C API; see the [Share consumers](#share-consumers-queues-for-kafka) usage section and the ShareConsumer section in [rdkafka.h](src/rdkafka.h)) |
 
 
 

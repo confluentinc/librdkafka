@@ -19,6 +19,12 @@ Begin with the following examples:
  * [misc.c](misc.c) - a collection of miscellaneous usage examples.
 
 
+For the share consumer (Queues for Kafka, [KIP-932](../INTRODUCTION.md#share-consumers-queues-for-kafka), **Preview**), see:
+ * [share_consumer.c](share_consumer.c) - a basic share consumer (poll + acknowledge).
+ * [share_consumer_commit_sync.c](share_consumer_commit_sync.c) - share consumer with explicit acknowledgement and synchronous commit.
+ * [share_consumer_commit_async.c](share_consumer_commit_async.c) - share consumer with explicit acknowledgement and asynchronous commit.
+
+
 For more complex uses, see:
  * [rdkafka_example.c](rdkafka_example.c) - simple consumer, producer, metadata listing, kitchen sink, etc.
  * [rdkafka_example.cpp](rdkafka_example.cpp) - simple consumer, producer, metadata listing in C++.

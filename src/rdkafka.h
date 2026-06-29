@@ -5237,8 +5237,9 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *
  * @warning **Preview feature.** The share consumer is provided as a preview:
  *          the public interfaces may change in a future release and it is not
- *          recommended for production use. See the "Current limitations"
- *          section below.
+ *          recommended for production use. It is currently available through
+ *          the C API only; there is no C++ wrapper yet. See the "Current
+ *          limitations" section below.
  *
  * @par Overview
  * A share consumer lets multiple members of a *share group* cooperatively

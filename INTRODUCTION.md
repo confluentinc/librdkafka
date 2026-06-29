@@ -1965,7 +1965,8 @@ work like a traditional queue.
 A share consumer is a distinct handle type, `rd_kafka_share_t`, created with
 `rd_kafka_share_consumer_new()` (not `rd_kafka_new()`). The full API reference
 lives in the *Share consumer (Queues for Kafka)* section of
-[rdkafka.h](src/rdkafka.h).
+[rdkafka.h](src/rdkafka.h). The share consumer is currently available through
+the **C API only**; there is no C++ (`rdkafkacpp.h`) wrapper yet.
 
 #### Broker requirement
 

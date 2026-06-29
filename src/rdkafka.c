@@ -3134,6 +3134,10 @@ rd_kafka_share_t *rd_kafka_share_consumer_new(rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        rd_kafka_log(rk, LOG_WARNING, "SHARECONSUMER",
+                     "The share consumer is in \"Preview\" and is not "
+                     "recommended for production use");
+
         rkshare                           = rd_calloc(1, sizeof(*rkshare));
         rkshare->rkshare_rk               = rk;
         rkshare->rkshare_unacked_cnt      = 0;

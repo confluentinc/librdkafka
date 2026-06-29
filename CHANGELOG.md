@@ -4,11 +4,22 @@ librdkafka Unreleased is a maintenance release:
 
 * Fix compilation with CMake when CURL is disabled (#5136).
 * Fix `rd_atomic{32,64}_set` returning the new value in CMake builds, restoring the `ALL_BROKERS_DOWN` event (#5136).
+* Fix `poll()`/`consumer_poll()` being starved when internal ops are enqueued faster than they are drained, e.g. with `log.queue=true` and debug logging enabled (#5325).
 
 
 ## Fixes
 
 ### General fixes
+
+* Issues: #5325.
+  Fix `rd_kafka_poll()`/`rd_kafka_consumer_poll()` (and other queue poll
+  variants) potentially blocking far longer than the requested timeout, up to
+  indefinitely, when internal ops are enqueued faster than they are drained.
+  `rd_kafka_q_pop_serve()` only checked the timeout once the queue was found
+  empty, so a steady stream of internal ops (such as high-volume log ops with
+  `log.queue=true` and debug logging enabled) kept the queue non-empty and
+  starved the application thread. The timeout is now honoured after each
+  handled op (Tamir Suliman, #5325).
 
 * Issues: #5135.
   Fix compilation with CMake when CURL is disabled.

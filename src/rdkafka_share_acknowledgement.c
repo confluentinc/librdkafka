@@ -978,8 +978,13 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
 
         /* Explicit acknowledge APIs require explicit acknowledgement mode */
-        if (rd_kafka_share_acknowledgement_mode_is_implicit(rkshare))
+        if (rd_kafka_share_acknowledgement_mode_is_implicit(rkshare)) {
+                rd_kafka_dbg(rkshare->rkshare_rk, CONSUMER, "SHAREACK",
+                             "acknowledge(%s [%" PRId32 "] @%" PRId64
+                             ") rejected: implicit acknowledgement mode",
+                             topic, partition, offset);
                 return RD_KAFKA_RESP_ERR__STATE;
+        }
 
         /* Validate type - ACCEPT, RELEASE, REJECT allowed */
         if (type < RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT ||
@@ -989,12 +994,23 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
         /* Find partition and entry containing the offset */
         err = rd_kafka_share_find_ack_entry(rkshare, topic, partition, offset,
                                             &entry, &idx);
-        if (err)
+        if (err) {
+                rd_kafka_dbg(rkshare->rkshare_rk, CONSUMER, "SHAREACK",
+                             "acknowledge(%s [%" PRId32 "] @%" PRId64
+                             ") rejected: offset not in any in-flight "
+                             "acquired batch",
+                             topic, partition, offset);
                 return err;
+        }
 
         /* GAP records cannot be acknowledged */
-        if (entry->types[idx] == RD_KAFKA_SHARE_INTERNAL_ACK_GAP)
+        if (entry->types[idx] == RD_KAFKA_SHARE_INTERNAL_ACK_GAP) {
+                rd_kafka_dbg(rkshare->rkshare_rk, CONSUMER, "SHAREACK",
+                             "acknowledge(%s [%" PRId32 "] @%" PRId64
+                             ") rejected: offset is a GAP record",
+                             topic, partition, offset);
                 return RD_KAFKA_RESP_ERR__STATE;
+        }
 
         rd_kafka_share_update_acknowledgement_type(rkshare, entry, idx, type);
 

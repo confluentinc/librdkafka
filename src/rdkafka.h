@@ -5254,7 +5254,15 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  * (\c group.share.record.lock.duration.ms, 30 seconds by default) and is not
  * configured on this client. A record that is not acknowledged before its lock
  * expires, or that is released, becomes available again and may be redelivered
- * (possibly to a different member).
+ * (possibly to a different member). A record thus moves through the states
+ * *available* -> *acquired* -> *acknowledged*; a rejected record, or one that
+ * exceeds the broker's delivery-count limit, becomes *archived* and is no
+ * longer delivered.
+ *
+ * For a conceptual overview of share groups and Queues for Kafka, see KIP-932
+ * (https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka)
+ * and the Confluent share consumer documentation
+ * (https://docs.confluent.io/platform/current/clients/share-consumers.html).
  *
  * A share consumer is created with rd_kafka_share_consumer_new() rather than
  * rd_kafka_new(), and is represented by the opaque \c rd_kafka_share_t handle.
@@ -5272,7 +5280,11 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  * Configure the handle through the normal \c rd_kafka_conf_t interface before
  * calling rd_kafka_share_consumer_new(). \c group.id is required.
  * \c share.acknowledgement.mode is optional and selects the acknowledgement
- * mode (see below); when unset it defaults to \c implicit.
+ * mode (see below); when unset it defaults to \c implicit. It is the only
+ * share-specific client property: other share-group settings (acquisition-lock
+ * duration, delivery-count limit, session/heartbeat timeouts, isolation level,
+ * acquire mode and offset reset) are broker/group settings and are not exposed
+ * by this client.
  * Several classic-consumer properties are not applicable to share consumers
  * (for example \c partition.assignment.strategy, \c enable.auto.commit,
  * \c isolation.level, \c enable.partition.eof and the per-partition fetch
@@ -5308,7 +5320,9 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *  - #RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT  — do not deliver again.
  * The number of times a record has been delivered is available via
  * rd_kafka_message_delivery_count(), which can be used to detect and reject
- * "poison" records after a threshold.
+ * "poison" records after a threshold. The broker also enforces its own maximum
+ * delivery count (\c group.share.delivery.count.limit, default 5); once a
+ * record exceeds it the broker archives the record and stops redelivering it.
  *
  * @par Acknowledgement modes
  * The acknowledgement mode is fixed at creation by

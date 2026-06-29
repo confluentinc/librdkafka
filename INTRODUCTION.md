@@ -1958,9 +1958,14 @@ lock, processed, and then *acknowledged*. The lock duration is a broker/group
 setting (`group.share.record.lock.duration.ms`, 30 seconds by default) and is
 not configured on this client. A record that is not acknowledged before its
 lock expires, or that is explicitly released, becomes available again and may
-be redelivered — possibly to a different member. This makes it possible to
-scale the number of consumers beyond the number of partitions and to distribute
-work like a traditional queue.
+be redelivered — possibly to a different member. A record thus moves through the
+states *available* → *acquired* → *acknowledged*; a rejected record, or one that
+exceeds the broker's delivery-count limit, becomes *archived* and is no longer
+delivered. This makes it possible to scale the number of consumers beyond the
+number of partitions and to distribute work like a traditional queue.
+
+For a conceptual overview of share groups and Queues for Kafka, see the
+[Confluent share consumer documentation](https://docs.confluent.io/platform/current/clients/share-consumers.html).
 
 A share consumer is a distinct handle type, `rd_kafka_share_t`, created with
 `rd_kafka_share_consumer_new()` (not `rd_kafka_new()`). The full API reference
@@ -1993,7 +1998,10 @@ rd_kafka_share_destroy()        # free the handle
 
 Configure the handle through the normal `rd_kafka_conf_t` interface before
 creating it. `group.id` is required. `share.acknowledgement.mode` is optional
-and defaults to `implicit` (see below).
+and defaults to `implicit` (see below). It is the only share-specific client
+property: other share-group settings (acquisition-lock duration, delivery-count
+limit, session/heartbeat timeouts, isolation level, acquire mode and offset
+reset) are broker/group settings and are not exposed by this client.
 
 Several classic-consumer properties do not apply to share consumers and are
 rejected or ignored — for example `partition.assignment.strategy`,
@@ -2032,7 +2040,9 @@ Every acquired record is acknowledged with one of three types:
 
 The number of times a record has already been delivered is available via
 `rd_kafka_message_delivery_count()`, which is useful to detect and reject a
-"poison" record after a threshold.
+"poison" record after a threshold. The broker also enforces its own maximum
+delivery count (`group.share.delivery.count.limit`, default 5); once a record
+exceeds it the broker archives the record and stops redelivering it.
 
 There are two acknowledgement modes, selected by `share.acknowledgement.mode`:
 

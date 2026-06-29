@@ -231,12 +231,12 @@ int main(int argc, char **argv) {
                         if (rkm->err) {
                                 /* A record delivered with an error has already
                                  * been acknowledged for you by the library:
-                                 * RELEASE (put back for retry) for decompression
-                                 * errors, and REJECT (give up) for CRC or
-                                 * unsupported-format errors. You can still
-                                 * override that by acknowledging the offset
-                                 * yourself if your application needs different
-                                 * handling. */
+                                 * RELEASE (put back for retry) for
+                                 * decompression errors, and REJECT (give up)
+                                 * for CRC or unsupported-format errors. You can
+                                 * still override that by acknowledging the
+                                 * offset yourself if your application needs
+                                 * different handling. */
                                 fprintf(stderr, "%% Consumer error: %d: %s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
                                 continue;

@@ -28,9 +28,16 @@
  */
 
 /**
- * Simple high-level balanced Apache Kafka consumer
- * using the Kafka driver from librdkafka
- * (https://github.com/confluentinc/librdkafka)
+ * Example KIP-932 share consumer in the default (implicit) ack mode.
+ *
+ * Consumers in a share group share partitions like a queue. In implicit
+ * mode each record is acknowledged for you on the next rd_kafka_share_poll();
+ * there is nothing to ack from the application. If this consumer crashes
+ * before the next poll, the records it held are redelivered to another
+ * consumer in the group.
+ *
+ * Usage:
+ *   share_consumer <broker> <group.id> <topic1> [topic2 ...]
  */
 
 #ifndef _POSIX_C_SOURCE
@@ -85,6 +92,7 @@ int main(int argc, char **argv) {
         int topic_cnt; /* Number of topics to subscribe to */
         rd_kafka_topic_partition_list_t *subscription; /* Subscribed topics */
         int i;
+        int ret = 0; /* Process exit code */
 
         /*
          * Argument validation
@@ -198,10 +206,17 @@ int main(int argc, char **argv) {
                 error = rd_kafka_share_poll(rkshare, 3000, &rkmessages);
 
                 if (error) {
-                        fprintf(stderr, "%% Consume error: %s\n",
+                        int fatal = rd_kafka_error_is_fatal(error);
+                        fprintf(stderr, "%% Consume error%s: %s\n",
+                                fatal ? " (fatal)" : "",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
                         rd_kafka_messages_destroy(rkmessages);
+                        /* A fatal error is unrecoverable: stop consuming. */
+                        if (fatal) {
+                                ret = 1;
+                                goto done;
+                        }
                         continue;
                 }
 
@@ -212,6 +227,14 @@ int main(int argc, char **argv) {
                             rd_kafka_messages_get(rkmessages, i);
 
                         if (rkm->err) {
+                                /* A record delivered with an error has already
+                                 * been acknowledged for you by the library:
+                                 * RELEASE (put back for retry) for decompression
+                                 * errors, and REJECT (give up) for CRC or
+                                 * unsupported-format errors. You can still
+                                 * override that by acknowledging the offset
+                                 * yourself if your application needs different
+                                 * handling. */
                                 fprintf(stderr,
                                         "%% Consumer error: %d: "
                                         "%s\n",
@@ -244,6 +267,7 @@ int main(int argc, char **argv) {
         }
 
 
+done:
         /* Close the consumer: commit final offsets and leave the group. */
         fprintf(stderr, "%% Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
@@ -252,5 +276,5 @@ int main(int argc, char **argv) {
         /* Destroy the consumer */
         rd_kafka_share_destroy(rkshare);
 
-        return 0;
+        return ret;
 }

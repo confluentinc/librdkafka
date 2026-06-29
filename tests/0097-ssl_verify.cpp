@@ -155,7 +155,8 @@ class TestEventCb : public RdKafka::EventCb {
         Test::Say("SSL error: " + event.str() + "\n");
         if (expect_client_auth_fail) {
           /* Broker rejects the untrusted client cert. Different broker TLS
-           * stacks send 42 (bad_certificate) or 40 (handshake_failure). */
+           * stacks send 42 (bad_certificate) or 40 (handshake_failure since
+           * Java 23). */
           if (event.str().find("alert number 42") != std::string::npos ||
               event.str().find("alert number 40") != std::string::npos)
             expected = true;

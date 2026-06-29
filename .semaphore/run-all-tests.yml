@@ -24,7 +24,8 @@ global_job_config:
       - ./configure --install-deps --enable-werror --enable-devel
       - make -j all
       - make -j -C tests build
-      - sem-version java 17
+      - sem-version java 25
+      - export JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(which java)")")")"
 
 blocks:
   - name: "Run all tests (x86_64)"

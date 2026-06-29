@@ -5248,9 +5248,12 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  * one member of the group at a time. In a share group a single partition may
  * be consumed by several members at once, and individual records — rather than
  * partition offsets — are the unit of progress: each delivered record is
- * *acquired* by a member, processed, and then *acknowledged*. Records that are
- * not acknowledged in time, or that are released, become available again and
- * may be redelivered (possibly to a different member).
+ * *acquired* by a member under a time-limited acquisition lock, processed, and
+ * then *acknowledged*. The lock duration is a broker/group setting
+ * (\c group.share.record.lock.duration.ms, 30 seconds by default) and is not
+ * configured on this client. A record that is not acknowledged before its lock
+ * expires, or that is released, becomes available again and may be redelivered
+ * (possibly to a different member).
  *
  * A share consumer is created with rd_kafka_share_consumer_new() rather than
  * rd_kafka_new(), and is represented by the opaque \c rd_kafka_share_t handle.

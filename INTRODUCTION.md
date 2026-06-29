@@ -1953,12 +1953,14 @@ bring queue-like semantics to Kafka. Where a classic consumer group assigns
 each partition to exactly one member at a time, a *share group* lets multiple
 members consume from the **same** partitions cooperatively. The unit of
 progress is the individual record rather than the partition offset: each
-delivered record is *acquired* by a member, processed, and then
-*acknowledged*. Records that are not acknowledged in time, or that are
-explicitly released, become available again and may be redelivered — possibly
-to a different member. This makes it possible to scale the number of consumers
-beyond the number of partitions and to distribute work like a traditional
-queue.
+delivered record is *acquired* by a member under a time-limited acquisition
+lock, processed, and then *acknowledged*. The lock duration is a broker/group
+setting (`group.share.record.lock.duration.ms`, 30 seconds by default) and is
+not configured on this client. A record that is not acknowledged before its
+lock expires, or that is explicitly released, becomes available again and may
+be redelivered — possibly to a different member. This makes it possible to
+scale the number of consumers beyond the number of partitions and to distribute
+work like a traditional queue.
 
 A share consumer is a distinct handle type, `rd_kafka_share_t`, created with
 `rd_kafka_share_consumer_new()` (not `rd_kafka_new()`). The full API reference

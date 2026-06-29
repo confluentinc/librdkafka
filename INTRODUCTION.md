@@ -2037,6 +2037,9 @@ Every acquired record is acknowledged with one of three types:
 * **REJECT** (`RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT`) — do not deliver the
   record again.
 
+**Note**: RENEW (acquisition-lock renewal) is not yet available; see
+[Current limitations](#share-consumer-current-limitations).
+
 The number of times a record has already been delivered is available via
 `rd_kafka_message_delivery_count()`, which is useful to detect and reject a
 "poison" record after a threshold. The broker also enforces its own maximum

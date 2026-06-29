@@ -5317,6 +5317,8 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *  - #RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE — not processed; make available
  *    again for redelivery.
  *  - #RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT  — do not deliver again.
+ * @note RENEW (acquisition-lock renewal) is not yet available; see
+ *       "Current limitations" below.
  * The number of times a record has been delivered is available via
  * rd_kafka_message_delivery_count(), which can be used to detect and reject
  * "poison" records after a threshold. The broker also enforces its own maximum

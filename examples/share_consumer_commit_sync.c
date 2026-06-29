@@ -35,11 +35,12 @@
  *
  * This example demonstrates:
  *  - Consuming records with rd_kafka_share_poll()
- *  - Explicitly acknowledging individual records with
- *    rd_kafka_share_acknowledge_type() using ACCEPT, RELEASE, or REJECT
- *  - Committing acknowledgements synchronously with
- *    rd_kafka_share_commit_sync() at ~10% rate mid-batch,
- *    printing per-partition results
+ *  - Explicitly acknowledging each record with
+ *    rd_kafka_share_acknowledge_type(): ACCEPT on successful processing,
+ *    RELEASE on a processing failure so the record can be redelivered
+ *  - Committing the batch's acknowledgements synchronously with
+ *    rd_kafka_share_commit_sync() once per poll, printing any
+ *    per-partition errors
  */
 
 #ifndef _POSIX_C_SOURCE
@@ -50,8 +51,6 @@
 #include <signal.h>
 #include <string.h>
 #include <ctype.h>
-#include <stdlib.h>
-#include <time.h>
 
 /* Typical include path would be <librdkafka/rdkafka.h>, but this program
  * is builtin from within the librdkafka source tree and thus differs. */
@@ -81,17 +80,31 @@ static int is_printable(const char *buf, size_t size) {
         return 1;
 }
 
-static const char *ack_type_to_str(rd_kafka_share_AcknowledgeType_t type) {
-        switch (type) {
-        case RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT:
-                return "ACCEPT";
-        case RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE:
-                return "RELEASE";
-        case RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT:
-                return "REJECT";
-        default:
-                return "UNKNOWN";
-        }
+/**
+ * @brief Process a received record.
+ *
+ * Replace this with your own handling. The return value tells the caller how
+ * to acknowledge the record:
+ *   0   success           -> ACCEPT  (done, never redeliver it)
+ *   > 0 transient failure  -> RELEASE (retry later, maybe another consumer)
+ *   < 0 permanent failure  -> REJECT  (give up; the broker archives it)
+ */
+static int process_message(const rd_kafka_message_t *rkm) {
+        printf("Message on %s [%" PRId32 "] at offset %" PRId64
+               " (delivery count: %" PRId16 ")",
+               rd_kafka_topic_name(rkm->rkt), rkm->partition, rkm->offset,
+               rd_kafka_message_delivery_count(rkm));
+
+        if (rkm->key && is_printable(rkm->key, rkm->key_len))
+                printf(" Key: %.*s", (int)rkm->key_len, (const char *)rkm->key);
+
+        if (rkm->payload && is_printable(rkm->payload, rkm->len))
+                printf(" Value: %.*s", (int)rkm->len,
+                       (const char *)rkm->payload);
+
+        printf("\n");
+
+        return 0;
 }
 
 
@@ -106,6 +119,7 @@ int main(int argc, char **argv) {
         int topic_cnt;
         rd_kafka_topic_partition_list_t *subscription;
         int i;
+        int ret = 0; /* Process exit code */
 
         if (argc < 4) {
                 fprintf(stderr,
@@ -175,22 +189,28 @@ int main(int argc, char **argv) {
 
         signal(SIGINT, stop);
 
-        srand((unsigned int)time(NULL));
-
         while (run) {
-                rd_kafka_messages_t *rkmessages = NULL;
-                size_t rcvd_msgs;
+                rd_kafka_messages_t *rkmessages            = NULL;
+                rd_kafka_topic_partition_list_t *committed = NULL;
                 rd_kafka_error_t *error;
+                size_t rcvd_msgs;
                 size_t k;
+                int j;
 
-                printf("Calling rd_kafka_share_poll()\n");
                 error = rd_kafka_share_poll(rkshare, 3000, &rkmessages);
 
                 if (error) {
-                        fprintf(stderr, "%% Consume error: %s\n",
+                        int fatal = rd_kafka_error_is_fatal(error);
+                        fprintf(stderr, "%% Consume error%s: %s\n",
+                                fatal ? " (fatal)" : "",
                                 rd_kafka_error_string(error));
                         rd_kafka_error_destroy(error);
                         rd_kafka_messages_destroy(rkmessages);
+                        /* A fatal error is unrecoverable: stop consuming. */
+                        if (fatal) {
+                                ret = 1;
+                                goto done;
+                        }
                         continue;
                 }
 
@@ -206,44 +226,36 @@ int main(int argc, char **argv) {
                         rd_kafka_message_t *rkm =
                             rd_kafka_messages_get(rkmessages, k);
                         rd_kafka_share_AcknowledgeType_t ack_type;
-                        int r;
+                        int rc;
 
                         if (rkm->err) {
+                                /* A record delivered with an error has already
+                                 * been acknowledged for you by the library:
+                                 * RELEASE (put back for retry) for decompression
+                                 * errors, and REJECT (give up) for CRC or
+                                 * unsupported-format errors. You can still
+                                 * override that by acknowledging the offset
+                                 * yourself if your application needs different
+                                 * handling. */
                                 fprintf(stderr, "%% Consumer error: %d: %s\n",
                                         rkm->err, rd_kafka_message_errstr(rkm));
                                 continue;
                         }
 
-                        /* Randomly choose ack type:
-                         *   50% ACCEPT, 30% RELEASE, 20% REJECT */
-                        r = rand() % 100;
-                        if (r < 50)
+                        /* Decide how to acknowledge based on the processing
+                         * outcome: ACCEPT on success, RELEASE on a transient
+                         * failure so the record can be retried, REJECT on a
+                         * permanent failure so the broker archives it. */
+                        rc = process_message(rkm);
+                        if (rc == 0)
                                 ack_type =
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_ACCEPT;
-                        else if (r < 80)
+                        else if (rc > 0)
                                 ack_type =
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE;
                         else
                                 ack_type =
                                     RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT;
-
-                        printf("Message on %s [%" PRId32 "] at offset %" PRId64
-                               " (delivery count: %" PRId16 ") -> %s",
-                               rd_kafka_topic_name(rkm->rkt), rkm->partition,
-                               rkm->offset,
-                               rd_kafka_message_delivery_count(rkm),
-                               ack_type_to_str(ack_type));
-
-                        if (rkm->key && is_printable(rkm->key, rkm->key_len))
-                                printf(" Key: %.*s", (int)rkm->key_len,
-                                       (const char *)rkm->key);
-
-                        if (rkm->payload &&
-                            is_printable(rkm->payload, rkm->len))
-                                printf(" Value: %.*s", (int)rkm->len,
-                                       (const char *)rkm->payload);
-
-                        printf("\n");
 
                         err = rd_kafka_share_acknowledge_type(rkshare, rkm,
                                                               ack_type);
@@ -254,54 +266,39 @@ int main(int argc, char **argv) {
                                         rd_kafka_topic_name(rkm->rkt),
                                         rkm->partition, rkm->offset,
                                         rd_kafka_err2str(err));
-
-                        /* Randomly commit ~10% of the time to
-                         * exercise sync commit mid-batch. */
-                        if (run && (rand() % 100) < 10) {
-                                rd_kafka_topic_partition_list_t *partitions =
-                                    NULL;
-
-                                printf(
-                                    "Calling "
-                                    "rd_kafka_share_commit_sync()\n");
-                                error = rd_kafka_share_commit_sync(
-                                    rkshare, 30000, &partitions);
-                                if (error) {
-                                        fprintf(stderr,
-                                                "%% Commit sync error: %s\n",
-                                                rd_kafka_error_string(error));
-                                        rd_kafka_error_destroy(error);
-                                } else if (partitions) {
-                                        int j;
-                                        printf(
-                                            "Commit sync results "
-                                            "(%d partitions):\n",
-                                            partitions->cnt);
-                                        for (j = 0; j < partitions->cnt; j++) {
-                                                rd_kafka_topic_partition_t
-                                                    *rktpar =
-                                                        &partitions->elems[j];
-                                                printf("  %s [%" PRId32
-                                                       "]: %s\n",
-                                                       rktpar->topic,
-                                                       rktpar->partition,
-                                                       rd_kafka_err2str(
-                                                           rktpar->err));
-                                        }
-                                        rd_kafka_topic_partition_list_destroy(
-                                            partitions);
-                                } else {
-                                        printf("No pending acks to commit\n");
-                                }
-                        }
                 }
+
+                /* Flush this batch's acknowledgements before the next poll().
+                 * commit_sync() blocks for the broker reply and reports the
+                 * per-partition outcome. */
+                error = rd_kafka_share_commit_sync(rkshare, 30000, &committed);
+                if (error) {
+                        fprintf(stderr, "%% Commit sync error: %s\n",
+                                rd_kafka_error_string(error));
+                        rd_kafka_error_destroy(error);
+                } else if (committed) {
+                        for (j = 0; j < committed->cnt; j++) {
+                                rd_kafka_topic_partition_t *rktpar =
+                                    &committed->elems[j];
+                                if (rktpar->err)
+                                        fprintf(stderr,
+                                                "%% Commit failed for "
+                                                "%s [%" PRId32 "]: %s\n",
+                                                rktpar->topic,
+                                                rktpar->partition,
+                                                rd_kafka_err2str(rktpar->err));
+                        }
+                        rd_kafka_topic_partition_list_destroy(committed);
+                }
+
                 rd_kafka_messages_destroy(rkmessages);
         }
 
+done:
         fprintf(stderr, "%% Closing share consumer\n");
         rd_kafka_share_consumer_close(rkshare);
 
         rd_kafka_share_destroy(rkshare);
 
-        return 0;
+        return ret;
 }

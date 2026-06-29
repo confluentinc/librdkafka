@@ -5317,6 +5317,8 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *  - #RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE — not processed; make available
  *    again for redelivery.
  *  - #RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT  — do not deliver again.
+ * @note RENEW (acquisition-lock renewal) is not yet available; see
+ *       "Current limitations" below.
  * The number of times a record has been delivered is available via
  * rd_kafka_message_delivery_count(), which can be used to detect and reject
  * "poison" records after a threshold. The broker also enforces its own maximum
@@ -5335,7 +5337,9 @@ rd_kafka_resp_err_t rd_kafka_purge(rd_kafka_t *rk, int purge_flags);
  *    rd_kafka_share_acknowledge_type() or rd_kafka_share_acknowledge_offset(),
  *    before the next poll. If any record from the previous batch is still
  *    unacknowledged, rd_kafka_share_poll() returns
- *    RD_KAFKA_RESP_ERR__STATE.
+ *    RD_KAFKA_RESP_ERR__STATE. Records you have acknowledged but not yet
+ *    committed are also committed when the consumer is closed (unless it is
+ *    destroyed with RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE).
  *
  * @par Committing acknowledgements
  * Acknowledgements are sent to the broker as part of the next poll, or

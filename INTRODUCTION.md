@@ -2037,6 +2037,9 @@ Every acquired record is acknowledged with one of three types:
 * **REJECT** (`RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_REJECT`) — do not deliver the
   record again.
 
+**Note**: RENEW (acquisition-lock renewal) is not yet available; see
+[Current limitations](#share-consumer-current-limitations).
+
 The number of times a record has already been delivered is available via
 `rd_kafka_message_delivery_count()`, which is useful to detect and reject a
 "poison" record after a threshold. The broker also enforces its own maximum
@@ -2054,7 +2057,9 @@ There are two acknowledgement modes, selected by `share.acknowledgement.mode`:
   `rd_kafka_share_acknowledge_type()` or `rd_kafka_share_acknowledge_offset()`)
   before the next poll. If any record from the previous batch is still
   unacknowledged, `rd_kafka_share_poll()` returns
-  `RD_KAFKA_RESP_ERR__STATE`.
+  `RD_KAFKA_RESP_ERR__STATE`. Records you have acknowledged but not yet
+  committed are also committed when the consumer is closed (unless it is
+  destroyed with `RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE`).
 
 Acknowledgements are sent to the broker as part of the next poll, or flushed
 explicitly with `rd_kafka_share_commit_async()` (fire-and-forget) or

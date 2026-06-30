@@ -1567,7 +1567,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      _RK(share.max_poll_records),
      "The maximum number of records returned in a single call to "
      "`rd_kafka_share_poll()`. This value is sent to the broker in the "
-     "ShareFetch request and therefore bounds the number of records the broker acquires and returns "
+     "ShareFetch request and therefore bounds the number of records the broker "
+     "acquires and returns "
      "per fetch. "
      "Note: this limit is currently best-effort and not strictly enforced, "
      "so a poll may occasionally return more records than this value. "

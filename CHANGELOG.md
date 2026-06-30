@@ -48,6 +48,8 @@ librdkafka v2.15.0 is a feature release:
 > a broker with share groups enabled (generally available in Apache Kafka
 > 4.2.0).
 
+## Enhancements
+* Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
 
 ## Fixes
 
@@ -63,7 +65,6 @@ librdkafka v2.15.0 is a feature release:
   CMake never defined `HAVE_ATOMICS_{32,64}_ATOMIC`, so the setters used a non-atomic fallback that
   returned the new value, which prevented the `ALL_BROKERS_DOWN` event from being raised under CMake.
   Happening since 2.11.1 (#5136).
-* Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered
 
 ### Consumer fixes
 

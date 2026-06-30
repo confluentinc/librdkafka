@@ -1564,7 +1564,15 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
      "corresponds with the broker config `broker.rack`.",
      .sdef = ""},
     {_RK_GLOBAL | _RK_CONSUMER, "max.poll.records", _RK_C_INT,
-     _RK(share.max_poll_records), "tba description,", 1, INT_MAX, 500},
+     _RK(share.max_poll_records),
+     "The maximum number of records returned in a single call to "
+     "`rd_kafka_share_poll()`. This value is sent to the broker in the "
+     "ShareFetch request and therefore bounds the number of records the broker acquires and returns "
+     "per fetch. "
+     "Note: this limit is currently best-effort and not strictly enforced, "
+     "so a poll may occasionally return more records than this value. "
+     "This property is only supported for share consumers.",
+     1, INT_MAX, 500},
     {_RK_GLOBAL | _RK_CONSUMER | _RK_MED, "share.acknowledgement.mode",
      _RK_C_STR, _RK(share.share_acknowledgement_mode),
      "Acknowledgement mode for share consumers. "

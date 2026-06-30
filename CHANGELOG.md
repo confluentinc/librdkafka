@@ -68,7 +68,7 @@ librdkafka v2.15.0 is a feature release:
 
 ### Consumer fixes
 
-* Issues: #5488.
+* Issues: #5541.
   Improve error handling in the KIP-848 `consumer` group protocol:
     - Defer the leave heartbeat until the assignment is revoked, so a member that
       exceeds `max.poll.interval.ms` rejoins cleanly instead of being rejected
@@ -78,6 +78,7 @@ librdkafka v2.15.0 is a feature release:
     - Surface unexpected permanent broker-level heartbeat errors instead of
       retrying them in a loop; internal transport/timeout codes keep their
       existing retry/reconnect handling.
+    Happening since 2.12.0 (#5488)
 
 
 # librdkafka v2.14.2

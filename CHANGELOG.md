@@ -48,6 +48,8 @@ librdkafka v2.15.0 is a feature release:
 > a broker with share groups enabled (generally available in Apache Kafka
 > 4.2.0).
 
+## Enhancements
+* Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
 
 ## Fixes
 
@@ -64,6 +66,19 @@ librdkafka v2.15.0 is a feature release:
   returned the new value, which prevented the `ALL_BROKERS_DOWN` event from being raised under CMake.
   Happening since 2.11.1 (#5136).
 
+### Consumer fixes
+
+* Issues: #5541.
+  Improve error handling in the KIP-848 `consumer` group protocol:
+    - Defer the leave heartbeat until the assignment is revoked, so a member that
+      exceeds `max.poll.interval.ms` rejoins cleanly instead of being rejected
+      with a fatal `INVALID_REQUEST`.
+    - Treat `GROUP_ID_NOT_FOUND` in the ConsumerGroupHeartbeat response as fatal,
+      except while the member is already leaving.
+    - Surface unexpected permanent broker-level heartbeat errors instead of
+      retrying them in a loop; internal transport/timeout codes keep their
+      existing retry/reconnect handling.
+    Happening since 2.12.0 (#5488)
 
 
 # librdkafka v2.14.2

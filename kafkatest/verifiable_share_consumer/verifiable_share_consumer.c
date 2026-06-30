@@ -448,7 +448,7 @@ int main(int argc, char **argv) {
         rd_kafka_resp_err_t err;
         rd_kafka_error_t *error;
         rd_kafka_error_t *commit_error;
-        rd_kafka_message_t *batch[BATCH_CAPACITY];
+        rd_kafka_messages_t *batch         = NULL;
         rd_kafka_message_t *rkm;
         const char *t;
         struct partition_data *pd_c;
@@ -612,8 +612,8 @@ int main(int argc, char **argv) {
 
         while (run && (max_messages < 0 || total_acknowledged < max_messages)) {
                 rcvd  = 0;
-                error = rd_kafka_share_consume_batch(rkshare, POLL_TIMEOUT_MS,
-                                                     batch, &rcvd);
+                error = rd_kafka_share_poll(rkshare, POLL_TIMEOUT_MS,
+                                                     &batch);
                 if (error) {
                         fatal     = rd_kafka_error_is_fatal(error);
                         retriable = rd_kafka_error_is_retriable(error);
@@ -625,18 +625,21 @@ int main(int argc, char **argv) {
                                 cleanup_and_exit(1);
                         continue;
                 }
-                if (rcvd == 0)
+                rcvd = rd_kafka_messages_count(batch);
+                if (rcvd == 0) {
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
                         continue;
+                }
 
                 rd_list_clear(&consumed);
                 consumed_in_batch = 0;
 
                 for (i = 0; i < rcvd; i++) {
-                        rkm = batch[i];
+                        rkm = rd_kafka_messages_get(batch, i);
                         if (rkm->err) {
                                 fprintf(stderr, "share msg err: %s\n",
                                         rd_kafka_message_errstr(rkm));
-                                rd_kafka_message_destroy(rkm);
                                 continue;
                         }
 
@@ -648,9 +651,13 @@ int main(int argc, char **argv) {
 
                         if (verbose)
                                 emit_record_data(rkm);
-
-                        rd_kafka_message_destroy(rkm);
                 }
+
+                /* Messages are owned by the batch; destroy the batch (which
+                 * frees all contained messages) and reset to NULL so the next
+                 * rd_kafka_share_poll() sees a NULL out-pointer as required. */
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
 
                 if (consumed_in_batch > 0)
                         emit_records_consumed(&consumed, consumed_in_batch);

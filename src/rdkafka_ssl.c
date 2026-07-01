@@ -45,6 +45,7 @@
 #pragma comment(lib, "libssl.lib")
 #endif
 
+#include <openssl/tls1.h>
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 
@@ -1875,7 +1876,39 @@ static rd_bool_t rd_kafka_ssl_ctx_load_providers(rd_kafka_t *rk,
 }
 #endif
 
+static rd_bool_t rd_kafka_ssl_cipher_is_tls13(const char *cipher, int n)
+{
+        return (strncmp(cipher, TLS1_3_RFC_AES_128_GCM_SHA256, n) == 0
+                || strncmp(cipher, TLS1_3_RFC_AES_256_GCM_SHA384, n) == 0
+                || strncmp(cipher, TLS1_3_RFC_CHACHA20_POLY1305_SHA256, n) == 0
+                || strncmp(cipher, TLS1_3_RFC_AES_128_CCM_SHA256, n) == 0
+                || strncmp(cipher, TLS1_3_RFC_AES_128_CCM_8_SHA256, n) == 0);
+}
 
+static rd_bool_t rd_kafka_ssl_ctx_set_ciphers(SSL_CTX *ctx, const char *cipher_suites)
+{
+        rd_bool_t ret;
+        char *dest = NULL;
+        const char *token, *ptr = cipher_suites;
+        size_t len = strlen(cipher_suites);
+        char *list12 = rd_calloc(1, (len + 1) * sizeof(char));
+        char *list13 = rd_calloc(1, (len + 1) * sizeof(char));
+
+        while ((token = strchr(ptr, ':')) != NULL) {
+                dest = rd_kafka_ssl_cipher_is_tls13(ptr, (int)(token - ptr)) ? list13 : list12;
+                strncat(dest, ptr, (int)(token - ptr));
+                strcat(dest, ":");
+                ptr = token + 1;
+        }
+        dest = rd_kafka_ssl_cipher_is_tls13(ptr, strlen(ptr)) ? list13 : list12;
+        strcat(dest, ptr);
+
+        ret = SSL_CTX_set_cipher_list(ctx, list12)
+                && SSL_CTX_set_ciphersuites(ctx, list13);
+        rd_free(list13);
+        rd_free(list12);
+        return ret;
+}
 
 /**
  * @brief Once per rd_kafka_t handle initialization of OpenSSL
@@ -1950,8 +1983,8 @@ int rd_kafka_ssl_ctx_init(rd_kafka_t *rk, char *errstr, size_t errstr_size) {
         if (rk->rk_conf.ssl.cipher_suites) {
                 rd_kafka_dbg(rk, SECURITY, "SSL", "Setting cipher list: %s",
                              rk->rk_conf.ssl.cipher_suites);
-                if (!SSL_CTX_set_cipher_list(ctx,
-                                             rk->rk_conf.ssl.cipher_suites)) {
+                if (!rd_kafka_ssl_ctx_set_ciphers(ctx,
+                                                  rk->rk_conf.ssl.cipher_suites)) {
                         /* Set a string that will prefix the
                          * the OpenSSL error message (which is lousy)
                          * to make it more meaningful. */

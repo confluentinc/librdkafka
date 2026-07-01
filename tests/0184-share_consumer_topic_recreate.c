@@ -640,6 +640,8 @@ static void do_test_recreate_survives_concurrent_producer(void) {
 
         test_create_topic_wait_exists(common_admin, topic, partition_cnt_a, -1,
                                       60 * 1000);
+        test_wait_topic_exists(common_producer, topic, 60 * 1000);
+
         id_initial = fetch_topic_id(topic);
         TEST_SAY("Initial topic_id: %s (partition_cnt=%" PRId32 ")\n",
                  rd_kafka_Uuid_base64str(id_initial), partition_cnt_a);
@@ -649,6 +651,8 @@ static void do_test_recreate_survives_concurrent_producer(void) {
         rkshare = test_create_share_consumer(group_id, "implicit");
 
         test_share_consumer_subscribe_multi(rkshare, 1, topic);
+
+        rd_sleep(3);
 
         /* Start background producer in "before" phase. */
         producer_args.producer  = common_producer;

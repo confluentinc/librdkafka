@@ -49,7 +49,7 @@
 #endif
 
 
-#elif !defined(__WIN32__) && !defined(_MSC_VER) && !defined(__sun) && !defined(_AIX)
+#elif !defined(__WIN32__) && !defined(_MSC_VER) && !defined(__sun) && !defined(_AIX) && !defined(__QNXNTO__)
 #  include <endian.h>
 #endif
 

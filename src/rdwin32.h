@@ -75,7 +75,8 @@ struct msghdr {
 #endif
 
 #define RD_UNUSED
-#define RD_INLINE __inline
+#define RD_INLINE   __inline
+#define RD_NOINLINE __declspec(noinline)
 #define RD_WARN_UNUSED_RESULT
 #define RD_NORETURN       __declspec(noreturn)
 #define RD_IS_CONSTANT(p) (0)

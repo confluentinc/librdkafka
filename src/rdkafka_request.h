@@ -190,6 +190,10 @@ int rd_kafka_buf_read_CurrentLeader(rd_kafka_buf_t *rkbuf,
 int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
                                     rd_kafkap_NodeEndpoints_t *NodeEndpoints);
 
+int rd_kafka_buf_read_TopicConfigErrorCode(
+    rd_kafka_buf_t *rkbuf,
+    rd_kafka_resp_err_t *topic_config_err);
+
 
 rd_kafka_resp_err_t
 rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,

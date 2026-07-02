@@ -5852,7 +5852,7 @@ void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
 
         /* If auto topic creation is not enabled, we create the topic with
          * broker default values */
-        test_create_topic(use_rk, topicname, partition_cnt, -1);
+        test_create_topic_wait_exists(use_rk, topicname, partition_cnt, -1, 5000);
 }
 
 /**

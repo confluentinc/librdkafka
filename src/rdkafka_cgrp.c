@@ -4182,6 +4182,17 @@ void rd_kafka_cgrp_partition_del(rd_kafka_cgrp_t *rkcg,
 
         rd_list_remove(&rkcg->rkcg_toppars, rktp);
 
+        /* Stop the consumer lag timer and release its reference before
+         * releasing the cgrp reference. Both this function and the timer
+         * callback run on the KafkaMain thread, so stopping the timer here
+         * guarantees no callback is in flight when we release the references.
+         * Without this, the broker thread can free the toppar between the
+         * timer capturing its arg pointer and the callback actually running,
+         * causing a heap-use-after-free. */
+        if (rd_kafka_timer_stop(&rktp->rktp_rkt->rkt_rk->rk_timers,
+                                &rktp->rktp_consumer_lag_tmr, 1 /*lock*/))
+                rd_kafka_toppar_destroy(rktp); /* refcnt from timer keep */
+
         rd_kafka_toppar_destroy(rktp); /* refcnt from _add above */
 
         rd_kafka_cgrp_try_terminate(rkcg);

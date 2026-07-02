@@ -290,7 +290,8 @@ rd_kafka_toppar_t *rd_kafka_toppar_new0(rd_kafka_topic_t *rkt,
                         intvl = 10 * 1000;
                 rd_kafka_timer_start(
                     &rkt->rkt_rk->rk_timers, &rktp->rktp_consumer_lag_tmr,
-                    intvl * 1000ll, rd_kafka_toppar_consumer_lag_tmr_cb, rktp);
+                    intvl * 1000ll, rd_kafka_toppar_consumer_lag_tmr_cb,
+                    rd_kafka_toppar_keep(rktp));
         }
 
         rktp->rktp_rkt = rd_kafka_topic_keep(rkt);

@@ -44,12 +44,14 @@ class StatsCb : public RdKafka::EventCb {
   int lag_valid;             // number of times lag has been valid
   bool partitions_assigned;  // partitions were assigned
   bool skip_first;           // skip first event after assignment
+  bool with_txns;            // whether the test is run with transactions or not
 
   StatsCb() {
     calc_lag            = -1;
     lag_valid           = 0;
     partitions_assigned = false;
     skip_first          = true;
+    with_txns           = false;
   }
 
   /**
@@ -77,17 +79,18 @@ class StatsCb : public RdKafka::EventCb {
     }
 
     int64_t consumer_lag = parse_json(event.str().c_str());
+    /* Depending on the implementation the abort transaction control message
+     * may not be stored and be corresponding to the offset of the
+     * last aborted message, so allow for a difference of 1. */
+    int64_t expected_lag = with_txns ? calc_lag - 1 : calc_lag;
 
     Test::Say(3, tostr() << "Stats: consumer_lag is " << consumer_lag << "\n");
     if (consumer_lag == -1) {
       Test::Say(2, "Skipping old stats with invalid consumer_lag\n");
       return; /* Old stats generated before first message consumed */
-    } else if (consumer_lag < calc_lag - 1)
-      /* Depending on the implementation the abort transaction control message
-       * may not be stored and be corresponding to the offset of the
-       * last aborted message, so allow for a difference of 1. */
+    } else if (consumer_lag < expected_lag)
       Test::Fail(tostr() << "Stats consumer_lag " << consumer_lag
-                         << ", expected >= " << calc_lag - 1 << "\n");
+                         << ", expected >= " << expected_lag << "\n");
     else
       lag_valid++;
   }
@@ -237,6 +240,7 @@ static void do_test_consumer_lag(bool with_txns) {
     Test::Fail("assign failed: " + RdKafka::err2str(err));
   RdKafka::TopicPartition::destroy(parts);
   stats.partitions_assigned = true;
+  stats.with_txns           = with_txns;
 
   /* Start consuming */
   Test::Say("Consuming topic " + topic + "\n");

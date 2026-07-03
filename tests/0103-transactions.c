@@ -1173,11 +1173,14 @@ static void do_test_txn_abort_control_message_leader_epoch(void) {
         rd_kafka_topic_partition_list_add(offsets, topic, 0);
         rd_kafka_committed(c, offsets, -1);
 
-        /* Committed offset must be 2 */
+        /* Committed offset must be 1 or 2, depending on the implementation
+         * the control message has the offset of the last aborted message
+         * or the next one. */
         TEST_ASSERT(offsets->cnt == 1, "expected 1 partition, got %d",
                     offsets->cnt);
-        TEST_ASSERT(offsets->elems[0].offset == 2,
-                    "expected offset 2, got %" PRId64,
+        TEST_ASSERT(offsets->elems[0].offset <= 2 &&
+                        offsets->elems[0].offset >= 1,
+                    "expected 1 <= offset <= 2 , got %" PRId64,
                     offsets->elems[0].offset);
 
         /* All done */

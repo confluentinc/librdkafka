@@ -434,6 +434,7 @@ static void consume_subscribe_assign_pause_resume(void) {
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "enable.partition.eof", "true");
         rk = test_create_consumer(topic, NULL, conf, NULL);
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
 
         test_consumer_subscribe(rk, topic);
 

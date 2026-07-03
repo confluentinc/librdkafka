@@ -421,6 +421,7 @@ static void do_empty_commit(void) {
         TEST_SAY(_C_MAG "[ do_empty_commit group.id %s ]\n", group_id);
 
         rk = test_create_consumer(group_id, NULL, conf, tconf);
+        test_create_topic_if_auto_create_disabled(rk, topic, -1);
 
         test_consumer_subscribe(rk, topic);
 

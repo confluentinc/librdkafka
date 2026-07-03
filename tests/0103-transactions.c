@@ -776,6 +776,8 @@ static void do_test_fenced_txn(rd_bool_t produce_after_fence) {
         p2 = test_create_handle(RD_KAFKA_PRODUCER, rd_kafka_conf_dup(conf));
         rd_kafka_conf_destroy(conf);
 
+        test_create_topic_if_auto_create_disabled(p1, topic, -1);
+
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p1, 30 * 1000));
 
         /* Begin a transaction */

@@ -619,9 +619,14 @@ static void do_test_consume_batch_control_msgs(void) {
 
         rd_kafka_committed(consumer, pause_partition_list, timeout_ms);
 
-        TEST_ASSERT(pause_partition_list->elems[0].offset == expected_offset,
-                    "Expected offset should be %" PRId64 ", but it is %" PRId64,
-                    expected_offset, pause_partition_list->elems[0].offset);
+        /* Depending on the implementation the commit and abort transaction
+         * control messages may not be stored and the abort control message
+         * offset be corresponding to the offset of the
+         * last aborted message, so allow for a difference of 2. */
+        TEST_ASSERT(
+            pause_partition_list->elems[0].offset >= expected_offset - 2,
+            "Expected offset should be >= %" PRId64 ", but it is %" PRId64,
+            expected_offset - 2, pause_partition_list->elems[0].offset);
 
         rd_kafka_topic_partition_list_destroy(pause_partition_list);
 

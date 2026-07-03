@@ -82,9 +82,12 @@ class StatsCb : public RdKafka::EventCb {
     if (consumer_lag == -1) {
       Test::Say(2, "Skipping old stats with invalid consumer_lag\n");
       return; /* Old stats generated before first message consumed */
-    } else if (consumer_lag != calc_lag)
+    } else if (consumer_lag < calc_lag - 1)
+      /* Depending on the implementation the abort transaction control message
+       * may not be stored and be corresponding to the offset of the
+       * last aborted message, so allow for a difference of 1. */
       Test::Fail(tostr() << "Stats consumer_lag " << consumer_lag
-                         << ", expected " << calc_lag << "\n");
+                         << ", expected >= " << calc_lag - 1 << "\n");
     else
       lag_valid++;
   }

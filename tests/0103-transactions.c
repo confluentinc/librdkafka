@@ -348,8 +348,8 @@ void do_test_consumer_producer_txn(void) {
         p1 = test_create_handle(RD_KAFKA_PRODUCER, tmpconf);
 
         /* Create input and output topics */
-        test_create_topic_wait_exists(p1, input_topic, 4, 3, 5000);
-        test_create_topic_wait_exists(p1, output_topic, 4, 3, 5000);
+        test_create_topic_wait_exists(p1, input_topic, 4, -1, 5000);
+        test_create_topic_wait_exists(p1, output_topic, 4, -1, 5000);
 
         /* Seed input topic with messages */
         TEST_CALL_ERROR__(rd_kafka_init_transactions(p1, 30 * 1000));

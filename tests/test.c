@@ -5852,7 +5852,8 @@ void test_create_topic_if_auto_create_disabled(rd_kafka_t *use_rk,
 
         /* If auto topic creation is not enabled, we create the topic with
          * broker default values */
-        test_create_topic_wait_exists(use_rk, topicname, partition_cnt, -1, 5000);
+        test_create_topic_wait_exists(use_rk, topicname, partition_cnt, -1,
+                                      5000);
 }
 
 /**
@@ -6501,7 +6502,7 @@ void test_wait_metadata_update(rd_kafka_t *rk,
          * Sleeping comes before the full metadata requests because otherwise
          * those requests can trigger rejoins in case of
          * regex subscriptions. */
-        rd_sleep(1);
+        test_wait_for_metadata_propagation(1);
 
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);

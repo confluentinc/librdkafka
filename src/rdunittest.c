@@ -437,6 +437,7 @@ extern int unittest_sasl_oauthbearer_oidc_assertion(void);
 extern int unittest_admin(void);
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
+extern int unittest_sasl(void);
 #if WITH_SSL
 extern int unittest_ssl(void);
 #endif
@@ -465,6 +466,7 @@ int rd_unittest(void) {
 #endif
             {"conf", unittest_conf},
             {"broker", unittest_broker},
+            {"sasl", unittest_sasl},
             {"request", unittest_request},
 #if WITH_SASL_OAUTHBEARER
             {"sasl_oauthbearer", unittest_sasl_oauthbearer},

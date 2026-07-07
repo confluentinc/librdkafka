@@ -314,6 +314,7 @@ _TEST_DECL(0184_share_consumer_topic_recreate_local);
 _TEST_DECL(0185_share_consumer_max_poll_interval);
 _TEST_DECL(0186_share_consumer_fatal_error);
 _TEST_DECL(0190_share_consumer_telemetry);
+_TEST_DECL(0191_ipv6_nodename_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -612,6 +613,7 @@ struct test tests[] = {
     _TEST(0190_share_consumer_telemetry,
           TEST_F_MANUAL,
           TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0191_ipv6_nodename_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),

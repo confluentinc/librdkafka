@@ -1913,6 +1913,12 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
 
         for (i = 0; i < (int)eligible_topic_cnt; i++)
                 partition_cnt += eligible_topics[i]->metadata->partition_cnt;
+        /* Owned partitions may include stale claims not present in the
+         * currently eligible metadata. Size ownership maps for both. */
+        size_t owned_partition_cnt = partition_cnt;
+        for (i = 0; i < (int)member_cnt; i++)
+                if (members[i].rkgm_owned)
+                        owned_partition_cnt += members[i].rkgm_owned->cnt;
         const rd_kafka_metadata_internal_t *mdi =
             rd_kafka_metadata_get_internal(metadata);
 
@@ -1933,7 +1939,7 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
 
         /* Map partition to ConsumerGenerationPair */
         map_toppar_cgpair_t prevAssignment =
-            RD_MAP_INITIALIZER(partition_cnt, rd_kafka_topic_partition_cmp,
+            RD_MAP_INITIALIZER(owned_partition_cnt, rd_kafka_topic_partition_cmp,
                                rd_kafka_topic_partition_hash,
                                rd_kafka_topic_partition_destroy_free,
                                ConsumerGenerationPair_destroy);
@@ -1961,7 +1967,7 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
 
         /* Mapping of partition to current consumer. */
         map_toppar_str_t currentPartitionConsumer =
-            RD_MAP_INITIALIZER(partition_cnt, rd_kafka_topic_partition_cmp,
+            RD_MAP_INITIALIZER(owned_partition_cnt, rd_kafka_topic_partition_cmp,
                                rd_kafka_topic_partition_hash,
                                rd_kafka_topic_partition_destroy_free,
                                NULL /* refs members.rkgm_member_id->str */);
@@ -1984,7 +1990,7 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
         prepopulateCurrentAssignments(
             rk, members, member_cnt, &subscriptions, &currentAssignment,
             &prevAssignment, &currentPartitionConsumer,
-            &consumer2PotentialTopics, partition_cnt);
+            &consumer2PotentialTopics, owned_partition_cnt);
 
         isFreshAssignment = rd_true;
         RD_MAP_FOREACH(consumer, partitions, &currentAssignment) {

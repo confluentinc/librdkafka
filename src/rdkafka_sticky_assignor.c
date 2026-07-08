@@ -368,8 +368,9 @@ typedef struct PartitionMovements_s {
 
 
 static void PartitionMovements_init(PartitionMovements_t *pmov,
+                                    size_t partition_cnt,
                                     size_t topic_cnt) {
-        RD_MAP_INIT(&pmov->partitionMovements, topic_cnt * 3,
+        RD_MAP_INIT(&pmov->partitionMovements, partition_cnt,
                     rd_kafka_topic_partition_cmp, rd_kafka_topic_partition_hash,
                     NULL, ConsumerPair_free);
 
@@ -1974,9 +1975,9 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
         const rd_map_elem_t *elem;
 
         /* Initialize PartitionMovements */
-        PartitionMovements_init(&partitionMovements, eligible_topic_cnt);
 
-        /* Prepopulate current and previous assignments */
+        PartitionMovements_init(&partitionMovements, partition_cnt,
+                                eligible_topic_cnt);
         prepopulateCurrentAssignments(
             rk, members, member_cnt, &subscriptions, &currentAssignment,
             &prevAssignment, &currentPartitionConsumer,

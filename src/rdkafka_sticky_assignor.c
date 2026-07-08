@@ -1545,29 +1545,18 @@ populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
  * @returns true if all consumers have identical subscriptions based on
  *          the currently available topics and partitions.
  *
- * @remark The Java code checks both partition2AllPotentialConsumers and
- *         and consumer2AllPotentialPartitions but since these maps
- *         are symmetrical we only check one of them.
- *         ^ FIXME, but we do.
+ * @remark The partition-to-consumer map is sufficient because the potential
+ *         partition and consumer maps are constructed symmetrically.
  */
 static rd_bool_t areSubscriptionsIdentical(
-    map_toppar_list_t *partition2AllPotentialConsumers,
-    map_str_toppar_list_t *consumer2AllPotentialPartitions) {
+    map_toppar_list_t *partition2AllPotentialConsumers) {
         const void *ignore;
-        const rd_list_t *lcurr, *lprev                       = NULL;
-        const rd_kafka_topic_partition_list_t *pcurr, *pprev = NULL;
+        const rd_list_t *lcurr, *lprev = NULL;
 
         RD_MAP_FOREACH(ignore, lcurr, partition2AllPotentialConsumers) {
                 if (lprev && rd_list_cmp(lcurr, lprev, rd_map_str_cmp))
                         return rd_false;
                 lprev = lcurr;
-        }
-
-        RD_MAP_FOREACH(ignore, pcurr, consumer2AllPotentialPartitions) {
-                if (pprev && rd_kafka_topic_partition_list_cmp(
-                                 pcurr, pprev, rd_kafka_topic_partition_cmp))
-                        return rd_false;
-                pprev = pcurr;
         }
 
         if (ignore) /* Avoid unused warning */
@@ -1633,8 +1622,7 @@ sortPartitions(rd_kafka_t *rk,
                      isFreshAssignment ? "fresh" : "existing");
 
         if (isFreshAssignment ||
-            !areSubscriptionsIdentical(partition2AllPotentialConsumers,
-                                       consumer2AllPotentialPartitions)) {
+            !areSubscriptionsIdentical(partition2AllPotentialConsumers)) {
                 /* Create an ascending sorted list of partitions based on
                  * how many consumers can potentially use them. */
                 RD_MAP_FOREACH(partition, consumers,

@@ -1907,7 +1907,13 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
             &prevAssignment, &currentPartitionConsumer,
             &consumer2AllPotentialPartitions, partition_cnt);
 
-        isFreshAssignment = RD_MAP_IS_EMPTY(&currentAssignment);
+        isFreshAssignment = rd_true;
+        RD_MAP_FOREACH(consumer, partitions, &currentAssignment) {
+                if (partitions->cnt > 0) {
+                        isFreshAssignment = rd_false;
+                        break;
+                }
+        }
 
         /* Populate partition2AllPotentialConsumers and
          * consumer2AllPotentialPartitions maps by each eligible topic. */

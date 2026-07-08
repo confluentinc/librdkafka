@@ -1360,13 +1360,16 @@ static void balance(rd_kafka_t *rk,
                      (int)RD_MAP_CNT(&fixedAssignments));
 
         /* Create a deep copy of the current assignment so we can revert to it
-         * if we do not get a more balanced assignment later. */
-        RD_MAP_COPY(&preBalanceAssignment, currentAssignment,
-                    NULL /* just reference the key */,
-                    (rd_map_copy_t *)rd_kafka_topic_partition_list_copy);
-        RD_MAP_COPY(&preBalancePartitionConsumers, currentPartitionConsumer,
-                    rd_kafka_topic_partition_copy_void,
-                    NULL /* references assign_cb(members) fields */);
+         * if we do not get a more balanced assignment later. Cold assignments
+         * are never reverted. */
+        if (!initializing) {
+                RD_MAP_COPY(&preBalanceAssignment, currentAssignment,
+                            NULL /* just reference the key */,
+                            (rd_map_copy_t *)rd_kafka_topic_partition_list_copy);
+                RD_MAP_COPY(&preBalancePartitionConsumers, currentPartitionConsumer,
+                            rd_kafka_topic_partition_copy_void,
+                            NULL /* references currentPartitionConsumer */);
+        }
 
 
         /* If we don't already need to revoke something due to subscription

@@ -372,20 +372,46 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                    rd_atomic32_set(&rkb->rkb_down_reported, 1) == 0) {
 
                 /* Propagate ALL_BROKERS_DOWN event if all brokers are
-                 * now down, unless we're terminating. */
+                 * now down, unless we're terminating.
+                 * The error is reported only once per outage: the
+                 * re-bootstrap sequence resets each broker's down reported
+                 * state to retry all brokers before reaching this condition
+                 * again, so the error would otherwise be reported on every
+                 * re-bootstrap cycle for the same continuing outage.
+                 * It's armed again when any broker connection comes up. */
                 if (rd_atomic32_add(&rkb->rkb_rk->rk_broker_down_cnt, 1) ==
                         rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                             rd_atomic32_get(
                                 &rkb->rkb_rk->rk_logical_broker_cnt) &&
                     !rd_kafka_terminating(rkb->rkb_rk)) {
                         rd_kafka_rebootstrap(rkb->rkb_rk);
-                        rd_kafka_op_err(
-                            rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
-                            "%i/%i brokers are down",
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
-                                rd_atomic32_get(
-                                    &rkb->rkb_rk->rk_logical_broker_cnt));
+                        if (rd_atomic32_set(
+                                &rkb->rkb_rk->rk_all_brokers_down_reported,
+                                1) == 0)
+                                rd_kafka_op_err(
+                                    rkb->rkb_rk,
+                                    RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+                                    "%i/%i brokers are down",
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_down_cnt),
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_cnt) -
+                                        rd_atomic32_get(
+                                            &rkb->rkb_rk
+                                                 ->rk_logical_broker_cnt));
+                        else
+                                rd_kafka_dbg(
+                                    rkb->rkb_rk, BROKER, "ALLDOWN",
+                                    "%i/%i brokers are down: "
+                                    "ALL_BROKERS_DOWN already reported "
+                                    "for the current outage",
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_down_cnt),
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_cnt) -
+                                        rd_atomic32_get(
+                                            &rkb->rkb_rk
+                                                 ->rk_logical_broker_cnt));
                 }
 
         } else if (rd_kafka_broker_state_is_up(state) &&
@@ -401,6 +427,12 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                         if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                                 rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
                                                 1);
+
+                                /* The outage is over: arm the
+                                 * ALL_BROKERS_DOWN report again. */
+                                rd_atomic32_set(
+                                    &rkb->rkb_rk->rk_all_brokers_down_reported,
+                                    0);
 
                                 /* If at least one broker connects we reset
                                  * the down counter to try again with rest of

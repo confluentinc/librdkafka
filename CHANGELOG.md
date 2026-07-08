@@ -1,3 +1,28 @@
+# librdkafka v2.15.1
+
+librdkafka v2.15.1 is a maintenance release:
+
+- Fix to report the `RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN` error only once per
+  outage instead of on every re-bootstrap cycle while all brokers stay
+  unreachable (#5546).
+
+
+## Fixes
+
+### General fixes
+
+- Issues: #5546.
+  The `RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN` error was reported on every
+  re-bootstrap cycle (roughly every reconnect interval) for the whole duration
+  of an outage in which all brokers are unreachable, instead of only once per
+  outage, because the re-bootstrap sequence resets the per-broker
+  down-reported state. The error is now reported once per outage and armed
+  again as soon as any broker connection comes up. Re-bootstrap sequences
+  continue on every cycle as before.
+  Happening since 2.11.1 (#5126).
+
+
+
 # librdkafka v2.15.0
 
 librdkafka v2.15.0 is a feature release:

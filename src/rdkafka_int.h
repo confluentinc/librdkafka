@@ -306,6 +306,12 @@ struct rd_kafka_s {
          *   that have had at least one connection attempt
          *   and are configured or learned. */
         rd_atomic32_t rk_broker_down_cnt;
+        /**  Set to 1 when ERR__ALL_BROKERS_DOWN has been reported for the
+         *   current outage. Prevents re-reporting the error on every
+         *   re-bootstrap cycle while all brokers remain down, given the
+         *   re-bootstrap sequence resets each broker's down reported state.
+         *   Reset to 0 when any non-logical broker enters the UP state. */
+        rd_atomic32_t rk_all_brokers_down_reported;
         /**  Set to 1 when there's a re-bootstrap in progress.
          *   Set to 0 when the re-bootstrap is done.
          *   Accessed from the main thread and the broker threads. */

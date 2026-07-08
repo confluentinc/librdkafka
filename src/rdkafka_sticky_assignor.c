@@ -1372,7 +1372,7 @@ static void prepopulateCurrentAssignments(
         /* For each partition we create a sorted list (by generation) of
          * its consumers. */
         RD_MAP_LOCAL_INITIALIZER(
-            sortedPartitionConsumersByGeneration, member_cnt * 10 /* FIXME */,
+            sortedPartitionConsumersByGeneration, estimated_partition_cnt,
             const rd_kafka_topic_partition_t *,
             /* List of ConsumerGenerationPair_t */
             rd_list_t *, rd_kafka_topic_partition_cmp,
@@ -1493,8 +1493,7 @@ static void prepopulateCurrentAssignments(
 static void
 populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
                       map_toppar_list_t *partition2AllPotentialConsumers,
-                      map_str_toppar_list_t *consumer2AllPotentialPartitions,
-                      size_t estimated_partition_cnt) {
+                      map_str_toppar_list_t *consumer2AllPotentialPartitions) {
         int i;
         const rd_kafka_group_member_t *rkgm;
 
@@ -1528,7 +1527,7 @@ populatePotentialMaps(const rd_kafka_assignor_topic_t *atopic,
                                   RD_MAP_GET(partition2AllPotentialConsumers,
                                              partition))) {
                                 consumers = rd_list_new(
-                                    RD_MAX(2, (int)estimated_partition_cnt / 2),
+                                    RD_MAX(2, rd_list_cnt(&atopic->members)),
                                     NULL);
                                 RD_MAP_SET(
                                     partition2AllPotentialConsumers,
@@ -1819,8 +1818,11 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
                                    char *errstr,
                                    size_t errstr_size,
                                    void *opaque) {
-        /* FIXME: Let the cgrp pass the actual eligible partition count */
-        size_t partition_cnt = member_cnt * 10; /* FIXME */
+        size_t partition_cnt = 0;
+        int i;
+
+        for (i = 0; i < (int)eligible_topic_cnt; i++)
+                partition_cnt += eligible_topics[i]->metadata->partition_cnt;
         const rd_kafka_metadata_internal_t *mdi =
             rd_kafka_metadata_get_internal(metadata);
 
@@ -1884,7 +1886,6 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
         const char *consumer;
         rd_kafka_topic_partition_list_t *partitions;
         const rd_map_elem_t *elem;
-        int i;
 
         /* Initialize PartitionMovements */
         PartitionMovements_init(&partitionMovements, eligible_topic_cnt);
@@ -1908,7 +1909,7 @@ rd_kafka_sticky_assignor_assign_cb(rd_kafka_t *rk,
         for (i = 0; i < (int)eligible_topic_cnt; i++)
                 populatePotentialMaps(
                     eligible_topics[i], &partition2AllPotentialConsumers,
-                    &consumer2AllPotentialPartitions, partition_cnt);
+                    &consumer2AllPotentialPartitions);
 
 
         /* Sort valid partitions to minimize partition movements. */

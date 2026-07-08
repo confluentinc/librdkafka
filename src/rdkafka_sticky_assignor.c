@@ -555,6 +555,52 @@ static int sort_by_map_elem_val_toppar_list_cnt(const void *_a,
                 return r;
         return strcmp((const char *)a->key, (const char *)b->key);
 }
+/* Move one consumer to its new position after its assignment count changes. */
+static void reorder_sorted_consumer(rd_list_t *sorted_consumers, int idx) {
+        void *elem = sorted_consumers->rl_elems[idx];
+        int new_idx = idx;
+
+        while (new_idx > 0 &&
+               sort_by_map_elem_val_toppar_list_cnt(
+                   sorted_consumers->rl_elems[new_idx - 1], elem) > 0)
+                new_idx--;
+
+        if (new_idx == idx) {
+                while (new_idx + 1 < sorted_consumers->rl_cnt &&
+                       sort_by_map_elem_val_toppar_list_cnt(
+                           elem, sorted_consumers->rl_elems[new_idx + 1]) > 0)
+                        new_idx++;
+        }
+
+        if (new_idx == idx)
+                return;
+
+        if (new_idx < idx)
+                memmove(&sorted_consumers->rl_elems[new_idx + 1],
+                        &sorted_consumers->rl_elems[new_idx],
+                        sizeof(*sorted_consumers->rl_elems) * (idx - new_idx));
+        else
+                memmove(&sorted_consumers->rl_elems[idx],
+                        &sorted_consumers->rl_elems[idx + 1],
+                        sizeof(*sorted_consumers->rl_elems) *
+                            (new_idx - idx));
+
+        sorted_consumers->rl_elems[new_idx] = elem;
+}
+
+static void reorder_sorted_consumer_by_id(rd_list_t *sorted_consumers,
+                                          const char *consumer) {
+        const rd_map_elem_t *elem;
+        int i;
+
+        RD_LIST_FOREACH(elem, sorted_consumers, i) {
+                if (!strcmp((const char *)elem->key, consumer)) {
+                        reorder_sorted_consumer(sorted_consumers, i);
+                        return;
+                }
+        }
+}
+
 
 
 /**
@@ -593,11 +639,7 @@ maybeAssignPartition(const rd_kafka_topic_partition_t *partition,
                 RD_MAP_SET(currentPartitionConsumer,
                            rd_kafka_topic_partition_copy(partition), consumer);
 
-                /* Re-sort sortedCurrentSubscriptions since this consumer's
-                 * assignment count has increased.
-                 * This is an O(N) operation since it is a single shuffle. */
-                rd_list_sort(sortedCurrentSubscriptions,
-                             sort_by_map_elem_val_toppar_list_cnt);
+                reorder_sorted_consumer(sortedCurrentSubscriptions, i);
                 return rd_true;
         }
         return rd_false;
@@ -694,9 +736,10 @@ static void processPartitionMovement(
         RD_MAP_SET(currentPartitionConsumer,
                    rd_kafka_topic_partition_copy(partition), newConsumer);
 
-        /* Re-sort after assignment count has changed. */
-        rd_list_sort(sortedCurrentSubscriptions,
-                     sort_by_map_elem_val_toppar_list_cnt);
+        if (oldConsumer)
+                reorder_sorted_consumer_by_id(sortedCurrentSubscriptions,
+                                              oldConsumer);
+        reorder_sorted_consumer_by_id(sortedCurrentSubscriptions, newConsumer);
 
         rd_kafka_dbg(rk, ASSIGNOR, "STICKY",
                      "%s [%" PRId32 "] %sassigned to %s (from %s)",
@@ -1794,12 +1837,10 @@ sortPartitions(rd_kafka_t *rk,
                 rd_kafka_topic_partition_list_destroy(prevPartitions);
 
                 if (reSort) {
-                        /* Re-sort the list to keep the consumer with the most
-                         * partitions at the end of the list.
-                         * This should be an O(N) operation given it is at most
-                         * a single shuffle. */
-                        rd_list_sort(&sortedConsumers,
-                                     sort_by_map_elem_val_toppar_list_cnt);
+                        /* Move the updated consumer to its new position. */
+                        reorder_sorted_consumer(
+                            &sortedConsumers,
+                            rd_list_cnt(&sortedConsumers) - 1);
                 }
         }
 

@@ -1,3 +1,29 @@
+# librdkafka v2.15.1
+
+librdkafka v2.15.1 is a maintenance release:
+
+* Fix for consuming messages stored in the legacy MessageSet format
+  (MsgVersion v0..v1): messages were returned to the application with
+  NULL key and value when a flexible Fetch version (v12+) was used (#5549).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Fix for consuming messages stored in the legacy MessageSet format
+  (MsgVersion v0..v1), as served by brokers or topics with
+  `log.message.format.version` < 0.11.
+  The Message Key and Value fields were incorrectly parsed as compact
+  (varint-prefixed) bytes when the enclosing FetchResponse used a flexible
+  version (v12+), while legacy MessageSets always use the fixed-width
+  encoding. Messages were returned to the application with NULL key and
+  value, and the remainder of the MessageSet was misparsed, raising
+  `Unsupported Message(Set) MagicByte` errors.
+  Happening since v2.5.0 (#5549, @delthas).
+
+
+
 # librdkafka v2.15.0
 
 librdkafka v2.15.0 is a feature release:

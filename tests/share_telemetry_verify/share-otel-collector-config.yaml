@@ -19,7 +19,7 @@ exporters:
       encoding: otlp_proto
   debug:
     verbosity: basic
-
+    
 service:
   pipelines:
     metrics:

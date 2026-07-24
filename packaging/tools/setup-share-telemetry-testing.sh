@@ -32,8 +32,13 @@ fi
 
 if [ ! -d "${KAFKA_DIR}" ]; then
     echo "==> Setting up Kafka broker ${KAFKA_VERSION}"
-    wget -q https://downloads.apache.org/kafka/${KAFKA_VERSION}/kafka_2.13-${KAFKA_VERSION}.tgz \
-        -O ${WORK_DIR}/kafka.tgz
+    KAFKA_TGZ=kafka_2.13-${KAFKA_VERSION}.tgz
+    if ! wget -nv "https://downloads.apache.org/kafka/${KAFKA_VERSION}/${KAFKA_TGZ}" \
+            -O ${WORK_DIR}/kafka.tgz; then
+        echo "==> ${KAFKA_VERSION} not on downloads.apache.org, trying archive.apache.org"
+        wget -nv "https://archive.apache.org/dist/kafka/${KAFKA_VERSION}/${KAFKA_TGZ}" \
+            -O ${WORK_DIR}/kafka.tgz
+    fi
     tar -C ${WORK_DIR} -xzf ${WORK_DIR}/kafka.tgz
 
     SP=${KAFKA_DIR}/config/server.properties

@@ -181,11 +181,9 @@ blocks:
       jobs:
         - name: 'Linux Ubuntu amd64: share consumer telemetry'
           commands:
-            # Cache disabled on this branch: build the OTLP plugin + Kafka from
-            # scratch every run so cache handling is ruled out as a failure
-            # source (there is no seeded share-telemetry-* cache on the public
-            # repo, and cache store may fail without write access).
+            - cache restore share-telemetry-${KAFKA_VERSION}-${CACHE_TAG}
             - ./packaging/tools/setup-share-telemetry-testing.sh
+            - cache store share-telemetry-${KAFKA_VERSION}-${CACHE_TAG} tests/share_telemetry_verify/.work
 
   - name: 'Linux Ubuntu aarch64: share consumer tests'
     dependencies: []

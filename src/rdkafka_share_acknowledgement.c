@@ -996,7 +996,7 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
                                             &entry, &idx);
         if (err) {
                 rd_kafka_dbg(rkshare->rkshare_rk, CONSUMER, "SHAREACK",
-                             "acknowledge(%s [%" PRId32 "] @%" PRId64
+                             "Acknowledge(%s [%" PRId32 "] @%" PRId64
                              ") rejected: offset not in any in-flight "
                              "acquired batch",
                              topic, partition, offset);
@@ -1006,7 +1006,7 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
         /* GAP records cannot be acknowledged */
         if (entry->types[idx] == RD_KAFKA_SHARE_INTERNAL_ACK_GAP) {
                 rd_kafka_dbg(rkshare->rkshare_rk, CONSUMER, "SHAREACK",
-                             "acknowledge(%s [%" PRId32 "] @%" PRId64
+                             "Acknowledge(%s [%" PRId32 "] @%" PRId64
                              ") rejected: offset is a GAP record",
                              topic, partition, offset);
                 return RD_KAFKA_RESP_ERR__STATE;

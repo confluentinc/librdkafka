@@ -980,7 +980,7 @@ rd_kafka_share_acknowledge_offset0(rd_kafka_share_t *rkshare,
         /* Explicit acknowledge APIs require explicit acknowledgement mode */
         if (rd_kafka_share_acknowledgement_mode_is_implicit(rkshare)) {
                 rd_kafka_dbg(rkshare->rkshare_rk, CONSUMER, "SHAREACK",
-                             "Acknowledge(%s [%" PRId32 "] @%" PRId64
+                             "acknowledge(%s [%" PRId32 "] @%" PRId64
                              ") rejected: implicit acknowledgement mode",
                              topic, partition, offset);
                 return RD_KAFKA_RESP_ERR__STATE;

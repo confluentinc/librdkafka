@@ -951,13 +951,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            md->topics[i].topic,
-                                                           (void *)strcmp));
+                                                           rd_list_cmp_str));
                 if (requested_topic_ids)
                         rd_list_free_cb(
                             missing_topic_ids,
                             rd_list_remove_cmp(missing_topic_ids,
                                                &mdi->topics[i].topic_id,
-                                               (void *)rd_kafka_Uuid_ptr_cmp));
+                                               rd_kafka_Uuid_ptr_cmp));
                 /* Only update cache when not asking
                  * for all topics or cache entry
                  * already exists. */

@@ -114,7 +114,7 @@ static const char *test_states[] = {
 
 #define _TEST_DECL(NAME) extern int main_##NAME(int, char **)
 #define _TEST(NAME, FLAGS, ...)                                                \
-        {.name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__}
+        { .name = #NAME, .mainfunc = main_##NAME, .flags = FLAGS, __VA_ARGS__ }
 
 
 /**
@@ -287,6 +287,7 @@ _TEST_DECL(0151_purge_brokers_mock);
 _TEST_DECL(0152_rebootstrap_local);
 _TEST_DECL(0153_memberid);
 _TEST_DECL(0154_admin_quota_ut);
+_TEST_DECL(0154_admin_quota_broker);
 _TEST_DECL(0155_share_group_heartbeat_mock);
 _TEST_DECL(0156_share_consumer_fetch_mock);
 _TEST_DECL(0157_share_consumer_ack_mock);
@@ -584,6 +585,7 @@ struct test tests[] = {
     _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
     _TEST(0153_memberid, TEST_F_LOCAL),
     _TEST(0154_admin_quota_ut, TEST_F_LOCAL),
+    _TEST(0154_admin_quota_broker, 0, TEST_BRKVER(2, 6, 0, 0)),
     _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
     _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
     _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),

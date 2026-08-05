@@ -6253,7 +6253,6 @@ rd_kafka_AlterClientQuotasRequest(rd_kafka_broker_t *rkb,
         rd_kafka_ClientQuotaEntry_t *entry;
         rd_kafka_ClientQuotaEntity_t *entity;
         rd_kafka_ClientQuotaOperation_t *operation;
-        int op_timeout;
         int i;
         int j;
         /* Buffer grows automatically; use a modest base size. */
@@ -6269,9 +6268,8 @@ rd_kafka_AlterClientQuotasRequest(rd_kafka_broker_t *rkb,
 
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
-                            "Configurable Quota Management (KIP-257) not "
-                            "supported by broker, requires "
-                            "broker version >= 2.0.0");
+                            "AlterClientQuotas (KIP-546) not supported by "
+                            "broker, requires broker version >= 2.6.0");
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
@@ -6316,11 +6314,6 @@ rd_kafka_AlterClientQuotasRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 1)
                 rd_kafka_buf_write_tags_empty(rkbuf);
 
-        /* timeout */
-        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
-        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
-                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
-
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
@@ -6353,7 +6346,6 @@ rd_kafka_DescribeClientQuotasRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion;
         const rd_kafka_ClientQuotaFilter_t *filter;
         const rd_kafka_ClientQuotaFilterComponent_t *comp;
-        int op_timeout;
         int i;
         /* Buffer grows automatically; use a modest base size. */
         size_t estimated_len;
@@ -6371,9 +6363,8 @@ rd_kafka_DescribeClientQuotasRequest(rd_kafka_broker_t *rkb,
             rkb, RD_KAFKAP_DescribeClientQuotas, 0, 1, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
-                            "Configurable Quota Management (KIP-257) not "
-                            "supported by broker, requires "
-                            "broker version >= 2.0.0");
+                            "DescribeClientQuotas (KIP-546) not supported by "
+                            "broker, requires broker version >= 2.6.0");
                 rd_kafka_replyq_destroy(&replyq);
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
@@ -6400,11 +6391,6 @@ rd_kafka_DescribeClientQuotasRequest(rd_kafka_broker_t *rkb,
 
         if (ApiVersion >= 1)
                 rd_kafka_buf_write_tags_empty(rkbuf);
-
-        /* timeout */
-        op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);
-        if (op_timeout > rkb->rkb_rk->rk_conf.socket_timeout_ms)
-                rd_kafka_buf_set_abs_timeout(rkbuf, op_timeout + 1000, 0);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 

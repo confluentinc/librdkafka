@@ -217,6 +217,7 @@ int main(int argc, char **argv) {
                 const char *quota_key   = NULL;
                 double quota_value      = 0.0;
                 rd_kafka_ClientQuotaEntry_t *entry;
+                rd_kafka_ClientQuotaEntry_t **new_entries;
                 rd_kafka_resp_err_t err;
 
                 if (!strcasecmp(verb, "SET"))
@@ -226,7 +227,7 @@ int main(int argc, char **argv) {
                 else
                         usage("Expected SET or REMOVE, got: %s", verb);
 
-                if (i + 2 + (!is_remove ? 1 : 0) >= argc + 1) {
+                if (argc - i < 3 + (!is_remove ? 1 : 0)) {
                         /* Need at least entity-type entity-name quota-key
                          * (and value for SET) */
                         if (is_remove)
@@ -268,7 +269,11 @@ int main(int argc, char **argv) {
                 if (err)
                         fatal("add_operation failed: %s", errstr);
 
-                entries = realloc(entries, (entry_cnt + 1) * sizeof(*entries));
+                new_entries =
+                    realloc(entries, (entry_cnt + 1) * sizeof(*entries));
+                if (!new_entries)
+                        fatal("Failed to allocate quota entries");
+                entries              = new_entries;
                 entries[entry_cnt++] = entry;
         }
 

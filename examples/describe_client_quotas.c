@@ -87,8 +87,8 @@ static void usage(const char *reason, ...) {
             "Options:\n"
             "  -b <brokers>    Bootstrap server list (default: "
             "localhost:9092)\n"
-            "  -s              Strict mode: only return entries that match\n"
-            "                  all components exactly\n"
+            "  -s              Strict mode: reject entries containing entity\n"
+            "                  types absent from the filter\n"
             "  -X <prop=val>   Set librdkafka configuration property.\n"
             "  -d <dbg,..>     Enable librdkafka debugging (%s).\n"
             "\n"
@@ -151,7 +151,7 @@ static void print_result(const rd_kafka_DescribeClientQuotas_result_t *result) {
                 size_t entity_cnt, value_cnt, j;
 
                 /* Print entities this result entry covers */
-                entities = rd_kafka_DescribeClientQuotas_result_entry_entity(
+                entities = rd_kafka_DescribeClientQuotas_result_entry_entities(
                     entry, &entity_cnt);
                 printf("  Entry %zu (", i);
                 for (j = 0; j < entity_cnt; j++) {

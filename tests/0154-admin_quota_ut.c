@@ -89,18 +89,39 @@ static void do_test_ClientQuotaFilter(void) {
 
         /* DEFAULT match (NULL name) */
         err = rd_kafka_ClientQuotaFilter_add_component(
-            filter, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT, NULL, errstr,
-            sizeof(errstr));
+            filter, "client-id", RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT, NULL,
+            errstr, sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "expected NO_ERROR for DEFAULT component, got %s",
                     rd_kafka_err2str(err));
 
         /* ANY match (NULL name) */
         err = rd_kafka_ClientQuotaFilter_add_component(
-            filter, "client-id", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, NULL, errstr,
+            filter, "ip", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, NULL, errstr,
             sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "expected NO_ERROR for ANY component, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_ClientQuotaFilter_add_component(
+            filter, "bad-exact", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, NULL,
+            errstr, sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for EXACT without match, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_ClientQuotaFilter_add_component(
+            filter, "bad-any", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, "value", errstr,
+            sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for ANY with match, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_ClientQuotaFilter_add_component(
+            filter, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, NULL, errstr,
+            sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for duplicate entity type, got %s",
                     rd_kafka_err2str(err));
 
         rd_kafka_ClientQuotaFilter_destroy(filter);
@@ -156,6 +177,12 @@ static void do_test_ClientQuotaEntry(void) {
                     "expected NO_ERROR for entity with NULL name, got %s",
                     rd_kafka_err2str(err));
 
+        err = rd_kafka_ClientQuotaEntry_add_entity(entry, "user", "bob", errstr,
+                                                   sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for duplicate entity type, got %s",
+                    rd_kafka_err2str(err));
+
         /* NULL quota key must be rejected */
         *errstr = '\0';
         err     = rd_kafka_ClientQuotaEntry_add_operation(
@@ -180,6 +207,13 @@ static void do_test_ClientQuotaEntry(void) {
             sizeof(errstr));
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
                     "expected NO_ERROR for remove operation, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_ClientQuotaEntry_add_operation(
+            entry, "producer_byte_rate", 2048.0, 0 /*remove*/, errstr,
+            sizeof(errstr));
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__INVALID_ARG,
+                    "expected INVALID_ARG for duplicate quota key, got %s",
                     rd_kafka_err2str(err));
 
         rd_kafka_ClientQuotaEntry_destroy(entry);
@@ -386,8 +420,245 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 }
 
 
+static void do_test_AlterClientQuotas_broker(rd_kafka_t *rk,
+                                             const char *user,
+                                             const char *second_entity_type,
+                                             const char *second_entity_name,
+                                             const char *key,
+                                             double value,
+                                             rd_bool_t remove,
+                                             rd_bool_t validate_only) {
+        rd_kafka_ClientQuotaEntry_t *entry;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *queue;
+        rd_kafka_event_t *event;
+        const rd_kafka_AlterClientQuotas_result_t *result;
+        const rd_kafka_ClientQuotaEntry_t **results;
+        const rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        size_t result_cnt;
+        char errstr[512];
+
+        entry = rd_kafka_ClientQuotaEntry_new();
+        TEST_CALL_ERR__(rd_kafka_ClientQuotaEntry_add_entity(
+            entry, "user", user, errstr, sizeof(errstr)));
+        if (second_entity_type)
+                TEST_CALL_ERR__(rd_kafka_ClientQuotaEntry_add_entity(
+                    entry, second_entity_type, second_entity_name, errstr,
+                    sizeof(errstr)));
+        TEST_CALL_ERR__(rd_kafka_ClientQuotaEntry_add_operation(
+            entry, key, value, remove, errstr, sizeof(errstr)));
+
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS);
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 10 * 1000, errstr, sizeof(errstr)));
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_validate_only(
+            options, validate_only, errstr, sizeof(errstr)));
+
+        queue = rd_kafka_queue_new(rk);
+        rd_kafka_AlterClientQuotas(rk, &entry, 1, options, queue);
+        rd_kafka_ClientQuotaEntry_destroy(entry);
+        rd_kafka_AdminOptions_destroy(options);
+
+        event = rd_kafka_queue_poll(queue, 15 * 1000);
+        TEST_ASSERT(event, "AlterClientQuotas result event missing");
+        TEST_CALL_ERR__(rd_kafka_event_error(event));
+
+        result = rd_kafka_event_AlterClientQuotas_result(event);
+        TEST_ASSERT(result, "Expected AlterClientQuotasResult, got %s",
+                    rd_kafka_event_name(event));
+        results =
+            rd_kafka_AlterClientQuotas_result_entries(result, &result_cnt);
+        TEST_ASSERT(result_cnt == 1,
+                    "Expected one AlterClientQuotas result, got %" PRIusz,
+                    result_cnt);
+        error = rd_kafka_ClientQuotaEntry_error(results[0]);
+        err   = error ? rd_kafka_error_code(error) : RD_KAFKA_RESP_ERR_NO_ERROR;
+        TEST_ASSERT(!err, "AlterClientQuotas entry failed: %s",
+                    error ? rd_kafka_error_string(error)
+                          : rd_kafka_err2str(err));
+
+        rd_kafka_event_destroy(event);
+        rd_kafka_queue_destroy(queue);
+}
+
+
+static void
+do_test_DescribeClientQuotas_broker(rd_kafka_t *rk,
+                                    const char *filter_type,
+                                    rd_kafka_ClientQuotaMatchType_t match_type,
+                                    const char *match,
+                                    rd_bool_t strict,
+                                    const char *expected_user,
+                                    const char *expected_key,
+                                    double expected_value,
+                                    rd_bool_t expected_found) {
+        rd_kafka_ClientQuotaFilter_t *filter;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_queue_t *queue;
+        rd_kafka_event_t *event;
+        const rd_kafka_DescribeClientQuotas_result_t *result;
+        const rd_kafka_DescribeClientQuotas_result_entry_t **entries;
+        size_t entry_cnt, i;
+        rd_bool_t found = rd_false;
+        int retries     = 5;
+        char errstr[512];
+
+retry_describe:
+        filter = rd_kafka_ClientQuotaFilter_new(strict);
+        TEST_CALL_ERR__(rd_kafka_ClientQuotaFilter_add_component(
+            filter, filter_type, match_type, match, errstr, sizeof(errstr)));
+        options = rd_kafka_AdminOptions_new(
+            rk, RD_KAFKA_ADMIN_OP_DESCRIBECLIENTQUOTAS);
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+            options, 10 * 1000, errstr, sizeof(errstr)));
+
+        queue = rd_kafka_queue_new(rk);
+        rd_kafka_DescribeClientQuotas(rk, filter, options, queue);
+        rd_kafka_ClientQuotaFilter_destroy(filter);
+        rd_kafka_AdminOptions_destroy(options);
+
+        event = rd_kafka_queue_poll(queue, 15 * 1000);
+        TEST_ASSERT(event, "DescribeClientQuotas result event missing");
+        TEST_CALL_ERR__(rd_kafka_event_error(event));
+        result = rd_kafka_event_DescribeClientQuotas_result(event);
+        TEST_ASSERT(result, "Expected DescribeClientQuotasResult, got %s",
+                    rd_kafka_event_name(event));
+        entries =
+            rd_kafka_DescribeClientQuotas_result_entries(result, &entry_cnt);
+
+        for (i = 0; i < entry_cnt; i++) {
+                const rd_kafka_ClientQuotaEntity_t **entities;
+                const rd_kafka_ClientQuotaValue_t **values;
+                double actual;
+                size_t entity_cnt, value_cnt, j;
+                rd_bool_t user_matches = rd_false;
+
+                entities = rd_kafka_DescribeClientQuotas_result_entry_entities(
+                    entries[i], &entity_cnt);
+                for (j = 0; j < entity_cnt; j++) {
+                        const char *type =
+                            rd_kafka_ClientQuotaEntity_type(entities[j]);
+                        const char *name =
+                            rd_kafka_ClientQuotaEntity_name(entities[j]);
+                        if (!strcmp(type, "user") && name &&
+                            !strcmp(name, expected_user))
+                                user_matches = rd_true;
+                }
+                if (!user_matches)
+                        continue;
+
+                values = rd_kafka_DescribeClientQuotas_result_entry_values(
+                    entries[i], &value_cnt);
+                for (j = 0; j < value_cnt; j++) {
+                        if (!strcmp(rd_kafka_ClientQuotaValue_key(values[j]),
+                                    expected_key)) {
+                                actual =
+                                    rd_kafka_ClientQuotaValue_value(values[j]);
+                                TEST_ASSERT(actual > expected_value - 0.001 &&
+                                                actual < expected_value + 0.001,
+                                            "Expected %s=%f, got %f",
+                                            expected_key, expected_value,
+                                            actual);
+                                found = rd_true;
+                        }
+                }
+        }
+
+        if (found != expected_found && retries-- > 0) {
+                TEST_SAY("Quota update is still propagating; retrying\n");
+                rd_kafka_event_destroy(event);
+                rd_kafka_queue_destroy(queue);
+                rd_usleep(200 * 1000, 0);
+                found = rd_false;
+                goto retry_describe;
+        }
+
+        TEST_ASSERT(found == expected_found,
+                    "Expected quota %s for user %s to be %s", expected_key,
+                    expected_user, expected_found ? "present" : "absent");
+        rd_kafka_event_destroy(event);
+        rd_kafka_queue_destroy(queue);
+}
+
+
+static void do_test_broker_roundtrip(void) {
+        char *user          = rd_strdup(test_mk_topic_name("quota-user", 1));
+        const char *brokers = test_getenv("BROKERS", NULL);
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+
+        if (test_broker_version < TEST_BRKVER(2, 6, 0, 0)) {
+                TEST_SAY("Skipping ClientQuota broker test for Kafka <2.6\n");
+                return;
+        }
+
+        SUB_TEST_QUICK("KIP-546 broker roundtrip");
+        test_conf_init(&conf, NULL, 30);
+        if (brokers)
+                test_conf_set(conf, "bootstrap.servers", brokers);
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* validate_only must not persist the requested quota. */
+        do_test_AlterClientQuotas_broker(rk, user, NULL, NULL,
+                                         "producer_byte_rate", 111111.0,
+                                         rd_false, rd_true);
+        do_test_DescribeClientQuotas_broker(
+            rk, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, user, rd_false, user,
+            "producer_byte_rate", 111111.0, rd_false);
+
+        do_test_AlterClientQuotas_broker(rk, user, NULL, NULL,
+                                         "producer_byte_rate", 222222.0,
+                                         rd_false, rd_false);
+        do_test_DescribeClientQuotas_broker(
+            rk, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, user, rd_false, user,
+            "producer_byte_rate", 222222.0, rd_true);
+        do_test_DescribeClientQuotas_broker(
+            rk, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_ANY, NULL, rd_false, user,
+            "producer_byte_rate", 222222.0, rd_true);
+
+        /* A composite entity exercises DEFAULT without changing a cluster-wide
+         * default quota. */
+        do_test_AlterClientQuotas_broker(rk, user, "client-id", NULL,
+                                         "consumer_byte_rate", 333333.0,
+                                         rd_false, rd_false);
+        do_test_DescribeClientQuotas_broker(
+            rk, "client-id", RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT, NULL,
+            rd_false, user, "consumer_byte_rate", 333333.0, rd_true);
+
+        /* Strict matching excludes the composite user+client-id entity when
+         * the filter only specifies user. */
+        do_test_DescribeClientQuotas_broker(
+            rk, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, user, rd_true, user,
+            "consumer_byte_rate", 333333.0, rd_false);
+
+        do_test_AlterClientQuotas_broker(
+            rk, user, NULL, NULL, "producer_byte_rate", 0.0, rd_true, rd_false);
+        do_test_AlterClientQuotas_broker(rk, user, "client-id", NULL,
+                                         "consumer_byte_rate", 0.0, rd_true,
+                                         rd_false);
+        do_test_DescribeClientQuotas_broker(
+            rk, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, user, rd_false, user,
+            "producer_byte_rate", 0.0, rd_false);
+        do_test_DescribeClientQuotas_broker(
+            rk, "user", RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT, user, rd_false, user,
+            "consumer_byte_rate", 0.0, rd_false);
+
+        rd_kafka_destroy(rk);
+        rd_free(user);
+        SUB_TEST_PASS();
+}
+
+
 int main_0154_admin_quota_ut(int argc, char **argv) {
         do_test_apis(RD_KAFKA_PRODUCER);
         do_test_apis(RD_KAFKA_CONSUMER);
+        return 0;
+}
+
+
+int main_0154_admin_quota_broker(int argc, char **argv) {
+        do_test_broker_roundtrip();
         return 0;
 }

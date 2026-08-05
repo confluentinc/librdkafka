@@ -1740,7 +1740,8 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
             options->for_api == RD_KAFKA_ADMIN_OP_CREATETOPICS ||
             options->for_api == RD_KAFKA_ADMIN_OP_CREATEPARTITIONS ||
             options->for_api == RD_KAFKA_ADMIN_OP_ALTERCONFIGS ||
-            options->for_api == RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS)
+            options->for_api == RD_KAFKA_ADMIN_OP_INCREMENTALALTERCONFIGS ||
+            options->for_api == RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS)
                 rd_kafka_confval_init_int(&options->validate_only,
                                           "validate_only", 0, 1, 0);
         else
@@ -5165,11 +5166,8 @@ void rd_kafka_DeleteConsumerGroupOffsets(
  *
  *
  */
-rd_kafka_ClientQuotaEntity_t *
-rd_kafka_ClientQuotaEntity_new0(const char *type,
-                                const char *name,
-                                rd_kafka_resp_err_t err,
-                                const char *errstr) {
+static rd_kafka_ClientQuotaEntity_t *
+rd_kafka_ClientQuotaEntity_new0(const char *type, const char *name) {
         rd_kafka_ClientQuotaEntity_t *client_quota_entity;
 
         client_quota_entity       = rd_calloc(1, sizeof(*client_quota_entity));
@@ -5178,25 +5176,7 @@ rd_kafka_ClientQuotaEntity_new0(const char *type,
         return client_quota_entity;
 }
 
-rd_kafka_ClientQuotaEntity_t *
-rd_kafka_ClientQuotaEntity_new(const char *type,
-                               const char *name,
-                               char *errstr,
-                               size_t errstr_size) {
-        if (!type) {
-                rd_snprintf(errstr, errstr_size, "Invalid entity type");
-                return NULL;
-        }
-        if (!name) {
-                rd_snprintf(errstr, errstr_size, "Invalid entity name");
-                return NULL;
-        }
-
-        return rd_kafka_ClientQuotaEntity_new0(
-            type, name, RD_KAFKA_RESP_ERR_NO_ERROR, NULL);
-}
-
-void rd_kafka_ClientQuotaEntity_destroy(
+static void rd_kafka_ClientQuotaEntity_destroy(
     rd_kafka_ClientQuotaEntity_t *client_quota_entity) {
         if (client_quota_entity->type)
                 rd_free(client_quota_entity->type);
@@ -5219,7 +5199,7 @@ rd_kafka_ClientQuotaEntity_type(const rd_kafka_ClientQuotaEntity_t *entity) {
         return entity->type;
 }
 
-rd_kafka_ClientQuotaOperation_t *
+static rd_kafka_ClientQuotaOperation_t *
 rd_kafka_ClientQuotaOperation_new0(const char *name,
                                    double value,
                                    rd_bool_t remove) {
@@ -5232,21 +5212,7 @@ rd_kafka_ClientQuotaOperation_new0(const char *name,
         return client_quota_operation;
 }
 
-rd_kafka_ClientQuotaOperation_t *
-rd_kafka_ClientQuotaOperation_new(const char *name,
-                                  double value,
-                                  rd_bool_t remove,
-                                  char *errstr,
-                                  size_t errstr_size) {
-        if (!name) {
-                rd_snprintf(errstr, errstr_size, "Invalid entity name");
-                return NULL;
-        }
-
-        return rd_kafka_ClientQuotaOperation_new0(name, value, remove);
-}
-
-void rd_kafka_ClientQuotaOperation_destroy(
+static void rd_kafka_ClientQuotaOperation_destroy(
     rd_kafka_ClientQuotaOperation_t *client_quota_operation) {
         if (client_quota_operation->name)
                 rd_free(client_quota_operation->name);
@@ -5257,32 +5223,13 @@ static void rd_kafka_ClientQuotaOperation_free(void *ptr) {
         rd_kafka_ClientQuotaOperation_destroy(ptr);
 }
 
-const char *rd_kafka_ClientQuotaOperation_name(
-    const rd_kafka_ClientQuotaOperation_t *operation) {
-        return operation->name;
-}
-
-double rd_kafka_ClientQuotaOperation_value(
-    const rd_kafka_ClientQuotaOperation_t *operation) {
-        return operation->value;
-}
-
-rd_bool_t rd_kafka_ClientQuotaOperation_remove(
-    const rd_kafka_ClientQuotaOperation_t *operation) {
-        return operation->remove;
-}
-
 /**
  * @brief Allocate a new ClientQuotaOperation and make a copy of \p src
  */
 static rd_kafka_ClientQuotaOperation_t *
 rd_kafka_ClientQuotaOperation_copy(const rd_kafka_ClientQuotaOperation_t *src) {
-        rd_kafka_ClientQuotaOperation_t *dst;
-
-        dst = rd_kafka_ClientQuotaOperation_new(src->name, src->value,
-                                                src->remove, NULL, 0);
-        rd_assert(dst);
-        return dst;
+        return rd_kafka_ClientQuotaOperation_new0(src->name, src->value,
+                                                  src->remove);
 }
 
 /**
@@ -5291,7 +5238,7 @@ rd_kafka_ClientQuotaOperation_copy(const rd_kafka_ClientQuotaOperation_t *src) {
 static rd_kafka_ClientQuotaEntity_t *
 rd_kafka_ClientQuotaEntity_copy(const rd_kafka_ClientQuotaEntity_t *src) {
         /* Use _new0 directly to allow NULL name (default entity). */
-        return rd_kafka_ClientQuotaEntity_new0(src->type, src->name, 0, NULL);
+        return rd_kafka_ClientQuotaEntity_new0(src->type, src->name);
 }
 
 /**
@@ -5318,6 +5265,15 @@ void rd_kafka_ClientQuotaEntry_destroy(rd_kafka_ClientQuotaEntry_t *entry) {
         if (entry->error)
                 rd_kafka_error_destroy(entry->error);
         rd_free(entry);
+}
+
+void rd_kafka_ClientQuotaEntry_destroy_array(
+    rd_kafka_ClientQuotaEntry_t **entries,
+    size_t entry_cnt) {
+        size_t i;
+
+        for (i = 0; i < entry_cnt; i++)
+                rd_kafka_ClientQuotaEntry_destroy(entries[i]);
 }
 
 static void rd_kafka_ClientQuotaEntry_free(void *ptr) {
@@ -5355,13 +5311,25 @@ rd_kafka_ClientQuotaEntry_add_entity(rd_kafka_ClientQuotaEntry_t *entry,
                                      const char *name,
                                      char *errstr,
                                      size_t errstr_size) {
+        rd_kafka_ClientQuotaEntity_t *entity;
+        int i;
+
         if (!type) {
                 rd_snprintf(errstr, errstr_size,
                             "Entity type must not be NULL");
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
+
+        RD_LIST_FOREACH(entity, &entry->entities, i) {
+                if (!strcmp(entity->type, type)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Duplicate entity type: %s", type);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+        }
+
         rd_list_add(&entry->entities,
-                    rd_kafka_ClientQuotaEntity_new0(type, name, 0, NULL));
+                    rd_kafka_ClientQuotaEntity_new0(type, name));
         return RD_KAFKA_RESP_ERR_NO_ERROR;
 }
 
@@ -5375,10 +5343,22 @@ rd_kafka_ClientQuotaEntry_add_operation(rd_kafka_ClientQuotaEntry_t *entry,
                                         int remove,
                                         char *errstr,
                                         size_t errstr_size) {
+        rd_kafka_ClientQuotaOperation_t *operation;
+        int i;
+
         if (!key) {
                 rd_snprintf(errstr, errstr_size, "Quota key must not be NULL");
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
+
+        RD_LIST_FOREACH(operation, &entry->operations, i) {
+                if (!strcmp(operation->name, key)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Duplicate quota key: %s", key);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+        }
+
         rd_list_add(&entry->operations,
                     rd_kafka_ClientQuotaOperation_new0(key, value, remove));
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -5457,9 +5437,9 @@ rd_kafka_AlterClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
                         RD_KAFKAP_STR_DUPA(&etype, &ktype);
                         if (!RD_KAFKAP_STR_IS_NULL(&kname))
                                 RD_KAFKAP_STR_DUPA(&ename, &kname);
-                        rd_list_add(&entry->entities,
-                                    rd_kafka_ClientQuotaEntity_new0(
-                                        etype, ename, 0, NULL));
+                        rd_list_add(
+                            &entry->entities,
+                            rd_kafka_ClientQuotaEntity_new0(etype, ename));
                         if (rd_kafka_buf_ApiVersion(reply) >= 1)
                                 rd_kafka_buf_skip_tags(reply);
                 }
@@ -5511,6 +5491,8 @@ void rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
         static const struct rd_kafka_admin_worker_cbs cbs = {
             rd_kafka_AlterClientQuotasRequest,
             rd_kafka_AlterClientQuotasResponse_parse};
+
+        rd_assert(rkqu);
 
         rko = rd_kafka_admin_request_op_new(
             rk, RD_KAFKA_OP_ALTERCLIENTQUOTAS,
@@ -5572,7 +5554,7 @@ rd_kafka_ClientQuotaFilter_t *rd_kafka_ClientQuotaFilter_new(int strict) {
         filter = rd_calloc(1, sizeof(*filter));
         rd_list_init(&filter->components, 0,
                      rd_kafka_ClientQuotaFilterComponent_free);
-        filter->strict = strict;
+        filter->strict = !!strict;
         return filter;
 }
 
@@ -5608,11 +5590,38 @@ rd_kafka_resp_err_t rd_kafka_ClientQuotaFilter_add_component(
     const char *match,
     char *errstr,
     size_t errstr_size) {
+        rd_kafka_ClientQuotaFilterComponent_t *component;
+        int i;
+
         if (!entity_type) {
                 rd_snprintf(errstr, errstr_size,
                             "entity_type must not be NULL");
                 return RD_KAFKA_RESP_ERR__INVALID_ARG;
         }
+
+        if (match_type < RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT ||
+            match_type > RD_KAFKA_CLIENT_QUOTA_MATCH_ANY) {
+                rd_snprintf(errstr, errstr_size, "Invalid match type: %d",
+                            (int)match_type);
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        if ((match_type == RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT && !match) ||
+            (match_type != RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT && match)) {
+                rd_snprintf(errstr, errstr_size,
+                            "EXACT requires a match value; DEFAULT and ANY "
+                            "require NULL");
+                return RD_KAFKA_RESP_ERR__INVALID_ARG;
+        }
+
+        RD_LIST_FOREACH(component, &filter->components, i) {
+                if (!strcmp(component->entity_type, entity_type)) {
+                        rd_snprintf(errstr, errstr_size,
+                                    "Duplicate entity type: %s", entity_type);
+                        return RD_KAFKA_RESP_ERR__INVALID_ARG;
+                }
+        }
+
         rd_list_add(&filter->components,
                     rd_kafka_ClientQuotaFilterComponent_new0(
                         entity_type, (int8_t)match_type, match));
@@ -5650,7 +5659,7 @@ static rd_kafka_DescribeClientQuotas_result_entry_t *
 rd_kafka_DescribeClientQuotas_result_entry_new(void) {
         rd_kafka_DescribeClientQuotas_result_entry_t *entry;
         entry = rd_calloc(1, sizeof(*entry));
-        rd_list_init(&entry->entity, 0,
+        rd_list_init(&entry->entities, 0,
                      (void (*)(void *))rd_kafka_ClientQuotaEntity_free);
         rd_list_init(&entry->values, 0, rd_kafka_ClientQuotaValue_free);
         return entry;
@@ -5658,7 +5667,7 @@ rd_kafka_DescribeClientQuotas_result_entry_new(void) {
 
 static void rd_kafka_DescribeClientQuotas_result_entry_destroy(
     rd_kafka_DescribeClientQuotas_result_entry_t *entry) {
-        rd_list_destroy(&entry->entity);
+        rd_list_destroy(&entry->entities);
         rd_list_destroy(&entry->values);
         rd_free(entry);
 }
@@ -5707,6 +5716,9 @@ rd_kafka_DescribeClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_read_arraycnt(reply, &entry_cnt, 100000);
 
+        if (entry_cnt == -1)
+                entry_cnt = 0;
+
         rd_list_init(&rko_result->rko_u.admin_result.results, entry_cnt,
                      rd_kafka_DescribeClientQuotas_result_entry_free);
 
@@ -5727,9 +5739,9 @@ rd_kafka_DescribeClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
                         RD_KAFKAP_STR_DUPA(&etype, &ktype);
                         if (!RD_KAFKAP_STR_IS_NULL(&kname))
                                 RD_KAFKAP_STR_DUPA(&ename, &kname);
-                        rd_list_add(&entry->entity,
-                                    rd_kafka_ClientQuotaEntity_new0(
-                                        etype, ename, 0, NULL));
+                        rd_list_add(
+                            &entry->entities,
+                            rd_kafka_ClientQuotaEntity_new0(etype, ename));
                         if (rd_kafka_buf_ApiVersion(reply) >= 1)
                                 rd_kafka_buf_skip_tags(reply);
                 }
@@ -5787,11 +5799,11 @@ rd_kafka_DescribeClientQuotas_result_entries(
 }
 
 const rd_kafka_ClientQuotaEntity_t **
-rd_kafka_DescribeClientQuotas_result_entry_entity(
+rd_kafka_DescribeClientQuotas_result_entry_entities(
     const rd_kafka_DescribeClientQuotas_result_entry_t *entry,
     size_t *cntp) {
-        *cntp = rd_list_cnt(&entry->entity);
-        return (const rd_kafka_ClientQuotaEntity_t **)entry->entity.rl_elems;
+        *cntp = rd_list_cnt(&entry->entities);
+        return (const rd_kafka_ClientQuotaEntity_t **)entry->entities.rl_elems;
 }
 
 const rd_kafka_ClientQuotaValue_t **
@@ -5815,6 +5827,9 @@ void rd_kafka_DescribeClientQuotas(rd_kafka_t *rk,
             rd_kafka_DescribeClientQuotasRequest,
             rd_kafka_DescribeClientQuotasResponse_parse,
         };
+
+        rd_assert(rkqu);
+        rd_assert(filter);
 
         rko = rd_kafka_admin_request_op_new(
             rk, RD_KAFKA_OP_DESCRIBECLIENTQUOTAS,

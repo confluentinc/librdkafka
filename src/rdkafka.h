@@ -11222,15 +11222,6 @@ RD_EXPORT const char *
 rd_kafka_ClientQuotaEntity_name(const rd_kafka_ClientQuotaEntity_t *entity);
 
 /**
- * @brief Client Quota Operation
- *
- * This structure is used to define operations on client quotas, such as
- * setting producer_byte_rate or removing request_percentage a quota for a
- * specific entity.
- */
-typedef struct rd_kafka_ClientQuotaOperation_s rd_kafka_ClientQuotaOperation_t;
-
-/**
  * @brief Client Quota Entry
  *
  * This structure is used to combine the entities and the quota operations to
@@ -11251,6 +11242,13 @@ RD_EXPORT rd_kafka_ClientQuotaEntry_t *rd_kafka_ClientQuotaEntry_new(void);
  */
 RD_EXPORT void
 rd_kafka_ClientQuotaEntry_destroy(rd_kafka_ClientQuotaEntry_t *entry);
+
+/**
+ * @brief Destroy an array of ClientQuotaEntry objects.
+ */
+RD_EXPORT void
+rd_kafka_ClientQuotaEntry_destroy_array(rd_kafka_ClientQuotaEntry_t **entries,
+                                        size_t entry_cnt);
 
 /**
  * @brief Add an entity to the ClientQuotaEntry.
@@ -11345,8 +11343,14 @@ rd_kafka_AlterClientQuotas_result_entries(
  * @param options   Optional admin options, or NULL for defaults.
  * @param rkqu      Queue to emit result event on.
  *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
+ *  - rd_kafka_AdminOptions_set_validate_only() - default false
+ *
+ * @remark This operation is supported by brokers with version 2.6.0 or higher.
+ *
  * @remark The result event type emitted on the supplied queue is of type
- *         \c RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT
+ *         \c RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT.
  */
 RD_EXPORT void
 rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
@@ -11369,18 +11373,13 @@ rd_kafka_AlterClientQuotas(rd_kafka_t *rk,
 /**
  * @brief Match type for DescribeClientQuotas filter components.
  */
-typedef enum {
+typedef enum rd_kafka_ClientQuotaMatchType_t {
         RD_KAFKA_CLIENT_QUOTA_MATCH_EXACT = 0, /**< Exact name match */
         RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT =
-            1,                               /**< Default (nameless) entity */
-        RD_KAFKA_CLIENT_QUOTA_MATCH_ANY = 2, /**< Any entity of this type */
+            1, /**< Default (nameless) entity */
+        RD_KAFKA_CLIENT_QUOTA_MATCH_ANY =
+            2, /**< Any named entity of this type */
 } rd_kafka_ClientQuotaMatchType_t;
-
-/**
- * @brief Opaque filter component for DescribeClientQuotas.
- */
-typedef struct rd_kafka_ClientQuotaFilterComponent_s
-    rd_kafka_ClientQuotaFilterComponent_t;
 
 /**
  * @brief Opaque filter for DescribeClientQuotas.
@@ -11401,7 +11400,8 @@ typedef struct rd_kafka_DescribeClientQuotas_result_entry_s
 /**
  * @brief Create a new DescribeClientQuotas filter.
  *
- * @param strict If true, only return entries matching all components exactly.
+ * @param strict If true, matching entities must not contain entity types that
+ *               are absent from the filter components.
  *
  * @returns a newly allocated filter that must be freed with
  *          rd_kafka_ClientQuotaFilter_destroy().
@@ -11425,8 +11425,7 @@ rd_kafka_ClientQuotaFilter_destroy(rd_kafka_ClientQuotaFilter_t *filter);
  *                     \c RD_KAFKA_CLIENT_QUOTA_MATCH_DEFAULT, or
  *                     \c RD_KAFKA_CLIENT_QUOTA_MATCH_ANY.
  * @param match        Entity name for EXACT match; must be NULL for DEFAULT
- *                     and ANY (a non-NULL value will be sent to the broker
- *                     and may result in an error).
+ *                     and ANY.
  * @param errstr       Human-readable error string on failure.
  * @param errstr_size  Size of \p errstr.
  *
@@ -11461,7 +11460,7 @@ rd_kafka_ClientQuotaValue_value(const rd_kafka_ClientQuotaValue_t *val);
  * @returns a pointer to an array of ClientQuotaEntity pointers.
  */
 RD_EXPORT const rd_kafka_ClientQuotaEntity_t **
-rd_kafka_DescribeClientQuotas_result_entry_entity(
+rd_kafka_DescribeClientQuotas_result_entry_entities(
     const rd_kafka_DescribeClientQuotas_result_entry_t *entry,
     size_t *cntp);
 
@@ -11499,6 +11498,11 @@ rd_kafka_DescribeClientQuotas_result_entries(
  * @param filter   Filter specifying which quotas to describe.
  * @param options  Optional admin options, or NULL for defaults.
  * @param rkqu     Queue to emit result event on.
+ *
+ * Supported admin options:
+ *  - rd_kafka_AdminOptions_set_request_timeout() - default socket.timeout.ms
+ *
+ * @remark This operation is supported by brokers with version 2.6.0 or higher.
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT.

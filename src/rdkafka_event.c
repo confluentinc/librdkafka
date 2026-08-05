@@ -99,6 +99,10 @@ const char *rd_kafka_event_name(const rd_kafka_event_t *rkev) {
                 return "ListOffsetsResult";
         case RD_KAFKA_EVENT_ELECTLEADERS_RESULT:
                 return "ElectLeadersResult";
+        case RD_KAFKA_EVENT_ALTERCLIENTQUOTAS_RESULT:
+                return "AlterClientQuotasResult";
+        case RD_KAFKA_EVENT_DESCRIBECLIENTQUOTAS_RESULT:
+                return "DescribeClientQuotasResult";
         default:
                 return "?unknown?";
         }

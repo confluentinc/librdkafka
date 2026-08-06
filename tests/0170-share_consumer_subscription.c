@@ -140,44 +140,61 @@ typedef struct {
 
 
 #define SUBSCRIBE(n)                                                           \
-        {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = 1}
+        { .op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = 1 }
 #define SUBSCRIBE_REPEAT(n, r)                                                 \
-        {.op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = (r)}
-#define SUBSCRIBE_ADD(n) {.op = TEST_OP_SUBSCRIBE_ADD, .topic_cnt = (n)}
+        { .op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = (r) }
+#define SUBSCRIBE_ADD(n)                                                       \
+        { .op = TEST_OP_SUBSCRIBE_ADD, .topic_cnt = (n) }
 #define SUBSCRIBE_NO_CREATE(n)                                                 \
-        {.op         = TEST_OP_SUBSCRIBE,                                      \
-         .topic_cnt  = (n),                                                    \
-         .repeat_cnt = 1,                                                      \
-         .flags      = TEST_OP_F_SKIP_TOPIC_CREATE}
-#define UNSUBSCRIBE()         {.op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = 1}
-#define UNSUBSCRIBE_REPEAT(r) {.op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = (r)}
-#define RESUBSCRIBE(n)        {.op = TEST_OP_RESUBSCRIBE, .topic_cnt = (n)}
-#define PRODUCE(msgs)         {.op = TEST_OP_PRODUCE, .msgs_per_topic = (msgs)}
+        {                                                                      \
+                .op = TEST_OP_SUBSCRIBE, .topic_cnt = (n), .repeat_cnt = 1,    \
+                .flags = TEST_OP_F_SKIP_TOPIC_CREATE                           \
+        }
+#define UNSUBSCRIBE()                                                          \
+        { .op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = 1 }
+#define UNSUBSCRIBE_REPEAT(r)                                                  \
+        { .op = TEST_OP_UNSUBSCRIBE, .repeat_cnt = (r) }
+#define RESUBSCRIBE(n)                                                         \
+        { .op = TEST_OP_RESUBSCRIBE, .topic_cnt = (n) }
+#define PRODUCE(msgs)                                                          \
+        { .op = TEST_OP_PRODUCE, .msgs_per_topic = (msgs) }
 #define PRODUCE_TO_OLD(msgs)                                                   \
-        {.op             = TEST_OP_PRODUCE,                                    \
-         .msgs_per_topic = (msgs),                                             \
-         .flags          = TEST_OP_F_PRODUCE_TO_OLD}
+        {                                                                      \
+                .op = TEST_OP_PRODUCE, .msgs_per_topic = (msgs),               \
+                .flags = TEST_OP_F_PRODUCE_TO_OLD                              \
+        }
 #define PRODUCE_TO_TOPIC(idx, msgs)                                            \
-        {.op             = TEST_OP_PRODUCE_TO_TOPIC,                           \
-         .topic_idx      = (idx),                                              \
-         .msgs_per_topic = (msgs)}
-#define CONSUME(expected) {.op = TEST_OP_CONSUME, .expected_msgs = (expected)}
+        {                                                                      \
+                .op = TEST_OP_PRODUCE_TO_TOPIC, .topic_idx = (idx),            \
+                .msgs_per_topic = (msgs)                                       \
+        }
+#define CONSUME(expected)                                                      \
+        { .op = TEST_OP_CONSUME, .expected_msgs = (expected) }
 #define CONSUME_VERIFY_NO_OLD(expected)                                        \
-        {.op            = TEST_OP_CONSUME,                                     \
-         .expected_msgs = (expected),                                          \
-         .flags         = TEST_OP_F_VERIFY_NO_OLD_MSGS}
-#define CONSUME_ANY() {.op = TEST_OP_CONSUME, .expected_msgs = -1}
+        {                                                                      \
+                .op = TEST_OP_CONSUME, .expected_msgs = (expected),            \
+                .flags = TEST_OP_F_VERIFY_NO_OLD_MSGS                          \
+        }
+#define CONSUME_ANY()                                                          \
+        { .op = TEST_OP_CONSUME, .expected_msgs = -1 }
 #define VERIFY_SUB(cnt)                                                        \
-        {.op = TEST_OP_VERIFY_SUB_CNT, .expected_sub_cnt = (cnt)}
-#define DELETE_TOPIC(idx) {.op = TEST_OP_DELETE_TOPIC, .topic_idx = (idx)}
-#define WAIT_MS(ms)       {.op = TEST_OP_WAIT, .wait_ms = (ms)}
+        { .op = TEST_OP_VERIFY_SUB_CNT, .expected_sub_cnt = (cnt) }
+#define DELETE_TOPIC(idx)                                                      \
+        { .op = TEST_OP_DELETE_TOPIC, .topic_idx = (idx) }
+#define WAIT_MS(ms)                                                            \
+        { .op = TEST_OP_WAIT, .wait_ms = (ms) }
 #define CREATE_CONSUMER(idx)                                                   \
-        {.op = TEST_OP_CREATE_CONSUMER, .consumer_idx = (idx)}
-#define CREATE_TOPIC(n)      {.op = TEST_OP_CREATE_TOPIC, .topic_cnt = (n)}
-#define SUBSCRIBE_EXISTING() {.op = TEST_OP_SUBSCRIBE_EXISTING, .repeat_cnt = 1}
-#define POLL_NO_SUB()        {.op = TEST_OP_POLL_NO_SUB}
-#define SUBSCRIBE_EMPTY()    {.op = TEST_OP_SUBSCRIBE_EMPTY}
-#define TEST_OPS_END()       {.op = TEST_OP_END}
+        { .op = TEST_OP_CREATE_CONSUMER, .consumer_idx = (idx) }
+#define CREATE_TOPIC(n)                                                        \
+        { .op = TEST_OP_CREATE_TOPIC, .topic_cnt = (n) }
+#define SUBSCRIBE_EXISTING()                                                   \
+        { .op = TEST_OP_SUBSCRIBE_EXISTING, .repeat_cnt = 1 }
+#define POLL_NO_SUB()                                                          \
+        { .op = TEST_OP_POLL_NO_SUB }
+#define SUBSCRIBE_EMPTY()                                                      \
+        { .op = TEST_OP_SUBSCRIBE_EMPTY }
+#define TEST_OPS_END()                                                         \
+        { .op = TEST_OP_END }
 
 
 /**

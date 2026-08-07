@@ -452,6 +452,10 @@ fail:
         if (p12)
                 PKCS12_free(p12);
 
+        /* The reason has been copied to errstr, don't leave it on the queue
+         * where a later unrelated failure would report it again. */
+        ERR_clear_error();
+
         return NULL;
 }
 #endif /* WITH_SSL */

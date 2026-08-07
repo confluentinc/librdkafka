@@ -544,6 +544,134 @@ static void do_test_bad_calls() {
   Test::Say("Producer creation failed expectedly: " + errstr + "\n");
 }
 
+
+/* Self-signed certificate valid until 2126. Only ever parsed, never used
+ * for a handshake. */
+static const std::string valid_certificate_pem =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIDITCCAgmgAwIBAgIUbC4ibhU9bHAgjEcO7z3D34wrKlYwDQYJKoZIhvcNAQEL\n"
+    "BQAwHzEdMBsGA1UEAwwUbGlicmRrYWZrYS10ZXN0LTAwOTcwIBcNMjYwODA3MTIw\n"
+    "ODQ3WhgPMjEyNjA3MTQxMjA4NDdaMB8xHTAbBgNVBAMMFGxpYnJka2Fma2EtdGVz\n"
+    "dC0wMDk3MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnW50fTvi7yLy\n"
+    "lzvruQrD7qQsHfSRf7iD6Ihta9hkmXziLgbVMB9WSCOMOKQb9qLxxxolIl8cpC/j\n"
+    "QiOydK3UTimXkK4j4bVkNURa/EsQb+n3gqdxUHb9GlZOERTZNpZX3xvqXIcR4gF4\n"
+    "4SC9QcV88oMD3e0OlPH75JuiT41NbYNiBUIQ6hm/UD5l1yxuYotMTg5py16F5KxC\n"
+    "OA+QBvjXIy768R5nru0ZH+r0lbmlcvE0wojqFWcjyhHz/i0gT7lzjnoV30lsh5es\n"
+    "ksNorsZIAKYqGGSju36ckQm0ApD0DLWUwP1us2lCWcaF9fvOFlapnUwreAewrG8Z\n"
+    "5gh88Z5EgQIDAQABo1MwUTAdBgNVHQ4EFgQUrsO/5SSiOwxvquORFEBqhmVsRpcw\n"
+    "HwYDVR0jBBgwFoAUrsO/5SSiOwxvquORFEBqhmVsRpcwDwYDVR0TAQH/BAUwAwEB\n"
+    "/zANBgkqhkiG9w0BAQsFAAOCAQEAeNXkpmzf7ecN52c7ME8DTmpS6NUlMxSwRXJl\n"
+    "87KOAqOB/K/YfYlIdDMqpwqFb9axa498sIhGAtMjKFGr8YfajupUBjK3EUIGIgWm\n"
+    "aXErE7PQXwuGubtxgasFVYIsK8+w1zuUVgm76PJpfeHGmPDLJx2T0fNJbYgfmyPH\n"
+    "/L38xGpRLdP5mv4JJ/zM8R8MkJXbitwER0Xszzv0gaB/Xf/sg4oRLzQ85pku5ted\n"
+    "9hmclXmZyUOTJmrY7Sf9CQEgut89RDnpWlmRHzz6o4aHZt25j3Cm04aZ9oYEEgc9\n"
+    "bWnDPoD0X7geanPhHiJvbAEJpqQ2fUuZa8AwVcVQYIRX2tcZew==\n"
+    "-----END CERTIFICATE-----\n";
+
+/* A well-formed PEM block whose payload does not decode to an X.509
+ * certificate. */
+static const std::string malformed_certificate_pem =
+    "-----BEGIN CERTIFICATE-----\n"
+    "AAAA\n"
+    "-----END CERTIFICATE-----\n";
+
+
+/**
+ * @brief A trailing certificate block that can't be parsed makes the chain
+ *        unusable and is rejected. That rejection is intentional: the client
+ *        certificate chain is sent to the broker, so it can't be silently
+ *        truncated. The error must name the underlying OpenSSL reason
+ *        rather than "No further error information available".
+ */
+static void do_test_cert_pem_chain_error_reporting() {
+  SUB_TEST();
+
+  {
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    std::string errstr;
+
+    if (conf->set("security.protocol", "SSL", errstr))
+      Test::Fail(errstr);
+    if (conf->set("ssl.certificate.pem", valid_certificate_pem, errstr))
+      Test::Fail(errstr);
+
+    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+    delete conf;
+    if (!producer)
+      Test::Fail(
+          "Expected producer creation to succeed with a valid "
+          "ssl.certificate.pem, got: " +
+          errstr);
+    Test::Say("Valid ssl.certificate.pem accepted (as expected)\n");
+    delete producer;
+  }
+
+  {
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    std::string errstr;
+
+    if (conf->set("security.protocol", "SSL", errstr))
+      Test::Fail(errstr);
+    if (conf->set("ssl.certificate.pem",
+                  valid_certificate_pem + malformed_certificate_pem, errstr))
+      Test::Fail(errstr);
+
+    RdKafka::Producer *producer = RdKafka::Producer::create(conf, errstr);
+    delete conf;
+    if (producer) {
+      delete producer;
+      Test::Fail(
+          "Expected producer creation to fail with a malformed "
+          "certificate chain in ssl.certificate.pem");
+    }
+
+    Test::Say("Malformed certificate chain rejected (as expected): " + errstr +
+              "\n");
+
+    if (errstr.find("No further error information available") !=
+        std::string::npos)
+      Test::Fail("Expected the underlying OpenSSL error to be reported, not: " +
+                 errstr);
+
+    if (errstr.find("error reading certificate chain") == std::string::npos)
+      Test::Fail(
+          "Expected the error to identify the certificate chain as the "
+          "failing part, not: " +
+          errstr);
+
+    /* The error text differs between OpenSSL versions, only its
+     * "error:<code>:<lib>:..." prefix is checked. */
+    if (errstr.find("error:") == std::string::npos)
+      Test::Fail("Expected an OpenSSL error string in: " + errstr);
+  }
+
+  /* Same input through the setter API, which uses a different error path. */
+  {
+    RdKafka::Conf *conf = RdKafka::Conf::create(RdKafka::Conf::CONF_GLOBAL);
+    std::string errstr;
+    std::string pem = valid_certificate_pem + malformed_certificate_pem;
+
+    if (conf->set_ssl_cert(RdKafka::CERT_PUBLIC_KEY, RdKafka::CERT_ENC_PEM,
+                           (void *)pem.data(), pem.size(),
+                           errstr) == RdKafka::Conf::CONF_OK)
+      Test::Fail(
+          "Expected set_ssl_cert() to fail with a malformed "
+          "certificate chain");
+
+    Test::Say("set_ssl_cert() rejected malformed chain (as expected): " +
+              errstr + "\n");
+
+    /* This path appends the reason after ": ", so an empty reason leaves
+     * the message ending in ": ". */
+    if (errstr.size() < 2 || errstr.compare(errstr.size() - 2, 2, ": ") == 0)
+      Test::Fail("Expected an OpenSSL error to be appended to: " + errstr);
+
+    delete conf;
+  }
+
+  SUB_TEST_PASS();
+}
+
 }  // namespace TestSSLVerify
 
 using namespace TestSSLVerify;
@@ -668,6 +796,8 @@ int main_0097_ssl_verify_local(int argc, char **argv) {
       Test::Say("Failed to create producer with junk " + props[i] +
                 " (as expected): " + errstr + "\n");
   }
+
+  do_test_cert_pem_chain_error_reporting();
 
   return 0;
 }

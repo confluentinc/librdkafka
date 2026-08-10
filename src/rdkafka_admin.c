@@ -2094,7 +2094,7 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
         }
 
         /* #topics */
-        rd_kafka_buf_read_i32(reply, &topic_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &topic_cnt, 100000);
 
         if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -2120,10 +2120,50 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
                 int orig_pos;
 
                 rd_kafka_buf_read_str(reply, &ktopic);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 7) {
+                        /* TopicId: not exposed to the caller. */
+                        rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
+                        rd_kafka_buf_read_uuid(reply, &TopicId);
+                }
+
                 rd_kafka_buf_read_i16(reply, &error_code);
 
                 if (rd_kafka_buf_ApiVersion(reply) >= 1)
                         rd_kafka_buf_read_str(reply, &error_msg);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 5) {
+                        int32_t NumPartitions, ReplicationFactor;
+                        int32_t ConfigCnt;
+
+                        /* NumPartitions, ReplicationFactor: not exposed to
+                         * the caller. */
+                        rd_kafka_buf_read_i32(reply, &NumPartitions);
+                        rd_kafka_buf_read_i32(reply, &ReplicationFactor);
+
+                        /* Configs: not exposed to the caller. */
+                        rd_kafka_buf_read_arraycnt(reply, &ConfigCnt, 100000);
+                        while (ConfigCnt-- > 0) {
+                                rd_kafkap_str_t ConfigName, ConfigValue;
+                                int8_t ConfigSource;
+                                rd_bool_t ConfigReadOnly, ConfigIsSensitive;
+
+                                rd_kafka_buf_read_str(reply, &ConfigName);
+                                rd_kafka_buf_read_str(reply, &ConfigValue);
+                                rd_kafka_buf_read_bool(reply, &ConfigReadOnly);
+                                rd_kafka_buf_read_i8(reply, &ConfigSource);
+                                rd_kafka_buf_read_bool(reply,
+                                                       &ConfigIsSensitive);
+                                rd_kafka_buf_skip_tags(reply); /* Config
+                                                                * tags */
+                        }
+                }
+
+                rd_kafka_buf_skip_tags(reply); /* Topic-result tags,
+                                                * including the tagged
+                                                * TopicConfigErrorCode
+                                                * (v5+), which is not
+                                                * exposed to the caller. */
 
                 /* For non-blocking CreateTopicsRequests the broker
                  * will returned REQUEST_TIMED_OUT for topics

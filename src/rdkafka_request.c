@@ -1130,7 +1130,7 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         int16_t ApiVersion;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 2, NULL);
+            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 4, NULL);
         /* If the supported ApiVersions are not yet known,
          * or this broker doesn't support it, we let this request
          * succeed or fail later from the broker thread where the
@@ -1141,6 +1141,10 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetForLeaderEpoch, 1, 4 + (parts->cnt * 64),
             ApiVersion >= 4 /*flexver*/);
+
+        if (ApiVersion >= 3)
+                /* ReplicaId: -1 for a normal consumer/client. */
+                rd_kafka_buf_write_i32(rkbuf, -1);
 
         /* Sort partitions by topic */
         rd_kafka_topic_partition_list_sort_by_topic(parts);

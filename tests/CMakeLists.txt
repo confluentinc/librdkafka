@@ -166,6 +166,7 @@ set(
     0185-share_consumer_max_poll_interval.c
     0186-share_consumer_fatal_error.c
     0190-share_consumer_telemetry.c
+    0191-flexver_group_protocol_mock.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

@@ -2658,7 +2658,7 @@ release of librdkafka.
 | 17     | SaslHandshake                | 1         | 1              |
 | 18     | ApiVersions                  | 4         | 3              |
 | 19     | CreateTopics                 | 7         | 7              |
-| 20     | DeleteTopics                 | 6         | 4              |
+| 20     | DeleteTopics                 | 6         | 6              |
 | 21     | DeleteRecords                | 2         | 2              |
 | 22     | InitProducerId               | 5         | 4              |
 | 23     | OffsetForLeaderEpoch         | 4         | 4              |

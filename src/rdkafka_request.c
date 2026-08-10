@@ -2152,6 +2152,7 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
 void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
                                 const char *group_id,
                                 const char *member_id,
+                                const rd_kafkap_str_t *group_instance_id,
                                 rd_kafka_replyq_t replyq,
                                 rd_kafka_resp_cb_t *resp_cb,
                                 void *opaque) {
@@ -2160,12 +2161,22 @@ void rd_kafka_LeaveGroupRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_LeaveGroup, 0, 1, &features);
+            rkb, RD_KAFKAP_LeaveGroup, 0, 4, &features);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_LeaveGroup, 1, 300);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_LeaveGroup, 1,
+                                                 300, ApiVersion >= 4);
 
         rd_kafka_buf_write_str(rkbuf, group_id, -1);
-        rd_kafka_buf_write_str(rkbuf, member_id, -1);
+
+        if (ApiVersion <= 2) {
+                rd_kafka_buf_write_str(rkbuf, member_id, -1);
+        } else {
+                /* #Members */
+                rd_kafka_buf_write_arraycnt(rkbuf, 1);
+                rd_kafka_buf_write_str(rkbuf, member_id, -1);
+                rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Member tags */
+        }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -2200,7 +2211,30 @@ void rd_kafka_handle_LeaveGroup(rd_kafka_t *rk,
                 goto err;
         }
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_throttle_time(rkbuf);
+
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 3) {
+                int32_t member_cnt;
+                int32_t i;
+
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, 1000000);
+
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafkap_str_t MemberId, GroupInstanceId;
+                        int16_t MemberErrorCode;
+
+                        rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
+                        rd_kafka_buf_read_i16(rkbuf, &MemberErrorCode);
+                        rd_kafka_buf_skip_tags(rkbuf);
+
+                        if (MemberErrorCode && !ErrorCode)
+                                ErrorCode = MemberErrorCode;
+                }
+        }
 
 err:
         actions = rd_kafka_err_action(rkb, ErrorCode, request,

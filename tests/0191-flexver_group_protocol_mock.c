@@ -93,5 +93,7 @@ int main_0191_flexver_group_protocol_mock(int argc, char **argv) {
                                        RD_KAFKAP_Heartbeat, 4);
         do_test_group_protocol_version("FindCoordinator flexible version",
                                        RD_KAFKAP_FindCoordinator, 3);
+        do_test_group_protocol_version("LeaveGroup flexible version",
+                                       RD_KAFKAP_LeaveGroup, 4);
         return 0;
 }

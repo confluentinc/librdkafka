@@ -5534,7 +5534,7 @@ rd_kafka_CreatePartitionsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_CreatePartitions, 0, 2, NULL);
+            rkb, RD_KAFKAP_CreatePartitions, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "CreatePartitions (KIP-195) not supported "

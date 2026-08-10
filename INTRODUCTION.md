@@ -2672,7 +2672,7 @@ release of librdkafka.
 | 32     | DescribeConfigs              | 4         | 4              |
 | 33     | AlterConfigs                 | 2         | 2              |
 | 36     | SaslAuthenticate             | 2         | 2              |
-| 37     | CreatePartitions             | 3         | 2              |
+| 37     | CreatePartitions             | 3         | 3              |
 | 42     | DeleteGroups                 | 2         | 2              |
 | 43     | ElectLeaders                 | 2         | 2              |
 | 44     | IncrementalAlterConfigs      | 1         | 1              |

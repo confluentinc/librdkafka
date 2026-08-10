@@ -3671,7 +3671,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
         /* #resources */
-        rd_kafka_buf_read_i32(reply, &res_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &res_cnt, 100000);
 
         if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -3732,7 +3732,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         config->errstr = rd_strdup(this_errstr);
 
                 /* #config_entries */
-                rd_kafka_buf_read_i32(reply, &entry_cnt);
+                rd_kafka_buf_read_arraycnt(reply, &entry_cnt, 100000);
 
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
                         rd_kafkap_str_t config_name, config_value;
@@ -3749,7 +3749,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_bool(reply, &entry->a.is_readonly);
 
                         /* ApiVersion 0 has is_default field, while
-                         * ApiVersion 1 has source field.
+                         * ApiVersion 1+ has source field.
                          * Convert between the two so they look the same
                          * to the caller. */
                         if (rd_kafka_buf_ApiVersion(reply) == 0) {
@@ -3771,23 +3771,10 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_bool(reply, &entry->a.is_sensitive);
 
 
-                        if (rd_kafka_buf_ApiVersion(reply) == 1) {
-                                /* #config_synonyms (ApiVersion 1) */
-                                rd_kafka_buf_read_i32(reply, &syn_cnt);
-
-                                if (syn_cnt > 100000)
-                                        rd_kafka_buf_parse_fail(
-                                            reply,
-                                            "Broker returned %" PRId32
-                                            " config synonyms for "
-                                            "ConfigResource %d,%s: "
-                                            "limit is 100000",
-                                            syn_cnt, config->restype,
-                                            config->name);
-
-                                if (syn_cnt > 0)
-                                        rd_list_grow(&entry->synonyms, syn_cnt);
-
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1) {
+                                /* #config_synonyms (ApiVersion 1+) */
+                                rd_kafka_buf_read_arraycnt(reply, &syn_cnt,
+                                                           100000);
                         } else {
                                 /* No synonyms in ApiVersion 0 */
                                 syn_cnt = 0;
@@ -3795,7 +3782,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
 
 
-                        /* Read synonyms (ApiVersion 1) */
+                        /* Read synonyms (ApiVersion 1+) */
                         for (si = 0; si < (int)syn_cnt; si++) {
                                 rd_kafkap_str_t syn_name, syn_value;
                                 int8_t syn_source;
@@ -3804,6 +3791,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_kafka_buf_read_str(reply, &syn_name);
                                 rd_kafka_buf_read_str(reply, &syn_value);
                                 rd_kafka_buf_read_i8(reply, &syn_source);
+                                rd_kafka_buf_skip_tags(reply);
 
                                 syn_entry = rd_kafka_ConfigEntry_new0(
                                     syn_name.str, RD_KAFKAP_STR_LEN(&syn_name),
@@ -3829,9 +3817,24 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }
 
+                        if (rd_kafka_buf_ApiVersion(reply) >= 3) {
+                                int8_t ConfigType;
+                                rd_kafkap_str_t Documentation;
+
+                                /* ConfigType: not exposed to the caller. */
+                                rd_kafka_buf_read_i8(reply, &ConfigType);
+                                /* Documentation: not exposed to the
+                                 * caller. */
+                                rd_kafka_buf_read_str(reply, &Documentation);
+                        }
+
+                        rd_kafka_buf_skip_tags(reply); /* ConfigEntry tags */
+
                         rd_kafka_ConfigResource_add_ConfigEntry(config, entry);
                         entry = NULL;
                 }
+
+                rd_kafka_buf_skip_tags(reply); /* DescribeConfigsResult tags */
 
                 /* As a convenience to the application we insert result
                  * in the same order as they were requested. The broker

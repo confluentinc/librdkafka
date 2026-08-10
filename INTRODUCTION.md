@@ -2669,7 +2669,7 @@ release of librdkafka.
 | 29     | DescribeAcls                 | 3         | 2              |
 | 30     | CreateAcls                   | 3         | 2              |
 | 31     | DeleteAcls                   | 3         | 2              |
-| 32     | DescribeConfigs              | 4         | 1              |
+| 32     | DescribeConfigs              | 4         | 4              |
 | 33     | AlterConfigs                 | 2         | 2              |
 | 36     | SaslAuthenticate             | 2         | 2              |
 | 37     | CreatePartitions             | 3         | 2              |

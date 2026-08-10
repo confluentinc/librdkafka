@@ -996,6 +996,26 @@ static void rd_kafka_cgrp_handle_LeaveGroup(rd_kafka_t *rk,
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
 
+        if (request->rkbuf_reqhdr.ApiVersion >= 3) {
+                int32_t member_cnt;
+                int32_t i;
+
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, 1000000);
+
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafkap_str_t MemberId, GroupInstanceId;
+                        int16_t MemberErrorCode;
+
+                        rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
+                        rd_kafka_buf_read_i16(rkbuf, &MemberErrorCode);
+                        rd_kafka_buf_skip_tags(rkbuf);
+
+                        if (MemberErrorCode && !ErrorCode)
+                                ErrorCode = MemberErrorCode;
+                }
+        }
+
 err:
         if (ErrorCode)
                 rd_kafka_dbg(rk, CGRP, "LEAVEGROUP",
@@ -1256,6 +1276,7 @@ static void rd_kafka_cgrp_leave(rd_kafka_cgrp_t *rkcg) {
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(
                     rkcg->rkcg_coord, rkcg->rkcg_group_id->str, member_id,
+                    rkcg->rkcg_group_instance_id,
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_cgrp_handle_LeaveGroup, rkcg);
         } else

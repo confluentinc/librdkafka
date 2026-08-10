@@ -2651,7 +2651,7 @@ release of librdkafka.
 | 10     | FindCoordinator              | 6         | 3              |
 | 11     | JoinGroup                    | 9         | 5              |
 | 12     | Heartbeat                    | 4         | 4              |
-| 13     | LeaveGroup                   | 5         | 1              |
+| 13     | LeaveGroup                   | 5         | 4              |
 | 14     | SyncGroup                    | 5         | 3              |
 | 15     | DescribeGroups               | 6         | 5              |
 | 16     | ListGroups                   | 5         | 4              |

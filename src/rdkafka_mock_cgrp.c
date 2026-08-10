@@ -180,6 +180,12 @@ rd_kafka_mock_cgrp_classic_sync_done(rd_kafka_mock_cgrp_classic_t *mcgrp,
                                   RD_KAFKAP_SyncGroup);
 
                         rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+                        if (resp->rkbuf_reqhdr.ApiVersion >= 5) {
+                                rd_kafka_buf_write_kstr(
+                                    resp, NULL); /* ProtocolType */
+                                rd_kafka_buf_write_kstr(
+                                    resp, NULL); /* ProtocolName */
+                        }
                         /* MemberState */
                         rd_kafka_buf_write_kbytes(
                             resp, !err ? member->assignment : NULL);

@@ -1960,6 +1960,7 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
                                           const rd_kafka_group_member_t *rkgm) {
         rd_kafka_buf_t *rkbuf;
         rd_slice_t slice;
+        size_t len;
 
         rkbuf = rd_kafka_buf_new(1, 100);
         rd_kafka_buf_write_i16(rkbuf, 0); /* Version */
@@ -1976,9 +1977,15 @@ rd_kafka_group_MemberState_consumer_write(rd_kafka_buf_t *env_rkbuf,
 
         /* Get pointer to binary buffer */
         rd_slice_init_full(&slice, &rkbuf->rkbuf_buf);
+        len = rd_slice_remains(&slice);
 
-        /* Write binary buffer as Kafka Bytes to enveloping buffer. */
-        rd_kafka_buf_write_i32(env_rkbuf, (int32_t)rd_slice_remains(&slice));
+        /* Write binary buffer as Kafka Bytes, or KIP-482 COMPACT_BYTES if
+         * the enveloping buffer is a flexible-version request, to the
+         * enveloping buffer. */
+        if (env_rkbuf->rkbuf_flags & RD_KAFKA_OP_F_FLEXVER)
+                rd_kafka_buf_write_uvarint(env_rkbuf, (uint64_t)(len + 1));
+        else
+                rd_kafka_buf_write_i32(env_rkbuf, (int32_t)len);
         rd_buf_write_slice(&env_rkbuf->rkbuf_buf, &slice);
 
         rd_kafka_buf_destroy(rkbuf);
@@ -2003,27 +2010,33 @@ void rd_kafka_SyncGroupRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_SyncGroup, 0, 3, &features);
+            rkb, RD_KAFKAP_SyncGroup, 0, 5, &features);
 
-        rkbuf = rd_kafka_buf_new_request(
+        rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_SyncGroup, 1,
             RD_KAFKAP_STR_SIZE(group_id) + 4 /* GenerationId */ +
                 RD_KAFKAP_STR_SIZE(member_id) +
                 RD_KAFKAP_STR_SIZE(group_instance_id) +
                 4 /* array size group_assignment */ +
-                (assignment_cnt * 100 /*guess*/));
+                (assignment_cnt * 100 /*guess*/),
+            ApiVersion >= 4);
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);
         rd_kafka_buf_write_kstr(rkbuf, member_id);
         if (ApiVersion >= 3)
                 rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
-        rd_kafka_buf_write_i32(rkbuf, assignment_cnt);
+        if (ApiVersion >= 5) {
+                rd_kafka_buf_write_kstr(rkbuf, NULL); /* ProtocolType */
+                rd_kafka_buf_write_kstr(rkbuf, NULL); /* ProtocolName */
+        }
+        rd_kafka_buf_write_arraycnt(rkbuf, assignment_cnt);
 
         for (i = 0; i < assignment_cnt; i++) {
                 const rd_kafka_group_member_t *rkgm = &assignments[i];
 
                 rd_kafka_buf_write_kstr(rkbuf, rkgm->rkgm_member_id);
                 rd_kafka_group_MemberState_consumer_write(rkbuf, rkgm);
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Assignment tags */
         }
 
         /* This is a blocking request */

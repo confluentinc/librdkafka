@@ -1895,7 +1895,12 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &MemberId);
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3)
                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-        rd_kafka_buf_read_i32(rkbuf, &AssignmentCnt);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5) {
+                rd_kafkap_str_t ProtocolType, ProtocolName;
+                rd_kafka_buf_read_str(rkbuf, &ProtocolType);
+                rd_kafka_buf_read_str(rkbuf, &ProtocolName);
+        }
+        rd_kafka_buf_read_arraycnt(rkbuf, &AssignmentCnt, 100000);
 
         /*
          * Construct response
@@ -1955,6 +1960,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
 
                 rd_kafka_buf_read_str(rkbuf, &MemberId2);
                 rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
+                rd_kafka_buf_skip_tags(rkbuf);
 
                 if (err)
                         continue;
@@ -1979,8 +1985,12 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Error case */
-        rd_kafka_buf_write_i16(resp, err);        /* ErrorCode */
-        rd_kafka_buf_write_bytes(resp, NULL, -1); /* MemberState */
+        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5) {
+                rd_kafka_buf_write_kstr(resp, NULL); /* ProtocolType */
+                rd_kafka_buf_write_kstr(resp, NULL); /* ProtocolName */
+        }
+        rd_kafka_buf_write_kbytes(resp, NULL); /* MemberState */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 
@@ -5197,7 +5207,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_JoinGroup]       = {0, 6, 6, rd_kafka_mock_handle_JoinGroup},
         [RD_KAFKAP_Heartbeat]       = {0, 5, 4, rd_kafka_mock_handle_Heartbeat},
         [RD_KAFKAP_LeaveGroup] = {0, 4, 4, rd_kafka_mock_handle_LeaveGroup},
-        [RD_KAFKAP_SyncGroup]  = {0, 4, 4, rd_kafka_mock_handle_SyncGroup},
+        [RD_KAFKAP_SyncGroup]  = {0, 5, 4, rd_kafka_mock_handle_SyncGroup},
         [RD_KAFKAP_AddPartitionsToTxn] =
             {0, 1, -1, rd_kafka_mock_handle_AddPartitionsToTxn},
         [RD_KAFKAP_AddOffsetsToTxn] = {0, 1, -1,

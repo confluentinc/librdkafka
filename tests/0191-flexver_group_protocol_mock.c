@@ -91,5 +91,7 @@ do_test_group_protocol_version(const char *what, int16_t ApiKey, int16_t ApiVers
 int main_0191_flexver_group_protocol_mock(int argc, char **argv) {
         do_test_group_protocol_version("Heartbeat flexible version",
                                        RD_KAFKAP_Heartbeat, 4);
+        do_test_group_protocol_version("FindCoordinator flexible version",
+                                       RD_KAFKAP_FindCoordinator, 3);
         return 0;
 }

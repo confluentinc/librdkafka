@@ -2648,7 +2648,7 @@ release of librdkafka.
 | 3      | Metadata                     | 13        | 13             |
 | 8      | OffsetCommit                 | 9         | 9              |
 | 9      | OffsetFetch                  | 9         | 9              |
-| 10     | FindCoordinator              | 6         | 2              |
+| 10     | FindCoordinator              | 6         | 3              |
 | 11     | JoinGroup                    | 9         | 5              |
 | 12     | Heartbeat                    | 4         | 4              |
 | 13     | LeaveGroup                   | 5         | 1              |

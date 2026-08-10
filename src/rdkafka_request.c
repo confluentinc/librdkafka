@@ -604,13 +604,14 @@ rd_kafka_FindCoordinatorRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_FindCoordinator, 0, 2, NULL);
+            rkb, RD_KAFKAP_FindCoordinator, 0, 3, NULL);
 
         if (coordtype != RD_KAFKA_COORD_GROUP && ApiVersion < 1)
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_FindCoordinator, 1,
-                                         1 + 2 + strlen(coordkey));
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_FindCoordinator,
+                                                 1, 1 + 2 + strlen(coordkey),
+                                                 ApiVersion >= 3);
 
         rd_kafka_buf_write_str(rkbuf, coordkey, -1);
 

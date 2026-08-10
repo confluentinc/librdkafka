@@ -2664,7 +2664,7 @@ release of librdkafka.
 | 23     | OffsetForLeaderEpoch         | 4         | 2              |
 | 24     | AddPartitionsToTxn           | 5         | 3              |
 | 25     | AddOffsetsToTxn              | 4         | 3              |
-| 26     | EndTxn                       | 5         | 1              |
+| 26     | EndTxn                       | 5         | 3              |
 | 28     | TxnOffsetCommit              | 5         | 3              |
 | 29     | DescribeAcls                 | 3         | 2              |
 | 30     | CreateAcls                   | 3         | 2              |

@@ -2377,12 +2377,25 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
         for (i = 0; i < (int)topic_cnt; i++) {
                 rd_kafkap_str_t ktopic;
                 int16_t error_code;
+                rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
+                char *this_errstr         = NULL;
                 rd_kafka_topic_result_t *terr;
                 rd_kafka_NewTopic_t skel;
                 int orig_pos;
 
                 rd_kafka_buf_read_str(reply, &ktopic);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 6) {
+                        /* TopicId: not exposed to the caller. */
+                        rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
+                        rd_kafka_buf_read_uuid(reply, &TopicId);
+                }
+
                 rd_kafka_buf_read_i16(reply, &error_code);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 5)
+                        rd_kafka_buf_read_str(reply, &error_msg);
+
                 rd_kafka_buf_skip_tags(reply);
 
                 /* For non-blocking DeleteTopicsRequests the broker
@@ -2394,12 +2407,22 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
                     rd_kafka_confval_get_int(&rko_req->rko_u.admin_request
                                                   .options.operation_timeout) <=
                         0) {
-                        error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        error_code  = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        this_errstr = NULL;
                 }
 
-                terr = rd_kafka_topic_result_new(
-                    ktopic.str, RD_KAFKAP_STR_LEN(&ktopic), error_code,
-                    error_code ? rd_kafka_err2str(error_code) : NULL);
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                this_errstr =
+                                    (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
+                }
+
+                terr = rd_kafka_topic_result_new(ktopic.str,
+                                                 RD_KAFKAP_STR_LEN(&ktopic),
+                                                 error_code, this_errstr);
 
                 /* As a convenience to the application we insert topic result
                  * in the same order as they were requested. The broker

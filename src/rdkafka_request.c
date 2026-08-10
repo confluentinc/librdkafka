@@ -5387,7 +5387,7 @@ rd_kafka_DeleteTopicsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DeleteTopics, 0, 4, &features);
+            rkb, RD_KAFKAP_DeleteTopics, 0, 6, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
@@ -5404,8 +5404,15 @@ rd_kafka_DeleteTopicsRequest(rd_kafka_broker_t *rkb,
         /* #topics */
         rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(del_topics));
 
-        while ((delt = rd_list_elem(del_topics, i++)))
+        while ((delt = rd_list_elem(del_topics, i++))) {
                 rd_kafka_buf_write_str(rkbuf, delt->topic, -1);
+                if (ApiVersion >= 6) {
+                        rd_kafka_Uuid_t zero_uuid = RD_KAFKA_UUID_ZERO;
+                        /* TopicId: librdkafka only deletes by name. */
+                        rd_kafka_buf_write_uuid(rkbuf, &zero_uuid);
+                        rd_kafka_buf_write_tags_empty(rkbuf);
+                }
+        }
 
         /* timeout */
         op_timeout = rd_kafka_confval_get_int(&options->operation_timeout);

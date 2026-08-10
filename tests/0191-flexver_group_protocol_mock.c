@@ -97,5 +97,7 @@ int main_0191_flexver_group_protocol_mock(int argc, char **argv) {
                                        RD_KAFKAP_LeaveGroup, 4);
         do_test_group_protocol_version("SyncGroup KIP-559 version",
                                        RD_KAFKAP_SyncGroup, 5);
+        do_test_group_protocol_version("JoinGroup flexible version",
+                                       RD_KAFKAP_JoinGroup, 7);
         return 0;
 }

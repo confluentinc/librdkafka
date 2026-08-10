@@ -2074,17 +2074,18 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_JoinGroup, 0, 5, &features);
+            rkb, RD_KAFKAP_JoinGroup, 0, 7, &features);
 
 
-        rkbuf = rd_kafka_buf_new_request(
+        rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_JoinGroup, 1,
             RD_KAFKAP_STR_SIZE(group_id) + 4 /* sessionTimeoutMs */ +
                 4 /* rebalanceTimeoutMs */ + RD_KAFKAP_STR_SIZE(member_id) +
                 RD_KAFKAP_STR_SIZE(group_instance_id) +
                 RD_KAFKAP_STR_SIZE(protocol_type) +
                 4 /* array count GroupProtocols */ +
-                (rd_list_cnt(topics) * 100));
+                (rd_list_cnt(topics) * 100),
+            ApiVersion >= 6);
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.group_session_timeout_ms);
         if (ApiVersion >= 1)
@@ -2093,7 +2094,7 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
         if (ApiVersion >= 5)
                 rd_kafka_buf_write_kstr(rkbuf, group_instance_id);
         rd_kafka_buf_write_kstr(rkbuf, protocol_type);
-        rd_kafka_buf_write_i32(rkbuf, rk->rk_conf.enabled_assignor_cnt);
+        rd_kafka_buf_write_arraycnt(rkbuf, rk->rk_conf.enabled_assignor_cnt);
 
         RD_LIST_FOREACH(rkas, &rk->rk_conf.partition_assignors, i) {
                 rd_kafkap_bytes_t *member_metadata;
@@ -2106,6 +2107,7 @@ void rd_kafka_JoinGroupRequest(rd_kafka_broker_t *rkb,
                     rk->rk_conf.client_rack);
                 rd_kafka_buf_write_kbytes(rkbuf, member_metadata);
                 rd_kafkap_bytes_destroy(member_metadata);
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Protocol tags */
         }
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);

@@ -2649,7 +2649,7 @@ release of librdkafka.
 | 8      | OffsetCommit                 | 9         | 9              |
 | 9      | OffsetFetch                  | 9         | 9              |
 | 10     | FindCoordinator              | 6         | 3              |
-| 11     | JoinGroup                    | 9         | 5              |
+| 11     | JoinGroup                    | 9         | 7              |
 | 12     | Heartbeat                    | 4         | 4              |
 | 13     | LeaveGroup                   | 5         | 4              |
 | 14     | SyncGroup                    | 5         | 5              |

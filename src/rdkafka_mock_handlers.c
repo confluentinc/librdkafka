@@ -5217,7 +5217,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_SyncGroup]  = {0, 5, 4, rd_kafka_mock_handle_SyncGroup},
         [RD_KAFKAP_AddPartitionsToTxn] =
             {0, 3, 3, rd_kafka_mock_handle_AddPartitionsToTxn},
-        [RD_KAFKAP_AddOffsetsToTxn] = {0, 1, -1,
+        [RD_KAFKAP_AddOffsetsToTxn] = {0, 3, 3,
                                        rd_kafka_mock_handle_AddOffsetsToTxn},
         [RD_KAFKAP_TxnOffsetCommit] = {0, 3, 3,
                                        rd_kafka_mock_handle_TxnOffsetCommit},

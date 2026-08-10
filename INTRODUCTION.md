@@ -2662,7 +2662,7 @@ release of librdkafka.
 | 21     | DeleteRecords                | 2         | 2              |
 | 22     | InitProducerId               | 5         | 4              |
 | 23     | OffsetForLeaderEpoch         | 4         | 2              |
-| 24     | AddPartitionsToTxn           | 5         | 0              |
+| 24     | AddPartitionsToTxn           | 5         | 3              |
 | 25     | AddOffsetsToTxn              | 4         | 0              |
 | 26     | EndTxn                       | 5         | 1              |
 | 28     | TxnOffsetCommit              | 5         | 3              |

@@ -2030,6 +2030,13 @@ static void rd_kafka_cgrp_handle_SyncGroup(rd_kafka_t *rk,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 5) {
+                rd_kafkap_str_t ProtocolType, ProtocolName;
+                rd_kafka_buf_read_str(rkbuf, &ProtocolType);
+                rd_kafka_buf_read_str(rkbuf, &ProtocolName);
+        }
+
         rd_kafka_buf_read_kbytes(rkbuf, &MemberState);
 
 err:

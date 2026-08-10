@@ -2646,6 +2646,12 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
         /* Response: ThrottleTimeMs */
         rd_kafka_buf_write_i32(resp, 0);
 
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
+                int32_t ReplicaId;
+                /* ReplicaId */
+                rd_kafka_buf_read_i32(rkbuf, &ReplicaId);
+        }
+
         /* #Topics */
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
 
@@ -2686,6 +2692,7 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_read_i32(rkbuf, &CurrentLeaderEpoch);
                         /* LeaderEpoch */
                         rd_kafka_buf_read_i32(rkbuf, &LeaderEpoch);
+                        rd_kafka_buf_skip_tags(rkbuf); /* Partition tags */
 
                         mpart = rd_kafka_mock_partition_find(mtopic, Partition);
                         if (!err && !mpart)
@@ -2710,7 +2717,12 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_i32(resp, LeaderEpoch);
                         /* Response: Partition */
                         rd_kafka_buf_write_i64(resp, EndOffset);
+                        rd_kafka_buf_write_tags_empty(
+                            resp); /* Partition-result tags */
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);       /* Topic tags */
+                rd_kafka_buf_write_tags_empty(resp); /* Topic-result tags */
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -5223,7 +5235,7 @@ const struct rd_kafka_mock_api_handler
                                        rd_kafka_mock_handle_TxnOffsetCommit},
         [RD_KAFKAP_EndTxn]          = {0, 3, 3, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
-            {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+            {2, 4, 4, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
             {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_ShareGroupHeartbeat] =

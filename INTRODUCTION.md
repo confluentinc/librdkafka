@@ -2671,7 +2671,7 @@ release of librdkafka.
 | 31     | DeleteAcls                   | 3         | 2              |
 | 32     | DescribeConfigs              | 4         | 1              |
 | 33     | AlterConfigs                 | 2         | 2              |
-| 36     | SaslAuthenticate             | 2         | 1              |
+| 36     | SaslAuthenticate             | 2         | 2              |
 | 37     | CreatePartitions             | 3         | 2              |
 | 42     | DeleteGroups                 | 2         | 2              |
 | 43     | ElectLeaders                 | 2         | 2              |

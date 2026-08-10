@@ -5214,7 +5214,7 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_CreateTopics, 0, 4, &features);
+            rkb, RD_KAFKAP_CreateTopics, 0, 7, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
@@ -5232,12 +5232,12 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateTopics, 1,
-                                         4 + (rd_list_cnt(new_topics) * 200) +
-                                             4 + 1);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_CreateTopics, 1,
+            4 + (rd_list_cnt(new_topics) * 200) + 4 + 1, ApiVersion >= 5);
 
         /* #topics */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_topics));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(new_topics));
 
         while ((newt = rd_list_elem(new_topics, i++))) {
                 int partition;
@@ -5287,7 +5287,8 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                 }
 
                 /* #replica_assignment */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->replicas));
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&newt->replicas));
 
                 /* Replicas per partition, see rdkafka_admin.[ch]
                  * for how these are constructed. */
@@ -5303,24 +5304,31 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                         /* partition */
                         rd_kafka_buf_write_i32(rkbuf, partition);
                         /* #replicas */
-                        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(replicas));
+                        rd_kafka_buf_write_arraycnt(rkbuf,
+                                                    rd_list_cnt(replicas));
 
                         for (ri = 0; ri < rd_list_cnt(replicas); ri++) {
                                 /* replica */
                                 rd_kafka_buf_write_i32(
                                     rkbuf, rd_list_get_int32(replicas, ri));
                         }
+
+                        rd_kafka_buf_write_tags_empty(
+                            rkbuf); /* Assignment tags */
                 }
 
                 /* #config_entries */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->config));
+                rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(&newt->config));
 
                 RD_LIST_FOREACH(entry, &newt->config, ei) {
                         /* config_name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+                        rd_kafka_buf_write_tags_empty(rkbuf); /* Config tags */
                 }
+
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Topic tags */
         }
 
         /* timeout */

@@ -6678,7 +6678,7 @@ rd_kafka_AddOffsetsToTxnRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AddOffsetsToTxn, 0, 0, NULL);
+            rkb, RD_KAFKAP_AddOffsetsToTxn, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AddOffsetsToTxnRequest (KIP-98) not supported "
@@ -6687,8 +6687,8 @@ rd_kafka_AddOffsetsToTxnRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_request(rkb, RD_KAFKAP_AddOffsetsToTxn, 1, 100);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_AddOffsetsToTxn,
+                                                 1, 100, ApiVersion >= 3);
 
         /* transactional_id */
         rd_kafka_buf_write_str(rkbuf, transactional_id, -1);

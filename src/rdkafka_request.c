@@ -3594,22 +3594,26 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
         int features;
+        /* Broker does not support -1 (Null) for this field */
+        const rd_kafkap_bytes_t AuthBytes = {.len  = (int32_t)size,
+                                             .data = buf ? buf : ""};
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0);
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 2, &features);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 0, ApiVersion >= 2);
 
         /* Should be sent before any other requests since it is part of
          * the initial connection handshake. */
         rkbuf->rkbuf_prio = RD_KAFKA_PRIO_FLASH;
 
-        /* Broker does not support -1 (Null) for this field */
-        rd_kafka_buf_write_bytes(rkbuf, buf ? buf : "", size);
+        rd_kafka_buf_write_kbytes(rkbuf, &AuthBytes);
 
         /* There are no errors that can be retried, instead
          * close down the connection and reconnect on failure. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
 
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_SaslAuthenticate, 0, 1, &features);
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (replyq.q)

@@ -262,6 +262,7 @@
     <ClCompile Include="..\..\tests\0190-share_consumer_telemetry.c" />
     <ClCompile Include="..\..\tests\0191-ipv6_nodename_mock.c" />
     <ClCompile Include="..\..\tests\0192-flexver_group_protocol_mock.c" />
+    <ClCompile Include="..\..\tests\0193-sasl_authenticate_flexver.c" />
     <ClCompile Include="..\..\tests\8000-idle.cpp" />
     <ClCompile Include="..\..\tests\8001-fetch_from_follower_mock_manual.c" />
     <ClCompile Include="..\..\tests\test.c" />

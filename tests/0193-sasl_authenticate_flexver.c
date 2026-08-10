@@ -51,10 +51,10 @@ static void do_test_sasl_authenticate(void) {
 
         test_conf_init(&conf, NULL, 30);
 
-        if (rd_kafka_conf_get(conf, "sasl.username", username,
-                              &username_sz) != RD_KAFKA_CONF_OK ||
-            rd_kafka_conf_get(conf, "sasl.password", password,
-                              &password_sz) != RD_KAFKA_CONF_OK ||
+        if (rd_kafka_conf_get(conf, "sasl.username", username, &username_sz) !=
+                RD_KAFKA_CONF_OK ||
+            rd_kafka_conf_get(conf, "sasl.password", password, &password_sz) !=
+                RD_KAFKA_CONF_OK ||
             username_sz <= 1 || password_sz <= 1) {
                 rd_kafka_conf_destroy(conf);
                 SUB_TEST_SKIP(

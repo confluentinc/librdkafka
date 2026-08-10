@@ -170,6 +170,7 @@ set(
     0191-ipv6_nodename_mock.c
     0192-cgrp_static_session_timeout_mock.c
     0193-sasl_authenticate_flexver.c
+    0194-flexver_group_protocol_mock.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

@@ -2247,16 +2247,17 @@ void rd_kafka_HeartbeatRequest(rd_kafka_broker_t *rkb,
         int features;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_Heartbeat, 0, 3, &features);
+            rkb, RD_KAFKAP_Heartbeat, 0, 4, &features);
 
         rd_rkb_dbg(rkb, CGRP, "HEARTBEAT",
                    "Heartbeat for group \"%s\" generation id %" PRId32,
                    group_id->str, generation_id);
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_Heartbeat, 1,
-                                         RD_KAFKAP_STR_SIZE(group_id) +
-                                             4 /* GenerationId */ +
-                                             RD_KAFKAP_STR_SIZE(member_id));
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_Heartbeat, 1,
+            RD_KAFKAP_STR_SIZE(group_id) + 4 /* GenerationId */ +
+                RD_KAFKAP_STR_SIZE(member_id),
+            ApiVersion >= 4);
 
         rd_kafka_buf_write_kstr(rkbuf, group_id);
         rd_kafka_buf_write_i32(rkbuf, generation_id);

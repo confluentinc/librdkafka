@@ -100,6 +100,7 @@ typedef struct rd_kafka_mock_cgrp_classic_s {
         char *protocol_type;                     /**< Protocol type */
         char *protocol_name;                     /**< Elected protocol name */
         int32_t generation_id;                   /**< Generation Id */
+        int32_t member_id_seq;                   /**< MemberId sequence */
         int session_timeout_ms;                  /**< Session timeout */
         enum {
                 RD_KAFKA_MOCK_CGRP_STATE_EMPTY,       /* No members */
@@ -892,6 +893,10 @@ rd_kafka_resp_err_t rd_kafka_mock_cgrp_classic_check_state(
 rd_kafka_mock_cgrp_classic_member_t *rd_kafka_mock_cgrp_classic_member_find(
     const rd_kafka_mock_cgrp_classic_t *mcgrp,
     const rd_kafkap_str_t *MemberId);
+const char *rd_kafka_mock_cgrp_classic_member_id_generate(
+    rd_kafka_mock_cgrp_classic_t *mcgrp,
+    char *dst,
+    size_t dst_size);
 void rd_kafka_mock_cgrp_classic_destroy(rd_kafka_mock_cgrp_classic_t *mcgrp);
 rd_kafka_mock_cgrp_classic_t *
 rd_kafka_mock_cgrp_classic_find(rd_kafka_mock_cluster_t *mcluster,

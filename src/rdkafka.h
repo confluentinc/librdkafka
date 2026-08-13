@@ -1476,6 +1476,44 @@ rd_kafka_header_get_all(const rd_kafka_headers_t *hdrs,
                         size_t *sizep);
 
 
+/**
+ * @brief Iterator for all headers.
+ *
+ *        Same semantics as rd_kafka_header_get_all(), but also returns the
+ *        header name's size in \p name_sizep.
+ *
+ * @param hdrs       Headers to iterate.
+ * @param idx        Iterator index, start at 0 and increment by one for each
+ *                   call as long as RD_KAFKA_RESP_ERR_NO_ERROR is returned.
+ * @param namep      (out) Set to a const pointer to the header-name byte
+ *                   sequence. Its length is returned through \p name_sizep.
+ *                   The name bytes may contain embedded NUL bytes and are
+ *                   followed by a trailing NUL; callers must use
+ *                   \p name_sizep to read the name.
+ * @param name_sizep (out) Set to the header name's size (not including
+ *                   null-terminator).
+ * @param valuep     (out) Set to a (null-terminated) const pointer to the
+ *                   value (may be NULL).
+ * @param sizep      (out) Set to the value's size (not including
+ *                   null-terminator).
+ *
+ * @returns RD_KAFKA_RESP_ERR_NO_ERROR if an entry was found, else
+ *          RD_KAFKA_RESP_ERR__NOENT if \p idx is out of range.
+ *
+ * @remark The returned pointer in \p valuep includes a trailing
+ *         null-terminator that is not accounted for in \p sizep.
+ * @remark The returned pointers are only valid as long as the headers list and
+ *         the header item are valid.
+ */
+RD_EXPORT rd_kafka_resp_err_t
+rd_kafka_header_get_all_with_name_size(const rd_kafka_headers_t *hdrs,
+                                       size_t idx,
+                                       const char **namep,
+                                       size_t *name_sizep,
+                                       const void **valuep,
+                                       size_t *sizep);
+
+
 
 /**@}*/
 

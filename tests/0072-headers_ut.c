@@ -233,6 +233,103 @@ static void expect_iter(const char *what,
 }
 
 
+static void do_test_embedded_nul_header_name_size(void) {
+        static const char name_nul[] = {'a', '\0', 'b'};
+        rd_kafka_headers_t *hdrs;
+        rd_kafka_resp_err_t err;
+        const char *name;
+        const char *value;
+        size_t name_size;
+        size_t value_size;
+
+        SUB_TEST_QUICK();
+
+        hdrs = rd_kafka_headers_new(2);
+
+        err =
+            rd_kafka_header_add(hdrs, name_nul, sizeof(name_nul), "v-nul", -1);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "failed to add embedded-NUL header: %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_header_add(hdrs, "a", -1, "v-a", -1);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "failed to add plain header: %s", rd_kafka_err2str(err));
+
+        err = rd_kafka_header_get_all_with_name_size(
+            hdrs, 0, &name, &name_size, (const void **)&value, &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "failed to get embedded-NUL header: %s",
+                    rd_kafka_err2str(err));
+        TEST_ASSERT(name_size == sizeof(name_nul),
+                    "expected embedded-NUL name size %" PRIusz ", not %" PRIusz,
+                    sizeof(name_nul), name_size);
+        TEST_ASSERT(!memcmp(name, name_nul, name_size),
+                    "embedded-NUL header name bytes differ");
+        TEST_ASSERT(name[name_size] == '\0',
+                    "embedded-NUL header name is not NUL-terminated");
+        TEST_ASSERT(value_size == strlen("v-nul") && !strcmp(value, "v-nul"),
+                    "unexpected embedded-NUL header value");
+
+        err = rd_kafka_header_get_all_with_name_size(
+            hdrs, 1, &name, &name_size, (const void **)&value, &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "failed to get plain header: %s", rd_kafka_err2str(err));
+        TEST_ASSERT(name_size == 1, "expected plain name size 1, not %" PRIusz,
+                    name_size);
+        TEST_ASSERT(!memcmp(name, "a", name_size),
+                    "plain header name bytes differ");
+        TEST_ASSERT(name[name_size] == '\0',
+                    "plain header name is not NUL-terminated");
+        TEST_ASSERT(value_size == strlen("v-a") && !strcmp(value, "v-a"),
+                    "unexpected plain header value");
+
+        err = rd_kafka_header_get_all_with_name_size(
+            hdrs, 2, &name, &name_size, (const void **)&value, &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NOENT,
+                    "expected NOENT at end of headers, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_header_get_all_with_name_size(
+            hdrs, SIZE_MAX, &name, &name_size, (const void **)&value,
+            &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NOENT,
+                    "expected NOENT for SIZE_MAX index, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_header_get_all_with_name_size(
+            hdrs, (size_t)INT_MAX + 1, &name, &name_size, (const void **)&value,
+            &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NOENT,
+                    "expected NOENT for INT_MAX + 1 index, got %s",
+                    rd_kafka_err2str(err));
+
+        err = rd_kafka_header_get_all(hdrs, 0, &name, (const void **)&value,
+                                      &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "old getter failed on embedded-NUL header: %s",
+                    rd_kafka_err2str(err));
+        TEST_ASSERT(!strcmp(name, "a"),
+                    "expected old getter C-string name 'a', not '%s'", name);
+        TEST_ASSERT(value_size == strlen("v-nul") && !strcmp(value, "v-nul"),
+                    "unexpected old getter embedded-NUL header value");
+
+        err = rd_kafka_header_get_all(hdrs, 1, &name, (const void **)&value,
+                                      &value_size);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "old getter failed on plain header: %s",
+                    rd_kafka_err2str(err));
+        TEST_ASSERT(!strcmp(name, "a"),
+                    "expected old getter plain name 'a', not '%s'", name);
+        TEST_ASSERT(value_size == strlen("v-a") && !strcmp(value, "v-a"),
+                    "unexpected old getter plain header value");
+
+        rd_kafka_headers_destroy(hdrs);
+
+        SUB_TEST_PASS();
+}
+
+
 
 /**
  * @brief First on_send() interceptor
@@ -346,6 +443,8 @@ int main_0072_headers_ut(int argc, char **argv) {
         size_t header_cnt;
         const int msgcnt = 10;
         rd_kafka_resp_err_t err;
+
+        do_test_embedded_nul_header_name_size();
 
         conf = rd_kafka_conf_new();
         test_conf_set(conf, "message.timeout.ms", "1");

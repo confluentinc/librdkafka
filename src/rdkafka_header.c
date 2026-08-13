@@ -215,6 +215,30 @@ rd_kafka_resp_err_t rd_kafka_header_get_all(const rd_kafka_headers_t *hdrs,
 }
 
 
+rd_kafka_resp_err_t
+rd_kafka_header_get_all_with_name_size(const rd_kafka_headers_t *hdrs,
+                                       size_t idx,
+                                       const char **namep,
+                                       size_t *name_sizep,
+                                       const void **valuep,
+                                       size_t *sizep) {
+        const rd_kafka_header_t *hdr;
+
+        if (unlikely(idx >= (size_t)rd_list_cnt(&hdrs->rkhdrs_list)))
+                return RD_KAFKA_RESP_ERR__NOENT;
+
+        hdr = rd_list_elem(&hdrs->rkhdrs_list, (int)idx);
+        if (unlikely(!hdr))
+                return RD_KAFKA_RESP_ERR__NOENT;
+
+        *namep      = hdr->rkhdr_name;
+        *name_sizep = hdr->rkhdr_name_size;
+        *valuep     = hdr->rkhdr_value;
+        *sizep      = hdr->rkhdr_value_size;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
 size_t rd_kafka_header_cnt(const rd_kafka_headers_t *hdrs) {
         return (size_t)rd_list_cnt(&hdrs->rkhdrs_list);
 }

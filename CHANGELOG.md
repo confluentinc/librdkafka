@@ -50,6 +50,7 @@ librdkafka v2.15.0 is a feature release:
 
 ## Enhancements
 * Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
+* Add list_groups functionality detailed in KIP-1043
 
 ## Fixes
 

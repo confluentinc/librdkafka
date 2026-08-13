@@ -3077,6 +3077,298 @@ static void do_test_ListConsumerGroups(const char *what,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Helper for do_test_ListGroups, makes ListGroups call
+ * and checks returned group count equals to \p exp_found.
+ *
+ * Parameter \p exp_type, if not UNKNOWN, needs to match
+ * returned groups type.
+ *
+ * If \p match_states is true, then the state of the
+ * returned groups is checked and expected to be `EMPTY`.
+ *
+ * If \p exp_protocol is not NULL, then the protocol of each
+ * matched group is checked against it.
+ */
+static void test_ListGroups_helper(rd_kafka_t *rk,
+                                   rd_kafka_AdminOptions_t *option,
+                                   rd_kafka_queue_t *q,
+                                   char **list_groups,
+                                   size_t list_groups_cnt,
+                                   size_t exp_found,
+                                   rd_kafka_group_type_t exp_type,
+                                   rd_bool_t match_states,
+                                   const char *exp_protocol) {
+        rd_kafka_event_t *rkev                     = NULL;
+        const rd_kafka_ListGroups_result_t *result = NULL;
+        size_t group_cnt;
+        size_t error_cnt;
+        size_t found;
+        size_t i, j;
+        const rd_kafka_GroupListing_t **groups = NULL;
+
+        TEST_SAY("Call ListGroups\n");
+        rd_kafka_ListGroups(rk, option, q);
+        /* Poll result queue for ListGroups result.
+         * Print but otherwise ignore other event types
+         * (typically generic Error events). */
+        while (1) {
+                rkev = rd_kafka_queue_poll(q, tmout_multip(20 * 1000));
+                if (rkev == NULL)
+                        continue;
+
+                if (rd_kafka_event_error(rkev))
+                        TEST_SAY("%s: %s\n", rd_kafka_event_name(rkev),
+                                 rd_kafka_event_error_string(rkev));
+
+                if (rd_kafka_event_type(rkev) ==
+                    RD_KAFKA_EVENT_LISTGROUPS_RESULT)
+                        break;
+
+                rd_kafka_event_destroy(rkev);
+        }
+        /* Convert event to proper result */
+        result = rd_kafka_event_ListGroups_result(rkev);
+        TEST_ASSERT(result, "expected ListGroups_result, got %s",
+                    rd_kafka_event_name(rkev));
+
+        if (rd_kafka_event_error(rkev))
+                TEST_FAIL("ListGroups failed with %s",
+                          rd_kafka_event_error_string(rkev));
+
+        groups = rd_kafka_ListGroups_result_valid(result, &group_cnt);
+        rd_kafka_ListGroups_result_errors(result, &error_cnt);
+
+        TEST_ASSERT(error_cnt == 0,
+                    "expected ListGroups to return 0 errors,"
+                    " got %zu",
+                    error_cnt);
+
+        found = 0;
+        for (i = 0; i < group_cnt; i++) {
+                const rd_kafka_GroupListing_t *group = groups[i];
+                const char *group_id = rd_kafka_GroupListing_group_id(group);
+                int is_simple_consumer_group =
+                    rd_kafka_GroupListing_is_simple_consumer_group(group);
+                rd_kafka_group_state_t state =
+                    rd_kafka_GroupListing_state(group);
+                rd_kafka_group_type_t type = rd_kafka_GroupListing_type(group);
+                const char *group_protocol =
+                    rd_kafka_GroupListing_protocol(group);
+                for (j = 0; j < list_groups_cnt; j++) {
+                        if (!strcmp(list_groups[j], group_id)) {
+                                found++;
+                                TEST_ASSERT(!is_simple_consumer_group,
+                                            "expected a normal group,"
+                                            " got a simple group");
+                                if (exp_type != RD_KAFKA_GROUP_TYPE_UNKNOWN) {
+                                        TEST_ASSERT(type == exp_type,
+                                                    "Expected the Group Type "
+                                                    "to be set by the Broker.");
+                                }
+
+                                if (match_states)
+                                        TEST_ASSERT(
+                                            state == RD_KAFKA_GROUP_STATE_EMPTY,
+                                            "expected an Empty state,"
+                                            " got state %s",
+                                            rd_kafka_group_state_name(state));
+
+                                if (exp_protocol)
+                                        TEST_ASSERT(
+                                            !strcmp(group_protocol,
+                                                    exp_protocol),
+                                            "expected protocol %s for group %s,"
+                                            " got %s",
+                                            exp_protocol, group_id,
+                                            group_protocol);
+
+                                break;
+                        }
+                }
+        }
+
+        TEST_ASSERT(found == exp_found,
+                    "expected to find %" PRIusz
+                    " groups,"
+                    " got %" PRIusz,
+                    exp_found, found);
+
+        rd_kafka_event_destroy(rkev);
+}
+
+/**
+ * @brief Test list groups, creating consumers for a set of groups,
+ * listing and deleting them at the end.
+ */
+static void do_test_ListGroups(const char *what,
+                               rd_kafka_t *rk,
+                               rd_kafka_queue_t *useq,
+                               int request_timeout,
+                               rd_bool_t match_states,
+                               rd_bool_t match_types,
+                               rd_bool_t match_protocol) {
+#define TEST_LIST_GROUPS_CNT 4
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        char errstr[512];
+        char *list_groups[TEST_LIST_GROUPS_CNT];
+        const int partitions_cnt = 1;
+        const int msgs_cnt       = 100;
+        char *topic;
+        size_t i;
+        rd_kafka_metadata_topic_t exp_mdtopic = {0};
+        int64_t testid                        = test_id_generate();
+        rd_bool_t has_match_states =
+            test_broker_version >= TEST_BRKVER(2, 7, 0, 0);
+        rd_bool_t has_match_types =
+            test_broker_version >= TEST_BRKVER(3, 8, 0, 0);
+
+        rd_kafka_group_type_t group_type_in_use = RD_KAFKA_GROUP_TYPE_UNKNOWN;
+        rd_kafka_group_type_t group_type_not_in_use =
+            RD_KAFKA_GROUP_TYPE_UNKNOWN;
+        const char *expected_group_protocol = NULL;
+
+        SUB_TEST_QUICK(
+            "%s ListGroups with %s, request_timeout %d"
+            ", match_states %s, match_types %s",
+            rd_kafka_name(rk), what, request_timeout, RD_STR_ToF(match_states),
+            RD_STR_ToF(match_types));
+
+        /* match_states would not work if broker version is below 2.7.0 */
+        if (!has_match_states)
+                match_states = rd_false;
+
+        /* match_types would not work if broker version is below 3.8.0 */
+        if (!has_match_types)
+                match_types = rd_false;
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        options = rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+
+        if (request_timeout != -1) {
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, request_timeout, errstr, sizeof(errstr)));
+        }
+
+        if (match_states) {
+                rd_kafka_group_state_t empty = RD_KAFKA_GROUP_STATE_EMPTY;
+
+                TEST_CALL_ERROR__(rd_kafka_AdminOptions_set_match_group_states(
+                    options, &empty, 1));
+        }
+
+        if (match_types) {
+                if (test_consumer_group_protocol_classic()) {
+                        group_type_in_use     = RD_KAFKA_GROUP_TYPE_CLASSIC;
+                        group_type_not_in_use = RD_KAFKA_GROUP_TYPE_CONSUMER;
+                } else {
+                        group_type_in_use     = RD_KAFKA_GROUP_TYPE_CONSUMER;
+                        group_type_not_in_use = RD_KAFKA_GROUP_TYPE_CLASSIC;
+                }
+                TEST_CALL_ERROR__(rd_kafka_AdminOptions_set_match_group_types(
+                    options, &group_type_in_use, 1));
+        }
+
+        /* ListGroups protocol type is "consumer" for both classic
+         * and consumer group protocols. */
+        if (match_protocol)
+                expected_group_protocol = "consumer";
+
+        topic             = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        exp_mdtopic.topic = topic;
+
+        /* Create the topics first. */
+        test_CreateTopics_simple(rk, NULL, &topic, 1, partitions_cnt, NULL);
+
+        /* Verify that topics are reported by metadata */
+        test_wait_metadata_update(rk, &exp_mdtopic, 1, NULL, 0, 15 * 1000);
+
+        /* Produce 100 msgs */
+        test_produce_msgs_easy(topic, testid, 0, msgs_cnt);
+
+        for (i = 0; i < TEST_LIST_GROUPS_CNT; i++) {
+                char *group = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+                test_consume_msgs_easy(group, topic, testid, -1, msgs_cnt,
+                                       NULL);
+                list_groups[i] = group;
+        }
+
+        test_ListGroups_helper(rk, options, q, list_groups,
+                               TEST_LIST_GROUPS_CNT, TEST_LIST_GROUPS_CNT,
+                               group_type_in_use, has_match_states,
+                               expected_group_protocol);
+
+        if (match_protocol) {
+                /* None of the created groups have a "streams" protocol
+                 * type, so filtering on that protocol type must yield
+                 * no matches. */
+                const char *streams_protocol_type = "streams";
+                rd_kafka_AdminOptions_t *option_protocol_type_streams =
+                    rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+                TEST_CALL_ERROR__(
+                    rd_kafka_AdminOptions_set_match_protocol_types(
+                        option_protocol_type_streams, &streams_protocol_type,
+                        1));
+
+                test_ListGroups_helper(rk, option_protocol_type_streams, q,
+                                       list_groups, TEST_LIST_GROUPS_CNT, 0,
+                                       RD_KAFKA_GROUP_TYPE_UNKNOWN, rd_false,
+                                       NULL);
+
+                rd_kafka_AdminOptions_destroy(option_protocol_type_streams);
+        }
+
+        if (match_types) {
+                /* Simply test with the option of type not in use */
+                rd_kafka_AdminOptions_t *option_group_type_not_in_use =
+                    rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+                rd_kafka_AdminOptions_set_match_group_types(
+                    option_group_type_not_in_use, &group_type_not_in_use, 1);
+
+                test_ListGroups_helper(rk, option_group_type_not_in_use, q,
+                                       list_groups, TEST_LIST_GROUPS_CNT, 0,
+                                       group_type_not_in_use, rd_false, NULL);
+
+                rd_kafka_AdminOptions_destroy(option_group_type_not_in_use);
+
+                /* None of the created groups are STREAMS groups, so
+                 * filtering on that type must yield no matches either. */
+                rd_kafka_group_type_t group_type_streams =
+                    RD_KAFKA_GROUP_TYPE_STREAMS;
+                rd_kafka_AdminOptions_t *option_group_type_streams =
+                    rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+                rd_kafka_AdminOptions_set_match_group_types(
+                    option_group_type_streams, &group_type_streams, 1);
+
+                test_ListGroups_helper(rk, option_group_type_streams, q,
+                                       list_groups, TEST_LIST_GROUPS_CNT, 0,
+                                       group_type_streams, rd_false, NULL);
+
+                rd_kafka_AdminOptions_destroy(option_group_type_streams);
+        }
+
+        test_DeleteGroups_simple(rk, NULL, (char **)list_groups,
+                                 TEST_LIST_GROUPS_CNT, NULL);
+
+        for (i = 0; i < TEST_LIST_GROUPS_CNT; i++) {
+                rd_free(list_groups[i]);
+        }
+
+        rd_free(topic);
+
+        rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+
+        TEST_LATER_CHECK();
+#undef TEST_LIST_GROUPS_CNT
+
+        SUB_TEST_PASS();
+}
+
 typedef struct expected_DescribeConsumerGroups_result {
         char *group_id;
         rd_kafka_resp_err_t err;
@@ -5519,6 +5811,15 @@ static void do_test_apis(rd_kafka_type_t cltype) {
                                    rd_true);
         do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
                                    rd_false);
+
+        do_test_ListGroups("temp queue", rk, NULL, -1, rd_false, rd_true,
+                           rd_true);
+        do_test_ListGroups("temp queue", rk, NULL, -1, rd_false, rd_false,
+                           rd_false);
+        do_test_ListGroups("main queue", rk, mainq, 1500, rd_true, rd_true,
+                           rd_true);
+        do_test_ListGroups("main queue", rk, mainq, 1500, rd_true, rd_false,
+                           rd_false);
 
         /* TODO: check this test after KIP-848 admin operation
          * implementation */

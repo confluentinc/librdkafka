@@ -2260,6 +2260,24 @@ err:
 
 
 /**
+ * @brief KIP-394 requires member.id on the initial JoinGroup request: adopt
+ *        the member id the broker assigned to us in its MEMBER_ID_REQUIRED
+ *        response and let the next join go out without a backoff.
+ *
+ * @locality rdkafka main thread
+ */
+static void
+rd_kafka_cgrp_set_required_member_id(rd_kafka_cgrp_t *rkcg,
+                                     const rd_kafkap_str_t *member_id) {
+        char *member_id_str;
+
+        RD_KAFKAP_STR_DUPA(&member_id_str, member_id);
+        rd_kafka_cgrp_set_member_id(rkcg, member_id_str);
+        rd_interval_reset(&rkcg->rkcg_join_intvl);
+}
+
+
+/**
  * @brief cgrp handler for JoinGroup responses
  * opaque must be the cgrp handle.
  *
@@ -2281,6 +2299,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
         int actions;
         int i_am_leader           = 0;
         rd_kafka_assignor_t *rkas = NULL;
+        rd_bool_t outdated        = rd_false;
 
         rd_kafka_cgrp_clear_wait_resp(rkcg, RD_KAFKAP_JoinGroup);
 
@@ -2294,7 +2313,14 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                     "JoinGroup response: discarding outdated request "
                     "(now in join-state %s)",
                     rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
-                return;
+
+                /* Still parse the response below: a MEMBER_ID_REQUIRED
+                 * response carries a member id assigned to us by the broker,
+                 * and this is the only place it is sent. */
+                if (err)
+                        return; /* Nothing to parse */
+
+                outdated = rd_true;
         }
 
         if (err) {
@@ -2311,6 +2337,18 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
         rd_kafka_buf_read_str(rkbuf, &LeaderId);
         rd_kafka_buf_read_str(rkbuf, &MyMemberId);
         rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+
+        if (unlikely(outdated)) {
+                /* KIP-394: keep the member id assigned to us, if we don't
+                 * have one yet, so that the next JoinGroup reclaims it
+                 * instead of having the broker assign a second one and hold
+                 * this one until its session timeout expires. */
+                if (ErrorCode == RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED &&
+                    !RD_KAFKAP_STR_LEN(rkcg->rkcg_member_id))
+                        rd_kafka_cgrp_set_required_member_id(rkcg, &MyMemberId);
+
+                return;
+        }
 
         if (!ErrorCode && RD_KAFKAP_STR_IS_NULL(&Protocol)) {
                 /* Protocol not set, we will not be able to find
@@ -2531,15 +2569,8 @@ err:
                         rd_kafka_cgrp_set_member_id(rkcg, "");
                 else if (ErrorCode == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION)
                         rkcg->rkcg_generation_id = -1;
-                else if (ErrorCode == RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED) {
-                        /* KIP-394 requires member.id on initial join
-                         * group request */
-                        char *my_member_id;
-                        RD_KAFKAP_STR_DUPA(&my_member_id, &MyMemberId);
-                        rd_kafka_cgrp_set_member_id(rkcg, my_member_id);
-                        /* Skip the join backoff */
-                        rd_interval_reset(&rkcg->rkcg_join_intvl);
-                }
+                else if (ErrorCode == RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED)
+                        rd_kafka_cgrp_set_required_member_id(rkcg, &MyMemberId);
 
                 if (rd_kafka_cgrp_rebalance_protocol(rkcg) ==
                         RD_KAFKA_REBALANCE_PROTOCOL_COOPERATIVE &&
@@ -2557,6 +2588,9 @@ err:
         return;
 
 err_parse:
+        if (unlikely(outdated))
+                return; /* Don't act on a response we are discarding */
+
         ErrorCode = rkbuf->rkbuf_err;
         goto err;
 }

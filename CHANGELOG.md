@@ -1,3 +1,26 @@
+# librdkafka v2.15.1
+
+librdkafka v2.15.1 is a maintenance release:
+
+* Fix `int_latency` metric calculation, that was reporting bogus values when
+  `message.timeout.ms` is set to 0 (infinite) (#5335).
+
+
+## Fixes
+
+### Producer fixes
+
+* Issues: #5555.
+  Fix `int_latency` metric calculation. It was derived from the message
+  timeout timestamp (`now + message.timeout.ms - rkm_ts_timeout`), which
+  yields a large negative value when `message.timeout.ms` is 0 (infinite)
+  and `rkm_ts_timeout` is `INT64_MAX`. It's now computed directly as
+  `now - rkm_ts_enq`, the actual time the message spent in the queue,
+  regardless of the timeout setting.
+  Happening since 0.11.0 (#5335).
+
+
+
 # librdkafka v2.15.0
 
 librdkafka v2.15.0 is a feature release:

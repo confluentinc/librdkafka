@@ -527,6 +527,145 @@ static void test_producer_latency_first_message(int case_number) {
         SUB_TEST_PASS();
 }
 
+struct int_latency_stats {
+        int64_t minv; /**< Lowest int_latency.min seen */
+        int64_t avgv; /**< Last int_latency.avg seen */
+        int cnt;      /**< Total number of int_latency samples */
+};
+
+
+/**
+ * @brief Crude extraction of the integer JSON field \p field following
+ *        \p start.
+ */
+static int64_t find_json_int(const char *start, const char *field) {
+        char search[64];
+        const char *t;
+
+        rd_snprintf(search, sizeof(search), "\"%s\":", field);
+
+        t = strstr(start, search);
+        TEST_ASSERT(t, "Field %s not found in stats", field);
+
+        t += strlen(search);
+        while (isspace((int)*t))
+                t++;
+
+        return strtoll(t, NULL, 0);
+}
+
+
+/**
+ * @brief Collect the per-broker int_latency gauges from the stats.
+ */
+static int int_latency_stats_cb(rd_kafka_t *rk,
+                                char *json,
+                                size_t json_len,
+                                void *opaque) {
+        struct int_latency_stats *stats = opaque;
+        const char *t                   = json;
+
+        while ((t = strstr(t, "\"int_latency\":"))) {
+                int64_t minv, avgv;
+                int cnt;
+
+                t += strlen("\"int_latency\":");
+
+                /* Brokers that haven't produced anything during this
+                 * window have no samples. */
+                cnt = (int)find_json_int(t, "cnt");
+                if (cnt == 0)
+                        continue;
+
+                minv = find_json_int(t, "min");
+                avgv = find_json_int(t, "avg");
+
+                TEST_SAY("int_latency: min %" PRId64 "us, avg %" PRId64
+                         "us, cnt %d\n",
+                         minv, avgv, cnt);
+
+                if (stats->cnt == 0 || minv < stats->minv)
+                        stats->minv = minv;
+                stats->avgv = avgv;
+                stats->cnt += cnt;
+        }
+
+        return 0;
+}
+
+
+static void dr_msg_cb_expect_success(rd_kafka_t *rk,
+                                     const rd_kafka_message_t *rkmessage,
+                                     void *opaque) {
+        TEST_ASSERT(!rkmessage->err, "Message delivery failed: %s",
+                    rd_kafka_err2str(rkmessage->err));
+}
+
+
+/**
+ * @brief Verify that the per-broker int_latency metric holds a sane
+ *        (non-negative) value regardless of the configured
+ *        `message.timeout.ms`.
+ *
+ * int_latency used to be derived from the message timeout timestamp, which
+ * is INT64_MAX for an infinite (0) timeout, yielding a large negative value.
+ */
+static void test_int_latency(const char *message_timeout_ms) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstrap_servers;
+        const char *topic              = test_mk_topic_name("0055_int_lat", 1);
+        struct int_latency_stats stats = RD_ZERO_INIT;
+        const int msgcnt               = 10;
+        int64_t abs_timeout;
+        int i;
+
+        SUB_TEST_QUICK("message.timeout.ms=%s", message_timeout_ms);
+
+        mcluster = test_mock_cluster_new(1, &bootstrap_servers);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstrap_servers);
+        test_conf_set(conf, "statistics.interval.ms", "100");
+        /* Linger so the messages spend measurable time on the queue. */
+        test_conf_set(conf, "linger.ms", "50");
+        test_conf_set(conf, "message.timeout.ms", message_timeout_ms);
+        rd_kafka_conf_set_dr_msg_cb(conf, dr_msg_cb_expect_success);
+        rd_kafka_conf_set_stats_cb(conf, int_latency_stats_cb);
+        rd_kafka_conf_set_opaque(conf, &stats);
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        for (i = 0; i < msgcnt; i++)
+                TEST_CALL_ERR__(rd_kafka_producev(
+                    rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
+                    RD_KAFKA_V_VALUE("hi", 2),
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END));
+
+        TEST_CALL_ERR__(rd_kafka_flush(rk, tmout_multip(10 * 1000)));
+
+        /* Wait for a stats emission covering the produced messages. */
+        abs_timeout = test_clock() + (tmout_multip(10 * 1000) * 1000);
+        while (stats.cnt == 0 && test_clock() < abs_timeout)
+                rd_kafka_poll(rk, 100);
+
+        TEST_ASSERT(stats.cnt > 0, "Expected int_latency samples in stats");
+        TEST_ASSERT(stats.minv >= 0,
+                    "Expected non-negative int_latency, got min %" PRId64 "us",
+                    stats.minv);
+        TEST_ASSERT(stats.avgv >= 0,
+                    "Expected non-negative int_latency, got avg %" PRId64 "us",
+                    stats.avgv);
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0055_producer_latency_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -534,6 +673,11 @@ int main_0055_producer_latency_mock(int argc, char **argv) {
         for (case_number = 0; case_number < 4; case_number++) {
                 test_producer_latency_first_message(case_number);
         }
+
+        /* 0 = infinite message timeout, the case that used to report
+         * a bogus int_latency. */
+        test_int_latency("0");
+        test_int_latency("5000");
 
         return 0;
 }

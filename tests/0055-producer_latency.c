@@ -621,7 +621,7 @@ static void test_int_latency(const char *message_timeout_ms) {
         int64_t abs_timeout;
         int i;
 
-        SUB_TEST("message.timeout.ms=%s", message_timeout_ms);
+        SUB_TEST_QUICK("message.timeout.ms=%s", message_timeout_ms);
 
         mcluster = test_mock_cluster_new(1, &bootstrap_servers);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);

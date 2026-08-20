@@ -50,7 +50,7 @@ librdkafka v2.15.0 is a feature release:
 
 ## Enhancements
 * Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
-* Update bundled libcurl to 8.21.0 (#XXXX).
+* Update bundled libcurl to 8.21.0 (#5572).
 
 
 ## Security considerations

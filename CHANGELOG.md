@@ -50,6 +50,30 @@ librdkafka v2.15.0 is a feature release:
 
 ## Enhancements
 * Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
+* Update bundled libcurl to 8.21.0 (#XXXX).
+
+
+## Security considerations
+
+The bundled libcurl was upgraded to 8.21.0 (8.20.0 → 8.21.0 for
+source/autoconf builds, 8.19.0 → 8.21.0 for vcpkg-based packages), so both
+build paths are now on the same libcurl release. The pinned vcpkg release
+was moved from 2026.04.27 to 2026.07.29, as libcurl 8.21.0 is not present in
+the version database of the older vcpkg snapshot.
+
+ * libcurl upgrade to 8.21.0 addresses, on both the autoconf and vcpkg
+   paths: CVE-2026-8286, CVE-2026-8458, CVE-2026-8924, CVE-2026-8925,
+   CVE-2026-8926, CVE-2026-8927, CVE-2026-8932, CVE-2026-9079,
+   CVE-2026-9080, CVE-2026-9545, CVE-2026-9546, CVE-2026-9547,
+   CVE-2026-10536, CVE-2026-11352, CVE-2026-11564, CVE-2026-11586,
+   CVE-2026-11856, CVE-2026-12064.
+ * Additionally addressed on the vcpkg path only, since these were already
+   fixed by 8.20.0 on the autoconf path and were listed as outstanding for
+   vcpkg in v2.14.2: CVE-2026-4873, CVE-2026-5545, CVE-2026-5773,
+   CVE-2026-6253, CVE-2026-6276, CVE-2026-6429, CVE-2026-7168, and
+   CVE-2026-7009 (Apple SecTrust only, so it does not affect the
+   OpenSSL-backed builds shipped by librdkafka).
+
 
 ## Fixes
 

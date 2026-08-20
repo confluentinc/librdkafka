@@ -618,6 +618,7 @@ static void test_int_latency(const char *message_timeout_ms) {
         const char *topic              = test_mk_topic_name("0055_int_lat", 1);
         struct int_latency_stats stats = RD_ZERO_INIT;
         const int msgcnt               = 10;
+        rd_kafka_resp_err_t err;
         int64_t abs_timeout;
         int i;
 
@@ -638,11 +639,14 @@ static void test_int_latency(const char *message_timeout_ms) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
-        for (i = 0; i < msgcnt; i++)
-                TEST_CALL_ERR__(rd_kafka_producev(
+        for (i = 0; i < msgcnt; i++) {
+                err = rd_kafka_producev(
                     rk, RD_KAFKA_V_TOPIC(topic), RD_KAFKA_V_PARTITION(0),
                     RD_KAFKA_V_VALUE("hi", 2),
-                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END));
+                    RD_KAFKA_V_MSGFLAGS(RD_KAFKA_MSG_F_COPY), RD_KAFKA_V_END);
+                TEST_ASSERT(!err, "producev #%d failed: %s", i,
+                            rd_kafka_err2str(err));
+        }
 
         TEST_CALL_ERR__(rd_kafka_flush(rk, tmout_multip(10 * 1000)));
 

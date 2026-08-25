@@ -17,7 +17,10 @@ if (!(Test-Path -Path "c:\msys64\usr\bin\bash.exe")) {
     (New-Object System.Net.WebClient).DownloadFile($url, './msys2-installer.exe')
 
     # Verify checksum
-    (Get-FileHash -Algorithm "SHA256" .\msys2-installer.exe).hash -eq $sha256
+    $actualSha256 = (Get-FileHash -Algorithm "SHA256" .\msys2-installer.exe).hash
+    if ($actualSha256 -ne $sha256) {
+        throw "msys2 installer checksum mismatch: expected $sha256, got $actualSha256"
+    }
 
     # Install msys2
     .\msys2-installer.exe -y -oc:\

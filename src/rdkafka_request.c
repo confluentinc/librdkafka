@@ -6827,12 +6827,20 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                      "Parsing: subscription id %" PRId32,
                      rk->rk_telemetry.subscription_id);
 
-        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
+        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
+        if (arraycnt < 0)
+                rd_kafka_buf_parse_fail(rkbuf,
+                                        "ApiArrayCnt %" PRId32 " out of range",
+                                        arraycnt);
 
         if (arraycnt) {
                 rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
                 rk->rk_telemetry.accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
+                if (!rk->rk_telemetry.accepted_compression_types)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "Failed to allocate accepted_compression_types");
 
                 for (i = 0; i < (size_t)arraycnt; i++) {
                         int8_t AcceptedCompressionType;

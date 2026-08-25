@@ -1,9 +1,45 @@
-# librdkafka v2.15.1
+
+# librdkafka v2.15.1 (unreleased)
 
 librdkafka v2.15.1 is a maintenance release:
 
+* Update bundled OpenSSL and libcurl dependencies, and refresh the Windows
+  build toolchain (msys2, vcpkg) (#).
 * Fix `int_latency` metric calculation, that was reporting bogus values when
   `message.timeout.ms` is set to 0 (infinite) (#5335).
+
+## Security considerations
+
+Bundled dependencies were further upgraded as follows:
+OpenSSL 3.5.6 → 3.5.7 for source/autoconf builds, and 3.6.2 → 3.6.3 for
+vcpkg-based packages; libcurl 8.20.0 → 8.21.0, now used by both
+source/autoconf builds and vcpkg (previously pinned to 8.19.0 in vcpkg,
+so vcpkg-based packages also pick up the fixes below that source/autoconf
+builds already got from 8.20.0).
+
+ * OpenSSL upgrade (3.5.6 → 3.5.7 for source/autoconf, 3.6.2 → 3.6.3 for
+   vcpkg) addresses:
+   * Both branches: CVE-2026-34180, CVE-2026-34181, CVE-2026-34182,
+     CVE-2026-34183, CVE-2026-42764, CVE-2026-42766, CVE-2026-42767,
+     CVE-2026-42768, CVE-2026-42769, CVE-2026-42770, CVE-2026-45445,
+     CVE-2026-45446, CVE-2026-45447, CVE-2026-7383, CVE-2026-9076.
+   * Only the vcpkg 3.6.2 → 3.6.3 branch (3.5.6/3.5.7 were not affected):
+     CVE-2026-35188, CVE-2026-42765.
+
+ * libcurl upgrade (8.20.0 → 8.21.0) addresses: CVE-2026-8286,
+   CVE-2026-8458, CVE-2026-8924, CVE-2026-8925, CVE-2026-8926,
+   CVE-2026-8927, CVE-2026-8932, CVE-2026-9079, CVE-2026-9080,
+   CVE-2026-9545, CVE-2026-9546, CVE-2026-9547, CVE-2026-10536,
+   CVE-2026-11352, CVE-2026-11564, CVE-2026-11586, CVE-2026-11856,
+   CVE-2026-12064.
+   Since libcurl is now at the same version (8.21.0) for both
+   source/autoconf and vcpkg builds, this also closes the gap noted in
+   the previous release, where vcpkg-pinned 8.19.0 still contained
+   CVE-2026-4873, CVE-2026-5545, CVE-2026-5773, CVE-2026-6253,
+   CVE-2026-6276, CVE-2026-6429, CVE-2026-7168.
+
+ * zlib vcpkg port revision bump (1.3.2#0 → 1.3.2#1): no upstream version
+   change and no associated CVE; packaging-only update.
 
 
 ## Fixes

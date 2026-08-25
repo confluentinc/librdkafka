@@ -4,9 +4,10 @@
 librdkafka v2.15.1 is a maintenance release:
 
 * Update bundled OpenSSL and libcurl dependencies, and refresh the Windows
-  build toolchain (msys2, vcpkg) (#).
+  build toolchain (msys2, vcpkg) (#5579).
 * Fix `int_latency` metric calculation, that was reporting bogus values when
   `message.timeout.ms` is set to 0 (infinite) (#5335).
+
 
 ## Security considerations
 

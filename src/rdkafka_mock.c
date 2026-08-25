@@ -3154,6 +3154,13 @@ void rd_kafka_mock_group_initial_rebalance_delay_ms(
         mtx_unlock(&mcluster->lock);
 }
 
+void rd_kafka_mock_set_controller_id(rd_kafka_mock_cluster_t *mcluster,
+                                     int32_t controller_id) {
+        mtx_lock(&mcluster->lock);
+        mcluster->controller_id = controller_id;
+        mtx_unlock(&mcluster->lock);
+}
+
 
 static rd_kafka_op_res_t
 rd_kafka_mock_cluster_op_serve(rd_kafka_t *rk,

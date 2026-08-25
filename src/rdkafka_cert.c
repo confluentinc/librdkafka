@@ -181,6 +181,9 @@ static rd_kafka_cert_t *rd_kafka_cert_new(const rd_kafka_conf_t *conf,
                 return NULL;
         }
 
+        /* Start clean so a failure below reports this call's error only. */
+        ERR_clear_error();
+
         action = "read memory";
         bio    = BIO_new_mem_buf((void *)buffer, (long)size);
         if (!bio)

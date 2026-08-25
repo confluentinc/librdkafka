@@ -776,8 +776,9 @@ static EVP_PKEY *rd_kafka_ssl_PKEY_from_string(rd_kafka_t *rk,
  *
  * @return 0 on success, -1 on error.
  *
- * @remark On error the OpenSSL error queue is left intact for the caller to
- *         report the underlying reason.
+ * @remark The error queue is cleared on entry. On success it is left
+ *         cleared; on error it holds this function's error for the caller
+ *         to report.
  */
 int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                                           STACK_OF(X509) * chainp,
@@ -786,6 +787,9 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
         X509 *ca;
         int r, ret = 0;
         unsigned long err;
+
+        ERR_clear_error();
+
         while (1) {
                 ca = X509_new();
                 if (ca == NULL) {
@@ -840,11 +844,16 @@ static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
         BIO *bio = BIO_new_mem_buf((void *)str, -1);
         X509 *x509;
 
+        /* Start clean so the reason reported below is from this parse only. */
+        ERR_clear_error();
+
         x509 =
             PEM_read_bio_X509(bio, NULL, rd_kafka_transport_ssl_passwd_cb, rk);
 
         if (!x509) {
-                *reasonp = "not in PEM format?";
+                /* Keep neutral: a well-formed block with an invalid payload
+                 * also fails here. The real reason is on the error queue. */
+                *reasonp = "error reading certificate";
                 BIO_free(bio);
                 return NULL;
         }
@@ -1329,6 +1338,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                                 BIO_free(bio);
                                 return -1;
                         }
+
+                        /* The final read raised a benign "no start line";
+                         * clear it so it isn't mistaken for a real error. */
+                        ERR_clear_error();
 
                         BIO_free(bio);
 

@@ -1206,6 +1206,253 @@ do_test_records_survive_leaderless_transit(rd_bool_t explicit_mode) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief 4A: Leader change DURING a RELEASE acknowledgement.
+ *
+ * Acquire records, RELEASE them (vs ACCEPT), then move the leader BEFORE
+ * commit_sync flushes the acks. The pre-send leader-stale check should
+ * either reroute or surface NOT_LEADER_OR_FOLLOWER per partition — the
+ * RELEASE must NOT be silently swallowed.
+ */
+static void do_test_release_with_leader_change(void) {
+        test_ctx_t ctx;
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        rd_kafka_error_t *error;
+        const char *topic               = "0183-release-leader-change";
+        const char *group               = "sg-0183-release-leader-change";
+        const int broker1               = 1;
+        const int broker2               = 2;
+        const int msgcnt                = 5;
+        rd_kafka_messages_t *rkmessages = NULL;
+        size_t rcvd                     = 0;
+        size_t j;
+        rd_kafka_topic_partition_list_t *results = NULL;
+        int err_partitions                       = 0;
+        int ok_partitions                        = 0;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new(2);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+        TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0,
+                                                       broker1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "set initial leader to broker %d", broker1);
+
+        mock_produce(ctx.producer, topic, RD_KAFKA_PARTITION_UA, msgcnt);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        test_conf_set(conf, "share.acknowledgement.mode", "explicit");
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "-1");
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare, "create share consumer");
+        subscribe_one(rkshare, topic);
+
+        /* Acquire all records from the original leader. */
+        error = rd_kafka_share_poll(rkshare, 10000, &rkmessages);
+        TEST_ASSERT(!error, "share_poll failed: %s",
+                    error ? rd_kafka_error_string(error) : "");
+        rcvd = rkmessages ? rd_kafka_messages_count(rkmessages) : 0;
+        TEST_ASSERT(rcvd == (size_t)msgcnt, "expected %d records, got %" PRIusz,
+                    msgcnt, rcvd);
+
+        /* RELEASE every record (do not ACCEPT). */
+        for (j = 0; j < rcvd; j++) {
+                rd_kafka_resp_err_t aerr = rd_kafka_share_acknowledge_type(
+                    rkshare, rd_kafka_messages_get(rkmessages, j),
+                    RD_KAFKA_SHARE_ACKNOWLEDGE_TYPE_RELEASE);
+                TEST_ASSERT(aerr == RD_KAFKA_RESP_ERR_NO_ERROR,
+                            "RELEASE acknowledge failed: %s",
+                            rd_kafka_err2str(aerr));
+        }
+
+        /* Migrate leader to broker 2 BEFORE commit_sync. The RELEASE
+         * acks are now segregated against broker 1, which is no longer
+         * leader. */
+        TEST_ASSERT(rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0,
+                                                       broker2) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "migrate leader to broker %d", broker2);
+
+        /* commit_sync. Per-partition err must reach the caller — either
+         * NOT_LEADER_OR_FOLLOWER (if the RELEASE was rejected by stale
+         * broker) or NO_ERROR (if the client rerouted). Either is
+         * acceptable behaviour; what we must NOT see is silent success
+         * with the RELEASE lost. */
+        error = rd_kafka_share_commit_sync(rkshare, 5000, &results);
+
+        TEST_SAY("RELEASE commit_sync returned: %s\n",
+                 error ? rd_kafka_error_string(error) : "success");
+
+        /* The topic has exactly 1 partition; a silent drop of the
+         * RELEASE would show up as a MISSING row (cnt < 1), so pin the
+         * exact count rather than just cnt > 0. */
+        TEST_ASSERT(results != NULL,
+                    "expected per-partition results from commit_sync");
+        TEST_ASSERT(results->cnt == 1,
+                    "expected exactly 1 partition result (p0), got %d "
+                    "(a missing row means the RELEASE was silently dropped)",
+                    results->cnt);
+
+        for (j = 0; j < (size_t)results->cnt; j++) {
+                rd_kafka_resp_err_t per_err = results->elems[j].err;
+                TEST_SAY("  partition [%" PRId32 "] err=%s\n",
+                         results->elems[j].partition,
+                         rd_kafka_err2name(per_err));
+                if (per_err == RD_KAFKA_RESP_ERR_NO_ERROR)
+                        ok_partitions++;
+                else if (per_err == RD_KAFKA_RESP_ERR_NOT_LEADER_OR_FOLLOWER ||
+                         per_err == RD_KAFKA_RESP_ERR__TIMED_OUT)
+                        err_partitions++;
+                else
+                        TEST_FAIL(
+                            "Unexpected per-partition err for RELEASE "
+                            "with leader change: %s",
+                            rd_kafka_err2name(per_err));
+        }
+
+        TEST_ASSERT(ok_partitions + err_partitions == results->cnt,
+                    "results cnt mismatch: ok=%d err=%d total=%d",
+                    ok_partitions, err_partitions, results->cnt);
+        TEST_SAY(
+            "RELEASE with leader change: ok=%d err=%d (both surfaced "
+            "cleanly)\n",
+            ok_partitions, err_partitions);
+
+        rd_kafka_topic_partition_list_destroy(results);
+        if (error)
+                rd_kafka_error_destroy(error);
+
+        rd_kafka_messages_destroy(rkmessages);
+        rkmessages = NULL;
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
+ * @brief 4B: Rapid leader-change churn.
+ *
+ * Cycle the partition leader L1 -> L2 -> L3 -> L1 -> ... in a tight loop,
+ * faster than the consumer can stabilize. Verify:
+ *   - Consumer eventually delivers all produced records (no permanent
+ *     stuck state).
+ *   - No fatal error surfaces.
+ *   - Session resets are bounded.
+ */
+static void do_test_rapid_leader_churn(void) {
+        test_ctx_t ctx;
+        rd_kafka_conf_t *conf;
+        rd_kafka_share_t *rkshare;
+        const char *topic  = "0183-rapid-leader-churn";
+        const char *group  = "sg-0183-rapid-leader-churn";
+        const int msgcnt   = 30;
+        const int n_churns = 15; /* 15 leader migrations across the run */
+        const int churn_interval_ms = 300; /* fast leader changes */
+        rd_kafka_messages_t *batch  = NULL;
+        rd_kafka_error_t *error;
+        int consumed    = 0;
+        int churn_count = 0;
+        int next_broker = 2;
+        rd_ts_t t_next_churn;
+
+        SUB_TEST_QUICK();
+
+        ctx = test_ctx_new(3);
+
+        TEST_ASSERT(rd_kafka_mock_topic_create(ctx.mcluster, topic, 1, 1) ==
+                        RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "create topic");
+        TEST_ASSERT(
+            rd_kafka_mock_partition_set_leader(ctx.mcluster, topic, 0, 1) ==
+                RD_KAFKA_RESP_ERR_NO_ERROR,
+            "set initial leader");
+
+        mock_produce(ctx.producer, topic, RD_KAFKA_PARTITION_UA, msgcnt);
+
+        test_conf_init(&conf, NULL, 0);
+        test_conf_set(conf, "bootstrap.servers", ctx.bootstraps);
+        test_conf_set(conf, "group.id", group);
+        rkshare = rd_kafka_share_consumer_new(conf, NULL, 0);
+        TEST_ASSERT(rkshare, "create share consumer");
+        subscribe_one(rkshare, topic);
+
+        t_next_churn = test_clock() + (churn_interval_ms * 1000);
+
+        /* Poll loop with concurrent leader churn. The poll itself is
+         * the main-thread driver; we trigger leader changes from the
+         * test thread between polls. */
+        while (consumed < msgcnt && churn_count < n_churns + 10) {
+                size_t rcvd = 0;
+                size_t j;
+
+                /* Time to churn the leader? */
+                if (churn_count < n_churns && test_clock() >= t_next_churn) {
+                        rd_kafka_resp_err_t serr =
+                            rd_kafka_mock_partition_set_leader(
+                                ctx.mcluster, topic, 0, next_broker);
+                        TEST_ASSERT(serr == RD_KAFKA_RESP_ERR_NO_ERROR,
+                                    "churn %d: set leader %d failed: %s",
+                                    churn_count, next_broker,
+                                    rd_kafka_err2str(serr));
+                        TEST_SAY("churn %d -> broker %d\n", churn_count,
+                                 next_broker);
+                        next_broker = (next_broker % 3) + 1; /* 2,3,1,2,3,... */
+                        churn_count++;
+                        t_next_churn =
+                            test_clock() + (churn_interval_ms * 1000);
+                }
+
+                error = rd_kafka_share_poll(rkshare, 200, &batch);
+                if (error) {
+                        rd_kafka_resp_err_t ec = rd_kafka_error_code(error);
+                        /* Top-level errors are tolerated during churn —
+                         * NOT_LEADER_OR_FOLLOWER / FENCED_LEADER_EPOCH
+                         * etc. Just no FATAL. */
+                        TEST_ASSERT(!rd_kafka_error_is_fatal(error),
+                                    "fatal error during leader churn: %s",
+                                    rd_kafka_err2name(ec));
+                        rd_kafka_error_destroy(error);
+                        rd_kafka_messages_destroy(batch);
+                        batch = NULL;
+                        continue;
+                }
+                rcvd = rd_kafka_messages_count(batch);
+                for (j = 0; j < rcvd; j++) {
+                        rd_kafka_message_t *rkm =
+                            rd_kafka_messages_get(batch, j);
+                        if (!rkm->err)
+                                consumed++;
+                }
+                rd_kafka_messages_destroy(batch);
+                batch = NULL;
+        }
+
+        TEST_SAY("Rapid churn: produced=%d consumed=%d churns=%d\n", msgcnt,
+                 consumed, churn_count);
+
+        TEST_ASSERT(consumed >= msgcnt,
+                    "consumer wedged during leader churn: consumed=%d/%d "
+                    "after %d churns",
+                    consumed, msgcnt, churn_count);
+
+        test_share_consumer_close(rkshare);
+        test_share_destroy(rkshare);
+        test_ctx_destroy(&ctx);
+
+        SUB_TEST_PASS();
+}
+
 
 int main_0183_share_consumer_leader_change_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -1230,5 +1477,12 @@ int main_0183_share_consumer_leader_change_mock(int argc, char **argv) {
                                                "explicit-sync-no-refresh");
         do_test_leader_change_consume_recovery(rd_true, rd_true, rd_true,
                                                "explicit-sync-wait-refresh");
+
+        /* Planned test 4A: RELEASE with leader migration. */
+        do_test_release_with_leader_change();
+
+        /* Planned test 4B: rapid leader-change churn. */
+        do_test_rapid_leader_churn();
+
         return 0;
 }

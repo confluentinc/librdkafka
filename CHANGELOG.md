@@ -2,7 +2,7 @@
 # librdkafka v2.15.1 (unreleased)
 
 * Update bundled OpenSSL and libcurl dependencies, and refresh the Windows
-  build toolchain (msys2, vcpkg) (#).
+  build toolchain (msys2, vcpkg) (#5578).
 
 ## Security considerations
 

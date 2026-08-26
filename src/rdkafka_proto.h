@@ -619,8 +619,9 @@ static RD_INLINE RD_UNUSED int rd_kafka_Uuid_cmp(rd_kafka_Uuid_t a,
         return 0;
 }
 
-static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(void *a, void *b) {
-        rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
+static RD_INLINE RD_UNUSED int rd_kafka_Uuid_ptr_cmp(const void *a,
+                                                     const void *b) {
+        const rd_kafka_Uuid_t *a_uuid = a, *b_uuid = b;
         return rd_kafka_Uuid_cmp(*a_uuid, *b_uuid);
 }
 

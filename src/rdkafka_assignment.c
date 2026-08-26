@@ -387,11 +387,11 @@ static void rd_kafka_share_assignment_serve_removals(rd_kafka_t *rk) {
 static void rd_kafka_assignment_request_stop(rd_kafka_assignment_t *assignment,
                                              rd_kafka_toppar_t *rktp,
                                              rd_kafka_q_t *stop_replyq) {
-        if (!rktp->rktp_started || rktp->rktp_stop_pending)
+        if (!rktp->rktp_started || rktp->rktp_wait_stop)
                 return;
 
         rd_assert(assignment->started_cnt > 0);
-        rktp->rktp_stop_pending = rd_true;
+        rktp->rktp_wait_stop = rd_true;
         assignment->wait_stop_cnt++;
         rd_kafka_toppar_op_fetch_stop(rktp, RD_KAFKA_REPLYQ(stop_replyq, 0));
 }
@@ -405,8 +405,8 @@ static void rd_kafka_assignment_complete_stop(rd_kafka_assignment_t *assignment,
         rd_assert(assignment->wait_stop_cnt > 0);
         assignment->wait_stop_cnt--;
 
-        rd_assert(rktp->rktp_stop_pending);
-        rktp->rktp_stop_pending = rd_false;
+        rd_assert(rktp->rktp_wait_stop);
+        rktp->rktp_wait_stop = rd_false;
 
         rd_assert(rktp->rktp_started);
         rktp->rktp_started = rd_false;
@@ -486,10 +486,11 @@ static int rd_kafka_assignment_serve_removals0(rd_kafka_t *rk,
                 rd_kafka_dbg(rk, CGRP, "REMOVE",
                              "Removing %s [%" PRId32
                              "] from assignment "
-                             "(started=%s, pending=%s, queried=%s, "
-                             "stored offset=%s)",
+                             "(started=%s, wait_stop=%s, pending=%s, "
+                             "queried=%s, stored offset=%s)",
                              rktpar->topic, rktpar->partition,
                              RD_STR_ToF(rktp->rktp_started),
+                             RD_STR_ToF(rktp->rktp_wait_stop),
                              RD_STR_ToF(was_pending), RD_STR_ToF(was_queried),
                              rd_kafka_offset2str(rktpar->offset));
         }
@@ -585,7 +586,7 @@ static int rd_kafka_assignment_serve_pending(rd_kafka_t *rk) {
                     rd_kafka_topic_partition_ensure_toppar(rk, rktpar, rd_true);
 
                 rd_assert(!rktp->rktp_started);
-                rd_assert(!rktp->rktp_stop_pending);
+                rd_assert(!rktp->rktp_wait_stop);
 
                 if (!RD_KAFKA_OFFSET_IS_LOGICAL(rktpar->offset) ||
                     rktpar->offset == RD_KAFKA_OFFSET_BEGINNING ||
@@ -1254,7 +1255,9 @@ unittest_assignment_add_removed_partition(rd_kafka_t *rk,
                 rd_kafka_toppar_unlock(rktp);
         }
 
-        return rktp;
+        /* Return a test-owned reference that remains valid after
+         * serve_removals0() clears the removed assignment list. */
+        return rktp ? rd_kafka_toppar_keep(rktp) : NULL;
 }
 
 
@@ -1270,6 +1273,9 @@ static int unittest_assignment_stop_pending(void) {
         rd_kafka_conf_set(conf, "enable.auto.commit", "false", NULL, 0);
         rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, errstr, sizeof(errstr));
         RD_UT_ASSERT(rk, "failed to create consumer: %s", errstr);
+        /* Keep this fixture single-threaded and deterministic: no group.id
+         * means no consumer group, and FETCH_STOP replies go to a private
+         * test queue that is never polled. */
         test_ops = rd_kafka_q_new(rk);
 
         /* A removal for a partition that was never started must not request
@@ -1279,7 +1285,6 @@ static int unittest_assignment_stop_pending(void) {
         RD_UT_ASSERT(!RD_KAFKA_TOPPAR_IS_PAUSED(rktp),
                      "test requires an unpaused partition so only FETCH_STOP "
                      "bumps the version");
-        rk->rk_consumer.assignment.started_cnt = 1;
         version = rd_atomic32_get(&rktp->rktp_version);
         RD_UT_ASSERT(rd_kafka_assignment_serve_removals0(rk, test_ops) == 0,
                      "non-started removal should have no outstanding work");
@@ -1287,8 +1292,11 @@ static int unittest_assignment_stop_pending(void) {
                      "non-started removal must not request FETCH_STOP");
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 0,
                      "non-started removal must not increment wait_stop_cnt");
-        RD_UT_ASSERT(!rktp->rktp_stop_pending,
+        RD_UT_ASSERT(rk->rk_consumer.assignment.started_cnt == 0,
+                     "non-started removal must not alter started_cnt");
+        RD_UT_ASSERT(!rktp->rktp_wait_stop,
                      "non-started removal must not mark stop-pending");
+        rd_kafka_toppar_destroy(rktp);
 
         rktp = unittest_assignment_add_removed_partition(rk, "rdut", 0);
         RD_UT_ASSERT(rktp, "failed to re-add toppar to removed list");
@@ -1304,8 +1312,9 @@ static int unittest_assignment_stop_pending(void) {
                      "FETCH_STOP");
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 1,
                      "first stop should increment wait_stop_cnt once");
-        RD_UT_ASSERT(rktp->rktp_stop_pending,
+        RD_UT_ASSERT(rktp->rktp_wait_stop,
                      "first stop should mark the toppar stop-pending");
+        rd_kafka_toppar_destroy(rktp);
 
         rktp = unittest_assignment_add_removed_partition(rk, "rdut", 0);
         RD_UT_ASSERT(rktp, "failed to re-add toppar to removed list");
@@ -1316,7 +1325,7 @@ static int unittest_assignment_stop_pending(void) {
         rk->rk_consumer.assignment.wait_stop_cnt = 1;
         rk->rk_consumer.assignment.started_cnt   = 1;
         rktp->rktp_started                       = rd_true;
-        rktp->rktp_stop_pending                  = rd_true;
+        rktp->rktp_wait_stop                     = rd_true;
         version = rd_atomic32_get(&rktp->rktp_version);
         rd_kafka_assignment_serve_removals0(rk, test_ops);
         RD_UT_ASSERT(rd_atomic32_get(&rktp->rktp_version) == version,
@@ -1325,7 +1334,7 @@ static int unittest_assignment_stop_pending(void) {
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 1,
                      "duplicate removal must not increment wait_stop_cnt");
 
-        RD_UT_ASSERT(rktp->rktp_stop_pending,
+        RD_UT_ASSERT(rktp->rktp_wait_stop,
                      "completion fixture requires a pending stop");
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 1,
                      "completion fixture requires one awaited stop");
@@ -1336,11 +1345,12 @@ static int unittest_assignment_stop_pending(void) {
         rd_kafka_assignment_complete_stop(&rk->rk_consumer.assignment, rktp);
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 0,
                      "completion should clear wait_stop_cnt");
-        RD_UT_ASSERT(!rktp->rktp_stop_pending,
+        RD_UT_ASSERT(!rktp->rktp_wait_stop,
                      "completion should clear stop-pending");
         RD_UT_ASSERT(!rktp->rktp_started, "completion should clear started");
         RD_UT_ASSERT(rk->rk_consumer.assignment.started_cnt == 0,
                      "completion should decrement started_cnt");
+        rd_kafka_toppar_destroy(rktp);
 
         {
                 rd_kafka_toppar_t *rktp0, *rktp1;
@@ -1375,11 +1385,15 @@ static int unittest_assignment_stop_pending(void) {
                 RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 2,
                              "same removal round should await both stop "
                              "replies");
-                RD_UT_ASSERT(rktp0->rktp_stop_pending &&
-                                 rktp1->rktp_stop_pending,
+                RD_UT_ASSERT(rktp0->rktp_wait_stop && rktp1->rktp_wait_stop,
                              "same removal round should mark both toppars "
                              "stop-pending");
 
+                /* In this no-cgrp fixture, consuming the final outstanding
+                 * stop through the production path would complete assignment
+                 * and dereference the absent cgrp. Consume only the first
+                 * production stop here; the final completion stays local to
+                 * the helper below. */
                 rd_kafka_assignment_partition_stopped(rk, rktp0);
                 RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 1,
                              "production completion should clear exactly one "
@@ -1387,10 +1401,11 @@ static int unittest_assignment_stop_pending(void) {
                 RD_UT_ASSERT(rk->rk_consumer.assignment.started_cnt == 1,
                              "production completion should decrement started "
                              "count once");
-                RD_UT_ASSERT(!rktp0->rktp_stop_pending && !rktp0->rktp_started,
+                RD_UT_ASSERT(!rktp0->rktp_wait_stop && !rktp0->rktp_started,
                              "production completion should clear the first "
                              "toppar");
-                RD_UT_ASSERT(rktp1->rktp_stop_pending && rktp1->rktp_started,
+                rd_kafka_toppar_destroy(rktp0);
+                RD_UT_ASSERT(rktp1->rktp_wait_stop && rktp1->rktp_started,
                              "production completion should leave the second "
                              "toppar pending");
 
@@ -1402,9 +1417,10 @@ static int unittest_assignment_stop_pending(void) {
                 RD_UT_ASSERT(rk->rk_consumer.assignment.started_cnt == 0,
                              "final helper completion should clear "
                              "started_cnt");
-                RD_UT_ASSERT(!rktp1->rktp_stop_pending && !rktp1->rktp_started,
+                RD_UT_ASSERT(!rktp1->rktp_wait_stop && !rktp1->rktp_started,
                              "final helper completion should clear the second "
                              "toppar");
+                rd_kafka_toppar_destroy(rktp1);
         }
 
         rd_kafka_q_destroy_owner(test_ops);

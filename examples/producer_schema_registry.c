@@ -73,9 +73,8 @@ static const char *SCHEMA_DEF =
     "  ]"
     "}";
 
-static void dr_msg_cb(rd_kafka_t *rk,
-                      const rd_kafka_message_t *rkmessage,
-                      void *opaque) {
+static void
+dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
         if (rkmessage->err)
                 fprintf(stderr, "%% Delivery failed: %s\n",
                         rd_kafka_err2str(rkmessage->err));
@@ -89,6 +88,7 @@ int main(int argc, char **argv) {
         const char *brokers = "localhost:9092";
         const char *sr_url  = "http://localhost:8081";
         const char *topic   = "myTopic";
+        char subject[256];
         char errstr[512];
 
         /* 1. Configure and create the librdkafka producer. */
@@ -113,10 +113,11 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        /* 3. Register (or look up) the schema under <topic>-value. */
+        /* 3. Register (or look up) the schema under <topic>-value, the
+         *    default TopicNameStrategy subject. */
+        snprintf(subject, sizeof(subject), "%s-value", topic);
         serdes_schema_t *sschema = serdes_schema_add(
-            serdes, "myTopic-value", -1, SCHEMA_DEF, -1, errstr,
-            sizeof(errstr));
+            serdes, subject, -1, SCHEMA_DEF, -1, errstr, sizeof(errstr));
         if (!sschema) {
                 fprintf(stderr, "%% Failed to add schema: %s\n", errstr);
                 return 1;
@@ -142,7 +143,7 @@ int main(int argc, char **argv) {
 
         /* 5. Serialize with the Schema Registry framing
          *    (magic byte + schema id). */
-        void *payload      = NULL;
+        void *payload       = NULL;
         size_t payload_size = 0;
         if (serdes_schema_serialize_avro(sschema, &record, &payload,
                                          &payload_size, errstr,

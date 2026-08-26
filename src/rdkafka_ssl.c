@@ -769,11 +769,16 @@ static EVP_PKEY *rd_kafka_ssl_PKEY_from_string(rd_kafka_t *rk,
 /**
  * Read a PEM formatted cert chain from BIO \p in into \p chainp .
  *
- * @param rk rdkafka instance.
  * @param in BIO to read from.
  * @param chainp Stack to push the certificates to.
+ * @param password_cb Password callback for encrypted certificates.
+ * @param password_cb_opaque Opaque passed to \p password_cb .
  *
  * @return 0 on success, -1 on error.
+ *
+ * @remark The error queue is cleared on entry. On success it is left
+ *         cleared; on error it holds this function's error for the caller
+ *         to report.
  */
 int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                                           STACK_OF(X509) * chainp,
@@ -782,6 +787,9 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
         X509 *ca;
         int r, ret = 0;
         unsigned long err;
+
+        ERR_clear_error();
+
         while (1) {
                 ca = X509_new();
                 if (ca == NULL) {
@@ -800,14 +808,16 @@ int rd_kafka_ssl_read_cert_chain_from_BIO(BIO *in,
                         break;
                 }
         }
-        /* When the while loop ends, it's usually just EOF. */
+        /* When the while loop ends, it's usually just EOF.
+         * Anything else is a real error and is left on the error queue. */
         err = ERR_peek_last_error();
         if (ERR_GET_LIB(err) == ERR_LIB_PEM &&
-            ERR_GET_REASON(err) == PEM_R_NO_START_LINE)
+            ERR_GET_REASON(err) == PEM_R_NO_START_LINE) {
                 ret = 0;
-        else
+                ERR_clear_error();
+        } else {
                 ret = -1; /* some real error */
-        ERR_clear_error();
+        }
 end:
         return ret;
 }
@@ -818,21 +828,32 @@ end:
  *
  * @param str Input PEM string, nul-terminated.
  * @param chainp Stack to push the certificates to.
+ * @param reasonp Set to a static string identifying what could not be read,
+ *                when NULL is returned.
  *
  * @returns a new X509 on success or NULL on error.
  *
- * @remark When NULL is returned the chainp stack is not modified.
+ * @remark When NULL is returned the caller is still responsible for freeing
+ *         any certificate that was pushed to the chainp stack before the
+ *         failing one.
  */
 static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
                                            const char *str,
-                                           STACK_OF(X509) * chainp) {
+                                           STACK_OF(X509) * chainp,
+                                           const char **reasonp) {
         BIO *bio = BIO_new_mem_buf((void *)str, -1);
         X509 *x509;
+
+        /* Start clean so the reason reported below is from this parse only. */
+        ERR_clear_error();
 
         x509 =
             PEM_read_bio_X509(bio, NULL, rd_kafka_transport_ssl_passwd_cb, rk);
 
         if (!x509) {
+                /* Keep neutral: a well-formed block with an invalid payload
+                 * also fails here. The real reason is on the error queue. */
+                *reasonp = "error reading certificate";
                 BIO_free(bio);
                 return NULL;
         }
@@ -846,6 +867,7 @@ static X509 *rd_kafka_ssl_X509_from_string(rd_kafka_t *rk,
                 rd_kafka_log(rk, LOG_WARNING, "SSL",
                              "Failed to read certificate chain from PEM. "
                              "Returning NULL certificate too.");
+                *reasonp = "error reading certificate chain";
                 X509_free(x509);
                 BIO_free(bio);
                 return NULL;
@@ -1317,6 +1339,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                                 return -1;
                         }
 
+                        /* The final read raised a benign "no start line";
+                         * clear it so it isn't mistaken for a real error. */
+                        ERR_clear_error();
+
                         BIO_free(bio);
 
                         rd_kafka_dbg(rk, SECURITY, "SSL",
@@ -1455,6 +1481,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
         if (rk->rk_conf.ssl.cert_pem) {
                 X509 *x509;
+                const char *reason = NULL;
                 STACK_OF(X509) *ca = sk_X509_new_null();
                 if (!ca) {
                         rd_assert(!*"sk_X509_new_null() allocation failed");
@@ -1464,11 +1491,10 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
                              "Loading public key from string");
 
                 x509 = rd_kafka_ssl_X509_from_string(
-                    rk, rk->rk_conf.ssl.cert_pem, ca);
+                    rk, rk->rk_conf.ssl.cert_pem, ca, &reason);
                 if (!x509) {
                         rd_snprintf(errstr, errstr_size,
-                                    "ssl.certificate.pem failed: "
-                                    "not in PEM format?: ");
+                                    "ssl.certificate.pem failed: %s: ", reason);
                         sk_X509_pop_free(ca, X509_free);
                         return -1;
                 }

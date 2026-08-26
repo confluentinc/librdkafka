@@ -477,6 +477,86 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief cluster_id must be copied by its exact wire length,
+ *        not via strlen() during DescribeCluster parsing.
+ *
+ * On the wire cluster_id is immediately followed by the controller_id int32,
+ * and cluster_id.str is not nul-terminated, so a strlen()-based copy would
+ * over-read into the controller_id bytes when they are non-zero. Forcing
+ * controller_id = -1 (all 0xFF bytes) triggers this; the cluster id from
+ * DescribeCluster (the parser's per-response copy under test) must equal the
+ * one from rd_kafka_clusterid() (a length-based copy).
+ */
+static void do_test_cluster_id_not_overread(void) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        char *clusterid;
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DescribeCluster_result_t *res;
+        const char *describe_clusterid;
+        char errstr[256];
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        /* Force controller_id to -1 (0xFFFFFFFF) so the byte following the
+         * cluster_id on the wire is non-zero */
+        rd_kafka_mock_set_controller_id(mcluster, -1);
+
+        test_conf_init(&conf, NULL, 10);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Authoritative cluster id: rk_clusterid uses a length-based copy
+         * (RD_KAFKAP_STR_DUP) */
+        clusterid = rd_kafka_clusterid(rk, tmout_multip(5000));
+        TEST_ASSERT(clusterid, "Expected to retrieve clusterid");
+
+        /* DescribeCluster surfaces the internal per-response cluster_id copy */
+        q = rd_kafka_queue_new(rk);
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER);
+        /* DescribeCluster defaults to routing to the controller; since we set
+         * controller_id = -1 (no controller), target broker 1 explicitly so
+         * the request is served and the response parsed. */
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_broker(options, 1, errstr,
+                                                         sizeof(errstr)));
+        rd_kafka_DescribeCluster(rk, options, q);
+        rd_kafka_AdminOptions_destroy(options);
+
+        rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT,
+                                      tmout_multip(10 * 1000));
+        TEST_ASSERT(rkev, "Expected DescribeCluster result event");
+        TEST_ASSERT(!rd_kafka_event_error(rkev), "DescribeCluster failed: %s",
+                    rd_kafka_event_error_string(rkev));
+
+        res                = rd_kafka_event_DescribeCluster_result(rkev);
+        describe_clusterid = rd_kafka_DescribeCluster_result_cluster_id(res);
+
+        TEST_ASSERT(describe_clusterid &&
+                        !strcmp(describe_clusterid, clusterid),
+                    "DescribeCluster cluster id \"%s\" (len %d) does not match "
+                    "expected \"%s\" (len %d): cluster_id was over-read",
+                    describe_clusterid ? describe_clusterid : "(null)",
+                    describe_clusterid ? (int)strlen(describe_clusterid) : -1,
+                    clusterid, (int)strlen(clusterid));
+
+        rd_kafka_event_destroy(rkev);
+        rd_kafka_queue_destroy(q);
+        rd_kafka_mem_free(rk, clusterid);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0146_metadata_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         int variation;
@@ -493,6 +573,8 @@ int main_0146_metadata_mock(int argc, char **argv) {
         do_test_fast_metadata_refresh(1);
 
         do_test_stale_metadata_doesnt_migrate_partition();
+
+        do_test_cluster_id_not_overread();
 
         for (variation = 0; variation < 4; variation++) {
                 do_test_metadata_update_operation(

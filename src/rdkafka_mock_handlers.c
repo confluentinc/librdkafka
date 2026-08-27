@@ -1308,24 +1308,48 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         int i;
         size_t of_Brokers_cnt;
         int32_t response_Brokers_cnt = 0;
-
-        /* Consume the next pushed err+rtt for ApiKey=Metadata so an
-         * injected RTT (or __TRANSPORT close) on this connection takes
-         * effect. The returned err code is not propagated into the
-         * response body (Metadata's error reporting is per-topic and
-         * per-partition; tests that need to inject a topic-level
-         * MetadataResponse error should use the dedicated mock
-         * topic/partition error APIs). */
-        rd_kafka_mock_next_request_error(mconn, resp);
+        rd_kafka_resp_err_t err;
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
                 rd_kafka_buf_write_i32(resp, 0);
         }
 
+        /* Consume the next pushed err+rtt for ApiKey=Metadata so an
+         * injected RTT (or __TRANSPORT close) on this connection takes
+         * effect. From ApiVersion 13 (KIP-1102) the error code is also
+         * returned as the top level ErrorCode, see below. On earlier
+         * versions it can't be represented in the response body (error
+         * reporting is per-topic and per-partition only); tests that need
+         * to inject a topic-level MetadataResponse error should use the
+         * dedicated mock topic/partition error APIs. */
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+        if (err && rkbuf->rkbuf_reqhdr.ApiVersion < 13)
+                /* Top-level error code not supported */
+                err = RD_KAFKA_RESP_ERR_NO_ERROR;
+
+        if (err) {
+                /* Response: #Brokers */
+                rd_kafka_buf_write_arraycnt(resp, 0);
+
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2) {
+                        /* Response: ClusterId */
+                        rd_kafka_buf_write_str(resp, mcluster->id, -1);
+                }
+
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
+                        /* Response: ControllerId */
+                        rd_kafka_buf_write_i32(resp, mcluster->controller_id);
+                }
+
+                /* Response: #Topics */
+                rd_kafka_buf_write_arraycnt(resp, 0);
+
+                goto send_response;
+        }
+
         /* Response: #Brokers */
         of_Brokers_cnt = rd_kafka_buf_write_arraycnt_pos(resp);
-
         TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
                 if (!mrkb->up || !mrkb->in_metadata)
                         continue;
@@ -1336,7 +1360,7 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 /* Response: Brokers.Port */
                 rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1) {
-                        /* Response: Brokers.Rack (Matt's going to love this) */
+                        /* Response: Brokers.Rack */
                         rd_kafka_buf_write_str(resp, mrkb->rack, -1);
                 }
                 rd_kafka_buf_write_tags_empty(resp);
@@ -1473,18 +1497,23 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_arraycnt(resp, 0);
         }
 
+        if (requested_topics)
+                rd_kafka_topic_partition_list_destroy(requested_topics);
+
+send_response:
+
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 8 &&
             rkbuf->rkbuf_reqhdr.ApiVersion <= 10) {
                 /* ClusterAuthorizedOperations */
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
         }
 
-        rd_kafka_buf_skip_tags(rkbuf);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 13) {
+                /* Response: ErrorCode */
+                rd_kafka_buf_write_i16(resp, err);
+        }
+
         rd_kafka_buf_write_tags_empty(resp);
-
-        if (requested_topics)
-                rd_kafka_topic_partition_list_destroy(requested_topics);
-
         rd_kafka_mock_connection_send_response(mconn, resp);
 
         return 0;
@@ -1534,7 +1563,8 @@ rd_kafka_mock_handle_FindCoordinator(rd_kafka_mock_connection_t *mconn,
 
         if (!err && RD_KAFKAP_STR_LEN(&Key) > 0) {
                 mrkb = rd_kafka_mock_cluster_get_coord(mcluster, KeyType, &Key);
-                rd_assert(mrkb);
+                if (!mrkb)
+                        err = RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
         }
 
         if (!mrkb && !err)
@@ -5142,7 +5172,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 9, 8, rd_kafka_mock_handle_OffsetCommit},
         [RD_KAFKAP_ApiVersion]   = {0, 2, 3, rd_kafka_mock_handle_ApiVersion},
-        [RD_KAFKAP_Metadata]     = {0, 12, 9, rd_kafka_mock_handle_Metadata},
+        [RD_KAFKAP_Metadata]     = {0, 13, 9, rd_kafka_mock_handle_Metadata},
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,

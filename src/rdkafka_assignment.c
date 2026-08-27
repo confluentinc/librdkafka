@@ -1295,7 +1295,7 @@ static int unittest_assignment_stop_pending(void) {
         RD_UT_ASSERT(rk->rk_consumer.assignment.started_cnt == 0,
                      "non-started removal must not alter started_cnt");
         RD_UT_ASSERT(!rktp->rktp_wait_stop,
-                     "non-started removal must not mark stop-pending");
+                     "non-started removal must not set wait_stop");
         rd_kafka_toppar_destroy(rktp);
 
         rktp = unittest_assignment_add_removed_partition(rk, "rdut", 0);
@@ -1313,7 +1313,7 @@ static int unittest_assignment_stop_pending(void) {
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 1,
                      "first stop should increment wait_stop_cnt once");
         RD_UT_ASSERT(rktp->rktp_wait_stop,
-                     "first stop should mark the toppar stop-pending");
+                     "first stop should set wait_stop on the toppar");
         rd_kafka_toppar_destroy(rktp);
 
         rktp = unittest_assignment_add_removed_partition(rk, "rdut", 0);
@@ -1346,7 +1346,7 @@ static int unittest_assignment_stop_pending(void) {
         RD_UT_ASSERT(rk->rk_consumer.assignment.wait_stop_cnt == 0,
                      "completion should clear wait_stop_cnt");
         RD_UT_ASSERT(!rktp->rktp_wait_stop,
-                     "completion should clear stop-pending");
+                     "completion should clear wait_stop");
         RD_UT_ASSERT(!rktp->rktp_started, "completion should clear started");
         RD_UT_ASSERT(rk->rk_consumer.assignment.started_cnt == 0,
                      "completion should decrement started_cnt");
@@ -1386,8 +1386,8 @@ static int unittest_assignment_stop_pending(void) {
                              "same removal round should await both stop "
                              "replies");
                 RD_UT_ASSERT(rktp0->rktp_wait_stop && rktp1->rktp_wait_stop,
-                             "same removal round should mark both toppars "
-                             "stop-pending");
+                             "same removal round should set wait_stop on both "
+                             "toppars");
 
                 /* In this no-cgrp fixture, consuming the final outstanding
                  * stop through the production path would complete assignment

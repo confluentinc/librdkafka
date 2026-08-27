@@ -1590,6 +1590,8 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_resp_err_t err;
         rd_kafka_mock_cgrp_classic_t *mcgrp;
         rd_kafka_mock_cgrp_classic_proto_t *protos = NULL;
+        const char *generated_member_id            = NULL;
+        char memberid[32];
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
         rd_kafka_buf_read_i32(rkbuf, &SessionTimeoutMs);
@@ -1646,16 +1648,32 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
                                                        &ProtocolType);
                 rd_assert(mcgrp);
 
-                /* This triggers an async rebalance, the response will be
-                 * sent later. */
-                err = rd_kafka_mock_cgrp_classic_member_add(
-                    mcgrp, mconn, resp, &MemberId, &ProtocolType,
-                    &GroupInstanceId, protos, ProtocolCnt, SessionTimeoutMs);
-                if (!err) {
-                        /* .._add() assumes ownership of resp and protos */
-                        protos = NULL;
-                        rd_kafka_mock_connection_set_blocking(mconn, rd_true);
-                        return 0;
+                if (rkbuf->rkbuf_reqhdr.ApiVersion >= 4 &&
+                    !RD_KAFKAP_STR_LEN(&MemberId) &&
+                    !RD_KAFKAP_STR_LEN(&GroupInstanceId)) {
+                        /* KIP-394: a dynamic member that joins without a
+                         * member id has one generated for it and is told to
+                         * rejoin with it. Static members are exempt. */
+                        generated_member_id =
+                            rd_kafka_mock_cgrp_classic_member_id_generate(
+                                mcgrp, memberid, sizeof(memberid));
+                        err = RD_KAFKA_RESP_ERR_MEMBER_ID_REQUIRED;
+
+                } else {
+                        /* This triggers an async rebalance, the response will
+                         * be sent later. */
+                        err = rd_kafka_mock_cgrp_classic_member_add(
+                            mcgrp, mconn, resp, &MemberId, &ProtocolType,
+                            &GroupInstanceId, protos, ProtocolCnt,
+                            SessionTimeoutMs);
+                        if (!err) {
+                                /* .._add() assumes ownership of resp and
+                                 * protos */
+                                protos = NULL;
+                                rd_kafka_mock_connection_set_blocking(mconn,
+                                                                      rd_true);
+                                return 0;
+                        }
                 }
         }
 
@@ -1665,9 +1683,13 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_write_i16(resp, err);      /* ErrorCode */
         rd_kafka_buf_write_i32(resp, -1);       /* GenerationId */
         rd_kafka_buf_write_str(resp, NULL, -1); /* ProtocolName */
-        rd_kafka_buf_write_str(resp, NULL, -1); /* LeaderId */
-        rd_kafka_buf_write_kstr(resp, NULL);    /* MemberId */
-        rd_kafka_buf_write_i32(resp, 0);        /* MemberCnt */
+        /* LeaderId: empty, not NULL, when a MemberId is returned, as a real
+         * broker does. */
+        rd_kafka_buf_write_str(resp, generated_member_id ? "" : NULL, -1);
+        /* MemberId: the id generated for a KIP-394 MEMBER_ID_REQUIRED
+         * response, else NULL. */
+        rd_kafka_buf_write_str(resp, generated_member_id, -1);
+        rd_kafka_buf_write_i32(resp, 0); /* MemberCnt */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 

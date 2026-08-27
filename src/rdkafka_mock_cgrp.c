@@ -548,6 +548,21 @@ rd_kafka_mock_cgrp_classic_member_t *rd_kafka_mock_cgrp_classic_member_find(
 
 
 /**
+ * @brief Generate a MemberId for a member that joined without one (KIP-394).
+ *
+ * @returns \p dst.
+ */
+const char *rd_kafka_mock_cgrp_classic_member_id_generate(
+    rd_kafka_mock_cgrp_classic_t *mcgrp,
+    char *dst,
+    size_t dst_size) {
+        rd_snprintf(dst, dst_size, "mock-member-%" PRId32,
+                    ++mcgrp->member_id_seq);
+        return dst;
+}
+
+
+/**
  * @brief Update or add member to consumer group
  */
 rd_kafka_resp_err_t rd_kafka_mock_cgrp_classic_member_add(

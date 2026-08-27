@@ -167,6 +167,7 @@ set(
     0186-share_consumer_fatal_error.c
     0187-legacy_msgset_fetch_mock.c
     0190-share_consumer_telemetry.c
+    0191-joingroup_member_id_mock.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

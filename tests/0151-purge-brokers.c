@@ -825,6 +825,40 @@ static do_test_kip1102_rebootstrap_cases_variation_t
  */
 static rd_atomic32_t do_test_kip1102_rebootstrap_cases_rebootstrap_cnt;
 
+/**
+ * @brief Id of a broker that is removed from Metadata responses while still
+ *        listening and still present in `bootstrap.servers`, so that it can
+ *        only ever be reached through a bootstrap (`RD_KAFKA_CONFIGURED`)
+ *        broker object and never as a learned one. A Metadata request
+ *        arriving there proves the re-bootstrap sequence didn't just start
+ *        but actually resulted in a bootstrap broker being used.
+ *
+ *        -1 when the variation doesn't use one.
+ */
+static int32_t do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = -1;
+
+/**
+ * @brief Highest number of Metadata requests seen on the bootstrap-only
+ *        broker. Sampled while the mock cluster is still alive, as the
+ *        test harness destroys it before returning.
+ */
+static rd_atomic32_t
+    do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt;
+
+/**
+ * @brief Whether request tracking was already started for this variation.
+ */
+static rd_bool_t do_test_kip1102_rebootstrap_cases_tracking_started;
+
+static rd_bool_t
+do_test_kip1102_rebootstrap_cases_is_metadata_to_bootstrap_only(
+    rd_kafka_mock_request_t *request,
+    void *opaque) {
+        return rd_kafka_mock_request_api_key(request) == RD_KAFKAP_Metadata &&
+               rd_kafka_mock_request_id(request) ==
+                   do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id;
+}
+
 static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
                                                      int level,
                                                      const char *fac,
@@ -849,6 +883,18 @@ do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
         test_conf_set(conf, "fetch.wait.max.ms", "10");
         log_interceptor = test_conf_set_log_interceptor(
             conf, do_test_kip1102_rebootstrap_cases_log_cb, debug_contexts);
+
+        if (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id != -1) {
+                /* `cluster` is already created at this point and
+                 * `bootstrap.servers` still lists all of its brokers, so
+                 * hiding this one from Metadata makes it reachable only as
+                 * a bootstrap broker. Replica assignment already skips
+                 * brokers that aren't in metadata, so the expected learned
+                 * broker set is unaffected. */
+                rd_kafka_mock_broker_remove_from_metadata(
+                    cluster,
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id);
+        }
         return RD_KAFKA_CONSUMER;
 }
 
@@ -872,6 +918,22 @@ static rd_kafka_resp_err_t
 static rd_bool_t
 do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                                                   int action) {
+        if (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id != -1 &&
+            cluster) {
+                /* Sample while the cluster is alive: the harness destroys
+                 * it before returning to the test function. */
+                size_t cnt = test_mock_get_matching_request_cnt(
+                    cluster,
+                    do_test_kip1102_rebootstrap_cases_is_metadata_to_bootstrap_only,
+                    NULL);
+                if ((int32_t)cnt >
+                    rd_atomic32_get(
+                        &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt))
+                        rd_atomic32_set(
+                            &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt,
+                            (int32_t)cnt);
+        }
+
         if (action == 0) {
                 /* First action: set the error codes */
                 int i;
@@ -884,6 +946,18 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                 for (i = 0; i < 70; i++)
                         rd_kafka_mock_push_request_errors(
                             cluster, RD_KAFKAP_Metadata, 1, allowed_errors[0]);
+
+                if (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id !=
+                        -1 &&
+                    !do_test_kip1102_rebootstrap_cases_tracking_started) {
+                        /* Start tracking only now: this clears the request
+                         * list, discarding the initial bootstrap requests
+                         * which legitimately may have gone to the
+                         * bootstrap-only broker. */
+                        rd_kafka_mock_start_request_tracking(cluster);
+                        do_test_kip1102_rebootstrap_cases_tracking_started =
+                            rd_true;
+                }
 
         } else if (action == 1) {
                 /* Second action: in case there's no third action await
@@ -933,6 +1007,10 @@ static void do_test_kip1102_rebootstrap_cases(
 
         do_test_kip1102_rebootstrap_cases_variation = variation;
         rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 0);
+        rd_atomic32_init(
+            &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt, 0);
+        do_test_kip1102_rebootstrap_cases_tracking_started         = rd_false;
+        do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = -1;
         if (variation % 2 == 1) {
                 /* REBOOTSTRAP_REQUIRED error code cases:
                  * A re-bootstrap is expected for each error response.
@@ -941,6 +1019,16 @@ static void do_test_kip1102_rebootstrap_cases(
                  * timer activation. */
                 expected_min_rebootstrap_cnt = 65;
                 expected_rebootstrap_cnt     = 70;
+
+                /* Connections stay healthy in these cases, so an inert
+                 * re-bootstrap (one that starts but never actually reaches
+                 * a bootstrap broker) is observable. Add a 6th broker that
+                 * is only reachable as a bootstrap server.
+                 *
+                 * Not done for the ERR__TRANSPORT variations, where the
+                 * mock closes the connections and the client would reach a
+                 * bootstrap broker via the "all brokers down" path anyway. */
+                do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = 6;
         }
 
         int32_t expected_brokers_cnt[] = {5, 5, 4, 5};
@@ -957,7 +1045,10 @@ static void do_test_kip1102_rebootstrap_cases(
                                 {TEST_ACTION_SET_UP_BROKER, 1}};
 
         do_test_add_remove_brokers0(
-            5, actions,
+            do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id == -1
+                ? 5
+                : 6,
+            actions,
             variation / 2 == 0 ? RD_ARRAY_SIZE(actions)
                                : RD_ARRAY_SIZE(actions) - 1,
             expected_broker_ids, expected_brokers_cnt,
@@ -972,6 +1063,22 @@ static void do_test_kip1102_rebootstrap_cases(
                     "between %d and %d, got %d",
                     expected_min_rebootstrap_cnt, expected_rebootstrap_cnt,
                     rebootstrap_cnt);
+
+        if (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id != -1) {
+                /* Starting the sequence isn't enough: it must result in a
+                 * bootstrap broker actually being queried, otherwise the
+                 * client keeps asking the very brokers that reported its
+                 * metadata as stale. */
+                int32_t bootstrap_only_metadata_cnt = rd_atomic32_get(
+                    &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt);
+                TEST_ASSERT(
+                    bootstrap_only_metadata_cnt > 0,
+                    "Expected at least one Metadata request to the "
+                    "bootstrap-only broker %" PRId32
+                    " after %d re-bootstrap sequence(s), got %" PRId32,
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id,
+                    rebootstrap_cnt, bootstrap_only_metadata_cnt);
+        }
 
         rd_free(log_interceptor);
         allowed_errors = NULL;

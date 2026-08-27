@@ -503,6 +503,9 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         /* Remove ":9092" port suffix from nodename */
         if ((t = strrchr(name, ':')))
                 *t = '\0';
+        if (name[strlen(name) - 1] == '.') {
+                name[strlen(name) - 1] = '\0';
+        }
 
         /* Normalize hostname (remove trailing dot) for both SNI and certificate
          * verification */

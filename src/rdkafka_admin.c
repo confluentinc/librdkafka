@@ -2094,7 +2094,7 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
         }
 
         /* #topics */
-        rd_kafka_buf_read_i32(reply, &topic_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &topic_cnt, 100000);
 
         if (topic_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -2120,10 +2120,50 @@ rd_kafka_CreateTopicsResponse_parse(rd_kafka_op_t *rko_req,
                 int orig_pos;
 
                 rd_kafka_buf_read_str(reply, &ktopic);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 7) {
+                        /* TopicId: not exposed to the caller. */
+                        rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
+                        rd_kafka_buf_read_uuid(reply, &TopicId);
+                }
+
                 rd_kafka_buf_read_i16(reply, &error_code);
 
                 if (rd_kafka_buf_ApiVersion(reply) >= 1)
                         rd_kafka_buf_read_str(reply, &error_msg);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 5) {
+                        int32_t NumPartitions, ReplicationFactor;
+                        int32_t ConfigCnt;
+
+                        /* NumPartitions, ReplicationFactor: not exposed to
+                         * the caller. */
+                        rd_kafka_buf_read_i32(reply, &NumPartitions);
+                        rd_kafka_buf_read_i32(reply, &ReplicationFactor);
+
+                        /* Configs: not exposed to the caller. */
+                        rd_kafka_buf_read_arraycnt(reply, &ConfigCnt, 100000);
+                        while (ConfigCnt-- > 0) {
+                                rd_kafkap_str_t ConfigName, ConfigValue;
+                                int8_t ConfigSource;
+                                rd_bool_t ConfigReadOnly, ConfigIsSensitive;
+
+                                rd_kafka_buf_read_str(reply, &ConfigName);
+                                rd_kafka_buf_read_str(reply, &ConfigValue);
+                                rd_kafka_buf_read_bool(reply, &ConfigReadOnly);
+                                rd_kafka_buf_read_i8(reply, &ConfigSource);
+                                rd_kafka_buf_read_bool(reply,
+                                                       &ConfigIsSensitive);
+                                rd_kafka_buf_skip_tags(reply); /* Config
+                                                                * tags */
+                        }
+                }
+
+                rd_kafka_buf_skip_tags(reply); /* Topic-result tags,
+                                                * including the tagged
+                                                * TopicConfigErrorCode
+                                                * (v5+), which is not
+                                                * exposed to the caller. */
 
                 /* For non-blocking CreateTopicsRequests the broker
                  * will returned REQUEST_TIMED_OUT for topics
@@ -2337,12 +2377,25 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
         for (i = 0; i < (int)topic_cnt; i++) {
                 rd_kafkap_str_t ktopic;
                 int16_t error_code;
+                rd_kafkap_str_t error_msg = RD_KAFKAP_STR_INITIALIZER;
+                char *this_errstr         = NULL;
                 rd_kafka_topic_result_t *terr;
                 rd_kafka_NewTopic_t skel;
                 int orig_pos;
 
                 rd_kafka_buf_read_str(reply, &ktopic);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 6) {
+                        /* TopicId: not exposed to the caller. */
+                        rd_kafka_Uuid_t TopicId = RD_KAFKA_UUID_ZERO;
+                        rd_kafka_buf_read_uuid(reply, &TopicId);
+                }
+
                 rd_kafka_buf_read_i16(reply, &error_code);
+
+                if (rd_kafka_buf_ApiVersion(reply) >= 5)
+                        rd_kafka_buf_read_str(reply, &error_msg);
+
                 rd_kafka_buf_skip_tags(reply);
 
                 /* For non-blocking DeleteTopicsRequests the broker
@@ -2354,12 +2407,22 @@ rd_kafka_DeleteTopicsResponse_parse(rd_kafka_op_t *rko_req,
                     rd_kafka_confval_get_int(&rko_req->rko_u.admin_request
                                                   .options.operation_timeout) <=
                         0) {
-                        error_code = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        error_code  = RD_KAFKA_RESP_ERR_NO_ERROR;
+                        this_errstr = NULL;
                 }
 
-                terr = rd_kafka_topic_result_new(
-                    ktopic.str, RD_KAFKAP_STR_LEN(&ktopic), error_code,
-                    error_code ? rd_kafka_err2str(error_code) : NULL);
+                if (error_code) {
+                        if (RD_KAFKAP_STR_IS_NULL(&error_msg) ||
+                            RD_KAFKAP_STR_LEN(&error_msg) == 0)
+                                this_errstr =
+                                    (char *)rd_kafka_err2str(error_code);
+                        else
+                                RD_KAFKAP_STR_DUPA(&this_errstr, &error_msg);
+                }
+
+                terr = rd_kafka_topic_result_new(ktopic.str,
+                                                 RD_KAFKAP_STR_LEN(&ktopic),
+                                                 error_code, this_errstr);
 
                 /* As a convenience to the application we insert topic result
                  * in the same order as they were requested. The broker
@@ -3671,7 +3734,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
         rd_kafka_op_throttle_time(rkb, rk->rk_rep, Throttle_Time);
 
         /* #resources */
-        rd_kafka_buf_read_i32(reply, &res_cnt);
+        rd_kafka_buf_read_arraycnt(reply, &res_cnt, 100000);
 
         if (res_cnt > rd_list_cnt(&rko_req->rko_u.admin_request.args))
                 rd_kafka_buf_parse_fail(
@@ -3732,7 +3795,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         config->errstr = rd_strdup(this_errstr);
 
                 /* #config_entries */
-                rd_kafka_buf_read_i32(reply, &entry_cnt);
+                rd_kafka_buf_read_arraycnt(reply, &entry_cnt, 100000);
 
                 for (ci = 0; ci < (int)entry_cnt; ci++) {
                         rd_kafkap_str_t config_name, config_value;
@@ -3749,7 +3812,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_bool(reply, &entry->a.is_readonly);
 
                         /* ApiVersion 0 has is_default field, while
-                         * ApiVersion 1 has source field.
+                         * ApiVersion 1+ has source field.
                          * Convert between the two so they look the same
                          * to the caller. */
                         if (rd_kafka_buf_ApiVersion(reply) == 0) {
@@ -3771,23 +3834,10 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                         rd_kafka_buf_read_bool(reply, &entry->a.is_sensitive);
 
 
-                        if (rd_kafka_buf_ApiVersion(reply) == 1) {
-                                /* #config_synonyms (ApiVersion 1) */
-                                rd_kafka_buf_read_i32(reply, &syn_cnt);
-
-                                if (syn_cnt > 100000)
-                                        rd_kafka_buf_parse_fail(
-                                            reply,
-                                            "Broker returned %" PRId32
-                                            " config synonyms for "
-                                            "ConfigResource %d,%s: "
-                                            "limit is 100000",
-                                            syn_cnt, config->restype,
-                                            config->name);
-
-                                if (syn_cnt > 0)
-                                        rd_list_grow(&entry->synonyms, syn_cnt);
-
+                        if (rd_kafka_buf_ApiVersion(reply) >= 1) {
+                                /* #config_synonyms (ApiVersion 1+) */
+                                rd_kafka_buf_read_arraycnt(reply, &syn_cnt,
+                                                           100000);
                         } else {
                                 /* No synonyms in ApiVersion 0 */
                                 syn_cnt = 0;
@@ -3795,7 +3845,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
 
 
 
-                        /* Read synonyms (ApiVersion 1) */
+                        /* Read synonyms (ApiVersion 1+) */
                         for (si = 0; si < (int)syn_cnt; si++) {
                                 rd_kafkap_str_t syn_name, syn_value;
                                 int8_t syn_source;
@@ -3804,6 +3854,7 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_kafka_buf_read_str(reply, &syn_name);
                                 rd_kafka_buf_read_str(reply, &syn_value);
                                 rd_kafka_buf_read_i8(reply, &syn_source);
+                                rd_kafka_buf_skip_tags(reply);
 
                                 syn_entry = rd_kafka_ConfigEntry_new0(
                                     syn_name.str, RD_KAFKAP_STR_LEN(&syn_name),
@@ -3829,9 +3880,24 @@ rd_kafka_DescribeConfigsResponse_parse(rd_kafka_op_t *rko_req,
                                 rd_list_add(&entry->synonyms, syn_entry);
                         }
 
+                        if (rd_kafka_buf_ApiVersion(reply) >= 3) {
+                                int8_t ConfigType;
+                                rd_kafkap_str_t Documentation;
+
+                                /* ConfigType: not exposed to the caller. */
+                                rd_kafka_buf_read_i8(reply, &ConfigType);
+                                /* Documentation: not exposed to the
+                                 * caller. */
+                                rd_kafka_buf_read_str(reply, &Documentation);
+                        }
+
+                        rd_kafka_buf_skip_tags(reply); /* ConfigEntry tags */
+
                         rd_kafka_ConfigResource_add_ConfigEntry(config, entry);
                         entry = NULL;
                 }
+
+                rd_kafka_buf_skip_tags(reply); /* DescribeConfigsResult tags */
 
                 /* As a convenience to the application we insert result
                  * in the same order as they were requested. The broker

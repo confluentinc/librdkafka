@@ -924,6 +924,68 @@ static void do_test_list_offsets_leader_change(int variation) {
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief Verify that OffsetForLeaderEpoch validation still works, end to
+ *        end, when the mock broker only accepts the raised protocol
+ *        version ceiling (v4, the first KIP-482 flexible version and the
+ *        version that adds the ReplicaId field).
+ */
+static void do_test_offset_for_leader_epoch_flexver(void) {
+        const char *topic      = test_mk_topic_name(__FUNCTION__, 1);
+        const char *c1_groupid = topic;
+        rd_kafka_t *c1;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        int msg_cnt     = 5;
+        uint64_t testid = test_id_generate();
+        rd_kafka_conf_t *conf;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 1, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_OffsetForLeaderEpoch, 4, 4));
+
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_cnt, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+
+        c1 = test_create_consumer(c1_groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c1, topic);
+
+        /* Consume initial messages and join the group, etc. */
+        test_consumer_poll("MSG_INIT", c1, testid, 0, 0, msg_cnt, NULL);
+
+        /* Trigger a leader change, which causes an OffsetForLeaderEpoch
+         * request (at the pinned v4) to be sent to validate the new
+         * leader's epoch before resuming fetches. */
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+        rd_kafka_poll(c1, 1000);
+        rd_sleep(1);
+
+        test_produce_msgs_easy_v(topic, testid, 0, 0, msg_cnt, 10,
+                                 "bootstrap.servers", bootstraps,
+                                 "batch.num.messages", "1", NULL);
+
+        test_consumer_poll("MSG_AFTER_LEADER_CHANGE", c1, testid, 0, 0, msg_cnt,
+                           NULL);
+
+        rd_kafka_destroy(c1);
+
+        test_mock_cluster_destroy(mcluster);
+
+        TEST_LATER_CHECK();
+        SUB_TEST_PASS();
+}
+
+
 int main_0139_offset_validation_mock(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -945,6 +1007,8 @@ int main_0139_offset_validation_mock(int argc, char **argv) {
 
         do_test_list_offsets_leader_change(0);
         do_test_list_offsets_leader_change(1);
+
+        do_test_offset_for_leader_epoch_flexver();
 
         return 0;
 }

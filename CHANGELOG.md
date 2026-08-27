@@ -73,6 +73,7 @@ librdkafka v2.15.0 is a feature release:
 
 ## Enhancements
 * Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
+* Raise API version ceilings to match the Apache Kafka 2.8.0 Java client (#5566).
 
 ## Fixes
 

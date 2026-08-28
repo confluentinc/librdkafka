@@ -521,6 +521,16 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                         *t = '\0';
         }
 
+        /* Strip the zone id from a scoped IPv6 literal:
+         * "fe80::1%eth0" -> "fe80::1" (also "%25eth0" when percent-encoded,
+         * see RFC 6874).
+         * The zone identifies the local link the address is reachable on
+         * (RFC 4007), not the peer, and a certificate cannot assert one: an
+         * iPAddress entry holds the 4 or 16 address octets alone (RFC 5280).
+         * The address itself is what is matched. */
+        if (strchr(name, ':') && (t = strchr(name, '%')))
+                *t = '\0';
+
         /* Normalize hostname (remove trailing dot) for both SNI and certificate
          * verification */
         rd_kafka_ssl_normalize_hostname(name, name_for_verify,
@@ -574,8 +584,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                  *
                  * Fall back to the dNSName entries if the name only looks
                  * numerical but is not a valid address: "1.2.3" is a legal
-                 * hostname, and an IPv6 literal carrying a zone id
-                 * ("fe80::1%eth0") is not accepted by the address parser. */
+                 * hostname. */
                 if (is_ip_literal &&
                     X509_VERIFY_PARAM_set1_ip_asc(param, name_for_verify) == 1)
                         ; /* verified as an address */

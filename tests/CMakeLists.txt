@@ -165,6 +165,7 @@ set(
     0184-share_consumer_topic_recreate.c
     0185-share_consumer_max_poll_interval.c
     0186-share_consumer_fatal_error.c
+    0187-legacy_msgset_fetch_mock.c
     0190-share_consumer_telemetry.c
     0191-ipv6_nodename_mock.c
     8000-idle.cpp

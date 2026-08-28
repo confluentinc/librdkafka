@@ -6,7 +6,14 @@ librdkafka v2.15.1 is a maintenance release:
   build toolchain (msys2, vcpkg) (#5579).
 * Fix `int_latency` metric calculation, that was reporting bogus values when
   `message.timeout.ms` is set to 0 (infinite) (#5335).
+* IPv6 addresses are wrapped in square brackets following RFC 3986, allowing to connect to those addresses (#5544).
+* IPv6 addresses are correctly passed to OpenSSL as IPs not as hostnames with brackets and the certificate is validated against its `iPAddress` entries instead of against `dNSName` entries (#5544).
 
+
+## Upgrade considerations
+
+* If you're parsing the the nodename as received by `connect_cb`, `stats_cb`, `ssl_cert_verify_cb`, `throttle_cb` or user metadata calls, make sure you're correctly parsing it following RFC 3986.
+* Make sure you're connecting to brokers providing a certificate with the IP in a `iPAddress` entry, not in a `dNSName` entry.
 
 ## Security considerations
 

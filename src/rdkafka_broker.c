@@ -142,7 +142,14 @@ static void rd_kafka_mk_nodename(char *dest,
                                  size_t dsize,
                                  const char *name,
                                  uint16_t port) {
-        rd_snprintf(dest, dsize, "%s:%hu", name, port);
+        /* An IPv6 literal must be enclosed in brackets so the trailing
+         * ":port" is not mistaken for part of the address. Only a bare
+         * (unbracketed) literal needs wrapping; a hostname or IPv4 address
+         * never contains a ':'. */
+        if (strchr(name, ':') && *name != '[')
+                rd_snprintf(dest, dsize, "[%s]:%hu", name, port);
+        else
+                rd_snprintf(dest, dsize, "%s:%hu", name, port);
 }
 
 /**
@@ -6720,6 +6727,71 @@ static int rd_ut_ApiVersion_at_least(void) {
 }
 
 /**
+ * @brief Unittest for broker nodename construction.
+ *
+ * A nodename produced by rd_kafka_mk_nodename() must be split back into the
+ * original host and port by rd_addrinfo_prepare() (the parsing that feeds
+ * getaddrinfo()). This exercises IPv6 literals, in particular compressed
+ * forms ending in "::", which otherwise concatenate into an unresolvable
+ * ":::port" and fail name resolution.
+ */
+static int rd_ut_mk_nodename(void) {
+        static const struct {
+                const char *host;
+                uint16_t port;
+                const char *exp_host; /* NULL: same as host */
+        } hosts[] = {
+            {"broker.example.com", 9092},
+            {"192.0.2.1", 9092},
+            {"2600:1f18:4dcf:654c:46fc:0:0:1", 9092}, /* full IPv6 */
+            {"2600:1f18:4dcf:654c:46fc::", 9092},     /* compressed tail */
+            {"fe80::", 9092},                         /* compressed */
+            {"::1", 9092},                            /* IPv6 loopback */
+            /* An IPv6 literal that is already enclosed in brackets, as it is
+             * when configured that way in bootstrap.servers, must not be
+             * bracketed a second time. */
+            {"[::1]", 9092, "::1"},
+            {"[2600:1f18:4dcf:654c:46fc::]", 9092,
+             "2600:1f18:4dcf:654c:46fc::"},
+            {NULL, 0},
+        };
+        int i;
+        char nodename[256];
+        char expected_port[16];
+        char *node, *svc;
+        const char *errstr;
+        const char *exp_host;
+
+        for (i = 0; hosts[i].host; i++) {
+                rd_kafka_mk_nodename(nodename, sizeof(nodename), hosts[i].host,
+                                     hosts[i].port);
+
+                exp_host =
+                    hosts[i].exp_host ? hosts[i].exp_host : hosts[i].host;
+
+                errstr = rd_addrinfo_prepare(nodename, &node, &svc);
+                RD_UT_ASSERT(!errstr,
+                             "host '%s' -> nodename '%s': "
+                             "rd_addrinfo_prepare failed: %s",
+                             hosts[i].host, nodename, errstr);
+
+                RD_UT_ASSERT(!strcmp(node, exp_host),
+                             "host '%s' -> nodename '%s': parsed host '%s' "
+                             "does not match expected '%s'",
+                             hosts[i].host, nodename, node, exp_host);
+
+                rd_snprintf(expected_port, sizeof(expected_port), "%hu",
+                            hosts[i].port);
+                RD_UT_ASSERT(!strcmp(svc, expected_port),
+                             "host '%s' -> nodename '%s': parsed port '%s' "
+                             "does not match expected '%s'",
+                             hosts[i].host, nodename, svc, expected_port);
+        }
+
+        RD_UT_PASS();
+}
+
+/**
  * @name Unit tests
  * @{
  *
@@ -6729,6 +6801,7 @@ int unittest_broker(void) {
 
         fails += rd_ut_reconnect_backoff();
         fails += rd_ut_ApiVersion_at_least();
+        fails += rd_ut_mk_nodename();
 
         return fails;
 }

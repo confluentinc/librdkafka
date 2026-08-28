@@ -493,6 +493,7 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                                                   size_t errstr_size) {
         char name[RD_KAFKA_NODENAME_SIZE];
         char name_for_verify[RD_KAFKA_NODENAME_SIZE];
+        rd_bool_t is_ip_literal;
         char *t;
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
@@ -500,24 +501,45 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                     rktrans->rktrans_rkb->rkb_nodename);
         rd_kafka_broker_unlock(rktrans->rktrans_rkb);
 
-        /* Remove ":9092" port suffix from nodename */
+        /* Remove ":9092" port suffix from nodename.
+         * Use the last ':': the port holds no ':' of its own, so it is always
+         * the final one, whereas an IPv6 literal does contain ':'. */
         if ((t = strrchr(name, ':')))
                 *t = '\0';
+
+        /* Strip the brackets enclosing an IPv6 literal, leaving the bare
+         * address: "[2600::1]" -> "2600::1".
+         * The nodename holds an IPv6 literal in the bracketed URL form (see
+         * rd_kafka_mk_nodename()), but both SNI and OpenSSL's certificate
+         * verification expect the bare address: a bracketed literal does not
+         * parse as an IP address, so it would be matched against the
+         * certificate's dNSName entries instead of its iPAddress entries and
+         * fail verification. */
+        if (*name == '[') {
+                memmove(name, name + 1, strlen(name));
+                if ((t = strrchr(name, ']')))
+                        *t = '\0';
+        }
 
         /* Normalize hostname (remove trailing dot) for both SNI and certificate
          * verification */
         rd_kafka_ssl_normalize_hostname(name, name_for_verify,
                                         sizeof(name_for_verify));
 
+        /* Is this a numerical address rather than a hostname?
+         * An IP literal must not be sent as SNI (RFC 6066) and must be
+         * verified against the certificate's iPAddress entries rather than its
+         * dNSName entries.
+         * The enclosing brackets were stripped above, so a ':' identifies an
+         * IPv6 literal: a DNS hostname can never contain one. */
+        is_ip_literal = *name_for_verify &&
+                        (strchr(name_for_verify, ':') != NULL ||
+                         /*ipv4*/ strspn(name_for_verify, "0123456789.") ==
+                             strlen(name_for_verify));
+
 #if (OPENSSL_VERSION_NUMBER >= 0x0090806fL) && !defined(OPENSSL_NO_TLSEXT)
         /* If non-numerical hostname, send it for SNI */
-        if (!(/*ipv6*/ (
-                  strchr(name_for_verify, ':') &&
-                  strspn(name_for_verify, "0123456789abcdefABCDEF:.[]%") ==
-                      strlen(name_for_verify)) ||
-              /*ipv4*/
-              strspn(name_for_verify, "0123456789.") ==
-                  strlen(name_for_verify)) &&
+        if (!is_ip_literal &&
             !SSL_set_tlsext_host_name(rktrans->rktrans_ssl, name_for_verify))
                 goto fail;
 #endif
@@ -534,19 +556,43 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
                            name, name_for_verify);
         }
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000 && !defined(OPENSSL_IS_BORINGSSL)
-        if (!SSL_set1_host(rktrans->rktrans_ssl, name_for_verify))
-                goto fail;
-#elif OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
+#if OPENSSL_VERSION_NUMBER >= 0x1000200fL /* 1.0.2 */
         {
                 X509_VERIFY_PARAM *param;
 
                 param = SSL_get0_param(rktrans->rktrans_ssl);
 
-                if (!X509_VERIFY_PARAM_set1_host(
-                        param, name_for_verify,
-                        strnlen(name_for_verify, sizeof(name_for_verify))))
-                        goto fail;
+                /* Match an IP literal against the certificate's iPAddress
+                 * entries and a hostname against its dNSName entries.
+                 *
+                 * X509_VERIFY_PARAM_*() is used for both rather than
+                 * SSL_set1_host(): both have been available since 1.0.2,
+                 * whereas SSL_set1_host() requires 1.1.0, and its recognition
+                 * of IP literals was added later still, so relying on it would
+                 * silently match a literal against the dNSName entries on
+                 * older versions and never against the iPAddress entries.
+                 *
+                 * Fall back to the dNSName entries if the name only looks
+                 * numerical but is not a valid address: "1.2.3" is a legal
+                 * hostname, and an IPv6 literal carrying a zone id
+                 * ("fe80::1%eth0") is not accepted by the address parser. */
+                if (is_ip_literal &&
+                    X509_VERIFY_PARAM_set1_ip_asc(param, name_for_verify) == 1)
+                        ; /* verified as an address */
+                else {
+                        if (is_ip_literal) {
+                                /* Discard the address parsing error so that a
+                                 * later failure reports its own reason. */
+                                ERR_clear_error();
+                                is_ip_literal = rd_false;
+                        }
+
+                        if (!X509_VERIFY_PARAM_set1_host(
+                                param, name_for_verify,
+                                strnlen(name_for_verify,
+                                        sizeof(name_for_verify))))
+                                goto fail;
+                }
         }
 #else
         rd_snprintf(errstr, errstr_size,
@@ -557,8 +603,8 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
 #endif
 
         rd_rkb_dbg(rktrans->rktrans_rkb, SECURITY, "ENDPOINT",
-                   "Enabled endpoint identification using hostname %s",
-                   name_for_verify);
+                   "Enabled endpoint identification using %s %s",
+                   is_ip_literal ? "address" : "hostname", name_for_verify);
 
         return 0;
 

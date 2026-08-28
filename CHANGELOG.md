@@ -6,14 +6,15 @@ librdkafka v2.15.1 is a maintenance release:
   build toolchain (msys2, vcpkg) (#5579).
 * Fix `int_latency` metric calculation, that was reporting bogus values when
   `message.timeout.ms` is set to 0 (infinite) (#5335).
-* IPv6 addresses are wrapped in square brackets following RFC 3986, allowing to connect to those addresses (#5544).
+* IPv6 addresses are wrapped in square brackets following RFC 3986, allowing to connect to those compressed IPv6 addresses (#5544).
 * IPv6 addresses are correctly passed to OpenSSL as IPs not as hostnames with brackets and the certificate is validated against its `iPAddress` entries instead of against `dNSName` entries (#5544).
 
 
 ## Upgrade considerations
 
 * If you're parsing the the nodename as received by `connect_cb`, `stats_cb`, `ssl_cert_verify_cb`, `throttle_cb` or user metadata calls, make sure you're correctly parsing it following RFC 3986.
-* Make sure you're connecting to brokers providing a certificate with the IP in a `iPAddress` entry, not in a `dNSName` entry.
+* Make sure the brokers' certificates carry the IP in an iPAddress entry, not a dNSName entry. Previously the certificate was validated against dNSName (falling back to the subject CN) whenever the address could not be parsed as an IP literal: with OpenSSL < 3.0 or BoringSSL for any IP address, and on all OpenSSL versions for an IPv6 address configured in brackets in bootstrap.servers ([::1]:9092), which never verified. A scoped address (fe80::1%eth0) was likewise dNSName-matched on every version and now has the zone stripped before matching. IPv6 addresses ending in :: could not be connected to at all, as the nodename became host:::port and failed name resolution. In the remaining cases, a bare IPv4 or IPv6 literal on OpenSSL >= 3.0, the iPAddress entry was already used, and behaviour is unchanged.
+
 
 ## Security considerations
 

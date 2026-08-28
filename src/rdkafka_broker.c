@@ -6739,6 +6739,7 @@ static int rd_ut_mk_nodename(void) {
         static const struct {
                 const char *host;
                 uint16_t port;
+                const char *exp_host; /* NULL: same as host */
         } hosts[] = {
             {"broker.example.com", 9092},
             {"192.0.2.1", 9092},
@@ -6746,6 +6747,12 @@ static int rd_ut_mk_nodename(void) {
             {"2600:1f18:4dcf:654c:46fc::", 9092},     /* compressed tail */
             {"fe80::", 9092},                         /* compressed */
             {"::1", 9092},                            /* IPv6 loopback */
+            /* An IPv6 literal that is already enclosed in brackets, as it is
+             * when configured that way in bootstrap.servers, must not be
+             * bracketed a second time. */
+            {"[::1]", 9092, "::1"},
+            {"[2600:1f18:4dcf:654c:46fc::]", 9092,
+             "2600:1f18:4dcf:654c:46fc::"},
             {NULL, 0},
         };
         int i;
@@ -6753,10 +6760,14 @@ static int rd_ut_mk_nodename(void) {
         char expected_port[16];
         char *node, *svc;
         const char *errstr;
+        const char *exp_host;
 
         for (i = 0; hosts[i].host; i++) {
                 rd_kafka_mk_nodename(nodename, sizeof(nodename), hosts[i].host,
                                      hosts[i].port);
+
+                exp_host =
+                    hosts[i].exp_host ? hosts[i].exp_host : hosts[i].host;
 
                 errstr = rd_addrinfo_prepare(nodename, &node, &svc);
                 RD_UT_ASSERT(!errstr,
@@ -6764,10 +6775,10 @@ static int rd_ut_mk_nodename(void) {
                              "rd_addrinfo_prepare failed: %s",
                              hosts[i].host, nodename, errstr);
 
-                RD_UT_ASSERT(!strcmp(node, hosts[i].host),
+                RD_UT_ASSERT(!strcmp(node, exp_host),
                              "host '%s' -> nodename '%s': parsed host '%s' "
                              "does not match expected '%s'",
-                             hosts[i].host, nodename, node, hosts[i].host);
+                             hosts[i].host, nodename, node, exp_host);
 
                 rd_snprintf(expected_port, sizeof(expected_port), "%hu",
                             hosts[i].port);

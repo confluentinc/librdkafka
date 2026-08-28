@@ -35,33 +35,46 @@
  * A broker that advertises a compressed IPv6 literal (one ending in "::")
  * used to produce a nodename such as "2600:...:46fc:::9092" — the trailing
  * "::" of the address concatenated directly against the ":port", giving a
- * ":::" that name resolution rejects with "Name or service not known".
- * The literal must instead be bracketed: "[2600:...:46fc::]:9092".
+ * ":::" run that name resolution rejects with "Name or service not known".
+ * The literal must instead be enclosed in brackets, as in an URL authority:
+ * "[2600:...:46fc::]:9092".
  */
 
 /* Compressed IPv6 literal ending in "::", mirroring the customer report. */
 static const char *ipv6_host = "2600:1f18:4dcf:654c:46fc::";
+/* The nodename the above must produce: the literal bracketed, then ":port". */
+static const char *exp_nodename = "[2600:1f18:4dcf:654c:46fc::]:9092";
 
-static rd_bool_t nodename_bracketed;
-static rd_bool_t nodename_malformed;
+static rd_bool_t nodename_built;
+static rd_bool_t resolve_failed;
+static rd_bool_t resolve_succeeded;
 
 /**
  * @brief Inspect broker log lines for the nodename derived from the
  *        advertised IPv6 address.
+ *
+ * @remark Assert on the resolution *outcome* as well as on the nodename:
+ *         matching the nodename alone would still pass if the bracketed form
+ *         were built but no longer understood by rd_addrinfo_prepare().
  */
 static void ipv6_nodename_mock_log_cb(const rd_kafka_t *rk,
                                       int level,
                                       const char *fac,
                                       const char *buf) {
-        /* The bug manifests as a ":::" run wherever the mangled nodename is
-         * printed (nodename change or a "Failed to resolve" failure). */
-        if (strstr(buf, ":::"))
-                nodename_malformed = rd_true;
+        /* The bug manifests as a failure to resolve the constructed
+         * nodename. */
+        if (strstr(buf, "Failed to resolve") && strstr(buf, ipv6_host))
+                resolve_failed = rd_true;
 
-        /* The fixed nodename brackets the literal: "[<ipv6>]:<port>". */
-        if (strstr(buf, "Nodename changed") && strstr(buf, "[") &&
-            strstr(buf, ipv6_host))
-                nodename_bracketed = rd_true;
+        /* Resolution succeeded once a connection to the advertised address is
+         * attempted. The connection itself then fails (the address is not
+         * routable from the test host), which is expected and ignored by
+         * ipv6_nodename_is_fatal_cb(). */
+        if (strstr(buf, "Connecting to") && strstr(buf, ipv6_host))
+                resolve_succeeded = rd_true;
+
+        if (strstr(buf, "Nodename changed") && strstr(buf, exp_nodename))
+                nodename_built = rd_true;
 }
 
 /**
@@ -123,19 +136,27 @@ int main_0191_ipv6_nodename_mock(int argc, char **argv) {
         if (!rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(1000)))
                 rd_kafka_metadata_destroy(md);
 
-        TEST_SAY("Waiting for the IPv6 nodename to be constructed\n");
-        for (i = 0; i < 50 && !nodename_bracketed && !nodename_malformed; i++)
+        TEST_SAY("Waiting for the IPv6 nodename to be resolved\n");
+        /* Wait for the resolution *outcome*, not merely for the nodename to be
+         * built: "Nodename changed" is logged before the address is resolved,
+         * so stopping there would miss the failure this test guards against. */
+        for (i = 0; i < 50 && !resolve_failed && !resolve_succeeded; i++)
                 rd_kafka_poll(rk, 100);
 
-        TEST_ASSERT(!nodename_malformed,
-                    "IPv6 nodename was built with a malformed \":::\" run "
-                    "(host and port concatenated without brackets)");
-        TEST_ASSERT(nodename_bracketed,
-                    "expected the IPv6 literal to be bracketed as "
-                    "\"[%s]:port\" in the broker nodename",
-                    ipv6_host);
+        TEST_ASSERT(nodename_built,
+                    "expected the advertised IPv6 literal to produce the "
+                    "nodename \"%s\"",
+                    exp_nodename);
+        TEST_ASSERT(!resolve_failed,
+                    "nodename \"%s\" failed to resolve: the bracketed literal "
+                    "was not split back into address and port",
+                    exp_nodename);
+        TEST_ASSERT(resolve_succeeded,
+                    "expected a connection attempt to %s, indicating that the "
+                    "nodename \"%s\" resolved",
+                    ipv6_host, exp_nodename);
 
-        TEST_SAY("IPv6 nodename correctly bracketed\n");
+        TEST_SAY("IPv6 nodename \"%s\" built and resolved\n", exp_nodename);
         rd_kafka_destroy(rk);
         test_mock_cluster_destroy(cluster);
         rd_free(log_interceptor);

@@ -153,6 +153,42 @@ static void rd_kafka_mk_nodename(char *dest,
 }
 
 /**
+ * @brief Extract the bare hostname from a broker nodename: the inverse of
+ *        rd_kafka_mk_nodename().
+ *
+ * Strips the ":port" suffix, the brackets enclosing an IPv6 literal
+ * ("[2600::1]:9092" -> "2600::1"), and the zone id of a scoped IPv6 literal
+ * ("fe80::1%eth0" -> "fe80::1", also "%25eth0" when percent-encoded per
+ * RFC 6874): the zone identifies the local link the address is reachable on
+ * (RFC 4007), not the peer, so it has no place in a hostname used to
+ * identify the remote end (SNI, certificate verification, SASL).
+ */
+void rd_kafka_nodename_to_hostname(const char *nodename,
+                                   char *dest,
+                                   size_t dsize) {
+        char *t;
+
+        rd_strlcpy(dest, nodename, dsize);
+
+        /* Strip the ":port" suffix. Use the last ':' so an IPv6 literal such
+         * as "[2600::1]:9092" is not truncated at a ':' within the address. */
+        if ((t = strrchr(dest, ':')))
+                *t = '\0';
+
+        /* Strip the enclosing brackets from an IPv6 literal, leaving the bare
+         * address: "[2600::1]" -> "2600::1". */
+        if (*dest == '[') {
+                memmove(dest, dest + 1, strlen(dest));
+                if ((t = strrchr(dest, ']')))
+                        *t = '\0';
+        }
+
+        /* Strip the zone id from a scoped IPv6 literal. */
+        if (strchr(dest, ':') && (t = strchr(dest, '%')))
+                *t = '\0';
+}
+
+/**
  * Construct descriptive broker name
  */
 static void rd_kafka_mk_brokername(char *dest,
@@ -6792,6 +6828,43 @@ static int rd_ut_mk_nodename(void) {
 }
 
 /**
+ * @brief Unittest for hostname extraction from a broker nodename.
+ *
+ * The nodename carries a ":port" suffix, IPv6 literals are bracketed
+ * ("[2600::1]:9092") and may be scoped ("[fe80::1%eth0]:9092"); the
+ * hostname must be the bare address.
+ */
+static int rd_ut_nodename_to_hostname(void) {
+        static const struct {
+                const char *nodename;
+                const char *exp;
+        } tests[] = {
+            {"broker.example.com:9092", "broker.example.com"},
+            {"192.0.2.1:9092", "192.0.2.1"},
+            {"[2600:1f18:4dcf:654c:46fc::]:9092", "2600:1f18:4dcf:654c:46fc::"},
+            {"[fe80::]:9092", "fe80::"},
+            {"[::1]:9092", "::1"},
+            /* The zone id of a scoped literal is stripped, both plain and
+             * percent-encoded (RFC 6874). */
+            {"[fe80::1%eth0]:9092", "fe80::1"},
+            {"[fe80::1%25eth0]:9092", "fe80::1"},
+            {NULL, NULL},
+        };
+        int i;
+        char hostname[RD_KAFKA_NODENAME_SIZE];
+
+        for (i = 0; tests[i].nodename; i++) {
+                rd_kafka_nodename_to_hostname(tests[i].nodename, hostname,
+                                              sizeof(hostname));
+                RD_UT_ASSERT(!strcmp(hostname, tests[i].exp),
+                             "nodename '%s': expected hostname '%s', got '%s'",
+                             tests[i].nodename, tests[i].exp, hostname);
+        }
+
+        RD_UT_PASS();
+}
+
+/**
  * @name Unit tests
  * @{
  *
@@ -6802,6 +6875,7 @@ int unittest_broker(void) {
         fails += rd_ut_reconnect_backoff();
         fails += rd_ut_ApiVersion_at_least();
         fails += rd_ut_mk_nodename();
+        fails += rd_ut_nodename_to_hostname();
 
         return fails;
 }

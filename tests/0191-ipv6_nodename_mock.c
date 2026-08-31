@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2024, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,15 @@
 
 #include "test.h"
 
+#ifndef _WIN32
+#include <netdb.h>
+#else
+#define WIN32_MEAN_AND_LEAN
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+#endif
+
 /**
  * @name Verify that an IPv6 address advertised in a Metadata response is
  *       turned into a resolvable broker nodename.
@@ -48,6 +57,33 @@ static const char *exp_nodename = "[2600:1f18:4dcf:654c:46fc::]:9092";
 static rd_bool_t nodename_built;
 static rd_bool_t resolve_failed;
 static rd_bool_t resolve_succeeded;
+
+/**
+ * @brief Whether the IPv6 literal \p host can be resolved on this machine.
+ *
+ * Broker resolution passes AI_ADDRCONFIG (see rd_kafka_broker_resolve()),
+ * and some resolvers apply that filter to numeric literals too (glibc does
+ * not, musl and Windows do), so on a host without a configured IPv6
+ * interface the advertised literal may fail to resolve — an environment
+ * limitation unrelated to the nodename construction under test, so skip
+ * rather than fail. The probe issues the same query the client will.
+ */
+static rd_bool_t ipv6_is_resolvable(const char *host) {
+        struct addrinfo hints = RD_ZERO_INIT;
+        struct addrinfo *res  = NULL;
+        int r;
+
+        hints.ai_family   = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags    = AI_ADDRCONFIG;
+
+        r = getaddrinfo(host, "9092", &hints, &res);
+        if (res)
+                freeaddrinfo(res);
+
+        return r == 0;
+}
 
 /**
  * @brief Inspect broker log lines for the nodename derived from the
@@ -111,6 +147,15 @@ int main_0191_ipv6_nodename_mock(int argc, char **argv) {
         }
 
         cluster = test_mock_cluster_new(1, &bootstraps);
+
+        if (!ipv6_is_resolvable(ipv6_host)) {
+                test_mock_cluster_destroy(cluster);
+                TEST_SKIP(
+                    "No configured IPv6 interface: "
+                    "%s is not resolvable on this machine\n",
+                    ipv6_host);
+                return 0;
+        }
 
         test_conf_init(&conf, NULL, tmout_multip(10));
         test_conf_set(conf, "bootstrap.servers", bootstraps);

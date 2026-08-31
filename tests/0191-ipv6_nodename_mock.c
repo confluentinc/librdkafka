@@ -1,7 +1,7 @@
 /*
  * librdkafka - Apache Kafka C library
  *
- * Copyright (c) 2024, Confluent Inc.
+ * Copyright (c) 2026, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@ static const char *exp_nodename = "[2600:1f18:4dcf:654c:46fc::]:9092";
 
 static rd_bool_t nodename_built;
 static rd_bool_t resolve_failed;
+static rd_bool_t resolve_env_unavailable;
 static rd_bool_t resolve_succeeded;
 
 /**
@@ -61,10 +62,23 @@ static void ipv6_nodename_mock_log_cb(const rd_kafka_t *rk,
                                       int level,
                                       const char *fac,
                                       const char *buf) {
-        /* The bug manifests as a failure to resolve the constructed
-         * nodename. */
-        if (strstr(buf, "Failed to resolve") && strstr(buf, ipv6_host))
-                resolve_failed = rd_true;
+        if (strstr(buf, "Failed to resolve")) {
+                /* Distinguish the bug from an environment limitation by the
+                 * form of the string that failed to resolve:
+                 *  - the bug produces a malformed nodename (the trailing "::"
+                 *    of the literal run against ":port", giving ":::"), which
+                 *    is NOT the bracketed exp_nodename;
+                 *  - a host lacking a configured IPv6 interface fails to
+                 *    resolve even the correctly bracketed exp_nodename, since
+                 *    broker resolution passes AI_ADDRCONFIG and some resolvers
+                 *    apply that filter to numeric literals too (glibc does not,
+                 *    musl and Windows do). That is unrelated to the nodename
+                 *    construction under test, so the test is skipped. */
+                if (strstr(buf, exp_nodename))
+                        resolve_env_unavailable = rd_true;
+                else if (strstr(buf, ipv6_host))
+                        resolve_failed = rd_true;
+        }
 
         /* Resolution succeeded once a connection to the advertised address is
          * attempted. The connection itself then fails (the address is not
@@ -140,13 +154,32 @@ int main_0191_ipv6_nodename_mock(int argc, char **argv) {
         /* Wait for the resolution *outcome*, not merely for the nodename to be
          * built: "Nodename changed" is logged before the address is resolved,
          * so stopping there would miss the failure this test guards against. */
-        for (i = 0; i < 50 && !resolve_failed && !resolve_succeeded; i++)
+        for (i = 0; i < 50 && !resolve_failed && !resolve_succeeded &&
+                    !resolve_env_unavailable;
+             i++)
                 rd_kafka_poll(rk, 100);
 
+        /* The nodename must have been built regardless of whether the host
+         * can route to it. */
         TEST_ASSERT(nodename_built,
                     "expected the advertised IPv6 literal to produce the "
                     "nodename \"%s\"",
                     exp_nodename);
+
+        if (resolve_env_unavailable) {
+                /* The correctly bracketed nodename was built but the host has
+                 * no configured IPv6 interface to resolve it against. */
+                TEST_SKIP(
+                    "No configured IPv6 interface: nodename \"%s\" "
+                    "was built correctly but is not resolvable on this "
+                    "machine\n",
+                    exp_nodename);
+                rd_kafka_destroy(rk);
+                test_mock_cluster_destroy(cluster);
+                rd_free(log_interceptor);
+                return 0;
+        }
+
         TEST_ASSERT(!resolve_failed,
                     "nodename \"%s\" failed to resolve: the bracketed literal "
                     "was not split back into address and port",

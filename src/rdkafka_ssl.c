@@ -494,42 +494,20 @@ static int rd_kafka_transport_ssl_set_endpoint_id(rd_kafka_transport_t *rktrans,
         char name[RD_KAFKA_NODENAME_SIZE];
         char name_for_verify[RD_KAFKA_NODENAME_SIZE];
         rd_bool_t is_ip_literal;
-        char *t;
 
+        /* Extract the bare hostname or address from the nodename (see
+         * rd_kafka_nodename_to_hostname()): both SNI and OpenSSL's
+         * certificate verification expect the bare address of an IPv6
+         * literal, not the bracketed URL form the nodename holds — a
+         * bracketed literal does not parse as an IP address, so it would be
+         * matched against the certificate's dNSName entries instead of its
+         * iPAddress entries and fail verification. Likewise a certificate
+         * cannot assert a zone id: an iPAddress entry holds the 4 or 16
+         * address octets alone (RFC 5280). */
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
-        rd_snprintf(name, sizeof(name), "%s",
-                    rktrans->rktrans_rkb->rkb_nodename);
+        rd_kafka_nodename_to_hostname(rktrans->rktrans_rkb->rkb_nodename, name,
+                                      sizeof(name));
         rd_kafka_broker_unlock(rktrans->rktrans_rkb);
-
-        /* Remove ":9092" port suffix from nodename.
-         * Use the last ':': the port holds no ':' of its own, so it is always
-         * the final one, whereas an IPv6 literal does contain ':'. */
-        if ((t = strrchr(name, ':')))
-                *t = '\0';
-
-        /* Strip the brackets enclosing an IPv6 literal, leaving the bare
-         * address: "[2600::1]" -> "2600::1".
-         * The nodename holds an IPv6 literal in the bracketed URL form (see
-         * rd_kafka_mk_nodename()), but both SNI and OpenSSL's certificate
-         * verification expect the bare address: a bracketed literal does not
-         * parse as an IP address, so it would be matched against the
-         * certificate's dNSName entries instead of its iPAddress entries and
-         * fail verification. */
-        if (*name == '[') {
-                memmove(name, name + 1, strlen(name));
-                if ((t = strrchr(name, ']')))
-                        *t = '\0';
-        }
-
-        /* Strip the zone id from a scoped IPv6 literal:
-         * "fe80::1%eth0" -> "fe80::1" (also "%25eth0" when percent-encoded,
-         * see RFC 6874).
-         * The zone identifies the local link the address is reachable on
-         * (RFC 4007), not the peer, and a certificate cannot assert one: an
-         * iPAddress entry holds the 4 or 16 address octets alone (RFC 5280).
-         * The address itself is what is matched. */
-        if (strchr(name, ':') && (t = strchr(name, '%')))
-                *t = '\0';
 
         /* Normalize hostname (remove trailing dot) for both SNI and certificate
          * verification */

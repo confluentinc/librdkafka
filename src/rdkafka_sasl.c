@@ -35,7 +35,6 @@
 #include "rdkafka_sasl_int.h"
 #include "rdkafka_request.h"
 #include "rdkafka_queue.h"
-#include "rdunittest.h"
 
 /**
  * @brief Send SASL auth data using legacy directly on socket framing.
@@ -231,32 +230,6 @@ void rd_kafka_sasl_close(rd_kafka_transport_t *rktrans) {
  *
  * Locality: broker thread
  */
-/**
- * @brief Extract the bare hostname from a broker nodename for use as the SASL
- *        hostname, stripping the ":port" suffix and any enclosing IPv6
- *        brackets (e.g. "[2600::1]:9092" -> "2600::1").
- */
-static void rd_kafka_sasl_nodename_to_hostname(const char *nodename,
-                                               char *dest,
-                                               size_t dsize) {
-        char *t;
-
-        rd_strlcpy(dest, nodename, dsize);
-
-        /* Strip the ":port" suffix. Use the last ':' so an IPv6 literal such
-         * as "[2600::1]:9092" is not truncated at a ':' within the address. */
-        if ((t = strrchr(dest, ':')))
-                *t = '\0';
-
-        /* Strip the enclosing brackets from an IPv6 literal, leaving the bare
-         * address: "[2600::1]" -> "2600::1". */
-        if (*dest == '[') {
-                memmove(dest, dest + 1, strlen(dest));
-                if ((t = strrchr(dest, ']')))
-                        *t = '\0';
-        }
-}
-
 int rd_kafka_sasl_client_new(rd_kafka_transport_t *rktrans,
                              char *errstr,
                              size_t errstr_size) {
@@ -290,8 +263,8 @@ int rd_kafka_sasl_client_new(rd_kafka_transport_t *rktrans,
         }
 
         rd_kafka_broker_lock(rktrans->rktrans_rkb);
-        rd_kafka_sasl_nodename_to_hostname(rktrans->rktrans_rkb->rkb_nodename,
-                                           hostname, sizeof(hostname));
+        rd_kafka_nodename_to_hostname(rktrans->rktrans_rkb->rkb_nodename,
+                                      hostname, sizeof(hostname));
         rd_kafka_broker_unlock(rktrans->rktrans_rkb);
 
         rd_rkb_dbg(rkb, SECURITY, "SASL",
@@ -611,45 +584,4 @@ rd_kafka_error_t *rd_kafka_sasl_set_credentials(rd_kafka_t *rk,
                                     "SASL credentials updated");
 
         return NULL;
-}
-
-
-/**
- * @brief Unittest for SASL hostname extraction from a broker nodename.
- *
- * The nodename carries a ":port" suffix, and IPv6 literals are bracketed
- * ("[2600::1]:9092"); the SASL hostname must be the bare address.
- */
-static int unittest_sasl_nodename_to_hostname(void) {
-        static const struct {
-                const char *nodename;
-                const char *exp;
-        } tests[] = {
-            {"broker.example.com:9092", "broker.example.com"},
-            {"192.0.2.1:9092", "192.0.2.1"},
-            {"[2600:1f18:4dcf:654c:46fc::]:9092", "2600:1f18:4dcf:654c:46fc::"},
-            {"[fe80::]:9092", "fe80::"},
-            {"[::1]:9092", "::1"},
-            {NULL, NULL},
-        };
-        int i;
-        char hostname[RD_KAFKA_NODENAME_SIZE];
-
-        for (i = 0; tests[i].nodename; i++) {
-                rd_kafka_sasl_nodename_to_hostname(tests[i].nodename, hostname,
-                                                   sizeof(hostname));
-                RD_UT_ASSERT(!strcmp(hostname, tests[i].exp),
-                             "nodename '%s': expected hostname '%s', got '%s'",
-                             tests[i].nodename, tests[i].exp, hostname);
-        }
-
-        RD_UT_PASS();
-}
-
-int unittest_sasl(void) {
-        int fails = 0;
-
-        fails += unittest_sasl_nodename_to_hostname();
-
-        return fails;
 }

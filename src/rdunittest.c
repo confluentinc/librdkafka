@@ -435,6 +435,7 @@ extern int unittest_sasl_oauthbearer_oidc_jwt_bearer(void);
 extern int unittest_sasl_oauthbearer_oidc_assertion(void);
 #endif
 extern int unittest_admin(void);
+extern int unittest_q_pop_serve_starvation(void);
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
 #if WITH_SSL
@@ -486,6 +487,7 @@ int rd_unittest(void) {
              unittest_sasl_oauthbearer_oidc_assertion},
 #endif
             {"admin", unittest_admin},
+            {"q_pop_serve_starvation", unittest_q_pop_serve_starvation},
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
             {"fetcher_share_filter_forward",

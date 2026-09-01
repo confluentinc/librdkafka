@@ -1652,6 +1652,52 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
         return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
 }
 
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_group_states(
+    rd_kafka_AdminOptions_t *options,
+    const rd_kafka_group_state_t *group_states,
+    size_t group_states_cnt) {
+        size_t i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        rd_list_t *states_list = rd_list_new(0, NULL);
+        rd_list_init_int32(states_list, group_states_cnt);
+        uint64_t states_bitmask = 0;
+
+        if (RD_KAFKA_GROUP_STATE__CNT >= 64) {
+                rd_assert("BUG: cannot handle states with a bitmask anymore");
+        }
+
+        for (i = 0; i < group_states_cnt; i++) {
+                uint64_t state_bit;
+                rd_kafka_group_state_t state = group_states[i];
+
+                if (state < 0 || state >= RD_KAFKA_GROUP_STATE__CNT) {
+                        rd_list_destroy(states_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Invalid group state value");
+                }
+
+                state_bit = 1 << state;
+                if (states_bitmask & state_bit) {
+                        rd_list_destroy(states_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate states not allowed");
+                } else {
+                        states_bitmask = states_bitmask | state_bit;
+                        rd_list_set_int32(states_list, (int32_t)i, state);
+                }
+        }
+        err = rd_kafka_confval_set_type(&options->match_group_states,
+                                        RD_KAFKA_CONFVAL_PTR, states_list,
+                                        errstr, sizeof(errstr));
+        if (err) {
+                rd_list_destroy(states_list);
+        }
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
 rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
     rd_kafka_AdminOptions_t *options,
     const rd_kafka_consumer_group_type_t *consumer_group_types,
@@ -1698,6 +1744,98 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
         }
 
         err = rd_kafka_confval_set_type(&options->match_consumer_group_types,
+                                        RD_KAFKA_CONFVAL_PTR, types_list,
+                                        errstr, sizeof(errstr));
+        if (err) {
+                rd_list_destroy(types_list);
+        }
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_group_types(
+    rd_kafka_AdminOptions_t *options,
+    const rd_kafka_group_type_t *group_types,
+    size_t group_types_cnt) {
+        size_t i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        rd_list_t *types_list  = rd_list_new(0, NULL);
+        uint64_t types_bitmask = 0;
+
+        rd_list_init_int32(types_list, group_types_cnt);
+
+        if (RD_KAFKA_GROUP_TYPE__CNT >= 64) {
+                rd_assert("BUG: cannot handle types with a bitmask anymore");
+        }
+
+        for (i = 0; i < group_types_cnt; i++) {
+                uint64_t type_bit;
+                rd_kafka_group_type_t type = group_types[i];
+
+                if (type < RD_KAFKA_GROUP_TYPE_UNKNOWN ||
+                    type >= RD_KAFKA_GROUP_TYPE__CNT) {
+                        rd_list_destroy(types_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Only a valid type is allowed");
+                } else if (type == RD_KAFKA_GROUP_TYPE_UNKNOWN) {
+                        rd_list_destroy(types_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "UNKNOWN type is not allowed");
+                }
+
+                type_bit = 1 << type;
+                if (types_bitmask & type_bit) {
+                        rd_list_destroy(types_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate types not allowed");
+                } else {
+                        types_bitmask = types_bitmask | type_bit;
+                        rd_list_set_int32(types_list, (int32_t)i, type);
+                }
+        }
+
+        err = rd_kafka_confval_set_type(&options->match_group_types,
+                                        RD_KAFKA_CONFVAL_PTR, types_list,
+                                        errstr, sizeof(errstr));
+        if (err) {
+                rd_list_destroy(types_list);
+        }
+        return !err ? NULL : rd_kafka_error_new(err, "%s", errstr);
+}
+
+rd_kafka_error_t *
+rd_kafka_AdminOptions_set_match_protocol_types(rd_kafka_AdminOptions_t *options,
+                                               const char **protocol_types,
+                                               size_t protocol_types_cnt) {
+        size_t i;
+        char errstr[512];
+        rd_kafka_resp_err_t err;
+        rd_list_t *types_list = rd_list_new((int)protocol_types_cnt, rd_free);
+
+        for (i = 0; i < protocol_types_cnt; i++) {
+                const char *type = protocol_types[i];
+
+                if (!type || !*type) {
+                        rd_list_destroy(types_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Protocol type must be a non-empty string");
+                }
+
+                if (rd_list_find(types_list, type, rd_strcmp2)) {
+                        rd_list_destroy(types_list);
+                        return rd_kafka_error_new(
+                            RD_KAFKA_RESP_ERR__INVALID_ARG,
+                            "Duplicate protocol types not allowed");
+                }
+
+                rd_list_add(types_list, rd_strdup(type));
+        }
+
+        err = rd_kafka_confval_set_type(&options->match_protocol_types,
                                         RD_KAFKA_CONFVAL_PTR, types_list,
                                         errstr, sizeof(errstr));
         if (err) {
@@ -1776,6 +1914,14 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                                          "match_consumer_group_states");
 
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTGROUPS)
+                rd_kafka_confval_init_ptr(&options->match_group_states,
+                                          "match_group_states");
+        else
+                rd_kafka_confval_disable(&options->match_group_states,
+                                         "match_group_states");
+
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPS)
                 rd_kafka_confval_init_ptr(&options->match_consumer_group_types,
                                           "match_consumer_group_types");
@@ -1783,6 +1929,20 @@ static void rd_kafka_AdminOptions_init(rd_kafka_t *rk,
                 rd_kafka_confval_disable(&options->match_consumer_group_types,
                                          "match_consumer_group_types");
 
+        if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
+            options->for_api == RD_KAFKA_ADMIN_OP_LISTGROUPS)
+                rd_kafka_confval_init_ptr(&options->match_group_types,
+                                          "match_group_types");
+        else
+                rd_kafka_confval_disable(&options->match_group_types,
+                                         "match_group_types");
+
+        if (options->for_api == RD_KAFKA_ADMIN_OP_LISTGROUPS)
+                rd_kafka_confval_init_ptr(&options->match_protocol_types,
+                                          "match_protocol_types");
+        else
+                rd_kafka_confval_disable(&options->match_protocol_types,
+                                         "match_protocol_types");
         if (options->for_api == RD_KAFKA_ADMIN_OP_ANY ||
             options->for_api == RD_KAFKA_ADMIN_OP_LISTOFFSETS)
                 rd_kafka_confval_init_int(&options->isolation_level,
@@ -1815,6 +1975,16 @@ static void rd_kafka_AdminOptions_copy_to(rd_kafka_AdminOptions_t *dst,
                     states_list_copy, errstr, sizeof(errstr));
                 rd_assert(!err);
         }
+        if (src->match_group_states.u.PTR) {
+                char errstr[512];
+                rd_list_t *states_list_copy = rd_list_copy_preallocated(
+                    src->match_group_states.u.PTR, NULL);
+
+                rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+                    &dst->match_group_states, RD_KAFKA_CONFVAL_PTR,
+                    states_list_copy, errstr, sizeof(errstr));
+                rd_assert(!err);
+        }
         if (src->match_consumer_group_types.u.PTR) {
                 char errstr[512];
                 rd_list_t *types_list_copy = rd_list_copy_preallocated(
@@ -1823,6 +1993,26 @@ static void rd_kafka_AdminOptions_copy_to(rd_kafka_AdminOptions_t *dst,
                 rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
                     &dst->match_consumer_group_types, RD_KAFKA_CONFVAL_PTR,
                     types_list_copy, errstr, sizeof(errstr));
+                rd_assert(!err);
+        }
+        if (src->match_group_types.u.PTR) {
+                char errstr[512];
+                rd_list_t *types_list_copy = rd_list_copy_preallocated(
+                    src->match_group_types.u.PTR, NULL);
+
+                rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+                    &dst->match_group_types, RD_KAFKA_CONFVAL_PTR,
+                    types_list_copy, errstr, sizeof(errstr));
+                rd_assert(!err);
+        }
+        if (src->match_protocol_types.u.PTR) {
+                char errstr[512];
+                rd_list_t *protocol_types_list_copy = rd_list_copy(
+                    src->match_protocol_types.u.PTR, rd_list_string_copy, NULL);
+
+                rd_kafka_resp_err_t err = rd_kafka_confval_set_type(
+                    &dst->match_protocol_types, RD_KAFKA_CONFVAL_PTR,
+                    protocol_types_list_copy, errstr, sizeof(errstr));
                 rd_assert(!err);
         }
 }
@@ -1848,8 +2038,17 @@ void rd_kafka_AdminOptions_destroy(rd_kafka_AdminOptions_t *options) {
         if (options->match_consumer_group_states.u.PTR) {
                 rd_list_destroy(options->match_consumer_group_states.u.PTR);
         }
+        if (options->match_group_states.u.PTR) {
+                rd_list_destroy(options->match_group_states.u.PTR);
+        }
         if (options->match_consumer_group_types.u.PTR) {
                 rd_list_destroy(options->match_consumer_group_types.u.PTR);
+        }
+        if (options->match_group_types.u.PTR) {
+                rd_list_destroy(options->match_group_types.u.PTR);
+        }
+        if (options->match_protocol_types.u.PTR) {
+                rd_list_destroy(options->match_protocol_types.u.PTR);
         }
         rd_free(options);
 }
@@ -7735,6 +7934,504 @@ const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
         rd_kafka_op_type_t reqtype =
             rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
         rd_assert(reqtype == RD_KAFKA_OP_LISTCONSUMERGROUPS);
+
+        list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
+        rd_assert(list_result_cnt == 1);
+        list_result = rko->rko_u.admin_result.results.rl_elems[0];
+        error_cnt   = rd_list_cnt(&list_result->errors);
+        if (error_cnt == 0) {
+                *cntp = 0;
+                return NULL;
+        }
+        *cntp = error_cnt;
+        return (const rd_kafka_error_t **)list_result->errors.rl_elems;
+}
+
+/**@}*/
+
+/**
+ * @name List groups
+ * @{
+ *
+ *
+ *
+ *
+ */
+
+/**
+ * @brief Create a new GroupListing object.
+ *
+ * @param group_id The group id.
+ * @param is_simple_consumer_group Is the group simple?
+ * @param state Group state.
+ * @param type Group type.
+ * @param protocol Group protocol.
+ */
+static rd_kafka_GroupListing_t *
+rd_kafka_GroupListing_new(const char *group_id,
+                          rd_bool_t is_simple_consumer_group,
+                          rd_kafka_group_state_t state,
+                          rd_kafka_group_type_t type,
+                          const char *protocol) {
+        rd_kafka_GroupListing_t *grplist;
+        grplist                           = rd_calloc(1, sizeof(*grplist));
+        grplist->group_id                 = rd_strdup(group_id);
+        grplist->is_simple_consumer_group = is_simple_consumer_group;
+        grplist->state                    = state;
+        grplist->type                     = type;
+        grplist->protocol                 = rd_strdup(protocol);
+        return grplist;
+}
+
+/**
+ * @brief Copy \p grplist GroupListing.
+ *
+ * @param grplist The group listing to copy.
+ * @return A new allocated copy of the passed GroupListing.
+ */
+static rd_kafka_GroupListing_t *
+rd_kafka_GroupListing_copy(const rd_kafka_GroupListing_t *grplist) {
+        return rd_kafka_GroupListing_new(
+            grplist->group_id, grplist->is_simple_consumer_group,
+            grplist->state, grplist->type, grplist->protocol);
+}
+
+/**
+ * @brief Same as rd_kafka_GroupListing_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_GroupListing_copy_opaque(const void *grplist,
+                                               void *opaque) {
+        return rd_kafka_GroupListing_copy(grplist);
+}
+
+static void rd_kafka_GroupListing_destroy(rd_kafka_GroupListing_t *grplist) {
+        RD_IF_FREE(grplist->group_id, rd_free);
+        RD_IF_FREE(grplist->protocol, rd_free);
+        rd_free(grplist);
+}
+
+static void rd_kafka_GroupListing_free(void *ptr) {
+        rd_kafka_GroupListing_destroy(ptr);
+}
+
+const char *
+rd_kafka_GroupListing_group_id(const rd_kafka_GroupListing_t *grplist) {
+        return grplist->group_id;
+}
+
+int rd_kafka_GroupListing_is_simple_consumer_group(
+    const rd_kafka_GroupListing_t *grplist) {
+        return grplist->is_simple_consumer_group;
+}
+
+rd_kafka_group_state_t
+rd_kafka_GroupListing_state(const rd_kafka_GroupListing_t *grplist) {
+        return grplist->state;
+}
+
+rd_kafka_group_type_t
+rd_kafka_GroupListing_type(const rd_kafka_GroupListing_t *grplist) {
+        return grplist->type;
+}
+
+const char *
+rd_kafka_GroupListing_protocol(const rd_kafka_GroupListing_t *grplist) {
+        return grplist->protocol;
+}
+
+/**
+ * @brief Create a new ListGroupsResult object.
+ *
+ * @param valid
+ * @param errors
+ */
+static rd_kafka_ListGroupsResult_t *
+rd_kafka_ListGroupsResult_new(const rd_list_t *valid, const rd_list_t *errors) {
+        rd_kafka_ListGroupsResult_t *res;
+        res = rd_calloc(1, sizeof(*res));
+        rd_list_init_copy(&res->valid, valid);
+        rd_list_copy_to(&res->valid, valid, rd_kafka_GroupListing_copy_opaque,
+                        NULL);
+        rd_list_init_copy(&res->errors, errors);
+        rd_list_copy_to(&res->errors, errors, rd_kafka_error_copy_opaque, NULL);
+        return res;
+}
+
+static void
+rd_kafka_ListGroupsResult_destroy(rd_kafka_ListGroupsResult_t *res) {
+        rd_list_destroy(&res->valid);
+        rd_list_destroy(&res->errors);
+        rd_free(res);
+}
+
+static void rd_kafka_ListGroupsResult_free(void *ptr) {
+        rd_kafka_ListGroupsResult_destroy(ptr);
+}
+
+/**
+ * @brief Copy the passed ListGroupsResult.
+ *
+ * @param res the ListGroupsResult to copy
+ * @return a newly allocated ListGroupsResult object.
+ *
+ * @sa Release the object with rd_kafka_ListGroupsResult_destroy().
+ */
+static rd_kafka_ListGroupsResult_t *
+rd_kafka_ListGroupsResult_copy(const rd_kafka_ListGroupsResult_t *res) {
+        return rd_kafka_ListGroupsResult_new(&res->valid, &res->errors);
+}
+
+/**
+ * @brief Same as rd_kafka_ListGroupsResult_copy() but suitable for
+ *        rd_list_copy(). The \p opaque is ignored.
+ */
+static void *rd_kafka_ListGroupsResult_copy_opaque(const void *list,
+                                                   void *opaque) {
+        return rd_kafka_ListGroupsResult_copy(list);
+}
+
+/**
+ * @brief Send ListGroupsRequest. Admin worker compatible callback.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_admin_ListGroupsRequest(rd_kafka_broker_t *rkb,
+                                 const rd_list_t *groups /*(char*)*/,
+                                 rd_kafka_AdminOptions_t *options,
+                                 char *errstr,
+                                 size_t errstr_size,
+                                 rd_kafka_replyq_t replyq,
+                                 rd_kafka_resp_cb_t *resp_cb,
+                                 void *opaque) {
+        int i;
+        rd_kafka_resp_err_t err;
+        rd_kafka_error_t *error;
+        const char **states_str      = NULL;
+        const char **group_types_str = NULL;
+        int states_str_cnt           = 0;
+        rd_list_t *states =
+            rd_kafka_confval_get_ptr(&options->match_group_states);
+        int group_types_str_cnt = 0;
+        rd_list_t *group_types =
+            rd_kafka_confval_get_ptr(&options->match_group_types);
+
+
+        /* Prepare list_options for consumer group state */
+        if (states && rd_list_cnt(states) > 0) {
+                states_str_cnt = rd_list_cnt(states);
+                states_str     = rd_calloc(states_str_cnt, sizeof(*states_str));
+                for (i = 0; i < states_str_cnt; i++) {
+                        states_str[i] = rd_kafka_group_state_name(
+                            rd_list_get_int32(states, i));
+                }
+        }
+
+        /* Prepare list_options for consumer group type */
+        if (group_types && rd_list_cnt(group_types) > 0) {
+                group_types_str_cnt = rd_list_cnt(group_types);
+                group_types_str =
+                    rd_calloc(group_types_str_cnt, sizeof(*group_types_str));
+                for (i = 0; i < group_types_str_cnt; i++) {
+                        group_types_str[i] = rd_kafka_group_type_name(
+                            rd_list_get_int32(group_types, i));
+                }
+        }
+        error = rd_kafka_ListGroupsRequest(rkb, -1, states_str, states_str_cnt,
+                                           group_types_str, group_types_str_cnt,
+                                           replyq, resp_cb, opaque);
+
+        if (states_str) {
+                rd_free(states_str);
+        }
+
+        if (group_types_str) {
+                rd_free(group_types_str);
+        }
+
+        if (error) {
+                rd_snprintf(errstr, errstr_size, "%s",
+                            rd_kafka_error_string(error));
+                err = rd_kafka_error_code(error);
+                rd_kafka_error_destroy(error);
+                return err;
+        }
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Parse ListGroupsResponse and create ADMIN_RESULT op.
+ */
+static rd_kafka_resp_err_t
+rd_kafka_ListGroupsResponse_parse(rd_kafka_op_t *rko_req,
+                                  rd_kafka_op_t **rko_resultp,
+                                  rd_kafka_buf_t *reply,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        const int log_decode_errors = LOG_ERR;
+        int i, cnt;
+        int16_t error_code, api_version;
+        rd_kafka_op_t *rko_result = NULL;
+        rd_kafka_error_t *error   = NULL;
+        rd_kafka_broker_t *rkb    = reply->rkbuf_rkb;
+        rd_list_t valid, errors;
+        rd_kafka_ListGroupsResult_t *list_result;
+        char *group_id = NULL, *group_state = NULL, *proto_type = NULL,
+             *group_type_str = NULL;
+
+        api_version = rd_kafka_buf_ApiVersion(reply);
+        if (api_version >= 1) {
+                rd_kafka_buf_read_throttle_time(reply);
+        }
+        rd_kafka_buf_read_i16(reply, &error_code);
+        if (error_code) {
+                error = rd_kafka_error_new(error_code,
+                                           "Broker [%d"
+                                           "] "
+                                           "ListGroups: %s",
+                                           rd_kafka_broker_id(rkb),
+                                           rd_kafka_err2str(error_code));
+        }
+
+        rd_kafka_buf_read_arraycnt(reply, &cnt, RD_KAFKAP_GROUPS_MAX);
+        rd_list_init(&valid, cnt, rd_kafka_GroupListing_free);
+        rd_list_init(&errors, 8, rd_free);
+        if (error)
+                rd_list_add(&errors, error);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_ListGroupsResult_free);
+
+        rd_list_t *protocol_types = rd_kafka_confval_get_ptr(
+            &rko_req->rko_u.admin_request.options.match_protocol_types);
+        int protocol_types_cnt =
+            protocol_types ? rd_list_cnt(protocol_types) : 0;
+        for (i = 0; i < cnt; i++) {
+                rd_kafkap_str_t GroupId, ProtocolType,
+                    GroupState = RD_ZERO_INIT, GroupType = RD_ZERO_INIT;
+                rd_kafka_GroupListing_t *group_listing;
+                rd_bool_t is_simple_consumer_group;
+                rd_kafka_group_state_t state = RD_KAFKA_GROUP_STATE_UNKNOWN;
+                rd_kafka_group_type_t type   = RD_KAFKA_GROUP_TYPE_UNKNOWN;
+
+                rd_kafka_buf_read_str(reply, &GroupId);
+                rd_kafka_buf_read_str(reply, &ProtocolType);
+                if (api_version >= 4) {
+                        rd_kafka_buf_read_str(reply, &GroupState);
+                }
+                if (api_version >= 5) {
+                        rd_kafka_buf_read_str(reply, &GroupType);
+                }
+                rd_kafka_buf_skip_tags(reply);
+
+                group_id   = RD_KAFKAP_STR_DUP(&GroupId);
+                proto_type = RD_KAFKAP_STR_DUP(&ProtocolType);
+                if (api_version >= 4) {
+                        group_state = RD_KAFKAP_STR_DUP(&GroupState);
+                        state       = rd_kafka_group_state_code(group_state);
+                }
+
+                if (api_version >= 5) {
+                        group_type_str = RD_KAFKAP_STR_DUP(&GroupType);
+                        type = rd_kafka_group_type_code(group_type_str);
+                }
+
+                is_simple_consumer_group = *proto_type == '\0';
+
+                if (protocol_types_cnt == 0 ||
+                    rd_list_find(protocol_types, proto_type, rd_strcmp2)) {
+                        group_listing = rd_kafka_GroupListing_new(
+                            group_id, is_simple_consumer_group, state, type,
+                            proto_type);
+                        rd_list_add(&valid, group_listing);
+                }
+
+                rd_free(group_id);
+                rd_free(group_state);
+                rd_free(proto_type);
+                rd_free(group_type_str);
+                group_id       = NULL;
+                group_state    = NULL;
+                proto_type     = NULL;
+                group_type_str = NULL;
+        }
+        rd_kafka_buf_skip_tags(reply);
+
+err_parse:
+        if (group_id)
+                rd_free(group_id);
+        if (group_state)
+                rd_free(group_state);
+        if (proto_type)
+                rd_free(proto_type);
+        if (group_type_str)
+                rd_free(group_type_str);
+
+        if (reply->rkbuf_err) {
+                error_code = reply->rkbuf_err;
+                error      = rd_kafka_error_new(
+                    error_code,
+                    "Broker [%d"
+                         "] "
+                         "ListGroups response protocol parse failure: %s",
+                    rd_kafka_broker_id(rkb), rd_kafka_err2str(error_code));
+                rd_list_add(&errors, error);
+        }
+
+        list_result = rd_kafka_ListGroupsResult_new(&valid, &errors);
+        rd_list_add(&rko_result->rko_u.admin_result.results, list_result);
+
+        *rko_resultp = rko_result;
+        rd_list_destroy(&valid);
+        rd_list_destroy(&errors);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
+ * @brief Compare two GroupListing by group_id
+ */
+static int rd_kafka_GroupListing_cmp_group_id(const void *a, const void *b) {
+        const rd_kafka_GroupListing_t *ga = a, *gb = b;
+        return strcmp(ga->group_id, gb->group_id);
+}
+
+/**
+ * @brief Append groups from \p src to \p dst, skipping duplicates.
+ *
+ * Keeps \p dst sorted by group_id so that subsequent calls can use
+ * bsearch for O(log n) dedup lookups.
+ */
+static void rd_kafka_GroupListing_list_append_dedup(rd_list_t *dst,
+                                                    const rd_list_t *src) {
+        const rd_kafka_GroupListing_t *grp;
+        int j;
+        rd_list_t *to_add = NULL;
+
+        if (!rd_list_cnt(src))
+                return;
+
+        /* Ensure dst is sorted for bsearch lookups. */
+        if (!(dst->rl_flags & RD_LIST_F_SORTED))
+                rd_list_sort(dst, rd_kafka_GroupListing_cmp_group_id);
+
+        /* Collect pointers to src groups not already in dst.
+         * dst is not modified here so the sorted flag stays valid. */
+        RD_LIST_FOREACH(grp, src, j) {
+                if (rd_list_find(dst, grp, rd_kafka_GroupListing_cmp_group_id))
+                        continue;
+                if (!to_add)
+                        to_add = rd_list_new(rd_list_cnt(src), NULL);
+                rd_list_add(to_add, (void *)grp);
+        }
+
+        /* Copy new groups into dst and resort. */
+        if (to_add) {
+                rd_list_copy_to(dst, to_add, rd_kafka_GroupListing_copy_opaque,
+                                NULL);
+                rd_list_sort(dst, rd_kafka_GroupListing_cmp_group_id);
+                rd_list_destroy(to_add);
+        }
+}
+
+/** @brief Merge the ListGroups response from a single broker
+ *         into the user response list.
+ */
+static void
+rd_kafka_ListGroups_response_merge(rd_kafka_op_t *rko_fanout,
+                                   const rd_kafka_op_t *rko_partial) {
+        int cnt;
+        rd_kafka_ListGroupsResult_t *res = NULL;
+        rd_kafka_ListGroupsResult_t *newres;
+        rd_list_t new_valid, new_errors;
+
+        rd_assert(rko_partial->rko_evtype == RD_KAFKA_EVENT_LISTGROUPS_RESULT);
+
+        cnt = rd_list_cnt(&rko_fanout->rko_u.admin_request.fanout.results);
+        if (cnt) {
+                res = rd_list_elem(
+                    &rko_fanout->rko_u.admin_request.fanout.results, 0);
+        } else {
+                rd_list_init(&new_valid, 0, rd_kafka_GroupListing_free);
+                rd_list_init(&new_errors, 0, rd_free);
+                res = rd_kafka_ListGroupsResult_new(&new_valid, &new_errors);
+                rd_list_set(&rko_fanout->rko_u.admin_request.fanout.results, 0,
+                            res);
+                rd_list_destroy(&new_valid);
+                rd_list_destroy(&new_errors);
+        }
+        if (!rko_partial->rko_err) {
+                int new_valid_count, new_errors_count;
+                const rd_list_t *new_errors_list;
+                /* Read the partial result and merge the valid groups
+                 * and the errors into the fanout parent result. */
+                newres =
+                    rd_list_elem(&rko_partial->rko_u.admin_result.results, 0);
+                rd_assert(newres);
+                new_valid_count  = rd_list_cnt(&newres->valid);
+                new_errors_count = rd_list_cnt(&newres->errors);
+                if (new_valid_count) {
+                        rd_kafka_GroupListing_list_append_dedup(&res->valid,
+                                                                &newres->valid);
+                }
+                if (new_errors_count) {
+                        new_errors_list = &newres->errors;
+                        rd_list_grow(&res->errors, new_errors_count);
+                        rd_list_copy_to(&res->errors, new_errors_list,
+                                        rd_kafka_error_copy_opaque, NULL);
+                }
+        } else {
+                /* Op errored, e.g. timeout */
+                rd_list_add(&res->errors,
+                            rd_kafka_error_new(rko_partial->rko_err, NULL));
+        }
+}
+
+void rd_kafka_ListGroups(rd_kafka_t *rk,
+                         const rd_kafka_AdminOptions_t *options,
+                         rd_kafka_queue_t *rkqu) {
+        rd_kafka_op_t *rko;
+        static const struct rd_kafka_admin_worker_cbs cbs = {
+            rd_kafka_admin_ListGroupsRequest,
+            rd_kafka_ListGroupsResponse_parse};
+        static const struct rd_kafka_admin_fanout_worker_cbs fanout_cbs = {
+            rd_kafka_ListGroups_response_merge,
+            rd_kafka_ListGroupsResult_copy_opaque,
+        };
+
+        rko = rd_kafka_admin_request_op_target_all_new(
+            rk, RD_KAFKA_OP_LISTGROUPS, RD_KAFKA_EVENT_LISTGROUPS_RESULT, &cbs,
+            &fanout_cbs, rd_kafka_ListGroupsResult_free, options, rkqu->rkqu_q);
+        rd_kafka_q_enq(rk->rk_ops, rko);
+}
+
+const rd_kafka_GroupListing_t **
+rd_kafka_ListGroups_result_valid(const rd_kafka_ListGroups_result_t *result,
+                                 size_t *cntp) {
+        int list_result_cnt;
+        const rd_kafka_ListGroupsResult_t *list_result;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_LISTGROUPS);
+
+        list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
+        rd_assert(list_result_cnt == 1);
+        list_result = rd_list_elem(&rko->rko_u.admin_result.results, 0);
+        *cntp       = rd_list_cnt(&list_result->valid);
+
+        return (const rd_kafka_GroupListing_t **)list_result->valid.rl_elems;
+}
+
+const rd_kafka_error_t **
+rd_kafka_ListGroups_result_errors(const rd_kafka_ListGroups_result_t *result,
+                                  size_t *cntp) {
+        int list_result_cnt, error_cnt;
+        const rd_kafka_ListGroupsResult_t *list_result;
+        const rd_kafka_op_t *rko = (const rd_kafka_op_t *)result;
+        rd_kafka_op_type_t reqtype =
+            rko->rko_u.admin_result.reqtype & ~RD_KAFKA_OP_FLAGMASK;
+        rd_assert(reqtype == RD_KAFKA_OP_LISTGROUPS);
 
         list_result_cnt = rd_list_cnt(&rko->rko_u.admin_result.results);
         rd_assert(list_result_cnt == 1);

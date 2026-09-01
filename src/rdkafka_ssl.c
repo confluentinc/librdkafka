@@ -45,6 +45,7 @@
 #pragma comment(lib, "libssl.lib")
 #endif
 
+#include <openssl/hmac.h>
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
 

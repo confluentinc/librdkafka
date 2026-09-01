@@ -28,62 +28,89 @@
 
 #include "test.h"
 
+#ifndef _WIN32
+#include <netdb.h>
+#else
+#define WIN32_MEAN_AND_LEAN
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+#endif
+
 /**
  * @name Verify that an IPv6 address advertised in a Metadata response is
  *       turned into a resolvable broker nodename.
  *
  * A broker that advertises a compressed IPv6 literal (one ending in "::")
- * used to produce a nodename such as "2600:...:46fc:::9092" — the trailing
+ * used to produce a nodename such as "2001:db8:::9092" — the trailing
  * "::" of the address concatenated directly against the ":port", giving a
  * ":::" run that name resolution rejects with "Name or service not known".
  * The literal must instead be enclosed in brackets, as in an URL authority:
- * "[2600:...:46fc::]:9092".
+ * "[2001:db8::]:9092".
+ *
+ * Two subtests, each with its own advertised address:
+ *  - do_test_ipv6_compressed(): a compressed documentation literal (RFC 3849
+ *    2001:db8::/32) ending in "::", mirroring the customer report. This owns
+ *    the construction coverage: it proves the "::"-tail literal is bracketed
+ *    rather than left as the malformed ":::" form. Resolution is not
+ *    asserted, so it needs no IPv6 and never skips.
+ *  - do_test_ipv6_loopback(): the IPv6 loopback "::1". This owns the
+ *    resolution coverage: the full build -> resolve -> connect path is
+ *    exercised and asserted, proving the bracketed nodename is understood by
+ *    rd_addrinfo_prepare(). It is skipped up front, before any work, on the
+ *    rare host whose resolver cannot return an IPv6 address at all.
+ *
+ * The client is configured with broker.address.family=any: the test
+ * environment's test.conf pins it to v4 (the test brokers listen on IPv4
+ * localhost), under which no IPv6 literal can ever resolve.
  */
 
-/* Compressed IPv6 literal ending in "::", mirroring the customer report. */
-static const char *ipv6_host = "2600:1f18:4dcf:654c:46fc::";
-/* The nodename the above must produce: the literal bracketed, then ":port". */
-static const char *exp_nodename = "[2600:1f18:4dcf:654c:46fc::]:9092";
+/* Broker address advertised by the current subtest and the nodename it must
+ * produce. Set by each subtest before creating the client; read by the log
+ * interceptor. */
+static const char *ipv6_host;
+static const char *exp_nodename;
 
 static rd_bool_t nodename_built;
-static rd_bool_t resolve_failed;
-static rd_bool_t resolve_env_unavailable;
 static rd_bool_t resolve_succeeded;
+
+/**
+ * @brief Whether the IPv6 loopback can be resolved on this machine.
+ *
+ * Issues the same query rd_kafka_broker_resolve() will issue with
+ * broker.address.family=any: some resolvers (e.g. musl in a container
+ * without an IPv6 stack) apply the AI_ADDRCONFIG filter to numeric literals
+ * and refuse every IPv6 address, an environment limitation unrelated to the
+ * nodename handling under test.
+ */
+static rd_bool_t ipv6_loopback_resolvable(void) {
+        struct addrinfo hints = RD_ZERO_INIT;
+        struct addrinfo *res  = NULL;
+        int r;
+
+        hints.ai_family   = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_protocol = IPPROTO_TCP;
+        hints.ai_flags    = AI_ADDRCONFIG;
+
+        r = getaddrinfo("::1", "9092", &hints, &res);
+        if (res)
+                freeaddrinfo(res);
+
+        return r == 0;
+}
 
 /**
  * @brief Inspect broker log lines for the nodename derived from the
  *        advertised IPv6 address.
- *
- * @remark Assert on the resolution *outcome* as well as on the nodename:
- *         matching the nodename alone would still pass if the bracketed form
- *         were built but no longer understood by rd_addrinfo_prepare().
  */
 static void ipv6_nodename_mock_log_cb(const rd_kafka_t *rk,
                                       int level,
                                       const char *fac,
                                       const char *buf) {
-        if (strstr(buf, "Failed to resolve")) {
-                /* Distinguish the bug from an environment limitation by the
-                 * form of the string that failed to resolve:
-                 *  - the bug produces a malformed nodename (the trailing "::"
-                 *    of the literal run against ":port", giving ":::"), which
-                 *    is NOT the bracketed exp_nodename;
-                 *  - a host lacking a configured IPv6 interface fails to
-                 *    resolve even the correctly bracketed exp_nodename, since
-                 *    broker resolution passes AI_ADDRCONFIG and some resolvers
-                 *    apply that filter to numeric literals too (glibc does not,
-                 *    musl and Windows do). That is unrelated to the nodename
-                 *    construction under test, so the test is skipped. */
-                if (strstr(buf, exp_nodename))
-                        resolve_env_unavailable = rd_true;
-                else if (strstr(buf, ipv6_host))
-                        resolve_failed = rd_true;
-        }
-
         /* Resolution succeeded once a connection to the advertised address is
-         * attempted. The connection itself then fails (the address is not
-         * routable from the test host), which is expected and ignored by
-         * ipv6_nodename_is_fatal_cb(). */
+         * attempted. The connection itself then fails (nothing is listening),
+         * which is expected and ignored by ipv6_nodename_is_fatal_cb(). */
         if (strstr(buf, "Connecting to") && strstr(buf, ipv6_host))
                 resolve_succeeded = rd_true;
 
@@ -109,7 +136,21 @@ static int ipv6_nodename_is_fatal_cb(rd_kafka_t *rk,
         return 1;
 }
 
-int main_0191_ipv6_nodename_mock(int argc, char **argv) {
+/**
+ * @brief Advertise \p host as the broker address and wait for the nodename to
+ *        be built.
+ *
+ * When \p wait_for_resolve is true, also wait until the client attempts to
+ * connect to the advertised address (resolve_succeeded), so the caller can
+ * assert on the resolution outcome; otherwise it returns as soon as the
+ * nodename is built.
+ *
+ * Sets the module-level ipv6_host / exp_nodename and the outcome flags, which
+ * the caller inspects.
+ */
+static void do_advertise_and_wait(const char *host,
+                                  const char *nodename,
+                                  rd_bool_t wait_for_resolve) {
         rd_kafka_mock_cluster_t *cluster;
         const char *bootstraps;
         rd_kafka_t *rk;
@@ -119,15 +160,20 @@ int main_0191_ipv6_nodename_mock(int argc, char **argv) {
         const char *debug_contexts[2] = {"broker", NULL};
         int i;
 
-        if (test_needs_auth()) {
-                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
-                return 0;
-        }
+        ipv6_host         = host;
+        exp_nodename      = nodename;
+        nodename_built    = rd_false;
+        resolve_succeeded = rd_false;
 
         cluster = test_mock_cluster_new(1, &bootstraps);
 
         test_conf_init(&conf, NULL, tmout_multip(10));
         test_conf_set(conf, "bootstrap.servers", bootstraps);
+        /* The test environment's test.conf pins broker.address.family=v4
+         * (the test brokers listen on IPv4 localhost), under which no IPv6
+         * literal can resolve. This test's mock broker addresses are IPv6, so
+         * lift the pin for this client. */
+        test_conf_set(conf, "broker.address.family", "any");
         log_interceptor = test_conf_set_log_interceptor(
             conf, ipv6_nodename_mock_log_cb, debug_contexts);
 
@@ -150,49 +196,84 @@ int main_0191_ipv6_nodename_mock(int argc, char **argv) {
         if (!rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(1000)))
                 rd_kafka_metadata_destroy(md);
 
-        TEST_SAY("Waiting for the IPv6 nodename to be resolved\n");
         /* Wait for the resolution *outcome*, not merely for the nodename to be
          * built: "Nodename changed" is logged before the address is resolved,
-         * so stopping there would miss the failure this test guards against. */
-        for (i = 0; i < 50 && !resolve_failed && !resolve_succeeded &&
-                    !resolve_env_unavailable;
+         * so stopping at the nodename would miss a bracketed form that no
+         * longer parses back. When only construction is under test, stop as
+         * soon as the nodename is built. */
+        for (i = 0; i < 50 && !(nodename_built &&
+                                (!wait_for_resolve || resolve_succeeded));
              i++)
                 rd_kafka_poll(rk, 100);
 
-        /* The nodename must have been built regardless of whether the host
-         * can route to it. */
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(cluster);
+        rd_free(log_interceptor);
+}
+
+/**
+ * @brief The full build -> resolve -> connect path, using the IPv6 loopback
+ *        "::1". Skipped up front, before any work, if this machine's resolver
+ *        cannot return IPv6 addresses at all.
+ */
+static void do_test_ipv6_loopback(void) {
+        SUB_TEST();
+
+        if (!ipv6_loopback_resolvable())
+                SUB_TEST_SKIP(
+                    "this machine's resolver cannot resolve any "
+                    "IPv6 address (not even ::1)\n");
+
+        do_advertise_and_wait("::1", "[::1]:9092",
+                              rd_true /*wait_for_resolve*/);
+
         TEST_ASSERT(nodename_built,
                     "expected the advertised IPv6 literal to produce the "
                     "nodename \"%s\"",
                     exp_nodename);
-
-        if (resolve_env_unavailable) {
-                /* The correctly bracketed nodename was built but the host has
-                 * no configured IPv6 interface to resolve it against. */
-                TEST_SKIP(
-                    "No configured IPv6 interface: nodename \"%s\" "
-                    "was built correctly but is not resolvable on this "
-                    "machine\n",
+        TEST_ASSERT(resolve_succeeded,
+                    "nodename \"%s\" was not resolved: the bracketed literal "
+                    "was not split back into address and port",
                     exp_nodename);
-                rd_kafka_destroy(rk);
-                test_mock_cluster_destroy(cluster);
-                rd_free(log_interceptor);
+
+        TEST_SAY("IPv6 nodename \"%s\" built and resolved\n", exp_nodename);
+
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief A compressed documentation literal ending in "::" mirrors the
+ *        customer report. Verifies only that it is bracketed, not that it
+ *        resolves (the loopback subtest owns that), so it needs no IPv6 and
+ *        never skips.
+ */
+static void do_test_ipv6_compressed(void) {
+        SUB_TEST();
+
+        do_advertise_and_wait("2001:db8::", "[2001:db8::]:9092",
+                              rd_false /*wait_for_resolve*/);
+
+        /* nodename_built matches only the bracketed exp_nodename, so a
+         * regression to the malformed ":::" form (the bug) fails this
+         * assertion rather than slipping through. */
+        TEST_ASSERT(nodename_built,
+                    "expected the advertised \"::\"-tail literal to produce "
+                    "the bracketed nodename \"%s\"",
+                    exp_nodename);
+
+        TEST_SAY("IPv6 nodename \"%s\" built\n", exp_nodename);
+
+        SUB_TEST_PASS();
+}
+
+int main_0191_ipv6_nodename_mock(int argc, char **argv) {
+        if (test_needs_auth()) {
+                TEST_SKIP("Mock cluster does not support SSL/SASL\n");
                 return 0;
         }
 
-        TEST_ASSERT(!resolve_failed,
-                    "nodename \"%s\" failed to resolve: the bracketed literal "
-                    "was not split back into address and port",
-                    exp_nodename);
-        TEST_ASSERT(resolve_succeeded,
-                    "expected a connection attempt to %s, indicating that the "
-                    "nodename \"%s\" resolved",
-                    ipv6_host, exp_nodename);
-
-        TEST_SAY("IPv6 nodename \"%s\" built and resolved\n", exp_nodename);
-        rd_kafka_destroy(rk);
-        test_mock_cluster_destroy(cluster);
-        rd_free(log_interceptor);
+        do_test_ipv6_compressed();
+        do_test_ipv6_loopback();
 
         return 0;
 }

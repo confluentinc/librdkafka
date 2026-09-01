@@ -46,7 +46,14 @@ struct rd_kafka_topic_result_s {
         char *topic;             /**< Points to data */
         rd_kafka_resp_err_t err; /**< Error code */
         char *errstr;            /**< Points to data after topic, unless NULL */
-        char data[1];            /**< topic followed by errstr */
+        rd_kafka_resp_err_t topic_config_err; /**< Error code for topic config,
+                                               *   or 0 if not applicable. */
+        int32_t num_partitions;     /**< Number of partitions, or -1 if
+                                     *   not applicable. */
+        int16_t replication_factor; /**< Replication factor, or -1 if
+                                     *   not applicable. */
+        rd_list_t configs;          /**< Type (rd_kafka_ConfigEntry_t *) */
+        char data[1];               /**< topic followed by errstr */
 };
 
 void rd_kafka_topic_result_destroy(rd_kafka_topic_result_t *terr);

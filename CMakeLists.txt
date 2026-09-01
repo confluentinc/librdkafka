@@ -3,7 +3,15 @@ cmake_minimum_required(VERSION 3.5)
 include("packaging/cmake/parseversion.cmake")
 parseversion("src/rdkafka.h")
 
-project(RdKafka VERSION ${RDKAFKA_VERSION})
+project(RdKafka VERSION ${RDKAFKA_VERSION} LANGUAGES C)
+
+include(CheckLanguage)
+check_language(CXX)
+if(CMAKE_CXX_COMPILER)
+  enable_language(CXX)
+else()
+  message(STATUS "C++ compiler not found, skipping C++ support")
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
 
@@ -181,7 +189,7 @@ endif()
 
 option(RDKAFKA_BUILD_STATIC "Build static rdkafka library" OFF)
 option(RDKAFKA_BUILD_EXAMPLES "Build examples" ON)
-option(RDKAFKA_BUILD_TESTS "Build tests" ON)
+option(RDKAFKA_BUILD_TESTS "Build tests" CMAKE_CXX_COMPILER)
 if(WIN32)
     option(WITHOUT_WIN32_CONFIG "Avoid including win32_config.h on cmake builds" ON)
 endif(WIN32)
@@ -279,13 +287,20 @@ install(
 )
 
 add_subdirectory(src)
-add_subdirectory(src-cpp)
+
+if(CMAKE_CXX_COMPILER)
+  add_subdirectory(src-cpp)
+endif()
 
 if(RDKAFKA_BUILD_EXAMPLES)
   add_subdirectory(examples)
 endif()
 
 if(RDKAFKA_BUILD_TESTS)
-  enable_testing()
-  add_subdirectory(tests)
+  if(CMAKE_CXX_COMPILER)
+    enable_testing()
+    add_subdirectory(tests)
+  else()
+    message(FATAL_ERROR "Building tests needs C++ suport")
+  endif()
 endif()

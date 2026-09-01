@@ -39,14 +39,17 @@
  * The literal must instead be enclosed in brackets, as in an URL authority:
  * "[2001:db8::]:9092".
  *
- * Two subtests, each with its own advertised address:
+ * Two subtests, each with its own advertised address; neither skips:
  *  - do_test_ipv6_loopback():  the IPv6 loopback "::1", which resolves on
  *    every host, so the full build -> resolve -> connect path is exercised
- *    and asserted with no skip.
+ *    and asserted. This owns the resolution coverage: it proves the
+ *    bracketed nodename is understood by rd_addrinfo_prepare().
  *  - do_test_ipv6_compressed(): a compressed documentation literal (RFC 3849
- *    2001:db8::/32) ending in "::", mirroring the customer report. It may be
- *    unresolvable on a host with no configured IPv6 interface, so that
- *    subtest skips in that environment after verifying the nodename was built.
+ *    2001:db8::/32) ending in "::", mirroring the customer report. This owns
+ *    the construction coverage: it proves the "::"-tail literal is bracketed
+ *    rather than left as the malformed ":::" form. Resolution is not asserted
+ *    here (the loopback subtest covers it) so it needs no IPv6 and never
+ *    skips.
  */
 
 /* Broker address advertised by the current subtest and the nodename it must
@@ -56,40 +59,16 @@ static const char *ipv6_host;
 static const char *exp_nodename;
 
 static rd_bool_t nodename_built;
-static rd_bool_t resolve_failed;
-static rd_bool_t resolve_env_unavailable;
 static rd_bool_t resolve_succeeded;
 
 /**
  * @brief Inspect broker log lines for the nodename derived from the
  *        advertised IPv6 address.
- *
- * @remark Track the resolution *outcome* as well as the nodename: matching
- *         the nodename alone would still pass if the bracketed form were
- *         built but no longer understood by rd_addrinfo_prepare().
  */
 static void ipv6_nodename_mock_log_cb(const rd_kafka_t *rk,
                                       int level,
                                       const char *fac,
                                       const char *buf) {
-        if (strstr(buf, "Failed to resolve")) {
-                /* Distinguish the bug from an environment limitation by the
-                 * form of the string that failed to resolve:
-                 *  - the bug produces a malformed nodename (the trailing "::"
-                 *    of the literal run against ":port", giving ":::"), which
-                 *    is NOT the bracketed exp_nodename;
-                 *  - a host lacking a configured IPv6 interface fails to
-                 *    resolve even the correctly bracketed exp_nodename, since
-                 *    broker resolution passes AI_ADDRCONFIG and some resolvers
-                 *    apply that filter to numeric literals too (glibc does not,
-                 *    musl and Windows do). That is unrelated to the nodename
-                 *    construction under test. */
-                if (strstr(buf, exp_nodename))
-                        resolve_env_unavailable = rd_true;
-                else if (strstr(buf, ipv6_host))
-                        resolve_failed = rd_true;
-        }
-
         /* Resolution succeeded once a connection to the advertised address is
          * attempted. The connection itself then fails (nothing is listening),
          * which is expected and ignored by ipv6_nodename_is_fatal_cb(). */
@@ -120,12 +99,19 @@ static int ipv6_nodename_is_fatal_cb(rd_kafka_t *rk,
 
 /**
  * @brief Advertise \p host as the broker address and wait for the nodename to
- *        be built and its resolution attempted.
+ *        be built.
+ *
+ * When \p wait_for_resolve is true, also wait until the client attempts to
+ * connect to the advertised address (resolve_succeeded), so the caller can
+ * assert on the resolution outcome; otherwise it returns as soon as the
+ * nodename is built.
  *
  * Sets the module-level ipv6_host / exp_nodename and the outcome flags, which
  * the caller inspects.
  */
-static void do_advertise_and_wait(const char *host, const char *nodename) {
+static void do_advertise_and_wait(const char *host,
+                                  const char *nodename,
+                                  rd_bool_t wait_for_resolve) {
         rd_kafka_mock_cluster_t *cluster;
         const char *bootstraps;
         rd_kafka_t *rk;
@@ -135,12 +121,10 @@ static void do_advertise_and_wait(const char *host, const char *nodename) {
         const char *debug_contexts[2] = {"broker", NULL};
         int i;
 
-        ipv6_host               = host;
-        exp_nodename            = nodename;
-        nodename_built          = rd_false;
-        resolve_failed          = rd_false;
-        resolve_env_unavailable = rd_false;
-        resolve_succeeded       = rd_false;
+        ipv6_host         = host;
+        exp_nodename      = nodename;
+        nodename_built    = rd_false;
+        resolve_succeeded = rd_false;
 
         cluster = test_mock_cluster_new(1, &bootstraps);
 
@@ -168,12 +152,13 @@ static void do_advertise_and_wait(const char *host, const char *nodename) {
         if (!rd_kafka_metadata(rk, 0, NULL, &md, tmout_multip(1000)))
                 rd_kafka_metadata_destroy(md);
 
-        TEST_SAY("Waiting for the IPv6 nodename to be resolved\n");
         /* Wait for the resolution *outcome*, not merely for the nodename to be
          * built: "Nodename changed" is logged before the address is resolved,
-         * so stopping there would miss the failure this test guards against. */
-        for (i = 0; i < 50 && !resolve_failed && !resolve_succeeded &&
-                    !resolve_env_unavailable;
+         * so stopping at the nodename would miss a bracketed form that no
+         * longer parses back. When only construction is under test, stop as
+         * soon as the nodename is built. */
+        for (i = 0; i < 50 && !(nodename_built &&
+                                (!wait_for_resolve || resolve_succeeded));
              i++)
                 rd_kafka_poll(rk, 100);
 
@@ -189,20 +174,17 @@ static void do_advertise_and_wait(const char *host, const char *nodename) {
 static void do_test_ipv6_loopback(void) {
         SUB_TEST();
 
-        do_advertise_and_wait("::1", "[::1]:9092");
+        do_advertise_and_wait("::1", "[::1]:9092",
+                              rd_true /*wait_for_resolve*/);
 
         TEST_ASSERT(nodename_built,
                     "expected the advertised IPv6 literal to produce the "
                     "nodename \"%s\"",
                     exp_nodename);
-        TEST_ASSERT(!resolve_failed,
-                    "nodename \"%s\" failed to resolve: the bracketed literal "
+        TEST_ASSERT(resolve_succeeded,
+                    "nodename \"%s\" was not resolved: the bracketed literal "
                     "was not split back into address and port",
                     exp_nodename);
-        TEST_ASSERT(resolve_succeeded,
-                    "expected a connection attempt to %s, indicating that the "
-                    "nodename \"%s\" resolved",
-                    ipv6_host, exp_nodename);
 
         TEST_SAY("IPv6 nodename \"%s\" built and resolved\n", exp_nodename);
 
@@ -211,39 +193,25 @@ static void do_test_ipv6_loopback(void) {
 
 /**
  * @brief A compressed documentation literal ending in "::" mirrors the
- *        customer report. The nodename must be bracketed; resolution is only
- *        asserted where the host has IPv6, otherwise this subtest skips.
+ *        customer report. Verifies only that it is bracketed, not that it
+ *        resolves (the loopback subtest owns that), so it needs no IPv6 and
+ *        never skips.
  */
 static void do_test_ipv6_compressed(void) {
         SUB_TEST();
 
-        do_advertise_and_wait("2001:db8::", "[2001:db8::]:9092");
+        do_advertise_and_wait("2001:db8::", "[2001:db8::]:9092",
+                              rd_false /*wait_for_resolve*/);
 
+        /* nodename_built matches only the bracketed exp_nodename, so a
+         * regression to the malformed ":::" form (the bug) fails this
+         * assertion rather than slipping through. */
         TEST_ASSERT(nodename_built,
-                    "expected the advertised IPv6 literal to produce the "
-                    "nodename \"%s\"",
+                    "expected the advertised \"::\"-tail literal to produce "
+                    "the bracketed nodename \"%s\"",
                     exp_nodename);
 
-        if (resolve_env_unavailable) {
-                /* The correctly bracketed nodename was built but the host has
-                 * no configured IPv6 interface to resolve it against. */
-                SUB_TEST_SKIP(
-                    "No configured IPv6 interface: nodename \"%s\" "
-                    "was built correctly but is not resolvable on this "
-                    "machine\n",
-                    exp_nodename);
-        }
-
-        TEST_ASSERT(!resolve_failed,
-                    "nodename \"%s\" failed to resolve: the bracketed literal "
-                    "was not split back into address and port",
-                    exp_nodename);
-        TEST_ASSERT(resolve_succeeded,
-                    "expected a connection attempt to %s, indicating that the "
-                    "nodename \"%s\" resolved",
-                    ipv6_host, exp_nodename);
-
-        TEST_SAY("IPv6 nodename \"%s\" built and resolved\n", exp_nodename);
+        TEST_SAY("IPv6 nodename \"%s\" built\n", exp_nodename);
 
         SUB_TEST_PASS();
 }

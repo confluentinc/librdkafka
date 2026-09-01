@@ -34,4 +34,4 @@ else
 fi
 
 docker run --rm --entrypoint $ENTRYPOINT \
-    -v .:/librdkafka -w /librdkafka -e CI -u $UID:$UID ${IMAGE} ${REST}
+    -v .:/librdkafka -w /librdkafka -e CI -e TESTS -u $UID:$UID ${IMAGE} ${REST}

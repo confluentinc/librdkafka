@@ -157,7 +157,8 @@ static void rd_kafka_mk_nodename(char *dest,
  *        rd_kafka_mk_nodename().
  *
  * Strips the ":port" suffix, the brackets enclosing an IPv6 literal
- * ("[2600::1]:9092" -> "2600::1"), and the zone id of a scoped IPv6 literal
+ * ("[2001:db8::1]:9092" -> "2001:db8::1"), and the zone id of a scoped IPv6
+ * literal
  * ("fe80::1%eth0" -> "fe80::1", also "%25eth0" when percent-encoded per
  * RFC 6874): the zone identifies the local link the address is reachable on
  * (RFC 4007), not the peer, so it has no place in a hostname used to
@@ -171,12 +172,13 @@ void rd_kafka_nodename_to_hostname(const char *nodename,
         rd_strlcpy(dest, nodename, dsize);
 
         /* Strip the ":port" suffix. Use the last ':' so an IPv6 literal such
-         * as "[2600::1]:9092" is not truncated at a ':' within the address. */
+         * as "[2001:db8::1]:9092" is not truncated at a ':' within the address.
+         */
         if ((t = strrchr(dest, ':')))
                 *t = '\0';
 
         /* Strip the enclosing brackets from an IPv6 literal, leaving the bare
-         * address: "[2600::1]" -> "2600::1". */
+         * address: "[2001:db8::1]" -> "2001:db8::1". */
         if (*dest == '[') {
                 memmove(dest, dest + 1, strlen(dest));
                 if ((t = strrchr(dest, ']')))
@@ -6779,16 +6781,15 @@ static int rd_ut_mk_nodename(void) {
         } hosts[] = {
             {"broker.example.com", 9092},
             {"192.0.2.1", 9092},
-            {"2600:1f18:4dcf:654c:46fc:0:0:1", 9092}, /* full IPv6 */
-            {"2600:1f18:4dcf:654c:46fc::", 9092},     /* compressed tail */
-            {"fe80::", 9092},                         /* compressed */
-            {"::1", 9092},                            /* IPv6 loopback */
+            {"2001:db8:0:0:0:0:0:1", 9092}, /* full IPv6 */
+            {"2001:db8::", 9092},           /* compressed tail */
+            {"fe80::", 9092},               /* compressed */
+            {"::1", 9092},                  /* IPv6 loopback */
             /* An IPv6 literal that is already enclosed in brackets, as it is
              * when configured that way in bootstrap.servers, must not be
              * bracketed a second time. */
             {"[::1]", 9092, "::1"},
-            {"[2600:1f18:4dcf:654c:46fc::]", 9092,
-             "2600:1f18:4dcf:654c:46fc::"},
+            {"[2001:db8::]", 9092, "2001:db8::"},
             {NULL, 0},
         };
         int i;
@@ -6831,7 +6832,7 @@ static int rd_ut_mk_nodename(void) {
  * @brief Unittest for hostname extraction from a broker nodename.
  *
  * The nodename carries a ":port" suffix, IPv6 literals are bracketed
- * ("[2600::1]:9092") and may be scoped ("[fe80::1%eth0]:9092"); the
+ * ("[2001:db8::1]:9092") and may be scoped ("[fe80::1%eth0]:9092"); the
  * hostname must be the bare address.
  */
 static int rd_ut_nodename_to_hostname(void) {
@@ -6841,7 +6842,7 @@ static int rd_ut_nodename_to_hostname(void) {
         } tests[] = {
             {"broker.example.com:9092", "broker.example.com"},
             {"192.0.2.1:9092", "192.0.2.1"},
-            {"[2600:1f18:4dcf:654c:46fc::]:9092", "2600:1f18:4dcf:654c:46fc::"},
+            {"[2001:db8::]:9092", "2001:db8::"},
             {"[fe80::]:9092", "fe80::"},
             {"[::1]:9092", "::1"},
             /* The zone id of a scoped literal is stripped, both plain and

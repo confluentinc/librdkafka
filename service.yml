@@ -179,4 +179,23 @@ semaphore:
           - "x86_64,aarch64"
           - "x86_64"
           - "aarch64"
-      
+
+  - name: run-share-perf-comparison
+    branch: master
+    scheduled: false
+    pipeline_file: .semaphore/run-share-perf-comparison.yml
+    parameters:
+      - name: DURATION_SECONDS
+        required: false
+        default_value: "300"
+        description: "How long to run the perf clients in seconds. Default 300 (5 min)."
+
+      - name: MSG_SIZE
+        required: false
+        default_value: "1000"
+        description: "Producer message size in bytes."
+
+      - name: PRODUCER_RATE
+        required: false
+        description: "Producer rate cap in messages per second. Leave empty for unlimited."
+

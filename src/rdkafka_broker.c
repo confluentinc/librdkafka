@@ -5483,7 +5483,8 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
          * the broker thread until we've finalized the rkb. */
         rd_kafka_broker_lock(rkb);
         rd_kafka_broker_keep(rkb); /* broker thread's refcnt */
-        if (thrd_create(&rkb->rkb_thread, rd_kafka_broker_thread_main, rkb) !=
+        if (getenv("RDK_FORCE_THRD_FAIL") ||
+            thrd_create(&rkb->rkb_thread, rd_kafka_broker_thread_main, rkb) !=
             thrd_success) {
                 rd_kafka_broker_unlock(rkb);
 
@@ -5493,6 +5494,18 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                 /* Send ERR op back to application for processing. */
                 rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
                                 "Unable to create broker thread");
+
+                /* The wake-up pipe was opened above and is closed by
+                 * rd_kafka_broker_destroy_final(), which this path does not
+                 * reach: rd_free() releases the struct holding the descriptor
+                 * numbers without closing them, so nothing can close them
+                 * afterwards. Close them here before the struct goes. */
+#ifndef _WIN32
+                if (rkb->rkb_wakeup_fd[0] != -1)
+                        rd_socket_close(rkb->rkb_wakeup_fd[0]);
+                if (rkb->rkb_wakeup_fd[1] != -1)
+                        rd_socket_close(rkb->rkb_wakeup_fd[1]);
+#endif
 
                 rd_free(rkb);
 

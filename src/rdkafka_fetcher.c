@@ -1522,6 +1522,23 @@ static rd_kafka_resp_err_t rd_kafka_share_fetch_reply_handle_partition(
 
                         size = LastOffsets[i] - FirstOffsets[i] + 1;
 
+                        /* size is used both as the int64 fill-loop bound below
+                         * and, truncated to the int32 types_cnt, as the
+                         * allocation count in
+                         * rd_kafka_share_ack_batch_entry_new. A broker-supplied
+                         * range with LastOffset < FirstOffset, or one wider
+                         * than INT32_MAX, would make the truncated allocation
+                         * smaller than the loop bound and overflow
+                         * entry->types. */
+                        if (unlikely(size <= 0 || size > INT32_MAX))
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf,
+                                    "%.*s [%" PRId32
+                                    "]: AcquiredRecords range %" PRId64
+                                    "..%" PRId64 " out of range",
+                                    RD_KAFKAP_STR_PR(topic), PartitionId,
+                                    FirstOffsets[i], LastOffsets[i]);
+
                         rd_rkb_dbg(rkb, FETCH, "SHAREFETCH",
                                    "%.*s [%" PRId32
                                    "]: Acquired Records from offset %" PRId64

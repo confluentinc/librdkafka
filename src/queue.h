@@ -69,12 +69,12 @@
  * after an existing element, at the head of the list, or at the end of
  * the list. A tail queue may be traversed in either direction.
  *
- * A circle queue is headed by a pair of pointers, one to the head of the
+ * A circular queue is headed by a pair of pointers, one to the head of the
  * list and the other to the tail of the list. The elements are doubly
  * linked so that an arbitrary element can be removed without a need to
  * traverse the list. New elements can be added to the list before or after
  * an existing element, at the head of the list, or at the end of the list.
- * A circle queue may be traversed in either direction, but has a more
+ * A circular queue may be traversed in either direction, but has a more
  * complex end of list detection.
  *
  * For details on the use of these macros, see the queue(3) manual page.
@@ -125,9 +125,9 @@ struct {								\
 #define	SLIST_NEXT(elm, field)	((elm)->field.sle_next)
 
 #define	SLIST_FOREACH(var, head, field)					\
-	for((var) = (head)->slh_first;					\
+	for((var) = SLIST_FIRST(head);					\
 	    (var) != SLIST_END(head);					\
-	    (var) = (var)->field.sle_next)
+	    (var) = SLIST_NEXT(var, field))
 
 #define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
 	for ((var) = SLIST_FIRST((head));				\
@@ -143,12 +143,12 @@ struct {								\
 } while (/*CONSTCOND*/0)
 
 #define	SLIST_INSERT_AFTER(slistelm, elm, field) do {			\
-	(elm)->field.sle_next = (slistelm)->field.sle_next;		\
+	(elm)->field.sle_next = SLIST_NEXT(slistelm, field);		\
 	(slistelm)->field.sle_next = (elm);				\
 } while (/*CONSTCOND*/0)
 
 #define	SLIST_INSERT_HEAD(head, elm, field) do {			\
-	(elm)->field.sle_next = (head)->slh_first;			\
+	(elm)->field.sle_next = SLIST_FIRST(head);			\
 	(head)->slh_first = (elm);					\
 } while (/*CONSTCOND*/0)
 
@@ -158,7 +158,7 @@ struct {								\
 } while (/*CONSTCOND*/0)
 
 #define	SLIST_REMOVE_HEAD(head, field) do {				\
-	(head)->slh_first = (head)->slh_first->field.sle_next;		\
+	(head)->slh_first = SLIST_NEXT(SLIST_FIRST(head), field);	\
 } while (/*CONSTCOND*/0)
 
 #define	SLIST_REMOVE(head, elm, type, field) do {			\
@@ -166,11 +166,11 @@ struct {								\
 		SLIST_REMOVE_HEAD((head), field);			\
 	}								\
 	else {								\
-		struct type *curelm = (head)->slh_first;		\
+		struct type *curelm = SLIST_FIRST(head);		\
 		while(curelm->field.sle_next != (elm))			\
-			curelm = curelm->field.sle_next;		\
+			curelm = SLIST_NEXT(curelm, field);		\
 		curelm->field.sle_next =				\
-		    curelm->field.sle_next->field.sle_next;		\
+		    SLIST_NEXT(SLIST_NEXT(curelm, field), field);	\
 	}								\
 } while (/*CONSTCOND*/0)
 
@@ -201,9 +201,9 @@ struct {								\
 #define	LIST_NEXT(elm, field)		((elm)->field.le_next)
 
 #define	LIST_FOREACH(var, head, field)					\
-	for ((var) = ((head)->lh_first);				\
+	for ((var) = LIST_FIRST(head);					\
 	    (var) != LIST_END(head);					\
-	    (var) = ((var)->field.le_next))
+	    (var) = LIST_NEXT(var, field))
 
 #define	LIST_FOREACH_SAFE(var, head, field, tvar)			\
 	for ((var) = LIST_FIRST((head));				\
@@ -214,7 +214,7 @@ struct {								\
 #define	LIST_MOVE(head1, head2) do {					\
 	LIST_INIT((head2));						\
 	if (!LIST_EMPTY((head1))) {					\
-		(head2)->lh_first = (head1)->lh_first;			\
+		(head2)->lh_first = LIST_FIRST(head1);			\
 		LIST_INIT((head1));					\
 	}								\
 } while (/*CONSTCOND*/0)
@@ -252,7 +252,7 @@ struct {								\
 
 #define	LIST_INSERT_AFTER(listelm, elm, field) do {			\
 	QUEUEDEBUG_LIST_OP((listelm), field)				\
-	if (((elm)->field.le_next = (listelm)->field.le_next) != 	\
+	if (((elm)->field.le_next = LIST_NEXT(listelm, field)) != 	\
 	    LIST_END(head))						\
 		(listelm)->field.le_next->field.le_prev =		\
 		    &(elm)->field.le_next;				\
@@ -270,7 +270,7 @@ struct {								\
 
 #define	LIST_INSERT_HEAD(head, elm, field) do {				\
 	QUEUEDEBUG_LIST_INSERT_HEAD((head), (elm), field)		\
-	if (((elm)->field.le_next = (head)->lh_first) != LIST_END(head))\
+	if (((elm)->field.le_next = LIST_FIRST(head)) != LIST_END(head))\
 		(head)->lh_first->field.le_prev = &(elm)->field.le_next;\
 	(head)->lh_first = (elm);					\
 	(elm)->field.le_prev = &(head)->lh_first;			\
@@ -278,15 +278,15 @@ struct {								\
 
 #define	LIST_REMOVE(elm, field) do {					\
 	QUEUEDEBUG_LIST_OP((elm), field)				\
-	if ((elm)->field.le_next != NULL)				\
+	if ((elm)->field.le_next != LIST_END(elm))			\
 		(elm)->field.le_next->field.le_prev = 			\
 		    (elm)->field.le_prev;				\
-	*(elm)->field.le_prev = (elm)->field.le_next;			\
+	*(elm)->field.le_prev = LIST_NEXT(elm, field);			\
 	QUEUEDEBUG_LIST_POSTREMOVE((elm), field)			\
 } while (/*CONSTCOND*/0)
 
 #define LIST_REPLACE(elm, elm2, field) do {				\
-	if (((elm2)->field.le_next = (elm)->field.le_next) != NULL)	\
+	if (((elm2)->field.le_next = LIST_NEXT(elm, field)) != NULL)	\
 		(elm2)->field.le_next->field.le_prev =			\
 		    &(elm2)->field.le_next;				\
 	(elm2)->field.le_prev = (elm)->field.le_prev;			\
@@ -320,14 +320,14 @@ struct {								\
 #define	SIMPLEQ_NEXT(elm, field)	((elm)->field.sqe_next)
 
 #define	SIMPLEQ_FOREACH(var, head, field)				\
-	for ((var) = ((head)->sqh_first);				\
+	for ((var) = SIMPLEQ_FIRST(head);				\
 	    (var) != SIMPLEQ_END(head);					\
-	    (var) = ((var)->field.sqe_next))
+	    (var) = SIMPLEQ_NEXT(var, field))
 
 #define	SIMPLEQ_FOREACH_SAFE(var, head, field, next)			\
-	for ((var) = ((head)->sqh_first);				\
+	for ((var) = SIMPLEQ_FIRST(head);				\
 	    (var) != SIMPLEQ_END(head) &&				\
-	    ((next = ((var)->field.sqe_next)), 1);			\
+	    ((next = SIMPLEQ_NEXT(var, field)), 1);			\
 	    (var) = (next))
 
 /*
@@ -339,51 +339,51 @@ struct {								\
 } while (/*CONSTCOND*/0)
 
 #define	SIMPLEQ_INSERT_HEAD(head, elm, field) do {			\
-	if (((elm)->field.sqe_next = (head)->sqh_first) == NULL)	\
+	if (((elm)->field.sqe_next = SIMPLEQ_FIRST(head)) == NULL)	\
 		(head)->sqh_last = &(elm)->field.sqe_next;		\
 	(head)->sqh_first = (elm);					\
 } while (/*CONSTCOND*/0)
 
 #define	SIMPLEQ_INSERT_TAIL(head, elm, field) do {			\
-	(elm)->field.sqe_next = NULL;					\
+	(elm)->field.sqe_next = SIMPLEQ_END(head);			\
 	*(head)->sqh_last = (elm);					\
 	(head)->sqh_last = &(elm)->field.sqe_next;			\
 } while (/*CONSTCOND*/0)
 
 #define	SIMPLEQ_INSERT_AFTER(head, listelm, elm, field) do {		\
-	if (((elm)->field.sqe_next = (listelm)->field.sqe_next) == NULL)\
+	if (((elm)->field.sqe_next = SIMPLEQ_NEXT(listelm, field)) == NULL) \
 		(head)->sqh_last = &(elm)->field.sqe_next;		\
 	(listelm)->field.sqe_next = (elm);				\
 } while (/*CONSTCOND*/0)
 
 #define	SIMPLEQ_REMOVE_HEAD(head, field) do {				\
-	if (((head)->sqh_first = (head)->sqh_first->field.sqe_next) == NULL) \
+	if (((head)->sqh_first = SIMPLEQ_NEXT(SIMPLEQ_FIRST(head), field)) == NULL) \
 		(head)->sqh_last = &(head)->sqh_first;			\
 } while (/*CONSTCOND*/0)
 
 #define SIMPLEQ_REMOVE_AFTER(head, elm, field) do {			\
-	if (((elm)->field.sqe_next = (elm)->field.sqe_next->field.sqe_next) \
+	if (((elm)->field.sqe_next = SIMPLEQ_NEXT(SIMPLEQ_NEXT(elm, field), field)) \
 	    == NULL)							\
 		(head)->sqh_last = &(elm)->field.sqe_next;		\
 } while (/*CONSTCOND*/0)
 
 #define	SIMPLEQ_REMOVE(head, elm, type, field) do {			\
-	if ((head)->sqh_first == (elm)) {				\
+	if (SIMPLEQ_FIRST(head) == (elm)) {				\
 		SIMPLEQ_REMOVE_HEAD((head), field);			\
 	} else {							\
-		struct type *curelm = (head)->sqh_first;		\
-		while (curelm->field.sqe_next != (elm))			\
-			curelm = curelm->field.sqe_next;		\
+		struct type *curelm = SIMPLEQ_FIRST(head);		\
+		while (SIMPLEQ_NEXT(curelm, field) != (elm))		\
+			curelm = SIMPLEQ_NEXT(curelm, field);		\
 		if ((curelm->field.sqe_next =				\
-			curelm->field.sqe_next->field.sqe_next) == NULL) \
+			SIMPLEQ_NEXT(SIMPLEQ_NEXT(curelm, field), field)) == NULL) \
 			    (head)->sqh_last = &(curelm)->field.sqe_next; \
 	}								\
 } while (/*CONSTCOND*/0)
 
 #define	SIMPLEQ_CONCAT(head1, head2) do {				\
 	if (!SIMPLEQ_EMPTY((head2))) {					\
-		*(head1)->sqh_last = (head2)->sqh_first;		\
-		(head1)->sqh_last = (head2)->sqh_last;		\
+		*(head1)->sqh_last = SIMPLEQ_FIRST(head2);		\
+		(head1)->sqh_last = (head2)->sqh_last;			\
 		SIMPLEQ_INIT((head2));					\
 	}								\
 } while (/*CONSTCOND*/0)
@@ -428,19 +428,19 @@ struct {								\
 
 
 #define	TAILQ_FOREACH(var, head, field)					\
-	for ((var) = ((head)->tqh_first);				\
+	for ((var) = TAILQ_FIRST(head);					\
 	    (var) != TAILQ_END(head);					\
-	    (var) = ((var)->field.tqe_next))
+	    (var) = TAILQ_NEXT(var, field))
 
 #define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
-	for ((var) = ((head)->tqh_first);				\
+	for ((var) = TAILQ_FIRST(head);					\
 	    (var) != TAILQ_END(head) &&					\
 	    ((next) = TAILQ_NEXT(var, field), 1); (var) = (next))
 
 #define	TAILQ_FOREACH_REVERSE(var, head, headname, field)		\
-	for ((var) = (*(((struct headname *)((head)->tqh_last))->tqh_last));\
+	for ((var) = TAILQ_LAST(head, headname);			\
 	    (var) != TAILQ_END(head);					\
-	    (var) = (*(((struct headname *)((var)->field.tqe_prev))->tqh_last)))
+	    (var) = TAILQ_PREV(var, headname, field))
 
 #define	TAILQ_FOREACH_REVERSE_SAFE(var, head, headname, field, prev)	\
 	for ((var) = TAILQ_LAST((head), headname);			\
@@ -492,7 +492,7 @@ struct {								\
 
 #define	TAILQ_INSERT_HEAD(head, elm, field) do {			\
 	QUEUEDEBUG_TAILQ_INSERT_HEAD((head), (elm), field)		\
-	if (((elm)->field.tqe_next = (head)->tqh_first) != TAILQ_END(head))\
+	if (((elm)->field.tqe_next = TAILQ_FIRST(head)) != TAILQ_END(head)) \
 		(head)->tqh_first->field.tqe_prev =			\
 		    &(elm)->field.tqe_next;				\
 	else								\
@@ -511,7 +511,7 @@ struct {								\
 
 #define	TAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	QUEUEDEBUG_TAILQ_OP((listelm), field)				\
-	if (((elm)->field.tqe_next = (listelm)->field.tqe_next) != 	\
+	if (((elm)->field.tqe_next = TAILQ_NEXT(listelm, field)) != 	\
 	    TAILQ_END(head))						\
 		(elm)->field.tqe_next->field.tqe_prev = 		\
 		    &(elm)->field.tqe_next;				\
@@ -532,17 +532,17 @@ struct {								\
 #define	TAILQ_REMOVE(head, elm, field) do {				\
 	QUEUEDEBUG_TAILQ_PREREMOVE((head), (elm), field)		\
 	QUEUEDEBUG_TAILQ_OP((elm), field)				\
-	if (((elm)->field.tqe_next) != TAILQ_END(head))			\
+	if (TAILQ_NEXT(elm, field) != TAILQ_END(head))			\
 		(elm)->field.tqe_next->field.tqe_prev = 		\
 		    (elm)->field.tqe_prev;				\
 	else								\
 		(head)->tqh_last = (elm)->field.tqe_prev;		\
-	*(elm)->field.tqe_prev = (elm)->field.tqe_next;			\
+	*(elm)->field.tqe_prev = TAILQ_NEXT(elm, field);		\
 	QUEUEDEBUG_TAILQ_POSTREMOVE((elm), field);			\
 } while (/*CONSTCOND*/0)
 
 #define TAILQ_REPLACE(head, elm, elm2, field) do {			\
-        if (((elm2)->field.tqe_next = (elm)->field.tqe_next) != 	\
+        if (((elm2)->field.tqe_next = TAILQ_NEXT(elm, field)) != 	\
 	    TAILQ_END(head))   						\
                 (elm2)->field.tqe_next->field.tqe_prev =		\
                     &(elm2)->field.tqe_next;				\
@@ -555,7 +555,7 @@ struct {								\
 
 #define	TAILQ_CONCAT(head1, head2, field) do {				\
 	if (!TAILQ_EMPTY(head2)) {					\
-		*(head1)->tqh_last = (head2)->tqh_first;		\
+		*(head1)->tqh_last = TAILQ_FIRST(head2);		\
 		(head2)->tqh_first->field.tqe_prev = (head1)->tqh_last;	\
 		(head1)->tqh_last = (head2)->tqh_last;			\
 		TAILQ_INIT((head2));					\
@@ -592,49 +592,49 @@ struct {								\
  */
 #define	STAILQ_INIT(head) do {						\
 	(head)->stqh_first = NULL;					\
-	(head)->stqh_last = &(head)->stqh_first;				\
+	(head)->stqh_last = &(head)->stqh_first;			\
 } while (/*CONSTCOND*/0)
 
 #define	STAILQ_INSERT_HEAD(head, elm, field) do {			\
-	if (((elm)->field.stqe_next = (head)->stqh_first) == NULL)	\
+	if (((elm)->field.stqe_next = STAILQ_FIRST(head)) == NULL)	\
 		(head)->stqh_last = &(elm)->field.stqe_next;		\
 	(head)->stqh_first = (elm);					\
 } while (/*CONSTCOND*/0)
 
 #define	STAILQ_INSERT_TAIL(head, elm, field) do {			\
-	(elm)->field.stqe_next = NULL;					\
+	(elm)->field.stqe_next = STAILQ_END(head);			\
 	*(head)->stqh_last = (elm);					\
 	(head)->stqh_last = &(elm)->field.stqe_next;			\
 } while (/*CONSTCOND*/0)
 
 #define	STAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
-	if (((elm)->field.stqe_next = (listelm)->field.stqe_next) == NULL)\
+	if (((elm)->field.stqe_next = STAILQ_NEXT(listelm, field)) == NULL) \
 		(head)->stqh_last = &(elm)->field.stqe_next;		\
 	(listelm)->field.stqe_next = (elm);				\
 } while (/*CONSTCOND*/0)
 
 #define	STAILQ_REMOVE_HEAD(head, field) do {				\
-	if (((head)->stqh_first = (head)->stqh_first->field.stqe_next) == NULL) \
-		(head)->stqh_last = &(head)->stqh_first;			\
+	if (((head)->stqh_first = STAILQ_NEXT(STAILQ_FIRST(head), field)) == NULL) \
+		(head)->stqh_last = &(head)->stqh_first;		\
 } while (/*CONSTCOND*/0)
 
 #define	STAILQ_REMOVE(head, elm, type, field) do {			\
-	if ((head)->stqh_first == (elm)) {				\
+	if (STAILQ_FIRST(head) == (elm)) {				\
 		STAILQ_REMOVE_HEAD((head), field);			\
 	} else {							\
-		struct type *curelm = (head)->stqh_first;		\
-		while (curelm->field.stqe_next != (elm))			\
-			curelm = curelm->field.stqe_next;		\
+		struct type *curelm = STAILQ_FIRST(head);		\
+		while (curelm->field.stqe_next != (elm))		\
+			curelm = STAILQ_NEXT(curelm, field);		\
 		if ((curelm->field.stqe_next =				\
-			curelm->field.stqe_next->field.stqe_next) == NULL) \
+			STAILQ_NEXT(STAILQ_NEXT(curelm, field), field)) == NULL) \
 			    (head)->stqh_last = &(curelm)->field.stqe_next; \
 	}								\
 } while (/*CONSTCOND*/0)
 
 #define	STAILQ_FOREACH(var, head, field)				\
-	for ((var) = ((head)->stqh_first);				\
+	for ((var) = STAILQ_FIRST(head);				\
 		(var);							\
-		(var) = ((var)->field.stqe_next))
+		(var) = STAILQ_NEXT(var, field))
 
 #define	STAILQ_FOREACH_SAFE(var, head, field, tvar)			\
 	for ((var) = STAILQ_FIRST((head));				\
@@ -643,7 +643,7 @@ struct {								\
 
 #define	STAILQ_CONCAT(head1, head2) do {				\
 	if (!STAILQ_EMPTY((head2))) {					\
-		*(head1)->stqh_last = (head2)->stqh_first;		\
+		*(head1)->stqh_last = STAILQ_FIRST(head2);		\
 		(head1)->stqh_last = (head2)->stqh_last;		\
 		STAILQ_INIT((head2));					\
 	}								\
@@ -754,7 +754,7 @@ struct {								\
 #define	CIRCLEQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	QUEUEDEBUG_CIRCLEQ_HEAD((head), field)				\
 	QUEUEDEBUG_CIRCLEQ_ELM((head), (listelm), field)		\
-	(elm)->field.cqe_next = (listelm)->field.cqe_next;		\
+	(elm)->field.cqe_next = CIRCLEQ_NEXT(listelm, field);		\
 	(elm)->field.cqe_prev = (listelm);				\
 	if ((listelm)->field.cqe_next == CIRCLEQ_ENDC(head))		\
 		(head)->cqh_last = (elm);				\
@@ -767,8 +767,8 @@ struct {								\
 	QUEUEDEBUG_CIRCLEQ_HEAD((head), field)				\
 	QUEUEDEBUG_CIRCLEQ_ELM((head), (listelm), field)		\
 	(elm)->field.cqe_next = (listelm);				\
-	(elm)->field.cqe_prev = (listelm)->field.cqe_prev;		\
-	if ((listelm)->field.cqe_prev == CIRCLEQ_ENDC(head))		\
+	(elm)->field.cqe_prev = CIRCLEQ_PREV(listelm, field);		\
+	if (CIRCLEQ_PREV(listelm, field) == CIRCLEQ_ENDC(head))		\
 		(head)->cqh_first = (elm);				\
 	else								\
 		(listelm)->field.cqe_prev->field.cqe_next = (elm);	\
@@ -777,9 +777,9 @@ struct {								\
 
 #define	CIRCLEQ_INSERT_HEAD(head, elm, field) do {			\
 	QUEUEDEBUG_CIRCLEQ_HEAD((head), field)				\
-	(elm)->field.cqe_next = (head)->cqh_first;			\
+	(elm)->field.cqe_next = CIRCLEQ_FIRST(head);			\
 	(elm)->field.cqe_prev = CIRCLEQ_END(head);			\
-	if ((head)->cqh_last == CIRCLEQ_ENDC(head))			\
+	if (CIRCLEQ_LAST(head) == CIRCLEQ_ENDC(head))			\
 		(head)->cqh_last = (elm);				\
 	else								\
 		(head)->cqh_first->field.cqe_prev = (elm);		\
@@ -789,8 +789,8 @@ struct {								\
 #define	CIRCLEQ_INSERT_TAIL(head, elm, field) do {			\
 	QUEUEDEBUG_CIRCLEQ_HEAD((head), field)				\
 	(elm)->field.cqe_next = CIRCLEQ_END(head);			\
-	(elm)->field.cqe_prev = (head)->cqh_last;			\
-	if ((head)->cqh_first == CIRCLEQ_ENDC(head))			\
+	(elm)->field.cqe_prev = CIRCLEQ_LAST(head);			\
+	if (CIRCLEQ_FIRST(head) == CIRCLEQ_ENDC(head))			\
 		(head)->cqh_first = (elm);				\
 	else								\
 		(head)->cqh_last->field.cqe_next = (elm);		\
@@ -800,28 +800,28 @@ struct {								\
 #define	CIRCLEQ_REMOVE(head, elm, field) do {				\
 	QUEUEDEBUG_CIRCLEQ_HEAD((head), field)				\
 	QUEUEDEBUG_CIRCLEQ_ELM((head), (elm), field)			\
-	if ((elm)->field.cqe_next == CIRCLEQ_ENDC(head))		\
-		(head)->cqh_last = (elm)->field.cqe_prev;		\
+	if (CIRCLEQ_NEXT(elm, field) == CIRCLEQ_ENDC(head))		\
+		(head)->cqh_last = CIRCLEQ_PREV(elm, field);		\
 	else								\
 		(elm)->field.cqe_next->field.cqe_prev =			\
-		    (elm)->field.cqe_prev;				\
+		    CIRCLEQ_PREV(elm, field);				\
 	if ((elm)->field.cqe_prev == CIRCLEQ_ENDC(head))		\
-		(head)->cqh_first = (elm)->field.cqe_next;		\
+		(head)->cqh_first = CIRCLEQ_NEXT(elm, field);		\
 	else								\
 		(elm)->field.cqe_prev->field.cqe_next =			\
-		    (elm)->field.cqe_next;				\
+		    CIRCLEQ_NEXT(elm, field);				\
 	QUEUEDEBUG_CIRCLEQ_POSTREMOVE((elm), field)			\
 } while (/*CONSTCOND*/0)
 
 #define	CIRCLEQ_FOREACH(var, head, field)				\
-	for ((var) = ((head)->cqh_first);				\
+	for ((var) = CIRCLEQ_FIRST(head);				\
 		(var) != CIRCLEQ_ENDC(head);				\
-		(var) = ((var)->field.cqe_next))
+		(var) = CIRCLEQ_NEXT(var, field))
 
 #define	CIRCLEQ_FOREACH_REVERSE(var, head, field)			\
-	for ((var) = ((head)->cqh_last);				\
+	for ((var) = CIRCLEQ_LAST(head);				\
 		(var) != CIRCLEQ_ENDC(head);				\
-		(var) = ((var)->field.cqe_prev))
+		(var) = CIRCLEQ_PREV(var, field))
 
 /*
  * Circular queue access methods.
@@ -838,13 +838,13 @@ struct {								\
     (CIRCLEQ_FIRST(head) == CIRCLEQ_ENDC(head))
 
 #define CIRCLEQ_LOOP_NEXT(head, elm, field)				\
-	(((elm)->field.cqe_next == CIRCLEQ_ENDC(head))			\
-	    ? ((head)->cqh_first)					\
-	    : (elm->field.cqe_next))
+	((CIRCLEQ_NEXT(elm, field) == CIRCLEQ_ENDC(head))		\
+	    ? CIRCLEQ_FIRST(head)					\
+	    : CIRCLEQ_NEXT(elm, field))
 #define CIRCLEQ_LOOP_PREV(head, elm, field)				\
-	(((elm)->field.cqe_prev == CIRCLEQ_ENDC(head))			\
-	    ? ((head)->cqh_last)					\
-	    : (elm->field.cqe_prev))
+	((CIRCLEQ_PREV(elm, field) == CIRCLEQ_ENDC(head))		\
+	    ? CIRCLEQ_LAST(head)					\
+	    : CIRCLEQ_PREV(elm, field))
 #endif /* !_KERNEL */
 
 #endif	/* !_SYS_QUEUE_H_ */

@@ -240,6 +240,7 @@ rd_kafka_handle_OffsetForLeaderEpoch(rd_kafka_t *rk,
                                      rd_kafka_topic_partition_list_t **offsets);
 void rd_kafka_OffsetForLeaderEpochRequest(
     rd_kafka_broker_t *rkb,
+    int32_t replica_id,
     rd_kafka_topic_partition_list_t *parts,
     rd_kafka_replyq_t replyq,
     rd_kafka_resp_cb_t *resp_cb,

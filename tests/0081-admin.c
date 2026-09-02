@@ -3160,8 +3160,19 @@ static void do_test_DescribeConsumerGroups(const char *what,
                         test_conf_set(conf, "client.id", client_ids[i]);
                         test_conf_set(conf, "group.instance.id",
                                       group_instance_ids[i]);
-                        test_conf_set(conf, "session.timeout.ms", "5000");
                         test_conf_set(conf, "auto.offset.reset", "earliest");
+                        if (test_consumer_group_protocol_classic()) {
+                                test_conf_set(conf, "session.timeout.ms",
+                                              "5000");
+                        } else {
+                                test_broker_conf_set_group_consumer_heartbeat_interval_ms(
+                                    group_id, 1000);
+                                test_broker_conf_set_group_consumer_session_timeout_ms(
+                                    group_id, 5000);
+                                /* Await propagation */
+                                rd_sleep(1);
+                        }
+
                         rks[i] =
                             test_create_consumer(group_id, NULL, conf, NULL);
                         test_consumer_subscribe(rks[i], topic);
@@ -5520,13 +5531,9 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_ListConsumerGroups("main queue", rk, mainq, 1500, rd_true,
                                    rd_false);
 
-        /* TODO: check this test after KIP-848 admin operation
-         * implementation */
-        if (test_consumer_group_protocol_classic()) {
-                /* Describe groups */
-                do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
-                do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
-        }
+        /* Describe groups */
+        do_test_DescribeConsumerGroups("temp queue", rk, NULL, -1);
+        do_test_DescribeConsumerGroups("main queue", rk, mainq, 1500);
 
         /* Describe topics */
         do_test_DescribeTopics("temp queue", rk, NULL, 15000, rd_false);

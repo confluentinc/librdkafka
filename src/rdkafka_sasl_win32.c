@@ -108,13 +108,37 @@ static const char *rd_kafka_sasl_sspi_err2str(SECURITY_STATUS sr) {
 static CredHandle *rd_kafka_sasl_sspi_cred_new(rd_kafka_transport_t *rktrans,
                                                char *errstr,
                                                size_t errstr_size) {
+        rd_kafka_t *rk   = rktrans->rktrans_rkb->rkb_rk;
         TimeStamp expiry = {0, 0};
         SECURITY_STATUS sr;
-        CredHandle *cred = rd_calloc(1, sizeof(*cred));
+        CredHandle *cred                          = rd_calloc(1, sizeof(*cred));
+        SEC_WINNT_AUTH_IDENTITY_A *swai_auth_data = NULL;
 
-        sr = AcquireCredentialsHandle(NULL, __TEXT("Kerberos"),
-                                      SECPKG_CRED_OUTBOUND, NULL, NULL, NULL,
-                                      NULL, cred, &expiry);
+        if (rk->rk_conf.sasl.win32gssapi.username &&
+            strlen(rk->rk_conf.sasl.win32gssapi.username)) {
+                swai_auth_data         = rd_calloc(1, sizeof(*swai_auth_data));
+                swai_auth_data->User   = rk->rk_conf.sasl.win32gssapi.username;
+                swai_auth_data->Domain = rk->rk_conf.sasl.win32gssapi.domain;
+                swai_auth_data->Password =
+                    rk->rk_conf.sasl.win32gssapi.password;
+                swai_auth_data->UserLength =
+                    (unsigned long)strlen(swai_auth_data->User);
+                swai_auth_data->DomainLength =
+                    (unsigned long)(swai_auth_data->Domain
+                                        ? strlen(swai_auth_data->Domain)
+                                        : 0);
+                swai_auth_data->PasswordLength =
+                    (unsigned long)(swai_auth_data->Password
+                                        ? strlen(swai_auth_data->Password)
+                                        : 0);
+                swai_auth_data->Flags = SEC_WINNT_AUTH_IDENTITY_ANSI;
+        }
+
+        sr = AcquireCredentialsHandle(
+            NULL, __TEXT("Kerberos"), SECPKG_CRED_OUTBOUND, NULL,
+            swai_auth_data, NULL, NULL, cred, &expiry);
+        if (swai_auth_data)
+                rd_free(swai_auth_data);
 
         if (sr != SEC_E_OK) {
                 rd_free(cred);

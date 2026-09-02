@@ -132,7 +132,7 @@ int main_0049_consume_conn_close(int argc, char **argv) {
          * callback fallback (CONSUMER_ERR) */
         assignment->elems[0].offset = 123456789;
         TEST_SAY("Committing offsets while down, should fail eventually\n");
-        err = rd_kafka_commit(rk, assignment, 1 /*async*/);
+        err = rd_kafka_commit(rk, assignment, 1 /*async*/, -1 /*infinite*/);
         TEST_ASSERT(!err, "async commit failed: %s", rd_kafka_err2str(err));
         rd_kafka_topic_partition_list_destroy(assignment);
 

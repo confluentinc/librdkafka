@@ -846,10 +846,9 @@ static int rd_kafka_transport_get_wsa_events(rd_kafka_transport_t *rktrans) {
         r = WSAEnumNetworkEvents(rktrans->rktrans_s, rktrans->rktrans_wsaevent,
                                  &netevents);
         if (unlikely(r == SOCKET_ERROR)) {
-                rd_rkb_log(rkb, LOG_ERR, "WSAWAIT",
-                           "WSAEnumNetworkEvents() failed: %s",
-                           rd_socket_strerror(rd_socket_errno));
                 socket_errstr = rd_socket_strerror(rd_socket_errno);
+                rd_rkb_log(rkb, LOG_ERR, "WSAWAIT",
+                           "WSAEnumNetworkEvents() failed: %s", socket_errstr);
                 return POLLHUP | POLLERR;
         }
 

@@ -365,9 +365,10 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
         switch (compression_type) {
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
-                *uncompressed_payload = rd_gz_decompress(
+                *uncompressed_payload = rd_gz_decompress_limited(
                     compressed_payload, (int)compressed_payload_size,
-                    (uint64_t *)uncompressed_payload_size);
+                    (uint64_t *)uncompressed_payload_size,
+                    (uint64_t)rkb->rkb_rk->rk_conf.recv_max_msg_size);
                 if (*uncompressed_payload == NULL)
                         r = -1;
                 else

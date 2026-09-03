@@ -43,4 +43,14 @@ void *rd_gz_decompress(const void *compressed,
                        int compressed_len,
                        uint64_t *decompressed_lenp);
 
+/**
+ * Decompress gzip data without exceeding max_decompressed_len bytes.
+ * The returned buffer is nul-terminated and the decompressed length is
+ * returned in '*decompressed_lenp'.
+ */
+void *rd_gz_decompress_limited(const void *compressed,
+                               int compressed_len,
+                               uint64_t *decompressed_lenp,
+                               uint64_t max_decompressed_len);
+
 #endif /* _RDGZ_H_ */

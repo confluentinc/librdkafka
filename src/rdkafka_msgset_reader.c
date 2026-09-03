@@ -287,8 +287,10 @@ rd_kafka_msgset_reader_decompress(rd_kafka_msgset_reader_t *msetr,
                 uint64_t outlenx = 0;
 
                 /* Decompress Message payload */
-                iov.iov_base = rd_gz_decompress(compressed,
-                                                (int)compressed_size, &outlenx);
+                iov.iov_base = rd_gz_decompress_limited(
+                    compressed, (int)compressed_size, &outlenx,
+                    (uint64_t)
+                        msetr->msetr_rkb->rkb_rk->rk_conf.recv_max_msg_size);
                 if (unlikely(!iov.iov_base)) {
                         rd_rkb_dbg(msetr->msetr_rkb, MSG, "GZIP",
                                    "Failed to decompress Gzip "

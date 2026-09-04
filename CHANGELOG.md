@@ -52,6 +52,23 @@ builds already got from 8.20.0).
 
 ## Fixes
 
+### Consumer fixes
+
+* A consumer with `enable.auto.commit=true` no longer sends an `OffsetCommit`
+  for an assignment it has already lost. On a client-side session timeout, or
+  when `max.poll.interval.ms` is exceeded, the member id is reset, the
+  assignment is marked lost, and its partitions are revoked. The revoke-time
+  auto-commit of those partitions was still being sent, because the
+  assignment-lost flag was cleared inside `rd_kafka_cgrp_unassign()` and
+  `rd_kafka_cgrp_incremental_unassign()` before the removed partitions were
+  served, defeating the guard that skips commits for a lost assignment. The
+  commit went out with an empty member id and the previous generation, which a
+  broker rejects with `UNKNOWN_MEMBER_ID`, or, for a static member
+  (`group.instance.id` set), with the fatal `FENCED_INSTANCE_ID` that stops the
+  consumer. The flag is now kept set until the following rejoin applies a new
+  assignment, so the offsets of a lost assignment are never committed.
+  Happening since 1.6.0.
+
 ### Producer fixes
 
 * Issues: #5555.

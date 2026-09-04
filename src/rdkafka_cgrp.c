@@ -4883,8 +4883,12 @@ static rd_kafka_error_t *rd_kafka_cgrp_incremental_unassign(
                     RD_KAFKA_CGRP_JOIN_STATE_WAIT_INCR_UNASSIGN_TO_COMPLETE);
         }
 
-        rd_kafka_cgrp_assignment_clear_lost(rkcg,
-                                            "incremental_unassign() called");
+        /* Note: the assignment-lost flag is intentionally NOT cleared here.
+         * A lost assignment must stay marked lost until the following rejoin
+         * applies a new assignment (assign()/incremental_assign()), so that the
+         * revoke-time auto-commit of the removed partitions is correctly
+         * skipped. Clearing it here previously let an OffsetCommit go out with
+         * an empty member id, fatally fencing a static member. */
 
         return NULL;
 }
@@ -5063,7 +5067,8 @@ static rd_kafka_error_t *rd_kafka_cgrp_unassign(rd_kafka_cgrp_t *rkcg) {
                     rkcg, RD_KAFKA_CGRP_JOIN_STATE_WAIT_UNASSIGN_TO_COMPLETE);
         }
 
-        rd_kafka_cgrp_assignment_clear_lost(rkcg, "unassign() called");
+        /* Note: the assignment-lost flag is intentionally NOT cleared here,
+         * see rd_kafka_cgrp_incremental_unassign() for the rationale. */
 
         return NULL;
 }

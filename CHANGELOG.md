@@ -1,4 +1,4 @@
-# librdkafka v2.15.1 (unreleased)
+# librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:
 

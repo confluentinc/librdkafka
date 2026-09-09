@@ -26,3 +26,5 @@ elect_leaders
 share_consumer
 share_consumer_commit_async
 share_consumer_commit_sync
+alter_client_quotas
+describe_client_quotas

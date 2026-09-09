@@ -52,6 +52,12 @@ producer_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a producer.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) producer.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
+# Not part of $(EXAMPLES): requires libserdes and avro-c, which librdkafka
+# does not depend on. Build explicitly with `make producer_schema_registry`.
+producer_schema_registry: ../src/librdkafka.a producer_schema_registry.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a -lserdes -lavro $(LIBS)
+
 consumer: ../src/librdkafka.a consumer.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)

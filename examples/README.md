@@ -9,6 +9,10 @@ Begin with the following examples:
  * [consumer.c](consumer.c) - a typical C high-level consumer application.
  * [producer.c](producer.c) - a typical C producer application.
  * [producer.cpp](producer.cpp) - a typical C++ producer application.
+ * [producer_schema_registry.c](producer_schema_registry.c) - producer using
+                                      Schema Registry, via libserdes and avro-c.
+                                      Not built by `make`; see the file header
+                                      for its extra build dependencies.
  * [idempotent_producer.c](idempotent_producer.c) - Idempotent producer.
  * [transactions.c](transactions.c) - Full exactly once semantics (EOS)
                                       transactional consumer-producer exammple.

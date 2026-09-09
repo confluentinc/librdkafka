@@ -13,7 +13,8 @@ python3 infra/helper.py build_image librdkafka
 python3 infra/helper.py build_fuzzers librdkafka
 python3 infra/helper.py run_fuzzer librdkafka FUZZ_NAME
 ```
-where FUZZ_NAME references the name of the fuzzer. Currently the only fuzzer we have is fuzz_regex
+where FUZZ_NAME references the name of the fuzzer. Currently we have fuzz_regex (the builtin
+regexp engine) and fuzz_protocol (the Fetch-response MessageSet/record-batch decoder)
 
 Notice that the OSS-Fuzz `helper.py` script above will create a Docker image in which the code of librdkafka will be built. As such, depending on how you installed Docker, you may be asked to have root access (i.e. run with `sudo`).
 

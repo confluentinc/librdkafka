@@ -5494,7 +5494,29 @@ rd_kafka_broker_t *rd_kafka_broker_add(rd_kafka_t *rk,
                 rd_kafka_op_err(rk, RD_KAFKA_RESP_ERR__CRIT_SYS_RESOURCE,
                                 "Unable to create broker thread");
 
-                rd_free(rkb);
+                /* Unwind through the destructor rather than by hand.
+                 *
+                 * rd_free() releases the struct without running
+                 * rd_kafka_broker_destroy_final(), so the wake-up pipe opened
+                 * above is never closed and the two descriptors stay open for
+                 * the life of the process with nothing left holding their
+                 * numbers. It also bypasses the refcount, leaving the two
+                 * references taken here unaccounted for.
+                 *
+                 * At this point the broker is not yet on rk_brokers and nothing
+                 * else can reach it, so dropping both references takes the count
+                 * to zero and runs the destructor, which closes the pipe, tears
+                 * down the locks and queues, and frees the struct. */
+                /* The destructor asserts it runs on the broker's own thread,
+                 * which is how it is reached in every other case. That thread
+                 * was never created, and no other thread can reach this broker
+                 * because it is not yet on rk_brokers, so this thread is the one
+                 * that owns it. Recording that makes the assertion true rather
+                 * than bypassed. */
+                rkb->rkb_thread = thrd_current();
+
+                rd_kafka_broker_destroy(rkb); /* broker thread's refcnt */
+                rd_kafka_broker_destroy(rkb); /* rk_broker's refcnt */
 
 #ifndef _WIN32
                 /* Restore sigmask of caller */

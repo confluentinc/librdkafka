@@ -2675,20 +2675,24 @@ static void do_test_commit_after_msg_timeout(void) {
 
 
 /**
- * @brief #3575: Verify that OUT_OF_ORDER_SEQ does not trigger an epoch bump
- *        during an ongoing transaction.
- *        The transaction should instead enter the abortable state.
+ * @brief #3575: Verify that OUT_OF_ORDER_SEQ is retried during a transaction
+ *        when it doesn't happen on first in-flight message, otherwise
+ *        it's fatal.
+ *
+ *        - variation 0: the error happens on first message
+ *        - variation 1: the error happens on subsequent messages
  */
-static void do_test_out_of_order_seq(void) {
+static void do_test_out_of_order_seq(int variation) {
         rd_kafka_t *rk;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_error_t *error;
         int32_t txn_coord = 1, leader = 2;
         const char *txnid = "myTxnId";
         test_timing_t timing;
-        rd_kafka_resp_err_t err;
+        rd_kafka_resp_err_t err, expected_err = RD_KAFKA_RESP_ERR__FATAL;
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("%s", variation == 0 ? "on first message"
+                                            : "on subsequent messages");
 
         rk = create_txn_producer(&mcluster, txnid, 3, "batch.num.messages", "1",
                                  NULL);
@@ -2720,13 +2724,13 @@ static void do_test_out_of_order_seq(void) {
          * so that we can have multiple messages in-flight. */
         rd_kafka_mock_broker_set_rtt(mcluster, leader, 2 * 1000);
 
-        /* Produce a message, let it fail with with different errors,
-         * ending with OUT_OF_ORDER which previously triggered an
-         * Epoch bump. */
+        /* Produce a message, let it fail with with a first error
+         * and OUT_OF_ORDER_SEQUENCE_NUMBER for next messages. */
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 3,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
-            RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+            variation == 0 ? RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER
+                           : RD_KAFKA_RESP_ERR_NOT_LEADER_FOR_PARTITION,
+            RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER,
             RD_KAFKA_RESP_ERR_OUT_OF_ORDER_SEQUENCE_NUMBER);
 
         /* Produce three messages that will be delayed
@@ -2748,36 +2752,52 @@ static void do_test_out_of_order_seq(void) {
 
         rd_kafka_mock_broker_set_rtt(mcluster, leader, 0);
 
-        /* Produce a fifth message, should fail with ERR__STATE since
-         * the transaction should have entered the abortable state. */
+        /* Produce a fifth message:
+         *
+         * variation 0: should fail with a fatal error since it's not expected
+         * on first message: there's a sequence desyncronization.
+         *
+         * variation 1: should succeed since
+         * the out of order sequence number is an expected error
+         * for subsequent messages and all of them are retried
+         * with same sequence.
+         */
         err = rd_kafka_producev(rk, RD_KAFKA_V_TOPIC("mytopic"),
                                 RD_KAFKA_V_PARTITION(0),
                                 RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END);
-        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__STATE,
-                    "Expected produce() to fail with ERR__STATE, not %s",
-                    rd_kafka_err2name(err));
-        TEST_SAY("produce() failed as expected: %s\n", rd_kafka_err2str(err));
+        if (variation == 1)
+                expected_err = RD_KAFKA_RESP_ERR_NO_ERROR;
 
-        /* Commit the transaction, should fail with abortable error. */
-        TIMING_START(&timing, "commit_transaction(-1)");
-        error = rd_kafka_commit_transaction(rk, -1);
-        TIMING_STOP(&timing);
-        TEST_ASSERT(error != NULL, "Expected commit_transaction() to fail");
+        TEST_ASSERT(err == expected_err,
+                    "Expected produce() to have error \"%s\", not \"%s\"",
+                    rd_kafka_err2name(expected_err), rd_kafka_err2name(err));
 
-        TEST_SAY("commit_transaction() failed (expectedly): %s\n",
-                 rd_kafka_error_string(error));
-
-        TEST_ASSERT(!rd_kafka_error_is_fatal(error),
-                    "Did not expect fatal error");
-        TEST_ASSERT(rd_kafka_error_txn_requires_abort(error),
-                    "Expected abortable error");
-        rd_kafka_error_destroy(error);
-
-        /* Abort the transaction */
-        TEST_CALL_ERROR__(rd_kafka_abort_transaction(rk, -1));
+        if (variation == 1) {
+                TEST_SAY("produce() succeeded as expected: %s\n",
+                         rd_kafka_err2str(err));
+                /* Commit the transaction, should succeed. */
+                TIMING_START(&timing, "commit_transaction(-1)");
+                error = rd_kafka_commit_transaction(rk, -1);
+                TIMING_STOP(&timing);
+                TEST_ASSERT(error == NULL,
+                            "Expected commit_transaction() to succeed");
+        } else {
+                char errstr[512];
+                TEST_SAY("produce() failed with fatal error as expected: %s\n",
+                         rd_kafka_err2str(
+                             rd_kafka_fatal_error(rk, errstr, sizeof(errstr))));
+                TEST_ASSERT(
+                    strstr(errstr, "due to sequence desynchronization"),
+                    "Expected error string to contain \"%s\", got \"%s\"",
+                    "due to sequence desynchronization", errstr);
+                rd_kafka_destroy(rk);
+                rk = create_txn_producer(&mcluster, txnid, 3,
+                                         "batch.num.messages", "1", NULL);
+                TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, -1));
+        }
 
         /* Run a new transaction without errors to verify that the
-         * producer can recover. */
+         * producer continues correctly. */
         TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
 
         TEST_CALL_ERR__(rd_kafka_producev(
@@ -3895,7 +3915,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_txn_switch_coordinator_refresh();
 
-        do_test_out_of_order_seq();
+        do_test_out_of_order_seq(0);
+        do_test_out_of_order_seq(1);
 
         do_test_topic_disappears_for_awhile();
 

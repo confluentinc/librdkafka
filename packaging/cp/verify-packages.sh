@@ -48,18 +48,21 @@ verify_rpm_distros() {
     # Last RHEL 8 version is 2.4.0
     verify_rpm rockylinux:8 "2.4.0"
     verify_rpm rockylinux:9 $version
+    verify_rpm rockylinux:10 $version
 }
 
 verify_debian_distros() {
     local platform=$1
     local version=$2
     echo "#### Verifying Debian packages for $platform ####"
-    verify_debian debian:11 $version
+    verify_debian debian:11 "2.15.0"
     verify_debian debian:12 $version
+    verify_debian debian:13 $version
     # Last Ubuntu 20 version is 2.13.2
     verify_debian ubuntu:20.04 "2.13.2"
     verify_debian ubuntu:22.04 $version
     verify_debian ubuntu:24.04 $version
+    verify_debian ubuntu:26.04 $version
 }
 
 verify_distros() {

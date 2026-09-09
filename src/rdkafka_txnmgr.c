@@ -842,7 +842,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
 
         rd_kafka_buf_read_throttle_time(rkbuf);
 
-        rd_kafka_buf_read_i32(rkbuf, &TopicCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicCnt, RD_KAFKAP_TOPICS_MAX);
 
         while (TopicCnt-- > 0) {
                 rd_kafkap_str_t Topic;
@@ -851,7 +851,8 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
                 rd_bool_t request_error = rd_false;
 
                 rd_kafka_buf_read_str(rkbuf, &Topic);
-                rd_kafka_buf_read_i32(rkbuf, &PartCnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartCnt,
+                                           RD_KAFKAP_PARTITIONS_MAX);
 
                 rkt = rd_kafka_topic_find0(rk, &Topic);
                 if (rkt)
@@ -865,6 +866,7 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
 
                         rd_kafka_buf_read_i32(rkbuf, &Partition);
                         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+                        rd_kafka_buf_skip_tags(rkbuf);
 
                         if (rkt)
                                 rktp = rd_kafka_toppar_get(rkt, Partition,
@@ -978,6 +980,8 @@ static void rd_kafka_txn_handle_AddPartitionsToTxn(rd_kafka_t *rk,
                         if (request_error)
                                 break; /* Request-level error seen, bail out */
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);
 
                 if (rkt) {
                         rd_kafka_topic_rdunlock(rkt);

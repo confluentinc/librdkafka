@@ -1247,6 +1247,11 @@ int main(int argc, char **argv) {
                 exit(1);
         }
 
+        /* Share consumer rejects offset_commit_cb (registered above); clear
+         * it for -S. */
+        if (mode == 'S')
+                rd_kafka_conf_set_offset_commit_cb(conf, NULL);
+
         if (do_conf_dump) {
                 const char **arr;
                 size_t cnt;

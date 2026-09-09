@@ -38,6 +38,13 @@
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 
 #define RD_KAFKA_HEADERS_IOV_CNT 2
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_msgbatch_t *) map_topic_partition_msgbatch_t;
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_buf_t *) map_topic_partition_buf_t;
+typedef RD_MAP_TYPE(const rd_kafka_topic_partition_t *,
+                    rd_kafka_Produce_result_t *) map_topic_partition_result_t;
+
 
 
 /**
@@ -400,6 +407,12 @@ struct rd_kafka_buf_s { /* rd_kafka_buf_t */
                 } Metadata;
                 struct {
                         rd_kafka_msgbatch_t batch; /**< MessageSet/batch */
+
+                        map_topic_partition_msgbatch_t batch_map;
+                        size_t batch_start_pos; /* Pos where Record batch
+                                                 * starts in the buf */
+                        size_t batch_end_pos;   /* Pos after Record batch +
+                                                 * Partition tags in the buf */
                 } Produce;
                 struct {
                         rd_bool_t commit; /**< true = txn commit,

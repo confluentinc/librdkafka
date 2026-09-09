@@ -2285,6 +2285,37 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         }
         rd_list_destroy(&additional_brokerlists);
 done:
+        /* Decommission the learned brokers: from now on, until a successful
+         * Metadata response rebuilds the broker list, only the bootstrap
+         * brokers may be used.
+         *
+         * Re-adding the bootstrap brokers above isn't enough on its own
+         * while the learned brokers are still connected: as long as any of
+         * them is up, `rd_kafka_broker_any_usable()` keeps returning them
+         * (`rd_kafka_broker_weight_usable()` weighs learned brokers higher)
+         * and `rd_kafka_connect_any()` returns without connecting anything,
+         * so the client keeps asking the very brokers that reported its
+         * metadata as stale.
+         *
+         * Decommissioning them takes `rk_broker_up_cnt` to zero and takes
+         * them out of every broker lookup: the usual "no usable brokers"
+         * path then connects a (never connected) bootstrap broker, and the
+         * periodic topic scan keeps refreshing metadata from it, as the
+         * partitions are now delegated to the internal broker.
+         *
+         * Nothing queued on them is lost: the broker termination path
+         * hands its partitions back (`PARTITION_LEAVE`, moving the
+         * messages in the transmit queue back to the partition queue),
+         * and the next Metadata response delegates them to their leaders
+         * again, re-creating the learned brokers as needed.
+         *
+         * This must come *after* the bootstrap brokers were re-added: they
+         * count in `rk_broker_cnt` without being down-reported, so the
+         * learned brokers going down while terminating doesn't reach the
+         * "all brokers down" state, that would report a spurious
+         * `ALL_BROKERS_DOWN` and start another re-bootstrap sequence. */
+        rd_kafka_brokers_decommission_learned(rk, "re-bootstrap");
+
         rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 0);
 }
 

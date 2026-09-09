@@ -6628,6 +6628,78 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 }
 
 /**
+ * @brief Decommission the brokers in \p brokers, that must not be already
+ *        decommissioning (see `rk->wait_decommissioned_brokers`).
+ *
+ *        Their threads are added to `rk->wait_decommissioned_thrds` for
+ *        later joining, see `rd_kafka_decommissioned_broker_thread_join()`.
+ *
+ * @locks rd_kafka_wrlock(rk) MUST be held, it's temporarily released.
+ * @locality any
+ */
+void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers) {
+        rd_kafka_broker_t *rkb;
+        int i;
+
+        RD_LIST_FOREACH(rkb, brokers, i) {
+                rd_kafka_broker_decommission(rk, rkb,
+                                             &rk->wait_decommissioned_thrds);
+                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
+        }
+}
+
+/**
+ * @brief Decommission all learned brokers, keeping the configured
+ *        (bootstrap) and logical ones.
+ *
+ *        Used by the re-bootstrap sequence so that only the bootstrap
+ *        brokers are used until a Metadata response rebuilds the broker
+ *        list. Partitions delegated to the decommissioned brokers are
+ *        handed back with their queued messages, see
+ *        `RD_KAFKA_OP_PARTITION_LEAVE` handling, and delegated again on
+ *        the next Metadata response.
+ *
+ * @param reason Reason for the decommission, for debug logs.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_wrlock(rk)
+ * @locality any
+ */
+void rd_kafka_brokers_decommission_learned(rd_kafka_t *rk, const char *reason) {
+        rd_kafka_broker_t *rkb;
+        rd_list_t brokers_to_decommission;
+
+        rd_kafka_wrlock(rk);
+        rd_list_init(&brokers_to_decommission,
+                     rd_atomic32_get(&rk->rk_broker_cnt), NULL);
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                        continue;
+
+                /* Don't try to decommission already decommissioning brokers
+                 * otherwise they could be already destroyed when
+                 * `rd_kafka_broker_decommission` is called below. */
+                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr) != NULL)
+                        continue;
+
+                rd_list_add(&brokers_to_decommission, rkb);
+        }
+
+        if (rd_list_cnt(&brokers_to_decommission) > 0) {
+                rd_kafka_dbg(rk, BROKER, "DECOMMISSION",
+                             "Decommissioning %d learned broker(s): %s",
+                             rd_list_cnt(&brokers_to_decommission), reason);
+                rd_kafka_brokers_decommission_list(rk,
+                                                   &brokers_to_decommission);
+        }
+
+        rd_list_destroy(&brokers_to_decommission);
+        rd_kafka_wrunlock(rk);
+}
+
+/**
  * @brief Unittest for reconnect.backoff.ms
  */
 static int rd_ut_reconnect_backoff(void) {

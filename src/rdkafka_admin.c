@@ -931,6 +931,12 @@ static void rd_kafka_admin_response_parse(rd_kafka_op_t *rko) {
         char errstr[512];
 
         if (rko->rko_err) {
+                if (rko->rko_err == RD_KAFKA_RESP_ERR__DESTROY_BROKER)
+                        /* The broker handle was decommissioned while the
+                         * request was in flight (re-bootstrap, or broker
+                         * gone from metadata): report it as the lost
+                         * connection it is, the caller should retry. */
+                        rko->rko_err = RD_KAFKA_RESP_ERR__TRANSPORT;
                 rd_kafka_admin_result_fail(rko, rko->rko_err,
                                            "%s worker request failed: %s",
                                            rd_kafka_op2str(rko->rko_type),
@@ -978,6 +984,9 @@ static void rd_kafka_admin_coord_response_parse(rd_kafka_t *rk,
                 return;
 
         if (err) {
+                if (err == RD_KAFKA_RESP_ERR__DESTROY_BROKER)
+                        /* See rd_kafka_admin_response_parse(). */
+                        err = RD_KAFKA_RESP_ERR__TRANSPORT;
                 rd_kafka_admin_result_fail(
                     rko, err, "%s worker coordinator request failed: %s",
                     rd_kafka_op2str(rko->rko_type), rd_kafka_err2str(err));

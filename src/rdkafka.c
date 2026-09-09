@@ -6701,6 +6701,43 @@ rd_kafka_consumer_group_type_code(const char *name) {
         return RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN;
 }
 
+static const char *rd_kafka_group_state_names[] = {
+    "Unknown", "PreparingRebalance", "CompletingRebalance", "Stable", "Dead",
+    "Empty",   "Assigning",          "Reconciling"};
+
+const char *rd_kafka_group_state_name(rd_kafka_group_state_t state) {
+        if (state < 0 || state >= RD_KAFKA_GROUP_STATE__CNT)
+                return NULL;
+        return rd_kafka_group_state_names[state];
+}
+
+rd_kafka_group_state_t rd_kafka_group_state_code(const char *name) {
+        size_t i;
+        for (i = 0; i < RD_KAFKA_GROUP_STATE__CNT; i++) {
+                if (!rd_strcasecmp(rd_kafka_group_state_names[i], name))
+                        return i;
+        }
+        return RD_KAFKA_GROUP_STATE_UNKNOWN;
+}
+
+static const char *rd_kafka_group_type_names[] = {
+    "Unknown", "Consumer", "Classic", "Share", "Streams"};
+
+const char *rd_kafka_group_type_name(rd_kafka_group_type_t type) {
+        if (type < 0 || type >= RD_KAFKA_GROUP_TYPE__CNT)
+                return NULL;
+        return rd_kafka_group_type_names[type];
+}
+
+rd_kafka_group_type_t rd_kafka_group_type_code(const char *name) {
+        size_t i;
+        for (i = 0; i < RD_KAFKA_GROUP_TYPE__CNT; i++) {
+                if (!rd_strcasecmp(rd_kafka_group_type_names[i], name))
+                        return i;
+        }
+        return RD_KAFKA_GROUP_TYPE_UNKNOWN;
+}
+
 static void rd_kafka_DescribeGroups_resp_cb(rd_kafka_t *rk,
                                             rd_kafka_broker_t *rkb,
                                             rd_kafka_resp_err_t err,

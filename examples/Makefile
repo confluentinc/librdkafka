@@ -7,6 +7,7 @@ EXAMPLES ?= rdkafka_example rdkafka_performance rdkafka_example_cpp \
 	delete_records \
 	openssl_engine_example_cpp \
 	list_consumer_groups \
+	list_groups \
 	describe_consumer_groups \
 	describe_topics \
 	describe_cluster \
@@ -85,6 +86,10 @@ delete_records: ../src/librdkafka.a delete_records.c
 		../src/librdkafka.a $(LIBS)
 
 list_consumer_groups: ../src/librdkafka.a list_consumer_groups.c
+	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
+		../src/librdkafka.a $(LIBS)
+
+list_groups: ../src/librdkafka.a list_groups.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)
 

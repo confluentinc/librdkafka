@@ -1,0 +1,17 @@
+apiVersion: 1
+datasources:
+  - name: VictoriaMetrics
+    type: prometheus
+    access: proxy
+    uid: victoriametrics-datasource-uid
+    url: http://victoriametrics:8428
+    jsonData:
+      httpMethod: POST
+      manageAlerts: true
+      allowAsRecordingRulesTarget: true
+      prometheusType: Prometheus
+      prometheusVersion: ""
+      cacheLevel: 'High'
+      disableRecordingRules: false
+      timeInterval: 5s # VictoriaMetrics scrape interval
+      incrementalQueryOverlapWindow: 10m

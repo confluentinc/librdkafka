@@ -43,6 +43,10 @@
 
 #include <errno.h>
 
+#ifndef _WIN32
+#include <pthread.h>
+#endif
+
 /* AIX doesn't have MSG_DONTWAIT */
 #ifndef MSG_DONTWAIT
 #define MSG_DONTWAIT MSG_NONBLOCK
@@ -1301,9 +1305,36 @@ void rd_kafka_transport_term (void) {
 }
 #endif
 
-void rd_kafka_transport_init(void) {
 #ifdef _WIN32
+static RD_NOINLINE
+BOOL CALLBACK rd_kafka_transport_init_once(PINIT_ONCE init_once,
+                                           PVOID parameter,
+                                           PVOID *context) {
         WSADATA d;
         (void)WSAStartup(MAKEWORD(2, 2), &d);
+        return TRUE;
+}
+
+RD_NOINLINE
+void rd_kafka_transport_init(void) {
+        static INIT_ONCE _once = INIT_ONCE_STATIC_INIT;
+        (void)InitOnceExecuteOnce(&_once, rd_kafka_transport_init_once, NULL,
+                                  NULL);
+}
+#else
+/* example/skeleton for future usage */
+#if 0
+static RD_NOINLINE
+void rd_kafka_transport_init_once(void) {
+}
+#endif
+
+RD_NOINLINE
+void rd_kafka_transport_init(void) {
+/* example/skeleton for future usage */
+#if 0
+        static pthread_once_t _once = PTHREAD_ONCE_INIT;
+        (void)pthread_once(&_once, rd_kafka_transport_init_once);
 #endif
 }
+#endif

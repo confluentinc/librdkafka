@@ -96,7 +96,7 @@ static void do_test_offsetfetch_not_coordinator_retries(void) {
 
         /* The consumer should retry the OffsetFetch after the transient
          * NOT_COORDINATOR and then deliver all msgcnt records. */
-        for (i = 0; i < 150 && records_seen < msgcnt; i++) {
+        for (i = 0; i < 80 && records_seen < msgcnt; i++) {
                 rd_kafka_message_t *rkm = rd_kafka_consumer_poll(c, 200);
                 if (!rkm)
                         continue;

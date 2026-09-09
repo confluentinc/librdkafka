@@ -563,19 +563,20 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb,
             do_test_down_then_up_no_rebootstrap_loop_after_action_cb);
 
-        /* With a rebootstrap every time the bootstrap brokers are removed
-         * we get 6 re-bootstrap sequences.
-         * With the fix we require connection to all learned brokers before
-         * reaching all brokers down again.
-         * In this case we have to connect to the bootstrap broker
-         * and the learned broker, 2s in the slowest case as it depends
-         * on periodic 10s brokers refresh timer too.
-         * We expect 5 or less re-bootstrap sequences. */
+        /* A re-bootstrap sequence requires reaching the "all brokers down"
+         * state again, that is a failed connection attempt to every broker
+         * since the previous sequence. The learned broker is decommissioned
+         * by the first sequence, so only the bootstrap broker remains and
+         * each of its failed attempts starts a new sequence: those are paced
+         * by `reconnect.backoff.ms` (100ms, doubling up to 10s, with
+         * jitter), so about 7-9 sequences fit in 6s.
+         * A loop not gated by connection attempts would give hundreds:
+         * allow some slack over the expected count. */
         TEST_ASSERT(
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt) <=
-                5,
-            "Expected <= 5 re-bootstrap sequences, got %d",
+                12,
+            "Expected <= 12 re-bootstrap sequences, got %d",
             rd_atomic32_get(
                 &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt));
 
@@ -812,8 +813,57 @@ typedef enum do_test_kip1102_rebootstrap_cases_variation_t {
         /* Same as REBOOTSTRAP_REQUIRED but broker isn't restarted. */
         DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED_NO_RESTART =
             3,
+        /* A non-`REBOOTSTRAP_REQUIRED` top level error is returned from each
+         * metadata call, leaving the connections up. The re-bootstrap is
+         * triggered by `metadata.recovery.rebootstrap.trigger.ms`, like
+         * TRANSPORT_ERROR, but with the learned brokers still connected. */
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TOP_LEVEL_ERROR = 4,
+        /* Same as TOP_LEVEL_ERROR but broker isn't restarted. */
+        DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TOP_LEVEL_ERROR_NO_RESTART =
+            5,
         DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION__CNT
 } do_test_kip1102_rebootstrap_cases_variation_t;
+
+/**
+ * @brief Does \p variation inject the `REBOOTSTRAP_REQUIRED` error code, that
+ *        is expected to start a re-bootstrap sequence on each response?
+ */
+static rd_bool_t do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
+    do_test_kip1102_rebootstrap_cases_variation_t variation) {
+        return variation ==
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED ||
+               variation ==
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED_NO_RESTART;
+}
+
+/**
+ * @brief Is the broker set up again as the last action of \p variation ?
+ */
+static rd_bool_t do_test_kip1102_rebootstrap_cases_restarts_broker(
+    do_test_kip1102_rebootstrap_cases_variation_t variation) {
+        return variation ==
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR ||
+               variation ==
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED ||
+               variation ==
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TOP_LEVEL_ERROR;
+}
+
+/**
+ * @brief Do the connections to the learned brokers stay up in \p variation ?
+ *
+ *        Only then is an inert re-bootstrap observable: with the learned
+ *        brokers down the client reaches a bootstrap broker through the
+ *        "all brokers down" path regardless.
+ */
+static rd_bool_t do_test_kip1102_rebootstrap_cases_connections_stay_up(
+    do_test_kip1102_rebootstrap_cases_variation_t variation) {
+        return variation !=
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR &&
+               variation !=
+                   DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR_NO_RESTART;
+}
+
 /**
  * @brief `do_test_kip1102_rebootstrap_cases` test variation.
  */
@@ -850,6 +900,34 @@ static rd_atomic32_t
  */
 static rd_bool_t do_test_kip1102_rebootstrap_cases_tracking_started;
 
+/**
+ * @brief Returns the "host:port" listener of broker \p broker_id in
+ *        \p mcluster , as a newly allocated string.
+ *
+ *        `rd_kafka_mock_cluster_bootstraps()` lists the brokers in id order,
+ *        so entry `broker_id - 1` is the wanted one.
+ */
+static char *do_test_kip1102_rebootstrap_cases_broker_listener(
+    rd_kafka_mock_cluster_t *mcluster,
+    int32_t broker_id) {
+        const char *bootstraps = rd_kafka_mock_cluster_bootstraps(mcluster);
+        const char *start      = bootstraps;
+        const char *end;
+        int32_t i;
+
+        for (i = 1; i < broker_id; i++) {
+                start = strchr(start, ',');
+                TEST_ASSERT(start,
+                            "Broker %" PRId32 " not in bootstraps \"%s\"",
+                            broker_id, bootstraps);
+                start++;
+        }
+
+        end = strchr(start, ',');
+        return end ? rd_strndup(start, (size_t)(end - start))
+                   : rd_strdup(start);
+}
+
 static rd_bool_t
 do_test_kip1102_rebootstrap_cases_is_metadata_to_bootstrap_only(
     rd_kafka_mock_request_t *request,
@@ -885,15 +963,32 @@ do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
             conf, do_test_kip1102_rebootstrap_cases_log_cb, debug_contexts);
 
         if (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id != -1) {
-                /* `cluster` is already created at this point and
-                 * `bootstrap.servers` still lists all of its brokers, so
-                 * hiding this one from Metadata makes it reachable only as
-                 * a bootstrap broker. Replica assignment already skips
-                 * brokers that aren't in metadata, so the expected learned
-                 * broker set is unaffected. */
-                rd_kafka_mock_broker_remove_from_metadata(
-                    cluster,
-                    do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id);
+                int32_t id =
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id;
+                char *listener;
+
+                /* `cluster` is already created at this point. Hide this
+                 * broker from Metadata responses: it keeps listening, so it
+                 * becomes reachable only as a bootstrap broker and never as
+                 * a learned one. Replica assignment already skips brokers
+                 * that aren't in metadata and clamps the replication factor
+                 * to the eligible count, so the expected learned broker set
+                 * is unaffected. */
+                rd_kafka_mock_broker_remove_from_metadata(cluster, id);
+
+                /* Make it the *only* bootstrap server, so that any
+                 * re-bootstrap has to reach it. Otherwise the client picks
+                 * a random one of the cluster's bootstrap entries after
+                 * decommissioning the learned brokers and the check would
+                 * be flaky, in particular for the variations that trigger
+                 * a single re-bootstrap sequence. */
+                listener = do_test_kip1102_rebootstrap_cases_broker_listener(
+                    cluster, id);
+                TEST_SAY("Using broker %" PRId32
+                         " (%s) as the only bootstrap server\n",
+                         id, listener);
+                test_conf_set(conf, "bootstrap.servers", listener);
+                rd_free(listener);
         }
         return RD_KAFKA_CONSUMER;
 }
@@ -908,6 +1003,24 @@ static rd_kafka_resp_err_t
         RD_KAFKA_RESP_ERR_REBOOTSTRAP_REQUIRED,
         RD_KAFKA_RESP_ERR_NO_ERROR,
 };
+static rd_kafka_resp_err_t
+    do_test_kip1102_rebootstrap_cases_allowed_errors_top_level[] = {
+        RD_KAFKA_RESP_ERR_INVALID_REQUEST,
+        RD_KAFKA_RESP_ERR_NO_ERROR,
+};
+
+/**
+ * @brief The error injected in Metadata responses for \p variation .
+ */
+static rd_kafka_resp_err_t *do_test_kip1102_rebootstrap_cases_allowed_errors(
+    do_test_kip1102_rebootstrap_cases_variation_t variation) {
+        if (do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(variation))
+                return
+                    do_test_kip1102_rebootstrap_cases_allowed_errors_rebootstrap_required;
+        if (do_test_kip1102_rebootstrap_cases_connections_stay_up(variation))
+                return do_test_kip1102_rebootstrap_cases_allowed_errors_top_level;
+        return do_test_kip1102_rebootstrap_cases_allowed_errors_transport;
+}
 
 /**
  * @brief After setting down one broker, we trigger a series of metadata
@@ -938,10 +1051,8 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                 /* First action: set the error codes */
                 int i;
                 TEST_ASSERT(cluster != NULL);
-                allowed_errors =
-                    do_test_kip1102_rebootstrap_cases_variation % 2 == 0
-                        ? do_test_kip1102_rebootstrap_cases_allowed_errors_transport
-                        : do_test_kip1102_rebootstrap_cases_allowed_errors_rebootstrap_required;
+                allowed_errors = do_test_kip1102_rebootstrap_cases_allowed_errors(
+                    do_test_kip1102_rebootstrap_cases_variation);
                 /* A request is made every 100 ms: 7s */
                 for (i = 0; i < 70; i++)
                         rd_kafka_mock_push_request_errors(
@@ -1001,9 +1112,16 @@ static void do_test_kip1102_rebootstrap_cases(
 
         SUB_TEST_QUICK(
             "%s, %s",
-            variation % 2 == 0 ? "metadata.recovery.rebootstrap.trigger.ms"
-                               : "\"re-bootstrap required\" error code",
-            variation / 2 == 0 ? "broker restarted" : "broker not restarted");
+            do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(variation)
+                ? "\"re-bootstrap required\" error code"
+                : do_test_kip1102_rebootstrap_cases_connections_stay_up(
+                      variation)
+                    ? "metadata.recovery.rebootstrap.trigger.ms, "
+                      "connections up"
+                    : "metadata.recovery.rebootstrap.trigger.ms",
+            do_test_kip1102_rebootstrap_cases_restarts_broker(variation)
+                ? "broker restarted"
+                : "broker not restarted");
 
         do_test_kip1102_rebootstrap_cases_variation = variation;
         rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 0);
@@ -1011,7 +1129,9 @@ static void do_test_kip1102_rebootstrap_cases(
             &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt, 0);
         do_test_kip1102_rebootstrap_cases_tracking_started         = rd_false;
         do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = -1;
-        if (variation % 2 == 1) {
+
+        if (do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
+                variation)) {
                 /* REBOOTSTRAP_REQUIRED error code cases:
                  * A re-bootstrap is expected for each error response.
                  * It's possible multiple consecutive error responses cause a
@@ -1019,14 +1139,16 @@ static void do_test_kip1102_rebootstrap_cases(
                  * timer activation. */
                 expected_min_rebootstrap_cnt = 65;
                 expected_rebootstrap_cnt     = 70;
+        }
 
-                /* Connections stay healthy in these cases, so an inert
-                 * re-bootstrap (one that starts but never actually reaches
-                 * a bootstrap broker) is observable. Add a 6th broker that
-                 * is only reachable as a bootstrap server.
+        if (do_test_kip1102_rebootstrap_cases_connections_stay_up(variation)) {
+                /* The learned brokers stay connected here, so a re-bootstrap
+                 * that starts but never actually reaches a bootstrap broker
+                 * is observable. Add a 6th broker only reachable as a
+                 * bootstrap server.
                  *
-                 * Not done for the ERR__TRANSPORT variations, where the
-                 * mock closes the connections and the client would reach a
+                 * Not done for the ERR__TRANSPORT variations, where the mock
+                 * closes the connections and the client would reach a
                  * bootstrap broker via the "all brokers down" path anyway. */
                 do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = 6;
         }
@@ -1049,8 +1171,9 @@ static void do_test_kip1102_rebootstrap_cases(
                 ? 5
                 : 6,
             actions,
-            variation / 2 == 0 ? RD_ARRAY_SIZE(actions)
-                               : RD_ARRAY_SIZE(actions) - 1,
+            do_test_kip1102_rebootstrap_cases_restarts_broker(variation)
+                ? RD_ARRAY_SIZE(actions)
+                : RD_ARRAY_SIZE(actions) - 1,
             expected_broker_ids, expected_brokers_cnt,
             do_test_kip1102_rebootstrap_cases_edit_configuration_cb, NULL,
             do_test_kip1102_rebootstrap_cases_after_action_cb);

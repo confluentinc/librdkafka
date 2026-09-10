@@ -1,0 +1,12 @@
+{
+  "VerifiableProducer": {
+    "class": "kafkatest.services.verifiable_client.VerifiableClientApp",
+    "exec_cmd": "/librdkafka/kafkatest/verifiable_producer/verifiable_producer",
+    "deploy": "/librdkafka/kafkatest/deploy.sh"
+  },
+  "VerifiableShareConsumer": {
+    "class": "kafkatest.services.verifiable_client.VerifiableClientApp",
+    "exec_cmd": "/librdkafka/kafkatest/verifiable_share_consumer/verifiable_share_consumer",
+    "deploy": "/librdkafka/kafkatest/deploy.sh"
+  }
+}

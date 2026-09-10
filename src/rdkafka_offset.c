@@ -386,7 +386,8 @@ rd_kafka_commit0(rd_kafka_t *rk,
 rd_kafka_resp_err_t
 rd_kafka_commit(rd_kafka_t *rk,
                 const rd_kafka_topic_partition_list_t *offsets,
-                int async) {
+                int async,
+                int timeout_ms) {
         rd_kafka_cgrp_t *rkcg;
         rd_kafka_resp_err_t err;
         rd_kafka_q_t *repq   = NULL;
@@ -403,7 +404,7 @@ rd_kafka_commit(rd_kafka_t *rk,
         err = rd_kafka_commit0(rk, offsets, NULL, rq, NULL, NULL, "manual");
 
         if (!err && !async)
-                err = rd_kafka_q_wait_result(repq, RD_POLL_INFINITE);
+                err = rd_kafka_q_wait_result(repq, timeout_ms);
 
         if (!async)
                 rd_kafka_q_destroy_owner(repq);
@@ -414,7 +415,8 @@ rd_kafka_commit(rd_kafka_t *rk,
 
 rd_kafka_resp_err_t rd_kafka_commit_message(rd_kafka_t *rk,
                                             const rd_kafka_message_t *rkmessage,
-                                            int async) {
+                                            int async,
+                                            int timeout_ms) {
         rd_kafka_topic_partition_list_t *offsets;
         rd_kafka_topic_partition_t *rktpar;
         rd_kafka_resp_err_t err;
@@ -427,7 +429,7 @@ rd_kafka_resp_err_t rd_kafka_commit_message(rd_kafka_t *rk,
             offsets, rd_kafka_topic_name(rkmessage->rkt), rkmessage->partition);
         rktpar->offset = rkmessage->offset + 1;
 
-        err = rd_kafka_commit(rk, offsets, async);
+        err = rd_kafka_commit(rk, offsets, async, timeout_ms);
 
         rd_kafka_topic_partition_list_destroy(offsets);
 

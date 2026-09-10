@@ -198,7 +198,7 @@ static void do_offset_test(const char *what,
                                              async ? "commit.async"
                                                    : "commit.sync",
                                              rkm->offset + 1);
-                                err = rd_kafka_commit_message(rk, rkm, async);
+                                err = rd_kafka_commit_message(rk, rkm, async, -1);
                                 TIMING_STOP(&t_commit);
                                 if (err)
                                         TEST_FAIL("%s: commit failed: %s\n",

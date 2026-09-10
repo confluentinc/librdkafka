@@ -233,9 +233,37 @@ rd_kafka_assignment_apply_offsets(rd_kafka_t *rk,
                 /* Do nothing for request-level errors (err is set). */
         }
 
+        /* Request-level NOT_COORDINATOR returns an empty partition list, so the
+         * loop above left the queried partitions stuck on .queried forever.
+         * Re-queue them on .pending to retry against the re-discovered
+         * coordinator. */
+        if (err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR) {
+                rd_kafka_topic_partition_t *qpar;
+
+                RD_KAFKA_TPLIST_FOREACH(qpar,
+                                        rk->rk_consumer.assignment.queried) {
+                        rd_kafka_topic_partition_t *ppar =
+                            rd_kafka_topic_partition_list_add_copy(
+                                rk->rk_consumer.assignment.pending, qpar);
+
+                        ppar->offset = RD_KAFKA_OFFSET_STORED;
+
+                        rd_kafka_dbg(rk, CGRP, "OFFSETFETCH",
+                                     "Re-queuing %s [%" PRId32
+                                     "] for committed-offset query after "
+                                     "request-level %s",
+                                     qpar->topic, qpar->partition,
+                                     rd_kafka_err2name(err));
+                }
+
+                rd_kafka_topic_partition_list_clear(
+                    rk->rk_consumer.assignment.queried);
+        }
+
         /* In case of stale member epoch we retry to serve the
          * assignment only after a successful ConsumerGroupHeartbeat. */
-        if (offsets->cnt > 0 && err != RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH)
+        if ((offsets->cnt > 0 || err == RD_KAFKA_RESP_ERR_NOT_COORDINATOR) &&
+            err != RD_KAFKA_RESP_ERR_STALE_MEMBER_EPOCH)
                 rd_kafka_assignment_serve(rk);
 }
 
@@ -311,6 +339,14 @@ static void rd_kafka_assignment_handle_OffsetFetch(rd_kafka_t *rk,
                 case RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID:
                         rd_kafka_cgrp_consumer_expedite_next_heartbeat(
                             rk->rk_cgrp, "OffsetFetch error: Unknown member");
+                        break;
+                case RD_KAFKA_RESP_ERR_NOT_COORDINATOR:
+                        /* Retriable: don't surface to app, re-queried in
+                         * apply_offsets() below. */
+                        rd_kafka_dbg(
+                            rk, CGRP, "OFFSET",
+                            "Offset fetch failed with NOT_COORDINATOR; "
+                            "will re-query committed offsets");
                         break;
                 default:
                         rd_kafka_dbg(

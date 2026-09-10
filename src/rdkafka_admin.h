@@ -38,6 +38,7 @@
 #include "rdrand.h"
 
 #if WITH_SSL
+#include <openssl/rand.h>
 typedef struct rd_kafka_broker_s rd_kafka_broker_t;
 extern int rd_kafka_ssl_hmac(rd_kafka_broker_t *rkb,
                              const EVP_MD *evp,

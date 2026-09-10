@@ -58,6 +58,13 @@
 #include "rdendian.h"
 
 #include "crc32c.h"
+#include "crc32c_impl.h"
+
+#if WITH_CRC32C_HW
+#include <smmintrin.h>
+#include <wmmintrin.h>
+#include <emmintrin.h>
+#endif
 
 /* CRC-32C (iSCSI) polynomial in reversed bit order. */
 #define POLY 0x82f63b78
@@ -130,6 +137,72 @@ static uint32_t crc32c_sw(uint32_t crci, const void *buf, size_t len)
 
 #if WITH_CRC32C_HW
 static int sse42;  /* Cached SSE42 support */
+static int clmul;  /* Cached PCLMULQDQ support */
+int crc32c_have_sse42;  /* Exported for PCL path */
+int crc32c_have_clmul;  /* Exported for PCL path */
+
+/* Dispatch table entry for the active CRC32C implementation */
+static uint32_t (*crc32c_impl)(uint32_t, const void *, size_t);
+
+/* Profiling counters (enable via RD_CRC32C_PROFILE=1 at init time) */
+static struct {
+        uint64_t calls;
+        uint64_t total_bytes;
+        uint64_t long_bytes;     /* bytes processed in LONG blocks */
+        uint64_t short_bytes;    /* bytes processed in SHORT blocks */
+        uint64_t residual_bytes; /* bytes processed in 8-byte residual */
+        uint64_t align_bytes;    /* leading bytes for 8-byte alignment */
+        uint64_t long_folds;     /* number of LONG block folds */
+        uint64_t short_folds;    /* number of SHORT block folds */
+        uint64_t clmul_folds;    /* folds using PCLMULQDQ */
+        uint64_t table_folds;    /* folds using table-based shift */
+        int      enabled;
+} crc32c_profile;
+
+static void crc32c_profile_print(void) {
+        if (!crc32c_profile.enabled || !crc32c_profile.calls)
+                return;
+        fprintf(stderr,
+                "=== CRC32C Profile ===\n"
+                "  calls:          %"PRIu64"\n"
+                "  total bytes:    %"PRIu64" (avg %.1f KB/call)\n"
+                "  LONG bytes:     %"PRIu64" (%.1f%%)\n"
+                "  SHORT bytes:    %"PRIu64" (%.1f%%)\n"
+                "  residual bytes: %"PRIu64" (%.1f%%)\n"
+                "  align bytes:    %"PRIu64"\n"
+                "  LONG folds:     %"PRIu64"\n"
+                "  SHORT folds:    %"PRIu64"\n"
+                "  CLMUL folds:    %"PRIu64" (%.1f%%)\n"
+                "  table folds:    %"PRIu64" (%.1f%%)\n",
+                crc32c_profile.calls,
+                crc32c_profile.total_bytes,
+                crc32c_profile.calls ?
+                (double)crc32c_profile.total_bytes / crc32c_profile.calls / 1024.0
+                : 0.0,
+                crc32c_profile.long_bytes,
+                crc32c_profile.total_bytes ?
+                100.0 * crc32c_profile.long_bytes / crc32c_profile.total_bytes
+                : 0.0,
+                crc32c_profile.short_bytes,
+                crc32c_profile.total_bytes ?
+                100.0 * crc32c_profile.short_bytes / crc32c_profile.total_bytes
+                : 0.0,
+                crc32c_profile.residual_bytes,
+                crc32c_profile.total_bytes ?
+                100.0 * crc32c_profile.residual_bytes / crc32c_profile.total_bytes
+                : 0.0,
+                crc32c_profile.align_bytes,
+                crc32c_profile.long_folds,
+                crc32c_profile.short_folds,
+                crc32c_profile.clmul_folds,
+                crc32c_profile.long_folds + crc32c_profile.short_folds ?
+                100.0 * crc32c_profile.clmul_folds /
+                (crc32c_profile.long_folds + crc32c_profile.short_folds) : 0.0,
+                crc32c_profile.table_folds,
+                crc32c_profile.long_folds + crc32c_profile.short_folds ?
+                100.0 * crc32c_profile.table_folds /
+                (crc32c_profile.long_folds + crc32c_profile.short_folds) : 0.0);
+}
 
 /* Multiply a matrix times a vector over the Galois field of two elements,
    GF(2).  Each element is a bit in an unsigned integer.  mat must have at
@@ -238,14 +311,184 @@ static RD_INLINE uint32_t crc32c_shift(uint32_t zeros[][256], uint32_t crc)
 static uint32_t crc32c_long[4][256];
 static uint32_t crc32c_short[4][256];
 
+/* K constants for folding CRC stripes using PCLMULQDQ.
+ * K_long2 = x^(2*LONG*8) mod P  (fold crc0 by 16384 bytes)
+ * K_long  = x^(LONG*8) mod P     (fold crc1 by 8192 bytes)
+ * K_short2 = x^(2*SHORT*8) mod P (fold crc0 by 512 bytes)
+ * K_short  = x^(SHORT*8) mod P   (fold crc1 by 256 bytes) */
+static uint32_t crc32c_k_long2;
+static uint32_t crc32c_k_long;
+static uint32_t crc32c_k_short2;
+static uint32_t crc32c_k_short;
+
+/* Compute the PCLMULQDQ folding constant K' such that
+ * crc32q(0, K') = x^(fold_distance_bytes * 8) mod P.
+ *
+ * The CRC32Q instruction computes: msg * x^32 mod P (in reflected form).
+ * So K' must satisfy: K' * x^32 mod P = target = x^(N*8) mod P,
+ * i.e. K' = x^(N*8 - 32) mod P.
+ *
+ * We compute this by building the 32x32 GF(2) matrix for the
+ * crc32q(0, *) transform, inverting it, and applying to the target. */
+__attribute__((target("sse4.2")))
+static uint32_t crc32c_compute_k_clmul(uint32_t target) {
+        uint32_t M[32];    /* M[i] = crc32q(0, 1 << i) */
+        uint32_t inv[32];  /* starts as I, becomes M^(-1) */
+        uint32_t K = 0;
+        int row, col, pivot;
+
+        for (row = 0; row < 32; row++) {
+                M[row]   = (uint32_t)_mm_crc32_u64(0, 1ULL << row);
+                inv[row] = 1u << row;
+        }
+
+        /* Gaussian elimination over GF(2) to compute M^(-1). */
+        for (col = 0; col < 32; col++) {
+                pivot = -1;
+                for (row = col; row < 32; row++) {
+                        if (M[row] & (1u << col)) {
+                                pivot = row;
+                                break;
+                        }
+                }
+                if (pivot < 0)
+                        continue;
+                if (pivot != col) {
+                        uint32_t t = M[col];
+                        M[col] = M[pivot]; M[pivot] = t;
+                        t = inv[col];
+                        inv[col] = inv[pivot]; inv[pivot] = t;
+                }
+                for (row = 0; row < 32; row++) {
+                        if (row != col && (M[row] & (1u << col))) {
+                                M[row] ^= M[col];
+                                inv[row] ^= inv[col];
+                        }
+                }
+        }
+
+        /* K = M^(-1) * target */
+        for (row = 0; row < 32; row++) {
+                if (target & M[row]) {
+                        K ^= inv[row];
+                        target ^= M[row];
+                }
+        }
+
+        return K;
+}
+
 /* Initialize tables for shifting crcs. */
 static void crc32c_init_hw(void)
 {
+    uint32_t target;
+
     crc32c_zeros(crc32c_long, LONG);
     crc32c_zeros(crc32c_short, SHORT);
+
+    /* K_long: fold by LONG bytes. target = x^(LONG*8) mod P */
+    target = crc32c_shift(crc32c_long, 1);
+    crc32c_k_long = crc32c_compute_k_clmul(target);
+
+    /* K_long2: fold by 2*LONG bytes. target = shift(target, LONG) */
+    target = crc32c_shift(crc32c_long, target);
+    crc32c_k_long2 = crc32c_compute_k_clmul(target);
+
+    /* K_short: fold by SHORT bytes */
+    target = crc32c_shift(crc32c_short, 1);
+    crc32c_k_short = crc32c_compute_k_clmul(target);
+
+    /* K_short2: fold by 2*SHORT bytes */
+    target = crc32c_shift(crc32c_short, target);
+    crc32c_k_short2 = crc32c_compute_k_clmul(target);
+}
+
+/* Process exactly 3*SHORT (768) bytes using fully unrolled three-way
+ * parallel CRC32Q with PCLMULQDQ folding and data prefetch.
+ * Optimized for the SHORT block path — eliminates loop overhead. */
+__attribute__((target("pclmul,sse4.2")))
+static RD_UNUSED uint32_t
+crc32c_hw_clmul_768(const unsigned char *next, uint64_t crc0_in) {
+        uint64_t crc0 = crc0_in;  /* 64-bit for crc32q */
+
+        __asm__ __volatile__(
+            "xor          %%r11d, %%r11d  # crc1 = 0\n\t"
+            "xor          %%r10d, %%r10d  # crc2 = 0\n\t"
+            "movl           $4, %%r8d     # loop counter: 256/64 = 4\n\t"
+
+            /* Prefetch ahead: next + 512 (2 stripes ahead) */
+            "prefetcht0  512(%[in])\n\t"
+
+            ".L_crc32c_768_loop:\n\t"
+
+            /* Three-way parallel CRC32Q.  Offset fixed at 0; caller
+             * sees next+0..next+767 as consumed; crc32q offsets encode
+             * stripe positions directly. */
+            "crc32q    0(%[in]), %[c0]\n\t"
+            "crc32q  256(%[in]), %%r11\n\t"
+            "crc32q  512(%[in]), %%r10\n\t"
+
+            "crc32q    8(%[in]), %[c0]\n\t"
+            "crc32q  264(%[in]), %%r11\n\t"
+            "crc32q  520(%[in]), %%r10\n\t"
+
+            "crc32q   16(%[in]), %[c0]\n\t"
+            "crc32q  272(%[in]), %%r11\n\t"
+            "crc32q  528(%[in]), %%r10\n\t"
+
+            "crc32q   24(%[in]), %[c0]\n\t"
+            "crc32q  280(%[in]), %%r11\n\t"
+            "crc32q  536(%[in]), %%r10\n\t"
+
+            "crc32q   32(%[in]), %[c0]\n\t"
+            "crc32q  288(%[in]), %%r11\n\t"
+            "crc32q  544(%[in]), %%r10\n\t"
+
+            "crc32q   40(%[in]), %[c0]\n\t"
+            "crc32q  296(%[in]), %%r11\n\t"
+            "crc32q  552(%[in]), %%r10\n\t"
+
+            "crc32q   48(%[in]), %[c0]\n\t"
+            "crc32q  304(%[in]), %%r11\n\t"
+            "crc32q  560(%[in]), %%r10\n\t"
+
+            "crc32q   56(%[in]), %[c0]\n\t"
+            "crc32q  312(%[in]), %%r11\n\t"
+            "crc32q  568(%[in]), %%r10\n\t"
+
+            "add            $64, %[in]\n\t"
+            "decl           %%r8d\n\t"
+            "jnz .L_crc32c_768_loop\n\t"
+            "sub           $256, %[in]\n\t"
+
+            /* Fold three stripes: crc0 * K_short2 ^ crc1 * K_short ^ crc2. */
+            "movq        %[c0], %%xmm1\n\t"
+            "movd    %[k_short2], %%xmm3\n\t"
+            "movq        %%r11, %%xmm2\n\t"
+            "movd     %[k_short], %%xmm4\n\t"
+            "pclmulqdq $0x00, %%xmm3, %%xmm1\n\t"
+            "pclmulqdq $0x00, %%xmm4, %%xmm2\n\t"
+            "xor          %%ecx, %%ecx\n\t"
+            "xor          %%r11d, %%r11d\n\t"
+            "movq        %%xmm1, %%r8\n\t"
+            "movq        %%xmm2, %%r9\n\t"
+            "crc32q        %%r8, %%rcx\n\t"
+            "crc32q        %%r9, %%r11\n\t"
+            "xor          %%r10d, %%ecx\n\t"
+            "xor          %%r11d, %%ecx\n\t"
+
+            : [c0] "+c" (crc0), [in] "+r" (next)
+            : [k_short2] "r" ((uint64_t)crc32c_k_short2),
+              [k_short]  "r" ((uint64_t)crc32c_k_short)
+            : "r8", "r9", "r10", "r11",
+              "xmm1", "xmm2", "xmm3", "xmm4", "cc", "memory"
+        );
+
+        return (uint32_t)crc0;
 }
 
 /* Compute CRC-32C using the Intel hardware instruction. */
+__attribute__((target("pclmul,sse4.2")))
 static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 {
     const unsigned char *next = buf;
@@ -255,6 +498,11 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
     /* pre-process the crc */
     crc0 = crc ^ 0xffffffff;
 
+    if (crc32c_profile.enabled) {
+            crc32c_profile.calls++;
+            crc32c_profile.total_bytes += len;
+    }
+
     /* compute the crc for up to seven leading bytes to bring the data pointer
        to an eight-byte boundary */
     while (len && ((uintptr_t)next & 7) != 0) {
@@ -263,6 +511,8 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
                 : "r"(next), "0"(crc0));
         next++;
         len--;
+        if (crc32c_profile.enabled)
+                crc32c_profile.align_bytes++;
     }
 
     /* compute the crc on sets of LONG*3 bytes, executing three independent crc
@@ -281,8 +531,33 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
                     : "r"(next), "0"(crc0), "1"(crc1), "2"(crc2));
             next += 8;
         } while (next < end);
-        crc0 = crc32c_shift(crc32c_long, crc0) ^ crc1;
-        crc0 = crc32c_shift(crc32c_long, crc0) ^ crc2;
+        if (clmul) {
+                /* Fold three stripes using PCLMULQDQ:
+                 * crc0 * K_long2 mod P ^ crc1 * K_long mod P ^ crc2 */
+                __m128i a, b, p0, p1;
+                uint64_t f0, f1, r;
+                a = _mm_set_epi64x(0, (uint32_t)crc0);
+                b = _mm_set_epi64x(0, crc32c_k_long2);
+                p0 = _mm_clmulepi64_si128(a, b, 0x00);
+                f0 = _mm_extract_epi64(p0, 0);
+                a = _mm_set_epi64x(0, (uint32_t)crc1);
+                b = _mm_set_epi64x(0, crc32c_k_long);
+                p1 = _mm_clmulepi64_si128(a, b, 0x00);
+                f1 = _mm_extract_epi64(p1, 0);
+                r = _mm_crc32_u64(0, f0) ^ _mm_crc32_u64(0, f1) ^ (uint32_t)crc2;
+                crc0 = r;
+                if (crc32c_profile.enabled)
+                        crc32c_profile.clmul_folds++;
+        } else {
+                crc0 = crc32c_shift(crc32c_long, (uint32_t)crc0) ^ crc1;
+                crc0 = crc32c_shift(crc32c_long, (uint32_t)crc0) ^ crc2;
+                if (crc32c_profile.enabled)
+                        crc32c_profile.table_folds++;
+        }
+        if (crc32c_profile.enabled) {
+                crc32c_profile.long_bytes += LONG * 3;
+                crc32c_profile.long_folds++;
+        }
         next += LONG*2;
         len -= LONG*3;
     }
@@ -290,25 +565,44 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
     /* do the same thing, but now on SHORT*3 blocks for the remaining data less
        than a LONG*3 block */
     while (len >= SHORT*3) {
-        crc1 = 0;
-        crc2 = 0;
-        end = next + SHORT;
-        do {
-            __asm__("crc32q\t" "(%3), %0\n\t"
-                    "crc32q\t" SHORTx1 "(%3), %1\n\t"
-                    "crc32q\t" SHORTx2 "(%3), %2"
-                    : "=r"(crc0), "=r"(crc1), "=r"(crc2)
-                    : "r"(next), "0"(crc0), "1"(crc1), "2"(crc2));
-            next += 8;
-        } while (next < end);
-        crc0 = crc32c_shift(crc32c_short, crc0) ^ crc1;
-        crc0 = crc32c_shift(crc32c_short, crc0) ^ crc2;
-        next += SHORT*2;
-        len -= SHORT*3;
+        if (clmul) {
+                /* Use unrolled 768-byte function with prefetch */
+                crc0 = crc32c_hw_clmul_768(next, crc0);
+                next += SHORT * 3;   /* consumed 768 bytes */
+                len -= SHORT * 3;
+                if (crc32c_profile.enabled) {
+                        crc32c_profile.short_bytes += SHORT * 3;
+                        crc32c_profile.short_folds++;
+                        crc32c_profile.clmul_folds++;
+                }
+        } else {
+                crc1 = 0;
+                crc2 = 0;
+                end = next + SHORT;
+                do {
+                    __asm__("crc32q\t" "(%3), %0\n\t"
+                            "crc32q\t" SHORTx1 "(%3), %1\n\t"
+                            "crc32q\t" SHORTx2 "(%3), %2"
+                            : "=r"(crc0), "=r"(crc1), "=r"(crc2)
+                            : "r"(next), "0"(crc0), "1"(crc1), "2"(crc2));
+                    next += 8;
+                } while (next < end);
+                crc0 = crc32c_shift(crc32c_short, (uint32_t)crc0) ^ crc1;
+                crc0 = crc32c_shift(crc32c_short, (uint32_t)crc0) ^ crc2;
+                if (crc32c_profile.enabled) {
+                        crc32c_profile.short_bytes += SHORT * 3;
+                        crc32c_profile.short_folds++;
+                        crc32c_profile.table_folds++;
+                }
+                next += SHORT*2;
+                len -= SHORT*3;
+        }
     }
 
     /* compute the crc on the remaining eight-byte units less than a SHORT*3
        block */
+    if (crc32c_profile.enabled)
+            crc32c_profile.residual_bytes += len;
     end = next + (len - (len & 7));
     while (next < end) {
         __asm__("crc32q\t" "(%1), %0"
@@ -347,18 +641,27 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
         (have) = (ecx >> 20) & 1; \
     } while (0)
 
+/* Check for PCLMULQDQ via CPUID.01H:ECX bit 1.
+ * PCLMULQDQ was introduced in Westmere (2010), after SSE4.2 in Nehalem (2008).
+ * This reuses the same CPUID call but checks a different bit. */
+#define CLMUL(have) \
+    do { \
+        uint32_t eax, ecx; \
+        eax = 1; \
+        __asm__("cpuid" \
+                : "=c"(ecx) \
+                : "a"(eax) \
+                : "%ebx", "%edx"); \
+        (have) = (ecx >> 1) & 1; \
+    } while (0)
+
 #endif /* WITH_CRC32C_HW */
 
 /* Compute a CRC-32C.  If the crc32 instruction is available, use the hardware
    version.  Otherwise, use the software version. */
 uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 {
-#if WITH_CRC32C_HW
-        if (sse42)
-                return crc32c_hw(crc, buf, len);
-        else
-#endif
-                return crc32c_sw(crc, buf, len);
+        return crc32c_impl(crc, buf, len);
 }
 
 
@@ -372,11 +675,32 @@ uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 void rd_crc32c_global_init (void) {
 #if WITH_CRC32C_HW
         SSE42(sse42);
-        if (sse42)
+        crc32c_have_sse42 = sse42;
+        if (sse42) {
+                CLMUL(clmul);
+                crc32c_have_clmul = clmul;
+                if (clmul && getenv("RD_CRC32C_NO_CLMUL"))
+                        clmul = 0;
+                if (getenv("RD_CRC32C_PROFILE")) {
+                        crc32c_profile.enabled = 1;
+                        atexit(crc32c_profile_print);
+                }
                 crc32c_init_hw();
-        else
+
+                /* Default: crc32q + PCLMULQDQ fold (proven + correct).
+                 * Opt-in: full PCLMULQDQ folding via RD_CRC32C_PCL_FULL=1 */
+                if (clmul && getenv("RD_CRC32C_PCL_FULL")) {
+                        crc32c_pcl_init();
+                        crc32c_impl = crc32c_pcl_full;
+                } else {
+                        crc32c_impl = crc32c_hw;
+                }
+        } else
 #endif
+        {
                 crc32c_init_sw();
+                crc32c_impl = crc32c_sw;
+        }
 }
 
 int unittest_rd_crc32c (void) {
@@ -401,9 +725,12 @@ int unittest_rd_crc32c (void) {
         const char *how;
 
 #if WITH_CRC32C_HW
-        if (sse42)
-                how = "hardware (SSE42)";
-        else
+        if (sse42) {
+                if (clmul)
+                        how = "hardware (SSE42+PCLMULQDQ)";
+                else
+                        how = "hardware (SSE42)";
+        } else
                 how = "software (SSE42 supported in build but not at runtime)";
 #else
         how = "software";

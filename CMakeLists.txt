@@ -7,7 +7,16 @@ project(RdKafka VERSION ${RDKAFKA_VERSION})
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/packaging/cmake/Modules/")
 
+set(KAFKA_PRODUCT_NUMBER 2)
+set(KAFKA_PRODUCT_VERSION 3)
+set(KAFKA_BUILD_NUMBER 0)
+
 # Options. No 'RDKAFKA_' prefix to match old C++ code. {
+configure_file(
+  ${CMAKE_CURRENT_SOURCE_DIR}/version.rc.in
+  ${CMAKE_CURRENT_BINARY_DIR}/version.rc
+  @ONLY)
+
 
 # This option doesn't affect build in fact, only C code
 # (see 'rd_kafka_version_str'). In CMake the build type feature usually used

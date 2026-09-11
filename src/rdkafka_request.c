@@ -3986,6 +3986,10 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int32_t RecordErrorsCnt;
                 rd_kafkap_str_t ErrorMessage;
                 rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
+                if (RecordErrorsCnt < 0)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf, "RecordErrorsCnt %" PRId32 " out of range",
+                            RecordErrorsCnt);
                 if (RecordErrorsCnt) {
                         result->record_errors = rd_calloc(
                             RecordErrorsCnt, sizeof(*result->record_errors));

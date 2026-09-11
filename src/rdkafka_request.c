@@ -6840,15 +6840,20 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                             rkbuf,
                             "Failed to allocate accepted_compression_types");
 
+                /* Hand ownership over before the read loop: a failing read
+                 * below jumps to err_parse, which has no free of its own, and
+                 * rd_kafka_telemetry_clear() frees this field. Assigning only
+                 * after a successful alloc still keeps _cnt from ever being
+                 * set alongside a NULL pointer. */
+                rk->rk_telemetry.accepted_compression_types =
+                    accepted_compression_types;
+                rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
+
                 for (i = 0; i < (size_t)arraycnt; i++) {
                         int8_t AcceptedCompressionType;
                         rd_kafka_buf_read_i8(rkbuf, &AcceptedCompressionType);
                         accepted_compression_types[i] = AcceptedCompressionType;
                 }
-
-                rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
-                rk->rk_telemetry.accepted_compression_types =
-                    accepted_compression_types;
         } else {
                 rd_kafka_compression_t *accepted_compression_types =
                     rd_calloc(1, sizeof(rd_kafka_compression_t));
@@ -6884,6 +6889,9 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                      rk->rk_telemetry.push_interval_ms);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
+        if (arraycnt < 0)
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "ApiArrayCnt %" PRId32 " out of range", arraycnt);
 
         if (arraycnt) {
                 rk->rk_telemetry.requested_metrics_cnt = arraycnt;

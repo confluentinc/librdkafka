@@ -3985,7 +3985,13 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int i;
                 int32_t RecordErrorsCnt;
                 rd_kafkap_str_t ErrorMessage;
-                rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
+                rd_kafka_buf_read_arraycnt(
+                    rkbuf, &RecordErrorsCnt,
+                    rd_kafka_msgq_len(&request->rkbuf_batch.msgq));
+                if (RecordErrorsCnt < 0)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf, "RecordErrorsCnt %" PRId32 " out of range",
+                            RecordErrorsCnt);
                 if (RecordErrorsCnt) {
                         result->record_errors = rd_calloc(
                             RecordErrorsCnt, sizeof(*result->record_errors));
@@ -7387,12 +7393,84 @@ static int unittest_handle_GetTelemetrySubscriptions_bad_arraycnt(void) {
 }
 
 /**
+ * @brief Reject Produce record error counts above the request's batch size.
+ */
+static int unittest_handle_Produce_record_errors(void) {
+        const int counts[] = {-1, 0, 2, 3};
+        size_t i;
+        int version;
+
+        for (version = 8; version <= 9; version++) {
+                for (i = 0; i < RD_ARRAYSIZE(counts); i++) {
+                        rd_kafka_t *rk =
+                            rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+                        rd_kafka_broker_t *rkb =
+                            rd_kafka_broker_add_logical(rk, "unittest");
+                        rd_kafka_buf_t *reply   = rd_kafka_buf_new(0, 0);
+                        rd_kafka_buf_t *request = rd_kafka_buf_new(0, 0);
+                        rd_kafka_Produce_result_t *result =
+                            rd_kafka_Produce_result_new(-1, -1);
+                        rd_kafka_resp_err_t err;
+                        rd_kafka_resp_err_t expected =
+                            counts[i] < 0 || counts[i] > 2
+                                ? RD_KAFKA_RESP_ERR__BAD_MSG
+                                : RD_KAFKA_RESP_ERR_NO_ERROR;
+                        int j;
+
+                        reply->rkbuf_rkb = rkb;
+                        if (version >= 9)
+                                reply->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+                        request->rkbuf_reqhdr.ApiVersion = version;
+                        rd_kafka_msgq_init(&request->rkbuf_batch.msgq);
+                        ut_create_msgs(&request->rkbuf_batch.msgq, 1, 2);
+
+                        rd_kafka_buf_write_arraycnt(reply, 1);
+                        rd_kafka_buf_write_str(reply, "topic", -1);
+                        rd_kafka_buf_write_arraycnt(reply, 1);
+                        rd_kafka_buf_write_i32(reply, 0);
+                        rd_kafka_buf_write_i16(reply, 0);
+                        rd_kafka_buf_write_i64(reply, 0);
+                        rd_kafka_buf_write_i64(reply, -1);
+                        rd_kafka_buf_write_i64(reply, 0);
+                        rd_kafka_buf_write_arraycnt(reply, counts[i]);
+                        for (j = 0; j < counts[i]; j++) {
+                                rd_kafka_buf_write_i32(reply, j);
+                                rd_kafka_buf_write_str(reply, NULL, 0);
+                                rd_kafka_buf_write_tags_empty(reply);
+                        }
+                        rd_kafka_buf_write_str(reply, NULL, 0);
+                        rd_kafka_buf_write_tags_empty(reply);
+                        rd_kafka_buf_write_tags_empty(reply);
+                        rd_kafka_buf_write_i32(reply, 0);
+                        rd_kafka_buf_write_tags_empty(reply);
+                        rd_slice_init_full(&reply->rkbuf_reader,
+                                           &reply->rkbuf_buf);
+
+                        err = rd_kafka_handle_Produce_parse(rkb, NULL, reply,
+                                                            request, result);
+                        rd_kafka_Produce_result_destroy(result);
+                        ut_rd_kafka_msgq_purge(&request->rkbuf_batch.msgq);
+                        rd_kafka_buf_destroy(request);
+                        rd_kafka_buf_destroy(reply);
+                        rd_kafka_destroy(rk);
+                        RD_UT_ASSERT(
+                            err == expected,
+                            "Produce v%d count %d: expected %s, got %s",
+                            version, counts[i], rd_kafka_err2str(expected),
+                            rd_kafka_err2str(err));
+                }
+        }
+        RD_UT_PASS();
+}
+
+/**
  * @brief Request/response unit tests
  */
 int unittest_request(void) {
         int fails = 0;
 
         fails += unittest_idempotent_producer();
+        fails += unittest_handle_Produce_record_errors();
         fails += unittest_handle_GetTelemetrySubscriptions();
         fails += unittest_handle_GetTelemetrySubscriptions_bad_arraycnt();
 

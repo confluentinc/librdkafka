@@ -3768,9 +3768,16 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                  * and trigger a state change.
                  * This makes sure any eonce dependent on state changes
                  * are triggered. */
-                rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                     rd_kafka_broker_destroy_error(rkb->rkb_rk),
-                                     "Decommissioning this broker");
+                /* This is a planned removal (rd_kafka_broker_decommission()
+                 * is the sole sender of TERMINATE on this queue): avoid
+                 * reporting the broker down, otherwise decommissioning
+                 * several still-up brokers at once (e.g. learned brokers
+                 * on re-bootstrap) can itself cross the "all brokers down"
+                 * threshold and spuriously start another re-bootstrap
+                 * sequence. */
+                rd_kafka_broker_planned_fail(
+                    rkb, rd_kafka_broker_destroy_error(rkb->rkb_rk), "%s",
+                    "Decommissioning this broker");
 
                 rd_kafka_broker_prepare_destroy(rkb);
                 /* Release main thread reference here */

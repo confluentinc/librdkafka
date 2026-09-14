@@ -437,6 +437,7 @@ extern int unittest_sasl_oauthbearer_oidc_assertion(void);
 extern int unittest_admin(void);
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
+extern int unittest_topic(void);
 #if WITH_SSL
 extern int unittest_ssl(void);
 #endif
@@ -493,6 +494,7 @@ int rd_unittest(void) {
             {"share_acknowledge", unittest_share_acknowledge},
             {"msgset_errors", rd_kafka_unittest_msgset_errors},
             {"feature", unittest_feature},
+            {"topic", unittest_topic},
 #if WITH_SSL
             {"ssl", unittest_ssl},
 #endif

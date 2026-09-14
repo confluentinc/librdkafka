@@ -1,3 +1,21 @@
+# librdkafka v2.15.2
+
+librdkafka v2.15.2 is a maintenance release:
+
+* Fix a consumer partition that could stop being fetched after partition
+  leader changes.
+
+
+## Fixes
+
+### Consumer fixes
+
+* A partition could stay on a broker that is not its leader, failing every
+  fetch with `NOT_LEADER_FOR_PARTITION`, when a second leader update arrived
+  before it had left its broker after a first one (@hatemosphere, #5593).
+
+
+
 # librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:

@@ -546,9 +546,14 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt,
             0);
 
-        int32_t expected_brokers_cnt[] = {1, 1, 1, 1};
+        /* Action 2 sets the only broker down, so the "all brokers down" state
+         * is reached and a re-bootstrap sequence starts immediately,
+         * decommissioning the learned broker. With every broker down no
+         * Metadata response can succeed, so the learned broker list cannot be
+         * rebuilt and stays empty until the broker is set up again. */
+        int32_t expected_brokers_cnt[] = {1, 1, 0, 1};
 
-        int32_t expected_broker_ids[][5] = {{1}, {1}, {1}, {1}};
+        int32_t expected_broker_ids[][5] = {{1}, {1}, {0}, {1}};
 
         int32_t actions[][2] = {
             {TEST_ACTION_SET_UP_BROKER, 1},
@@ -774,8 +779,16 @@ static void do_test_kip899_rebootstrap_cases(
             {TEST_ACTION_SET_UP_BROKER, 2},
             {TEST_ACTION_SET_UP_BROKER, 3},
         };
-        if (variation ==
+        if (variation !=
             DO_TEST_KIP899_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_DISABLED) {
+                /* Action 7 sets the last broker down, so the "all brokers
+                 * down" state is reached and a re-bootstrap sequence starts
+                 * immediately, decommissioning the learned brokers. With every
+                 * broker down no Metadata response can succeed, so the learned
+                 * broker list cannot be rebuilt and stays empty until a broker
+                 * is set up again (action 8). */
+                expected_brokers_cnt[7] = 0;
+        } else {
                 /* If not re-bootstraping we've to start from the
                  * last broker seen */
                 actions[7][1]              = 5;
@@ -901,6 +914,38 @@ static rd_atomic32_t
 static rd_bool_t do_test_kip1102_rebootstrap_cases_tracking_started;
 
 /**
+ * @brief Whether the Metadata errors were already injected for this variation.
+ */
+static rd_bool_t do_test_kip1102_rebootstrap_cases_errors_pushed;
+
+/**
+ * @brief Whether the injected Metadata errors were already cleared for this
+ *        variation.
+ */
+static rd_bool_t do_test_kip1102_rebootstrap_cases_errors_cleared;
+
+/**
+ * @brief Absolute time after which we stop waiting for the expected
+ *        re-bootstrap sequences, 0 when not armed yet.
+ */
+static int64_t do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us;
+
+/**
+ * @brief Number of re-bootstrap sequences \p variation must show before the
+ *        injected error phase can be ended.
+ */
+static int do_test_kip1102_rebootstrap_cases_min_rebootstrap_cnt(
+    do_test_kip1102_rebootstrap_cases_variation_t variation) {
+        /* With the `REBOOTSTRAP_REQUIRED` error code a sequence is started on
+         * each error response, otherwise a single one is started when
+         * `metadata.recovery.rebootstrap.trigger.ms` is reached. */
+        return do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
+                   variation)
+                   ? 65
+                   : 1;
+}
+
+/**
  * @brief Returns the "host:port" listener of broker \p broker_id in
  *        \p mcluster , as a newly allocated string.
  *
@@ -943,18 +988,45 @@ static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
                                                      const char *buf) {
         if (strstr(buf, "Starting re-bootstrap sequence")) {
                 /* Count the number of re-bootstrap sequences started */
-                rd_atomic32_add(
+                int32_t cnt = rd_atomic32_add(
                     &do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 1);
+
+                if (do_test_kip1102_rebootstrap_cases_errors_pushed &&
+                    !do_test_kip1102_rebootstrap_cases_errors_cleared &&
+                    cnt >=
+                        do_test_kip1102_rebootstrap_cases_min_rebootstrap_cnt(
+                            do_test_kip1102_rebootstrap_cases_variation)) {
+                        /* End the error phase as soon as the expected
+                         * sequences have started: the next Metadata response
+                         * succeeds and cancels the re-bootstrap timer, so no
+                         * further sequence can start no matter how slow the
+                         * machine is.
+                         *
+                         * Letting the remaining pushed errors drain instead
+                         * re-arms the timer on each failed refresh and starts
+                         * a new sequence every
+                         * `metadata.recovery.rebootstrap.trigger.ms`, making
+                         * the count depend on how long the error phase takes.
+                         *
+                         * Only the mock cluster lock is taken here, no
+                         * client lock, so this is safe from the log callback.
+                         */
+                        do_test_kip1102_rebootstrap_cases_errors_cleared =
+                            rd_true;
+                        rd_kafka_mock_clear_request_errors(cluster,
+                                                           RD_KAFKAP_Metadata);
+                }
         }
 }
 
 static rd_kafka_type_t
 do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
         const char *debug_contexts[2] = {"conf", NULL};
-        /* This is 2 seconds less of the metadata refresh sequence expected
-         * total duration.
-         * ERR__TRANSPORT is returned
-         * so the rebootstrap timer isn't reset. */
+        /* Long enough that the first sequence is triggered only after the
+         * error injection is well under way, short enough to keep the test
+         * quick. The expected count doesn't depend on it: the error phase is
+         * ended as soon as the expected sequences have started,
+         * see `do_test_kip1102_rebootstrap_cases_log_cb()`. */
         test_conf_set(conf, "metadata.recovery.rebootstrap.trigger.ms", "5000");
         /* Avoid Head Of Line blocking from fetch requests for predictable
          * timing */
@@ -1014,9 +1086,9 @@ static rd_kafka_resp_err_t
  */
 static rd_kafka_resp_err_t *do_test_kip1102_rebootstrap_cases_allowed_errors(
     do_test_kip1102_rebootstrap_cases_variation_t variation) {
-        if (do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(variation))
-                return
-                    do_test_kip1102_rebootstrap_cases_allowed_errors_rebootstrap_required;
+        if (do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
+                variation))
+                return do_test_kip1102_rebootstrap_cases_allowed_errors_rebootstrap_required;
         if (do_test_kip1102_rebootstrap_cases_connections_stay_up(variation))
                 return do_test_kip1102_rebootstrap_cases_allowed_errors_top_level;
         return do_test_kip1102_rebootstrap_cases_allowed_errors_transport;
@@ -1051,8 +1123,9 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                 /* First action: set the error codes */
                 int i;
                 TEST_ASSERT(cluster != NULL);
-                allowed_errors = do_test_kip1102_rebootstrap_cases_allowed_errors(
-                    do_test_kip1102_rebootstrap_cases_variation);
+                allowed_errors =
+                    do_test_kip1102_rebootstrap_cases_allowed_errors(
+                        do_test_kip1102_rebootstrap_cases_variation);
                 /* A request is made every 100 ms: 7s */
                 for (i = 0; i < 70; i++)
                         rd_kafka_mock_push_request_errors(
@@ -1070,24 +1143,22 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                             rd_true;
                 }
 
-        } else if (action == 1) {
-                /* Second action: in case there's no third action await
-                 * enough re-bootstrap logs are seen. */
-                int rebootstrap_cnt, min_rebootstrap_cnt = 0;
-                switch (do_test_kip1102_rebootstrap_cases_variation) {
-                case DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_TRANSPORT_ERROR_NO_RESTART:
-                        min_rebootstrap_cnt = 1;
-                        break;
-                case DO_TEST_KIP1102_REBOOTSTRAP_CASES_VARIATION_REBOOTSTRAP_REQUIRED_NO_RESTART:
-                        min_rebootstrap_cnt = 65;
-                        break;
-                default:
-                        break;
-                }
-                rebootstrap_cnt = rd_atomic32_get(
-                    &do_test_kip1102_rebootstrap_cases_rebootstrap_cnt);
-                return rebootstrap_cnt < min_rebootstrap_cnt;
+                do_test_kip1102_rebootstrap_cases_errors_pushed = rd_true;
         }
+
+        if (action == 1 && !do_test_kip1102_rebootstrap_cases_errors_cleared) {
+                /* Second action: in case there's no third action, keep waiting
+                 * until the expected re-bootstrap sequences are seen, that is
+                 * until the log callback ends the error phase. Bounded, so
+                 * that a missing sequence fails the count assertion instead of
+                 * waiting forever. */
+                if (!do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us)
+                        do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us =
+                            test_clock() + 20000000;
+                return test_clock() <
+                       do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us;
+        }
+
         return rd_false;
 }
 
@@ -1108,17 +1179,16 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
 static void do_test_kip1102_rebootstrap_cases(
     do_test_kip1102_rebootstrap_cases_variation_t variation) {
         int rebootstrap_cnt = 0, expected_rebootstrap_cnt = 1,
-            expected_min_rebootstrap_cnt = expected_rebootstrap_cnt;
+            expected_min_rebootstrap_cnt = 1;
 
         SUB_TEST_QUICK(
             "%s, %s",
             do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(variation)
                 ? "\"re-bootstrap required\" error code"
-                : do_test_kip1102_rebootstrap_cases_connections_stay_up(
-                      variation)
-                    ? "metadata.recovery.rebootstrap.trigger.ms, "
-                      "connections up"
-                    : "metadata.recovery.rebootstrap.trigger.ms",
+            : do_test_kip1102_rebootstrap_cases_connections_stay_up(variation)
+                ? "metadata.recovery.rebootstrap.trigger.ms, "
+                  "connections up"
+                : "metadata.recovery.rebootstrap.trigger.ms",
             do_test_kip1102_rebootstrap_cases_restarts_broker(variation)
                 ? "broker restarted"
                 : "broker not restarted");
@@ -1128,7 +1198,13 @@ static void do_test_kip1102_rebootstrap_cases(
         rd_atomic32_init(
             &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt, 0);
         do_test_kip1102_rebootstrap_cases_tracking_started         = rd_false;
+        do_test_kip1102_rebootstrap_cases_errors_pushed            = rd_false;
+        do_test_kip1102_rebootstrap_cases_errors_cleared           = rd_false;
+        do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us      = 0;
         do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = -1;
+
+        expected_min_rebootstrap_cnt =
+            do_test_kip1102_rebootstrap_cases_min_rebootstrap_cnt(variation);
 
         if (do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
                 variation)) {
@@ -1137,8 +1213,7 @@ static void do_test_kip1102_rebootstrap_cases(
                  * It's possible multiple consecutive error responses cause a
                  * single re-bootstrap sequence because of the
                  * timer activation. */
-                expected_min_rebootstrap_cnt = 65;
-                expected_rebootstrap_cnt     = 70;
+                expected_rebootstrap_cnt = 70;
         }
 
         if (do_test_kip1102_rebootstrap_cases_connections_stay_up(variation)) {

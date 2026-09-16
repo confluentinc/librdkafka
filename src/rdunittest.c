@@ -437,6 +437,7 @@ extern int unittest_sasl_oauthbearer_oidc_assertion(void);
 extern int unittest_admin(void);
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
+extern int unittest_assignment(void);
 #if WITH_SSL
 extern int unittest_ssl(void);
 #endif
@@ -488,6 +489,7 @@ int rd_unittest(void) {
             {"admin", unittest_admin},
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
+            {"assignment", unittest_assignment},
             {"fetcher_share_filter_forward",
              unittest_fetcher_share_filter_forward},
             {"share_acknowledge", unittest_share_acknowledge},

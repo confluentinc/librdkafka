@@ -541,6 +541,7 @@ do_test_down_then_up_no_rebootstrap_loop_after_action_cb(rd_kafka_t **rkp,
  *        It shouldn't cause a loop of re-bootstrap sequences.
  */
 static void do_test_down_then_up_no_rebootstrap_loop(void) {
+        int32_t actual_rebootstrap_sequence_cnt;
         SUB_TEST_QUICK();
         rd_atomic32_init(
             &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt,
@@ -572,18 +573,30 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
          * state again, that is a failed connection attempt to every broker
          * since the previous sequence. The learned broker is decommissioned
          * by the first sequence, so only the bootstrap broker remains and
-         * each of its failed attempts starts a new sequence: those are paced
-         * by `reconnect.backoff.ms` (100ms, doubling up to 10s, with
-         * jitter), so about 7-9 sequences fit in 6s.
-         * A loop not gated by connection attempts would give hundreds:
-         * allow some slack over the expected count. */
-        TEST_ASSERT(
-            rd_atomic32_get(
-                &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt) <=
-                12,
-            "Expected <= 12 re-bootstrap sequences, got %d",
-            rd_atomic32_get(
-                &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt));
+         * each of its failed attempts starts a new sequence.
+         *
+         * The attempt rate is not paced by `reconnect.backoff.ms`: a connect
+         * scheduled through `rd_kafka_connect_any()` zeroes
+         * `rkb_ts_reconnect` to expedite the reconnect, so the backoff never
+         * ramps. It depends instead on how many subsystems ask for a cluster
+         * connection while every broker is down: the sparse connection
+         * keepalive, its deferred retry and, with `enable.idempotence`, the
+         * ProducerID acquisition. That is a scheduling property, not a
+         * configured one, so it is not a stable number to assert on.
+         *
+         * What is bounded is the interval gating `rd_kafka_connect_any()`,
+         * `sparse_connect_intvl` = max(11, min(reconnect.backoff.ms / 2,
+         * 1000)), 50ms by default, so at most 6000 / 50 = 120 sequences fit
+         * in the 6s window. A loop not gated by connection attempts would
+         * exceed that. */
+        actual_rebootstrap_sequence_cnt = rd_atomic32_get(
+            &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt);
+        TEST_SAY("Found %d re-bootstrap sequences\n",
+                 actual_rebootstrap_sequence_cnt);
+        TEST_ASSERT(actual_rebootstrap_sequence_cnt >= 7 &&
+                        actual_rebootstrap_sequence_cnt <= 120,
+                    "Expected between 7 and 120 re-bootstrap sequences, got %d",
+                    actual_rebootstrap_sequence_cnt);
 
         rd_free(log_interceptor);
         log_interceptor = NULL;

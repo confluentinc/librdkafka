@@ -54,6 +54,9 @@ builds already got from 8.20.0).
 
 ### Producer fixes
 
+* Reject malformed Produce response record-error counts before allocating
+  memory (#5580, @shoemoney).
+
 * Issues: #5555.
   Fix `int_latency` metric calculation. It was derived from the message
   timeout timestamp (`now + message.timeout.ms - rkm_ts_timeout`), which

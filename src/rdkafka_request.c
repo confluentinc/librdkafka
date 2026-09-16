@@ -3985,7 +3985,13 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int i;
                 int32_t RecordErrorsCnt;
                 rd_kafkap_str_t ErrorMessage;
-                rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
+                rd_kafka_buf_read_arraycnt(
+                    rkbuf, &RecordErrorsCnt,
+                    rd_kafka_msgq_len(&request->rkbuf_batch.msgq));
+                if (RecordErrorsCnt < 0)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf, "RecordErrorsCnt %" PRId32 " out of range",
+                            RecordErrorsCnt);
                 if (RecordErrorsCnt) {
                         result->record_errors = rd_calloc(
                             RecordErrorsCnt, sizeof(*result->record_errors));
@@ -6827,25 +6833,45 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                      "Parsing: subscription id %" PRId32,
                      rk->rk_telemetry.subscription_id);
 
-        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
+        rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
+        if (arraycnt < 0)
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "ApiArrayCnt %" PRId32 " out of range", arraycnt);
 
         if (arraycnt) {
-                rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
-                rk->rk_telemetry.accepted_compression_types =
+                rd_kafka_compression_t *accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
+                if (!accepted_compression_types)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "Failed to allocate accepted_compression_types");
+
+                /* Hand ownership over before the read loop: a failing read
+                 * below jumps to err_parse, which has no free of its own, and
+                 * rd_kafka_telemetry_clear() frees this field. Assigning only
+                 * after a successful alloc still keeps _cnt from ever being
+                 * set alongside a NULL pointer. */
+                rk->rk_telemetry.accepted_compression_types =
+                    accepted_compression_types;
+                rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
 
                 for (i = 0; i < (size_t)arraycnt; i++) {
                         int8_t AcceptedCompressionType;
                         rd_kafka_buf_read_i8(rkbuf, &AcceptedCompressionType);
-                        rk->rk_telemetry.accepted_compression_types[i] =
-                            AcceptedCompressionType;
+                        accepted_compression_types[i] = AcceptedCompressionType;
                 }
         } else {
+                rd_kafka_compression_t *accepted_compression_types =
+                    rd_calloc(1, sizeof(rd_kafka_compression_t));
+                if (!accepted_compression_types)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "Failed to allocate accepted_compression_types");
+                accepted_compression_types[0] = RD_KAFKA_COMPRESSION_NONE;
+
                 rk->rk_telemetry.accepted_compression_types_cnt = 1;
                 rk->rk_telemetry.accepted_compression_types =
-                    rd_calloc(1, sizeof(rd_kafka_compression_t));
-                rk->rk_telemetry.accepted_compression_types[0] =
-                    RD_KAFKA_COMPRESSION_NONE;
+                    accepted_compression_types;
         }
 
         rd_kafka_buf_read_i32(rkbuf, &rk->rk_telemetry.push_interval_ms);
@@ -6869,6 +6895,9 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                      rk->rk_telemetry.push_interval_ms);
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
+        if (arraycnt < 0)
+                rd_kafka_buf_parse_fail(
+                    rkbuf, "ApiArrayCnt %" PRId32 " out of range", arraycnt);
 
         if (arraycnt) {
                 rk->rk_telemetry.requested_metrics_cnt = arraycnt;
@@ -7284,13 +7313,166 @@ static int unittest_handle_GetTelemetrySubscriptions(void) {
 }
 
 /**
+ * @brief Test that GetTelemetrySubscriptions response handling rejects
+ *        an out-of-range AcceptedCompressionTypes array count (a nullable
+ *        -1, and a count above the 1000 cap) without crashing.
+ *
+ * @returns 1 on failure, 0 on success.
+ */
+static int unittest_handle_GetTelemetrySubscriptions_bad_arraycnt(void) {
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_buf_t *rkbuf;
+
+        RD_UT_SAY(
+            "Verifying GetTelemetrySubscriptions response handling "
+            "rejects arraycnt -1");
+
+        rk  = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, NULL, 0);
+        rkb = rd_kafka_broker_add_logical(rk, "unittest");
+
+        rkbuf            = rd_kafka_buf_new(0, 0);
+        rkbuf->rkbuf_rkb = rkb;
+        rd_kafka_buf_write_i32(rkbuf, 0); /* ThrottleTime */
+        rd_kafka_buf_write_i16(rkbuf, 0); /* ErrorCode */
+
+        rd_kafka_buf_write_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
+
+        rd_kafka_buf_write_i32(rkbuf, 0); /* SubscriptionId */
+
+        /* #AcceptedCompressionTypes: nullable -1, not valid here. */
+        rd_kafka_buf_write_arraycnt(rkbuf, -1);
+
+        rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+
+        rd_kafka_handle_GetTelemetrySubscriptions(
+            rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, NULL, NULL);
+
+        RD_UT_ASSERT(rkbuf->rkbuf_err == RD_KAFKA_RESP_ERR__BAD_MSG,
+                     "Expected RD_KAFKA_RESP_ERR__BAD_MSG for arraycnt -1, "
+                     "got %s",
+                     rd_kafka_err2str(rkbuf->rkbuf_err));
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_destroy(rk);
+
+        RD_UT_SAY(
+            "Verifying GetTelemetrySubscriptions response handling "
+            "rejects arraycnt > 1000");
+
+        rk  = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, NULL, 0);
+        rkb = rd_kafka_broker_add_logical(rk, "unittest");
+
+        rkbuf            = rd_kafka_buf_new(0, 0);
+        rkbuf->rkbuf_rkb = rkb;
+        rd_kafka_buf_write_i32(rkbuf, 0); /* ThrottleTime */
+        rd_kafka_buf_write_i16(rkbuf, 0); /* ErrorCode */
+
+        rd_kafka_buf_write_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
+
+        rd_kafka_buf_write_i32(rkbuf, 0); /* SubscriptionId */
+
+        /* #AcceptedCompressionTypes: above the 1000 cap. */
+        rd_kafka_buf_write_arraycnt(rkbuf, 1001);
+
+        rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+
+        rd_kafka_handle_GetTelemetrySubscriptions(
+            rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, NULL, NULL);
+
+        RD_UT_ASSERT(rkbuf->rkbuf_err == RD_KAFKA_RESP_ERR__BAD_MSG,
+                     "Expected RD_KAFKA_RESP_ERR__BAD_MSG for arraycnt "
+                     "1001, got %s",
+                     rd_kafka_err2str(rkbuf->rkbuf_err));
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+        return 0;
+}
+
+/**
+ * @brief Reject Produce record error counts above the request's batch size.
+ */
+static int unittest_handle_Produce_record_errors(void) {
+        const int counts[] = {-1, 0, 2, 3};
+        size_t i;
+        int version;
+
+        for (version = 8; version <= 9; version++) {
+                for (i = 0; i < RD_ARRAYSIZE(counts); i++) {
+                        rd_kafka_t *rk =
+                            rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+                        rd_kafka_broker_t *rkb =
+                            rd_kafka_broker_add_logical(rk, "unittest");
+                        rd_kafka_buf_t *reply   = rd_kafka_buf_new(0, 0);
+                        rd_kafka_buf_t *request = rd_kafka_buf_new(0, 0);
+                        rd_kafka_Produce_result_t *result =
+                            rd_kafka_Produce_result_new(-1, -1);
+                        rd_kafka_resp_err_t err;
+                        rd_kafka_resp_err_t expected =
+                            counts[i] < 0 || counts[i] > 2
+                                ? RD_KAFKA_RESP_ERR__BAD_MSG
+                                : RD_KAFKA_RESP_ERR_NO_ERROR;
+                        int j;
+
+                        reply->rkbuf_rkb = rkb;
+                        if (version >= 9)
+                                reply->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+                        request->rkbuf_reqhdr.ApiVersion = version;
+                        rd_kafka_msgq_init(&request->rkbuf_batch.msgq);
+                        ut_create_msgs(&request->rkbuf_batch.msgq, 1, 2);
+
+                        rd_kafka_buf_write_arraycnt(reply, 1);
+                        rd_kafka_buf_write_str(reply, "topic", -1);
+                        rd_kafka_buf_write_arraycnt(reply, 1);
+                        rd_kafka_buf_write_i32(reply, 0);
+                        rd_kafka_buf_write_i16(reply, 0);
+                        rd_kafka_buf_write_i64(reply, 0);
+                        rd_kafka_buf_write_i64(reply, -1);
+                        rd_kafka_buf_write_i64(reply, 0);
+                        rd_kafka_buf_write_arraycnt(reply, counts[i]);
+                        for (j = 0; j < counts[i]; j++) {
+                                rd_kafka_buf_write_i32(reply, j);
+                                rd_kafka_buf_write_str(reply, NULL, 0);
+                                rd_kafka_buf_write_tags_empty(reply);
+                        }
+                        rd_kafka_buf_write_str(reply, NULL, 0);
+                        rd_kafka_buf_write_tags_empty(reply);
+                        rd_kafka_buf_write_tags_empty(reply);
+                        rd_kafka_buf_write_i32(reply, 0);
+                        rd_kafka_buf_write_tags_empty(reply);
+                        rd_slice_init_full(&reply->rkbuf_reader,
+                                           &reply->rkbuf_buf);
+
+                        err = rd_kafka_handle_Produce_parse(rkb, NULL, reply,
+                                                            request, result);
+                        rd_kafka_Produce_result_destroy(result);
+                        ut_rd_kafka_msgq_purge(&request->rkbuf_batch.msgq);
+                        rd_kafka_buf_destroy(request);
+                        rd_kafka_buf_destroy(reply);
+                        rd_kafka_destroy(rk);
+                        RD_UT_ASSERT(
+                            err == expected,
+                            "Produce v%d count %d: expected %s, got %s",
+                            version, counts[i], rd_kafka_err2str(expected),
+                            rd_kafka_err2str(err));
+                }
+        }
+        RD_UT_PASS();
+}
+
+/**
  * @brief Request/response unit tests
  */
 int unittest_request(void) {
         int fails = 0;
 
         fails += unittest_idempotent_producer();
+        fails += unittest_handle_Produce_record_errors();
         fails += unittest_handle_GetTelemetrySubscriptions();
+        fails += unittest_handle_GetTelemetrySubscriptions_bad_arraycnt();
 
         return fails;
 }

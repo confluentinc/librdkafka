@@ -104,7 +104,15 @@ int main(int argc, char **argv) {
                 return 1;
         }
 
-        /* 2. Configure libserdes with the Schema Registry URL. */
+        /* 2. Configure libserdes with the Schema Registry URL.
+         *
+         *    Note: serdes_conf_new() returns NULL if a property is rejected.
+         *    Passing that NULL on to serdes_new() is not fatal, but it is
+         *    silent: serdes_new() falls back to a default configuration with
+         *    no registry URL at all, and the mistake only surfaces later as a
+         *    confusing failure in serdes_schema_add(). Production code should
+         *    pass a real errstr buffer here instead of (NULL, 0) and check the
+         *    result before using it. */
         serdes_conf_t *sconf =
             serdes_conf_new(NULL, 0, "schema.registry.url", sr_url, NULL);
         serdes_t *serdes = serdes_new(sconf, errstr, sizeof(errstr));

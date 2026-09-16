@@ -86,9 +86,12 @@ static void do_test_no_commit_of_lost_assignment(void) {
         test_conf_set(conf, "group.id", groupid);
         /* Static group membership */
         test_conf_set(conf, "group.instance.id", "my-instance");
-        /* Cooperative rebalancing: the revoke is an incremental unassign,
-         * which clears the assignment-lost flag at the sibling site
-         * (rd_kafka_cgrp_incremental_unassign) rather than the eager one. */
+        /* Cooperative rebalancing: the revoke is an incremental unassign.
+         * The assignment-lost flag is kept set across the unassign so that the
+         * revoke-time commit of the removed partitions is skipped, and is
+         * cleared only once the removal completes
+         * (rd_kafka_cgrp_incr_unassign_done, or
+         * rd_kafka_cgrp_consumer_incr_unassign_done under KIP-848). */
         test_conf_set(conf, "partition.assignment.strategy",
                       "cooperative-sticky");
         test_conf_set(conf, "session.timeout.ms", "6000");
@@ -100,8 +103,9 @@ static void do_test_no_commit_of_lost_assignment(void) {
         test_conf_set(conf, "auto.commit.interval.ms", "60000");
 
         /* No rebalance callback: the revoke is then handled by the internal
-         * unassign, which is the path that clears the assignment-lost flag
-         * before the removed partitions are served. */
+         * unassign, which keeps the assignment-lost flag set while the removed
+         * partitions are served (so their offsets are not committed) and
+         * clears it once the removal completes. */
         c = test_create_consumer(groupid, NULL, conf, NULL);
 
         test_consumer_subscribe(c, topic);

@@ -4876,8 +4876,9 @@ rd_kafka_cgrp_incremental_assign(rd_kafka_cgrp_t *rkcg,
  *        to it.
  *
  * @remark This method does not unmark the current assignment as lost
- *         (if lost). That happens following _incr_unassign_done and
- *         a group-rejoin initiated.
+ *         (if lost). rd_kafka_cgrp_incr_unassign_done() (classic protocol) and
+ *         rd_kafka_cgrp_consumer_incr_unassign_done() (KIP-848) do that once
+ *         the removal, including its revoke-time commit, has completed.
  *
  * @returns An error object or NULL on success.
  */
@@ -4900,11 +4901,13 @@ static rd_kafka_error_t *rd_kafka_cgrp_incremental_unassign(
         }
 
         /* Note: the assignment-lost flag is intentionally NOT cleared here.
-         * A lost assignment must stay marked lost until the following rejoin
-         * applies a new assignment (assign()/incremental_assign()), so that the
-         * revoke-time auto-commit of the removed partitions is correctly
-         * skipped. Clearing it here previously let an OffsetCommit go out with
-         * an empty member id, fatally fencing a static member. */
+         * It must stay set until the removal has been served, so that the
+         * revoke-time auto-commit of the removed partitions in
+         * rd_kafka_assignment_serve_removals() is correctly skipped. Clearing
+         * it here previously let an OffsetCommit go out with an empty member
+         * id, fatally fencing a static member. The flag is cleared once the
+         * removal completes, in rd_kafka_cgrp_incr_unassign_done() or
+         * rd_kafka_cgrp_consumer_incr_unassign_done(). */
 
         return NULL;
 }
@@ -4915,6 +4918,16 @@ static rd_kafka_error_t *rd_kafka_cgrp_incremental_unassign(
  *        to the next state.
  */
 static void rd_kafka_cgrp_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
+
+        /* The incremental unassign of the (possibly lost) partitions has now
+         * completed. The revoke-time commit of the removed partitions in
+         * rd_kafka_assignment_serve_removals() has already run and was
+         * correctly skipped while the flag was set. Whatever remains in the
+         * assignment is still owned and valid, so clear the lost flag here
+         * rather than deferring it to the next (incremental_)assign(). Leaving
+         * it set would wrongly block commits, close() and unsubscribe() for a
+         * member that is back in a steady state still holding partitions. */
+        rd_kafka_cgrp_assignment_clear_lost(rkcg, "incremental unassign done");
 
         /* If this action was underway when a terminate was initiated, it will
          * be left to complete. Now that's done, unassign all partitions */
@@ -4985,6 +4998,13 @@ static void rd_kafka_cgrp_unassign_done(rd_kafka_cgrp_t *rkcg) {
                      rkcg->rkcg_group_id->str,
                      rd_kafka_cgrp_state_names[rkcg->rkcg_state],
                      rd_kafka_cgrp_join_state_names[rkcg->rkcg_join_state]);
+
+        /* The (absolute) unassign has completed. The revoke-time commit of the
+         * removed partitions in rd_kafka_assignment_serve_removals() has
+         * already run and was skipped while the assignment was lost. The
+         * assignment is now empty, so the lost flag no longer applies; clear it
+         * here rather than deferring to the next assign(). */
+        rd_kafka_cgrp_assignment_clear_lost(rkcg, "unassign done");
 
         /* Leave group, if desired. */
         rd_kafka_cgrp_leave_maybe(rkcg);
@@ -5084,7 +5104,9 @@ static rd_kafka_error_t *rd_kafka_cgrp_unassign(rd_kafka_cgrp_t *rkcg) {
         }
 
         /* Note: the assignment-lost flag is intentionally NOT cleared here,
-         * see rd_kafka_cgrp_incremental_unassign() for the rationale. */
+         * see rd_kafka_cgrp_incremental_unassign() for the rationale. The flag
+         * is cleared once the removal completes, in
+         * rd_kafka_cgrp_unassign_done(). */
 
         return NULL;
 }
@@ -7045,6 +7067,14 @@ rd_kafka_cgrp_consumer_subscribe(rd_kafka_cgrp_t *rkcg,
  *        to the next state.
  */
 static void rd_kafka_cgrp_consumer_incr_unassign_done(rd_kafka_cgrp_t *rkcg) {
+
+        /* The incremental unassign of the (possibly lost) partitions has now
+         * completed, including the revoke-time commit of the removed
+         * partitions in rd_kafka_assignment_serve_removals() (skipped when
+         * the assignment was lost). The assignment is no longer lost from the
+         * application's point of view, see rd_kafka_cgrp_incr_unassign_done()
+         * for the classic protocol counterpart. */
+        rd_kafka_cgrp_assignment_clear_lost(rkcg, "incremental unassign done");
 
         /* If this action was underway when a terminate was initiated, it will
          * be left to complete. Now that's done, unassign all partitions */

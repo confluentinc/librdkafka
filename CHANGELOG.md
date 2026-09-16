@@ -65,8 +65,14 @@ builds already got from 8.20.0).
   commit went out with an empty member id and the previous generation, which a
   broker rejects with `UNKNOWN_MEMBER_ID`, or, for a static member
   (`group.instance.id` set), with the fatal `FENCED_INSTANCE_ID` that stops the
-  consumer. The flag is now kept set until the following rejoin applies a new
-  assignment, so the offsets of a lost assignment are never committed.
+  consumer. The flag is now kept set until the removal has been served and the
+  unassign completes (`rd_kafka_cgrp_unassign_done()`,
+  `rd_kafka_cgrp_incr_unassign_done()` and, for the KIP-848 consumer protocol,
+  `rd_kafka_cgrp_consumer_incr_unassign_done()`), so the offsets of a lost
+  assignment are never committed while the flag is still cleared as soon as
+  the revoke is done, keeping commits, `close()` and `unsubscribe()` working
+  for a member that retains other partitions, and `rd_kafka_assignment_lost()`
+  reporting false again by the time the next assignment is delivered.
   Happening since 1.6.0.
 
 ### Producer fixes

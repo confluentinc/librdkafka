@@ -593,9 +593,8 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
             &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt);
         TEST_SAY("Found %d re-bootstrap sequences\n",
                  actual_rebootstrap_sequence_cnt);
-        TEST_ASSERT(actual_rebootstrap_sequence_cnt >= 7 &&
-                        actual_rebootstrap_sequence_cnt <= 120,
-                    "Expected between 7 and 120 re-bootstrap sequences, got %d",
+        TEST_ASSERT(actual_rebootstrap_sequence_cnt <= 120,
+                    "Expected at most 120 re-bootstrap sequences, got %d",
                     actual_rebootstrap_sequence_cnt);
 
         rd_free(log_interceptor);

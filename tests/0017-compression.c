@@ -38,6 +38,80 @@
  */
 
 
+#if WITH_ZSTD
+/**
+ * @brief Verify that large, highly compressible zstd messages can be
+ *        consumed when their decompressed size is just below
+ *        receive.message.max.bytes.
+ *
+ * librdkafka only states the decompressed size in the zstd frame header
+ * when built with a static libzstd, so the consumer typically has to guess
+ * the decompressed size from the compressed size and grow the output
+ * buffer as it goes. The buffer growth must be clamped to
+ * receive.message.max.bytes, otherwise a message whose decompressed size
+ * falls between two growth steps and the configured limit can never be
+ * decompressed, permanently stalling the consumer (#5260).
+ *
+ * The messages below compress to a few hundred bytes, so the initial
+ * guess is several orders of magnitude too small and many growth steps
+ * are needed to reach the ~950 KB decompressed size.
+ */
+static void do_test_zstd_large_message(void) {
+        const int msg_cnt       = 3;
+        const size_t msg_size   = 950000;
+        const int32_t partition = 0;
+        rd_kafka_t *rk_p, *rk_c;
+        rd_kafka_topic_t *rkt_p, *rkt_c;
+        rd_kafka_conf_t *conf;
+        const char *topic;
+        uint64_t testid;
+
+        SUB_TEST("%d messages of %" PRIusz " bytes", msg_cnt, msg_size);
+
+        testid = test_id_generate();
+        topic  = test_mk_topic_name("0017_zstd_large", 1);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "compression.codec", "zstd");
+        /* Allow the large messages through the producer */
+        test_conf_set(conf, "message.max.bytes", "10000000");
+        rk_p  = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt_p = rd_kafka_topic_new(rk_p, topic, NULL);
+        TEST_ASSERT(rkt_p, "%s", rd_kafka_err2str(rd_kafka_last_error()));
+
+        test_wait_topic_exists(rk_p, topic, 5000);
+
+        test_produce_msgs(rk_p, rkt_p, testid, partition, 0, msg_cnt, NULL,
+                          msg_size);
+
+        rd_kafka_topic_destroy(rkt_p);
+        rd_kafka_destroy(rk_p);
+
+        /* Consume with receive.message.max.bytes just above the
+         * decompressed message size. */
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "fetch.max.bytes", "1000000");
+        test_conf_set(conf, "max.partition.fetch.bytes", "1000000");
+        test_conf_set(conf, "receive.message.max.bytes", "1000512");
+        rk_c = test_create_consumer(NULL, NULL, conf, NULL);
+
+        rkt_c = rd_kafka_topic_new(rk_c, topic, NULL);
+        TEST_ASSERT(rkt_c, "%s", rd_kafka_err2str(rd_kafka_last_error()));
+
+        test_consumer_start("zstd large", rkt_c, partition,
+                            RD_KAFKA_OFFSET_BEGINNING);
+        test_consume_msgs("zstd large", rkt_c, testid, partition, TEST_NO_SEEK,
+                          0, msg_cnt, 1 /* parse format */);
+        test_consumer_stop("zstd large", rkt_c, partition);
+
+        rd_kafka_topic_destroy(rkt_c);
+        rd_kafka_destroy(rk_c);
+
+        SUB_TEST_PASS();
+}
+#endif /* WITH_ZSTD */
+
+
 int main_0017_compression(int argc, char **argv) {
         rd_kafka_t *rk_p, *rk_c;
         const int msg_cnt = 1000;
@@ -135,6 +209,9 @@ int main_0017_compression(int argc, char **argv) {
         for (i = 0; codecs[i] != NULL; i++)
                 rd_free(topics[i]);
 
+#if WITH_ZSTD
+        do_test_zstd_large_message();
+#endif
 
         return 0;
 }

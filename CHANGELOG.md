@@ -1,3 +1,41 @@
+# librdkafka v2.15.2
+
+librdkafka v2.15.2 is a maintenance release:
+
+* zstd decompression in the consumer now grows its output buffer up to
+  `receive.message.max.bytes`, fixing messages that could never be
+  decompressed (#5260).
+* zstd decompression in the consumer now uses the streaming API, avoiding
+  repeated full decompressions when the decompressed size is not stated in
+  the frame header (#5595).
+
+
+## Enhancements
+* zstd decompression in the consumer now uses the zstd streaming API and
+  grows its output buffer in place, instead of discarding the output and
+  decompressing the message from scratch on every size miss. The
+  decompression context is also reused for the lifetime of the broker
+  connection (#5595).
+
+
+## Fixes
+
+### Consumer fixes
+
+* Issues: #5260.
+  zstd messages whose decompressed size fell between the last output buffer
+  growth step and `receive.message.max.bytes` could never be decompressed,
+  failing with `BAD_COMPRESSION` and permanently stalling the consumer on
+  that partition. The decompression buffer grew by a factor of three per
+  attempt, so it could jump from below the configured limit to above it
+  without ever trying a size in between. The buffer growth is now clamped to
+  `receive.message.max.bytes`, so the limit is always reachable.
+  Note that messages produced by librdkafka only state their decompressed
+  size in the zstd frame header when built against a static libzstd, so
+  consumers commonly have to guess the size and grow the buffer.
+  Happening since 1.0.0 (#5260).
+
+
 # librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:

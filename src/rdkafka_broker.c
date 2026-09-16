@@ -73,6 +73,9 @@
 #include "rdcrc32.h"
 #include "rdrand.h"
 #include "rdkafka_lz4.h"
+#if WITH_ZSTD
+#include "rdkafka_zstd.h"
+#endif
 #if WITH_SSL
 #include <openssl/err.h>
 #endif
@@ -695,6 +698,11 @@ void rd_kafka_broker_fail(rd_kafka_broker_t *rkb,
                 rd_kafka_buf_destroy(rkb->rkb_recv_buf);
                 rkb->rkb_recv_buf = NULL;
         }
+
+#if WITH_ZSTD
+        /* The cached zstd decompression context is per connection */
+        rd_kafka_zstd_dctx_destroy(rkb);
+#endif
 
         rkb->rkb_reauth_in_progress = rd_false;
 
@@ -5205,6 +5213,11 @@ void rd_kafka_broker_destroy_final(rd_kafka_broker_t *rkb) {
 
         if (rkb->rkb_recv_buf)
                 rd_kafka_buf_destroy(rkb->rkb_recv_buf);
+
+#if WITH_ZSTD
+        /* Normally already freed by rd_kafka_broker_fail() */
+        rd_kafka_zstd_dctx_destroy(rkb);
+#endif
 
         if (rkb->rkb_rsal)
                 rd_sockaddr_list_destroy(rkb->rkb_rsal);

@@ -32,13 +32,27 @@
 /**
  * @brief Decompress ZSTD framed data.
  *
- * @returns allocated buffer in \p *outbuf, length in \p *outlenp on success.
+ * The output buffer is grown as needed while decompressing, up to
+ * \c receive.message.max.bytes. Each growth increments the broker's
+ * \c zbuf_grow counter.
+ *
+ * @returns allocated buffer in \p *outbuf, length in \p *outlenp.
+ *
+ * @locality any thread, but \p rkb 's cached decompression context is only
+ *           used when called from its broker thread.
  */
 rd_kafka_resp_err_t rd_kafka_zstd_decompress(rd_kafka_broker_t *rkb,
                                              char *inbuf,
                                              size_t inlen,
                                              void **outbuf,
                                              size_t *outlenp);
+
+/**
+ * @brief Free the broker's cached ZSTD decompression context, if any.
+ *
+ * @locality broker thread
+ */
+void rd_kafka_zstd_dctx_destroy(rd_kafka_broker_t *rkb);
 
 /**
  * Allocate space for \p *outbuf and compress all \p iovlen buffers in \p iov.

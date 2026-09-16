@@ -324,6 +324,28 @@ struct rd_kafka_broker_s { /* rd_kafka_broker_t */
 
         rd_kafka_buf_t *rkb_recv_buf;
 
+#if WITH_ZSTD
+        /** Cached zstd decompression context (ZSTD_DStream).
+         *
+         *  Lazily created by rd_kafka_zstd_decompress() on the first
+         *  decompression and reused for the remainder of the connection,
+         *  avoiding a per-batch context (and decompression window)
+         *  allocation.
+         *
+         *  Freed on connection teardown (rd_kafka_broker_fail()) and,
+         *  defensively, in rd_kafka_broker_destroy_final().
+         *
+         *  Declared as an opaque pointer to keep <zstd.h> out of this
+         *  header: zstd.h has
+         *  `typedef struct ZSTD_DCtx_s ZSTD_DCtx; typedef ZSTD_DCtx
+         *  ZSTD_DStream;`.
+         *
+         *  @locality broker thread (only cached when the caller runs on
+         *            this broker's thread, see rd_kafka_zstd_decompress())
+         */
+        struct ZSTD_DCtx_s *rkb_zstd_dctx;
+#endif
+
         int rkb_max_inflight; /* Maximum number of in-flight
                                * requests to broker.
                                * Compared to rkb_waitresps length.*/

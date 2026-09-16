@@ -440,6 +440,9 @@ extern int unittest_telemetry_decode(void);
 #if WITH_SSL
 extern int unittest_ssl(void);
 #endif
+#if WITH_ZSTD
+extern int unittest_zstd(void);
+#endif
 
 int rd_unittest(void) {
         int fails = 0;
@@ -495,6 +498,9 @@ int rd_unittest(void) {
             {"feature", unittest_feature},
 #if WITH_SSL
             {"ssl", unittest_ssl},
+#endif
+#if WITH_ZSTD
+            {"zstd", unittest_zstd},
 #endif
             {NULL}};
         int i;

@@ -180,6 +180,12 @@ rd_kafka_mock_cgrp_classic_sync_done(rd_kafka_mock_cgrp_classic_t *mcgrp,
                                   RD_KAFKAP_SyncGroup);
 
                         rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+                        if (resp->rkbuf_reqhdr.ApiVersion >= 5) {
+                                rd_kafka_buf_write_kstr(
+                                    resp, NULL); /* ProtocolType */
+                                rd_kafka_buf_write_kstr(
+                                    resp, NULL); /* ProtocolName */
+                        }
                         /* MemberState */
                         rd_kafka_buf_write_kbytes(
                             resp, !err ? member->assignment : NULL);
@@ -355,10 +361,12 @@ rd_kafka_mock_cgrp_classic_elect_leader(rd_kafka_mock_cgrp_classic_t *mcgrp) {
 
                 rd_kafka_buf_write_i16(resp, 0); /* ErrorCode */
                 rd_kafka_buf_write_i32(resp, mcgrp->generation_id);
+                if (resp->rkbuf_reqhdr.ApiVersion >= 7)
+                        rd_kafka_buf_write_kstr(resp, NULL); /* ProtocolType */
                 rd_kafka_buf_write_str(resp, mcgrp->protocol_name, -1);
                 rd_kafka_buf_write_str(resp, mcgrp->leader->id, -1);
                 rd_kafka_buf_write_str(resp, member->id, -1);
-                rd_kafka_buf_write_i32(resp, member_cnt);
+                rd_kafka_buf_write_arraycnt(resp, member_cnt);
 
                 /* Send full member list to leader */
                 if (member_cnt > 0) {
@@ -375,6 +383,8 @@ rd_kafka_mock_cgrp_classic_elect_leader(rd_kafka_mock_cgrp_classic_t *mcgrp) {
 
                                 rd_kafka_buf_write_kbytes(
                                     resp, member2->protos[0].metadata);
+                                rd_kafka_buf_write_tags_empty(
+                                    resp); /* Member tags */
                         }
                 }
 

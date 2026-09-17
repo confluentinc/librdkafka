@@ -3828,6 +3828,59 @@ do_test_txn_offset_commit_doesnt_retry_too_quickly(rd_bool_t times_out) {
 }
 
 
+/**
+ * @brief Verify that a full transaction (AddPartitionsToTxn,
+ *        AddOffsetsToTxn, EndTxn) completes successfully when the mock
+ *        transaction coordinator only accepts the raised protocol version
+ *        ceiling (v3, the first KIP-482 flexible version) for those three
+ *        APIs, proving librdkafka actually emits, and can parse the
+ *        response of, that exact version end-to-end.
+ */
+static void do_test_txn_flexver(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_topic_partition_list_t *offsets;
+        rd_kafka_consumer_group_metadata_t *cgmetadata;
+        const char *groupid = "myGroupId";
+        const char *txnid   = "flexverTxnId";
+
+        SUB_TEST_QUICK();
+
+        rk = create_txn_producer(&mcluster, txnid, 3, NULL);
+
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_AddPartitionsToTxn, 3, 3));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_AddOffsetsToTxn, 3, 3));
+        TEST_CALL_ERR__(
+            rd_kafka_mock_set_apiversion(mcluster, RD_KAFKAP_EndTxn, 3, 3));
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 5000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        TEST_CALL_ERR__(rd_kafka_producev(
+            rk, RD_KAFKA_V_TOPIC("mytopic"), RD_KAFKA_V_PARTITION(0),
+            RD_KAFKA_V_VALUE("hi", 2), RD_KAFKA_V_END));
+
+        offsets = rd_kafka_topic_partition_list_new(1);
+        rd_kafka_topic_partition_list_add(offsets, "srctopic4", 0)->offset =
+            123;
+
+        cgmetadata = rd_kafka_consumer_group_metadata_new(groupid);
+        TEST_CALL_ERROR__(
+            rd_kafka_send_offsets_to_transaction(rk, offsets, cgmetadata, -1));
+        rd_kafka_consumer_group_metadata_destroy(cgmetadata);
+        rd_kafka_topic_partition_list_destroy(offsets);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, -1));
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
 int main_0105_transactions_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -3844,6 +3897,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
 
         do_test_txn_slow_reinit(rd_false);
         do_test_txn_slow_reinit(rd_true);
+
+        do_test_txn_flexver();
 
         /* Just do a subset of tests in quick mode */
         if (test_quick)

@@ -1599,7 +1599,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5)
                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
         rd_kafka_buf_read_str(rkbuf, &ProtocolType);
-        rd_kafka_buf_read_i32(rkbuf, &ProtocolCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &ProtocolCnt, 1000);
 
         if (ProtocolCnt > 1000) {
                 rd_kafka_dbg(mcluster->rk, MOCK, "MOCK",
@@ -1616,6 +1616,7 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
                 rd_kafkap_bytes_t Metadata;
                 rd_kafka_buf_read_str(rkbuf, &ProtocolName);
                 rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
+                rd_kafka_buf_skip_tags(rkbuf);
                 protos[i].name     = rd_kafkap_str_copy(&ProtocolName);
                 protos[i].metadata = rd_kafkap_bytes_copy(&Metadata);
         }
@@ -1662,12 +1663,14 @@ static int rd_kafka_mock_handle_JoinGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_mock_cgrp_classic_protos_destroy(protos, ProtocolCnt);
 
         /* Error case */
-        rd_kafka_buf_write_i16(resp, err);      /* ErrorCode */
-        rd_kafka_buf_write_i32(resp, -1);       /* GenerationId */
-        rd_kafka_buf_write_str(resp, NULL, -1); /* ProtocolName */
-        rd_kafka_buf_write_str(resp, NULL, -1); /* LeaderId */
-        rd_kafka_buf_write_kstr(resp, NULL);    /* MemberId */
-        rd_kafka_buf_write_i32(resp, 0);        /* MemberCnt */
+        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        rd_kafka_buf_write_i32(resp, -1);  /* GenerationId */
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 7)
+                rd_kafka_buf_write_kstr(resp, NULL); /* ProtocolType */
+        rd_kafka_buf_write_str(resp, NULL, -1);      /* ProtocolName */
+        rd_kafka_buf_write_str(resp, NULL, -1);      /* LeaderId */
+        rd_kafka_buf_write_kstr(resp, NULL);         /* MemberId */
+        rd_kafka_buf_write_arraycnt(resp, 0);        /* MemberCnt */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 
@@ -1765,12 +1768,18 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
         const rd_bool_t log_decode_errors = rd_true;
         rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
         rd_kafkap_str_t GroupId, MemberId;
-        rd_kafka_resp_err_t err;
-        rd_kafka_mock_cgrp_classic_t *mcgrp;
-        rd_kafka_mock_cgrp_classic_member_t *member = NULL;
+        rd_kafka_resp_err_t err, group_err;
+        rd_kafka_mock_cgrp_classic_t *mcgrp = NULL;
+        rd_bool_t is_batch = rkbuf->rkbuf_reqhdr.ApiVersion >= 3;
+        int32_t member_cnt = 1;
+        int32_t i;
 
         rd_kafka_buf_read_str(rkbuf, &GroupId);
-        rd_kafka_buf_read_str(rkbuf, &MemberId);
+
+        if (!is_batch)
+                rd_kafka_buf_read_str(rkbuf, &MemberId);
+        else
+                rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, 1000000);
 
         /*
          * Construct response
@@ -1782,38 +1791,79 @@ static int rd_kafka_mock_handle_LeaveGroup(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Inject error, if any */
-        err = rd_kafka_mock_next_request_error(mconn, resp);
-        if (!err) {
+        group_err = rd_kafka_mock_next_request_error(mconn, resp);
+        if (!group_err) {
                 mrkb = rd_kafka_mock_cluster_get_coord(
                     mcluster, RD_KAFKA_COORD_GROUP, &GroupId);
 
                 if (!mrkb)
-                        err = RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
+                        group_err = RD_KAFKA_RESP_ERR_COORDINATOR_NOT_AVAILABLE;
                 else if (mrkb != mconn->broker)
-                        err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
+                        group_err = RD_KAFKA_RESP_ERR_NOT_COORDINATOR;
         }
 
-        if (!err) {
+        if (!group_err) {
                 mcgrp = rd_kafka_mock_cgrp_classic_find(mcluster, &GroupId);
                 if (!mcgrp)
-                        err = RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND;
+                        group_err = RD_KAFKA_RESP_ERR_GROUP_ID_NOT_FOUND;
         }
 
-        if (!err) {
-                member =
-                    rd_kafka_mock_cgrp_classic_member_find(mcgrp, &MemberId);
-                if (!member)
-                        err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+        if (!is_batch) {
+                rd_kafka_mock_cgrp_classic_member_t *member = NULL;
+
+                err = group_err;
+                if (!err) {
+                        member = rd_kafka_mock_cgrp_classic_member_find(
+                            mcgrp, &MemberId);
+                        if (!member)
+                                err = RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                }
+
+                if (!err)
+                        err = rd_kafka_mock_cgrp_classic_check_state(
+                            mcgrp, member, rkbuf, -1);
+
+                if (!err)
+                        rd_kafka_mock_cgrp_classic_member_leave(mcgrp, member);
+
+                rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        } else {
+                rd_kafka_buf_write_i16(resp, group_err); /* ErrorCode */
+
+                /* #Members */
+                rd_kafka_buf_write_arraycnt(resp, member_cnt);
+
+                for (i = 0; i < member_cnt; i++) {
+                        rd_kafkap_str_t GroupInstanceId;
+                        rd_kafka_mock_cgrp_classic_member_t *member = NULL;
+
+                        rd_kafka_buf_read_str(rkbuf, &MemberId);
+                        rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
+                        rd_kafka_buf_skip_tags(rkbuf);
+
+                        err = group_err;
+                        if (!err) {
+                                member = rd_kafka_mock_cgrp_classic_member_find(
+                                    mcgrp, &MemberId);
+                                if (!member)
+                                        err =
+                                            RD_KAFKA_RESP_ERR_UNKNOWN_MEMBER_ID;
+                        }
+
+                        if (!err)
+                                err = rd_kafka_mock_cgrp_classic_check_state(
+                                    mcgrp, member, rkbuf, -1);
+
+                        if (!err)
+                                rd_kafka_mock_cgrp_classic_member_leave(mcgrp,
+                                                                        member);
+
+                        rd_kafka_buf_write_kstr(resp, &MemberId);
+                        rd_kafka_buf_write_kstr(resp, &GroupInstanceId);
+                        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+                        rd_kafka_buf_write_tags_empty(resp);
+                }
         }
-
-        if (!err)
-                err = rd_kafka_mock_cgrp_classic_check_state(mcgrp, member,
-                                                             rkbuf, -1);
-
-        if (!err)
-                rd_kafka_mock_cgrp_classic_member_leave(mcgrp, member);
-
-        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 
@@ -1848,7 +1898,12 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
         rd_kafka_buf_read_str(rkbuf, &MemberId);
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3)
                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
-        rd_kafka_buf_read_i32(rkbuf, &AssignmentCnt);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5) {
+                rd_kafkap_str_t ProtocolType, ProtocolName;
+                rd_kafka_buf_read_str(rkbuf, &ProtocolType);
+                rd_kafka_buf_read_str(rkbuf, &ProtocolName);
+        }
+        rd_kafka_buf_read_arraycnt(rkbuf, &AssignmentCnt, 100000);
 
         /*
          * Construct response
@@ -1908,6 +1963,7 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
 
                 rd_kafka_buf_read_str(rkbuf, &MemberId2);
                 rd_kafka_buf_read_kbytes(rkbuf, &Metadata);
+                rd_kafka_buf_skip_tags(rkbuf);
 
                 if (err)
                         continue;
@@ -1932,8 +1988,12 @@ static int rd_kafka_mock_handle_SyncGroup(rd_kafka_mock_connection_t *mconn,
         }
 
         /* Error case */
-        rd_kafka_buf_write_i16(resp, err);        /* ErrorCode */
-        rd_kafka_buf_write_bytes(resp, NULL, -1); /* MemberState */
+        rd_kafka_buf_write_i16(resp, err); /* ErrorCode */
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 5) {
+                rd_kafka_buf_write_kstr(resp, NULL); /* ProtocolType */
+                rd_kafka_buf_write_kstr(resp, NULL); /* ProtocolName */
+        }
+        rd_kafka_buf_write_kbytes(resp, NULL); /* MemberState */
 
         rd_kafka_mock_connection_send_response(mconn, resp);
 
@@ -2174,10 +2234,10 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
         /* Epoch */
         rd_kafka_buf_read_i16(rkbuf, &pid.epoch);
         /* #Topics */
-        rd_kafka_buf_read_i32(rkbuf, &TopicsCnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, 100000);
 
         /* Response: #Results */
-        rd_kafka_buf_write_i32(resp, TopicsCnt);
+        rd_kafka_buf_write_arraycnt(resp, TopicsCnt);
 
         /* Inject error */
         all_err = rd_kafka_mock_next_request_error(mconn, resp);
@@ -2211,9 +2271,9 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
                 rd_kafka_buf_write_kstr(resp, &Topic);
 
                 /* #Partitions */
-                rd_kafka_buf_read_i32(rkbuf, &PartsCnt);
+                rd_kafka_buf_read_arraycnt(rkbuf, &PartsCnt, 100000);
                 /* Response: #Partitions */
-                rd_kafka_buf_write_i32(resp, PartsCnt);
+                rd_kafka_buf_write_arraycnt(resp, PartsCnt);
 
                 mtopic = rd_kafka_mock_topic_find_by_kstr(mcluster, &Topic);
 
@@ -2244,7 +2304,11 @@ rd_kafka_mock_handle_AddPartitionsToTxn(rd_kafka_mock_connection_t *mconn,
 
                         /* Response: ErrorCode */
                         rd_kafka_buf_write_i16(resp, err);
+                        rd_kafka_buf_write_tags_empty(resp); /* Result tags */
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);       /* Topic tags */
+                rd_kafka_buf_write_tags_empty(resp); /* Result-topic tags */
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -2582,6 +2646,12 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
         /* Response: ThrottleTimeMs */
         rd_kafka_buf_write_i32(resp, 0);
 
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
+                int32_t ReplicaId;
+                /* ReplicaId */
+                rd_kafka_buf_read_i32(rkbuf, &ReplicaId);
+        }
+
         /* #Topics */
         rd_kafka_buf_read_arraycnt(rkbuf, &TopicsCnt, RD_KAFKAP_TOPICS_MAX);
 
@@ -2622,6 +2692,7 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_read_i32(rkbuf, &CurrentLeaderEpoch);
                         /* LeaderEpoch */
                         rd_kafka_buf_read_i32(rkbuf, &LeaderEpoch);
+                        rd_kafka_buf_skip_tags(rkbuf); /* Partition tags */
 
                         mpart = rd_kafka_mock_partition_find(mtopic, Partition);
                         if (!err && !mpart)
@@ -2646,7 +2717,12 @@ rd_kafka_mock_handle_OffsetForLeaderEpoch(rd_kafka_mock_connection_t *mconn,
                         rd_kafka_buf_write_i32(resp, LeaderEpoch);
                         /* Response: Partition */
                         rd_kafka_buf_write_i64(resp, EndOffset);
+                        rd_kafka_buf_write_tags_empty(
+                            resp); /* Partition-result tags */
                 }
+
+                rd_kafka_buf_skip_tags(rkbuf);       /* Topic tags */
+                rd_kafka_buf_write_tags_empty(resp); /* Topic-result tags */
         }
 
         rd_kafka_mock_connection_send_response(mconn, resp);
@@ -5147,19 +5223,19 @@ const struct rd_kafka_mock_api_handler
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,
                                        rd_kafka_mock_handle_InitProducerId},
-        [RD_KAFKAP_JoinGroup]       = {0, 6, 6, rd_kafka_mock_handle_JoinGroup},
+        [RD_KAFKAP_JoinGroup]       = {0, 7, 6, rd_kafka_mock_handle_JoinGroup},
         [RD_KAFKAP_Heartbeat]       = {0, 5, 4, rd_kafka_mock_handle_Heartbeat},
         [RD_KAFKAP_LeaveGroup] = {0, 4, 4, rd_kafka_mock_handle_LeaveGroup},
-        [RD_KAFKAP_SyncGroup]  = {0, 4, 4, rd_kafka_mock_handle_SyncGroup},
+        [RD_KAFKAP_SyncGroup]  = {0, 5, 4, rd_kafka_mock_handle_SyncGroup},
         [RD_KAFKAP_AddPartitionsToTxn] =
-            {0, 1, -1, rd_kafka_mock_handle_AddPartitionsToTxn},
-        [RD_KAFKAP_AddOffsetsToTxn] = {0, 1, -1,
+            {0, 3, 3, rd_kafka_mock_handle_AddPartitionsToTxn},
+        [RD_KAFKAP_AddOffsetsToTxn] = {0, 3, 3,
                                        rd_kafka_mock_handle_AddOffsetsToTxn},
         [RD_KAFKAP_TxnOffsetCommit] = {0, 3, 3,
                                        rd_kafka_mock_handle_TxnOffsetCommit},
-        [RD_KAFKAP_EndTxn]          = {0, 1, -1, rd_kafka_mock_handle_EndTxn},
+        [RD_KAFKAP_EndTxn]          = {0, 3, 3, rd_kafka_mock_handle_EndTxn},
         [RD_KAFKAP_OffsetForLeaderEpoch] =
-            {2, 2, -1, rd_kafka_mock_handle_OffsetForLeaderEpoch},
+            {2, 4, 4, rd_kafka_mock_handle_OffsetForLeaderEpoch},
         [RD_KAFKAP_ConsumerGroupHeartbeat] =
             {1, 1, 1, rd_kafka_mock_handle_ConsumerGroupHeartbeat},
         [RD_KAFKAP_ShareGroupHeartbeat] =

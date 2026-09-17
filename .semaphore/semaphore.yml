@@ -308,6 +308,8 @@ blocks:
 
   - name: 'Linux x64: release artifact docker builds'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:
@@ -350,6 +352,8 @@ blocks:
 
   - name: 'Linux arm64: release artifact docker builds'
     dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
     task:
       agent:
         machine:

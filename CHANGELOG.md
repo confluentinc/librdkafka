@@ -1,3 +1,29 @@
+# librdkafka v2.16.0  (unreleased)
+
+librdkafka v2.16.0 is a feature release:
+
+* Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
+
+
+## Upgrade considerations
+
+* Admin requests in flight on a decommissioned broker now fail with
+`RD_KAFKA_RESP_ERR__TRANSPORT` instead of `RD_KAFKA_RESP_ERR__DESTROY_BROKER`, so
+callers retry them instead of treating them as a hard failure.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5560.
+  Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected.
+  The client kept asking the very brokers that reported its metadata as stale. Learned brokers are now decommissioned when a re-bootstrap sequence starts, so only the bootstrap servers are used until a Metadata response rebuilds the broker list. Queued messages are handed back to their partitions and re-sent once new leaders are known. Admin requests in flight on a decommissioned broker now fail with `RD_KAFKA_RESP_ERR__TRANSPORT` (previously
+  `RD_KAFKA_RESP_ERR__DESTROY_BROKER`) and should be retried.
+  Happening since 2.11.0 (#5560).
+
+
+
 # librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:

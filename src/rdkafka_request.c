@@ -2703,6 +2703,15 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                 goto done;
         }
 
+        /* A Metadata response from a broker that is being decommissioned,
+         * e.g. a learned broker taken down by a re-bootstrap sequence, must
+         * not rebuild the broker list: it comes from a source the client
+         * just stopped trusting and the bootstrap brokers haven't been
+         * queried yet. Fail it as an in-flight request to that broker would
+         * have been, the refresh action then reaches a usable broker. */
+        if (!err && rd_kafka_broker_termination_in_progress(rkb))
+                err = RD_KAFKA_RESP_ERR__DESTROY_BROKER;
+
         if (err)
                 goto err;
 

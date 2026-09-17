@@ -37,6 +37,10 @@ static rd_kafka_t *c1, *c2;
 
 static int rebalances = 0;
 
+/* Set right before c2 is closed, so that the rebalance callback can tell the
+ * close-triggered revocation apart from an ordinary one. */
+static rd_bool_t c2_closing = rd_false;
+
 static void rebalance_cb(rd_kafka_t *rk,
                          rd_kafka_resp_err_t err,
                          rd_kafka_topic_partition_list_t *parts,
@@ -60,17 +64,27 @@ static void rebalance_cb(rd_kafka_t *rk,
                 if (rk == c1)
                         return;
 
-                /* Give the closing consumer some time to handle the
-                 * unassignment and leave so that the coming commit fails. */
+                /* Only c2's close-triggered revocation must reach the commit
+                 * below. In the `consumer` protocol all assignors are
+                 * cooperative, so the coordinator may revoke a subset of c2's
+                 * partitions while c2 is still a live member, for instance to
+                 * hand them over to c1 when the initial assignment was
+                 * uneven. A commit from a live member is legitimate and
+                 * succeeds, which would fail the assertion below for the
+                 * wrong reason. */
+                if (!c2_closing)
+                        return;
+
+                /* Give the closing consumer time to complete the unassignment
+                 * and leave the group, so that the coming commit fails. */
                 rd_sleep(5);
 
-                /* Committing after unassign will trigger an
-                 * Illegal generation error from the broker, which would
-                 * previously cause the cgrp to not properly transition
-                 * the next assigned state to fetching.
-                 * The closing consumer's commit is denied by the consumer
-                 * since it will have started to shut down after the assign
-                 * call. */
+                /* By now the cgrp has left the group and terminated, so this
+                 * commit is denied locally with _DESTROY and never reaches
+                 * the broker. What this test guards is that a failed commit
+                 * on revoke doesn't leave the remaining consumer's cgrp
+                 * unable to transition its next assignment to fetching
+                 * (issue #2933). */
                 TEST_SAY("%s: Committing\n", rd_kafka_name(rk));
                 commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/);
                 TEST_SAY("%s: Commit result: %s\n", rd_kafka_name(rk),
@@ -133,6 +147,7 @@ int main_0118_commit_rebalance(int argc, char **argv) {
         }
 
         /* Trigger rebalance */
+        c2_closing = rd_true;
         test_consumer_close(c2);
         rd_kafka_destroy(c2);
 

@@ -1,6 +1,6 @@
-# librdkafka v2.x.x
+# librdkafka v2.16.0 (Unreleased)
 
-librdkafka v2.x.x is a feature release:
+librdkafka v2.16.0 is a feature release:
 
 
 ## Security considerations

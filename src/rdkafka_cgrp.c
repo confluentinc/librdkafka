@@ -720,6 +720,17 @@ static void rd_kafka_cgrp_handle_FindCoordinator(rd_kafka_t *rk,
         char *errstr                        = NULL;
         int actions;
 
+        /* A response from a broker that is being decommissioned, e.g. a
+         * learned broker taken down by a re-bootstrap sequence, carries
+         * information from a source the client just stopped trusting.
+         * Applying it would re-create the coordinator as a learned broker
+         * and the next lookups would prefer it over the bootstrap brokers,
+         * defeating the re-bootstrap. Fail it as an in-flight request to
+         * that broker would have been, so that the retry reaches a
+         * usable broker. */
+        if (!err && rd_kafka_broker_termination_in_progress(rkb))
+                err = RD_KAFKA_RESP_ERR__DESTROY_BROKER;
+
         if (likely(!(ErrorCode = err))) {
                 if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
                         rd_kafka_buf_read_throttle_time(rkbuf);

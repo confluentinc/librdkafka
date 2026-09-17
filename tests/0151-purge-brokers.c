@@ -485,6 +485,34 @@ static void do_test_remove_then_add(void) {
 static rd_atomic32_t
     do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt;
 
+static rd_atomic32_t
+    do_test_down_then_up_no_rebootstrap_loop_all_brokers_down_cnt;
+
+/** Duration in seconds the only broker is kept down. */
+static int do_test_down_then_up_no_rebootstrap_loop_outage_s;
+
+/**
+ * @brief Error callback that counts the `ALL_BROKERS_DOWN` errors
+ *        reported to the application.
+ */
+static void
+do_test_down_then_up_no_rebootstrap_loop_error_cb(rd_kafka_t *rk,
+                                                  int err,
+                                                  const char *reason,
+                                                  void *opaque) {
+        if (err == RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN) {
+                rd_atomic32_add(
+                    &do_test_down_then_up_no_rebootstrap_loop_all_brokers_down_cnt,
+                    1);
+                TEST_SAY("Received ALL_BROKERS_DOWN: %s\n", reason);
+        } else if (err != RD_KAFKA_RESP_ERR__TRANSPORT) {
+                /* Connection failures are expected while the broker is down,
+                 * anything else isn't. */
+                TEST_FAIL("Unexpected error: %s: %s", rd_kafka_err2name(err),
+                          reason);
+        }
+}
+
 /**
  * @brief Log callback that counts numer of rebootstrap sequences received.
  */
@@ -508,9 +536,13 @@ do_test_down_then_up_no_rebootstrap_loop_edit_configuration_cb(
     rd_kafka_conf_t *conf) {
         const char *debug_contexts[2] = {"generic", NULL};
 
+        /* Avoid it being changed through test.conf */
+        test_conf_set(conf, "reconnect.backoff.max.ms", "10000");
         log_interceptor = test_conf_set_log_interceptor(
             conf, do_test_down_then_up_no_rebootstrap_loop_log_cb,
             debug_contexts);
+        rd_kafka_conf_set_error_cb(
+            conf, do_test_down_then_up_no_rebootstrap_loop_error_cb);
         return RD_KAFKA_PRODUCER;
 }
 
@@ -524,14 +556,23 @@ do_test_down_then_up_no_rebootstrap_loop_request_metadata_cb(int action) {
 }
 
 /**
- * @brief Await 5s after setting up the broker down
+ * @brief Await the outage duration after setting the broker down
  *        to check for re-bootstrap sequences.
+ *        Errors are only delivered to the error callback when the handle is
+ *        polled, so poll while waiting and after every other action too.
  */
 static rd_bool_t
 do_test_down_then_up_no_rebootstrap_loop_after_action_cb(rd_kafka_t **rkp,
                                                          int action) {
         if (action == 1) {
-                rd_sleep(6);
+                int64_t abs_timeout_us =
+                    test_clock() +
+                    do_test_down_then_up_no_rebootstrap_loop_outage_s *
+                        1000000LL;
+                while (test_clock() < abs_timeout_us)
+                        rd_kafka_poll(*rkp, 100);
+        } else {
+                rd_kafka_poll(*rkp, 0);
         }
         return rd_false;
 }
@@ -539,13 +580,19 @@ do_test_down_then_up_no_rebootstrap_loop_after_action_cb(rd_kafka_t **rkp,
 /**
  * @brief Test setting down a broker and then setting it up again.
  *        It shouldn't cause a loop of re-bootstrap sequences.
+ *
+ * @param outage_s Seconds the broker is kept down.
  */
-static void do_test_down_then_up_no_rebootstrap_loop(void) {
-        int32_t actual_rebootstrap_sequence_cnt;
-        SUB_TEST_QUICK();
+static void do_test_down_then_up_no_rebootstrap_loop(int outage_s) {
+        int32_t actual_rebootstrap_sequence_cnt, actual_all_brokers_down_cnt;
+        int32_t max_rebootstrap_sequence_cnt, expected_all_brokers_down_cnt;
+        SUB_TEST_QUICK("%ds outage", outage_s);
+        do_test_down_then_up_no_rebootstrap_loop_outage_s = outage_s;
         rd_atomic32_init(
             &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt,
             0);
+        rd_atomic32_init(
+            &do_test_down_then_up_no_rebootstrap_loop_all_brokers_down_cnt, 0);
 
         /* Action 2 sets the only broker down, so the "all brokers down" state
          * is reached and a re-bootstrap sequence starts immediately,
@@ -586,16 +633,35 @@ static void do_test_down_then_up_no_rebootstrap_loop(void) {
          *
          * What is bounded is the interval gating `rd_kafka_connect_any()`,
          * `sparse_connect_intvl` = max(11, min(reconnect.backoff.ms / 2,
-         * 1000)), 50ms by default, so at most 6000 / 50 = 120 sequences fit
-         * in the 6s window. A loop not gated by connection attempts would
-         * exceed that. */
+         * 1000)), 50ms by default, so at most outage_ms / 50 sequences fit
+         * in the outage window (100 for 5s). A loop not gated by connection
+         * attempts would exceed that. */
+        max_rebootstrap_sequence_cnt    = outage_s * 1000 / 50;
         actual_rebootstrap_sequence_cnt = rd_atomic32_get(
             &do_test_down_then_up_no_rebootstrap_loop_rebootstrap_sequence_cnt);
         TEST_SAY("Found %d re-bootstrap sequences\n",
                  actual_rebootstrap_sequence_cnt);
-        TEST_ASSERT(actual_rebootstrap_sequence_cnt <= 120,
-                    "Expected at most 120 re-bootstrap sequences, got %d",
-                    actual_rebootstrap_sequence_cnt);
+        TEST_ASSERT(
+            actual_rebootstrap_sequence_cnt <= max_rebootstrap_sequence_cnt,
+            "Expected at most %d re-bootstrap sequences, got %d",
+            max_rebootstrap_sequence_cnt, actual_rebootstrap_sequence_cnt);
+
+        /* Each of those sequences reaches the "all brokers down" state, but
+         * the `ALL_BROKERS_DOWN` error is reported to the application at most
+         * once every `reconnect.backoff.max.ms` (10s by default): one at the
+         * start of the outage and one more every 10s it lasts, so
+         * outage_s / 10 + 1 in total, not one per sequence. */
+        expected_all_brokers_down_cnt = outage_s / 10 + 1;
+        actual_all_brokers_down_cnt   = rd_atomic32_get(
+            &do_test_down_then_up_no_rebootstrap_loop_all_brokers_down_cnt);
+        TEST_SAY("Found %d ALL_BROKERS_DOWN error(s)\n",
+                 actual_all_brokers_down_cnt);
+        TEST_ASSERT(
+            actual_all_brokers_down_cnt == expected_all_brokers_down_cnt,
+            "Expected exactly %d ALL_BROKERS_DOWN error(s) over %d "
+            "re-bootstrap sequences in a %ds outage, got %d",
+            expected_all_brokers_down_cnt, actual_rebootstrap_sequence_cnt,
+            outage_s, actual_all_brokers_down_cnt);
 
         rd_free(log_interceptor);
         log_interceptor = NULL;
@@ -1348,7 +1414,9 @@ int main_0151_purge_brokers_mock(int argc, char **argv) {
 
         do_test_remove_then_add();
 
-        do_test_down_then_up_no_rebootstrap_loop();
+        do_test_down_then_up_no_rebootstrap_loop(5);
+
+        do_test_down_then_up_no_rebootstrap_loop(15);
 
         do_test_kip899_rebootstrap_cases_variations();
 

@@ -424,13 +424,38 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                                 &rkb->rkb_rk->rk_logical_broker_cnt) &&
                     !rd_kafka_terminating(rkb->rkb_rk)) {
                         rd_kafka_rebootstrap(rkb->rkb_rk);
-                        rd_kafka_op_err(
-                            rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
-                            "%i/%i brokers are down",
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
-                                rd_atomic32_get(
-                                    &rkb->rkb_rk->rk_logical_broker_cnt));
+
+                        rd_ts_t now = rd_clock();
+                        rd_ts_t rk_last_all_brokers_down_reported_ts =
+                            rd_atomic64_get(
+                                &rkb->rkb_rk
+                                     ->rk_last_all_brokers_down_reported_ts);
+                        int64_t reconnect_backoff_max_us =
+                            ((int64_t)rkb->rkb_rk->rk_conf
+                                 .reconnect_backoff_max_ms) *
+                            1000LL;
+
+                        /* Only report if more than
+                         * `reconnect.backoff.max.ms` has passed since last
+                         * report */
+                        if ((rk_last_all_brokers_down_reported_ts == 0 ||
+                             (rk_last_all_brokers_down_reported_ts +
+                              reconnect_backoff_max_us) < now) &&
+                            rd_atomic64_cas(
+                                &rkb->rkb_rk
+                                     ->rk_last_all_brokers_down_reported_ts,
+                                rk_last_all_brokers_down_reported_ts, now))
+                                rd_kafka_op_err(
+                                    rkb->rkb_rk,
+                                    RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+                                    "%i/%i brokers are down",
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_down_cnt),
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_cnt) -
+                                        rd_atomic32_get(
+                                            &rkb->rkb_rk
+                                                 ->rk_logical_broker_cnt));
                 }
 
         } else if (rd_kafka_broker_state_is_up(state) &&
@@ -446,6 +471,10 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                         if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                                 rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
                                                 1);
+                                rd_atomic64_set(
+                                    &rkb->rkb_rk
+                                         ->rk_last_all_brokers_down_reported_ts,
+                                    0);
 
                                 /* If at least one broker connects we reset
                                  * the down counter to try again with rest of

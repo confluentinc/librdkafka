@@ -2642,6 +2642,7 @@ rd_kafka_t *rd_kafka_new(rd_kafka_type_t type,
         rd_atomic32_init(&rk->rk_broker_up_cnt, 0);
         rd_atomic32_init(&rk->rk_broker_down_cnt, 0);
         rd_atomic32_init(&rk->rk_rebootstrap_in_progress, 0);
+        rd_atomic64_init(&rk->rk_last_all_brokers_down_reported_ts, 0);
 
         rk->rk_rep             = rd_kafka_q_new(rk);
         rk->rk_ops             = rd_kafka_q_new(rk);

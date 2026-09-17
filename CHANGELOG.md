@@ -19,6 +19,13 @@ OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
    CVE-2026-80231, CVE-2026-80255, CVE-2026-82208, and CVE-2026-82209.
 
 
+## Upgrade considerations
+
+* Admin requests in flight on a decommissioned broker now fail with
+`RD_KAFKA_RESP_ERR__TRANSPORT` instead of `RD_KAFKA_RESP_ERR__DESTROY_BROKER`, so
+callers retry them instead of treating them as a hard failure.
+
+
 ## Fixes
 
 ### General fixes

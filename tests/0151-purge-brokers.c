@@ -1158,12 +1158,28 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                 do_test_kip1102_rebootstrap_cases_errors_pushed = rd_true;
         }
 
-        if (action == 1 && !do_test_kip1102_rebootstrap_cases_errors_cleared) {
+        if (action == 1 &&
+            (!do_test_kip1102_rebootstrap_cases_errors_cleared ||
+             (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id !=
+                  -1 &&
+              rd_atomic32_get(
+                  &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt) ==
+                  0))) {
                 /* Second action: in case there's no third action, keep waiting
                  * until the expected re-bootstrap sequences are seen, that is
                  * until the log callback ends the error phase. Bounded, so
                  * that a missing sequence fails the count assertion instead of
-                 * waiting forever. */
+                 * waiting forever.
+                 *
+                 * Ending the error phase isn't enough when a bootstrap-only
+                 * broker is expected to be queried: the log callback clears
+                 * the errors on the "Starting re-bootstrap sequence" line,
+                 * which is emitted before the bootstrap servers are re-added,
+                 * so the Metadata request to the bootstrap-only broker is
+                 * still ahead. Without waiting for it the loop stops and the
+                 * cluster is destroyed while the client is still connecting,
+                 * and the count assertion below fails on timing rather than
+                 * on the property it checks. */
                 if (!do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us)
                         do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us =
                             test_clock() + 20000000;

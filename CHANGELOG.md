@@ -1,6 +1,9 @@
-# librdkafka v2.16.0 (Unreleased)
+# librdkafka v2.16.0  (unreleased)
 
 librdkafka v2.16.0 is a feature release:
+
+* Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
+* Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
 ## Security considerations
@@ -14,6 +17,18 @@ OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
  * libcurl upgrade (8.21.0 → 8.22.0) addresses CVE-2026-13608,
    CVE-2026-18924, CVE-2026-19931, CVE-2026-80229, CVE-2026-80230,
    CVE-2026-80231, CVE-2026-80255, CVE-2026-82208, and CVE-2026-82209.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5560.
+  Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected.
+  The client kept asking the very brokers that reported its metadata as stale. Learned brokers are now decommissioned when a re-bootstrap sequence starts, so only the bootstrap servers are used until a Metadata response rebuilds the broker list. Queued messages are handed back to their partitions and re-sent once new leaders are known. Admin requests in flight on a decommissioned broker now fail with `RD_KAFKA_RESP_ERR__TRANSPORT` (previously
+  `RD_KAFKA_RESP_ERR__DESTROY_BROKER`) and should be retried.
+  Happening since 2.11.0 (#5560).
+
 
 
 # librdkafka v2.15.1

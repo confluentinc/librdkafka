@@ -436,6 +436,53 @@ static int do_test(const char *assignor) {
                 rd_free(expect.name);
         }
 
+        {
+                const char *dyn_regex = tsprintf("^dynamic_topic_.*_%s", groupid);
+                char dyn_topic[128];
+                rd_snprintf(dyn_topic, sizeof(dyn_topic), "dynamic_topic_001_%s", groupid);
+
+                struct expect expect = {
+                    .name = rd_strdup(tsprintf("%s: dynamic topic match after topic creation", assignor)),
+                    .sub  = {rd_strdup(dyn_regex), NULL},
+                    .exp  = {dyn_topic, NULL}
+                };
+
+                TEST_SAY("Subscribing to regex before topic creation\n");
+
+                exp_curr = &expect;
+                expect.result = _EXP_ASSIGN;
+
+                rd_kafka_topic_partition_list_t *tlist = rd_kafka_topic_partition_list_new(1);
+                rd_kafka_topic_partition_list_add(tlist, expect.sub[0], RD_KAFKA_PARTITION_UA);
+                rd_kafka_resp_err_t err = rd_kafka_subscribe(rk, tlist);
+                rd_kafka_topic_partition_list_destroy(tlist);
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "subscribe() failed: %s", rd_kafka_err2str(err));
+
+                TEST_SAY("Creating topic %s after subscription\n", dyn_topic);
+                test_produce_msgs_easy(dyn_topic, testid, RD_KAFKA_PARTITION_UA, msgcnt);
+
+                TEST_SAY("Waiting for assignment with dynamic topic...\n");
+                while (expect.result == _EXP_ASSIGN)
+                    consumer_poll_once(rk);
+
+                TEST_ASSERT(expect.result == _EXP_ASSIGNED,
+                            "Expected dynamic assignment, got %d", expect.result);
+
+                expect.result = _EXP_REVOKE;
+                err = rd_kafka_unsubscribe(rk);
+                TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR, "unsubscribe() failed: %s", rd_kafka_err2str(err));
+
+                int64_t ts_end = test_clock() + 10000;
+                while (expect.result == _EXP_REVOKE && test_clock() < ts_end)
+                        consumer_poll_once(rk);
+                TEST_ASSERT(expect.result == _EXP_REVOKED,
+                            "Expected revoke after unsubscribe, got %d", expect.result);
+
+                exp_curr = NULL;
+                rd_free(expect.name);
+                rd_free((void *)expect.sub[0]);
+        }
+
         test_consumer_close(rk);
 
         for (i = 0; i < topic_cnt; i++)

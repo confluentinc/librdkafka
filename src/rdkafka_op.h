@@ -156,6 +156,10 @@ typedef enum {
         RD_KAFKA_OP_CREATEACLS,   /**< Admin: CreateAcls: u.admin_request*/
         RD_KAFKA_OP_DESCRIBEACLS, /**< Admin: DescribeAcls: u.admin_request*/
         RD_KAFKA_OP_DELETEACLS,   /**< Admin: DeleteAcls: u.admin_request*/
+        RD_KAFKA_OP_ALTERCLIENTQUOTAS,         /**< Admin: AlterClientQuotas:
+                                                  u.admin_request*/
+        RD_KAFKA_OP_DESCRIBECLIENTQUOTAS,      /**< Admin: DescribeClientQuotas:
+                                                  u.admin_request*/
         RD_KAFKA_OP_ALTERCONSUMERGROUPOFFSETS, /**< Admin:
                                                 *   AlterConsumerGroupOffsets
                                                 *   u.admin_request */

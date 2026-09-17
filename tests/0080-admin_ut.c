@@ -2770,11 +2770,13 @@ static void do_test_options(rd_kafka_t *rk) {
                     RD_KAFKA_ADMIN_OP_ALTERCONSUMERGROUPOFFSETS,               \
                     RD_KAFKA_ADMIN_OP_DELETECONSUMERGROUPOFFSETS,              \
                     RD_KAFKA_ADMIN_OP_ELECTLEADERS,                            \
+                    RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS,                       \
+                    RD_KAFKA_ADMIN_OP_DESCRIBECLIENTQUOTAS,                    \
                     RD_KAFKA_ADMIN_OP_ANY /* Must be last */                   \
         }
         struct {
                 const char *setter;
-                const rd_kafka_admin_op_t valid_apis[17];
+                const rd_kafka_admin_op_t valid_apis[19];
         } matrix[] = {
             {"request_timeout", _all_apis},
             {"operation_timeout",
@@ -2784,7 +2786,8 @@ static void do_test_options(rd_kafka_t *rk) {
             {"validate_only",
              {RD_KAFKA_ADMIN_OP_CREATETOPICS,
               RD_KAFKA_ADMIN_OP_CREATEPARTITIONS,
-              RD_KAFKA_ADMIN_OP_ALTERCONFIGS}},
+              RD_KAFKA_ADMIN_OP_ALTERCONFIGS,
+              RD_KAFKA_ADMIN_OP_ALTERCLIENTQUOTAS}},
             {"broker", _all_apis},
             {"require_stable_offsets",
              {RD_KAFKA_ADMIN_OP_LISTCONSUMERGROUPOFFSETS}},

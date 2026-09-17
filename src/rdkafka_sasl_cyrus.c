@@ -522,6 +522,7 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
              rktrans},
             {SASL_CB_CANON_USER, (void *)rd_kafka_sasl_cyrus_cb_canon, rktrans},
             {SASL_CB_LIST_END}};
+        const char *principal_host;
 
         state                       = rd_calloc(1, sizeof(*state));
         rktrans->rktrans_sasl.state = state;
@@ -544,8 +545,13 @@ static int rd_kafka_sasl_cyrus_client_new(rd_kafka_transport_t *rktrans,
 
         memcpy(state->callbacks, callbacks, sizeof(callbacks));
 
+        principal_host = (rk->rk_conf.sasl.domain_name &&
+                          *rk->rk_conf.sasl.domain_name)
+                             ? rk->rk_conf.sasl.domain_name
+                             : hostname;
+
         mtx_lock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);
-        r = sasl_client_new(rk->rk_conf.sasl.service_name, hostname, NULL,
+        r = sasl_client_new(rk->rk_conf.sasl.service_name, principal_host, NULL,
                             NULL, /* no local & remote IP checks */
                             state->callbacks, 0, &state->conn);
         mtx_unlock(&rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.lock);

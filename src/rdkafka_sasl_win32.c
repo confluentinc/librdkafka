@@ -512,9 +512,18 @@ static int rd_kafka_sasl_win32_client_new(rd_kafka_transport_t *rktrans,
         state                       = rd_calloc(1, sizeof(*state));
         rktrans->rktrans_sasl.state = state;
 
-        _snwprintf(state->principal, RD_ARRAYSIZE(state->principal), L"%hs/%hs",
-                   rktrans->rktrans_rkb->rkb_rk->rk_conf.sasl.service_name,
-                   hostname);
+        {
+                const char *principal_host;
+                if (rk->rk_conf.sasl.domain_name &&
+                    *rk->rk_conf.sasl.domain_name)
+                        principal_host = rk->rk_conf.sasl.domain_name;
+                else
+                        principal_host = hostname;
+
+                _snwprintf(state->principal, RD_ARRAYSIZE(state->principal),
+                           L"%hs/%hs", rk->rk_conf.sasl.service_name,
+                           principal_host);
+        }
 
         state->cred = rd_kafka_sasl_sspi_cred_new(rktrans, errstr, errstr_size);
         if (!state->cred)

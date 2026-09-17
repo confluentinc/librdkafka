@@ -6301,6 +6301,8 @@ struct rd_kafka_group_member_info {
  * @enum rd_kafka_consumer_group_state_t
  *
  * @brief Consumer group state.
+ *
+ * @deprecated Use \c rd_kafka_group_state_t instead.
  */
 typedef enum {
         RD_KAFKA_CONSUMER_GROUP_STATE_UNKNOWN              = 0,
@@ -6313,9 +6315,28 @@ typedef enum {
 } rd_kafka_consumer_group_state_t;
 
 /**
+ * @enum rd_kafka_group_state_t
+ *
+ * @brief Group state.
+ */
+typedef enum {
+        RD_KAFKA_GROUP_STATE_UNKNOWN              = 0,
+        RD_KAFKA_GROUP_STATE_PREPARING_REBALANCE  = 1,
+        RD_KAFKA_GROUP_STATE_COMPLETING_REBALANCE = 2,
+        RD_KAFKA_GROUP_STATE_STABLE               = 3,
+        RD_KAFKA_GROUP_STATE_DEAD                 = 4,
+        RD_KAFKA_GROUP_STATE_EMPTY                = 5,
+        RD_KAFKA_GROUP_STATE_ASSIGNING            = 6,
+        RD_KAFKA_GROUP_STATE_RECONCILING          = 7,
+        RD_KAFKA_GROUP_STATE__CNT
+} rd_kafka_group_state_t;
+
+/**
  * @enum rd_kafka_consumer_group_type_t
  *
  * @brief Consumer group type.
+ *
+ * @deprecated  Use \c rd_kafka_group_type_t instead
  */
 typedef enum {
         RD_KAFKA_CONSUMER_GROUP_TYPE_UNKNOWN  = 0,
@@ -6323,6 +6344,20 @@ typedef enum {
         RD_KAFKA_CONSUMER_GROUP_TYPE_CLASSIC  = 2,
         RD_KAFKA_CONSUMER_GROUP_TYPE__CNT
 } rd_kafka_consumer_group_type_t;
+
+/**
+ * @enum rd_kafka_group_type_t
+ *
+ * @brief Group type.
+ */
+typedef enum {
+        RD_KAFKA_GROUP_TYPE_UNKNOWN  = 0,
+        RD_KAFKA_GROUP_TYPE_CONSUMER = 1,
+        RD_KAFKA_GROUP_TYPE_CLASSIC  = 2,
+        RD_KAFKA_GROUP_TYPE_SHARE    = 3,
+        RD_KAFKA_GROUP_TYPE_STREAMS  = 4,
+        RD_KAFKA_GROUP_TYPE__CNT
+} rd_kafka_group_type_t;
 
 /**
  * @brief Group information
@@ -6409,6 +6444,26 @@ rd_kafka_consumer_group_state_t
 rd_kafka_consumer_group_state_code(const char *name);
 
 /**
+ * @brief Returns a name for a state code.
+ *
+ * @param state The state value.
+ *
+ * @return The group state name corresponding to the provided group state value.
+ */
+RD_EXPORT
+const char *rd_kafka_group_state_name(rd_kafka_group_state_t state);
+
+/**
+ * @brief Returns a code for a state name.
+ *
+ * @param name The state name.
+ *
+ * @return The group state value corresponding to the provided group state name.
+ */
+RD_EXPORT
+rd_kafka_group_state_t rd_kafka_group_state_code(const char *name);
+
+/**
  * @brief Returns a name for a group type code.
  *
  * @param type The group type value.
@@ -6431,6 +6486,28 @@ rd_kafka_consumer_group_type_name(rd_kafka_consumer_group_type_t type);
 RD_EXPORT
 rd_kafka_consumer_group_type_t
 rd_kafka_consumer_group_type_code(const char *name);
+
+/**
+ * @brief Returns a name for a group type code.
+ *
+ * @param type The group type value.
+ *
+ * @return The group type name corresponding to the provided group type value.
+ */
+RD_EXPORT
+const char *rd_kafka_group_type_name(rd_kafka_group_type_t type);
+
+/**
+ * @brief Returns a code for a group type name.
+ *
+ * @param name The group type name.
+ *
+ * @return The group type value corresponding to the provided group type name.
+ *
+ * @remark The comparison is case-insensitive.
+ */
+RD_EXPORT
+rd_kafka_group_type_t rd_kafka_group_type_code(const char *name);
 
 /**
  * @brief Release list memory
@@ -6699,6 +6776,8 @@ typedef int rd_kafka_event_type_t;
 #define RD_KAFKA_EVENT_DELETEACLS_RESULT         0x1000 /**< DeleteAcls_result_t */
 /** ListConsumerGroupsResult_t */
 #define RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT 0x2000
+/** ListGroupsResult_t */
+#define RD_KAFKA_EVENT_LISTGROUPS_RESULT 0x2001
 /** DescribeConsumerGroups_result_t */
 #define RD_KAFKA_EVENT_DESCRIBECONSUMERGROUPS_RESULT 0x4000
 /** ListConsumerGroupOffsets_result_t */
@@ -6981,6 +7060,8 @@ typedef rd_kafka_event_t rd_kafka_DescribeConfigs_result_t;
 typedef rd_kafka_event_t rd_kafka_DeleteRecords_result_t;
 /*! ListConsumerGroups result type */
 typedef rd_kafka_event_t rd_kafka_ListConsumerGroups_result_t;
+/*! ListGroups result type */
+typedef rd_kafka_event_t rd_kafka_ListGroups_result_t;
 /*! DescribeConsumerGroups result type */
 typedef rd_kafka_event_t rd_kafka_DescribeConsumerGroups_result_t;
 /*! DeleteGroups result type */
@@ -7100,6 +7181,21 @@ rd_kafka_event_DeleteRecords_result(rd_kafka_event_t *rkev);
  */
 RD_EXPORT const rd_kafka_ListConsumerGroups_result_t *
 rd_kafka_event_ListConsumerGroups_result(rd_kafka_event_t *rkev);
+
+/**
+ * @brief Get ListGroups result.
+ *
+ * @returns the result of a ListGroups request, or NULL if event is of
+ *          different type.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p rkev object.
+ *
+ * Event types:
+ *   RD_KAFKA_EVENT_LISTGROUPS_RESULT
+ */
+RD_EXPORT const rd_kafka_ListGroups_result_t *
+rd_kafka_event_ListGroups_result(rd_kafka_event_t *rkev);
 
 /**
  * @brief Get DescribeConsumerGroups result.
@@ -8227,6 +8323,7 @@ typedef enum rd_kafka_admin_op_t {
         RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER, /**< DescribeCluster */
         RD_KAFKA_ADMIN_OP_LISTOFFSETS,     /**< ListOffsets */
         RD_KAFKA_ADMIN_OP_ELECTLEADERS,    /**< ElectLeaders */
+        RD_KAFKA_ADMIN_OP_LISTGROUPS,      /**< ListGroups */
         RD_KAFKA_ADMIN_OP__CNT             /**< Number of ops defined */
 } rd_kafka_admin_op_t;
 
@@ -8456,6 +8553,24 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_states(
     size_t consumer_group_states_cnt);
 
 /**
+ * @brief Set groups states to query for.
+ *
+ * @param options Admin options.
+ * @param group_states Array of group states.
+ * @param group_states_cnt Size of the \p group_states array.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListGroups.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_group_states(
+    rd_kafka_AdminOptions_t *options,
+    const rd_kafka_group_state_t *group_states,
+    size_t group_states_cnt);
+
+/**
  * @brief Set consumer groups types to query for.
  *
  * @param options Admin options.
@@ -8472,6 +8587,42 @@ rd_kafka_error_t *rd_kafka_AdminOptions_set_match_consumer_group_types(
     rd_kafka_AdminOptions_t *options,
     const rd_kafka_consumer_group_type_t *consumer_group_types,
     size_t consumer_group_types_cnt);
+
+/**
+ * @brief Set groups types to query for.
+ *
+ * @param options Admin options.
+ * @param group_types Array of group types.
+ * @param group_types_cnt Size of the \p group_types array.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListGroups.
+ */
+RD_EXPORT
+rd_kafka_error_t *rd_kafka_AdminOptions_set_match_group_types(
+    rd_kafka_AdminOptions_t *options,
+    const rd_kafka_group_type_t *group_types,
+    size_t group_types_cnt);
+
+/**
+ * @brief Set protocol types to query for.
+ *
+ * @param options Admin options.
+ * @param protocol_types Array of protocol types.
+ * @param protocol_types_cnt Size of the \p protocol_types array.
+ *
+ * @return NULL on success, a new error instance that must be
+ *         released with rd_kafka_error_destroy() in case of error.
+ *
+ * @remark This option is valid for ListGroups.
+ */
+RD_EXPORT
+rd_kafka_error_t *
+rd_kafka_AdminOptions_set_match_protocol_types(rd_kafka_AdminOptions_t *options,
+                                               const char **protocol_types,
+                                               size_t protocol_types_cnt);
 
 /**
  * @brief Set Isolation Level to an allowed `rd_kafka_IsolationLevel_t` value.
@@ -9757,6 +9908,8 @@ typedef struct rd_kafka_ListConsumerGroupsResult_s
  *
  * @remark The result event type emitted on the supplied queue is of type
  *         \c RD_KAFKA_EVENT_LISTCONSUMERGROUPS_RESULT
+ *
+ * @deprecated Use \c rd_kafka_ListGroups instead.
  */
 RD_EXPORT
 void rd_kafka_ListConsumerGroups(rd_kafka_t *rk,
@@ -9845,6 +9998,131 @@ RD_EXPORT
 const rd_kafka_error_t **rd_kafka_ListConsumerGroups_result_errors(
     const rd_kafka_ListConsumerGroups_result_t *result,
     size_t *cntp);
+
+/**@}*/
+
+/**
+ * @name Admin API - ListGroups
+ * @{
+ */
+
+/**
+ * @brief ListGroups result for a single group
+ */
+
+/**! ListGroups result for a single group */
+typedef struct rd_kafka_GroupListing_s rd_kafka_GroupListing_t;
+
+/**! ListGroups results and errors */
+typedef struct rd_kafka_ListGroupsResult_s rd_kafka_ListGroupsResult_t;
+
+/**
+ * @brief List the groups available in the cluster.
+ *
+ * @param rk Client instance.
+ * @param options Optional admin options, or null for defaults.
+ * @param rkqu Queue to emit results on.
+ *
+ * @remark The result event type emitted on the supplied queue is of type
+ *         \c RD_KAFKA_EVENT_LISTGROUPS_RESULT
+ */
+RD_EXPORT
+void rd_kafka_ListGroups(rd_kafka_t *rk,
+                         const rd_kafka_AdminOptions_t *options,
+                         rd_kafka_queue_t *rkqu);
+
+/**
+ * @brief Gets the group id for the \p grplist group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return The group id.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p grplist object.
+ */
+RD_EXPORT
+const char *
+rd_kafka_GroupListing_group_id(const rd_kafka_GroupListing_t *grplist);
+
+/**
+ * @brief Is the \p grplist group a simple consumer group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return 1 if the group is a simple consumer group,
+ *         else 0.
+ */
+RD_EXPORT
+int rd_kafka_GroupListing_is_simple_consumer_group(
+    const rd_kafka_GroupListing_t *grplist);
+
+/**
+ * @brief Gets state for the \p grplist group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return A group state.
+ */
+RD_EXPORT
+rd_kafka_group_state_t
+rd_kafka_GroupListing_state(const rd_kafka_GroupListing_t *grplist);
+
+/**
+ * @brief Gets type for the \p grplist group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return A group type.
+ */
+RD_EXPORT
+rd_kafka_group_type_t
+rd_kafka_GroupListing_type(const rd_kafka_GroupListing_t *grplist);
+
+/**
+ * @brief Gets the protocol for the \p grplist group.
+ *
+ * @param grplist The group listing.
+ *
+ * @return A group protocol.
+ */
+RD_EXPORT
+const char *
+rd_kafka_GroupListing_protocol(const rd_kafka_GroupListing_t *grplist);
+
+/**
+ * @brief Get an array of valid list groups from a ListGroups result.
+ *
+ * The returned groups life-time is the same as the \p result object.
+ *
+ * @param result Result to get group results from.
+ * @param cntp is updated to the number of elements in the array.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_GroupListing_t **
+rd_kafka_ListGroups_result_valid(const rd_kafka_ListGroups_result_t *result,
+                                 size_t *cntp);
+
+/**
+ * @brief Get an array of errors from a ListGroups call result.
+ *
+ * The returned errors life-time is the same as the \p result object.
+ *
+ * @param result ListGroups result.
+ * @param cntp Is updated to the number of elements in the array.
+ *
+ * @return Array of errors in \p result.
+ *
+ * @remark The lifetime of the returned memory is the same
+ *         as the lifetime of the \p result object.
+ */
+RD_EXPORT
+const rd_kafka_error_t **
+rd_kafka_ListGroups_result_errors(const rd_kafka_ListGroups_result_t *result,
+                                  size_t *cntp);
 
 /**@}*/
 

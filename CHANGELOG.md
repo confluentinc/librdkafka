@@ -5,6 +5,13 @@ librdkafka v2.16.0 is a feature release:
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
 
 
+## Upgrade considerations
+
+* Admin requests in flight on a decommissioned broker now fail with
+`RD_KAFKA_RESP_ERR__TRANSPORT` instead of `RD_KAFKA_RESP_ERR__DESTROY_BROKER`, so
+callers retry them instead of treating them as a hard failure.
+
+
 ## Fixes
 
 ### General fixes

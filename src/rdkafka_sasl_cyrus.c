@@ -201,6 +201,7 @@ render_callback(const char *key, char *buf, size_t size, void *opaque) {
  * @locality rdkafka main thread
  */
 static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
+#ifdef HAVE_SYSTEM
         rd_kafka_sasl_cyrus_handle_t *handle = rk->rk_sasl.handle;
         int r;
         char *cmd;
@@ -282,6 +283,12 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
         rd_kafka_dbg(rk, SECURITY, "SASLREFRESH",
                      "Kerberos ticket refreshed in %dms", duration);
         return 0;
+#else
+        rd_kafka_log(rk, LOG_ERR, "SASLREFRESH",
+                     "Kerberos ticket refresh failed: "
+                     "system() is not available");
+        return -1;
+#endif
 }
 
 

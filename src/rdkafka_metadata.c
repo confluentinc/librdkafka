@@ -527,11 +527,7 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
 
                 rd_list_add(&brokers_to_decommission, rkb);
         }
-        RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
-                rd_kafka_broker_decommission(rk, rkb,
-                                             &rk->wait_decommissioned_thrds);
-                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
-        }
+        rd_kafka_brokers_decommission_list(rk, &brokers_to_decommission);
         rd_list_destroy(&brokers_to_decommission);
         rd_kafka_wrunlock(rk);
 }

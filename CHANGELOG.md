@@ -1,3 +1,36 @@
+# librdkafka v2.16.0  (unreleased)
+
+librdkafka v2.16.0 is a feature release:
+
+* Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5600).
+
+
+## Upgrade considerations
+
+* Admin requests in flight on a decommissioned broker now fail with
+`RD_KAFKA_RESP_ERR__TRANSPORT` instead of `RD_KAFKA_RESP_ERR__DESTROY_BROKER`, so
+callers retry them instead of treating them as a hard failure.
+* The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms`. In case there are multiple re-bootstrap attempts, caused
+  by no available broker connection, this reduces the amount of events while still signalling that the outage is ongoing.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5600.
+  Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected.
+  The client kept asking the very brokers that reported its metadata as stale. Learned brokers are now decommissioned when a re-bootstrap sequence starts, so only the bootstrap servers are used until a Metadata response rebuilds the broker list. Queued messages are handed back to their partitions and re-sent once new leaders are known. Admin requests in flight on a decommissioned broker now fail with `RD_KAFKA_RESP_ERR__TRANSPORT` (previously
+  `RD_KAFKA_RESP_ERR__DESTROY_BROKER`) and should be retried.
+  Happening since 2.11.0 (#5600).
+* Issues: #5546.
+  `ALL_BROKERS_DOWN` was reported on every re-bootstrap cycle during a sustained
+  outage. It is now reported once per outage, re-armed when a broker connection
+  comes up, and at most once every `reconnect.backoff.max.ms` while it lasts.
+  Happening since 2.11.1 (#5600).
+
+
+
 # librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:

@@ -1118,6 +1118,7 @@ static rd_kafka_op_res_t rd_kafka_offset_validate_op_cb(rd_kafka_t *rk,
 void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
         rd_kafka_topic_partition_list_t *parts;
         rd_kafka_topic_partition_t *rktpar;
+        int32_t ReplicaId = -1; /* Consumer replica id */
         char reason[512];
         va_list ap;
 
@@ -1219,7 +1220,8 @@ void rd_kafka_offset_validate(rd_kafka_toppar_t *rktp, const char *fmt, ...) {
             rd_kafka_fetch_pos2str(rktp->rktp_offset_validation_pos), reason);
 
         rd_kafka_OffsetForLeaderEpochRequest(
-            rktp->rktp_leader, parts, RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
+            rktp->rktp_leader, ReplicaId, parts,
+            RD_KAFKA_REPLYQ(rktp->rktp_ops, 0),
             rd_kafka_toppar_handle_OffsetForLeaderEpoch, rktp);
         rd_kafka_topic_partition_list_destroy(parts);
 }

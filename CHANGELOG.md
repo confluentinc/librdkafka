@@ -1,3 +1,21 @@
+# librdkafka v2.x.x
+
+librdkafka v2.x.x is a feature release:
+
+
+## Security considerations
+
+Bundled dependencies were further upgraded, beyond what v2.15.1 already
+covers, for source/autoconf builds:
+OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
+
+ * OpenSSL upgrade (3.5.7 → 3.5.8) addresses CVE-2026-75803.
+
+ * libcurl upgrade (8.21.0 → 8.22.0) addresses CVE-2026-13608,
+   CVE-2026-18924, CVE-2026-19931, CVE-2026-80229, CVE-2026-80230,
+   CVE-2026-80231, CVE-2026-80255, CVE-2026-82208, and CVE-2026-82209.
+
+
 # librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:

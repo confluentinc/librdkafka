@@ -3,6 +3,7 @@
 librdkafka v2.16.0 is a feature release:
 
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
+* The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 

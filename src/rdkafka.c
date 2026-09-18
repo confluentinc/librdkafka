@@ -2231,13 +2231,17 @@ void rd_kafka_reset_any_broker_down_reported(rd_kafka_t *rk) {
 /**
  * @brief Re-bootstrap timer callback.
  *
+ * @param arg rd_bool_t reset_brokers: drop all brokers and start again
+ *            from the bootstrap servers.
+ *
  * @locality rdkafka main thread
  * @locks none
  */
 static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
         int i;
         char *brokerlist;
-        rd_kafka_t *rk = rkts->rkts_rk;
+        rd_kafka_t *rk          = rkts->rkts_rk;
+        rd_bool_t reset_brokers = (rd_bool_t)(intptr_t)arg;
         rd_list_t additional_brokerlists;
 
         rd_dassert(thrd_is_current(rk->rk_thread));
@@ -2253,10 +2257,17 @@ static void rd_kafka_rebootstrap_tmr_cb(rd_kafka_timers_t *rkts, void *arg) {
                  * this is just a fail-safe. */
                 return;
 
-        rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence");
+        rd_kafka_dbg(rk, ALL, "REBOOTSTRAP", "Starting re-bootstrap sequence%s",
+                     reset_brokers ? " (resetting brokers)" : "");
 
         rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 1);
         rd_kafka_reset_any_broker_down_reported(rk);
+
+        /* Drop learned and configured brokers so the bootstrap servers
+         * are added again below as new brokers, connected to and
+         * resolved from scratch. */
+        if (reset_brokers)
+                rd_kafka_brokers_decommission_all(rk);
 
         if (rk->rk_conf.brokerlist) {
                 rd_kafka_brokers_add0(
@@ -4497,11 +4508,14 @@ done:
 /**
  * Schedules a rebootstrap of the cluster immediately.
  *
+ * @param reset_brokers Drop all brokers and start again from the
+ *                      bootstrap servers.
+ *
  * @locks none
  * @locks_acquired rd_kafka_timers_lock()
  * @locality any
  */
-void rd_kafka_rebootstrap(rd_kafka_t *rk) {
+void rd_kafka_rebootstrap(rd_kafka_t *rk, rd_bool_t reset_brokers) {
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return;
@@ -4513,7 +4527,8 @@ void rd_kafka_rebootstrap(rd_kafka_t *rk) {
                  * causing a new re-bootstrap. */
                 rd_kafka_timer_start_oneshot(
                     &rk->rk_timers, &rk->rebootstrap_tmr, rd_true /*restart*/,
-                    0, rd_kafka_rebootstrap_tmr_cb, NULL);
+                    0, rd_kafka_rebootstrap_tmr_cb,
+                    (void *)(intptr_t)reset_brokers);
         }
 }
 
@@ -4533,7 +4548,7 @@ void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk) {
         rd_kafka_timer_start_oneshot(
             &rk->rk_timers, &rk->rebootstrap_tmr, rd_false /*don't restart*/,
             rk->rk_conf.metadata_recovery_rebootstrap_trigger_ms * 1000LL,
-            rd_kafka_rebootstrap_tmr_cb, NULL);
+            rd_kafka_rebootstrap_tmr_cb, (void *)(intptr_t)rd_true);
 }
 
 /**
@@ -4546,12 +4561,19 @@ void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk) {
  * @locality any
  */
 int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk) {
+        int stopped;
+
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return 0;
 
-        return rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
-                                   rd_true /* lock */);
+        stopped = rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
+                                      rd_true /* lock */);
+        if (stopped)
+                /* The sequence will not run, allow scheduling a new one. */
+                rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 0);
+
+        return stopped;
 }
 
 /**

@@ -1433,7 +1433,7 @@ rd_kafka_resp_err_t rd_kafka_background_thread_create(rd_kafka_t *rk,
                                                       char *errstr,
                                                       size_t errstr_size);
 
-void rd_kafka_rebootstrap(rd_kafka_t *rk);
+void rd_kafka_rebootstrap(rd_kafka_t *rk, rd_bool_t reset_brokers);
 
 void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk);
 

@@ -1309,14 +1309,8 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
         size_t of_Brokers_cnt;
         int32_t response_Brokers_cnt = 0;
 
-        /* Consume the next pushed err+rtt for ApiKey=Metadata so an
-         * injected RTT (or __TRANSPORT close) on this connection takes
-         * effect. The returned err code is not propagated into the
-         * response body (Metadata's error reporting is per-topic and
-         * per-partition; tests that need to inject a topic-level
-         * MetadataResponse error should use the dedicated mock
-         * topic/partition error APIs). */
-        rd_kafka_mock_next_request_error(mconn, resp);
+        /* Inject error, if any. Written as top-level ErrorCode on v13+. */
+        rd_kafka_resp_err_t err = rd_kafka_mock_next_request_error(mconn, resp);
 
         if (rkbuf->rkbuf_reqhdr.ApiVersion >= 3) {
                 /* Response: ThrottleTime */
@@ -1477,6 +1471,11 @@ static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
             rkbuf->rkbuf_reqhdr.ApiVersion <= 10) {
                 /* ClusterAuthorizedOperations */
                 rd_kafka_buf_write_i32(resp, INT32_MIN);
+        }
+
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 13) {
+                /* ErrorCode (KIP-1102) */
+                rd_kafka_buf_write_i16(resp, err);
         }
 
         rd_kafka_buf_skip_tags(rkbuf);
@@ -5142,7 +5141,7 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 9, 8, rd_kafka_mock_handle_OffsetCommit},
         [RD_KAFKAP_ApiVersion]   = {0, 2, 3, rd_kafka_mock_handle_ApiVersion},
-        [RD_KAFKAP_Metadata]     = {0, 12, 9, rd_kafka_mock_handle_Metadata},
+        [RD_KAFKAP_Metadata]     = {0, 13, 9, rd_kafka_mock_handle_Metadata},
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,

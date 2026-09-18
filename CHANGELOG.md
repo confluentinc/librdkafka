@@ -15,6 +15,22 @@ OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
    CVE-2026-18924, CVE-2026-19931, CVE-2026-80229, CVE-2026-80230,
    CVE-2026-80231, CVE-2026-80255, CVE-2026-82208, and CVE-2026-82209.
 
+## Fixes
+
+### General fixes
+
+* Fix for KIP-1102 re-bootstrap triggered by a `REBOOTSTRAP_REQUIRED`
+  metadata error or by `metadata.recovery.rebootstrap.trigger.ms`.
+  The sequence only re-added the bootstrap servers, which were already
+  in the broker list, so the client kept using the brokers it had learned
+  and never resolved the bootstrap addresses again. Learned and configured
+  brokers are now removed and the bootstrap servers are added again as new
+  brokers. Happening since 2.11.0.
+* Fix for a re-bootstrap scheduled by a `REBOOTSTRAP_REQUIRED` metadata
+  error being cancelled by a successful metadata response received before
+  it ran, leaving the client unable to re-bootstrap on later errors.
+  Happening since 2.11.0.
+
 
 # librdkafka v2.15.1
 

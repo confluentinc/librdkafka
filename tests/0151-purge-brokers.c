@@ -993,14 +993,17 @@ static rd_bool_t do_test_kip1102_rebootstrap_cases_tracking_started;
 
 /**
  * @brief Whether the Metadata errors were already injected for this variation.
+ *        Set by the test thread, read by the client main thread from
+ *        the log callback.
  */
-static rd_bool_t do_test_kip1102_rebootstrap_cases_errors_pushed;
+static rd_atomic32_t do_test_kip1102_rebootstrap_cases_errors_pushed;
 
 /**
  * @brief Whether the injected Metadata errors were already cleared for this
- *        variation.
+ *        variation. Set by the client main thread from the log callback, read
+ *        by the test thread.
  */
-static rd_bool_t do_test_kip1102_rebootstrap_cases_errors_cleared;
+static rd_atomic32_t do_test_kip1102_rebootstrap_cases_errors_cleared;
 
 /**
  * @brief Absolute time after which we stop waiting for the expected
@@ -1069,8 +1072,10 @@ static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
                 int32_t cnt = rd_atomic32_add(
                     &do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 1);
 
-                if (do_test_kip1102_rebootstrap_cases_errors_pushed &&
-                    !do_test_kip1102_rebootstrap_cases_errors_cleared &&
+                if (rd_atomic32_get(
+                        &do_test_kip1102_rebootstrap_cases_errors_pushed) &&
+                    !rd_atomic32_get(
+                        &do_test_kip1102_rebootstrap_cases_errors_cleared) &&
                     cnt >=
                         do_test_kip1102_rebootstrap_cases_min_rebootstrap_cnt(
                             do_test_kip1102_rebootstrap_cases_variation)) {
@@ -1089,8 +1094,9 @@ static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
                          * Only the mock cluster lock is taken here, no
                          * client lock, so this is safe from the log callback.
                          */
-                        do_test_kip1102_rebootstrap_cases_errors_cleared =
-                            rd_true;
+                        rd_atomic32_set(
+                            &do_test_kip1102_rebootstrap_cases_errors_cleared,
+                            1);
                         rd_kafka_mock_clear_request_errors(cluster,
                                                            RD_KAFKAP_Metadata);
                 }
@@ -1221,11 +1227,13 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                             rd_true;
                 }
 
-                do_test_kip1102_rebootstrap_cases_errors_pushed = rd_true;
+                rd_atomic32_set(
+                    &do_test_kip1102_rebootstrap_cases_errors_pushed, 1);
         }
 
         if (action == 1 &&
-            (!do_test_kip1102_rebootstrap_cases_errors_cleared ||
+            (!rd_atomic32_get(
+                 &do_test_kip1102_rebootstrap_cases_errors_cleared) ||
              (do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id !=
                   -1 &&
               rd_atomic32_get(
@@ -1291,9 +1299,9 @@ static void do_test_kip1102_rebootstrap_cases(
         rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 0);
         rd_atomic32_init(
             &do_test_kip1102_rebootstrap_cases_bootstrap_only_metadata_cnt, 0);
-        do_test_kip1102_rebootstrap_cases_tracking_started         = rd_false;
-        do_test_kip1102_rebootstrap_cases_errors_pushed            = rd_false;
-        do_test_kip1102_rebootstrap_cases_errors_cleared           = rd_false;
+        do_test_kip1102_rebootstrap_cases_tracking_started = rd_false;
+        rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_errors_pushed, 0);
+        rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_errors_cleared, 0);
         do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us      = 0;
         do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = -1;
 

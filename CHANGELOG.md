@@ -26,6 +26,10 @@ OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
   and never resolved the bootstrap addresses again. Learned and configured
   brokers are now removed and the bootstrap servers are added again as new
   brokers. Happening since 2.11.0.
+* Fix for a re-bootstrap scheduled by a `REBOOTSTRAP_REQUIRED` metadata
+  error being cancelled by a successful metadata response received before
+  it ran, leaving the client unable to re-bootstrap on later errors.
+  Happening since 2.11.0.
 
 
 # librdkafka v2.15.1

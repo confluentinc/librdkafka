@@ -4561,12 +4561,19 @@ void rd_kafka_rebootstrap_tmr_start_maybe(rd_kafka_t *rk) {
  * @locality any
  */
 int rd_kafka_rebootstrap_tmr_stop(rd_kafka_t *rk) {
+        int stopped;
+
         if (rk->rk_conf.metadata_recovery_strategy ==
             RD_KAFKA_METADATA_RECOVERY_STRATEGY_NONE)
                 return 0;
 
-        return rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
-                                   rd_true /* lock */);
+        stopped = rd_kafka_timer_stop(&rk->rk_timers, &rk->rebootstrap_tmr,
+                                      rd_true /* lock */);
+        if (stopped)
+                /* The sequence will not run, allow scheduling a new one. */
+                rd_atomic32_set(&rk->rk_rebootstrap_in_progress, 0);
+
+        return stopped;
 }
 
 /**

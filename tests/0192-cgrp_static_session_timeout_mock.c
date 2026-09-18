@@ -36,7 +36,8 @@
  *       protocol, via either client-side trigger that resets the member id
  *       and revokes the assignment as lost: a session timeout
  *       (rd_kafka_cgrp_session_timeout_check()) or an exceeded
- *       `max.poll.interval.ms` (rd_kafka_cgrp_max_poll_interval_check_tmr_cb()).
+ *       `max.poll.interval.ms`
+ * (rd_kafka_cgrp_max_poll_interval_check_tmr_cb()).
  *
  * The offsets of a lost assignment must not be committed: the member no
  * longer owns those partitions. On top of that, for a static member the
@@ -85,8 +86,8 @@ static rd_bool_t is_leavegroup_request(rd_kafka_mock_request_t *request,
  * one still being unconsumed.
  */
 static void verify_recovery_after_lost_assignment(rd_kafka_t *c,
-                                                   const char *bootstraps,
-                                                   const char *topic) {
+                                                  const char *bootstraps,
+                                                  const char *topic) {
         int64_t tmout;
         rd_kafka_resp_err_t err;
 
@@ -464,9 +465,8 @@ static void do_test_no_commit_of_lost_assignment_max_poll_interval(void) {
         /* Simulate the application getting stuck: just don't call poll.
          * max.poll.interval.ms enforcement is purely client-side/timer
          * driven, so no mock broker trickery is needed to trigger it. */
-        TEST_SAY(
-            "Not polling for %dms (> max.poll.interval.ms %dms)\n",
-            max_poll_interval_ms + 2000, max_poll_interval_ms);
+        TEST_SAY("Not polling for %dms (> max.poll.interval.ms %dms)\n",
+                 max_poll_interval_ms + 2000, max_poll_interval_ms);
         rd_sleep((max_poll_interval_ms / 1000) + 2);
 
         /* Poll, discarding everything (including the app-visible
@@ -555,12 +555,10 @@ static void do_test_no_commit_of_lost_assignment_deleted_topic(void) {
 
         rd_kafka_mock_coordinator_set(mcluster, "group", groupid, 1);
 
-        test_produce_msgs_easy_v(topic_a, 0, 0, 0, 100, 10,
-                                 "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "10", NULL);
-        test_produce_msgs_easy_v(topic_b, 0, 0, 0, 100, 10,
-                                 "bootstrap.servers", bootstraps,
-                                 "batch.num.messages", "10", NULL);
+        test_produce_msgs_easy_v(topic_a, 0, 0, 0, 100, 10, "bootstrap.servers",
+                                 bootstraps, "batch.num.messages", "10", NULL);
+        test_produce_msgs_easy_v(topic_b, 0, 0, 0, 100, 10, "bootstrap.servers",
+                                 bootstraps, "batch.num.messages", "10", NULL);
 
         test_conf_init(&conf, NULL, 30);
         test_conf_set(conf, "bootstrap.servers", bootstraps);
@@ -649,8 +647,7 @@ static void do_test_no_commit_of_lost_assignment_deleted_topic(void) {
                 if (!strcmp(assignment->elems[i].topic, topic_b))
                         saw_topic_b = rd_true;
         }
-        TEST_ASSERT(saw_topic_b, "Expected %s to still be assigned",
-                    topic_b);
+        TEST_ASSERT(saw_topic_b, "Expected %s to still be assigned", topic_b);
         rd_kafka_topic_partition_list_destroy(assignment);
 
         /* topic_b was never touched: its consumption and ability to
@@ -913,8 +910,7 @@ static void do_test_no_auto_commit_timer_while_lost(void) {
         TEST_ASSERT(offset_commit_cnt == 0,
                     "Expected no OffsetCommit while the assignment is "
                     "lost, including from the auto-commit timer "
-                    "(auto.commit.interval.ms=%dms), but %" PRIusz
-                    " were sent",
+                    "(auto.commit.interval.ms=%dms), but %" PRIusz " were sent",
                     auto_commit_interval_ms, offset_commit_cnt);
 
         verify_recovery_after_lost_assignment(c, bootstraps, topic);
@@ -1343,8 +1339,7 @@ static void do_test_manual_commit_returns_assignment_lost(void) {
  *        (eager / cooperative) matrix - the other three cells are covered
  *        by the tests above.
  */
-static void
-do_test_no_commit_of_lost_assignment_eager_max_poll_interval(void) {
+static void do_test_no_commit_of_lost_assignment_eager_max_poll_interval(void) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         rd_kafka_conf_t *conf;
@@ -1475,11 +1470,10 @@ static void do_test_redelivery_after_lost_assignment(void) {
         test_consumer_subscribe(c, topic);
 
         for (i = 0; i < 10; i++) {
-                rd_kafka_message_t *rkm =
-                    rd_kafka_consumer_poll(c, 10 * 1000);
+                rd_kafka_message_t *rkm = rd_kafka_consumer_poll(c, 10 * 1000);
                 TEST_ASSERT(rkm, "Expected a message");
                 TEST_ASSERT(!rkm->err, "Expected no error, got: %s",
-                           rd_kafka_message_errstr(rkm));
+                            rd_kafka_message_errstr(rkm));
 
                 if (i == 4) {
                         /* Commit up to and including the 5th message: this,
@@ -1500,8 +1494,8 @@ static void do_test_redelivery_after_lost_assignment(void) {
                 while (test_clock() < tmout && rd_kafka_assignment_lost(c))
                         test_consumer_poll_once(c, NULL, 1000);
                 TEST_ASSERT(!rd_kafka_assignment_lost(c),
-                           "Expected the assignment to no longer be lost "
-                           "after the member rejoined");
+                            "Expected the assignment to no longer be lost "
+                            "after the member rejoined");
         }
 
         committed = rd_kafka_topic_partition_list_new(1);
@@ -1586,18 +1580,17 @@ static void do_test_no_fatal_error_on_lost_assignment_commit_attempt(void) {
 
         test_consumer_poll("consume", c, 0, -1, 0, 10, NULL);
 
-        rd_kafka_mock_push_request_errors(
-            mcluster, RD_KAFKAP_OffsetCommit, 10,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
-            RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID);
+        rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_OffsetCommit, 10,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                                          RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID);
 
         trigger_session_timeout(mcluster, c, session_timeout_ms);
 

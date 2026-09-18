@@ -5667,17 +5667,24 @@ static void rd_kafka_cgrp_revoke_all_rejoin(rd_kafka_cgrp_t *rkcg,
         /* COOPERATIVE case. */
 
         /* All partitions should never be revoked unless terminating, leaving
-         * the group, or on assignment lost. Another scenario represents a
-         * logic error. Fail fast in this case. */
+         * the group, unsubscribing (classic protocol only: with KIP-848 the
+         * broker revokes the partitions once the subscription is emptied),
+         * or on assignment lost. Another scenario represents a logic error.
+         * Fail fast in this case. */
         if (!(terminating || assignment_lost ||
+              (rkcg->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&
+               !rkcg->rkcg_subscription) ||
               (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE))) {
                 rd_kafka_log(rkcg->rkcg_rk, LOG_ERR, "REBALANCE",
                              "Group \"%s\": unexpected instruction to revoke "
                              "current assignment and rebalance "
                              "(terminating=%d, assignment_lost=%d, "
-                             "LEAVE_ON_UNASSIGN_DONE=%d)",
+                             "unsubscribing=%d, LEAVE_ON_UNASSIGN_DONE=%d)",
                              rkcg->rkcg_group_id->str, terminating,
                              assignment_lost,
+                             (rkcg->rkcg_group_protocol ==
+                                  RD_KAFKA_GROUP_PROTOCOL_CLASSIC &&
+                              !rkcg->rkcg_subscription),
                              (rkcg->rkcg_flags &
                               RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE));
                 rd_dassert(!*"BUG: unexpected instruction to revoke "
@@ -6277,7 +6284,8 @@ static rd_kafka_resp_err_t rd_kafka_cgrp_unsubscribe(rd_kafka_cgrp_t *rkcg,
         if (leave_group && RD_KAFKA_CGRP_HAS_JOINED(rkcg))
                 rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_LEAVE_ON_UNASSIGN_DONE;
 
-        /* FIXME: Why are we only revoking if !assignment_lost ? */
+        /* If the assignment is lost its revocation is already in progress
+         * and leave_maybe() will act on the flag when it completes. */
         if (!rd_kafka_cgrp_assignment_is_lost(rkcg))
                 rd_kafka_cgrp_revoke_all_rejoin(rkcg, rd_false /*not lost*/,
                                                 rd_true /*initiating*/,

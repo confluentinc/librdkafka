@@ -422,8 +422,11 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                         rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
                             rd_atomic32_get(
                                 &rkb->rkb_rk->rk_logical_broker_cnt) &&
-                    !rd_kafka_terminating(rkb->rkb_rk)) {
-                        rd_kafka_rebootstrap(rkb->rkb_rk);
+                    !rd_kafka_terminating(rkb->rkb_rk) &&
+                    /* A running re-bootstrap may be replacing the brokers. */
+                    !rd_atomic32_get(
+                        &rkb->rkb_rk->rk_rebootstrap_in_progress)) {
+                        rd_kafka_rebootstrap(rkb->rkb_rk, rd_false);
                         rd_kafka_op_err(
                             rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
                             "%i/%i brokers are down",
@@ -6670,6 +6673,37 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
         rd_kafka_wrlock(rk);
+}
+
+/**
+ * @brief Decommission all learned and configured brokers.
+ *
+ * @locality main thread
+ * @locks none
+ */
+void rd_kafka_brokers_decommission_all(rd_kafka_t *rk) {
+        rd_kafka_broker_t *rkb;
+        rd_list_t brokers;
+        int i;
+
+        rd_kafka_wrlock(rk);
+        rd_list_init(&brokers, rd_atomic32_get(&rk->rk_broker_cnt), NULL);
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED &&
+                    rkb->rkb_source != RD_KAFKA_CONFIGURED)
+                        continue;
+                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr))
+                        continue;
+                rd_list_add(&brokers, rkb);
+        }
+        RD_LIST_FOREACH(rkb, &brokers, i) {
+                rd_kafka_broker_decommission(rk, rkb,
+                                             &rk->wait_decommissioned_thrds);
+                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
+        }
+        rd_list_destroy(&brokers);
+        rd_kafka_wrunlock(rk);
 }
 
 /**

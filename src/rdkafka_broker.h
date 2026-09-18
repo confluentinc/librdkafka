@@ -846,6 +846,8 @@ void rd_kafka_broker_start_reauth_timer(rd_kafka_broker_t *rkb,
 
 void rd_kafka_broker_start_reauth_cb(rd_kafka_timers_t *rkts, void *rkb);
 
+void rd_kafka_brokers_decommission_all(rd_kafka_t *rk);
+
 void rd_kafka_broker_decommission(rd_kafka_t *rk,
                                   rd_kafka_broker_t *rkb,
                                   rd_list_t *wait_thrds);

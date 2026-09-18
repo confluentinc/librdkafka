@@ -2750,7 +2750,7 @@ err:
             RD_KAFKA_ERR_ACTION_END);
 
         if (actions & RD_KAFKA_ERR_ACTION_SPECIAL) {
-                rd_kafka_rebootstrap(rk);
+                rd_kafka_rebootstrap(rk, rd_true);
         }
 
         if (actions & RD_KAFKA_ERR_ACTION_RETRY) {

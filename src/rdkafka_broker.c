@@ -424,13 +424,38 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                                 &rkb->rkb_rk->rk_logical_broker_cnt) &&
                     !rd_kafka_terminating(rkb->rkb_rk)) {
                         rd_kafka_rebootstrap(rkb->rkb_rk);
-                        rd_kafka_op_err(
-                            rkb->rkb_rk, RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
-                            "%i/%i brokers are down",
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_down_cnt),
-                            rd_atomic32_get(&rkb->rkb_rk->rk_broker_cnt) -
-                                rd_atomic32_get(
-                                    &rkb->rkb_rk->rk_logical_broker_cnt));
+
+                        rd_ts_t now = rd_clock();
+                        rd_ts_t rk_last_all_brokers_down_reported_ts =
+                            rd_atomic64_get(
+                                &rkb->rkb_rk
+                                     ->rk_last_all_brokers_down_reported_ts);
+                        int64_t reconnect_backoff_max_us =
+                            ((int64_t)rkb->rkb_rk->rk_conf
+                                 .reconnect_backoff_max_ms) *
+                            1000LL;
+
+                        /* Only report if more than
+                         * `reconnect.backoff.max.ms` has passed since last
+                         * report */
+                        if ((rk_last_all_brokers_down_reported_ts == 0 ||
+                             (rk_last_all_brokers_down_reported_ts +
+                              reconnect_backoff_max_us) < now) &&
+                            rd_atomic64_cas(
+                                &rkb->rkb_rk
+                                     ->rk_last_all_brokers_down_reported_ts,
+                                rk_last_all_brokers_down_reported_ts, now))
+                                rd_kafka_op_err(
+                                    rkb->rkb_rk,
+                                    RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN,
+                                    "%i/%i brokers are down",
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_down_cnt),
+                                    rd_atomic32_get(
+                                        &rkb->rkb_rk->rk_broker_cnt) -
+                                        rd_atomic32_get(
+                                            &rkb->rkb_rk
+                                                 ->rk_logical_broker_cnt));
                 }
 
         } else if (rd_kafka_broker_state_is_up(state) &&
@@ -446,6 +471,10 @@ void rd_kafka_broker_set_state(rd_kafka_broker_t *rkb, int state) {
                         if (!RD_KAFKA_BROKER_IS_LOGICAL(rkb)) {
                                 rd_atomic32_add(&rkb->rkb_rk->rk_broker_up_cnt,
                                                 1);
+                                rd_atomic64_set(
+                                    &rkb->rkb_rk
+                                         ->rk_last_all_brokers_down_reported_ts,
+                                    0);
 
                                 /* If at least one broker connects we reset
                                  * the down counter to try again with rest of
@@ -3768,9 +3797,16 @@ rd_kafka_broker_op_serve(rd_kafka_broker_t *rkb, rd_kafka_op_t *rko) {
                  * and trigger a state change.
                  * This makes sure any eonce dependent on state changes
                  * are triggered. */
-                rd_kafka_broker_fail(rkb, LOG_DEBUG,
-                                     rd_kafka_broker_destroy_error(rkb->rkb_rk),
-                                     "Decommissioning this broker");
+                /* This is a planned removal (rd_kafka_broker_decommission()
+                 * is the sole sender of TERMINATE on this queue): avoid
+                 * reporting the broker down, otherwise decommissioning
+                 * several still-up brokers at once (e.g. learned brokers
+                 * on re-bootstrap) can itself cross the "all brokers down"
+                 * threshold and spuriously start another re-bootstrap
+                 * sequence. */
+                rd_kafka_broker_planned_fail(
+                    rkb, rd_kafka_broker_destroy_error(rkb->rkb_rk), "%s",
+                    "Decommissioning this broker");
 
                 rd_kafka_broker_prepare_destroy(rkb);
                 /* Release main thread reference here */
@@ -6670,6 +6706,78 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
         rd_kafka_q_enq(rkb->rkb_ops, rd_kafka_op_new(RD_KAFKA_OP_TERMINATE));
 
         rd_kafka_wrlock(rk);
+}
+
+/**
+ * @brief Decommission the brokers in \p brokers, that must not be already
+ *        decommissioning (see `rk->wait_decommissioned_brokers`).
+ *
+ *        Their threads are added to `rk->wait_decommissioned_thrds` for
+ *        later joining, see `rd_kafka_decommissioned_broker_thread_join()`.
+ *
+ * @locks rd_kafka_wrlock(rk) MUST be held, it's temporarily released.
+ * @locality any
+ */
+void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers) {
+        rd_kafka_broker_t *rkb;
+        int i;
+
+        RD_LIST_FOREACH(rkb, brokers, i) {
+                rd_kafka_broker_decommission(rk, rkb,
+                                             &rk->wait_decommissioned_thrds);
+                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
+        }
+}
+
+/**
+ * @brief Decommission all learned brokers, keeping the configured
+ *        (bootstrap) and logical ones.
+ *
+ *        Used by the re-bootstrap sequence so that only the bootstrap
+ *        brokers are used until a Metadata response rebuilds the broker
+ *        list. Partitions delegated to the decommissioned brokers are
+ *        handed back with their queued messages, see
+ *        `RD_KAFKA_OP_PARTITION_LEAVE` handling, and delegated again on
+ *        the next Metadata response.
+ *
+ * @param reason Reason for the decommission, for debug logs.
+ *
+ * @locks none
+ * @locks_acquired rd_kafka_wrlock(rk)
+ * @locality any
+ */
+void rd_kafka_brokers_decommission_learned(rd_kafka_t *rk, const char *reason) {
+        rd_kafka_broker_t *rkb;
+        rd_list_t brokers_to_decommission;
+
+        rd_kafka_wrlock(rk);
+        rd_list_init(&brokers_to_decommission,
+                     rd_atomic32_get(&rk->rk_broker_cnt), NULL);
+
+        TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
+                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                        continue;
+
+                /* Don't try to decommission already decommissioning brokers
+                 * otherwise they could be already destroyed when
+                 * `rd_kafka_broker_decommission` is called below. */
+                if (rd_list_find(&rk->wait_decommissioned_brokers, rkb,
+                                 rd_list_cmp_ptr) != NULL)
+                        continue;
+
+                rd_list_add(&brokers_to_decommission, rkb);
+        }
+
+        if (rd_list_cnt(&brokers_to_decommission) > 0) {
+                rd_kafka_dbg(rk, BROKER, "DECOMMISSION",
+                             "Decommissioning %d learned broker(s): %s",
+                             rd_list_cnt(&brokers_to_decommission), reason);
+                rd_kafka_brokers_decommission_list(rk,
+                                                   &brokers_to_decommission);
+        }
+
+        rd_list_destroy(&brokers_to_decommission);
+        rd_kafka_wrunlock(rk);
 }
 
 /**

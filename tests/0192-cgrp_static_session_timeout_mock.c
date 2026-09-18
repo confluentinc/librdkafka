@@ -1422,6 +1422,215 @@ static void do_test_no_commit_of_lost_assignment_eager_max_poll_interval(void) {
 }
 
 
+static int test3_rebalance_cnt;
+
+/**
+ * @brief Rebalance callback for
+ *        do_test_max_poll_interval_lost_during_pending_rebalance():
+ *        performs the incremental unassign/assign itself and asserts
+ *        rd_kafka_assignment_lost() inside the revoke that carries the
+ *        partition given up to the second member.
+ */
+static void test3_rebalance_cb(rd_kafka_t *rk,
+                               rd_kafka_resp_err_t err,
+                               rd_kafka_topic_partition_list_t *parts,
+                               void *opaque) {
+        test3_rebalance_cnt++;
+
+        TEST_SAY("Rebalance #%d: %s: %d partition(s)\n", test3_rebalance_cnt,
+                 rd_kafka_err2name(err), parts->cnt);
+
+        switch (err) {
+        case RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS:
+                TEST_CALL_ERROR__(rd_kafka_incremental_assign(rk, parts));
+                break;
+
+        case RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS:
+                /* Rebalance #2 is the one this test targets: the revoke
+                 * triggered by consumer B joining, still queued and
+                 * undelivered when max.poll.interval.ms separately expired
+                 * on A. Any other revoke - such as the ordinary teardown
+                 * revoke rd_kafka_consumer_close() triggers below - is not
+                 * the one under test. */
+                if (test3_rebalance_cnt == 2)
+                        TEST_ASSERT(
+                            rd_kafka_assignment_lost(rk),
+                            "Expected assignment_lost() to be true inside "
+                            "the revoke that was pending when "
+                            "max.poll.interval.ms expired");
+                TEST_CALL_ERROR__(rd_kafka_incremental_unassign(rk, parts));
+                break;
+
+        default:
+                TEST_FAIL("Unexpected rebalance event: %s",
+                          rd_kafka_err2name(err));
+        }
+}
+
+/**
+ * @brief The two max.poll.interval.ms / session.timeout.ms triggers above
+ *        only ever fire against an idle member: nothing else is under way
+ *        when the trigger runs, so rd_kafka_cgrp_revoke_all_rejoin_maybe()
+ *        falls straight through to rd_kafka_cgrp_revoke_all_rejoin() and
+ *        sets the lost flag itself.
+ *
+ *        The far more common shape in production is the trigger landing
+ *        while an ordinary rebalance - caused by a second member joining
+ *        the group, not by any loss - is already under way and still
+ *        waiting on this application to call poll(). The early return in
+ *        rd_kafka_cgrp_revoke_all_rejoin_maybe() for that case ("a
+ *        rebalance is already in progress, don't start a second one")
+ *        drops the assignment_lost=true it was called with on the floor:
+ *        the revoke that was already queued is delivered to the
+ *        application - and to rd_kafka_assignment_serve_removals()'s
+ *        revoke-time commit - as an ordinary, not-lost one.
+ *
+ *        Reproduced here with a genuine second member: consumer A starts
+ *        out owning both partitions of a 2-partition topic; consumer B
+ *        then joins the same group, which is what leaves A with a
+ *        REVOKE_PARTITIONS op queued and its join-state inside
+ *        RD_KAFKA_CGRP_REBALANCING() - without A itself ever being polled,
+ *        the same way the other max.poll.interval.ms subtests above rely
+ *        on Heartbeats flowing on the internal thread regardless of
+ *        polling. While A is still not polled, A's own
+ *        max.poll.interval.ms separately elapses on top of that: the
+ *        exact overlap this test targets.
+ */
+static void do_test_max_poll_interval_lost_during_pending_rebalance(void) {
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *c, *c2;
+        const char *groupid            = "mygroup";
+        const char *topic              = "test";
+        const int max_poll_interval_ms = 6000;
+        size_t offset_commit_cnt;
+        int64_t tmout;
+
+        SUB_TEST();
+
+        test_curr->is_fatal_cb = test_error_is_not_fatal_cb;
+        test3_rebalance_cnt    = 0;
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        rd_kafka_mock_coordinator_set(mcluster, "group", groupid, 1);
+
+        /* Two partitions so that consumer B joining actually requires A to
+         * give one up, rather than A keeping everything to itself. */
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 1);
+
+        test_produce_msgs_easy_v(topic, 0, 0, 0, 50, 10, "bootstrap.servers",
+                                 bootstraps, "batch.num.messages", "10", NULL);
+        test_produce_msgs_easy_v(topic, 0, 1, 0, 50, 10, "bootstrap.servers",
+                                 bootstraps, "batch.num.messages", "10", NULL);
+
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "security.protocol", "PLAINTEXT");
+        test_conf_set(conf, "group.id", groupid);
+        test_conf_set(conf, "group.instance.id", "consumer-a");
+        test_conf_set(conf, "partition.assignment.strategy",
+                      "cooperative-sticky");
+        /* Keep the session timeout well clear of the time this test spends
+         * not polling A, the same way the other max.poll.interval.ms
+         * subtests above do: only max.poll.interval.ms is exercised here. */
+        test_conf_set(conf, "session.timeout.ms", "30000");
+        test_conf_set(conf, "heartbeat.interval.ms", "1000");
+        test_conf_set(conf, "max.poll.interval.ms", "6000");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "true");
+        /* Keep the auto commit interval out of the way so that the only
+         * commit that can be observed is the one triggered by the revoke. */
+        test_conf_set(conf, "auto.commit.interval.ms", "60000");
+
+        c = test_create_consumer(groupid, test3_rebalance_cb, conf, NULL);
+
+        test_consumer_subscribe(c, topic);
+
+        /* Consume from both partitions so that there is a stored offset on
+         * the one A is about to give up. */
+        test_consumer_poll("consume", c, 0, -1, 0, 20, NULL);
+
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_mock_clear_requests(mcluster);
+
+        TEST_SAY("Starting consumer B in the same group\n");
+        test_conf_init(&conf, NULL, 30);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "security.protocol", "PLAINTEXT");
+        test_conf_set(conf, "group.id", groupid);
+        test_conf_set(conf, "partition.assignment.strategy",
+                      "cooperative-sticky");
+        test_conf_set(conf, "session.timeout.ms", "30000");
+        test_conf_set(conf, "heartbeat.interval.ms", "1000");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        test_conf_set(conf, "enable.auto.commit", "false");
+
+        c2 = test_create_consumer(groupid, NULL, conf, NULL);
+        test_consumer_subscribe(c2, topic);
+
+        /* Not polling A at all: B's own background thread sends its
+         * JoinGroup regardless, which is all A needs to hear about on its
+         * next Heartbeat - also background-thread-driven - to queue its
+         * revoke and land in RD_KAFKA_CGRP_REBALANCING(), where it then
+         * stays stuck (a real rebalance callback is registered above, so
+         * only a poll of A can dispatch the queued op and move it further).
+         * Poll only B here, for long enough to span max.poll.interval.ms on
+         * A: B never gets its own share of the partitions until A's revoke
+         * actually completes, which can't happen while A isn't being
+         * polled, so there is nothing for B's callback-less internal
+         * handling to do beyond keep rejoining. */
+        TEST_SAY("Not polling A for %dms (> max.poll.interval.ms %dms), "
+                 "polling only B\n",
+                 max_poll_interval_ms + 2000, max_poll_interval_ms);
+        tmout = test_clock() + ((max_poll_interval_ms + 2000) * 1000);
+        while (test_clock() < tmout)
+                test_consumer_poll_once(c2, NULL, 500);
+
+        /* Poll A past max.poll.interval.ms, discarding everything
+         * (including the app-visible ERR__MAX_POLL_EXCEEDED notification):
+         * this is what finally dispatches the queued revoke to
+         * test3_rebalance_cb() above, whose assertion runs as a side
+         * effect. */
+        TEST_SAY("Polling A\n");
+        tmout = test_clock() + (6 * 1000000);
+        while (test_clock() < tmout && test3_rebalance_cnt < 2) {
+                rd_kafka_message_t *rkm = rd_kafka_consumer_poll(c, 1000);
+                if (rkm)
+                        rd_kafka_message_destroy(rkm);
+        }
+
+        TEST_ASSERT(test3_rebalance_cnt >= 2,
+                    "Expected at least 2 rebalance events (initial assign, "
+                    "the revoke pending when max.poll.interval.ms expired), "
+                    "saw %d",
+                    test3_rebalance_cnt);
+
+        offset_commit_cnt = test_mock_get_matching_request_cnt(
+            mcluster, is_offset_commit_request, NULL);
+
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        TEST_ASSERT(offset_commit_cnt == 0,
+                    "Expected no OffsetCommit for the lost assignment, but "
+                    "%" PRIusz " were sent",
+                    offset_commit_cnt);
+
+        test_consumer_close(c2);
+        rd_kafka_destroy(c2);
+
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+
+        test_mock_cluster_destroy(mcluster);
+
+        test_curr->is_fatal_cb = NULL;
+
+        SUB_TEST_PASS();
+}
+
+
 /**
  * @brief The offsets of a lost assignment must never reach the broker as
  *        committed: after losing the assignment and rejoining, the
@@ -1756,6 +1965,7 @@ int main_0192_cgrp_static_session_timeout_mock(int argc, char **argv) {
         do_test_no_commit_of_lost_assignment_eager();
         do_test_no_commit_of_lost_assignment_max_poll_interval();
         do_test_no_commit_of_lost_assignment_eager_max_poll_interval();
+        do_test_max_poll_interval_lost_during_pending_rebalance();
         do_test_no_commit_of_lost_assignment_dynamic_member();
         do_test_rebalance_cb_sees_lost_cleared_before_assign();
         do_test_no_auto_commit_timer_while_lost();

@@ -3993,8 +3993,16 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                             rkbuf, "RecordErrorsCnt %" PRId32 " out of range",
                             RecordErrorsCnt);
                 if (RecordErrorsCnt) {
-                        result->record_errors = rd_calloc(
-                            RecordErrorsCnt, sizeof(*result->record_errors));
+                        rd_kafka_Produce_result_record_error_t *record_errors =
+                            rd_calloc(RecordErrorsCnt, sizeof(*record_errors));
+                        if (!record_errors)
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf, "Failed to allocate record_errors");
+
+                        /* Assign the count only once the allocation has
+                         * succeeded, so a failed alloc can never leave a
+                         * non-zero count beside a NULL pointer. */
+                        result->record_errors     = record_errors;
                         result->record_errors_cnt = RecordErrorsCnt;
                         for (i = 0; i < RecordErrorsCnt; i++) {
                                 int32_t BatchIndex;
@@ -6900,15 +6908,21 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
                     rkbuf, "ApiArrayCnt %" PRId32 " out of range", arraycnt);
 
         if (arraycnt) {
+                char **requested_metrics = rd_calloc(arraycnt, sizeof(char *));
+                if (!requested_metrics)
+                        rd_kafka_buf_parse_fail(
+                            rkbuf, "Failed to allocate requested_metrics");
+
+                /* Assign the count only once the allocation has succeeded,
+                 * so a failed alloc can never leave a non-zero count beside
+                 * a NULL pointer. */
+                rk->rk_telemetry.requested_metrics     = requested_metrics;
                 rk->rk_telemetry.requested_metrics_cnt = arraycnt;
-                rk->rk_telemetry.requested_metrics =
-                    rd_calloc(arraycnt, sizeof(char *));
 
                 for (i = 0; i < (size_t)arraycnt; i++) {
                         rd_kafkap_str_t Metric;
                         rd_kafka_buf_read_str(rkbuf, &Metric);
-                        rk->rk_telemetry.requested_metrics[i] =
-                            RD_KAFKAP_STR_DUP(&Metric);
+                        requested_metrics[i] = RD_KAFKAP_STR_DUP(&Metric);
                 }
         }
 

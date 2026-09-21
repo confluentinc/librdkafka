@@ -148,11 +148,12 @@ See [getting Started with Apache Kafka and C/C++](https://developer.confluent.io
 
     * Producers: basic producers, idempotent producers, transactional producers.
     * Schema Registry producers: see
-      [`producer_schema_registry.c`](examples/producer_schema_registry.c).
+      [`producer_schema_registry.cpp`](examples/producer_schema_registry.cpp).
       Production applications should use Schema Registry — producing raw bytes
       leads to data-quality issues, broken consumers, and ungovernable data.
       librdkafka has no built-in Schema Registry serializer, so this example
-      uses [libserdes](https://github.com/confluentinc/libserdes) and avro-c.
+      uses [libschemaregistry](https://github.com/confluentinc/libschemaregistry)
+      and avro-cpp.
     * Consumers: basic consumers, reading batches of messages.
     * Share consumers (Queues for Kafka, KIP-932, Preview): see the `share_consumer*` examples.
     * Performance and latency testing tools.

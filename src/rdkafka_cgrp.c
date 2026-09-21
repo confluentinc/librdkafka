@@ -5594,6 +5594,8 @@ static void rd_kafka_cgrp_revoke_all_rejoin_maybe(rd_kafka_cgrp_t *rkcg,
                         : "",
                     rkcg->rkcg_rebalance_rejoin ? ", rejoin on rebalance" : "",
                     reason);
+                if (assignment_lost)
+                        rd_kafka_cgrp_assignment_set_lost(rkcg, "%s", reason);
                 return;
         }
 

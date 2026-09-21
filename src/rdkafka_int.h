@@ -310,6 +310,9 @@ struct rd_kafka_s {
          *   Set to 0 when the re-bootstrap is done.
          *   Accessed from the main thread and the broker threads. */
         rd_atomic32_t rk_rebootstrap_in_progress;
+        /** Monotonic timestamp (microseconds) of the last time all brokers were
+         * reported as down. */
+        rd_atomic64_t rk_last_all_brokers_down_reported_ts;
 
         /**< Additional bootstrap servers list.
          *   contains all brokers added through rd_kafka_brokers_add().

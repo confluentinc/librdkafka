@@ -1256,6 +1256,7 @@ static void rd_kafka_cgrp_leave(rd_kafka_cgrp_t *rkcg) {
                            "Leaving group");
                 rd_kafka_LeaveGroupRequest(
                     rkcg->rkcg_coord, rkcg->rkcg_group_id->str, member_id,
+                    rkcg->rkcg_group_instance_id,
                     RD_KAFKA_REPLYQ(rkcg->rkcg_ops, 0),
                     rd_kafka_cgrp_handle_LeaveGroup, rkcg);
         } else
@@ -2045,6 +2046,13 @@ static void rd_kafka_cgrp_handle_SyncGroup(rd_kafka_t *rk,
                 rd_kafka_buf_read_throttle_time(rkbuf);
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
+
+        if (request->rkbuf_reqhdr.ApiVersion >= 5) {
+                rd_kafkap_str_t ProtocolType, ProtocolName;
+                rd_kafka_buf_read_str(rkbuf, &ProtocolType);
+                rd_kafka_buf_read_str(rkbuf, &ProtocolName);
+        }
+
         rd_kafka_buf_read_kbytes(rkbuf, &MemberState);
 
 err:
@@ -2323,10 +2331,14 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
 
         rd_kafka_buf_read_i16(rkbuf, &ErrorCode);
         rd_kafka_buf_read_i32(rkbuf, &GenerationId);
+        if (request->rkbuf_reqhdr.ApiVersion >= 7) {
+                rd_kafkap_str_t ProtocolType;
+                rd_kafka_buf_read_str(rkbuf, &ProtocolType);
+        }
         rd_kafka_buf_read_str(rkbuf, &Protocol);
         rd_kafka_buf_read_str(rkbuf, &LeaderId);
         rd_kafka_buf_read_str(rkbuf, &MyMemberId);
-        rd_kafka_buf_read_i32(rkbuf, &member_cnt);
+        rd_kafka_buf_read_arraycnt(rkbuf, &member_cnt, 100000);
 
         if (!ErrorCode && RD_KAFKAP_STR_IS_NULL(&Protocol)) {
                 /* Protocol not set, we will not be able to find
@@ -2422,6 +2434,7 @@ static void rd_kafka_cgrp_handle_JoinGroup(rd_kafka_t *rk,
                         if (request->rkbuf_reqhdr.ApiVersion >= 5)
                                 rd_kafka_buf_read_str(rkbuf, &GroupInstanceId);
                         rd_kafka_buf_read_kbytes(rkbuf, &MemberMetadata);
+                        rd_kafka_buf_skip_tags(rkbuf);
 
                         rkgm                 = &members[sub_cnt];
                         rkgm->rkgm_member_id = rd_kafkap_str_copy(&MemberId);

@@ -102,6 +102,15 @@ builds already got from 8.20.0).
 
 ### Producer fixes
 
+* Reject malformed Produce response record-error counts before allocating
+  memory (#5580, @shoemoney).
+
+* Guard the Produce response `record_errors` allocation, and the
+  GetTelemetrySubscriptions `requested_metrics` allocation, against
+  allocation failure, and only assign each count once its allocation has
+  succeeded, so a failed allocation can never leave a non-zero count
+  beside a `NULL` pointer (#5580, @shoemoney).
+
 * Issues: #5555.
   Fix `int_latency` metric calculation. It was derived from the message
   timeout timestamp (`now + message.timeout.ms - rkm_ts_timeout`), which

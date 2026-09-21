@@ -5,6 +5,10 @@ librdkafka v2.16.0 is a feature release:
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
+* A consumer no longer auto-commits the offsets of an assignment it has lost
+  on a session timeout or `max.poll.interval.ms` expiry, including when a
+  rebalance was already in progress; that commit went out with an empty member
+  id and could stop a static member with a fatal `FENCED_INSTANCE_ID` (#5585).
 
 
 ## Security considerations
@@ -66,6 +70,15 @@ callers retry them instead of treating them as a hard failure.
   the revoke is done, keeping commits, `close()` and `unsubscribe()` working
   for a member that retains other partitions, and `rd_kafka_assignment_lost()`
   reporting false again by the time the next assignment is delivered.
+  The same commit was also sent when the session timeout or
+  `max.poll.interval.ms` expired while a rebalance was already in progress,
+  typically with a revoke queued because another member had joined the group
+  but not yet delivered because the application had not called `poll()`: the
+  rebalance already under way was correctly left to run, but the assignment
+  was never marked lost, so the queued revoke was delivered, and its offsets
+  committed, as an ordinary one. `rd_kafka_cgrp_revoke_all_rejoin_maybe()`
+  now marks the assignment lost in this case as well, so the guard also
+  covers the revoke that was already pending.
   Happening since 1.6.0 (#5585).
 
 

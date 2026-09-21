@@ -2703,19 +2703,6 @@ static void rd_kafka_handle_Metadata(rd_kafka_t *rk,
                 goto done;
         }
 
-        /* A Metadata response from a learned broker that is being
-         * decommissioned, e.g. taken down by a re-bootstrap sequence, must
-         * not rebuild the broker list: it comes from a source the client
-         * just stopped trusting and the bootstrap brokers haven't been
-         * queried yet. Fail it as an in-flight request to that broker would
-         * have been, the refresh action then reaches a usable broker.
-         * A configured broker is decommissioned as soon as a Metadata
-         * response has provided the learned brokers, so a response from it
-         * is still valid, see rd_kafka_cgrp_handle_FindCoordinator(). */
-        if (!err && rkb->rkb_source == RD_KAFKA_LEARNED &&
-            rd_kafka_broker_termination_in_progress(rkb))
-                err = RD_KAFKA_RESP_ERR__DESTROY_BROKER;
-
         if (err)
                 goto err;
 

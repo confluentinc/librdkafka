@@ -240,15 +240,7 @@ rd_kafka_resp_err_t rd_kafka_mock_cgrp_classic_member_sync_set(
 
         rd_kafka_mock_cgrp_classic_member_active(mcgrp, member);
 
-        /* The member may retry SyncGroupRequest on a new connection (e.g.
-         * its previous coordinator connection was torn down) before this
-         * connection's closure is processed by
-         * rd_kafka_mock_cgrps_classic_connection_closed(): discard the
-         * stale, now-unreachable, response rather than asserting. */
-        if (member->resp) {
-                rd_kafka_buf_destroy(member->resp);
-                member->resp = NULL;
-        }
+        rd_assert(!member->resp);
 
         member->resp = resp;
         member->conn = mconn;
@@ -608,13 +600,7 @@ rd_kafka_resp_err_t rd_kafka_mock_cgrp_classic_member_add(
         member->protos    = protos;
         member->proto_cnt = proto_cnt;
 
-        /* Same rationale as in rd_kafka_mock_cgrp_classic_member_sync_set():
-         * a retried JoinGroupRequest on a new connection may arrive before
-         * this connection's closure is processed. */
-        if (member->resp) {
-                rd_kafka_buf_destroy(member->resp);
-                member->resp = NULL;
-        }
+        rd_assert(!member->resp);
         member->resp = resp;
         member->conn = mconn;
         rd_kafka_mock_cgrp_classic_member_active(mcgrp, member);

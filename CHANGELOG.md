@@ -1,9 +1,10 @@
-# librdkafka v2.16.0  (unreleased)
+# librdkafka v2.16.0
 
 librdkafka v2.16.0 is a feature release:
 
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
+* Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
@@ -67,6 +68,8 @@ callers retry them instead of treating them as a hard failure.
   for a member that retains other partitions, and `rd_kafka_assignment_lost()`
   reporting false again by the time the next assignment is delivered.
   Happening since 1.6.0 (#5585).
+* Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
+  by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
 
 
 # librdkafka v2.15.1

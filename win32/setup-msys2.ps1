@@ -1,8 +1,8 @@
 # Install (if necessary) and set up msys2.
 $ErrorActionPreference = "Stop"
 
-$url="https://github.com/msys2/msys2-installer/releases/download/2025-06-22/msys2-base-x86_64-20250622.sfx.exe"
-$sha256="df6c053891d0b87c9104c118c0ce22885c3bc350a7659958d6d97a6760ccfa76"
+$url="https://github.com/msys2/msys2-installer/releases/download/2026-06-11/msys2-base-x86_64-20260611.sfx.exe"
+$sha256="c105946e64e08f099ac0e4647461ce762b95333ad211777666476a9a41451d65"
 $cacheKey = "msys2-$sha256-$Env:CACHE_TAG"
 $librdkafkaPath = Get-Location;
 
@@ -17,7 +17,10 @@ if (!(Test-Path -Path "c:\msys64\usr\bin\bash.exe")) {
     (New-Object System.Net.WebClient).DownloadFile($url, './msys2-installer.exe')
 
     # Verify checksum
-    (Get-FileHash -Algorithm "SHA256" .\msys2-installer.exe).hash -eq $sha256
+    $actualSha256 = (Get-FileHash -Algorithm "SHA256" .\msys2-installer.exe).hash
+    if ($actualSha256 -ne $sha256) {
+        throw "msys2 installer checksum mismatch: expected $sha256, got $actualSha256"
+    }
 
     # Install msys2
     .\msys2-installer.exe -y -oc:\

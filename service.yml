@@ -35,6 +35,8 @@ semaphore:
       - name: LIBRDKAFKA_VERSION
         required: true
         description: librdkafka version to verify
+      - name: REPOSITORY_BASE_URL
+        description: repository base URL
   - name: run-all-tests
     branch: master
     scheduled: false

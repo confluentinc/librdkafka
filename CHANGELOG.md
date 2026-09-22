@@ -1,3 +1,356 @@
+# librdkafka v2.16.0
+
+librdkafka v2.16.0 is a feature release:
+
+* Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
+* The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
+* Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
+* Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
+
+
+## Security considerations
+
+Bundled dependencies were further upgraded, beyond what v2.15.1 already
+covers, for source/autoconf builds:
+OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
+
+ * OpenSSL upgrade (3.5.7 → 3.5.8) addresses CVE-2026-75803.
+
+ * libcurl upgrade (8.21.0 → 8.22.0) addresses CVE-2026-13608,
+   CVE-2026-18924, CVE-2026-19931, CVE-2026-80229, CVE-2026-80230,
+   CVE-2026-80231, CVE-2026-80255, CVE-2026-82208, and CVE-2026-82209.
+
+
+## Upgrade considerations
+
+* Admin requests in flight on a decommissioned broker now fail with
+`RD_KAFKA_RESP_ERR__TRANSPORT` instead of `RD_KAFKA_RESP_ERR__DESTROY_BROKER`, so
+callers retry them instead of treating them as a hard failure.
+* The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms`. In case there are multiple re-bootstrap attempts, caused
+  by no available broker connection, this reduces the amount of events while still signalling that the outage is ongoing.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5600.
+  Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected.
+  The client kept asking the very brokers that reported its metadata as stale. Learned brokers are now decommissioned when a re-bootstrap sequence starts, so only the bootstrap servers are used until a Metadata response rebuilds the broker list. Queued messages are handed back to their partitions and re-sent once new leaders are known. Admin requests in flight on a decommissioned broker now fail with `RD_KAFKA_RESP_ERR__TRANSPORT` (previously
+  `RD_KAFKA_RESP_ERR__DESTROY_BROKER`) and should be retried.
+  Happening since 2.11.0 (#5600).
+* Issues: #5546.
+  `ALL_BROKERS_DOWN` was reported on every re-bootstrap cycle during a sustained
+  outage. It is now reported once per outage, re-armed when a broker connection
+  comes up, and at most once every `reconnect.backoff.max.ms` while it lasts.
+  Happening since 2.11.1 (#5600).
+
+### Consumer fixes
+
+* Issues: #5585.
+  A consumer with `enable.auto.commit=true` no longer sends an `OffsetCommit`
+  for an assignment it has already lost. On a client-side session timeout, or
+  when `max.poll.interval.ms` is exceeded, the member id is reset, the
+  assignment is marked lost, and its partitions are revoked. The revoke-time
+  auto-commit of those partitions was still being sent, because the
+  assignment-lost flag was cleared inside `rd_kafka_cgrp_unassign()` and
+  `rd_kafka_cgrp_incremental_unassign()` before the removed partitions were
+  served, defeating the guard that skips commits for a lost assignment. The
+  commit went out with an empty member id and the previous generation, which a
+  broker rejects with `UNKNOWN_MEMBER_ID`, or, for a static member
+  (`group.instance.id` set), with the fatal `FENCED_INSTANCE_ID` that stops the
+  consumer. The flag is now kept set until the removal has been served and the
+  unassign completes (`rd_kafka_cgrp_unassign_done()`,
+  `rd_kafka_cgrp_incr_unassign_done()` and, for the KIP-848 consumer protocol,
+  `rd_kafka_cgrp_consumer_incr_unassign_done()`), so the offsets of a lost
+  assignment are never committed while the flag is still cleared as soon as
+  the revoke is done, keeping commits, `close()` and `unsubscribe()` working
+  for a member that retains other partitions, and `rd_kafka_assignment_lost()`
+  reporting false again by the time the next assignment is delivered.
+  Happening since 1.6.0 (#5585).
+* Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
+  by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
+
+
+# librdkafka v2.15.1
+
+librdkafka v2.15.1 is a maintenance release:
+
+* Update bundled OpenSSL and libcurl dependencies, and refresh the Windows
+  build toolchain (msys2, vcpkg) (#5579).
+* Fix `int_latency` metric calculation, that was reporting bogus values when
+  `message.timeout.ms` is set to 0 (infinite) (#5335).
+* IPv6 addresses are wrapped in square brackets following RFC 3986, allowing to connect to those compressed IPv6 addresses (#5544).
+* IPv6 addresses are correctly passed to OpenSSL as IPs not as hostnames with brackets and the certificate is validated against its `iPAddress` entries instead of against `dNSName` entries (#5544).
+
+
+## Upgrade considerations
+
+* If you're parsing the nodename as received by `connect_cb`, `stats_cb`, `ssl_cert_verify_cb` or `throttle_cb`, make sure you're correctly parsing it following RFC 3986. Metadata API calls are unaffected: they return the host and port as separate fields.
+* Make sure the brokers' certificates carry the IP in an iPAddress entry, not a dNSName entry. Previously the certificate was validated against dNSName (falling back to the subject CN) whenever the address could not be parsed as an IP literal: with OpenSSL < 3.0 or BoringSSL for any IP address, and on all OpenSSL versions for an IPv6 address configured in brackets in bootstrap.servers ([::1]:9092), which never verified. A scoped address (fe80::1%eth0) was likewise dNSName-matched on every version and now has the zone stripped before matching. IPv6 addresses ending in :: could not be connected to at all, as the nodename became host:::port and failed name resolution. In the remaining cases, a bare IPv4 or IPv6 literal on OpenSSL >= 3.0, the iPAddress entry was already used, and behaviour is unchanged.
+
+
+## Security considerations
+
+Bundled dependencies were further upgraded as follows:
+OpenSSL 3.5.6 → 3.5.7 for source/autoconf builds, and 3.6.2 → 3.6.3 for
+vcpkg-based packages; libcurl 8.20.0 → 8.21.0, now used by both
+source/autoconf builds and vcpkg (previously pinned to 8.19.0 in vcpkg,
+so vcpkg-based packages also pick up the fixes below that source/autoconf
+builds already got from 8.20.0).
+
+ * OpenSSL upgrade (3.5.6 → 3.5.7 for source/autoconf, 3.6.2 → 3.6.3 for
+   vcpkg) addresses:
+   * Both branches: CVE-2026-34180, CVE-2026-34181, CVE-2026-34182,
+     CVE-2026-34183, CVE-2026-42764, CVE-2026-42766, CVE-2026-42767,
+     CVE-2026-42768, CVE-2026-42769, CVE-2026-42770, CVE-2026-45445,
+     CVE-2026-45446, CVE-2026-45447, CVE-2026-7383, CVE-2026-9076.
+   * Only the vcpkg 3.6.2 → 3.6.3 branch (3.5.6/3.5.7 were not affected):
+     CVE-2026-35188, CVE-2026-42765.
+
+ * libcurl upgrade (8.20.0 → 8.21.0) addresses: CVE-2026-8286,
+   CVE-2026-8458, CVE-2026-8924, CVE-2026-8925, CVE-2026-8926,
+   CVE-2026-8927, CVE-2026-8932, CVE-2026-9079, CVE-2026-9080,
+   CVE-2026-9545, CVE-2026-9546, CVE-2026-9547, CVE-2026-10536,
+   CVE-2026-11352, CVE-2026-11564, CVE-2026-11586, CVE-2026-11856,
+   CVE-2026-12064.
+   Since libcurl is now at the same version (8.21.0) for both
+   source/autoconf and vcpkg builds, this also closes the gap noted in
+   the previous release, where vcpkg-pinned 8.19.0 still contained
+   CVE-2026-4873, CVE-2026-5545, CVE-2026-5773, CVE-2026-6253,
+   CVE-2026-6276, CVE-2026-6429, CVE-2026-7168.
+
+ * zlib vcpkg port revision bump (1.3.2#0 → 1.3.2#1): no upstream version
+   change and no associated CVE; packaging-only update.
+
+
+## Fixes
+
+### Producer fixes
+
+* Issues: #5555.
+  Fix `int_latency` metric calculation. It was derived from the message
+  timeout timestamp (`now + message.timeout.ms - rkm_ts_timeout`), which
+  yields a large negative value when `message.timeout.ms` is 0 (infinite)
+  and `rkm_ts_timeout` is `INT64_MAX`. It's now computed directly as
+  `now - rkm_ts_enq`, the actual time the message spent in the queue,
+  regardless of the timeout setting.
+  Happening since 0.11.0 (#5335).
+
+
+
+# librdkafka v2.15.0
+
+librdkafka v2.15.0 is a feature release:
+
+
+## [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka) Queues for Kafka – Now in **Preview**
+
+- Added a preview implementation of the **share consumer** (Queues for Kafka,
+  [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka)).
+  Members of a share group cooperatively consume from the same partitions with
+  per-record acquire/acknowledge semantics and redelivery, providing queue-like
+  consumption on top of Kafka.
+- New `rd_kafka_share_*` public API, with a dedicated `rd_kafka_share_t` handle
+  created via `rd_kafka_share_consumer_new()`:
+  - Subscription: `rd_kafka_share_subscribe()`, `rd_kafka_share_unsubscribe()`,
+    `rd_kafka_share_subscription()`.
+  - Batch polling: `rd_kafka_share_poll()` returns an `rd_kafka_messages_t`
+    batch (`rd_kafka_messages_count()` / `rd_kafka_messages_get()` /
+    `rd_kafka_messages_destroy()`).
+  - Acknowledgement: `rd_kafka_share_acknowledge()`,
+    `rd_kafka_share_acknowledge_type()`, `rd_kafka_share_acknowledge_offset()`
+    with ACCEPT / RELEASE / REJECT types, and
+    `rd_kafka_message_delivery_count()`.
+  - Commit: `rd_kafka_share_commit_sync()`, `rd_kafka_share_commit_async()` and
+    the acknowledgement-commit callback
+    (`rd_kafka_share_set_acknowledgement_commit_cb()`).
+  - Lifecycle: `rd_kafka_share_consumer_close()`,
+    `rd_kafka_share_consumer_close_queue()`, `rd_kafka_share_destroy()`.
+- Two acknowledgement modes selected by `share.acknowledgement.mode`
+  (default `implicit`; `explicit` requires the application to acknowledge every
+  record before the next poll).
+- New `max.poll.records` property (default 500) and adjusted defaults for
+  several network properties for share consumers (`receive.message.max.bytes`,
+  `connections.max.idle.ms`, `reconnect.backoff.ms`,
+  `reconnect.backoff.max.ms`).
+- See the *Share consumers (Queues for Kafka)* section of
+  [INTRODUCTION.md](INTRODUCTION.md#share-consumers-queues-for-kafka), the
+  *Share consumer* section in [rdkafka.h](src/rdkafka.h), and the
+  `examples/share_consumer*` programs.
+
+> [!Note]
+> The [KIP-932](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka)
+> share consumer is currently in **Preview** and should not be used in
+> production environments. The public interfaces may change before General
+> Availability, and known limitations apply (see
+> [INTRODUCTION.md](INTRODUCTION.md#share-consumer-current-limitations)). The
+> share consumer is single-threaded and not thread-safe by design. It requires
+> a broker with share groups enabled (generally available in Apache Kafka
+> 4.2.0).
+
+## Enhancements
+* Add `aws_iam` option to `sasl.oauthbearer.metadata.authentication.type`, with a defensive stub that fails when no token-refresh callback is registered.
+
+## Fixes
+
+### General fixes
+
+* Issues: #5135.
+  Fix compilation with CMake when CURL is disabled.
+  The OAuthBearer OIDC code included `<curl/curl.h>` under `#ifdef WITH_OAUTHBEARER_OIDC`, but
+  CMake always defines that macro (to 0 or 1), so CURL was required even when it was turned off.
+  Happening since 2.11.0 (#5136).
+* Issues: #5282.
+  Fix `rd_atomic32_set`/`rd_atomic64_set` returning the new value instead of the previous one in CMake builds.
+  CMake never defined `HAVE_ATOMICS_{32,64}_ATOMIC`, so the setters used a non-atomic fallback that
+  returned the new value, which prevented the `ALL_BROKERS_DOWN` event from being raised under CMake.
+  Happening since 2.11.1 (#5136).
+
+### Consumer fixes
+
+* Issues: #5541.
+  Improve error handling in the KIP-848 `consumer` group protocol:
+    - Defer the leave heartbeat until the assignment is revoked, so a member that
+      exceeds `max.poll.interval.ms` rejoins cleanly instead of being rejected
+      with a fatal `INVALID_REQUEST`.
+    - Treat `GROUP_ID_NOT_FOUND` in the ConsumerGroupHeartbeat response as fatal,
+      except while the member is already leaving.
+    - Surface unexpected permanent broker-level heartbeat errors instead of
+      retrying them in a loop; internal transport/timeout codes keep their
+      existing retry/reconnect handling.
+    Happening since 2.12.0 (#5488)
+
+
+# librdkafka v2.14.2
+
+librdkafka v2.14.2 is a maintenance release:
+
+* Fix duplicate groups in `ListConsumerGroups` when multiple brokers
+  return the same group (#5417).
+* Fix data race in timers (#5089).
+* Update bundled OpenSSL, libcurl, zstd, zlib and cJSON
+  dependencies (#5346).
+
+
+## Security considerations
+
+Bundled dependencies were upgraded as follows (see #5346):
+OpenSSL 3.0.15 → 3.5.6 (LTS) for source/autoconf builds, and to 3.6.2 in
+vcpkg-based packages (no LTS available in vcpkg); libcurl 8.10.1 → 8.20.0
+for source/autoconf builds and to 8.19.0 in vcpkg; zlib 1.3.1 → 1.3.2;
+zstd 1.5.6 → 1.5.7; cJSON 1.7.14 → 1.7.19.
+
+ * OpenSSL upgrade (3.0.15 → 3.5.6 LTS for source/autoconf,
+   3.3.2 → 3.6.2 for vcpkg) addresses:
+   * CVE-2025-15467 (OpenSSL): upgraded OpenSSL to 3.5.6 (LTS) or
+     3.6.2 with vcpkg as it usually doesn't provide LTS upgrades.
+   * Both branches (affect 3.0.15 and 3.3.2): CVE-2024-9143,
+     CVE-2024-13176, CVE-2025-9230, CVE-2025-68160, CVE-2025-69418,
+     CVE-2025-69419, CVE-2025-69420, CVE-2025-69421, CVE-2026-22795,
+     CVE-2026-22796, CVE-2026-28387, CVE-2026-28388, CVE-2026-28389,
+     CVE-2026-28390, CVE-2026-31789, CVE-2026-31790.
+   * Only the 3.3.x→3.6.2 vcpkg branch (3.0.15 was not affected):
+     CVE-2024-12797, CVE-2025-9231, CVE-2025-15468, CVE-2025-66199.
+
+ * libcurl upgrade (8.10.1 → 8.20.0 source/autoconf, 8.10.1 → 8.19.0
+   vcpkg) addresses:
+   * CVE-2025-14017 (libcurl): solved through upgrading to CURL 8.20.0.
+     LDAP module isn't present in pre-built binary, so this CVE doesn't
+     affect librdkafka but can still trigger automatic scanners.
+   * Fixed by 8.18.0 or earlier (both autoconf and vcpkg paths):
+     CVE-2024-9681, CVE-2024-11053, CVE-2025-0167, CVE-2025-0725,
+     CVE-2025-4947, CVE-2025-5025, CVE-2025-10966, CVE-2025-13034,
+     CVE-2025-14524, CVE-2025-14819, CVE-2025-15079, CVE-2025-15224,
+     CVE-2026-1965, CVE-2026-3783, CVE-2026-3784.
+   * Fixed only by 8.20.0 (autoconf path); vcpkg-pinned 8.19.0 still
+     contains these: CVE-2026-4873, CVE-2026-5545, CVE-2026-5773,
+     CVE-2026-6253, CVE-2026-6276, CVE-2026-6429, CVE-2026-7168.
+
+ * zlib (1.3.1 → 1.3.2): CVE-2026-27171 (CPU exhaustion in
+   `crc32_combine64` and `crc32_combine_gen64`).
+
+ * zstd (1.5.6 → 1.5.7): no CVEs; bug-fix and performance release.
+
+ * cJSON (1.7.14 → 1.7.19): CVE-2023-50471, CVE-2023-50472,
+   CVE-2024-31755, CVE-2025-57052.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5082.
+  Fix data race in timers. The callback and its argument could have been modified after the lock is released.
+  Happening since 1.x (#5089).
+
+### Consumer fixes
+
+* Fix crash (SIGSEGV) in `rd_kafka_cgrp_handle_LeaveGroup()` when coordinator
+  is unavailable during consumer close. The error logging path dereferenced
+  a potentially NULL broker pointer. Happening since 1.x.
+
+### Admin client fixes
+
+* Issues: #5417.
+  Fix duplicate groups in `ListConsumerGroups` when multiple brokers return the same group.
+  Happening since 1.x (#5417).
+
+
+# librdkafka v2.14.1
+
+librdkafka v2.14.1 is a maintenance release:
+
+* Bundle prebuilt binaries for linux-s390x (#5365).
+
+
+
+# librdkafka v2.14.0
+
+librdkafka v2.14.0 is a feature release:
+
+* [KIP-768](https://cwiki.apache.org/confluence/pages/viewpage.action?pageId=186877575#KIP768:ExtendSASL/OAUTHBEARERwithSupportforOIDC-ClientConfiguration) Extend SASL/OAUTHBEARER to support OIDC claim mapping beyond the default `sub` claim (#5336).
+
+
+
+# librdkafka v2.13.2
+
+librdkafka v2.13.2 is a maintenance release:
+
+* The `librdkafka.redist` NuGet package now includes binary for alpine-arm64 ([#5237](https://github.com/confluentinc/librdkafka/pull/5237), [@mclayton7](https://github.com/mclayton7))
+* Remove CPU usage regression when a subscription matches no topics (#5324).
+* Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
+  position on EOF or error messages (#5213).
+* Fix compilation without `getentropy` (@olegrok, @lpsinger, #5288).
+* Use a truly random seed for pseudo-random number generation whenever available (#5288).
+* Fix rd_list destroy callback type mismatch by changing rd_kafka_assignor_destroy to take a void * argument, as expected by rd_list_init() destroy callbacks, and casting internally to rd_kafka_assignor_t * (#5195) (#5278).
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5283.
+  Fix compilation without `getentropy`.
+  glibc versions lacking support are those less than 2.25 (2017).
+  Happening since 2.13.0 (@olegrok, @lpsinger, #5288).
+
+### Consumer fixes
+
+* Issues: #5324.
+  Remove CPU usage regression when a subscription matches no topics.
+  The increased CPU usage (~30%) was seen in particular when there are many topics
+  in the clusters and the given subscription regex doesn't match any.
+  Happening since 2.10.0 (#5324).
+* Issues: #4844.
+  Fix `rd_kafka_consume_batch_queue` incorrectly updating the application
+  position when receiving EOF or error messages, causing the position to
+  move forward and likely be stored and committed.
+  When storing the application offset the leader epoch is also considered for correct offset ordering in case of log truncation.
+  Happening since 2.2.0 (#5213).
+
+
+
 # librdkafka v2.13.0
 
 librdkafka v2.13.0 is a feature release:

@@ -110,6 +110,21 @@ typedef struct rd_kafka_partition_leader_epoch_s {
 } rd_kafka_partition_leader_epoch_t;
 
 /**
+ * @brief Return \p topic if non-NULL, else a printable literal
+ *        placeholder.
+ *
+ *        Use at %s format args where the source is a raw topic name
+ *        that may be NULL — most commonly an `mdt->topic` from a
+ *        Metadata response (compact_nullable_string can yield NULL
+ *        when the broker doesn't know a topic_id we asked about).
+ */
+static RD_INLINE RD_UNUSED const char *
+rd_kafka_topic_name_str_safe(const char *topic) {
+        return topic ? topic : "(null)";
+}
+
+
+/**
  * Finds and returns a topic based on its topic_id, or NULL if not found.
  * The 'rkt' refcount is increased by one and the caller must call
  * rd_kafka_topic_destroy() when it is done with the topic to decrease
@@ -193,6 +208,19 @@ struct rd_kafka_topic_s {
 #define rd_kafka_topic_wrunlock(rkt) rwlock_wrunlock(&(rkt)->rkt_lock)
 
 
+/**
+ * @brief Return the name of \p rkt if available, else a printable
+ *        literal placeholder. Guards \p rkt, \p rkt->rkt_topic, and
+ *        \p rkt->rkt_topic->str — each layer can be NULL on degenerate
+ *        flows that this helper is meant to absorb.
+ */
+static RD_INLINE RD_UNUSED const char *
+rd_kafka_topic_name_safe(const rd_kafka_topic_t *rkt) {
+        if (!rkt || !rkt->rkt_topic || !rkt->rkt_topic->str)
+                return "(null)";
+        return rkt->rkt_topic->str;
+}
+
 
 /**
  * @brief Increase refcount and return topic object.
@@ -230,6 +258,11 @@ rd_kafka_topic_t *rd_kafka_topic_new0(rd_kafka_t *rk,
                                       rd_kafka_topic_conf_t *conf,
                                       int *existing,
                                       int do_lock);
+
+rd_kafka_topic_t *rd_kafka_topic_new_with_id(rd_kafka_t *rk,
+                                             const char *topic,
+                                             rd_kafka_Uuid_t topic_id,
+                                             int do_lock);
 
 rd_kafka_topic_t *rd_kafka_topic_find_fl(const char *func,
                                          int line,
@@ -326,6 +359,8 @@ void rd_kafka_topic_leader_query0(rd_kafka_t *rk,
 void rd_kafka_local_topics_to_list(rd_kafka_t *rk,
                                    rd_list_t *topics,
                                    int *cache_cntp);
+
+void rd_kafka_local_topic_ids_to_list(rd_kafka_t *rk, rd_list_t *topic_ids);
 
 void rd_ut_kafka_topic_set_topic_exists(rd_kafka_topic_t *rkt,
                                         int partition_cnt,

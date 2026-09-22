@@ -375,8 +375,9 @@ static void rd_kafka_parse_Metadata_update_topic(
 
         rd_rkb_dbg(rkb, METADATA, "METADATA",
                    /* The indent below is intentional */
-                   "  Topic %s with %i partitions%s%s", mdt->topic,
-                   mdt->partition_cnt, mdt->err ? ": " : "",
+                   "  Topic %s with %i partitions%s%s",
+                   rd_kafka_topic_name_str_safe(mdt->topic), mdt->partition_cnt,
+                   mdt->err ? ": " : "",
                    mdt->err ? rd_kafka_err2str(mdt->err) : "");
 
         /* Ignore metadata completely for temporary errors. (issue #513)
@@ -387,8 +388,8 @@ static void rd_kafka_parse_Metadata_update_topic(
                 rd_rkb_dbg(rkb, TOPIC, "METADATA",
                            "Temporary error in metadata reply for "
                            "topic %s (PartCnt %i): %s: ignoring",
-                           mdt->topic, mdt->partition_cnt,
-                           rd_kafka_err2str(mdt->err));
+                           rd_kafka_topic_name_str_safe(mdt->topic),
+                           mdt->partition_cnt, rd_kafka_err2str(mdt->err));
         } else {
                 /* Update local topic & partition state based
                  * on metadata */
@@ -526,11 +527,7 @@ static void rd_kafka_metadata_decommission_unavailable_brokers(
 
                 rd_list_add(&brokers_to_decommission, rkb);
         }
-        RD_LIST_FOREACH(rkb, &brokers_to_decommission, i) {
-                rd_kafka_broker_decommission(rk, rkb,
-                                             &rk->wait_decommissioned_thrds);
-                rd_list_add(&rk->wait_decommissioned_brokers, rkb);
-        }
+        rd_kafka_brokers_decommission_list(rk, &brokers_to_decommission);
         rd_list_destroy(&brokers_to_decommission);
         rd_kafka_wrunlock(rk);
 }
@@ -676,9 +673,16 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
         mdi->cluster_id = NULL;
         if (ApiVersion >= 2) {
                 rd_kafka_buf_read_str(rkbuf, &cluster_id);
-                if (cluster_id.str)
-                        mdi->cluster_id =
-                            rd_tmpabuf_write_str(&tbuf, cluster_id.str);
+                if (!RD_KAFKAP_STR_IS_NULL(&cluster_id)) {
+                        int clen = RD_KAFKAP_STR_LEN(&cluster_id);
+                        if (!(mdi->cluster_id =
+                                  rd_tmpabuf_alloc(&tbuf, clen + 1)))
+                                rd_kafka_buf_parse_fail(
+                                    rkbuf,
+                                    "cluster_id: tmpabuf memory shortage");
+                        memcpy(mdi->cluster_id, cluster_id.str, clen);
+                        mdi->cluster_id[clen] = '\0';
+                }
         }
 
         mdi->controller_id = -1;
@@ -735,20 +739,22 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 if (!(md->topics[i].partitions = rd_tmpabuf_alloc(
                           &tbuf, md->topics[i].partition_cnt *
                                      sizeof(*md->topics[i].partitions))))
-                        rd_kafka_buf_parse_fail(rkbuf,
-                                                "%s: %d partitions: "
-                                                "tmpabuf memory shortage",
-                                                md->topics[i].topic,
-                                                md->topics[i].partition_cnt);
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "%s: %d partitions: "
+                            "tmpabuf memory shortage",
+                            rd_kafka_topic_name_str_safe(md->topics[i].topic),
+                            md->topics[i].partition_cnt);
 
                 if (!(mdi->topics[i].partitions = rd_tmpabuf_alloc(
                           &tbuf, md->topics[i].partition_cnt *
                                      sizeof(*mdi->topics[i].partitions))))
-                        rd_kafka_buf_parse_fail(rkbuf,
-                                                "%s: %d internal partitions: "
-                                                "tmpabuf memory shortage",
-                                                md->topics[i].topic,
-                                                md->topics[i].partition_cnt);
+                        rd_kafka_buf_parse_fail(
+                            rkbuf,
+                            "%s: %d internal partitions: "
+                            "tmpabuf memory shortage",
+                            rd_kafka_topic_name_str_safe(md->topics[i].topic),
+                            md->topics[i].partition_cnt);
 
 
                 for (j = 0; j < md->topics[i].partition_cnt; j++) {
@@ -792,7 +798,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                     "%s [%" PRId32
                                     "]: %d replicas: "
                                     "tmpabuf memory shortage",
-                                    md->topics[i].topic,
+                                    rd_kafka_topic_name_str_safe(
+                                        md->topics[i].topic),
                                     md->topics[i].partitions[j].id,
                                     md->topics[i].partitions[j].replica_cnt);
 
@@ -820,7 +827,8 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                                     "%s [%" PRId32
                                     "]: %d isrs: "
                                     "tmpabuf memory shortage",
-                                    md->topics[i].topic,
+                                    rd_kafka_topic_name_str_safe(
+                                        md->topics[i].topic),
                                     md->topics[i].partitions[j].id,
                                     md->topics[i].partitions[j].isr_cnt);
 
@@ -906,8 +914,13 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
 
         for (i = 0; i < md->topic_cnt; i++) {
 
-                /* Ignore topics in blacklist */
+                /* Ignore topics in blacklist. Skip when the broker
+                 * returned a NULL topic name (e.g. UNKNOWN_TOPIC_ID
+                 * response from a by-id Metadata request) — the
+                 * blacklist matches on name only, so there is nothing
+                 * to compare against. */
                 if (rkb->rkb_rk->rk_conf.topic_blacklist &&
+                    md->topics[i].topic &&
                     rd_kafka_pattern_match(rkb->rkb_rk->rk_conf.topic_blacklist,
                                            md->topics[i].topic)) {
                         rd_rkb_dbg(rkb, TOPIC | RD_KAFKA_DBG_METADATA,
@@ -933,17 +946,21 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_parse_Metadata_update_topic(rkb, &md->topics[i],
                                                      &mdi->topics[i]);
 
-                if (requested_topics)
+                /* Skip the by-name dedup if the response carries a
+                 * NULL topic name; strcmp(NULL, ...) is UB. The
+                 * missing_topics list is keyed by name, so a
+                 * NULL-name response cannot match any entry. */
+                if (requested_topics && md->topics[i].topic)
                         rd_list_free_cb(missing_topics,
                                         rd_list_remove_cmp(missing_topics,
                                                            md->topics[i].topic,
-                                                           (void *)strcmp));
+                                                           rd_list_cmp_str));
                 if (requested_topic_ids)
                         rd_list_free_cb(
                             missing_topic_ids,
                             rd_list_remove_cmp(missing_topic_ids,
                                                &mdi->topics[i].topic_id,
-                                               (void *)rd_kafka_Uuid_ptr_cmp));
+                                               rd_kafka_Uuid_ptr_cmp));
                 /* Only update cache when not asking
                  * for all topics or cache entry
                  * already exists. */
@@ -1110,6 +1127,9 @@ rd_kafka_parse_Metadata0(rd_kafka_broker_t *rkb,
                 rd_kafka_cgrp_metadata_update_check(rkb->rkb_rk->rk_cgrp,
                                                     rd_true /*do join*/);
 
+        if (rk->rk_cgrp && RD_KAFKA_IS_SHARE_CONSUMER(rk))
+                rd_kafka_share_topic_err_propagate(rk->rk_cgrp);
+
         if (rk->rk_type == RD_KAFKA_CONSUMER && rk->rk_cgrp &&
             rk->rk_cgrp->rkcg_group_protocol == RD_KAFKA_GROUP_PROTOCOL_CLASSIC)
                 rd_interval_reset(&rk->rk_cgrp->rkcg_join_intvl);
@@ -1216,6 +1236,7 @@ rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
                                         "(admin request)");
 }
 
+typedef RD_MAP_TYPE(const char *, const char *) map_str_str_t;
 
 /**
  * @brief Add all topics in current cached full metadata
@@ -1226,7 +1247,7 @@ rd_kafka_parse_Metadata_admin(rd_kafka_broker_t *rkb,
  *                an available topic will be added to this list with
  *                the appropriate error set.
  *
- * @returns the number of topics matched and added to \p list
+ * @returns the number of topics matched and added to \p tinfos
  *
  * @locks none
  * @locality any
@@ -1236,13 +1257,16 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                               rd_list_t *tinfos,
                               const rd_kafka_topic_partition_list_t *match,
                               rd_kafka_topic_partition_list_t *errored) {
-        int ti, i;
+        int i;
         size_t cnt = 0;
         rd_kafka_topic_partition_list_t *unmatched;
-        rd_list_t cached_topics;
-        const char *topic;
+        const struct rd_kafka_metadata_cache_entry *rkmce;
+        map_str_str_t map;
 
         rd_kafka_rdlock(rk);
+        map = (map_str_str_t)RD_MAP_INITIALIZER(
+            rk->rk_metadata_cache.rkmc_cnt, rd_map_str_cmp, rd_map_str_hash,
+            NULL /* topic list element */, NULL /* topic list element */);
         /* To keep track of which patterns and topics in `match` that
          * did not match any topic (or matched an errored topic), we
          * create a set of all topics to match in `unmatched` and then
@@ -1253,15 +1277,24 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
 
         /* For each topic in the cluster, scan through the match list
          * to find matching topic. */
-        rd_list_init(&cached_topics, rk->rk_metadata_cache.rkmc_cnt, rd_free);
-        rd_kafka_metadata_cache_topics_to_list(rk, &cached_topics, rd_false);
-        RD_LIST_FOREACH(topic, &cached_topics, ti) {
+        TAILQ_FOREACH(rkmce, &rk->rk_metadata_cache.rkmc_expiry, rkmce_link) {
                 const rd_kafka_metadata_topic_internal_t *mdti;
-                const rd_kafka_metadata_topic_t *mdt =
-                    rd_kafka_metadata_cache_topic_get(rk, topic, &mdti,
-                                                      rd_true /* valid */);
-                if (!mdt)
+                const rd_kafka_metadata_topic_t *mdt;
+                const char *topic = rkmce->rkmce_mtopic.topic;
+                rd_bool_t matched = rd_false;
+
+                if (!RD_KAFKA_METADATA_CACHE_VALID(rkmce) || !topic ||
+                    RD_MAP_GET(&map, topic))
+                        /* We could have multiple cache entries
+                         * with different topic id and same topic name
+                         * in some cases */
                         continue;
+
+                RD_MAP_SET(&map, topic, topic);
+
+                mdt  = &rkmce->rkmce_mtopic;
+                mdti = &rkmce->rkmce_metadata_internal_topic;
+
 
                 /* Ignore topics in blacklist */
                 if (rk->rk_conf.topic_blacklist &&
@@ -1279,6 +1312,15 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                             unmatched, match->elems[i].topic,
                             RD_KAFKA_PARTITION_UA);
 
+                        if (matched)
+                                /*
+                                 * Just remove it from unmatched.
+                                 * Topic was already added to
+                                 * `tinfos` or `errored`.
+                                 */
+                                continue;
+                        matched = rd_true;
+
                         if (mdt->err) {
                                 rd_kafka_topic_partition_list_add(
                                     errored, topic, RD_KAFKA_PARTITION_UA)
@@ -1294,6 +1336,7 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
                 }
         }
         rd_kafka_rdunlock(rk);
+        RD_MAP_DESTROY(&map);
 
         /* Any topics/patterns still in unmatched did not match any
          * existing topics, add them to `errored`. */
@@ -1306,7 +1349,6 @@ rd_kafka_metadata_topic_match(rd_kafka_t *rk,
         }
 
         rd_kafka_topic_partition_list_destroy(unmatched);
-        rd_list_destroy(&cached_topics);
 
         return cnt;
 }
@@ -1391,7 +1433,8 @@ void rd_kafka_metadata_log(rd_kafka_t *rk,
                 rd_kafka_dbg(
                     rk, METADATA, fac,
                     "  Topic #%i/%i: %s with %i partitions%s%s", i,
-                    md->topic_cnt, md->topics[i].topic,
+                    md->topic_cnt,
+                    rd_kafka_topic_name_str_safe(md->topics[i].topic),
                     md->topics[i].partition_cnt, md->topics[i].err ? ": " : "",
                     md->topics[i].err ? rd_kafka_err2str(md->topics[i].err)
                                       : "");
@@ -1503,6 +1546,85 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
 
 
 /**
+ * @brief Refresh metadata for topics identified by topic_id.
+ *
+ *        For consumer paths whose canonical identity is topic_id
+ *        (share consumer today): a by-id request lets the broker tell
+ *        us which of our locally known topic_ids no longer correspond
+ *        to a live topic, so stale rkts (e.g. those left behind by a
+ *        topic delete+recreate) can be marked as non-existent and
+ *        their broker-side share-session entries released.
+ *
+ *        No by-id cache hint / dedup is performed; every call sends
+ *        the request. Auto-creation, cgrp update, and subscription
+ *        version are not exposed: auto-creation requires a topic
+ *        name, and the cgrp-update hook is only consumed by the
+ *        classic consumer protocol.
+ *
+ * @param rk used to look up usable broker if \p rkb is NULL.
+ * @param rkb use this broker, unless NULL then any usable broker
+ *            from \p rk.
+ * @param topic_ids list of rd_kafka_Uuid_t * to query.
+ * @param reason reason of refresh, used in debug logs.
+ *
+ * @returns an error code; __UNKNOWN_TOPIC if topic_ids is empty;
+ *          __TRANSPORT if no broker is available.
+ *
+ * @locality any
+ * @locks none
+ */
+rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_topic_ids(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    const rd_list_t *topic_ids,
+                                    const char *reason) {
+        rd_list_t q_topic_ids;
+        int destroy_rkb = 0;
+
+        if (!rk) {
+                rd_assert(rkb);
+                rk = rkb->rkb_rk;
+        }
+
+        if (rd_list_cnt(topic_ids) == 0)
+                return RD_KAFKA_RESP_ERR__UNKNOWN_TOPIC;
+
+        if (!rkb) {
+                if (!(rkb = rd_kafka_broker_any_usable(
+                          rk, RD_POLL_NOWAIT, RD_DO_LOCK, 0, reason))) {
+                        rd_kafka_dbg(rk, METADATA, "METADATA",
+                                     "Skipping metadata refresh of %d "
+                                     "topic(s) using id: %s: no usable "
+                                     "brokers",
+                                     rd_list_cnt(topic_ids), reason);
+                        return RD_KAFKA_RESP_ERR__TRANSPORT;
+                }
+                destroy_rkb = 1;
+        }
+
+        rd_list_init(&q_topic_ids, rd_list_cnt(topic_ids),
+                     rd_list_Uuid_destroy);
+        rd_list_copy_to(&q_topic_ids, topic_ids, rd_list_Uuid_copy, NULL);
+
+        rd_kafka_dbg(rk, METADATA, "METADATA",
+                     "Requesting metadata for %d topic(s) using id: %s",
+                     rd_list_cnt(&q_topic_ids), reason);
+
+        rd_kafka_MetadataRequest(
+            rkb, NULL, &q_topic_ids, reason, rd_false /* allow_auto_create */,
+            rd_false /* cgrp_update */, -1 /* cgrp_subscription_version */,
+            rd_false /* force_racks */, NULL);
+
+        rd_list_destroy(&q_topic_ids);
+
+        if (destroy_rkb)
+                rd_kafka_broker_destroy(rkb);
+
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+
+/**
  * @brief Refresh metadata for known topics
  *
  * @param rk: used to look up usable broker if \p rkb is NULL.
@@ -1566,6 +1688,7 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                                           rd_kafka_broker_t *rkb,
                                           const char *reason) {
         rd_list_t topics;
+        rd_list_t topic_ids;
         rd_kafka_resp_err_t err;
         rd_kafka_cgrp_t *rkcg;
         rd_bool_t allow_auto_create_topics =
@@ -1586,6 +1709,23 @@ rd_kafka_metadata_refresh_consumer_topics(rd_kafka_t *rk,
                  * all topics in the cluster so that we can perform
                  * regexp matching. */
                 return rd_kafka_metadata_refresh_all(rk, rkb, reason);
+        }
+
+        if (RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
+                /* Share consumer identifies topics by id. Subscription
+                 * names are resolved server-side via
+                 * ShareGroupHeartbeat, so the only thing this
+                 * periodic path needs to do is status-check the
+                 * locally known topic ids. The broker's response
+                 * marks stale ids (e.g. those left behind by a
+                 * delete+recreate) as unknown, which drives cleanup
+                 * of the corresponding rkts. */
+                rd_list_init(&topic_ids, 8, rd_list_Uuid_destroy);
+                rd_kafka_local_topic_ids_to_list(rk, &topic_ids);
+                err = rd_kafka_metadata_refresh_topic_ids(rk, rkb, &topic_ids,
+                                                          reason);
+                rd_list_destroy(&topic_ids);
+                return err;
         }
 
         rd_list_init(&topics, 8, rd_free);
@@ -2104,9 +2244,10 @@ rd_kafka_metadata_update_op(rd_kafka_t *rk, rd_kafka_metadata_internal_t *mdi) {
                                     "Topic id %s not found in cache",
                                     rd_kafka_Uuid_base64str(&topic_id));
                         } else {
-                                rd_kafka_log(rk, LOG_WARNING, "METADATAUPDATE",
-                                             "Topic %s not found in cache",
-                                             topic);
+                                rd_kafka_log(
+                                    rk, LOG_WARNING, "METADATAUPDATE",
+                                    "Topic %s not found in cache",
+                                    rd_kafka_topic_name_str_safe(topic));
                         }
                         continue;
                 }

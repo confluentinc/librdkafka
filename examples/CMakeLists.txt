@@ -76,4 +76,13 @@ if(NOT WIN32)
     add_executable(kafkatest_verifiable_client kafkatest_verifiable_client.cpp)
     target_link_libraries(kafkatest_verifiable_client PUBLIC rdkafka++)
 
+    add_executable(share_consumer share_consumer.c)
+    target_link_libraries(share_consumer PUBLIC rdkafka)
+
+    add_executable(share_consumer_commit_sync share_consumer_commit_sync.c)
+    target_link_libraries(share_consumer_commit_sync PUBLIC rdkafka)
+
+    add_executable(share_consumer_commit_async share_consumer_commit_async.c)
+    target_link_libraries(share_consumer_commit_async PUBLIC rdkafka)
+
 endif(NOT WIN32)

@@ -150,6 +150,11 @@ rd_kafka_metadata_refresh_topics(rd_kafka_t *rk,
                                  int32_t cgrp_subscription_version,
                                  const char *reason);
 rd_kafka_resp_err_t
+rd_kafka_metadata_refresh_topic_ids(rd_kafka_t *rk,
+                                    rd_kafka_broker_t *rkb,
+                                    const rd_list_t *topic_ids,
+                                    const char *reason);
+rd_kafka_resp_err_t
 rd_kafka_metadata_refresh_known_topics(rd_kafka_t *rk,
                                        rd_kafka_broker_t *rkb,
                                        rd_bool_t force,

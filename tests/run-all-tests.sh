@@ -14,7 +14,7 @@ set -e
 # - no assertions
 # - following AK and CP versions
 
-export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-4.0.0}
+export TEST_KAFKA_GIT_REF=${TEST_KAFKA_GIT_REF:-4.3.0}
 export TEST_CP_VERSION=${TEST_CP_VERSION:-8.0.0}
 
 TEST_SSL_ARG=""
@@ -54,7 +54,9 @@ if [ ! -z $TEST_PARALLEL ]; then
     TEST_PARALLEL_ARG="-p$TEST_PARALLEL"
 fi
 if [ ! -z $TEST_CONF ]; then
-    TEST_CONF_ARG="--conf '$TEST_CONF'"
+    TEST_CONF_ARG="--conf $TEST_CONF"
+else
+    TEST_CONF_ARG="--conf [\"group.share.min.record.lock.duration.ms=1000\"]"
 fi
 if [ ! -z $TEST_ENV_VARIABLES ]; then
     IFS=',' read -ra TEST_ENV_VARIABLES_ARRAY <<< "$TEST_ENV_VARIABLES"

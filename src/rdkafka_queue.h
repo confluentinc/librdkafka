@@ -878,6 +878,21 @@ int rd_kafka_q_serve_rkmessages(rd_kafka_q_t *rkq,
                                 int timeout_ms,
                                 rd_kafka_message_t **rkmessages,
                                 size_t rkmessages_size);
+/**
+ * @brief Serve up to one share-consumer op from \p rkq.
+ *
+ * On success with a non-empty SHARE_FETCH_RESPONSE op, \c *rkmessages_out
+ * is set to a newly-allocated rd_kafka_messages_t sized exactly to the op's
+ * payload. The caller takes ownership and must release it with
+ * rd_kafka_messages_destroy().
+ *
+ * On error / empty queue / non-fetch ops, \c *rkmessages_out is NULL.
+ * The returned rd_kafka_error_t (if non-NULL) is owned by the caller.
+ */
+rd_kafka_error_t *
+rd_kafka_q_serve_share_rkmessages(rd_kafka_q_t *rkq,
+                                  int timeout_ms,
+                                  rd_kafka_messages_t **rkmessages_out);
 rd_kafka_resp_err_t rd_kafka_q_wait_result(rd_kafka_q_t *rkq, int timeout_ms);
 
 int rd_kafka_q_apply(rd_kafka_q_t *rkq,

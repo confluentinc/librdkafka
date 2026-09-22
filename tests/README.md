@@ -180,6 +180,11 @@ be it `make`, `run-test.sh`, `until-fail.sh`, etc.
  * `TEST_DEBUG=...` - this will automatically set the `debug` config property
                       of all instantiated clients to the value.
                       E.g.. `TEST_DEBUG=broker,protocol TESTS=0001 make`
+ * `TESTS_TO_DEBUG=0nnn,0mmm` - when used with `TEST_DEBUG`, limits debug
+                      logging to only the specified comma-separated test numbers.
+                      This is useful when running multiple tests but only wanting
+                      debug output from specific ones.
+                      E.g., `TESTS_TO_DEBUG=0172,0171 TEST_DEBUG=all make`
  * `TEST_LEVEL=n` - controls the `TEST_SAY()` output level, a higher number
                       yields more test output. Default level is 2.
  * `RD_UT_TEST=name` - only run unittest containing `name`, should be used

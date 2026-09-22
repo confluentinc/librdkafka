@@ -91,9 +91,9 @@ function manual_checks {
 function libcrypto_install_source {
     local name=$1
     local destdir=$2
-    local ver=3.0.15
-    local checksum="23c666d0edf20f14249b3d8f0368acaee9ab585b09e1de82107c66e1f3ec9533"
-    local url=https://www.openssl.org/source/openssl-${ver}.tar.gz
+    local ver=3.5.8
+    local checksum="a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"
+    local url=https://github.com/openssl/openssl/releases/download/openssl-${ver}/openssl-${ver}.tar.gz
 
     local conf_args="--prefix=/usr --openssldir=/usr/lib/ssl no-shared no-zlib"
 

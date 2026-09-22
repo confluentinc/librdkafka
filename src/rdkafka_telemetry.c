@@ -173,8 +173,9 @@ static void update_matched_metrics(rd_kafka_t *rk, size_t j) {
 static void rd_kafka_match_requested_metrics(rd_kafka_t *rk) {
         size_t metrics_cnt = RD_KAFKA_TELEMETRY_METRIC_CNT(rk), i;
         rd_bool_t is_metric_included[RD_MAX(
-            (int)RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
-            (int)RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT)] = {0};
+            RD_MAX((int)RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT,
+                   (int)RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT),
+            (int)RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT)] = {0};
         const rd_kafka_telemetry_metric_info_t *info =
             RD_KAFKA_TELEMETRY_METRIC_INFO(rk);
 

@@ -3,6 +3,7 @@
 #cmakedefine01 ENABLE_REFCNT_DEBUG
 
 #cmakedefine01 HAVE_ATOMICS_32
+#cmakedefine01 HAVE_ATOMICS_32_ATOMIC
 #cmakedefine01 HAVE_ATOMICS_32_SYNC
 
 #if (HAVE_ATOMICS_32)
@@ -14,6 +15,7 @@
 #endif
 
 #cmakedefine01 HAVE_ATOMICS_64
+#cmakedefine01 HAVE_ATOMICS_64_ATOMIC
 #cmakedefine01 HAVE_ATOMICS_64_SYNC
 
 #if (HAVE_ATOMICS_64)

@@ -24,7 +24,8 @@ global_job_config:
       - ./configure --install-deps --enable-werror --enable-devel
       - make -j all
       - make -j -C tests build
-      - sem-version java 17
+      - sem-version java 25
+      - export JAVA_HOME="$(java -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.home = //p')"
 
 blocks:
   - name: "Run all tests (x86_64)"
@@ -43,7 +44,7 @@ blocks:
               value: "False"
           commands:
             - if [[ "$TEST_TYPE" != *"plaintext"* ]]; then exit 0; fi
-            - ./tests/run-all-tests.sh 
+            - ./tests/run-all-tests.sh
         - name: "SSL cluster (x86_64)"
           env_vars:
             - name: TEST_SSL

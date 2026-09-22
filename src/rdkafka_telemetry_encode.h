@@ -36,14 +36,18 @@
 #define RD_KAFKA_TELEMETRY_METRIC_NODE_ID_ATTRIBUTE "node.id"
 
 #define RD_KAFKA_TELEMETRY_METRIC_INFO(rk)                                     \
-        (rk->rk_type == RD_KAFKA_PRODUCER                                      \
-             ? RD_KAFKA_TELEMETRY_PRODUCER_METRICS_INFO                        \
-             : RD_KAFKA_TELEMETRY_CONSUMER_METRICS_INFO)
+        (RD_KAFKA_IS_SHARE_CONSUMER(rk)                                        \
+             ? RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO                  \
+             : (rk->rk_type == RD_KAFKA_PRODUCER                               \
+                    ? RD_KAFKA_TELEMETRY_PRODUCER_METRICS_INFO                 \
+                    : RD_KAFKA_TELEMETRY_CONSUMER_METRICS_INFO))
 
 #define RD_KAFKA_TELEMETRY_METRIC_CNT(rk)                                      \
-        (rk->rk_type == RD_KAFKA_PRODUCER                                      \
-             ? RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT                         \
-             : RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT)
+        (RD_KAFKA_IS_SHARE_CONSUMER(rk)                                        \
+             ? RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT                   \
+             : (rk->rk_type == RD_KAFKA_PRODUCER                               \
+                    ? RD_KAFKA_TELEMETRY_PRODUCER_METRIC__CNT                  \
+                    : RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT))
 
 
 typedef enum {
@@ -81,6 +85,27 @@ typedef enum {
         RD_KAFKA_TELEMETRY_METRIC_CONSUMER_COORDINATOR_COMMIT_LATENCY_MAX,
         RD_KAFKA_TELEMETRY_CONSUMER_METRIC__CNT
 } rd_kafka_telemetry_consumer_metric_name_t;
+
+typedef enum {
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL,
+        RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE,
+        RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT
+} rd_kafka_telemetry_share_consumer_metric_name_t;
 
 typedef union {
         int64_t int_value;
@@ -292,6 +317,139 @@ static const rd_kafka_telemetry_metric_info_t RD_KAFKA_TELEMETRY_CONSUMER_METRIC
                             "coordinator.",
              .unit        = "ms",
              .is_int      = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+};
+
+static const rd_kafka_telemetry_metric_info_t RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRICS_INFO
+    [RD_KAFKA_TELEMETRY_SHARE_CONSUMER_METRIC__CNT] = {
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_POLL_IDLE_RATIO_AVG] =
+            {.name          = "consumer.share.poll.idle.ratio.avg",
+             .description   = "The average fraction of time the consumer's "
+                              "poll() is idle as opposed to waiting for the "
+                              "user code to process records.",
+             .unit          = "1",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_AVG] =
+            {.name = "consumer.share.time.between.poll.avg",
+             .description =
+                 "The average delay between invocations of poll() in "
+                 "milliseconds.",
+             .unit          = "ms",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_TIME_BETWEEN_POLL_MAX] =
+            {.name          = "consumer.share.time.between.poll.max",
+             .description   = "The max delay between invocations of poll() in "
+                              "milliseconds.",
+             .unit          = "ms",
+             .is_int        = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_TOTAL] =
+            {.name          = "consumer.share.fetch.manager.fetch.total",
+             .description   = "The total number of fetch requests.",
+             .unit          = "1",
+             .is_int        = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_RATE] =
+            {.name          = "consumer.share.fetch.manager.fetch.rate",
+             .description   = "The number of fetch requests per second.",
+             .unit          = "1",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_AVG] =
+            {.name          = "consumer.share.fetch.manager.fetch.latency.avg",
+             .description   = "The average time taken for a fetch request.",
+             .unit          = "ms",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_LATENCY_MAX] =
+            {.name          = "consumer.share.fetch.manager.fetch.latency.max",
+             .description   = "The maximum time taken for any fetch request.",
+             .unit          = "ms",
+             .is_int        = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_TOTAL] =
+            {.name = "consumer.share.fetch.manager.acknowledgements.send."
+                     "total",
+             .description   = "The total number of record acknowledgements "
+                              "sent.",
+             .unit          = "1",
+             .is_int        = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_ACKNOWLEDGEMENTS_SEND_RATE] =
+            {.name = "consumer.share.fetch.manager.acknowledgements.send."
+                     "rate",
+             .description   = "The average number of record acknowledgements "
+                              "sent per second.",
+             .unit          = "1",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_AVG] =
+            {.name = "consumer.share.fetch.manager.fetch.throttle.time.avg",
+             .description   = "The average throttle time in ms.",
+             .unit          = "ms",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_THROTTLE_TIME_MAX] =
+            {.name = "consumer.share.fetch.manager.fetch.throttle.time.max",
+             .description   = "The maximum throttle time in ms.",
+             .unit          = "ms",
+             .is_int        = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_TOTAL] =
+            {.name          = "consumer.share.coordinator.heartbeat.total",
+             .description   = "The total number of heartbeats.",
+             .unit          = "1",
+             .is_int        = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_COORDINATOR_HEARTBEAT_RATE] =
+            {.name          = "consumer.share.coordinator.heartbeat.rate",
+             .description   = "The number of heartbeats per second.",
+             .unit          = "1",
+             .is_int        = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_AVG] =
+            {.name        = "consumer.share.fetch.manager.fetch.size.avg",
+             .description = "The average number of bytes fetched per request.",
+             .unit        = "bytes",
+             .is_int      = rd_false,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_FETCH_SIZE_MAX] =
+            {.name        = "consumer.share.fetch.manager.fetch.size.max",
+             .description = "The maximum number of bytes fetched per request.",
+             .unit        = "bytes",
+             .is_int      = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_TOTAL] =
+            {.name        = "consumer.share.fetch.manager.bytes.consumed.total",
+             .description = "The total number of bytes fetched.",
+             .unit        = "bytes",
+             .is_int      = rd_true,
+             .is_per_broker = rd_false,
+             .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_SUM},
+        [RD_KAFKA_TELEMETRY_METRIC_SHARE_CONSUMER_BYTES_CONSUMED_RATE] =
+            {.name        = "consumer.share.fetch.manager.bytes.consumed.rate",
+             .description = "The average number of bytes fetched per "
+                            "second.",
+             .unit        = "bytes",
+             .is_int      = rd_false,
              .is_per_broker = rd_false,
              .type          = RD_KAFKA_TELEMETRY_METRIC_TYPE_GAUGE},
 };

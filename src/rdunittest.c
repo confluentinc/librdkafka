@@ -423,6 +423,9 @@ extern int unittest_scram(void);
 #endif
 extern int unittest_assignors(void);
 extern int unittest_map(void);
+extern int unittest_fetcher_share_filter_forward(void);
+extern int unittest_share_acknowledge(void);
+extern int rd_kafka_unittest_msgset_errors(void);
 #if WITH_CURL
 extern int unittest_http(void);
 #endif
@@ -431,8 +434,10 @@ extern int unittest_sasl_oauthbearer_oidc(void);
 extern int unittest_sasl_oauthbearer_oidc_jwt_bearer(void);
 extern int unittest_sasl_oauthbearer_oidc_assertion(void);
 #endif
+extern int unittest_admin(void);
 extern int unittest_telemetry(void);
 extern int unittest_telemetry_decode(void);
+extern int unittest_assignment(void);
 #if WITH_SSL
 extern int unittest_ssl(void);
 #endif
@@ -481,8 +486,14 @@ int rd_unittest(void) {
             {"sasl_oauthbearer_oidc_assertion",
              unittest_sasl_oauthbearer_oidc_assertion},
 #endif
+            {"admin", unittest_admin},
             {"telemetry", unittest_telemetry},
             {"telemetry_decode", unittest_telemetry_decode},
+            {"assignment", unittest_assignment},
+            {"fetcher_share_filter_forward",
+             unittest_fetcher_share_filter_forward},
+            {"share_acknowledge", unittest_share_acknowledge},
+            {"msgset_errors", rd_kafka_unittest_msgset_errors},
             {"feature", unittest_feature},
 #if WITH_SSL
             {"ssl", unittest_ssl},

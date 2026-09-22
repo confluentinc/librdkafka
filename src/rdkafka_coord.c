@@ -354,6 +354,12 @@ static void rd_kafka_coord_req_handle_FindCoordinator(rd_kafka_t *rk,
          * response. */
         if (creq->creq_done)
                 err = RD_KAFKA_RESP_ERR__DESTROY;
+        else if (!err && rkb->rkb_source == RD_KAFKA_LEARNED &&
+                 rd_kafka_broker_termination_in_progress(rkb))
+                /* Don't re-create the coordinator as a learned broker from a
+                 * learned broker being decommissioned, e.g. by a re-bootstrap
+                 * sequence, see rd_kafka_cgrp_handle_FindCoordinator(). */
+                err = RD_KAFKA_RESP_ERR__DESTROY_BROKER;
 
         if (err)
                 goto err;

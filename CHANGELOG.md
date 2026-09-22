@@ -1,3 +1,77 @@
+# librdkafka v2.16.0
+
+librdkafka v2.16.0 is a feature release:
+
+* Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected (#5560).
+* The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
+* Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
+* Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
+
+
+## Security considerations
+
+Bundled dependencies were further upgraded, beyond what v2.15.1 already
+covers, for source/autoconf builds:
+OpenSSL 3.5.7 → 3.5.8 (LTS); libcurl 8.21.0 → 8.22.0.
+
+ * OpenSSL upgrade (3.5.7 → 3.5.8) addresses CVE-2026-75803.
+
+ * libcurl upgrade (8.21.0 → 8.22.0) addresses CVE-2026-13608,
+   CVE-2026-18924, CVE-2026-19931, CVE-2026-80229, CVE-2026-80230,
+   CVE-2026-80231, CVE-2026-80255, CVE-2026-82208, and CVE-2026-82209.
+
+
+## Upgrade considerations
+
+* Admin requests in flight on a decommissioned broker now fail with
+`RD_KAFKA_RESP_ERR__TRANSPORT` instead of `RD_KAFKA_RESP_ERR__DESTROY_BROKER`, so
+callers retry them instead of treating them as a hard failure.
+* The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms`. In case there are multiple re-bootstrap attempts, caused
+  by no available broker connection, this reduces the amount of events while still signalling that the outage is ongoing.
+
+
+## Fixes
+
+### General fixes
+
+* Issues: #5600.
+  Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected.
+  The client kept asking the very brokers that reported its metadata as stale. Learned brokers are now decommissioned when a re-bootstrap sequence starts, so only the bootstrap servers are used until a Metadata response rebuilds the broker list. Queued messages are handed back to their partitions and re-sent once new leaders are known. Admin requests in flight on a decommissioned broker now fail with `RD_KAFKA_RESP_ERR__TRANSPORT` (previously
+  `RD_KAFKA_RESP_ERR__DESTROY_BROKER`) and should be retried.
+  Happening since 2.11.0 (#5600).
+* Issues: #5546.
+  `ALL_BROKERS_DOWN` was reported on every re-bootstrap cycle during a sustained
+  outage. It is now reported once per outage, re-armed when a broker connection
+  comes up, and at most once every `reconnect.backoff.max.ms` while it lasts.
+  Happening since 2.11.1 (#5600).
+
+### Consumer fixes
+
+* Issues: #5585.
+  A consumer with `enable.auto.commit=true` no longer sends an `OffsetCommit`
+  for an assignment it has already lost. On a client-side session timeout, or
+  when `max.poll.interval.ms` is exceeded, the member id is reset, the
+  assignment is marked lost, and its partitions are revoked. The revoke-time
+  auto-commit of those partitions was still being sent, because the
+  assignment-lost flag was cleared inside `rd_kafka_cgrp_unassign()` and
+  `rd_kafka_cgrp_incremental_unassign()` before the removed partitions were
+  served, defeating the guard that skips commits for a lost assignment. The
+  commit went out with an empty member id and the previous generation, which a
+  broker rejects with `UNKNOWN_MEMBER_ID`, or, for a static member
+  (`group.instance.id` set), with the fatal `FENCED_INSTANCE_ID` that stops the
+  consumer. The flag is now kept set until the removal has been served and the
+  unassign completes (`rd_kafka_cgrp_unassign_done()`,
+  `rd_kafka_cgrp_incr_unassign_done()` and, for the KIP-848 consumer protocol,
+  `rd_kafka_cgrp_consumer_incr_unassign_done()`), so the offsets of a lost
+  assignment are never committed while the flag is still cleared as soon as
+  the revoke is done, keeping commits, `close()` and `unsubscribe()` working
+  for a member that retains other partitions, and `rd_kafka_assignment_lost()`
+  reporting false again by the time the next assignment is delivered.
+  Happening since 1.6.0 (#5585).
+* Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
+  by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
+
+
 # librdkafka v2.15.1
 
 librdkafka v2.15.1 is a maintenance release:

@@ -852,7 +852,8 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
 
 void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers);
 
-void rd_kafka_brokers_decommission_learned(rd_kafka_t *rk, const char *reason);
+void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
+                                               const char *reason);
 
 int unittest_broker(void);
 

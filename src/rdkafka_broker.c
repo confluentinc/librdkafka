@@ -6730,15 +6730,16 @@ void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers) {
 }
 
 /**
- * @brief Decommission all learned brokers, keeping the configured
- *        (bootstrap) and logical ones.
+ * @brief Decommission all learned and configured (bootstrap) brokers,
+ *        keeping the logical and internal ones.
  *
- *        Used by the re-bootstrap sequence so that only the bootstrap
- *        brokers are used until a Metadata response rebuilds the broker
- *        list. Partitions delegated to the decommissioned brokers are
- *        handed back with their queued messages, see
- *        `RD_KAFKA_OP_PARTITION_LEAVE` handling, and delegated again on
- *        the next Metadata response.
+ *        Used by the re-bootstrap sequence: the bootstrap brokers are
+ *        re-added afterwards as new broker objects, so they're connected
+ *        again and their addresses re-resolved, and only they are used
+ *        until a Metadata response rebuilds the broker list. Partitions
+ *        delegated to the decommissioned brokers are handed back with their
+ *        queued messages, see `RD_KAFKA_OP_PARTITION_LEAVE` handling, and
+ *        delegated again on the next Metadata response.
  *
  * @param reason Reason for the decommission, for debug logs.
  *
@@ -6746,7 +6747,8 @@ void rd_kafka_brokers_decommission_list(rd_kafka_t *rk, rd_list_t *brokers) {
  * @locks_acquired rd_kafka_wrlock(rk)
  * @locality any
  */
-void rd_kafka_brokers_decommission_learned(rd_kafka_t *rk, const char *reason) {
+void rd_kafka_brokers_decommission_non_logical(rd_kafka_t *rk,
+                                               const char *reason) {
         rd_kafka_broker_t *rkb;
         rd_list_t brokers_to_decommission;
 
@@ -6755,7 +6757,8 @@ void rd_kafka_brokers_decommission_learned(rd_kafka_t *rk, const char *reason) {
                      rd_atomic32_get(&rk->rk_broker_cnt), NULL);
 
         TAILQ_FOREACH(rkb, &rk->rk_brokers, rkb_link) {
-                if (rkb->rkb_source != RD_KAFKA_LEARNED)
+                if (rkb->rkb_source != RD_KAFKA_LEARNED &&
+                    rkb->rkb_source != RD_KAFKA_CONFIGURED)
                         continue;
 
                 /* Don't try to decommission already decommissioning brokers
@@ -6770,7 +6773,7 @@ void rd_kafka_brokers_decommission_learned(rd_kafka_t *rk, const char *reason) {
 
         if (rd_list_cnt(&brokers_to_decommission) > 0) {
                 rd_kafka_dbg(rk, BROKER, "DECOMMISSION",
-                             "Decommissioning %d learned broker(s): %s",
+                             "Decommissioning %d broker(s): %s",
                              rd_list_cnt(&brokers_to_decommission), reason);
                 rd_kafka_brokers_decommission_list(rk,
                                                    &brokers_to_decommission);

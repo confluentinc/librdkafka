@@ -29,6 +29,15 @@
 #include "test.h"
 #include "../src/rdkafka_proto.h"
 
+#ifndef _WIN32
+#include <netdb.h>
+#else
+#define WIN32_MEAN_AND_LEAN
+#include <winsock2.h>
+#include <ws2ipdef.h>
+#include <ws2tcpip.h>
+#endif
+
 /**
  * @brief Test that is adding and removing brokers from the mock cluster, to
  * verify that the client is updated with the new broker list. This can trigger
@@ -1012,6 +1021,34 @@ static rd_atomic32_t do_test_kip1102_rebootstrap_cases_errors_cleared;
 static int64_t do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us;
 
 /**
+ * @brief Host and port of the bootstrap-only broker listener, as passed to the
+ *        resolve callback. Empty when the variation doesn't use one.
+ */
+static char do_test_kip1102_rebootstrap_cases_bootstrap_only_host[256];
+static char do_test_kip1102_rebootstrap_cases_bootstrap_only_port[16];
+
+/**
+ * @brief Number of times the bootstrap-only broker listener was resolved
+ *        since the Metadata errors were injected. Each re-bootstrap sequence
+ *        re-adds the bootstrap servers as new broker objects, so each one
+ *        should resolve it again.
+ */
+static rd_atomic32_t
+    do_test_kip1102_rebootstrap_cases_bootstrap_only_resolve_cnt;
+
+/**
+ * @brief Number of re-bootstrap sequences started since the Metadata errors
+ *        were injected, upper bound for the resolve count above.
+ */
+static rd_atomic32_t
+    do_test_kip1102_rebootstrap_cases_rebootstrap_after_errors_cnt;
+
+/**
+ * @brief Number of Metadata errors injected in the error phase.
+ */
+#define DO_TEST_KIP1102_REBOOTSTRAP_CASES_PUSHED_ERROR_CNT 140
+
+/**
  * @brief Number of re-bootstrap sequences \p variation must show before the
  *        injected error phase can be ended.
  */
@@ -1063,6 +1100,35 @@ do_test_kip1102_rebootstrap_cases_is_metadata_to_bootstrap_only(
                    do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id;
 }
 
+/**
+ * @brief Resolve callback delegating to getaddrinfo(3), counting the
+ *        resolutions of the bootstrap-only broker listener once the Metadata
+ *        errors were injected.
+ */
+static int
+do_test_kip1102_rebootstrap_cases_resolve_cb(const char *node,
+                                             const char *service,
+                                             const struct addrinfo *hints,
+                                             struct addrinfo **res,
+                                             void *opaque) {
+        if (!node) {
+                freeaddrinfo(*res);
+                return 0;
+        }
+
+        if (rd_atomic32_get(&do_test_kip1102_rebootstrap_cases_errors_pushed) &&
+            !strcmp(node,
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_host) &&
+            service &&
+            !strcmp(service,
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_port))
+                rd_atomic32_add(
+                    &do_test_kip1102_rebootstrap_cases_bootstrap_only_resolve_cnt,
+                    1);
+
+        return getaddrinfo(node, service, hints, res);
+}
+
 static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
                                                      int level,
                                                      const char *fac,
@@ -1071,6 +1137,12 @@ static void do_test_kip1102_rebootstrap_cases_log_cb(const rd_kafka_t *rk,
                 /* Count the number of re-bootstrap sequences started */
                 int32_t cnt = rd_atomic32_add(
                     &do_test_kip1102_rebootstrap_cases_rebootstrap_cnt, 1);
+
+                if (rd_atomic32_get(
+                        &do_test_kip1102_rebootstrap_cases_errors_pushed))
+                        rd_atomic32_add(
+                            &do_test_kip1102_rebootstrap_cases_rebootstrap_after_errors_cnt,
+                            1);
 
                 if (rd_atomic32_get(
                         &do_test_kip1102_rebootstrap_cases_errors_pushed) &&
@@ -1122,6 +1194,7 @@ do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
                 int32_t id =
                     do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id;
                 char *listener;
+                const char *colon;
 
                 /* `cluster` is already created at this point. Hide this
                  * broker from Metadata responses: it keeps listening, so it
@@ -1144,6 +1217,24 @@ do_test_kip1102_rebootstrap_cases_edit_configuration_cb(rd_kafka_conf_t *conf) {
                          " (%s) as the only bootstrap server\n",
                          id, listener);
                 test_conf_set(conf, "bootstrap.servers", listener);
+
+                /* Count its resolutions: each re-bootstrap sequence must
+                 * re-add it as a new broker object, that resolves and
+                 * connects anew, instead of keeping a connected one. */
+                colon = strrchr(listener, ':');
+                TEST_ASSERT(colon, "No port in listener \"%s\"", listener);
+                rd_snprintf(
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_host,
+                    sizeof(
+                        do_test_kip1102_rebootstrap_cases_bootstrap_only_host),
+                    "%.*s", (int)(colon - listener), listener);
+                rd_snprintf(
+                    do_test_kip1102_rebootstrap_cases_bootstrap_only_port,
+                    sizeof(
+                        do_test_kip1102_rebootstrap_cases_bootstrap_only_port),
+                    "%s", colon + 1);
+                rd_kafka_conf_set_resolve_cb(
+                    conf, do_test_kip1102_rebootstrap_cases_resolve_cb);
                 rd_free(listener);
         }
         return RD_KAFKA_CONSUMER;
@@ -1210,8 +1301,14 @@ do_test_kip1102_rebootstrap_cases_after_action_cb(rd_kafka_t **rkp,
                 allowed_errors =
                     do_test_kip1102_rebootstrap_cases_allowed_errors(
                         do_test_kip1102_rebootstrap_cases_variation);
-                /* A request is made every 100 ms: 7s */
-                for (i = 0; i < 70; i++)
+                /* A request is made every 100 ms. More errors than the
+                 * expected sequences are pushed: the error phase is ended
+                 * from the log callback once the expected sequences are
+                 * seen, and not every error consumed starts a sequence, see
+                 * `do_test_kip1102_rebootstrap_cases()`. */
+                for (i = 0;
+                     i < DO_TEST_KIP1102_REBOOTSTRAP_CASES_PUSHED_ERROR_CNT;
+                     i++)
                         rd_kafka_mock_push_request_errors(
                             cluster, RD_KAFKAP_Metadata, 1, allowed_errors[0]);
 
@@ -1302,6 +1399,12 @@ static void do_test_kip1102_rebootstrap_cases(
         do_test_kip1102_rebootstrap_cases_tracking_started = rd_false;
         rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_errors_pushed, 0);
         rd_atomic32_init(&do_test_kip1102_rebootstrap_cases_errors_cleared, 0);
+        rd_atomic32_init(
+            &do_test_kip1102_rebootstrap_cases_bootstrap_only_resolve_cnt, 0);
+        rd_atomic32_init(
+            &do_test_kip1102_rebootstrap_cases_rebootstrap_after_errors_cnt, 0);
+        do_test_kip1102_rebootstrap_cases_bootstrap_only_host[0]   = '\0';
+        do_test_kip1102_rebootstrap_cases_bootstrap_only_port[0]   = '\0';
         do_test_kip1102_rebootstrap_cases_wait_abs_timeout_us      = 0;
         do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id = -1;
 
@@ -1311,11 +1414,14 @@ static void do_test_kip1102_rebootstrap_cases(
         if (do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
                 variation)) {
                 /* REBOOTSTRAP_REQUIRED error code cases:
-                 * A re-bootstrap is expected for each error response.
-                 * It's possible multiple consecutive error responses cause a
-                 * single re-bootstrap sequence because of the
-                 * timer activation. */
-                expected_rebootstrap_cnt = 70;
+                 * A re-bootstrap is expected for each error response
+                 * received. It's possible multiple consecutive error
+                 * responses cause a single re-bootstrap sequence because of
+                 * the timer activation, and an error consumed by a request
+                 * in flight on a broker that the sequence decommissions is
+                 * never received: pushed errors are an upper bound. */
+                expected_rebootstrap_cnt =
+                    DO_TEST_KIP1102_REBOOTSTRAP_CASES_PUSHED_ERROR_CNT;
         }
 
         if (do_test_kip1102_rebootstrap_cases_connections_stay_up(variation)) {
@@ -1378,6 +1484,38 @@ static void do_test_kip1102_rebootstrap_cases(
                     " after %d re-bootstrap sequence(s), got %" PRId32,
                     do_test_kip1102_rebootstrap_cases_bootstrap_only_broker_id,
                     rebootstrap_cnt, bootstrap_only_metadata_cnt);
+
+                /* Each sequence must resolve the bootstrap server again:
+                 * a kept, still connected, bootstrap broker would never
+                 * re-resolve its address and, after a cluster switchover
+                 * behind the same hostname, would keep asking the old
+                 * cluster. Without the fix it resolves exactly once, on
+                 * the first sequence that re-adds it.
+                 *
+                 * Not an exact match: a sequence can be superseded by the
+                 * next one before its new bootstrap broker is selected
+                 * for connection, in which case that object never
+                 * resolves. */
+                int32_t resolve_cnt = rd_atomic32_get(
+                    &do_test_kip1102_rebootstrap_cases_bootstrap_only_resolve_cnt);
+                int32_t rebootstrap_after_errors_cnt = rd_atomic32_get(
+                    &do_test_kip1102_rebootstrap_cases_rebootstrap_after_errors_cnt);
+                int32_t expected_min_resolve_cnt =
+                    do_test_kip1102_rebootstrap_cases_is_rebootstrap_required(
+                        variation)
+                        ? 2
+                        : 1;
+                TEST_SAY("Bootstrap-only broker resolved %" PRId32
+                         " time(s) during %" PRId32
+                         " re-bootstrap sequence(s)\n",
+                         resolve_cnt, rebootstrap_after_errors_cnt);
+                TEST_ASSERT(resolve_cnt >= expected_min_resolve_cnt &&
+                                resolve_cnt <= rebootstrap_after_errors_cnt,
+                            "Expected the bootstrap-only broker to be "
+                            "resolved between %" PRId32 " and %" PRId32
+                            " time(s), got %" PRId32,
+                            expected_min_resolve_cnt,
+                            rebootstrap_after_errors_cnt, resolve_cnt);
         }
 
         rd_free(log_interceptor);

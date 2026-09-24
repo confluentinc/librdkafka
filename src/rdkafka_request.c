@@ -562,6 +562,10 @@ int rd_kafka_buf_read_NodeEndpoints(rd_kafka_buf_t *rkbuf,
         int32_t i;
         rd_kafka_buf_read_arraycnt(rkbuf, &NodeEndpoints->NodeEndpointCnt,
                                    RD_KAFKAP_BROKERS_MAX);
+        if (unlikely(NodeEndpoints->NodeEndpointCnt < 0))
+                rd_kafka_buf_parse_fail(rkbuf,
+                                        "Invalid NodeEndpointCnt %" PRId32,
+                                        NodeEndpoints->NodeEndpointCnt);
         // printf(" ---------------------------------------
         // rd_kafka_buf_read_NodeEndpoints: NodeEndpointCnt=%d\n",
         //        NodeEndpoints->NodeEndpointCnt);
@@ -3301,6 +3305,9 @@ rd_kafka_handle_ApiVersion(rd_kafka_t *rk,
                 goto err;
         }
 
+        if (unlikely(ApiArrayCnt < 0))
+                ApiArrayCnt = 0;
+
         rd_rkb_dbg(rkb, FEATURE, "APIVERSION", "Broker API support:");
 
         *apis = rd_malloc(sizeof(**apis) * ApiArrayCnt);
@@ -3999,7 +4006,7 @@ rd_kafka_handle_Produce_parse(rd_kafka_broker_t *rkb,
                 int32_t RecordErrorsCnt;
                 rd_kafkap_str_t ErrorMessage;
                 rd_kafka_buf_read_arraycnt(rkbuf, &RecordErrorsCnt, -1);
-                if (RecordErrorsCnt) {
+                if (RecordErrorsCnt > 0) {
                         result->record_errors = rd_calloc(
                             RecordErrorsCnt, sizeof(*result->record_errors));
                         result->record_errors_cnt = RecordErrorsCnt;
@@ -6842,7 +6849,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, -1);
 
-        if (arraycnt) {
+        if (arraycnt > 0) {
                 rk->rk_telemetry.accepted_compression_types_cnt = arraycnt;
                 rk->rk_telemetry.accepted_compression_types =
                     rd_calloc(arraycnt, sizeof(rd_kafka_compression_t));
@@ -6883,7 +6890,7 @@ void rd_kafka_handle_GetTelemetrySubscriptions(rd_kafka_t *rk,
 
         rd_kafka_buf_read_arraycnt(rkbuf, &arraycnt, 1000);
 
-        if (arraycnt) {
+        if (arraycnt > 0) {
                 rk->rk_telemetry.requested_metrics_cnt = arraycnt;
                 rk->rk_telemetry.requested_metrics =
                     rd_calloc(arraycnt, sizeof(char *));
@@ -7297,6 +7304,70 @@ static int unittest_handle_GetTelemetrySubscriptions(void) {
 }
 
 /**
+ * @brief Test that a nullable (-1) array count in the
+ *        GetTelemetrySubscriptions response is treated as an absent array
+ *        rather than being fed to rd_calloc() and the parse loops.
+ *
+ * @returns 1 on failure, 0 on success.
+ */
+static int unittest_handle_GetTelemetrySubscriptions_nullable(void) {
+        rd_kafka_t *rk;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_buf_t *rkbuf;
+
+        RD_UT_SAY("Verifying GetTelemetrySubscriptions nullable array "
+                  "handling");
+
+        rk  = rd_kafka_new(RD_KAFKA_CONSUMER, NULL, NULL, 0);
+        rkb = rd_kafka_broker_add_logical(rk, "unittest");
+
+        rkbuf            = rd_kafka_buf_new(0, 0);
+        rkbuf->rkbuf_rkb = rkb;
+        rd_kafka_buf_write_i32(rkbuf, 0); /* ThrottleTime */
+        rd_kafka_buf_write_i16(rkbuf, 0); /* ErrorCode */
+
+        rd_kafka_buf_write_uuid(rkbuf, &rk->rk_telemetry.client_instance_id);
+
+        rd_kafka_buf_write_i32(rkbuf, 0); /* SubscriptionId */
+
+        rd_kafka_buf_write_i32(rkbuf, -1); /* #AcceptedCompressionTypes: null */
+
+        rd_kafka_buf_write_i32(rkbuf, 0);  /* PushIntervalMs */
+        rd_kafka_buf_write_i32(rkbuf, 0);  /* TelemetryMaxBytes */
+        rd_kafka_buf_write_bool(rkbuf, 0); /* DeltaTemporality */
+
+        rd_kafka_buf_write_i32(rkbuf, -1); /* #RequestedMetrics: null */
+
+        /* Set up a buffer reader for sending the buffer. */
+        rd_slice_init_full(&rkbuf->rkbuf_reader, &rkbuf->rkbuf_buf);
+
+        /* Handle the response */
+        rd_kafka_handle_GetTelemetrySubscriptions(
+            rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, NULL, NULL);
+
+        /* A null AcceptedCompressionTypes array must install the
+         * RD_KAFKA_COMPRESSION_NONE default, not crash on a -1 count. */
+        RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types_cnt == 1,
+                     "Expected default compression type, got %" PRIusz,
+                     rk->rk_telemetry.accepted_compression_types_cnt);
+        RD_UT_ASSERT(rk->rk_telemetry.accepted_compression_types[0] ==
+                         RD_KAFKA_COMPRESSION_NONE,
+                     "Expected 'none' compression type, got '%s'",
+                     rd_kafka_compression2str(
+                         rk->rk_telemetry.accepted_compression_types[0]));
+
+        RD_UT_ASSERT(rk->rk_telemetry.requested_metrics_cnt == 0,
+                     "Expected no requested metrics, got %" PRIusz,
+                     rk->rk_telemetry.requested_metrics_cnt);
+        RD_UT_ASSERT(!rk->rk_telemetry.requested_metrics,
+                     "Expected NULL requested metrics");
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_destroy(rk);
+        return 0;
+}
+
+/**
  * @brief Request/response unit tests
  */
 int unittest_request(void) {
@@ -7304,6 +7375,7 @@ int unittest_request(void) {
 
         fails += unittest_idempotent_producer();
         fails += unittest_handle_GetTelemetrySubscriptions();
+        fails += unittest_handle_GetTelemetrySubscriptions_nullable();
 
         return fails;
 }

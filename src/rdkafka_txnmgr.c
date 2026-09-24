@@ -2921,6 +2921,13 @@ static void rd_kafka_txn_handle_FindCoordinator(rd_kafka_t *rk,
 
         rk->rk_eos.txn_wait_coord = rd_false;
 
+        if (!err && rkb->rkb_source == RD_KAFKA_LEARNED &&
+            rd_kafka_broker_termination_in_progress(rkb))
+                /* Don't set the coordinator from a learned broker being
+                 * decommissioned, e.g. by a re-bootstrap sequence,
+                 * see rd_kafka_cgrp_handle_FindCoordinator(). */
+                err = RD_KAFKA_RESP_ERR__DESTROY_BROKER;
+
         if (err)
                 goto err;
 

@@ -6692,6 +6692,19 @@ void rd_kafka_broker_decommission(rd_kafka_t *rk,
                                          RD_KAFKA_RESP_ERR__DESTROY_BROKER,
                                          "Group coordinator decommissioned");
 
+        if (rd_kafka_is_transactional(rk) && rk->rk_eos.txn_coord) {
+                /* Same for the transaction coordinator: drop the handle so
+                 * that the logical coordinator broker disconnects and a new
+                 * FindCoordinator query sets it again, re-resolving its
+                 * address. `txn_coord` is already destroyed when this is
+                 * reached from the instance destructor. */
+                rd_kafka_wrlock(rk);
+                if (rk->rk_eos.txn_curr_coord == rkb)
+                        rd_kafka_txn_coord_set(
+                            rk, NULL, "Transaction coordinator decommissioned");
+                rd_kafka_wrunlock(rk);
+        }
+
         if (RD_KAFKA_IS_SHARE_CONSUMER(rk) &&
             rkb->rkb_source == RD_KAFKA_LEARNED) {
                 rd_kafka_share_acks_clear_during_broker_decommission(rk, rkb);

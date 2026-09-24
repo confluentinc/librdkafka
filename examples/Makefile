@@ -52,6 +52,14 @@ producer_cpp: ../src-cpp/librdkafka++.a ../src/librdkafka.a producer.cpp
 	$(CXX) $(CPPFLAGS) $(CXXFLAGS) producer.cpp -o $@ $(LDFLAGS) \
 		../src-cpp/librdkafka++.a ../src/librdkafka.a $(LIBS)
 
+# Not part of $(EXAMPLES): requires libschemaregistry and avro-cpp, which
+# librdkafka does not depend on, and a C++17 compiler.
+# Build explicitly with `make producer_schema_registry`.
+producer_schema_registry: ../src-cpp/librdkafka++.a ../src/librdkafka.a producer_schema_registry.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -std=c++17 $@.cpp -o $@ $(LDFLAGS) \
+		../src-cpp/librdkafka++.a ../src/librdkafka.a \
+		-lschemaregistry -lavrocpp $(LIBS)
+
 consumer: ../src/librdkafka.a consumer.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $@.c -o $@ $(LDFLAGS) \
 		../src/librdkafka.a $(LIBS)

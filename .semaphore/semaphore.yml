@@ -501,6 +501,33 @@ blocks:
             - "& .\\win32\\msbuild.ps1 -platform Win32"
             - "& .\\win32\\package-zip.ps1 -platform Win32"
 
+  - name: 'Mend SCA + SAST scan'
+    dependencies: []
+    run:
+      when: "tag =~ '^v[0-9]\\.'"
+    task:
+      agent:
+        machine:
+          type: s1-prod-ubuntu24-04-amd64-2
+      jobs:
+        - name: 'Trigger ad hoc mend-source-scan'
+          commands:
+            # Fire-and-forget trigger of the standalone mend-source-scan task
+            # in appsec-semaphore-workflows (clones librdkafka@tag on its own
+            # agent and runs Mend SCA+SAST independently), added in
+            # https://github.com/confluentinc/appsec-semaphore-workflows/pull/608.
+            # librdkafka doesn't build via cc-mk-include, so this is triggered
+            # directly here instead of via appsec-sbom-malware-tasks.sh.
+            # A trigger failure/timeout must not block or fail the release.
+            - >
+              timeout 60 sem-trigger -p appsec-semaphore-workflows -t mend-source-scan
+              -i "REPO:librdkafka"
+              -i "REF:${SEMAPHORE_GIT_TAG_NAME}"
+              -i "VERSION:${SEMAPHORE_GIT_TAG_NAME#v}"
+              -i "PRODUCT_FAMILY:COSS"
+              -i "SCAN_ID:librdkafka-${SEMAPHORE_GIT_TAG_NAME}"
+              || echo "WARNING: failed to trigger Mend SCA+SAST scan (or timed out after 60s); continuing without failing the release" >&2
+
   - name: 'Packaging'
     dependencies:
       - 'Build documentation'

@@ -47,6 +47,28 @@ rd_kafka_topic_result_name(const rd_kafka_topic_result_t *topicres) {
         return topicres->topic;
 }
 
+const rd_kafka_resp_err_t rd_kafka_topic_result_topic_config_error(
+    const rd_kafka_topic_result_t *topicres) {
+        return topicres->topic_config_err;
+}
+
+const int32_t
+rd_kafka_topic_result_num_partitions(const rd_kafka_topic_result_t *topicres) {
+        return topicres->num_partitions;
+}
+
+const int16_t rd_kafka_topic_result_replication_factor(
+    const rd_kafka_topic_result_t *topicres) {
+        return topicres->replication_factor;
+}
+
+const rd_kafka_ConfigEntry_t **
+rd_kafka_topic_result_configs(const rd_kafka_topic_result_t *topicres,
+                              size_t *cntp) {
+        *cntp = rd_list_cnt(&topicres->configs);
+        return (const rd_kafka_ConfigEntry_t **)topicres->configs.rl_elems;
+}
+
 /**
  * @brief Create new topic_result (single allocation).
  *
@@ -82,6 +104,10 @@ rd_kafka_topic_result_t *rd_kafka_topic_result_new(const char *topic,
                 terr->errstr = NULL;
         }
 
+        terr->num_partitions     = -1;
+        terr->replication_factor = -1;
+        rd_list_init(&terr->configs, 0, NULL);
+
         return terr;
 }
 
@@ -90,6 +116,7 @@ rd_kafka_topic_result_t *rd_kafka_topic_result_new(const char *topic,
  * @brief Destroy topic_result
  */
 void rd_kafka_topic_result_destroy(rd_kafka_topic_result_t *terr) {
+        rd_list_destroy(&terr->configs);
         rd_free(terr);
 }
 

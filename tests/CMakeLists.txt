@@ -144,6 +144,7 @@ set(
     0151-purge-brokers.c
     0152-rebootstrap.c
     0153-memberid.c
+    0154-admin_quota_ut.c
     0155-share_group_heartbeat_mock.c
     0156-share_consumer_fetch_mock.c
     0157-share_consumer_ack_mock.c

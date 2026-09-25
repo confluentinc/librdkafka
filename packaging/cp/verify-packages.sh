@@ -45,8 +45,11 @@ verify_rpm_distros() {
     local platform=$1
     local version=$2
     echo "#### Verifying librdkafka $version RPM packages for $platform ####"
-    # EOL: Last RHEL 8 version is 2.4.0
-    verify_rpm rockylinux/rockylinux:8 "2.4.0"
+    # EOL: Last RHEL 8 version is 2.4.0. No s390x packages exist for it - s390x
+    # packaging starts at the version that first shipped it - so skip on s390x.
+    if [[ $platform != linux/s390x ]]; then
+        verify_rpm rockylinux/rockylinux:8 "2.4.0"
+    fi
     verify_rpm rockylinux/rockylinux:9 $version
     verify_rpm rockylinux/rockylinux:10 $version
 }
@@ -57,10 +60,19 @@ verify_debian_distros() {
     echo "#### Verifying librdkafka $version Debian packages for $platform ####"
     # EOL: Last Debian 11 version is 2.15.0. Security repository is unavailable.
     # verify_debian debian:11 "2.15.0"
-    verify_debian debian:12 $version
+    # The rolling debian:12 tag currently omits s390x on Docker Hub, so pin the
+    # point release that carries every architecture there.
+    if [[ $platform == linux/s390x ]]; then
+        verify_debian debian:12.12 $version
+    else
+        verify_debian debian:12 $version
+    fi
     verify_debian debian:13 $version
-    # EOL: Last Ubuntu 20 version is 2.13.2
-    verify_debian ubuntu:20.04 "2.13.2"
+    # EOL: Last Ubuntu 20 version is 2.13.2. No s390x packages exist for it, so
+    # skip on s390x.
+    if [[ $platform != linux/s390x ]]; then
+        verify_debian ubuntu:20.04 "2.13.2"
+    fi
     verify_debian ubuntu:22.04 $version
     verify_debian ubuntu:24.04 $version
     verify_debian ubuntu:26.04 $version

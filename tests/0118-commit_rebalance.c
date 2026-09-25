@@ -86,7 +86,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                  * unable to transition its next assignment to fetching
                  * (issue #2933). */
                 TEST_SAY("%s: Committing\n", rd_kafka_name(rk));
-                commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/);
+                commit_err = rd_kafka_commit(rk, parts, 0 /*sync*/, -1 /*infinite*/);
                 TEST_SAY("%s: Commit result: %s\n", rd_kafka_name(rk),
                          rd_kafka_err2name(commit_err));
 

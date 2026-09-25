@@ -73,7 +73,7 @@ static void do_test_store_unassigned(void) {
         TEST_CALL_ERR__(rd_kafka_offsets_store(c, parts));
 
         TEST_SAY("Committing\n");
-        TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false /*sync*/));
+        TEST_CALL_ERR__(rd_kafka_commit(c, NULL, rd_false /*sync*/, -1 /*infinite*/));
 
         TEST_SAY("Unassigning partitions and trying to store again\n");
         TEST_CALL_ERR__(rd_kafka_assign(c, NULL));
@@ -97,7 +97,7 @@ static void do_test_store_unassigned(void) {
                     rd_kafka_err2name(parts->elems[0].err));
 
         TEST_SAY("Committing: should fail\n");
-        err = rd_kafka_commit(c, NULL, rd_false /*sync*/);
+        err = rd_kafka_commit(c, NULL, rd_false /*sync*/, -1 /*infinite*/);
         TEST_ASSERT(err == RD_KAFKA_RESP_ERR__NO_OFFSET,
                     "Expected commit() to fail with NO_OFFSET, not %s",
                     rd_kafka_err2name(err));

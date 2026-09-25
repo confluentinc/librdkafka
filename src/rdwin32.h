@@ -36,7 +36,6 @@
 #include <inttypes.h>
 #include <sys/types.h>
 #include <time.h>
-#include <assert.h>
 
 #define WIN32_MEAN_AND_LEAN
 #include <winsock2.h> /* for sockets + struct timeval */
@@ -212,9 +211,6 @@ static RD_UNUSED int rd_gettimeofday(struct timeval *tv, struct timezone *tz) {
 
         return 0;
 }
-
-
-#define rd_assert(EXPR) assert(EXPR)
 
 
 static RD_INLINE RD_UNUSED const char *rd_getenv(const char *env,

@@ -32,6 +32,11 @@ callers retry them instead of treating them as a hard failure.
 
 ## Fixes
 
+### Admin API fixes
+
+* Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
+  to a client without a configured consumer group (@dprotaso).
+
 ### General fixes
 
 * Issues: #5600.

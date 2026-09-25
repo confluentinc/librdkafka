@@ -169,6 +169,7 @@ set(
     0190-share_consumer_telemetry.c
     0191-ipv6_nodename_mock.c
     0192-cgrp_static_session_timeout_mock.c
+    0193-admin_offset_fetch_mock.c
     8000-idle.cpp
     8001-fetch_from_follower_mock_manual.c
     test.c

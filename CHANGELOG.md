@@ -70,6 +70,17 @@ callers retry them instead of treating them as a hard failure.
   Happening since 1.6.0 (#5585).
 * Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
   by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
+* A consumer using the `classic` group protocol with a cooperative assignor
+  (`partition.assignment.strategy=cooperative-sticky`) now sends a
+  `LeaveGroupRequest` on `rd_kafka_consumer_close()` when its current
+  assignment is empty. There is nothing to revoke for such a member, so the
+  close path reached `rd_kafka_cgrp_revoke_all_rejoin()` and returned early
+  while terminating without ever acting on the pending leave, and the
+  coordinator only evicted the member after `session.timeout.ms`. Every
+  rebalance in the group stalled until then, and under the cooperative
+  protocol the partitions of any other member that left in that window stayed
+  unconsumed. Eager assignors and the KIP-848 `consumer` protocol were not
+  affected. Happening since 1.6.0 (#TBD).
 
 
 # librdkafka v2.15.1

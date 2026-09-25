@@ -111,6 +111,7 @@ int main(int argc, char **argv) {
          * set of brokers from the cluster. */
         if (rd_kafka_conf_set(conf, "bootstrap.servers", brokers, errstr,
                               sizeof(errstr)) != RD_KAFKA_CONF_OK) {
+                rd_kafka_conf_destroy(conf);
                 fprintf(stderr, "%s\n", errstr);
                 return 1;
         }

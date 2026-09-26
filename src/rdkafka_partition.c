@@ -2322,8 +2322,15 @@ static rd_kafka_op_res_t rd_kafka_toppar_op_serve(rd_kafka_t *rk,
 static void rd_kafka_toppar_op0(rd_kafka_toppar_t *rktp,
                                 rd_kafka_op_t *rko,
                                 rd_kafka_replyq_t replyq) {
+        rd_kafka_t *rk = rktp->rktp_rkt->rkt_rk;
+
         rko->rko_rktp   = rd_kafka_toppar_keep(rktp);
         rko->rko_replyq = replyq;
+
+        if (unlikely(rk->rk_conf.ut.toppar_op_enq != NULL))
+                rk->rk_conf.ut.toppar_op_enq(
+                    rk, rktp->rktp_rkt->rkt_topic->str, rktp->rktp_partition,
+                    rd_kafka_op2str(rko->rko_type), rko->rko_version);
 
         rd_kafka_q_enq(rktp->rktp_ops, rko);
 }

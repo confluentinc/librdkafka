@@ -641,6 +641,14 @@ struct rd_kafka_conf_s {
                     int32_t brokerid,
                     uint64_t msgid,
                     rd_kafka_resp_err_t err);
+                /**< Called after a toppar op's version barrier is taken
+                 *   and before the op is enqueued on rktp_ops, with
+                 *   rktp_op_lock held: must not call any partition API. */
+                void (*toppar_op_enq)(rd_kafka_t *rk,
+                                      const char *topic,
+                                      int32_t partition,
+                                      const char *op_name,
+                                      int32_t version);
         } ut;
 
         char *sw_name;    /**< Software/client name */

@@ -5,6 +5,7 @@ librdkafka v2.16.0 is a feature release:
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected, or kept an already connected bootstrap broker without re-resolving its address (#5560).
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
+* Fix partition pause, resume, seek and fetch start/stop being silently dropped, or aborting the application, when issued concurrently for the same partition (#5614).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
@@ -47,6 +48,23 @@ callers retry them instead of treating them as a hard failure.
 
 ### Consumer fixes
 
+* Issues: #5591.
+  A pause, resume, seek or fetch start/stop for a partition could be
+  silently dropped when issued at the same time as another one for the same
+  partition, typically an application pause or resume racing with the fetch
+  start issued once a newly assigned partition's committed offset is known.
+  Each of these ops takes a new partition version and is then enqueued, in two
+  separate steps, so two threads could enqueue their ops in the opposite order
+  of their versions, and the op with the lower version was then discarded as
+  outdated. A dropped fetch start left the partition never fetching, even
+  after being resumed; a dropped pause or resume was reported as successful by
+  `rd_kafka_pause_partitions()` and `rd_kafka_resume_partitions()` but had no
+  effect, leaving the partition consuming or paused indefinitely; a dropped
+  fetch stop could make a later fetch start for the same partition abort the
+  application with `assert: !rktp->rktp_cgrp`. The version is now taken and
+  the op enqueued atomically, so these ops are always handled in version
+  order.
+  Happening since 0.9.2 (#5614).
 * Issues: #5585.
   A consumer with `enable.auto.commit=true` no longer sends an `OffsetCommit`
   for an assignment it has already lost. On a client-side session timeout, or

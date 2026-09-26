@@ -168,6 +168,11 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
                                               *   async migration op. */
         rd_refcnt_t rktp_refcnt;
         mtx_t rktp_lock;
+        mtx_t rktp_op_lock; /**< Held while an op's new rktp_version is
+                             *   taken and the op is enqueued on rktp_ops,
+                             *   so ops are enqueued in version order.
+                             *   Only queue locks are taken while it is
+                             *   held. See rd_kafka_toppar_op0(). */
 
         // LOCK: toppar_lock. toppar_insert_msg(), concat_msgq()
         // LOCK: toppar_lock. toppar_enq_msg(), deq_msg(), toppar_retry_msgq()
@@ -284,6 +289,12 @@ struct rd_kafka_toppar_s {                           /* rd_kafka_toppar_t */
          *   Broker thread: Recv IO FetchResponse with tver=2 which
          *                  is same as rktp_version so message is forwarded
          *                  to app.
+         *
+         * A new rktp_version is only taken in rd_kafka_toppar_op0(),
+         * under rktp_op_lock together with the enqueue of the op carrying
+         * it, so ops are enqueued on rktp_ops in version order. Otherwise
+         * an op taking vN on one thread could be enqueued after an op
+         * taking vN+1 on another thread, and be dropped as outdated.
          *
          * Share consumers: all three versions remain 0 for the toppar's
          * lifetime. rktp_version is initialised to 0 and

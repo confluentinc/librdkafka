@@ -1315,7 +1315,8 @@ static const struct rd_kafka_property rd_kafka_properties[] = {
     {_RK_GLOBAL | _RK_HIDDEN, "ut_toppar_op_enq", _RK_C_PTR,
      _RK(ut.toppar_op_enq),
      "Called after a partition op's version barrier is taken and before "
-     "the op is enqueued: "
+     "the op is enqueued, with the partition's op lock held: it must not "
+     "call any partition API. "
      "void (*cb) (rd_kafka_t *rk, const char *topic, int32_t partition, "
      "const char *op_name, int32_t version)"},
 

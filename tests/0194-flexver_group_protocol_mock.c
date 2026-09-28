@@ -43,8 +43,9 @@
  * parses the response of, that exact version end-to-end rather than just
  * negotiating down to a version it already spoke before.
  */
-static void
-do_test_group_protocol_version(const char *what, int16_t ApiKey, int16_t ApiVersion) {
+static void do_test_group_protocol_version(const char *what,
+                                           int16_t ApiKey,
+                                           int16_t ApiVersion) {
         rd_kafka_t *rk;
         rd_kafka_conf_t *conf;
         rd_kafka_mock_cluster_t *mcluster;
@@ -52,14 +53,13 @@ do_test_group_protocol_version(const char *what, int16_t ApiKey, int16_t ApiVers
         rd_kafka_topic_partition_list_t *topics;
 
         SUB_TEST_QUICK("%s (ApiKey %" PRId16 " pinned to v%" PRId16 ")", what,
-                      ApiKey, ApiVersion);
+                       ApiKey, ApiVersion);
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, "topic", 1, 1);
 
-        TEST_CALL_ERR__(
-            rd_kafka_mock_set_apiversion(mcluster, ApiKey, ApiVersion,
-                                         ApiVersion));
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(mcluster, ApiKey,
+                                                     ApiVersion, ApiVersion));
 
         test_conf_init(&conf, NULL, 60);
         test_conf_set(conf, "bootstrap.servers", bootstraps);

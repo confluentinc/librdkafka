@@ -30,6 +30,10 @@ callers retry them instead of treating them as a hard failure.
   by no available broker connection, this reduces the amount of events while still signalling that the outage is ongoing.
 
 
+## Enhancements
+* Raise SaslAuthenticate, AddPartitionsToTxn, AddOffsetsToTxn, EndTxn, OffsetForLeaderEpoch, DescribeConfigs and CreateTopics API version ceilings to match the Apache Kafka 2.8.0 Java client (#5566).
+
+
 ## Fixes
 
 ### General fixes

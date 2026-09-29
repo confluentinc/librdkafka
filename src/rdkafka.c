@@ -1251,6 +1251,12 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         rd_atomic32_set(&rk->rk_terminate,
                         flags | RD_KAFKA_DESTROY_F_TERMINATE);
 
+        /* Wake up rd_kafka_clusterid() waiters so they can
+         * observe the terminate flag. */
+        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        cnd_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
+        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+
         rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Interrupting timers");
         rd_kafka_wrlock(rk);
         thrd = rk->rk_thread;
@@ -6372,6 +6378,9 @@ char *rd_kafka_clusterid(rd_kafka_t *rk, int timeout_ms) {
 
         while (1) {
                 int remains_ms;
+
+                if (rd_kafka_terminating(rk))
+                        return NULL;
 
                 rd_kafka_rdlock(rk);
 

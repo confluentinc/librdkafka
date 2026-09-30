@@ -4263,6 +4263,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         int inflight              = 0;
         uint64_t epoch_base_msgid = 0;
         rd_bool_t batch_ready     = rd_false;
+        rd_ts_t pre_linger_wakeup;
 
         /* By limiting the number of not-yet-sent buffers (rkb_outbufs) we
          * provide a backpressure mechanism to the producer loop
@@ -4319,6 +4320,10 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                         }
                 }
         }
+
+        /* Broker thread wakeup time before the linger.ms wakeup below is
+         * applied, restored if the in-flight limit prevents sending. */
+        pre_linger_wakeup = *next_wakeup;
 
         if (unlikely(!may_send)) {
                 /* Sends prohibited on the broker or instance level */
@@ -4436,6 +4441,16 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                  * to the broker's sequence de-duplication window. */
                 max_requests = RD_MIN(max_requests,
                                       RD_KAFKA_IDEMP_MAX_INFLIGHT - inflight);
+
+                if (max_requests <= 0) {
+                        /* Nothing can be sent until an in-flight request
+                         * finishes, which wakes up the broker thread
+                         * through its response. Don't let the (possibly
+                         * already expired) linger.ms wakeup time make the
+                         * broker thread busy-loop until then. */
+                        *next_wakeup = pre_linger_wakeup;
+                        return 0;
+                }
         }
 
 

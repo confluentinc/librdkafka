@@ -6,6 +6,7 @@ librdkafka v2.16.0 is a feature release:
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
 * Fix `rd_kafka_clusterid()`, `rd_kafka_query_watermark_offsets()` and `rd_kafka_offsets_for_times()` waiting until their timeout and accessing the freed client instance when it's destroyed during the call (#5616).
+* Fix the idempotent producer's broker thread busy-looping while a partition is at its in-flight request limit (#5617).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
@@ -78,6 +79,15 @@ callers retry them instead of treating them as a hard failure.
   Happening since 1.6.0 (#5585).
 * Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
   by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
+
+### Producer fixes
+
+* Issues: #5617.
+  With `enable.idempotence=true`, when a partition had reached the limit of
+  5 in-flight ProduceRequests and its queued messages had already passed
+  `linger.ms`, the broker thread polled its connection with a zero timeout
+  in a loop until a ProduceResponse arrived, using a full CPU core on
+  high-latency links. The broker thread now waits for the response instead.
 
 
 # librdkafka v2.15.1

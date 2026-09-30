@@ -367,11 +367,12 @@ void rd_kafka_buf_calc_timeout(const rd_kafka_t *rk,
                 /* Default:
                  * Relative timeout, set request timeout to
                  * to now + rel timeout. */
-                rkbuf->rkbuf_ts_timeout = now + rkbuf->rkbuf_rel_timeout * 1000;
+                rkbuf->rkbuf_ts_timeout =
+                    now + ((rd_ts_t)rkbuf->rkbuf_rel_timeout * 1000);
         } else if (!rkbuf->rkbuf_force_timeout) {
                 /* Use absolute timeout, limited by socket.timeout.ms */
                 rd_ts_t sock_timeout =
-                    now + rk->rk_conf.socket_timeout_ms * 1000;
+                    now + ((rd_ts_t)rk->rk_conf.socket_timeout_ms * 1000);
 
                 rkbuf->rkbuf_ts_timeout =
                     RD_MIN(sock_timeout, rkbuf->rkbuf_abs_timeout);

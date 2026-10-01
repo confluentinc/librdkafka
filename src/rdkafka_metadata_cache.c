@@ -1007,7 +1007,8 @@ void rd_kafka_metadata_cache_wait_terminate(rd_kafka_t *rk) {
  * rd_kafka_metadata_cache_wait_end(). Callers must check
  * rd_kafka_terminating() after it returns.
  *
- * @returns 1 on cache update or 0 on timeout or termination.
+ * @returns 1 on cache update notification or 0 on timeout or ongoing client
+ * termination.
  * @locks none
  * @locality application thread
  */

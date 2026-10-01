@@ -1,3 +1,13 @@
+# librdkafka v2.x.x (Unreleased)
+
+## Fixes
+
+### Admin fixes
+
+* Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
+  to a client without a configured consumer group (@dprotaso, #5611).
+
+
 # librdkafka v2.16.0
 
 librdkafka v2.16.0 is a feature release:
@@ -31,11 +41,6 @@ callers retry them instead of treating them as a hard failure.
 
 
 ## Fixes
-
-### Admin API fixes
-
-* Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
-  to a client without a configured consumer group (@dprotaso).
 
 ### General fixes
 

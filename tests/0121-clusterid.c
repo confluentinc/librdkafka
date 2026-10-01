@@ -122,6 +122,8 @@ static void do_test_different_clusterid_warning(void) {
 
 struct clusterid_thread_arg {
         rd_kafka_t *rk;
+        rd_atomic32_t started;
+        rd_atomic32_t done;
         char *clusterid;
         int64_t elapsed_us;
 };
@@ -130,8 +132,10 @@ static int clusterid_thread_main(void *p) {
         struct clusterid_thread_arg *arg = p;
         int64_t ts_start                 = test_clock();
 
+        rd_atomic32_set(&arg->started, 1);
         arg->clusterid  = rd_kafka_clusterid(arg->rk, 60 * 1000);
         arg->elapsed_us = test_clock() - ts_start;
+        rd_atomic32_set(&arg->done, 1);
         return 0;
 }
 
@@ -141,9 +145,13 @@ static void do_test_destroy_during_clusterid(void) {
         rd_kafka_conf_t *conf;
         struct clusterid_thread_arg arg = {0};
         thrd_t thrd;
+        int64_t ts_deadline;
         int ret;
 
         SUB_TEST_QUICK();
+
+        rd_atomic32_init(&arg.started, 0);
+        rd_atomic32_init(&arg.done, 0);
 
         /* Broker down: no metadata is received, so clusterid() blocks. */
         mcluster = test_mock_cluster_new(1, &bootstraps);
@@ -156,8 +164,19 @@ static void do_test_destroy_during_clusterid(void) {
         if (thrd_create(&thrd, clusterid_thread_main, &arg) != thrd_success)
                 TEST_FAIL("Failed to create thread");
 
-        /* Let the thread block in rd_kafka_clusterid() */
+        ts_deadline = test_clock() + 10 * 1000 * 1000;
+        while (!rd_atomic32_get(&arg.started)) {
+                TEST_ASSERT(test_clock() < ts_deadline,
+                            "clusterid thread did not start");
+                rd_usleep(10 * 1000, NULL);
+        }
+
+        /* Let the thread block in rd_kafka_clusterid(), then make sure
+         * it's still blocked when destroying, so destroy is what
+         * interrupts it. */
         rd_sleep(1);
+        TEST_ASSERT(!rd_atomic32_get(&arg.done),
+                    "rd_kafka_clusterid() returned before rd_kafka_destroy()");
         rd_kafka_destroy(arg.rk);
 
         if (thrd_join(thrd, &ret) != thrd_success)

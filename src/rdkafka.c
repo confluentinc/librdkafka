@@ -1251,11 +1251,9 @@ static void rd_kafka_destroy_app(rd_kafka_t *rk, int flags) {
         rd_atomic32_set(&rk->rk_terminate,
                         flags | RD_KAFKA_DESTROY_F_TERMINATE);
 
-        /* Wake up rd_kafka_clusterid() waiters so they can
-         * observe the terminate flag. */
-        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
-        cnd_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
-        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        /* Wake up calls waiting for metadata cache changes and wait
+         * for them to return before the cache and rk are destroyed. */
+        rd_kafka_metadata_cache_wait_terminate(rk);
 
         rd_kafka_dbg(rk, GENERIC, "TERMINATE", "Interrupting timers");
         rd_kafka_wrlock(rk);
@@ -6367,7 +6365,7 @@ char *rd_kafka_memberid(const rd_kafka_t *rk) {
 }
 
 
-char *rd_kafka_clusterid(rd_kafka_t *rk, int timeout_ms) {
+static char *rd_kafka_clusterid0(rd_kafka_t *rk, int timeout_ms) {
         rd_ts_t abs_timeout = rd_timeout_init(timeout_ms);
 
         /* ClusterId is returned in Metadata >=V2 responses and
@@ -6409,6 +6407,16 @@ char *rd_kafka_clusterid(rd_kafka_t *rk, int timeout_ms) {
         }
 
         return NULL;
+}
+
+char *rd_kafka_clusterid(rd_kafka_t *rk, int timeout_ms) {
+        char *clusterid;
+
+        rd_kafka_metadata_cache_wait_begin(rk);
+        clusterid = rd_kafka_clusterid0(rk, timeout_ms);
+        rd_kafka_metadata_cache_wait_end(rk);
+
+        return clusterid;
 }
 
 

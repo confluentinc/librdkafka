@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 include("packaging/cmake/parseversion.cmake")
 parseversion("src/rdkafka.h")

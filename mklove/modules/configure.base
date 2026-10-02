@@ -2446,7 +2446,7 @@ function mkl_download_archive {
 
         # OSX has shasum by default, on Linux it is typically in
         # some Perl package that may or may not be installed.
-        if $(which shasum >/dev/null 2>&1); then
+        if $(command -v shasum >/dev/null 2>&1); then
             checksum_tool="shasum -b -a ${shabits}"
         else
             # shaXsum is available in Linux coreutils

@@ -8609,6 +8609,9 @@ rd_kafka_NewTopic_set_replica_assignment(rd_kafka_NewTopic_t *new_topic,
  * @remark The name and value are not validated by the client, the validation
  *         takes place on the broker.
  *
+ * @remark To associate a schema with this topic at creation time, set
+ *         \c confluent.value.association (and optionally \c confluent.key.association).
+ *
  * @returns RD_KAFKA_RESP_ERR_NO_ERROR on success, or an error code
  *          if the arguments were invalid.
  *
@@ -9231,6 +9234,10 @@ rd_kafka_AlterConfigs_result_resources(
  *
  * @remark Requires broker version >=2.3.0
  *
+ * @remark To associate or update a topic's subject association, use a SET
+ *         operation on \c confluent.value.association (or \c confluent.key.association).
+ *         To remove an association, use a DELETE operation on the same key.
+ *
  * @remark Multiple resources and resource types may be set, but at most one
  *         resource of type \c RD_KAFKA_RESOURCE_BROKER is allowed per call
  *         since these resource requests must be sent to the broker specified
@@ -9298,6 +9305,9 @@ rd_kafka_IncrementalAlterConfigs_result_resources(
  *
  * Synonym configuration entries are returned if the broker supports
  * it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
+ *
+ * @remark For topics with an explicit subject association, the result includes
+ *         \c confluent.value.association and \c confluent.key.association entries.
  *
  * @remark Requires broker version >=0.11.0.0
  *

@@ -154,6 +154,14 @@ Monitor the Semaphore CI project page to know when the build pipeline
 is finished, then download the relevant artifacts for further use, see
 *The artifact pipeline* chapter below.
 
+The same tag build also triggers (fire-and-forget, via the `Mend SCA + SAST
+scan` block) the ad hoc `mend-source-scan` task in the internal
+`appsec-semaphore-workflows` Semaphore project, which independently clones
+the tagged ref and runs a Mend SCA + SAST scan against it under the COSS
+product family. This is informational/security-scanning only: a failure or
+timeout triggering it does not fail the release build, and it is not a
+gate for publishing packages.
+
 
 ## Publish release on github
 

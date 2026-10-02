@@ -1129,7 +1129,7 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         int16_t ApiVersion;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 2, NULL);
+            rkb, RD_KAFKAP_OffsetForLeaderEpoch, 2, 4, NULL);
         /* If the supported ApiVersions are not yet known,
          * or this broker doesn't support it, we let this request
          * succeed or fail later from the broker thread where the
@@ -1140,6 +1140,10 @@ void rd_kafka_OffsetForLeaderEpochRequest(
         rkbuf = rd_kafka_buf_new_flexver_request(
             rkb, RD_KAFKAP_OffsetForLeaderEpoch, 1, 4 + (parts->cnt * 64),
             ApiVersion >= 4 /*flexver*/);
+
+        if (ApiVersion >= 3)
+                /* ReplicaId: -1 for a normal consumer/client. */
+                rd_kafka_buf_write_i32(rkbuf, -1);
 
         /* Sort partitions by topic */
         rd_kafka_topic_partition_list_sort_by_topic(parts);
@@ -3556,22 +3560,26 @@ void rd_kafka_SaslAuthenticateRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_t *rkbuf;
         int16_t ApiVersion;
         int features;
+        /* Broker does not support -1 (Null) for this field */
+        const rd_kafkap_bytes_t AuthBytes = {.len  = (int32_t)size,
+                                             .data = buf ? buf : ""};
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_SaslAuthenticate, 0, 0);
+        ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 2, &features);
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_SaslAuthenticate, 0, 0, ApiVersion >= 2);
 
         /* Should be sent before any other requests since it is part of
          * the initial connection handshake. */
         rkbuf->rkbuf_prio = RD_KAFKA_PRIO_FLASH;
 
-        /* Broker does not support -1 (Null) for this field */
-        rd_kafka_buf_write_bytes(rkbuf, buf ? buf : "", size);
+        rd_kafka_buf_write_kbytes(rkbuf, &AuthBytes);
 
         /* There are no errors that can be retried, instead
          * close down the connection and reconnect on failure. */
         rkbuf->rkbuf_max_retries = RD_KAFKA_REQUEST_NO_RETRIES;
 
-        ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_SaslAuthenticate, 0, 1, &features);
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
         if (replyq.q)
@@ -5168,7 +5176,7 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_CreateTopics, 0, 4, &features);
+            rkb, RD_KAFKAP_CreateTopics, 0, 7, &features);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "Topic Admin API (KIP-4) not supported "
@@ -5186,12 +5194,12 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_CreateTopics, 1,
-                                         4 + (rd_list_cnt(new_topics) * 200) +
-                                             4 + 1);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_CreateTopics, 1,
+            4 + (rd_list_cnt(new_topics) * 200) + 4 + 1, ApiVersion >= 5);
 
         /* #topics */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(new_topics));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(new_topics));
 
         while ((newt = rd_list_elem(new_topics, i++))) {
                 int partition;
@@ -5241,7 +5249,8 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                 }
 
                 /* #replica_assignment */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->replicas));
+                rd_kafka_buf_write_arraycnt(rkbuf,
+                                            rd_list_cnt(&newt->replicas));
 
                 /* Replicas per partition, see rdkafka_admin.[ch]
                  * for how these are constructed. */
@@ -5257,24 +5266,31 @@ rd_kafka_CreateTopicsRequest(rd_kafka_broker_t *rkb,
                         /* partition */
                         rd_kafka_buf_write_i32(rkbuf, partition);
                         /* #replicas */
-                        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(replicas));
+                        rd_kafka_buf_write_arraycnt(rkbuf,
+                                                    rd_list_cnt(replicas));
 
                         for (ri = 0; ri < rd_list_cnt(replicas); ri++) {
                                 /* replica */
                                 rd_kafka_buf_write_i32(
                                     rkbuf, rd_list_get_int32(replicas, ri));
                         }
+
+                        rd_kafka_buf_write_tags_empty(
+                            rkbuf); /* Assignment tags */
                 }
 
                 /* #config_entries */
-                rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(&newt->config));
+                rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(&newt->config));
 
                 RD_LIST_FOREACH(entry, &newt->config, ei) {
                         /* config_name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                         /* config_value (nullable) */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->value, -1);
+                        rd_kafka_buf_write_tags_empty(rkbuf); /* Config tags */
                 }
+
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Topic tags */
         }
 
         /* timeout */
@@ -5763,7 +5779,7 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
         }
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_DescribeConfigs, 0, 1, NULL);
+            rkb, RD_KAFKAP_DescribeConfigs, 0, 4, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "DescribeConfigs (KIP-133) not supported "
@@ -5772,11 +5788,12 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_DescribeConfigs, 1,
-                                         rd_list_cnt(configs) * 200);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_DescribeConfigs,
+                                                 1, rd_list_cnt(configs) * 200,
+                                                 ApiVersion >= 4);
 
         /* #resources */
-        rd_kafka_buf_write_i32(rkbuf, rd_list_cnt(configs));
+        rd_kafka_buf_write_arraycnt(rkbuf, rd_list_cnt(configs));
 
         RD_LIST_FOREACH(config, configs, i) {
                 const rd_kafka_ConfigEntry_t *entry;
@@ -5793,23 +5810,31 @@ rd_kafka_resp_err_t rd_kafka_DescribeConfigsRequest(
                 /* #config */
                 if (rd_list_empty(&config->config)) {
                         /* Get all configs */
-                        rd_kafka_buf_write_i32(rkbuf, -1);
+                        rd_kafka_buf_write_arraycnt(rkbuf, -1);
                 } else {
                         /* Get requested configs only */
-                        rd_kafka_buf_write_i32(rkbuf,
-                                               rd_list_cnt(&config->config));
+                        rd_kafka_buf_write_arraycnt(
+                            rkbuf, rd_list_cnt(&config->config));
                 }
 
                 RD_LIST_FOREACH(entry, &config->config, ei) {
                         /* config_name */
                         rd_kafka_buf_write_str(rkbuf, entry->kv->name, -1);
                 }
+
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Resource tags */
         }
 
 
-        if (ApiVersion == 1) {
+        if (ApiVersion >= 1) {
                 /* include_synonyms */
                 rd_kafka_buf_write_i8(rkbuf, 1);
+        }
+
+        if (ApiVersion >= 3) {
+                /* include_documentation: not exposed to the caller, so
+                 * don't ask the broker to include it. */
+                rd_kafka_buf_write_i8(rkbuf, 0);
         }
 
         /* timeout */
@@ -6543,7 +6568,7 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
         int TopicCnt = 0, PartCnt = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AddPartitionsToTxn, 0, 0, NULL);
+            rkb, RD_KAFKAP_AddPartitionsToTxn, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AddPartitionsToTxnRequest (KIP-98) not supported "
@@ -6552,8 +6577,8 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_request(rkb, RD_KAFKAP_AddPartitionsToTxn, 1, 500);
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_AddPartitionsToTxn, 1, 500, ApiVersion >= 3);
 
         /* transactional_id */
         rd_kafka_buf_write_str(rkbuf, transactional_id, -1);
@@ -6563,15 +6588,17 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
         rd_kafka_buf_write_i16(rkbuf, pid.epoch);
 
         /* Topics/partitions array (count updated later) */
-        of_TopicCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+        of_TopicCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
         TAILQ_FOREACH(rktp, rktps, rktp_txnlink) {
                 if (last_rkt != rktp->rktp_rkt) {
 
                         if (last_rkt) {
                                 /* Update last topic's partition count field */
-                                rd_kafka_buf_update_i32(rkbuf, of_PartCnt,
-                                                        PartCnt);
+                                rd_kafka_buf_finalize_arraycnt(
+                                    rkbuf, of_PartCnt, PartCnt);
+                                rd_kafka_buf_write_tags_empty(
+                                    rkbuf); /* Topic tags */
                                 of_PartCnt = -1;
                         }
 
@@ -6579,7 +6606,7 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
                         rd_kafka_buf_write_kstr(rkbuf,
                                                 rktp->rktp_rkt->rkt_topic);
                         /* Partition count, updated later */
-                        of_PartCnt = rd_kafka_buf_write_i32(rkbuf, 0);
+                        of_PartCnt = rd_kafka_buf_write_arraycnt_pos(rkbuf);
 
                         PartCnt = 0;
                         TopicCnt++;
@@ -6592,9 +6619,12 @@ rd_kafka_AddPartitionsToTxnRequest(rd_kafka_broker_t *rkb,
         }
 
         /* Update last partition and topic count fields */
-        if (of_PartCnt != -1)
-                rd_kafka_buf_update_i32(rkbuf, (size_t)of_PartCnt, PartCnt);
-        rd_kafka_buf_update_i32(rkbuf, of_TopicCnt, TopicCnt);
+        if (of_PartCnt != -1) {
+                rd_kafka_buf_finalize_arraycnt(rkbuf, (size_t)of_PartCnt,
+                                               PartCnt);
+                rd_kafka_buf_write_tags_empty(rkbuf); /* Topic tags */
+        }
+        rd_kafka_buf_finalize_arraycnt(rkbuf, of_TopicCnt, TopicCnt);
 
         rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
 
@@ -6631,7 +6661,7 @@ rd_kafka_AddOffsetsToTxnRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(
-            rkb, RD_KAFKAP_AddOffsetsToTxn, 0, 0, NULL);
+            rkb, RD_KAFKAP_AddOffsetsToTxn, 0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "AddOffsetsToTxnRequest (KIP-98) not supported "
@@ -6640,8 +6670,8 @@ rd_kafka_AddOffsetsToTxnRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf =
-            rd_kafka_buf_new_request(rkb, RD_KAFKAP_AddOffsetsToTxn, 1, 100);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_AddOffsetsToTxn,
+                                                 1, 100, ApiVersion >= 3);
 
         /* transactional_id */
         rd_kafka_buf_write_str(rkbuf, transactional_id, -1);
@@ -6686,7 +6716,7 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
         int16_t ApiVersion = 0;
 
         ApiVersion = rd_kafka_broker_ApiVersion_supported(rkb, RD_KAFKAP_EndTxn,
-                                                          0, 1, NULL);
+                                                          0, 3, NULL);
         if (ApiVersion == -1) {
                 rd_snprintf(errstr, errstr_size,
                             "EndTxnRequest (KIP-98) not supported "
@@ -6695,7 +6725,8 @@ rd_kafka_resp_err_t rd_kafka_EndTxnRequest(rd_kafka_broker_t *rkb,
                 return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
         }
 
-        rkbuf = rd_kafka_buf_new_request(rkb, RD_KAFKAP_EndTxn, 1, 500);
+        rkbuf = rd_kafka_buf_new_flexver_request(rkb, RD_KAFKAP_EndTxn, 1, 500,
+                                                 ApiVersion >= 3);
 
         /* transactional_id */
         rd_kafka_buf_write_str(rkbuf, transactional_id, -1);

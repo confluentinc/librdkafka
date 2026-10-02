@@ -31,6 +31,7 @@
 #include "rdkafka_offset.h"
 #include "rdkafka_topic.h"
 #include "rdkafka_interceptor.h"
+#include "rdunittest.h"
 
 int RD_TLS rd_kafka_yield_thread = 0;
 
@@ -453,6 +454,28 @@ static rd_kafka_op_t *rd_kafka_q_pop_serve0(rd_kafka_q_t *rkq,
 
                                 if (res == RD_KAFKA_OP_RES_HANDLED ||
                                     res == RD_KAFKA_OP_RES_KEEP) {
+                                        /* The op was handled internally (e.g.
+                                         * a log, stats or callback op) and was
+                                         * not returned to the application.
+                                         * The timeout is otherwise only checked
+                                         * once the queue is found empty further
+                                         * below, so if internal ops are
+                                         * enqueued faster than they're drained
+                                         * (e.g. high volume logs with
+                                         * log.queue=true) the queue never
+                                         * empties and a poll() call could be
+                                         * starved indefinitely.
+                                         * Honour the timeout after each handled
+                                         * op to guarantee we return control to
+                                         * the application. */
+                                        if (rd_timeout_expired(
+                                                rd_timeout_remains(
+                                                    abs_timeout))) {
+                                                if (can_q_contain_fetched_msgs)
+                                                        rd_kafka_app_polled(
+                                                            rkq->rkq_rk, rkq);
+                                                return NULL;
+                                        }
                                         mtx_lock(&rkq->rkq_lock);
                                         is_locked = rd_true;
                                         goto retry; /* Next op */
@@ -1349,3 +1372,84 @@ void rd_kafka_enq_once_trigger_destroy(void *ptr) {
 
         rd_kafka_enq_once_trigger(eonce, RD_KAFKA_RESP_ERR__DESTROY, "destroy");
 }
+
+
+/**
+ * @name Unit tests
+ * @{
+ */
+
+/**
+ * @brief Serve callback used by unittest_q_pop_serve_starvation().
+ *
+ * Counts the number of ops handled and, while \p opaque (remaining counter)
+ * is non-zero, re-enqueues a new op onto the same queue to simulate a
+ * background thread that keeps the queue non-empty. The op is handled
+ * (destroyed) and reported as such.
+ */
+static rd_kafka_op_res_t
+rd_kafka_q_pop_serve_starvation_cb(rd_kafka_t *rk,
+                                   rd_kafka_q_t *rkq,
+                                   rd_kafka_op_t *rko,
+                                   rd_kafka_q_cb_type_t cb_type,
+                                   void *opaque) {
+        int *remaining = opaque;
+
+        if ((*remaining) > 0) {
+                (*remaining)--;
+                rd_kafka_q_enq(rkq, rd_kafka_op_new(RD_KAFKA_OP_LOG));
+        }
+
+        rd_kafka_op_destroy(rko);
+
+        return RD_KAFKA_OP_RES_HANDLED;
+}
+
+/**
+ * @brief Verify that a non-blocking (RD_POLL_NOWAIT) poll honours its timeout
+ *        even when the queue is continuously fed internal (handled) ops.
+ *
+ * Regression test for #5325: rd_kafka_q_pop_serve() would `goto retry` after
+ * every handled op without re-checking the timeout, so a steady stream of
+ * internal ops (e.g. logs with log.queue=true and debug enabled) could starve
+ * a poll(0) call for an unbounded amount of time.
+ *
+ * With the fix in place a NOWAIT poll handles exactly one op and then returns.
+ */
+int unittest_q_pop_serve_starvation(void) {
+        rd_kafka_q_t *rkq;
+        rd_kafka_op_t *rko;
+        int handled_cb_remaining = 100;
+        int seed_cnt             = 10;
+        int i;
+
+        RD_UT_BEGIN();
+
+        rkq = rd_kafka_q_new(NULL);
+
+        /* Seed the queue so it is non-empty when the poll starts. */
+        for (i = 0; i < seed_cnt; i++)
+                rd_kafka_q_enq(rkq, rd_kafka_op_new(RD_KAFKA_OP_LOG));
+
+        /* The callback feeds one new op for every op it handles (bounded by
+         * handled_cb_remaining), keeping the queue non-empty. Without the fix
+         * the NOWAIT poll would drain all seed + fed ops in a single call;
+         * with the fix it returns after the first handled op. */
+        rko = rd_kafka_q_pop_serve(
+            rkq, RD_POLL_NOWAIT, 0, RD_KAFKA_Q_CB_CALLBACK,
+            rd_kafka_q_pop_serve_starvation_cb, &handled_cb_remaining);
+
+        RD_UT_ASSERT(rko == NULL, "expected NULL op from a NOWAIT poll, got %p",
+                     rko);
+
+        RD_UT_ASSERT(handled_cb_remaining == 99,
+                     "NOWAIT poll did not honour its timeout between handled "
+                     "ops: %d feed-ops consumed, expected exactly 1",
+                     100 - handled_cb_remaining);
+
+        rd_kafka_q_destroy_owner(rkq);
+
+        RD_UT_PASS();
+}
+
+/**@}*/

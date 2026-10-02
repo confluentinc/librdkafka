@@ -1,3 +1,20 @@
+# librdkafka v2.x.x (Unreleased)
+
+## Fixes
+
+### Producer fixes
+
+* Reject malformed Produce response record-error counts before allocating
+  memory (#5580, @shoemoney).
+
+* Guard the Produce response `record_errors` allocation and the
+  GetTelemetrySubscriptions `requested_metrics` and
+  `accepted_compression_types` allocations against allocation failure,
+  and only assign each count once its allocation has succeeded, so a
+  failed allocation can never leave a non-zero count beside a `NULL`
+  pointer (#5580, @shoemoney).
+
+
 # librdkafka v2.16.0
 
 librdkafka v2.16.0 is a feature release:

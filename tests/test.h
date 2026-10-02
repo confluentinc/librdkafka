@@ -1094,6 +1094,12 @@ rd_kafka_resp_err_t
 test_ack_cb_state_first_err(const test_ack_cb_state_t *state);
 
 /**
+ * @brief Returns the number of recorded callbacks whose err matches @p err.
+ */
+int test_ack_cb_state_count_err(const test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err);
+
+/**
  * @brief Standard share acknowledgement callback.
  *
  * Tracks callback invocations, offsets acknowledged, and errors.

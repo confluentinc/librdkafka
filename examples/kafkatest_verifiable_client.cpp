@@ -627,12 +627,6 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  {
-    char hostname[128];
-    gethostname(hostname, sizeof(hostname) - 1);
-    conf->set("client.id", std::string("rdkafka@") + hostname, errstr);
-  }
-
   conf->set("log.thread.name", "true", errstr);
 
   /* auto commit is explicitly enabled with --enable-autocommit */

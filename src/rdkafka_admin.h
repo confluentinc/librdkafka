@@ -35,6 +35,7 @@
 #include "rdmap.h"
 #include "rdkafka_error.h"
 #include "rdkafka_confval.h"
+#include "rdlist.h"
 #include "rdrand.h"
 
 #if WITH_SSL
@@ -111,11 +112,26 @@ struct rd_kafka_AdminOptions_s {
                                           *   Valid for: ListConsumerGroups.
                                           */
 
+        rd_kafka_confval_t match_group_states; /**< PTR: list of group states
+                                                *   to query for.
+                                                *   Valid for: ListGroups.
+                                                */
+
         rd_kafka_confval_t
             match_consumer_group_types; /**< PTR: list of consumer group types
                                          *   to query for.
                                          *   Valid for: ListConsumerGroups.
                                          */
+
+        rd_kafka_confval_t
+            match_group_types; /**< PTR: list of group types to query for.
+                                *   Valid for: ListGroups
+                                */
+
+        rd_kafka_confval_t
+            match_protocol_types; /**< PTR: list of protocol types to query for.
+                                   *   Valid for: ListGroups.
+                                   */
 
         rd_kafka_confval_t
             isolation_level; /**< INT:Isolation Level needed for list Offset
@@ -495,6 +511,27 @@ struct rd_kafka_ConsumerGroupListing_s {
 struct rd_kafka_ListConsumerGroupsResult_s {
         rd_list_t valid;  /**< List of valid ConsumerGroupListing
                                (rd_kafka_ConsumerGroupListing_t *) */
+        rd_list_t errors; /**< List of errors (rd_kafka_error_t *) */
+};
+
+/**
+ * @struct  ListGroups result for a single group
+ */
+struct rd_kafka_GroupListing_s {
+        char *group_id; /**< Group id */
+        /** Is it a simple consumer group? That means empty protocol_type. */
+        rd_bool_t is_simple_consumer_group;
+        rd_kafka_group_state_t state; /**< Group state. */
+        rd_kafka_group_type_t type;   /**< Group type. */
+        char *protocol;               /**< The protocol of the group. */
+};
+
+/**
+ * @struct ListGroupsResult results and errors
+ */
+struct rd_kafka_ListGroupsResult_s {
+        rd_list_t valid;  /**< List of valid GroupListing
+                               (rd_kafka_GroupListing_t *) */
         rd_list_t errors; /**< List of errors (rd_kafka_error_t *) */
 };
 

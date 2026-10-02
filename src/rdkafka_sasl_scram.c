@@ -51,6 +51,15 @@
 
 
 /**
+ * @brief Maximum accepted server-first-message size.
+ *        The message is copied into a stack-allocated AuthMessage
+ *        (rd_alloca), so it must stay far below the thread stack size.
+ *        RFC 5802-conformant messages are well below 1KB.
+ */
+#define RD_KAFKA_SASL_SCRAM_SERVER_FIRST_MSG_MAX 4096
+
+
+/**
  * @brief Per-connection state
  */
 struct rd_kafka_sasl_scram_state {
@@ -438,6 +447,18 @@ rd_kafka_sasl_scram_handle_server_first_message(rd_kafka_transport_t *rktrans,
         const char *endptr;
         int itcnt;
         char *attr_m;
+
+        /* RFC 5802-conformant server-first-messages are well below 1KB.
+         * The message is later combined into the AuthMessage on the stack
+         * (rd_alloca), so an oversized broker response would exhaust the
+         * thread stack. Reject implausibly large messages early. */
+        if (unlikely(in->size > RD_KAFKA_SASL_SCRAM_SERVER_FIRST_MSG_MAX)) {
+                rd_snprintf(errstr, errstr_size,
+                            "Oversized server-first-message (%" PRIusz
+                            " bytes)",
+                            in->size);
+                return -1;
+        }
 
         /* Mandatory future extension check */
         if ((attr_m = rd_kafka_sasl_scram_get_attr(in, 'm', NULL, NULL, 0))) {

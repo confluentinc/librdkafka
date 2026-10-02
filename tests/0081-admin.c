@@ -682,7 +682,9 @@ static void test_print_ConfigEntry_array(const rd_kafka_ConfigEntry_t **entries,
                     "%s#%" PRIusz "/%" PRIusz
                     ": Source %s (%d): \"%s\"=\"%s\" "
                     "[is read-only=%s, default=%s, sensitive=%s, "
-                    "synonym=%s] with %" PRIusz " synonym(s)\n",
+                    "synonym=%s] with %" PRIusz
+                    " synonym(s) ConfigType: (%d) "
+                    "Documentation: %s\n",
                     indent, ei, entry_cnt,
                     rd_kafka_ConfigSource_name(rd_kafka_ConfigEntry_source(e)),
                     rd_kafka_ConfigEntry_source(e),
@@ -693,7 +695,11 @@ static void test_print_ConfigEntry_array(const rd_kafka_ConfigEntry_t **entries,
                     YN(rd_kafka_ConfigEntry_is_read_only(e)),
                     YN(rd_kafka_ConfigEntry_is_default(e)),
                     YN(rd_kafka_ConfigEntry_is_sensitive(e)),
-                    YN(rd_kafka_ConfigEntry_is_synonym(e)), syn_cnt);
+                    YN(rd_kafka_ConfigEntry_is_synonym(e)), syn_cnt,
+                    rd_kafka_ConfigEntry_type(e),
+                    rd_kafka_ConfigEntry_documentation(e)
+                        ? rd_kafka_ConfigEntry_documentation(e)
+                        : "(NULL)");
 #undef YN
 
                 if (syn_cnt > 0)

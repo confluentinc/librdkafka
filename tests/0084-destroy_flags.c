@@ -72,6 +72,13 @@ static void do_test_destroy_flags(const char *topic,
 
         if (local_mode)
                 test_conf_set(conf, "bootstrap.servers", "");
+        else if (!test_consumer_group_protocol_classic() &&
+                 destroy_flags & RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE) {
+                test_broker_conf_set_group_consumer_heartbeat_interval_ms(topic,
+                                                                          1000);
+                test_broker_conf_set_group_consumer_session_timeout_ms(topic,
+                                                                       3000);
+        }
 
         if (args->client_type == RD_KAFKA_PRODUCER) {
 
@@ -188,21 +195,11 @@ static void destroy_flags(int local_mode) {
 
 
 int main_0084_destroy_flags_local(int argc, char **argv) {
-        /* FIXME: fix the test with subscribe/unsubscribe PR. */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
-                return 0;
-        }
         destroy_flags(1 /*no brokers*/);
         return 0;
 }
 
 int main_0084_destroy_flags(int argc, char **argv) {
-        /* FIXME: fix the test with subscribe/unsubscribe PR. */
-        if (!test_consumer_group_protocol_classic()) {
-                TEST_SKIP("FIXME: fix the test with subscribe/unsubscribe PR");
-                return 0;
-        }
         destroy_flags(0 /*with brokers*/);
         return 0;
 }

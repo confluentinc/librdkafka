@@ -2,4 +2,8 @@
     "auto_create_topics": "true",
     "num_partitions": 4,
     "replication_factor": 3,
+    "conf": [
+        "group.consumer.min.session.timeout.ms=1",
+        "group.consumer.min.heartbeat.interval.ms=1"
+    ]
 }

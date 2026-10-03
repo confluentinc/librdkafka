@@ -139,8 +139,8 @@ int main_0006_symbols(int argc, char **argv) {
                 rd_kafka_consumer_close(NULL);
                 rd_kafka_assign(NULL, NULL);
                 rd_kafka_assignment(NULL, NULL);
-                rd_kafka_commit(NULL, NULL, 0);
-                rd_kafka_commit_message(NULL, NULL, 0);
+                rd_kafka_commit(NULL, NULL, 0, 0);
+                rd_kafka_commit_message(NULL, NULL, 0, 0);
                 rd_kafka_committed(NULL, NULL, 0);
                 rd_kafka_position(NULL, NULL);
 

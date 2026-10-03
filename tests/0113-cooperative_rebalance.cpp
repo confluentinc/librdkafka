@@ -3012,7 +3012,7 @@ static void r_lost_partitions_commit_illegal_generation_test_local() {
                                     RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,
                                     RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION);
 
-  rd_kafka_commit(c, NULL, rd_false);
+  rd_kafka_commit(c, NULL, rd_false, -1);
 
   expect_rebalance("lost partitions", c, RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS,
                    rd_true /*expect lost*/, 10 + 2);
@@ -3183,7 +3183,7 @@ static void v_rebalance_cb(rd_kafka_t *rk,
       TEST_SAY("Attempting manual commit after unassign, in 2 seconds..\n");
       /* Sleep enough to have the generation-id bumped by rejoin. */
       rd_sleep(2);
-      commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/);
+      commit_err = rd_kafka_commit(rk, NULL, 0 /*sync*/, -1 /*infinite*/);
       TEST_ASSERT(!commit_err || commit_err == RD_KAFKA_RESP_ERR__NO_OFFSET ||
                       commit_err == RD_KAFKA_RESP_ERR__DESTROY ||
                       commit_err == RD_KAFKA_RESP_ERR_ILLEGAL_GENERATION,

@@ -114,7 +114,7 @@ commit_metadata(const char *group_id,
         TEST_SAY("Committing:\n");
         print_toppar_list(toppar_to_commit);
 
-        err = rd_kafka_commit(rk, toppar_to_commit, 0);
+        err = rd_kafka_commit(rk, toppar_to_commit, 0, -1);
         TEST_ASSERT(!err, "rd_kafka_commit failed: %s", rd_kafka_err2str(err));
 
         while (commit_cb_cnt == 0)

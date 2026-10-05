@@ -1182,6 +1182,138 @@ static void do_test_group_id_not_found_while_leaving(void) {
         SUB_TEST_PASS();
 }
 
+static char pending_revoke_rebalances[256];
+
+/**
+ * @brief Rebalance callback that appends each event, as "revoke N" or
+ *        "assign N", to pending_revoke_rebalances.
+ */
+static void pending_revoke_rebalance_cb(rd_kafka_t *rk,
+                                        rd_kafka_resp_err_t err,
+                                        rd_kafka_topic_partition_list_t *parts,
+                                        void *opaque) {
+        size_t of = strlen(pending_revoke_rebalances);
+
+        rd_snprintf(pending_revoke_rebalances + of,
+                    sizeof(pending_revoke_rebalances) - of, "%s%s %d",
+                    of > 0 ? ", " : "",
+                    err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS ? "assign"
+                                                                : "revoke",
+                    parts->cnt);
+        test_rebalance_cb(rk, err, parts, opaque);
+}
+
+/**
+ * @brief Unsubscribing while an incremental revoke started by the coordinator
+ *        is still waiting for the application must leave the consumer able
+ *        to join the group again.
+ *
+ * The consumer is subscribed to topics A and B and changes its subscription to
+ * B without polling, so the coordinator's revoke of A waits for the
+ * application. It then unsubscribes, which queues the revoke of B, and serves
+ * the callbacks: revoke A, revoke B, then the empty assign that follows the
+ * coordinator's revoke. The leave heartbeat is sent after that assign.
+ * Previously this left the consumer in the STEADY join state at member epoch
+ * 0:
+ * - subscribing again after the leave completed sent a partial heartbeat
+ *   (no RebalanceTimeoutMs and no TopicPartitions) that the coordinator
+ *   rejects with a fatal INVALID_REQUEST;
+ * - subscribing again while the leave was in flight was never applied, so the
+ *   consumer never joined the group again.
+ *
+ * @param resubscribe_during_leave Subscribe again while the leave heartbeat's
+ *                                 response is held back, instead of after it.
+ */
+static void
+do_test_unsubscribe_during_pending_revoke(rd_bool_t resubscribe_during_leave) {
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *bootstraps;
+        rd_kafka_t *c;
+        rd_kafka_conf_t *conf;
+        char *topic_a, *topic_b;
+        rd_kafka_topic_partition_list_t *expected;
+        int64_t deadline;
+        const char *exp_rebalances = "revoke 2, revoke 2, assign 0";
+
+        SUB_TEST_QUICK("%s", resubscribe_during_leave
+                                 ? "subscribe while the leave is in flight"
+                                 : "subscribe after the leave");
+
+        topic_a = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+        topic_b = rd_strdup(test_mk_topic_name(__FUNCTION__, 1));
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+        /* The heartbeat interval is the heartbeat request timeout too: keep
+         * it above the delay of the leave heartbeat's response below. */
+        rd_kafka_mock_set_group_consumer_heartbeat_interval_ms(mcluster, 3000);
+        rd_kafka_mock_topic_create(mcluster, topic_a, 2, 1);
+        rd_kafka_mock_topic_create(mcluster, topic_b, 2, 1);
+
+        test_conf_init(&conf, NULL, 60);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        c = test_create_consumer(topic_a, pending_revoke_rebalance_cb, conf,
+                                 NULL);
+
+        test_consumer_subscribe_multi(c, 2, topic_a, topic_b);
+        expected = rd_kafka_topic_partition_list_new(4);
+        rd_kafka_topic_partition_list_add(expected, topic_a, 0);
+        rd_kafka_topic_partition_list_add(expected, topic_a, 1);
+        rd_kafka_topic_partition_list_add(expected, topic_b, 0);
+        rd_kafka_topic_partition_list_add(expected, topic_b, 1);
+        test_consumer_wait_assignment_topic_partition_list(c, rd_true, expected,
+                                                           10000);
+        rd_kafka_topic_partition_list_destroy(expected);
+
+        TEST_SAY(
+            "Subscribing to B only, without polling: the coordinator's "
+            "revoke of A waits for the application\n");
+        pending_revoke_rebalances[0] = '\0';
+        rd_kafka_mock_start_request_tracking(mcluster);
+        test_consumer_subscribe(c, topic_b);
+        wait_all_heartbeats_done(mcluster, 1, 500);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        TEST_SAY("Unsubscribing with the revoke of A still pending\n");
+        TEST_CALL_ERR__(rd_kafka_unsubscribe(c));
+        if (resubscribe_during_leave)
+                /* Hold back the response to the next heartbeat, the leave, so
+                 * that the subscription below is made while it's in flight. */
+                rd_kafka_mock_broker_push_request_error_rtts(
+                    mcluster, 1, RD_KAFKAP_ConsumerGroupHeartbeat, 1,
+                    RD_KAFKA_RESP_ERR_NO_ERROR, 1000);
+
+        deadline = test_clock() + 10 * 1000000;
+        while (strcmp(pending_revoke_rebalances, exp_rebalances) &&
+               test_clock() < deadline)
+                test_consumer_poll_once(c, NULL, 100);
+        TEST_ASSERT(!strcmp(pending_revoke_rebalances, exp_rebalances),
+                    "Expected rebalances \"%s\", got \"%s\"", exp_rebalances,
+                    pending_revoke_rebalances);
+
+        if (!resubscribe_during_leave) {
+                TEST_SAY("Waiting for the leave to complete\n");
+                deadline = test_clock() + 1000000;
+                while (test_clock() < deadline)
+                        test_consumer_poll_once(c, NULL, 100);
+        }
+
+        TEST_SAY("Subscribing to A again: the consumer must join the group\n");
+        test_consumer_subscribe(c, topic_a);
+        expected = rd_kafka_topic_partition_list_new(2);
+        rd_kafka_topic_partition_list_add(expected, topic_a, 0);
+        rd_kafka_topic_partition_list_add(expected, topic_a, 1);
+        test_consumer_wait_assignment_topic_partition_list(c, rd_true, expected,
+                                                           10000);
+        rd_kafka_topic_partition_list_destroy(expected);
+
+        test_consumer_close(c);
+        rd_kafka_destroy(c);
+        test_mock_cluster_destroy(mcluster);
+        rd_free(topic_a);
+        rd_free(topic_b);
+        SUB_TEST_PASS();
+}
+
 int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
 
@@ -1195,6 +1327,9 @@ int main_0147_consumer_group_consumer_mock(int argc, char **argv) {
         do_test_consumer_group_heartbeat_fatal_errors();
 
         do_test_group_id_not_found_while_leaving();
+
+        do_test_unsubscribe_during_pending_revoke(rd_false);
+        do_test_unsubscribe_during_pending_revoke(rd_true);
 
         do_test_consumer_group_heartbeat_retriable_errors();
 

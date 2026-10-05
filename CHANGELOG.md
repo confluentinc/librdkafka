@@ -79,6 +79,16 @@ callers retry them instead of treating them as a hard failure.
 * Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
   by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
 
+### Producer fixes
+
+* Issues: #5617.
+  An idempotent producer's broker thread no longer spins on zero-timeout polls
+  while a partition can't send: at the in-flight request limit, draining
+  in-flight requests, or waiting for a PID change. The linger wakeup is now
+  set only once a ProduceRequest can be created, and a response received by a
+  previous leader wakes the partition's current broker thread.
+  Happening since 1.9.0.
+
 
 # librdkafka v2.15.1
 

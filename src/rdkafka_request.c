@@ -5021,8 +5021,18 @@ static void rd_kafka_msgbatch_handle_Produce_result(
                 rd_kafka_dr_msgq0(rktp->rktp_rkt, &batch->msgq, err, presult);
         }
 
-        if (rd_kafka_is_idempotent(rk) && last_inflight)
-                rd_kafka_idemp_inflight_toppar_sub(rk, rktp);
+        if (rd_kafka_is_idempotent(rk)) {
+                /* A previous leader's response is not an IO event for the
+                 * partition's current broker thread (#5617). */
+                rd_kafka_toppar_lock(rktp);
+                if (rktp->rktp_broker && rktp->rktp_broker != rkb)
+                        rd_kafka_broker_wakeup(rktp->rktp_broker,
+                                               "produce in-flight decreased");
+                rd_kafka_toppar_unlock(rktp);
+
+                if (last_inflight)
+                        rd_kafka_idemp_inflight_toppar_sub(rk, rktp);
+        }
 }
 
 

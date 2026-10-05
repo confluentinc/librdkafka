@@ -6,6 +6,7 @@ librdkafka v2.16.0 is a feature release:
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
 * Fix `rd_kafka_clusterid()`, `rd_kafka_query_watermark_offsets()` and `rd_kafka_offsets_for_times()` waiting until their timeout and accessing the freed client instance when it's destroyed during the call (#5616).
+* KIP-848: fix a fatal `INVALID_REQUEST`, or a consumer that never joins the group again, when it subscribes after an `unsubscribe()` made while a revoke was pending (#5624).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
@@ -78,6 +79,16 @@ callers retry them instead of treating them as a hard failure.
   Happening since 1.6.0 (#5585).
 * Issues: #5573. Prevents duplicate `FETCH_STOP` requests during assignment removal
   by introducing an assignment-owned `rktp_wait_stop` flag (#5574).
+* Issues: #5623.
+  With the KIP-848 `consumer` protocol, an `unsubscribe()` made while an
+  incremental revoke started by the coordinator was still waiting for the
+  application left the consumer in the steady join state at member epoch 0
+  after the leave. A `subscribe()` after the leave then sent an incomplete
+  (re-)join heartbeat, without `RebalanceTimeoutMs` and `TopicPartitions`,
+  which the broker rejects with a fatal `INVALID_REQUEST`, and a `subscribe()`
+  while the leave was in flight was never applied, so the consumer never
+  joined the group again.
+  Happening since 2.4.0 (#5624).
 
 
 # librdkafka v2.15.1

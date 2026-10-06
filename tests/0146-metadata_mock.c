@@ -504,6 +504,11 @@ static void do_test_cluster_id_not_overread(void) {
         SUB_TEST_QUICK();
 
         mcluster = test_mock_cluster_new(1, &bootstraps);
+        /* Keep exercising the Metadata parser used by the older-broker
+         * fallback. */
+        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+            mcluster, RD_KAFKAP_DescribeCluster, -1, -1));
+
 
         /* Force controller_id to -1 (0xFFFFFFFF) so the byte following the
          * cluster_id on the wire is non-zero */

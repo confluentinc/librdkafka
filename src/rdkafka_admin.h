@@ -630,6 +630,14 @@ typedef struct rd_kafka_ClusterDescription_s {
 
 } rd_kafka_ClusterDescription_t;
 
+rd_kafka_resp_err_t
+rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
+                                       rd_kafka_op_t **rko_resultp,
+                                       rd_kafka_buf_t *reply,
+                                       char *errstr,
+                                       size_t errstr_size);
+
+
 /**@}*/
 
 /**

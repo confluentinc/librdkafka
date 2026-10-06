@@ -1293,8 +1293,73 @@ rd_kafka_mock_buf_write_Metadata_Topic(rd_kafka_mock_cluster_t *mcluster,
 
 
 /**
- * @brief Handle MetadataRequest
+ * @brief Handle DescribeCluster requests.
  */
+static int
+rd_kafka_mock_handle_DescribeCluster(rd_kafka_mock_connection_t *mconn,
+                                     rd_kafka_buf_t *rkbuf) {
+        const rd_bool_t log_decode_errors = rd_true;
+        rd_kafka_mock_cluster_t *mcluster = mconn->broker->cluster;
+        rd_kafka_buf_t *resp = rd_kafka_mock_buf_new_response(rkbuf);
+        const rd_kafka_mock_broker_t *mrkb;
+        rd_bool_t IncludeClusterAuthorizedOperations;
+        int8_t EndpointType            = 1;
+        rd_bool_t IncludeFencedBrokers = rd_false;
+        rd_kafka_resp_err_t err;
+        size_t of_BrokersCnt;
+        int32_t BrokerCnt            = 0;
+        int32_t AuthorizedOperations = INT32_MIN;
+
+        rd_kafka_buf_read_bool(rkbuf, &IncludeClusterAuthorizedOperations);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_read_i8(rkbuf, &EndpointType);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2)
+                rd_kafka_buf_read_bool(rkbuf, &IncludeFencedBrokers);
+        rd_kafka_buf_skip_tags(rkbuf);
+        err = rd_kafka_mock_next_request_error(mconn, resp);
+
+        if (!err && EndpointType != 1)
+                err = EndpointType == 2
+                          ? RD_KAFKA_RESP_ERR_MISMATCHED_ENDPOINT_TYPE
+                          : RD_KAFKA_RESP_ERR_UNSUPPORTED_ENDPOINT_TYPE;
+
+        rd_kafka_buf_write_i32(resp, 0); /* ThrottleTimeMs */
+        rd_kafka_buf_write_i16(resp, err);
+        rd_kafka_buf_write_str(resp, err ? rd_kafka_err2str(err) : NULL, -1);
+        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 1)
+                rd_kafka_buf_write_i8(resp, 1 /* broker endpoint */);
+        rd_kafka_buf_write_str(resp, mcluster->id, -1);
+        rd_kafka_buf_write_i32(resp, mcluster->controller_id);
+        of_BrokersCnt = rd_kafka_buf_write_arraycnt_pos(resp);
+        if (!err) {
+                TAILQ_FOREACH(mrkb, &mcluster->brokers, link) {
+                        if (!mrkb->up || !mrkb->in_metadata)
+                                continue;
+                        rd_kafka_buf_write_i32(resp, mrkb->id);
+                        rd_kafka_buf_write_str(resp, mrkb->advertised_listener,
+                                               -1);
+                        rd_kafka_buf_write_i32(resp, (int32_t)mrkb->port);
+                        rd_kafka_buf_write_str(resp, mrkb->rack, -1);
+                        if (rkbuf->rkbuf_reqhdr.ApiVersion >= 2)
+                                rd_kafka_buf_write_bool(resp, rd_false);
+                        rd_kafka_buf_write_tags_empty(resp);
+                        BrokerCnt++;
+                }
+                if (IncludeClusterAuthorizedOperations)
+                        AuthorizedOperations =
+                            1 << RD_KAFKA_ACL_OPERATION_DESCRIBE;
+        }
+        rd_kafka_buf_finalize_arraycnt(resp, of_BrokersCnt, BrokerCnt);
+        rd_kafka_buf_write_i32(resp, AuthorizedOperations);
+        rd_kafka_buf_write_tags_empty(resp);
+        rd_kafka_mock_connection_send_response(mconn, resp);
+        return 0;
+
+err_parse:
+        rd_kafka_buf_destroy(resp);
+        return -1;
+}
+
 static int rd_kafka_mock_handle_Metadata(rd_kafka_mock_connection_t *mconn,
                                          rd_kafka_buf_t *rkbuf) {
         const rd_bool_t log_decode_errors = rd_true;
@@ -5172,7 +5237,9 @@ const struct rd_kafka_mock_api_handler
         [RD_KAFKAP_OffsetFetch]  = {0, 6, 6, rd_kafka_mock_handle_OffsetFetch},
         [RD_KAFKAP_OffsetCommit] = {0, 9, 8, rd_kafka_mock_handle_OffsetCommit},
         [RD_KAFKAP_ApiVersion]   = {0, 2, 3, rd_kafka_mock_handle_ApiVersion},
-        [RD_KAFKAP_Metadata]     = {0, 13, 9, rd_kafka_mock_handle_Metadata},
+        [RD_KAFKAP_DescribeCluster] = {0, 2, 0,
+                                       rd_kafka_mock_handle_DescribeCluster},
+        [RD_KAFKAP_Metadata]        = {0, 13, 9, rd_kafka_mock_handle_Metadata},
         [RD_KAFKAP_FindCoordinator] = {0, 3, 3,
                                        rd_kafka_mock_handle_FindCoordinator},
         [RD_KAFKAP_InitProducerId]  = {0, 4, 2,

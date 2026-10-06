@@ -1,3 +1,10 @@
+# librdkafka master
+
+* Use the DescribeCluster protocol API (KIP-700) for `rd_kafka_DescribeCluster()`,
+  negotiating the highest supported version through v2, including cluster
+  authorized operations.
+  Retain the Metadata API fallback for older brokers.
+
 # librdkafka v2.16.0
 
 librdkafka v2.16.0 is a feature release:

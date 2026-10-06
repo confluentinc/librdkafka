@@ -178,7 +178,8 @@ RD_EXPORT void rd_kafka_mock_group_initial_rebalance_delay_ms(
 
 
 /**
- * @brief Set the controller broker id reported in Metadata responses.
+ * @brief Set the controller broker id reported in Metadata and DescribeCluster
+ * responses.
  *
  * A value of -1 indicates that there is currently no controller, which is
  * a valid state the client must handle.
@@ -448,7 +449,8 @@ rd_kafka_mock_broker_set_rtt(rd_kafka_mock_cluster_t *mcluster,
                              int rtt_ms);
 
 /**
- * @brief Sets the broker's rack as reported in Metadata to the client.
+ * @brief Sets the broker's rack as reported in Metadata and DescribeCluster to
+ * the client.
  *
  * @param mcluster Mock cluster instance.
  * @param broker_id Use -1 for all brokers, or >= 0 for a specific broker.

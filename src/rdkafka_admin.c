@@ -9483,8 +9483,8 @@ static void rd_kafka_ClusterDescription_destroy(
                 size_t i;
                 for (i = 0; i < clusterdesc->node_cnt; i++)
                         rd_kafka_Node_free(clusterdesc->nodes[i]);
-                rd_free(clusterdesc->nodes);
         }
+        RD_IF_FREE(clusterdesc->nodes, rd_free);
         rd_free(clusterdesc);
 }
 
@@ -9507,6 +9507,13 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeClusterRequest(
         int include_cluster_authorized_operations =
             rd_kafka_confval_get_int(&options->include_authorized_operations);
 
+        err = rd_kafka_DescribeClusterRequest(
+            rkb, include_cluster_authorized_operations, replyq, resp_cb,
+            opaque);
+        if (err != RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE)
+                return err;
+
+        /* KIP-700: retain Metadata for brokers without DescribeCluster. */
         err = rd_kafka_admin_MetadataRequest(
             rkb, NULL /* topics */, "describe cluster",
             include_cluster_authorized_operations,
@@ -9525,11 +9532,11 @@ static rd_kafka_resp_err_t rd_kafka_admin_DescribeClusterRequest(
  * @brief Parse DescribeCluster and create ADMIN_RESULT op.
  */
 static rd_kafka_resp_err_t
-rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
-                                       rd_kafka_op_t **rko_resultp,
-                                       rd_kafka_buf_t *reply,
-                                       char *errstr,
-                                       size_t errstr_size) {
+rd_kafka_DescribeClusterMetadataResponse_parse(rd_kafka_op_t *rko_req,
+                                               rd_kafka_op_t **rko_resultp,
+                                               rd_kafka_buf_t *reply,
+                                               char *errstr,
+                                               size_t errstr_size) {
         rd_kafka_metadata_internal_t *mdi = NULL;
         rd_kafka_resp_err_t err;
         rd_kafka_ClusterDescription_t *clusterdesc = NULL;
@@ -9560,6 +9567,124 @@ err:
                     rd_kafka_err2str(reply->rkbuf_err));
         return reply->rkbuf_err;
 }
+/**
+ * @brief Parse the dedicated DescribeCluster response or its Metadata
+ *        fallback and create an ADMIN_RESULT op.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
+                                       rd_kafka_op_t **rko_resultp,
+                                       rd_kafka_buf_t *reply,
+                                       char *errstr,
+                                       size_t errstr_size) {
+        const int log_decode_errors                = LOG_ERR;
+        rd_kafka_ClusterDescription_t *clusterdesc = NULL;
+        rd_kafka_op_t *rko_result;
+        rd_kafkap_str_t ErrorMessage, ClusterId;
+        int16_t ErrorCode;
+        int32_t ControllerId, BrokerCnt, AuthorizedOperations, i;
+
+        if (reply->rkbuf_reqhdr.ApiKey == RD_KAFKAP_Metadata)
+                return rd_kafka_DescribeClusterMetadataResponse_parse(
+                    rko_req, rko_resultp, reply, errstr, errstr_size);
+
+        rd_kafka_buf_read_throttle_time(reply);
+        rd_kafka_buf_read_i16(reply, &ErrorCode);
+        rd_kafka_buf_read_str(reply, &ErrorMessage);
+        if (ErrorCode) {
+                rd_snprintf(errstr, errstr_size,
+                            "DescribeCluster failed: %s: %.*s",
+                            rd_kafka_err2str(ErrorCode),
+                            RD_KAFKAP_STR_PR(&ErrorMessage));
+                return ErrorCode;
+        }
+
+        if (reply->rkbuf_reqhdr.ApiVersion >= 1) {
+                int8_t EndpointType;
+                rd_kafka_buf_read_i8(reply, &EndpointType);
+                if (EndpointType != 1)
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Unexpected DescribeCluster endpoint type %d",
+                            EndpointType);
+        }
+
+        rd_kafka_buf_read_str(reply, &ClusterId);
+        if (RD_KAFKAP_STR_IS_NULL(&ClusterId))
+                rd_kafka_buf_parse_fail(reply,
+                                        "Null DescribeCluster cluster id");
+        rd_kafka_buf_read_i32(reply, &ControllerId);
+        rd_kafka_buf_read_arraycnt(reply, &BrokerCnt, RD_KAFKAP_BROKERS_MAX);
+        if (BrokerCnt < 0)
+                rd_kafka_buf_parse_fail(reply,
+                                        "Null DescribeCluster brokers array");
+
+        clusterdesc             = rd_calloc(1, sizeof(*clusterdesc));
+        clusterdesc->cluster_id = RD_KAFKAP_STR_DUP(&ClusterId);
+        clusterdesc->nodes = rd_calloc(BrokerCnt, sizeof(*clusterdesc->nodes));
+
+        for (i = 0; i < BrokerCnt; i++) {
+                int32_t BrokerId, Port;
+                rd_kafkap_str_t Host, Rack;
+                char *host, *rack;
+
+                rd_kafka_buf_read_i32(reply, &BrokerId);
+                rd_kafka_buf_read_str(reply, &Host);
+                rd_kafka_buf_read_i32(reply, &Port);
+                rd_kafka_buf_read_str(reply, &Rack);
+                if (reply->rkbuf_reqhdr.ApiVersion >= 2) {
+                        rd_bool_t IsFenced;
+                        rd_kafka_buf_read_bool(reply, &IsFenced);
+                }
+                rd_kafka_buf_skip_tags(reply);
+                if (RD_KAFKAP_STR_IS_NULL(&Host) || Port < 0 ||
+                    Port > UINT16_MAX)
+                        rd_kafka_buf_parse_fail(
+                            reply, "Invalid DescribeCluster broker endpoint");
+
+                host = RD_KAFKAP_STR_DUP(&Host);
+                rack = RD_KAFKAP_STR_IS_NULL(&Rack) ? NULL
+                                                    : RD_KAFKAP_STR_DUP(&Rack);
+                clusterdesc->nodes[i] =
+                    rd_kafka_Node_new(BrokerId, host, (uint16_t)Port, rack);
+                clusterdesc->node_cnt++;
+                rd_free(host);
+                RD_IF_FREE(rack, rd_free);
+                if (ControllerId >= 0 && ControllerId == BrokerId &&
+                    !clusterdesc->controller)
+                        clusterdesc->controller =
+                            rd_kafka_Node_copy(clusterdesc->nodes[i]);
+        }
+
+        /* Preserve the Metadata fallback's controller id even when its
+         * endpoint is not present in the broker list. */
+        if (ControllerId >= 0 && !clusterdesc->controller) {
+                clusterdesc->controller =
+                    rd_calloc(1, sizeof(*clusterdesc->controller));
+                clusterdesc->controller->id = ControllerId;
+        }
+
+        rd_kafka_buf_read_i32(reply, &AuthorizedOperations);
+        rd_kafka_buf_skip_tags(reply);
+        clusterdesc->authorized_operations =
+            rd_kafka_AuthorizedOperations_parse(
+                AuthorizedOperations, &clusterdesc->authorized_operations_cnt);
+
+        rko_result = rd_kafka_admin_result_new(rko_req);
+        rd_list_init(&rko_result->rko_u.admin_result.results, 1,
+                     rd_kafka_ClusterDescription_free);
+        rd_list_add(&rko_result->rko_u.admin_result.results, clusterdesc);
+        *rko_resultp = rko_result;
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+
+err_parse:
+        RD_IF_FREE(clusterdesc, rd_kafka_ClusterDescription_destroy);
+        rd_snprintf(errstr, errstr_size,
+                    "DescribeCluster response protocol parse failure: %s",
+                    rd_kafka_err2str(reply->rkbuf_err));
+        return reply->rkbuf_err;
+}
+
 
 void rd_kafka_DescribeCluster(rd_kafka_t *rk,
                               const rd_kafka_AdminOptions_t *options,

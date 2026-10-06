@@ -896,8 +896,8 @@ void rd_kafka_broker_conn_closed(rd_kafka_broker_t *rkb,
                  */
                 rd_ts_t now = rd_clock();
                 rd_ts_t minidle =
-                    RD_MAX(60 * 1000 /*60s*/,
-                           rkb->rkb_rk->rk_conf.socket_timeout_ms) *
+                    (rd_ts_t)RD_MAX(60 * 1000 /*60s*/,
+                                    rkb->rkb_rk->rk_conf.socket_timeout_ms) *
                     1000;
                 int inflight = rd_kafka_bufq_cnt(&rkb->rkb_waitresps);
                 int inqueue  = rd_kafka_bufq_cnt(&rkb->rkb_outbufs);

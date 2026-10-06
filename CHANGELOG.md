@@ -4,6 +4,7 @@ librdkafka v2.16.0 is a feature release:
 
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected, or kept an already connected bootstrap broker without re-resolving its address (#5560).
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
+* Fix request timeouts overflowing when `socket.timeout.ms` exceeds 2147483 ms, which transactional producers hit with a large `transaction.timeout.ms` (#5170).
 * Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
 * Fix `rd_kafka_clusterid()`, `rd_kafka_query_watermark_offsets()` and `rd_kafka_offsets_for_times()` waiting until their timeout and accessing the freed client instance when it's destroyed during the call (#5616).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
@@ -52,6 +53,14 @@ callers retry them instead of treating them as a hard failure.
   accessed the client instance after it was freed. `rd_kafka_destroy()` now
   waits for these calls to return before freeing it.
   Happening since 0.11.3 (#5616).
+* Issues: #5170.
+  For transactional producers `socket.timeout.ms` defaults to
+  `transaction.timeout.ms - 100`, without the 300000 ms maximum that applies
+  when it is set explicitly. With `transaction.timeout.ms` above about
+  35.8 minutes it exceeds 2147483 ms, and converting it to microseconds
+  overflowed an `int`. The wrapped request timeout made in-flight requests
+  such as ApiVersionRequests time out prematurely, so the producer
+  could not initialize.
 
 ### Consumer fixes
 

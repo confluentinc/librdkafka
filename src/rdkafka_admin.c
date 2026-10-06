@@ -9568,7 +9568,7 @@ err:
         return reply->rkbuf_err;
 }
 /**
- * @brief Parse the dedicated DescribeCluster v0 response or its Metadata
+ * @brief Parse the dedicated DescribeCluster response or its Metadata
  *        fallback and create an ADMIN_RESULT op.
  */
 rd_kafka_resp_err_t
@@ -9599,6 +9599,16 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
                 return ErrorCode;
         }
 
+        if (reply->rkbuf_reqhdr.ApiVersion >= 1) {
+                int8_t EndpointType;
+                rd_kafka_buf_read_i8(reply, &EndpointType);
+                if (EndpointType != 1)
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "Unexpected DescribeCluster endpoint type %d",
+                            EndpointType);
+        }
+
         rd_kafka_buf_read_str(reply, &ClusterId);
         if (RD_KAFKAP_STR_IS_NULL(&ClusterId))
                 rd_kafka_buf_parse_fail(reply,
@@ -9622,6 +9632,10 @@ rd_kafka_DescribeClusterResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_buf_read_str(reply, &Host);
                 rd_kafka_buf_read_i32(reply, &Port);
                 rd_kafka_buf_read_str(reply, &Rack);
+                if (reply->rkbuf_reqhdr.ApiVersion >= 2) {
+                        rd_bool_t IsFenced;
+                        rd_kafka_buf_read_bool(reply, &IsFenced);
+                }
                 rd_kafka_buf_skip_tags(reply);
                 if (RD_KAFKAP_STR_IS_NULL(&Host) || Port < 0 ||
                     Port > UINT16_MAX)

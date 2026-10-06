@@ -2680,7 +2680,7 @@ release of librdkafka.
 | 47     | OffsetDelete                 | 0         | 0              |
 | 50     | DescribeUserScramCredentials | 0         | 0              |
 | 51     | AlterUserScramCredentials    | 0         | 0              |
-| 60     | DescribeCluster              | 1         | 0              |
+| 60     | DescribeCluster              | 1         | 2              |
 | 68     | ConsumerGroupHeartbeat       | 1         | 1              |
 | 69     | ConsumerGroupDescribe        | 1         | 0              |
 | 71     | GetTelemetrySubscriptions    | 0         | 0              |

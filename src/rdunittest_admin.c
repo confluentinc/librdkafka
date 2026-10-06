@@ -35,7 +35,9 @@
 #include "rdkafka_buf.h"
 
 /** Build a response with unknown tags at both nesting levels. */
-static rd_kafka_buf_t *ut_describe_cluster_response(const char *cluster_id,
+static rd_kafka_buf_t *ut_describe_cluster_response(int16_t version,
+                                                    int8_t endpoint_type,
+                                                    const char *cluster_id,
                                                     const char *host,
                                                     int32_t port,
                                                     int32_t controller_id,
@@ -45,10 +47,13 @@ static rd_kafka_buf_t *ut_describe_cluster_response(const char *cluster_id,
         rd_kafka_buf_t *reply = rd_kafka_buf_new(1, 256);
         int32_t i;
         reply->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
-        reply->rkbuf_reqhdr.ApiKey = RD_KAFKAP_DescribeCluster;
+        reply->rkbuf_reqhdr.ApiKey     = RD_KAFKAP_DescribeCluster;
+        reply->rkbuf_reqhdr.ApiVersion = version;
         rd_kafka_buf_write_i32(reply, 0);
         rd_kafka_buf_write_i16(reply, error);
         rd_kafka_buf_write_str(reply, error ? "broker error" : NULL, -1);
+        if (version >= 1)
+                rd_kafka_buf_write_i8(reply, endpoint_type);
         rd_kafka_buf_write_str(reply, cluster_id, -1);
         rd_kafka_buf_write_i32(reply, controller_id);
         rd_kafka_buf_write_arraycnt(reply, broker_cnt);
@@ -57,6 +62,8 @@ static rd_kafka_buf_t *ut_describe_cluster_response(const char *cluster_id,
                 rd_kafka_buf_write_str(reply, host, -1);
                 rd_kafka_buf_write_i32(reply, port);
                 rd_kafka_buf_write_str(reply, i == 0 ? NULL : "rack-2", -1);
+                if (version >= 2)
+                        rd_kafka_buf_write_bool(reply, rd_false);
                 rd_kafka_buf_write_uvarint(reply, 1);
                 rd_kafka_buf_write_uvarint(reply, 42);
                 rd_kafka_buf_write_uvarint(reply, 2);
@@ -99,6 +106,7 @@ int unittest_DescribeClusterResponse_parse(void) {
         char *data;
         size_t length, cut;
         size_t c;
+        int16_t version;
         const struct {
                 const char *cluster_id;
                 const char *host;
@@ -130,115 +138,143 @@ int unittest_DescribeClusterResponse_parse(void) {
         rd_kafka_conf_set(conf, "log_level", "0", NULL, 0);
         rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
         RD_UT_ASSERT(rk, "Failed to create producer: %s", errstr);
-        for (c = 0; c < RD_ARRAYSIZE(cases); c++) {
-                reply = ut_describe_cluster_response(
-                    cases[c].cluster_id, cases[c].host, cases[c].port,
-                    cases[c].controller_id, cases[c].broker_cnt,
-                    cases[c].operations, cases[c].error);
-                result = NULL;
-                error  = ut_describe_cluster_parse(rk, reply, &result, errstr,
-                                                   sizeof(errstr));
-                rd_kafka_buf_destroy(reply);
-                RD_UT_ASSERT(error == cases[c].expected,
-                             "Case %" PRIusz ": expected %s, got %s: %s", c,
-                             rd_kafka_err2name(cases[c].expected),
-                             rd_kafka_err2name(error), errstr);
-                if (error) {
-                        RD_UT_ASSERT(!result,
-                                     "Parse failure returned a result");
-                        if (cases[c].error)
-                                RD_UT_ASSERT(strstr(errstr, "broker error"),
-                                             "Broker error message lost");
-                        continue;
+        for (version = 0; version <= 2; version++) {
+                for (c = 0; c < RD_ARRAYSIZE(cases); c++) {
+                        reply = ut_describe_cluster_response(
+                            version, 1, cases[c].cluster_id, cases[c].host,
+                            cases[c].port, cases[c].controller_id,
+                            cases[c].broker_cnt, cases[c].operations,
+                            cases[c].error);
+                        result = NULL;
+                        error  = ut_describe_cluster_parse(
+                            rk, reply, &result, errstr, sizeof(errstr));
+                        rd_kafka_buf_destroy(reply);
+                        RD_UT_ASSERT(error == cases[c].expected,
+                                     "Case %" PRIusz
+                                     ": expected %s, got %s: %s",
+                                     c, rd_kafka_err2name(cases[c].expected),
+                                     rd_kafka_err2name(error), errstr);
+                        if (error) {
+                                RD_UT_ASSERT(!result,
+                                             "Parse failure returned a result");
+                                if (cases[c].error)
+                                        RD_UT_ASSERT(
+                                            strstr(errstr, "broker error"),
+                                            "Broker error message lost");
+                                continue;
+                        }
+                        RD_UT_ASSERT(result, "Missing result");
+                        description = rd_list_elem(
+                            &result->rko_u.admin_result.results, 0);
+                        /* Check ownership after the response buffer has been
+                         * destroyed.
+                         */
+                        RD_UT_ASSERT(
+                            !strcmp(description->cluster_id, "cluster"),
+                            "Incorrect cluster id");
+                        RD_UT_ASSERT(description->node_cnt ==
+                                         (size_t)cases[c].broker_cnt,
+                                     "Incorrect broker count");
+                        if (cases[c].broker_cnt) {
+                                RD_UT_ASSERT(
+                                    description->nodes[0]->id == 1 &&
+                                        !description->nodes[0]->rack &&
+                                        !strcmp(description->nodes[0]->host,
+                                                "localhost") &&
+                                        description->nodes[0]->port == 9092,
+                                    "Incorrect first broker");
+                                RD_UT_ASSERT(
+                                    !strcmp(description->nodes[1]->rack,
+                                            "rack-2"),
+                                    "Incorrect second broker rack");
+                        }
+                        if (cases[c].controller_id == 2)
+                                RD_UT_ASSERT(
+                                    description->controller &&
+                                        description->controller->id == 2 &&
+                                        !strcmp(description->controller->rack,
+                                                "rack-2"),
+                                    "Incorrect controller");
+                        else if (cases[c].controller_id >= 0)
+                                RD_UT_ASSERT(
+                                    description->controller &&
+                                        description->controller->id ==
+                                            cases[c].controller_id &&
+                                        !description->controller->host &&
+                                        description->controller->port == 0 &&
+                                        !description->controller->rack,
+                                    "Incorrect controller without a known "
+                                    "endpoint");
+                        else
+                                RD_UT_ASSERT(!description->controller,
+                                             "Expected no controller");
+                        if (cases[c].operations == INT32_MIN)
+                                RD_UT_ASSERT(
+                                    description->authorized_operations_cnt ==
+                                            -1 &&
+                                        !description->authorized_operations,
+                                    "Incorrect authorization sentinel");
+                        else if (cases[c].operations)
+                                RD_UT_ASSERT(
+                                    description->authorized_operations_cnt ==
+                                            1 &&
+                                        description->authorized_operations[0] ==
+                                            RD_KAFKA_ACL_OPERATION_DESCRIBE,
+                                    "Incorrect authorized operations");
+                        else
+                                RD_UT_ASSERT(
+                                    description->authorized_operations_cnt ==
+                                            0 &&
+                                        description->authorized_operations,
+                                    "Incorrect empty authorized operations");
+                        rd_kafka_op_destroy(result);
                 }
-                RD_UT_ASSERT(result, "Missing result");
-                description =
-                    rd_list_elem(&result->rko_u.admin_result.results, 0);
-                /* Check ownership after the response buffer has been destroyed.
-                 */
-                RD_UT_ASSERT(!strcmp(description->cluster_id, "cluster"),
-                             "Incorrect cluster id");
-                RD_UT_ASSERT(description->node_cnt ==
-                                 (size_t)cases[c].broker_cnt,
-                             "Incorrect broker count");
-                if (cases[c].broker_cnt) {
-                        RD_UT_ASSERT(description->nodes[0]->id == 1 &&
-                                         !description->nodes[0]->rack &&
-                                         !strcmp(description->nodes[0]->host,
-                                                 "localhost") &&
-                                         description->nodes[0]->port == 9092,
-                                     "Incorrect first broker");
-                        RD_UT_ASSERT(
-                            !strcmp(description->nodes[1]->rack, "rack-2"),
-                            "Incorrect second broker rack");
-                }
-                if (cases[c].controller_id == 2)
-                        RD_UT_ASSERT(description->controller &&
-                                         description->controller->id == 2 &&
-                                         !strcmp(description->controller->rack,
-                                                 "rack-2"),
-                                     "Incorrect controller");
-                else if (cases[c].controller_id >= 0)
-                        RD_UT_ASSERT(
-                            description->controller &&
-                                description->controller->id ==
-                                    cases[c].controller_id &&
-                                !description->controller->host &&
-                                description->controller->port == 0 &&
-                                !description->controller->rack,
-                            "Incorrect controller without a known endpoint");
-                else
-                        RD_UT_ASSERT(!description->controller,
-                                     "Expected no controller");
-                if (cases[c].operations == INT32_MIN)
-                        RD_UT_ASSERT(description->authorized_operations_cnt ==
-                                             -1 &&
-                                         !description->authorized_operations,
-                                     "Incorrect authorization sentinel");
-                else if (cases[c].operations)
-                        RD_UT_ASSERT(
-                            description->authorized_operations_cnt == 1 &&
-                                description->authorized_operations[0] ==
-                                    RD_KAFKA_ACL_OPERATION_DESCRIBE,
-                            "Incorrect authorized operations");
-                else
-                        RD_UT_ASSERT(description->authorized_operations_cnt ==
-                                             0 &&
-                                         description->authorized_operations,
-                                     "Incorrect empty authorized operations");
-                rd_kafka_op_destroy(result);
-        }
 
-        reply = ut_describe_cluster_response(
-            "cluster", "localhost", 9092, 2, 2,
-            1 << RD_KAFKA_ACL_OPERATION_DESCRIBE, 0);
-        length = rd_buf_len(&reply->rkbuf_buf);
-        data   = rd_malloc(length);
-        RD_UT_ASSERT(rd_slice_read(&reply->rkbuf_reader, data, length) ==
-                         length,
-                     "Failed to copy response");
-        rd_kafka_buf_destroy(reply);
-        /* Every incomplete prefix must fail, including after partial
-         * allocation. */
-        for (cut = 0; cut < length; cut++) {
-                reply = rd_kafka_buf_new_shadow(data, length, NULL);
-                RD_UT_ASSERT(rd_slice_init(&reply->rkbuf_reader,
-                                           &reply->rkbuf_buf, 0, cut) == 0,
-                             "Failed to limit response prefix");
-                reply->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
-                reply->rkbuf_reqhdr.ApiKey = RD_KAFKAP_DescribeCluster;
-                result                     = NULL;
-                error = ut_describe_cluster_parse(rk, reply, &result, errstr,
-                                                  sizeof(errstr));
+                reply = ut_describe_cluster_response(
+                    version, 1, "cluster", "localhost", 9092, 2, 2,
+                    1 << RD_KAFKA_ACL_OPERATION_DESCRIBE, 0);
+                length = rd_buf_len(&reply->rkbuf_buf);
+                data   = rd_malloc(length);
+                RD_UT_ASSERT(
+                    rd_slice_read(&reply->rkbuf_reader, data, length) == length,
+                    "Failed to copy response");
                 rd_kafka_buf_destroy(reply);
-                RD_UT_ASSERT((error == RD_KAFKA_RESP_ERR__BAD_MSG ||
-                              error == RD_KAFKA_RESP_ERR__UNDERFLOW) &&
-                                 !result,
-                             "Truncated response (%" PRIusz "/%" PRIusz
-                             ") did not fail: %s",
-                             cut, length, rd_kafka_err2name(error));
+                /* Every incomplete prefix must fail, including after partial
+                 * allocation. */
+                for (cut = 0; cut < length; cut++) {
+                        reply = rd_kafka_buf_new_shadow(data, length, NULL);
+                        RD_UT_ASSERT(rd_slice_init(&reply->rkbuf_reader,
+                                                   &reply->rkbuf_buf, 0,
+                                                   cut) == 0,
+                                     "Failed to limit response prefix");
+                        reply->rkbuf_flags |= RD_KAFKA_OP_F_FLEXVER;
+                        reply->rkbuf_reqhdr.ApiKey = RD_KAFKAP_DescribeCluster;
+                        reply->rkbuf_reqhdr.ApiVersion = version;
+                        result                         = NULL;
+                        error = ut_describe_cluster_parse(
+                            rk, reply, &result, errstr, sizeof(errstr));
+                        rd_kafka_buf_destroy(reply);
+                        RD_UT_ASSERT((error == RD_KAFKA_RESP_ERR__BAD_MSG ||
+                                      error == RD_KAFKA_RESP_ERR__UNDERFLOW) &&
+                                         !result,
+                                     "Truncated response (%" PRIusz "/%" PRIusz
+                                     ") did not fail: %s",
+                                     cut, length, rd_kafka_err2name(error));
+                }
+                rd_free(data);
+                if (version >= 1) {
+                        reply = ut_describe_cluster_response(
+                            version, 2, "cluster", "localhost", 9092, 2, 2, 0,
+                            0);
+                        result = NULL;
+                        error  = ut_describe_cluster_parse(
+                            rk, reply, &result, errstr, sizeof(errstr));
+                        rd_kafka_buf_destroy(reply);
+                        RD_UT_ASSERT(
+                            error == RD_KAFKA_RESP_ERR__BAD_MSG && !result,
+                            "Controller endpoint response was accepted");
+                }
         }
-        rd_free(data);
         rd_kafka_destroy(rk);
         RD_UT_PASS();
 }

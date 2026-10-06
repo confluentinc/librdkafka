@@ -29,32 +29,62 @@
 #include "test.h"
 #include "../src/rdkafka_proto.h"
 
+static rd_kafka_resp_err_t on_request_sent(rd_kafka_t *rk,
+                                           int sockfd,
+                                           const char *brokername,
+                                           int32_t brokerid,
+                                           int16_t ApiKey,
+                                           int16_t ApiVersion,
+                                           int32_t CorrId,
+                                           size_t size,
+                                           void *opaque) {
+        if (ApiKey == RD_KAFKAP_DescribeCluster)
+                TEST_ASSERT(ApiVersion == *(const int16_t *)opaque,
+                            "Expected DescribeCluster v%d, got v%d",
+                            *(const int16_t *)opaque, ApiVersion);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+static rd_kafka_resp_err_t on_new(rd_kafka_t *rk,
+                                  const rd_kafka_conf_t *conf,
+                                  void *opaque,
+                                  char *errstr,
+                                  size_t errstr_size) {
+        return rd_kafka_interceptor_add_on_request_sent(
+            rk, "describe_cluster_version", on_request_sent, opaque);
+}
+
 /**
  * Verify the dedicated API with Metadata v13 only, and the Metadata fallback
  * for older brokers. Broker errors must not switch to the fallback.
  */
 static void do_test_describe_cluster(void) {
         const struct {
-                rd_bool_t supported;
+                int16_t min_version;
+                int16_t max_version;
                 rd_bool_t include_authorized_operations;
                 int32_t controller_id;
                 rd_kafka_resp_err_t error;
                 rd_bool_t timeout;
         } cases[] = {
-            {rd_true, rd_false, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_true, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_true, rd_true, -1, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_true, rd_false, 99, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_false, rd_false, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_false, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_false, rd_true, -1, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_false, rd_false, 99, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
-            {rd_true, rd_true, 2,
-             RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED, rd_false},
-            {rd_true, rd_true, 2, RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION,
+            {0, 0, rd_false, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 0, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 1, rd_false, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 1, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {2, 2, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 2, rd_false, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 2, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 2, rd_true, -1, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 2, rd_false, 99, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {-1, -1, rd_false, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {-1, -1, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {-1, -1, rd_true, -1, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {-1, -1, rd_false, 99, RD_KAFKA_RESP_ERR_NO_ERROR, rd_false},
+            {0, 2, rd_true, 2, RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED,
              rd_false},
-            {rd_true, rd_true, 2, RD_KAFKA_RESP_ERR__TRANSPORT, rd_false},
-            {rd_true, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_true},
+            {0, 2, rd_true, 2, RD_KAFKA_RESP_ERR_UNSUPPORTED_VERSION, rd_false},
+            {0, 2, rd_true, 2, RD_KAFKA_RESP_ERR__TRANSPORT, rd_false},
+            {0, 2, rd_true, 2, RD_KAFKA_RESP_ERR_NO_ERROR, rd_true},
         };
         size_t c;
 
@@ -73,6 +103,8 @@ static void do_test_describe_cluster(void) {
                 char errstr[512];
                 size_t request_cnt, i;
                 int describe_requests = 0, metadata_requests = 0;
+                int16_t expected_version = RD_MIN(cases[c].max_version, 2);
+                rd_bool_t supported      = cases[c].max_version >= 0;
                 rd_kafka_resp_err_t expected_error =
                     cases[c].timeout ? RD_KAFKA_RESP_ERR__TIMED_OUT
                                      : cases[c].error;
@@ -80,11 +112,11 @@ static void do_test_describe_cluster(void) {
                 TEST_SAY("DescribeCluster case %" PRIusz "\n", c);
                 mcluster = test_mock_cluster_new(3, &bootstraps);
                 TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
-                    mcluster, RD_KAFKAP_Metadata, cases[c].supported ? 13 : 10,
-                    cases[c].supported ? 13 : 10));
-                if (!cases[c].supported)
-                        TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
-                            mcluster, RD_KAFKAP_DescribeCluster, -1, -1));
+                    mcluster, RD_KAFKAP_Metadata, supported ? 13 : 10,
+                    supported ? 13 : 10));
+                TEST_CALL_ERR__(rd_kafka_mock_set_apiversion(
+                    mcluster, RD_KAFKAP_DescribeCluster, cases[c].min_version,
+                    expected_version));
                 rd_kafka_mock_set_controller_id(mcluster,
                                                 cases[c].controller_id);
                 TEST_CALL_ERR__(
@@ -92,6 +124,9 @@ static void do_test_describe_cluster(void) {
 
                 test_conf_init(&conf, NULL, 20);
                 test_conf_set(conf, "bootstrap.servers", bootstraps);
+                TEST_CALL_ERR__(rd_kafka_conf_interceptor_add_on_new(
+                    conf, "describe_cluster_version", on_new,
+                    &expected_version));
                 rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
                 /* Complete broker discovery before tracking the admin request.
                  */
@@ -213,8 +248,7 @@ static void do_test_describe_cluster(void) {
                         operations =
                             rd_kafka_DescribeCluster_result_authorized_operations(
                                 result, &operation_cnt);
-                        if (cases[c].supported &&
-                            cases[c].include_authorized_operations)
+                        if (supported && cases[c].include_authorized_operations)
                                 TEST_ASSERT(
                                     operation_cnt == 1 && operations &&
                                         operations[0] ==
@@ -237,10 +271,10 @@ static void do_test_describe_cluster(void) {
                         describe_requests += key == RD_KAFKAP_DescribeCluster;
                         metadata_requests += key == RD_KAFKAP_Metadata;
                 }
-                TEST_ASSERT(describe_requests == (cases[c].supported ? 1 : 0),
+                TEST_ASSERT(describe_requests == (supported ? 1 : 0),
                             "Expected %d DescribeCluster requests, got %d",
-                            cases[c].supported ? 1 : 0, describe_requests);
-                if (!cases[c].supported)
+                            supported ? 1 : 0, describe_requests);
+                if (!supported)
                         TEST_ASSERT(metadata_requests >= 1,
                                     "Missing Metadata fallback request");
                 rd_kafka_mock_request_destroy_array(requests, request_cnt);

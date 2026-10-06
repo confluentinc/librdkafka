@@ -73,6 +73,7 @@ set(
     rdstring.c
     rdunittest.c
     rdunittest_acknowledge.c
+    rdunittest_admin.c
     rdunittest_fetcher.c
     rdunittest_msgset_errors.c
     rdvarint.c

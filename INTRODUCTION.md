@@ -2617,6 +2617,7 @@ The [Apache Kafka Implementation Proposals (KIPs)](https://cwiki.apache.org/conf
 | KIP-602 - Use all resolved addresses by default                          | 2.6.0                       | Supported                                                                                     |
 | KIP-651 - Support PEM format for SSL certs and keys                      | 2.7.0                       | Supported                                                                                     |
 | KIP-654 - Aborted txns with non-flushed msgs should not be fatal         | 2.7.0                       | Supported                                                                                     |
+| KIP-700 - Add Describe Cluster API                                      | 2.8.0                       | Supported                                                                                     |
 | KIP-714 - Client metrics and observability                               | 3.7.0                       | Supported                                                                                     |
 | KIP-735 - Increase default consumer session timeout                      | 3.0.0                       | Supported                                                                                     |
 | KIP-768 - SASL/OAUTHBEARER OIDC support                                  | 3.0                         | Supported                                                                                     |
@@ -2679,6 +2680,7 @@ release of librdkafka.
 | 47     | OffsetDelete                 | 0         | 0              |
 | 50     | DescribeUserScramCredentials | 0         | 0              |
 | 51     | AlterUserScramCredentials    | 0         | 0              |
+| 60     | DescribeCluster              | 1         | 0              |
 | 68     | ConsumerGroupHeartbeat       | 1         | 1              |
 | 69     | ConsumerGroupDescribe        | 1         | 0              |
 | 71     | GetTelemetrySubscriptions    | 0         | 0              |

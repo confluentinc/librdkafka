@@ -6331,6 +6331,32 @@ rd_kafka_resp_err_t rd_kafka_ElectLeadersRequest(
 }
 
 /**
+ * @brief Construct and send a DescribeCluster v0 request.
+ */
+rd_kafka_resp_err_t
+rd_kafka_DescribeClusterRequest(rd_kafka_broker_t *rkb,
+                                rd_bool_t include_authorized_operations,
+                                rd_kafka_replyq_t replyq,
+                                rd_kafka_resp_cb_t *resp_cb,
+                                void *opaque) {
+        rd_kafka_buf_t *rkbuf;
+        int16_t ApiVersion = rd_kafka_broker_ApiVersion_supported(
+            rkb, RD_KAFKAP_DescribeCluster, 0, 0, NULL);
+
+        if (ApiVersion == -1)
+                return RD_KAFKA_RESP_ERR__UNSUPPORTED_FEATURE;
+
+        rkbuf = rd_kafka_buf_new_flexver_request(
+            rkb, RD_KAFKAP_DescribeCluster, 1,
+            1 /* IncludeClusterAuthorizedOperations */ + 1 /* tags */,
+            rd_true /* flexver */);
+        rd_kafka_buf_write_bool(rkbuf, include_authorized_operations);
+        rd_kafka_buf_ApiVersion_set(rkbuf, ApiVersion, 0);
+        rd_kafka_broker_buf_enq_replyq(rkb, rkbuf, replyq, resp_cb, opaque);
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+/**
  * @brief Construct and send ConsumerGroupDescribe requests
  *        to \p rkb with the groups (const char *) in \p groups.
  *        Uses \p include_authorized_operations to get

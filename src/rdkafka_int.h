@@ -702,8 +702,14 @@ struct rd_kafka_s {
         rd_kafka_timer_t one_s_tmr;
         /** Rebootstrap timer.
          *  Will add bootstrap brokers again
-         *  when it's fired. */
+         *  when it's fired. Started by rd_kafka_rebootstrap() and only
+         *  stopped by the re-bootstrap sequence itself, as
+         *  rk_rebootstrap_in_progress is only reset by that sequence. */
         rd_kafka_timer_t rebootstrap_tmr;
+        /** Same as rebootstrap_tmr, started when a metadata request is sent
+         *  and stopped when a metadata response is received
+         *  (metadata.recovery.rebootstrap.trigger.ms). */
+        rd_kafka_timer_t rebootstrap_trigger_tmr;
 
         thrd_t rk_thread;
 

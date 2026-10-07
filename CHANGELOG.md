@@ -6,6 +6,9 @@ librdkafka v2.16.0 is a feature release:
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
 * Fix `rd_kafka_clusterid()`, `rd_kafka_query_watermark_offsets()` and `rd_kafka_offsets_for_times()` waiting until their timeout and accessing the freed client instance when it's destroyed during the call (#5616).
+* Fix a client never re-bootstrapping again, and possibly staying without
+  any broker forever, after a Metadata response was received while the
+  connection to its last broker dropped (#5628).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
@@ -52,6 +55,17 @@ callers retry them instead of treating them as a hard failure.
   accessed the client instance after it was freed. `rd_kafka_destroy()` now
   waits for these calls to return before freeing it.
   Happening since 0.11.3 (#5616).
+* A Metadata response handled after the connection to the last available
+  broker dropped cancelled the re-bootstrap scheduled by that disconnection,
+  and every later re-bootstrap with it, as the client still considered it in
+  progress. If that response didn't list the broker, e.g. one fenced at the
+  end of a controlled shutdown, which keeps answering requests for a few
+  milliseconds, the client was left without any broker to connect to forever,
+  and calls waiting for a partition leader without a timeout, such as
+  `rd_kafka_query_watermark_offsets()`, never returned.
+  The re-bootstrap now runs, as a Metadata response only cancels the one
+  triggered by `metadata.recovery.rebootstrap.trigger.ms`.
+  Happening since 2.12.0 (#5628).
 
 ### Consumer fixes
 

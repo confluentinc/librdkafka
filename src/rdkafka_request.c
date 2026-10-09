@@ -4960,6 +4960,10 @@ static void rd_kafka_msgbatch_handle_Produce_result(
         last_inflight = !rd_atomic32_sub(&rktp->rktp_msgs_inflight,
                                          rd_kafka_msgq_len(&batch->msgq));
 
+        /* Decrease partition's requests in-flight counter */
+        rd_assert(rd_atomic32_get(&rktp->rktp_reqs_inflight) > 0);
+        rd_atomic32_sub(&rktp->rktp_reqs_inflight, 1);
+
         /* Next expected sequence (and handle wrap) */
         next_seq = rd_kafka_seq_wrap(batch->first_seq +
                                      rd_kafka_msgq_len(&batch->msgq));

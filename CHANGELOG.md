@@ -1,3 +1,26 @@
+# librdkafka v2.16.1
+
+librdkafka v2.16.1 is a maintenance release:
+
+* Idempotent producer: allow up to 5 in-flight ProduceRequests per partition
+  regardless of how many messages each one carries (#5632).
+
+
+## Fixes
+
+### Producer fixes
+
+* Issues: #5632.
+  The idempotent producer limits the number of in-flight ProduceRequests
+  per partition to 5, the broker's sequence de-duplication window, but
+  compared that limit against the number of in-flight messages.
+  Any batch of 5 or more messages therefore left room for only one
+  ProduceRequest in flight per partition, capping per-partition throughput
+  at one batch per round-trip. The limit now counts ProduceRequests.
+  Happening since 1.0.0.
+
+
+
 # librdkafka v2.16.0
 
 librdkafka v2.16.0 is a feature release:

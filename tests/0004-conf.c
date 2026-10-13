@@ -511,28 +511,27 @@ int main_0004_conf(int argc, char **argv) {
         int i;
         const char *topic;
         static const char *gconfs[] = {
-                "message.max.bytes",
-                "12345", /* int property */
-                "client.id",
-                "my id", /* string property */
-                "debug",
-                "topic,metadata,interceptor", /* S2F property */
-                "topic.blacklist",
-                "__.*", /* #778 */
-                "auto.offset.reset",
-                "earliest", /* Global->Topic fallthru */
+            "message.max.bytes",
+            "12345", /* int property */
+            "client.id",
+            "my id", /* string property */
+            "debug",
+            "topic,metadata,interceptor", /* S2F property */
+            "topic.blacklist",
+            "__.*", /* #778 */
+            "auto.offset.reset",
+            "earliest", /* Global->Topic fallthru */
 #if WITH_ZLIB
-                "compression.codec",
-                "gzip", /* S2I property */
+            "compression.codec",
+            "gzip", /* S2I property */
 #endif
 #if defined(_WIN32)
-                "ssl.ca.certificate.stores",
-                "Intermediate ,, Root ,",
+            "ssl.ca.certificate.stores",
+            "Intermediate ,, Root ,",
 #endif
-                "client.dns.lookup",
-                "resolve_canonical_bootstrap_servers_only",
-                NULL
-        };
+            "client.dns.lookup",
+            "resolve_canonical_bootstrap_servers_only",
+            NULL};
         static const char *tconfs[] = {"request.required.acks",
                                        "-1", /* int */
                                        "auto.commit.enable",
@@ -721,6 +720,75 @@ int main_0004_conf(int argc, char **argv) {
                 rd_kafka_conf_destroy(conf);
         }
 
+#if WITH_OAUTHBEARER_OIDC
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location is mutually "
+                    "exclusive with https.ca.pem\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.pem",
+                              "-----BEGIN CERTIFICATE-----");
+                test_conf_set(conf, "https.ca.location",
+                              "/path/to/certificate.pem");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    !rk, "Expected rd_kafka_new() to fail, but it succeeded");
+                TEST_ASSERT(!strcmp(errstr,
+                                    "`https.ca.location` and "
+                                    "`https.ca.pem` are mutually exclusive"),
+                            "Expected rd_kafka_new() to fail with: "
+                            "\"`https.ca.location` and `https.ca.pem` "
+                            "are mutually exclusive\", got: \"%s\"",
+                            errstr);
+                rd_kafka_conf_destroy(conf);
+        }
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location gives an error when "
+                    "set to an invalid path\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.location",
+                              "/?/does/!/not/exist!");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    !rk, "Expected rd_kafka_new() to fail, but it succeeded");
+                TEST_ASSERT(!strcmp(errstr,
+                                    "`https.ca.location` must be "
+                                    "an existing file or directory"),
+                            "Expected rd_kafka_new() to fail with: "
+                            "\"`https.ca.location` must be "
+                            "an existing file or directory\", got: \"%s\"",
+                            errstr);
+                rd_kafka_conf_destroy(conf);
+        }
+        {
+                TEST_SAY(
+                    "Verify that https.ca.location doesn't give an error when "
+                    "set to `probe`\n");
+
+                conf = rd_kafka_conf_new();
+
+                test_conf_set(conf, "https.ca.location", "probe");
+
+                rk = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr,
+                                  sizeof(errstr));
+                TEST_ASSERT(
+                    rk, "Expected rd_kafka_new() not to fail, but it failed");
+
+                rd_kafka_destroy(rk);
+        }
+#endif /* WITH_OAUTHBEARER_OIDC */
+
+        /* Verify that OpenSSL_AppLink is not needed on Windows (#3554) */
+
 #ifdef _WIN32
         {
                 FILE *fp;
@@ -774,26 +842,25 @@ int main_0004_conf(int argc, char **argv) {
                         const char *exp;
                         int is_global;
                 } props[] = {
-                        {"request.required.acks", "0", "0"},
-                        {"request.required.acks", "-1", "-1"},
-                        {"request.required.acks", "1", "1"},
-                        {"acks", "3", "3"}, /* alias test */
-                        {"request.required.acks", "393", "393"},
-                        {"request.required.acks", "bad", NULL},
-                        {"request.required.acks", "all", "-1"},
-                        {"request.required.acks", "all", "-1", 1 /*fallthru*/},
-                        {"acks", "0", "0"}, /* alias test */
+                    {"request.required.acks", "0", "0"},
+                    {"request.required.acks", "-1", "-1"},
+                    {"request.required.acks", "1", "1"},
+                    {"acks", "3", "3"}, /* alias test */
+                    {"request.required.acks", "393", "393"},
+                    {"request.required.acks", "bad", NULL},
+                    {"request.required.acks", "all", "-1"},
+                    {"request.required.acks", "all", "-1", 1 /*fallthru*/},
+                    {"acks", "0", "0"}, /* alias test */
 #if WITH_SASL
-                        {"sasl.mechanisms", "GSSAPI", "GSSAPI", 1},
-                        {"sasl.mechanisms", "PLAIN", "PLAIN", 1},
-                        {"sasl.mechanisms", "GSSAPI,PLAIN", NULL, 1},
-                        {"sasl.mechanisms", "", NULL, 1},
+                    {"sasl.mechanisms", "GSSAPI", "GSSAPI", 1},
+                    {"sasl.mechanisms", "PLAIN", "PLAIN", 1},
+                    {"sasl.mechanisms", "GSSAPI,PLAIN", NULL, 1},
+                    {"sasl.mechanisms", "", NULL, 1},
 #endif
-                        {"linger.ms", "12555.3", "12555.3", 1},
-                        {"linger.ms", "1500.000", "1500", 1},
-                        {"linger.ms", "0.0001", "0.0001", 1},
-                        {NULL}
-                };
+                    {"linger.ms", "12555.3", "12555.3", 1},
+                    {"linger.ms", "1500.000", "1500", 1},
+                    {"linger.ms", "0.0001", "0.0001", 1},
+                    {NULL}};
 
                 TEST_SAY("Canonical tests\n");
                 tconf = rd_kafka_topic_conf_new();

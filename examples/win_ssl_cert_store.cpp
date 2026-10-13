@@ -211,9 +211,10 @@ class PrintingSSLVerifyCb : public RdKafka::SslCertificateVerifyCb {
     CertGetNameStringA(ctx, CERT_NAME_FRIENDLY_DISPLAY_TYPE,
                        CERT_NAME_ISSUER_FLAG, NULL, issuer, sizeof(issuer));
 
-    std::cerr << "Broker " << broker_name << " (" << broker_id << "): "
-              << "certificate depth " << depth << ", X509 error " << *x509_error
-              << ", subject " << subject << ", issuer " << issuer << std::endl;
+    std::cerr << "Broker " << broker_name << " (" << broker_id
+              << "): " << "certificate depth " << depth << ", X509 error "
+              << *x509_error << ", subject " << subject << ", issuer " << issuer
+              << std::endl;
 
     if (ctx)
       CertFreeCertificateContext(ctx);

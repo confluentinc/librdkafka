@@ -17,7 +17,7 @@ fi
 
 archive="${PWD}/$1"
 
-source ./packaging/mingw-w64/travis-before-install.sh
+source ./packaging/mingw-w64/export-variables.sh
 
 if [[ $linkage == "static" ]]; then
     ./packaging/mingw-w64/configure-build-msys2-mingw-static.sh

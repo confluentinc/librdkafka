@@ -115,7 +115,7 @@ for linenr, string in enumerate(sys.stdin):
     try:
         top, brokers, topics, toppars = parse(linenr, string)
     except Exception as e:
-        print(f"SKIP {linenr+1}: {e}")
+        print(f"SKIP {linenr + 1}: {e}")
         continue
 
     w_top.write_list(top)

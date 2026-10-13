@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -377,7 +378,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                  * while auto.offset.reset is default at `latest`. */
 
                 parts->elems[0].offset = RD_KAFKA_OFFSET_BEGINNING;
-                test_consumer_assign("rebalance", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("rebalance", rk,
+                                                           parts);
                 TEST_SAY("Pausing partitions\n");
                 if ((err2 = rd_kafka_pause_partitions(rk, parts)))
                         TEST_FAIL("Failed to pause: %s",
@@ -388,7 +390,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                                   rd_kafka_err2str(err2));
                 break;
         default:
-                test_consumer_unassign("rebalance", rk);
+                test_consumer_unassign_by_rebalance_protocol("rebalance", rk,
+                                                             parts);
                 break;
         }
 }

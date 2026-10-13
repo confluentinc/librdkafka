@@ -91,6 +91,14 @@ class NugetPackage (Package):
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-arm64/native/librdkafka.so'),
+        # Linux glibc centos8 s390x without GSSAPI (no external deps)
+        Mapping({'arch': 's390x',
+                 'plat': 'linux',
+                 'dist': 'centos8',
+                 'lnk': 'all'},
+                'librdkafka.tgz',
+                './usr/local/lib/librdkafka.so.1',
+                'runtimes/linux-s390x/native/librdkafka.so'),
 
         # Linux musl alpine x64 without GSSAPI (no external deps)
         Mapping({'arch': 'x64',
@@ -100,6 +108,14 @@ class NugetPackage (Package):
                 'librdkafka.tgz',
                 './usr/local/lib/librdkafka.so.1',
                 'runtimes/linux-x64/native/alpine-librdkafka.so'),
+        # Linux musl alpine arm64 without GSSAPI (no external deps)
+        Mapping({'arch': 'arm64',
+                 'plat': 'linux',
+                 'dist': 'alpine',
+                 'lnk': 'all'},
+                'librdkafka.tgz',
+                './usr/local/lib/librdkafka.so.1',
+                'runtimes/linux-arm64/native/alpine-librdkafka.so'),
 
         # Common Win runtime
         Mapping({'arch': 'x64',
@@ -136,8 +152,8 @@ class NugetPackage (Package):
         Mapping({'arch': 'x64',
                  'plat': 'win'},
                 'librdkafka.redist*',
-                'build/native/bin/v142/x64/Release/zlib1.dll',
-                'runtimes/win-x64/native/zlib1.dll'),
+                'build/native/bin/v142/x64/Release/z.dll',
+                'runtimes/win-x64/native/z.dll'),
         Mapping({'arch': 'x64',
                  'plat': 'win'},
                 'librdkafka.redist*',
@@ -197,8 +213,8 @@ class NugetPackage (Package):
         Mapping({'arch': 'x86',
                  'plat': 'win'},
                 'librdkafka.redist*',
-                'build/native/bin/v142/Win32/Release/zlib1.dll',
-                'runtimes/win-x86/native/zlib1.dll'),
+                'build/native/bin/v142/Win32/Release/z.dll',
+                'runtimes/win-x86/native/z.dll'),
         Mapping({'arch': 'x86',
                  'plat': 'win'},
                 'librdkafka.redist*',

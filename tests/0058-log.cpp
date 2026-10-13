@@ -52,9 +52,9 @@ class myLogCb : public RdKafka::EventCb {
     switch (event.type()) {
     case RdKafka::Event::EVENT_LOG:
       cnt_++;
-      Test::Say(tostr() << "Log: "
-                        << "level " << event.severity() << ", facility "
-                        << event.fac() << ", str " << event.str() << "\n");
+      Test::Say(tostr() << "Log: " << "level " << event.severity()
+                        << ", facility " << event.fac() << ", str "
+                        << event.str() << "\n");
       if (state_ != _EXP_LOG)
         Test::Fail(
             "Received unexpected "

@@ -70,6 +70,9 @@ static void do_test_empty_topic_consumer() {
                RdKafka::err2str(err));
   delete md;
 
+  /* Await propagation to the whole cluster */
+  test_wait_topic_exists(consumer->c_ptr(), topic.c_str(), 1 * 1000);
+
   /* Start consumer */
   err = consumer->start(rkt, partition, RdKafka::Topic::OFFSET_BEGINNING);
   if (err)

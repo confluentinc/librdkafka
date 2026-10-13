@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -55,7 +56,7 @@ static void rebalance_cb(rd_kafka_t *rk,
             rd_kafka_err2name(rebalance_exp_event), rd_kafka_err2name(err));
 
         if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS) {
-                test_consumer_assign("assign", rk, parts);
+                test_consumer_assign_by_rebalance_protocol("assign", rk, parts);
         } else {
                 rd_kafka_resp_err_t commit_err;
 
@@ -92,8 +93,8 @@ static void rebalance_cb(rd_kafka_t *rk,
                                     rd_kafka_err2name(commit_exp_err),
                                     rd_kafka_err2name(commit_err));
                 }
-
-                test_consumer_unassign("unassign", rk);
+                test_consumer_unassign_by_rebalance_protocol("unassign", rk,
+                                                             parts);
         }
 
         /* Make sure only one rebalance callback is served per poll()

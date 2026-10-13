@@ -6,6 +6,7 @@ misc
 openssl_engine_example_cpp
 producer
 producer_cpp
+producer_schema_registry
 rdkafka_complex_consumer_example
 rdkafka_complex_consumer_example_cpp
 rdkafka_consume_batch
@@ -23,3 +24,6 @@ incremental_alter_configs
 user_scram
 list_offsets
 elect_leaders
+share_consumer
+share_consumer_commit_async
+share_consumer_commit_sync

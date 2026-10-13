@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -120,6 +121,11 @@ int main_0016_client_swname(int argc, char **argv) {
         const char *jmx_port;
         const char *reason = NULL;
 
+        if (test_needs_auth()) {
+                TEST_SKIP("Cannot run this test with SSL/SASL\n");
+                return 0;
+        }
+
         /* If available, use the Kafka JmxTool to query software name
          * in broker JMX metrics */
         if (!(broker = test_getenv("BROKER_ADDRESS_2", NULL)))
@@ -136,14 +142,23 @@ int main_0016_client_swname(int argc, char **argv) {
                 reason =
                     "Env var BROKER_JMX_PORT_2 missing "
                     "(not running in trivup or trivup too old?)";
-        else
+        else {
+                rd_bool_t apache_kafka_4 =
+                    test_broker_version >= TEST_BRKVER(4, 0, 0, 0);
                 rd_snprintf(jmx_cmd, sizeof(jmx_cmd),
-                            "%s/bin/kafka-run-class.sh kafka.tools.JmxTool "
+                            "%s/bin/kafka-run-class.sh %s "
                             "--jmx-url "
                             "service:jmx:rmi:///jndi/rmi://:%s/jmxrmi "
+                            " --object-name '*:"
+                            "clientSoftwareName=*,"
+                            "clientSoftwareVersion=*,*' "
                             " --one-time true | "
                             "grep clientSoftware",
-                            kafka_path, jmx_port);
+                            kafka_path,
+                            apache_kafka_4 ? "org.apache.kafka.tools.JmxTool"
+                                           : "kafka.tools.JmxTool",
+                            jmx_port);
+        }
 
         if (reason)
                 TEST_WARN("Will not be able to verify JMX metrics: %s\n",

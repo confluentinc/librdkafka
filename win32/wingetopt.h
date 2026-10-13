@@ -67,10 +67,11 @@ struct option /* specification for a long form option...        */
         int val;          /* its associated status value                */
 };
 
-enum                 /* permitted values for its `has_arg' field...        */
-{ no_argument = 0,   /* option never takes an argument        */
-  required_argument, /* option always requires an argument        */
-  optional_argument  /* option may take an argument                */
+enum /* permitted values for its `has_arg' field...        */
+{
+        no_argument = 0,   /* option never takes an argument        */
+        required_argument, /* option always requires an argument        */
+        optional_argument  /* option may take an argument                */
 };
 
 extern int getopt_long(int nargc,

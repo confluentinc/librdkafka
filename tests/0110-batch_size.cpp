@@ -154,8 +154,7 @@ static void do_test_batch_size() {
   while (event_cb.avg_batchsize == 0)
     p->poll(1000);
 
-  Test::Say(tostr() << "Batchsize: "
-                    << "configured " << batchsize << ", min "
+  Test::Say(tostr() << "Batchsize: " << "configured " << batchsize << ", min "
                     << event_cb.min_batchsize << ", max "
                     << event_cb.max_batchsize << ", avg "
                     << event_cb.avg_batchsize << "\n");

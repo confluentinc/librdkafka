@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2019-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -167,7 +168,10 @@ static void do_test_static_group_rebalance(void) {
         test_conf_set(conf, "max.poll.interval.ms", "9000");
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
-        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "500");
+        /* Keep this interval higher than cluster metadata propagation
+         * time to make sure no additional rebalances are triggered
+         * when refreshing the full metadata with a regex subscription. */
+        test_conf_set(conf, "topic.metadata.refresh.interval.ms", "2000");
         test_conf_set(conf, "metadata.max.age.ms", "5000");
         test_conf_set(conf, "enable.partition.eof", "true");
         test_conf_set(conf, "group.instance.id", "consumer1");
@@ -180,7 +184,6 @@ static void do_test_static_group_rebalance(void) {
         test_conf_set(conf, "group.instance.id", "consumer2");
         c[1].rk = test_create_consumer(topic, rebalance_cb,
                                        rd_kafka_conf_dup(conf), NULL);
-        rd_kafka_conf_destroy(conf);
 
         test_wait_topic_exists(c[1].rk, topic, 5000);
 
@@ -223,15 +226,15 @@ static void do_test_static_group_rebalance(void) {
         test_msgver_verify("first.verify", &mv, TEST_MSGVER_ALL, 0, msgcnt);
 
         TEST_SAY("== Testing consumer restart ==\n");
-        conf = rd_kafka_conf_dup(rd_kafka_conf(c[1].rk));
 
         /* Only c[1] should exhibit rebalance behavior */
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         TIMING_START(&t_close, "consumer restart");
         test_consumer_close(c[1].rk);
         rd_kafka_destroy(c[1].rk);
-
-        c[1].rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+        c[1].rk = test_create_consumer(topic, rebalance_cb,
+                                       rd_kafka_conf_dup(conf), NULL);
+        rd_kafka_conf_destroy(conf);
         rd_kafka_poll_set_consumer(c[1].rk);
 
         test_consumer_subscribe(c[1].rk, topics);
@@ -330,16 +333,25 @@ static void do_test_static_group_rebalance(void) {
         /* max.poll.interval.ms should still be enforced by the consumer */
 
         /*
-         * Block long enough for consumer 2 to be evicted from the group
-         * `max.poll.interval.ms` + `session.timeout.ms`
+         * Stop polling consumer 2 until we reach
+         * `max.poll.interval.ms` and is evicted from the group.
          */
         rebalance_start        = test_clock();
         c[1].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
         c[0].curr_line         = __LINE__;
-        test_consumer_poll_no_msgs("wait.max.poll", c[0].rk, testid,
-                                   6000 + 9000);
-        c[1].curr_line = __LINE__;
+        /* consumer 2 will time out and all partitions will be assigned to
+         * consumer 1. */
+        static_member_expect_rebalance(&c[0], rebalance_start, &c[0].revoked_at,
+                                       -1);
+        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS;
+        static_member_expect_rebalance(&c[0], rebalance_start,
+                                       &c[0].assigned_at, -1);
+
+        /* consumer 2 restarts polling and re-joins the group */
+        rebalance_start        = test_clock();
+        c[0].expected_rb_event = RD_KAFKA_RESP_ERR__REVOKE_PARTITIONS;
+        c[1].curr_line         = __LINE__;
         test_consumer_poll_expect_err(c[1].rk, testid, 1000,
                                       RD_KAFKA_RESP_ERR__MAX_POLL_EXCEEDED);
 
@@ -568,7 +580,7 @@ static void do_test_fenced_member_consumer(void) {
         await_assignment_multi("Awaiting initial assignments", &c[1], 2);
 
         /* Create conflicting consumer */
-        TEST_SAY("Creating conflicting consumer2 instance\n");
+        TEST_SAY("Creating conflicting consumer 2 instance\n");
         test_conf_set(conf, "group.instance.id", "consumer2");
         test_conf_set(conf, "client.id", "consumer2b");
         c[0] = test_create_consumer(topic, NULL, rd_kafka_conf_dup(conf), NULL);
@@ -661,15 +673,29 @@ static rd_bool_t is_api_key(rd_kafka_mock_request_t *request, void *opaque) {
 }
 
 /**
+ * @enum do_test_static_membership_mock_variation_t
+ * @brief Variations of the static membership mock test.
+ */
+typedef enum do_test_static_membership_mock_variation_t {
+        /** Consumer 1 leaves with unsubscribe and rejoins the group */
+        DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_SAME_INSTANCE = 0,
+        /** Consumer 1 leaves with unsubscribe and a new consumer with same
+         *  group.instance.id joins the group */
+        DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_NEW_INSTANCE = 1,
+        DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION__CNT
+} do_test_static_membership_mock_variation_t;
+
+/**
  * @brief Static group membership tests with the mock cluster.
  *        Checks that consumer returns the same assignment
  *        and generation id after re-joining.
  *
- *        variation 1) consumer 1 leaves and rejoins the group.
- *        variation 2) consumer 1 leaves and a new consumer with same
- *                     group.instance.id joins the group.
+ * @param variation Test variation to run.
+ *
+ * @sa `do_test_static_membership_mock_variation_t`
  */
-static void do_test_static_membership_mock(int variation) {
+static void do_test_static_membership_mock(
+    do_test_static_membership_mock_variation_t variation) {
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         int32_t api_key   = RD_KAFKAP_ConsumerGroupHeartbeat;
@@ -680,8 +706,11 @@ static void do_test_static_membership_mock(int variation) {
         rd_kafka_topic_partition_list_t *prev_assignment1, *prev_assignment2,
             *next_assignment1, *next_assignment2;
 
-        SUB_TEST_QUICK("%s", variation == 1 ? "with unsubscribe"
-                                            : "with new instance");
+        SUB_TEST_QUICK(
+            "%s",
+            variation == DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_SAME_INSTANCE
+                ? "with same instance"
+                : "with new instance");
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 2, 3);
@@ -717,7 +746,8 @@ static void do_test_static_membership_mock(int variation) {
                                          &api_key);
         rd_kafka_mock_stop_request_tracking(mcluster);
 
-        if (variation == 2) {
+        if (variation ==
+            DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_NEW_INSTANCE) {
                 /* Don't destroy it immediately because the
                  * topic partition lists still hold a reference. */
                 consumer_1_to_destroy = consumer1;
@@ -787,6 +817,7 @@ int main_0102_static_group_rebalance(int argc, char **argv) {
 
 int main_0102_static_group_rebalance_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
+        int variation;
 
         if (test_consumer_group_protocol_classic()) {
                 TEST_SKIP(
@@ -795,7 +826,11 @@ int main_0102_static_group_rebalance_mock(int argc, char **argv) {
                 return 0;
         }
 
-        do_test_static_membership_mock(1);
-        do_test_static_membership_mock(2);
+        for (variation = DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION_SAME_INSTANCE;
+             variation < DO_TEST_STATIC_MEMBERSHIP_MOCK_VARIATION__CNT;
+             variation++) {
+                do_test_static_membership_mock(variation);
+        }
+
         return 0;
 }

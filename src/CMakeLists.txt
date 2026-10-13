@@ -26,6 +26,7 @@ set(
     rdkafka_offset.c
     rdkafka_op.c
     rdkafka_partition.c
+    rdkafka_share_acknowledgement.c
     rdkafka_pattern.c
     rdkafka_queue.c
     rdkafka_range_assignor.c
@@ -51,6 +52,7 @@ set(
     rdkafka_mock.c
     rdkafka_mock_handlers.c
     rdkafka_mock_cgrp.c
+    rdkafka_mock_sharegrp.c
     rdkafka_error.c
     rdkafka_fetcher.c
     rdkafka_telemetry.c
@@ -70,6 +72,9 @@ set(
     rdregex.c
     rdstring.c
     rdunittest.c
+    rdunittest_acknowledge.c
+    rdunittest_fetcher.c
+    rdunittest_msgset_errors.c
     rdvarint.c
     rdmap.c
     snappy.c

@@ -36,7 +36,6 @@ class LibrdkafkaTestApp(App):
         self.security_protocol = 'PLAINTEXT'
 
         f, self.test_conf_file = self.open_file('test.conf', 'perm')
-        f.write('broker.address.family=v4\n'.encode('ascii'))
         f.write(('test.sql.command=sqlite3 rdktests\n').encode('ascii'))
         f.write('test.timeout.multiplier=2\n'.encode('ascii'))
 
@@ -48,10 +47,6 @@ class LibrdkafkaTestApp(App):
         if version.startswith('0.9') or version.startswith('0.8'):
             conf_blob.append('api.version.request=false')
             conf_blob.append('broker.version.fallback=%s' % version)
-        else:
-            # any broker version with ApiVersion support
-            conf_blob.append('broker.version.fallback=0.10.0.0')
-            conf_blob.append('api.version.fallback.ms=0')
 
         # SASL (only one mechanism supported at a time)
         mech = self.conf.get('sasl_mechanisms', '').split(',')[0]
@@ -92,12 +87,28 @@ class LibrdkafkaTestApp(App):
                     self.env_add(
                         'EXPIRED_TOKEN_OIDC_URL',
                         oidc.conf.get('expired_url'))
+                    self.env_add(
+                        'EXPIRED_TOKEN_OIDC_URL',
+                        oidc.conf.get('expired_url'))
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY'] = \
+                        oidc.conf['sasl_oauthbearer_client_private_key_path']
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY_ENCRYPTED'] = \
+                        oidc.conf[
+                            'sasl_oauthbearer_client_private_key_encrypted_path']  # noqa: E501
+                    self.env['OAUTHBEARER_CLIENT_PRIVATE_KEY_PASSWORD'] = \
+                        oidc.conf[
+                            'sasl_oauthbearer_client_private_key_password']
                 else:
                     conf_blob.append(
                         'enable.sasl.oauthbearer.unsecure.jwt=true\n')
-                    conf_blob.append(
-                        'sasl.oauthbearer.config=%s\n' %
-                        self.conf.get('sasl_oauthbearer_config'))
+                    if not self.conf.get('sasl_oauthbearer_config'):
+                        conf_blob.append(
+                            'sasl.oauthbearer.config=scope=requiredScope'
+                            ' principal=admin\n')
+                    else:
+                        conf_blob.append(
+                            'sasl.oauthbearer.config=%s\n' %
+                            self.conf.get('sasl_oauthbearer_config'))
 
             elif mech == 'GSSAPI':
                 self.security_protocol = 'SASL_PLAINTEXT'

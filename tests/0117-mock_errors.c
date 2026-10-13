@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2020-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -102,8 +103,10 @@ static void do_test_offset_commit_error_during_rebalance(void) {
         rd_kafka_t *c1, *c2;
         rd_kafka_mock_cluster_t *mcluster;
         const char *bootstraps;
-        const char *topic = "test";
-        const int msgcnt  = 100;
+        const char *topic            = "test";
+        const int msgcnt             = 100;
+        const int exp_msg_cnt_intial = 1;
+        int exp_msg_cnt_final        = msgcnt;
         rd_kafka_resp_err_t err;
 
         SUB_TEST();
@@ -136,8 +139,8 @@ static void do_test_offset_commit_error_during_rebalance(void) {
 
 
         /* Wait for assignment and one message */
-        test_consumer_poll("C1.PRE", c1, 0, -1, -1, 1, NULL);
-        test_consumer_poll("C2.PRE", c2, 0, -1, -1, 1, NULL);
+        test_consumer_poll("C1.PRE", c1, 0, -1, -1, exp_msg_cnt_intial, NULL);
+        test_consumer_poll("C2.PRE", c2, 0, -1, -1, exp_msg_cnt_intial, NULL);
 
         /* Trigger rebalance */
         test_consumer_close(c2);
@@ -161,8 +164,15 @@ static void do_test_offset_commit_error_during_rebalance(void) {
                     "not %s",
                     rd_kafka_err2name(err));
 
+        /* Since all the assignors in the `consumer` protocol are COOPERATIVE
+         * only the new partitions are assigned to the consumer. All the
+         * previously assigned partitions will start consuming from the last
+         * offset. */
+        if (!test_consumer_group_protocol_classic())
+                exp_msg_cnt_final = msgcnt - exp_msg_cnt_intial;
+
         /* Wait for new assignment and able to read all messages */
-        test_consumer_poll("C1.PRE", c1, 0, -1, -1, msgcnt, NULL);
+        test_consumer_poll("C1.POST", c1, 0, -1, -1, exp_msg_cnt_final, NULL);
 
         rd_kafka_destroy(c1);
 

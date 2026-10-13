@@ -104,19 +104,41 @@ static void do_test_metadata_persists_in_cache(const char *assignor) {
 }
 
 /**
- * @brief No loop of metadata requests should be started
- *        when a metadata request is made without leader epoch change.
- *        See issue #4577
+ * @brief Tests about the fast metadata refresh feature.
+ *
+ * - variation 0: no loop of metadata requests should be started
+ *   when a metadata request is made without leader epoch change.
+ *   It's expected it stops after the first request.
+ *   See issue #4577
+ *
+ * - variation 1: an error is returned on subsequent metadata response too,
+ *   metadata refreshes continue every second until the error is cleared.
+ *
+ * It's expected that the temporary error doesn't remove the topic from cache,
+ * produce requests aren't blocked from metadata errors and no error is
+ * to be surfaced to the application.
  */
-static void do_test_fast_metadata_refresh_stops(void) {
+static void do_test_fast_metadata_refresh(int variation) {
         rd_kafka_t *rk;
         const char *bootstraps;
         rd_kafka_mock_cluster_t *mcluster;
         const char *topic = test_mk_topic_name(__FUNCTION__, 1);
         rd_kafka_conf_t *conf;
         int metadata_requests;
+        int expected_metadata_requests;
+        switch (variation) {
+        case 0:
+                expected_metadata_requests = 2;
+                break;
+        case 1:
+                expected_metadata_requests = 7;
+                break;
+        default:
+                TEST_FAIL("Invalid variation %d", variation);
+                break;
+        }
 
-        SUB_TEST_QUICK();
+        SUB_TEST_QUICK("%s", variation == 0 ? "stops" : "retries");
 
         mcluster = test_mock_cluster_new(3, &bootstraps);
         rd_kafka_mock_topic_create(mcluster, topic, 1, 1);
@@ -127,22 +149,51 @@ static void do_test_fast_metadata_refresh_stops(void) {
 
         rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
 
+        rd_kafka_mock_start_request_tracking(mcluster);
+
+        if (variation == 1) {
+                /* Produce some messages to the topic
+                 * and keep metadata in cache. */
+                test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
+        }
+
         /* This error triggers a metadata refresh but no leader change
          * happened */
         rd_kafka_mock_push_request_errors(
             mcluster, RD_KAFKAP_Produce, 1,
             RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
 
-        rd_kafka_mock_start_request_tracking(mcluster);
-        test_produce_msgs2(rk, topic, 0, 0, 0, 1, NULL, 5);
+        if (variation == 1) {
+                rd_kafka_mock_topic_set_error(
+                    mcluster, topic, RD_KAFKA_RESP_ERR_KAFKA_STORAGE_ERROR);
+        }
+
+        test_produce_msgs2(rk, topic, 0, 0, 0, 3, NULL, 5);
+
+        /* Wait some time for seeing the retries */
+        rd_sleep(3);
+
+        if (variation == 1) {
+                /* Clear topic error to stop the retries */
+                rd_kafka_mock_topic_set_error(mcluster, topic,
+                                              RD_KAFKA_RESP_ERR_NO_ERROR);
+        }
 
         /* First call is for getting initial metadata,
          * second one happens after the error,
-         * it should stop refreshing metadata after that. */
+         * it should stop refreshing metadata after that.
+         *
+         * There can be an additional metadata request originating from
+         * the 1s timer when the partition is being delegated or
+         * the broker is connecting but still not up. */
         metadata_requests = test_mock_wait_matching_requests(
-            mcluster, 2, 500, is_metadata_request, NULL);
-        TEST_ASSERT(metadata_requests == 2,
-                    "Expected 2 metadata request, got %d", metadata_requests);
+            mcluster, expected_metadata_requests, 500, is_metadata_request,
+            NULL);
+        TEST_ASSERT(expected_metadata_requests <= metadata_requests &&
+                        metadata_requests <= expected_metadata_requests + 2,
+                    "Expected %d or %d metadata request, got %d",
+                    expected_metadata_requests, expected_metadata_requests + 2,
+                    metadata_requests);
         rd_kafka_mock_stop_request_tracking(mcluster);
 
         rd_kafka_destroy(rk);
@@ -344,8 +395,16 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                 test_produce_msgs2(rk, topic, 0, 1, 0, 1, NULL, 0);
                 rd_kafka_flush(rk, 1000);
         } else {
+                test_produce_msgs_easy_v(topic, 0, 0, 0, 1, 0,
+                                         "bootstrap.servers", bootstraps, NULL);
+                test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0,
+                                         "bootstrap.servers", bootstraps, NULL);
+
                 rd_kafka_topic_partition_list_t *assignment;
                 test_conf_set(conf, "group.id", topic);
+                test_conf_set(conf, "fetch.wait.max.ms", "100");
+                test_conf_set(conf, "auto.offset.reset", "earliest");
+
                 rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
 
                 assignment = rd_kafka_topic_partition_list_new(1);
@@ -355,7 +414,8 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                 rd_kafka_topic_partition_list_destroy(assignment);
 
                 /* Start consuming from leader 1 and 2 */
-                test_consumer_poll_no_msgs("no errors", rk, 0, 1000);
+                test_consumer_poll_timeout("initial leaders", rk, 0, -1, -1, 2,
+                                           NULL, 5000);
         }
 
         TIMING_START(&timing, "Metadata update and partition migration");
@@ -377,10 +437,10 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
                                          "bootstrap.servers", bootstraps, NULL);
                 test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0,
                                          "bootstrap.servers", bootstraps, NULL);
-                test_consumer_poll_timeout("partition 0", rk, 0, -1, -1, 2,
+                test_consumer_poll_timeout("changed leaders", rk, 0, -1, -1, 2,
                                            NULL, 5000);
         }
-        TIMING_ASSERT_LATER(&timing, 0, 2000);
+        TIMING_ASSERT_LATER(&timing, 0, 500);
 
         /* Leader change triggers the metadata update and migration
          * of partition 0 to brokers 3 and with 'second_leader_change' also
@@ -417,6 +477,86 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
         SUB_TEST_PASS();
 }
 
+/**
+ * @brief cluster_id must be copied by its exact wire length,
+ *        not via strlen() during DescribeCluster parsing.
+ *
+ * On the wire cluster_id is immediately followed by the controller_id int32,
+ * and cluster_id.str is not nul-terminated, so a strlen()-based copy would
+ * over-read into the controller_id bytes when they are non-zero. Forcing
+ * controller_id = -1 (all 0xFF bytes) triggers this; the cluster id from
+ * DescribeCluster (the parser's per-response copy under test) must equal the
+ * one from rd_kafka_clusterid() (a length-based copy).
+ */
+static void do_test_cluster_id_not_overread(void) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        rd_kafka_conf_t *conf;
+        char *clusterid;
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_DescribeCluster_result_t *res;
+        const char *describe_clusterid;
+        char errstr[256];
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(1, &bootstraps);
+
+        /* Force controller_id to -1 (0xFFFFFFFF) so the byte following the
+         * cluster_id on the wire is non-zero */
+        rd_kafka_mock_set_controller_id(mcluster, -1);
+
+        test_conf_init(&conf, NULL, 10);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        /* Authoritative cluster id: rk_clusterid uses a length-based copy
+         * (RD_KAFKAP_STR_DUP) */
+        clusterid = rd_kafka_clusterid(rk, tmout_multip(5000));
+        TEST_ASSERT(clusterid, "Expected to retrieve clusterid");
+
+        /* DescribeCluster surfaces the internal per-response cluster_id copy */
+        q = rd_kafka_queue_new(rk);
+        options =
+            rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_DESCRIBECLUSTER);
+        /* DescribeCluster defaults to routing to the controller; since we set
+         * controller_id = -1 (no controller), target broker 1 explicitly so
+         * the request is served and the response parsed. */
+        TEST_CALL_ERR__(rd_kafka_AdminOptions_set_broker(options, 1, errstr,
+                                                         sizeof(errstr)));
+        rd_kafka_DescribeCluster(rk, options, q);
+        rd_kafka_AdminOptions_destroy(options);
+
+        rkev = test_wait_admin_result(q, RD_KAFKA_EVENT_DESCRIBECLUSTER_RESULT,
+                                      tmout_multip(10 * 1000));
+        TEST_ASSERT(rkev, "Expected DescribeCluster result event");
+        TEST_ASSERT(!rd_kafka_event_error(rkev), "DescribeCluster failed: %s",
+                    rd_kafka_event_error_string(rkev));
+
+        res                = rd_kafka_event_DescribeCluster_result(rkev);
+        describe_clusterid = rd_kafka_DescribeCluster_result_cluster_id(res);
+
+        TEST_ASSERT(describe_clusterid &&
+                        !strcmp(describe_clusterid, clusterid),
+                    "DescribeCluster cluster id \"%s\" (len %d) does not match "
+                    "expected \"%s\" (len %d): cluster_id was over-read",
+                    describe_clusterid ? describe_clusterid : "(null)",
+                    describe_clusterid ? (int)strlen(describe_clusterid) : -1,
+                    clusterid, (int)strlen(clusterid));
+
+        rd_kafka_event_destroy(rkev);
+        rd_kafka_queue_destroy(q);
+        rd_kafka_mem_free(rk, clusterid);
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 int main_0146_metadata_mock(int argc, char **argv) {
         TEST_SKIP_MOCK_CLUSTER(0);
         int variation;
@@ -429,9 +569,12 @@ int main_0146_metadata_mock(int argc, char **argv) {
 
         do_test_metadata_call_before_join();
 
-        do_test_fast_metadata_refresh_stops();
+        do_test_fast_metadata_refresh(0);
+        do_test_fast_metadata_refresh(1);
 
         do_test_stale_metadata_doesnt_migrate_partition();
+
+        do_test_cluster_id_not_overread();
 
         for (variation = 0; variation < 4; variation++) {
                 do_test_metadata_update_operation(

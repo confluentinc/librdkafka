@@ -45,6 +45,14 @@ Error strings must not contain a trailing period.
           will be a breaking API change.
 
 
+### Max Apache Kafka RPC versions
+
+Copy the first three columns of the table in `INTRODUCTION.md` to a temporary file
+and run the script
+`./packaging/tools/update_rpcs_max_versions.py <kafka_folder> <input_file>`
+for getting the updated columns in stdout.
+
+
 ## Run regression tests
 
 **Build tests:**

@@ -400,6 +400,7 @@ void do_test_telemetry_preferred_broker_change(rd_kafka_type_t type) {
         rd_kafka_t *rk              = NULL;
         const char *topic           = test_mk_topic_name(__FUNCTION__, 1);
         const int64_t push_interval = 5000;
+        const struct rd_kafka_metadata *md;
 
         rd_kafka_telemetry_expected_request_t requests_expected[] = {
             /* T= 0 : The initial GetTelemetrySubscriptions request. */
@@ -460,6 +461,9 @@ void do_test_telemetry_preferred_broker_change(rd_kafka_type_t type) {
          * the all brokers up during this time, but the preferred broker (1)
          * should remain sticky. */
         rd_kafka_mock_broker_set_up(mcluster, 2);
+        /* Refresh metadata so we're sure broker 2 is present */
+        TEST_CALL_ERR__(rd_kafka_metadata(rk, 0, NULL, &md, 5000));
+        RD_IF_FREE(md, rd_kafka_metadata_destroy);
         test_poll_timeout(rk, 2 * push_interval, topic);
 
         /* Set the preferred broker (1) down. */
@@ -571,7 +575,7 @@ void do_test_invalid_record(rd_kafka_type_t type) {
         rd_kafka_mock_cluster_t *mcluster;
         char *expected_metrics[]    = {"*"};
         rd_kafka_t *rk              = NULL;
-        const int64_t push_interval = 1000;
+        const int64_t push_interval = 2000;
         const char *topic           = test_mk_topic_name(__FUNCTION__, 1);
 
         rd_kafka_telemetry_expected_request_t requests_expected[] = {
@@ -603,12 +607,11 @@ void do_test_invalid_record(rd_kafka_type_t type) {
                                    RD_ARRAY_SIZE(expected_metrics),
                                    push_interval, topic);
 
-        rk = create_handle(bootstraps, type, topic);
-
-        test_poll_timeout(rk, push_interval * 1.2, topic);
-
-        rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_PushTelemetry, 1,
+        rd_kafka_mock_push_request_errors(mcluster, RD_KAFKAP_PushTelemetry, 2,
+                                          RD_KAFKA_RESP_ERR_NO_ERROR,
                                           RD_KAFKA_RESP_ERR_INVALID_RECORD);
+
+        rk = create_handle(bootstraps, type, topic);
 
         test_poll_timeout(rk, push_interval * 2.5, topic);
 

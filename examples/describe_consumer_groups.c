@@ -164,15 +164,31 @@ print_group_member_info(const rd_kafka_MemberDescription_t *member) {
             rd_kafka_MemberDescription_host(member));
         const rd_kafka_MemberAssignment_t *assignment =
             rd_kafka_MemberDescription_assignment(member);
-        const rd_kafka_topic_partition_list_t *topic_partitions =
+        const rd_kafka_topic_partition_list_t *assigned_topic_partitions =
             rd_kafka_MemberAssignment_partitions(assignment);
-        if (!topic_partitions) {
+        const rd_kafka_MemberAssignment_t *target_assignment =
+            rd_kafka_MemberDescription_target_assignment(member);
+        const rd_kafka_topic_partition_list_t *target_topic_partitions =
+            target_assignment
+                ? rd_kafka_MemberAssignment_partitions(target_assignment)
+                : NULL;
+        if (!assigned_topic_partitions) {
                 printf("    No assignment\n");
-        } else if (topic_partitions->cnt == 0) {
+        } else if (assigned_topic_partitions->cnt == 0) {
                 printf("    Empty assignment\n");
         } else {
                 printf("    Assignment:\n");
-                print_partition_list(stdout, topic_partitions, 0, "      ");
+                print_partition_list(stdout, assigned_topic_partitions, 0,
+                                     "      ");
+        }
+        if (!target_topic_partitions) {
+                printf("    No target assignment\n");
+        } else if (target_topic_partitions->cnt == 0) {
+                printf("    Empty target assignment\n");
+        } else {
+                printf("    Target assignment:\n");
+                print_partition_list(stdout, target_topic_partitions, 0,
+                                     "      ");
         }
 }
 
@@ -194,6 +210,8 @@ static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
             rd_kafka_ConsumerGroupDescription_partition_assignor(group);
         rd_kafka_consumer_group_state_t state =
             rd_kafka_ConsumerGroupDescription_state(group);
+        rd_kafka_consumer_group_type_t type =
+            rd_kafka_ConsumerGroupDescription_type(group);
         authorized_operations =
             rd_kafka_ConsumerGroupDescription_authorized_operations(
                 group, &authorized_operations_cnt);
@@ -212,9 +230,10 @@ static void print_group_info(const rd_kafka_ConsumerGroupDescription_t *group) {
                          rd_kafka_Node_port(coordinator));
         }
         printf(
-            "Group \"%s\", partition assignor \"%s\", "
-            " state %s%s, with %" PRId32 " member(s)\n",
+            "Group \"%s\", partition assignor \"%s\", type \"%s\""
+            " state \"%s\"%s, with %" PRId32 " member(s)\n",
             group_id, partition_assignor,
+            rd_kafka_consumer_group_type_name(type),
             rd_kafka_consumer_group_state_name(state), coordinator_desc,
             member_cnt);
         for (j = 0; j < authorized_operations_cnt; j++) {

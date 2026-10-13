@@ -45,29 +45,43 @@
  * is built from within the librdkafka source tree and thus differs. */
 #include "rdkafka.h"
 
+/**
+ * Local definition of rd_kafka_share_s to access rkshare_rk
+ * without pulling in rdkafka_int.h (which causes Windows link errors
+ * due to internal inline functions referencing unexported symbols).
+ *
+ * TODO: Replace with a proper public API (e.g.
+ * test_share_consumer_get_rk()) so tests don't depend on the
+ * internal struct layout.
+ */
+struct rd_kafka_share_s {
+        rd_kafka_t *rkshare_rk;
+};
+
+
 int test_level = 2;
 int test_seed  = 0;
 
-char test_mode[64]                                  = "bare";
-char test_scenario[64]                              = "default";
-static volatile sig_atomic_t test_exit              = 0;
-static char test_topic_prefix[128]                  = "rdkafkatest";
-static int test_topic_random                        = 0;
-int tests_running_cnt                               = 0;
-int test_concurrent_max                             = 5;
-int test_assert_on_fail                             = 0;
-double test_timeout_multiplier                      = 1.0;
-static char *test_sql_cmd                           = NULL;
-int test_session_timeout_ms                         = 6000;
-static const char *test_consumer_group_protocol_str = NULL;
+char test_mode[64]                            = "bare";
+char test_scenario[64]                        = "default";
+static volatile sig_atomic_t test_exit        = 0;
+static char test_topic_prefix[128]            = "rdkafkatest";
+static int test_topic_random                  = 0;
+int tests_running_cnt                         = 0;
+int test_concurrent_max                       = 5;
+int test_assert_on_fail                       = 0;
+double test_timeout_multiplier                = 1.0;
+static char *test_sql_cmd                     = NULL;
+int test_session_timeout_ms                   = 6000;
+static char *test_consumer_group_protocol_str = NULL;
 int test_broker_version;
-static const char *test_broker_version_str = "2.4.0.0";
-int test_flags                             = 0;
-int test_neg_flags                         = TEST_F_KNOWN_ISSUE;
+static char *test_broker_version_str = "2.4.0.0";
+int test_flags                       = 0;
+int test_neg_flags                   = TEST_F_KNOWN_ISSUE;
 /* run delete-test-topics.sh between each test (when concurrent_max = 1) */
 static int test_delete_topics_between = 0;
-static const char *test_git_version   = "HEAD";
-static const char *test_sockem_conf   = "";
+static char *test_git_version         = "HEAD";
+static char *test_sockem_conf         = "";
 int test_on_ci = 0; /* Tests are being run on CI, be more forgiving
                      * with regards to timeouts, etc. */
 int test_quick               = 0; /** Run tests quickly */
@@ -77,10 +91,10 @@ int test_rusage              = 0; /**< Check resource usage */
  *   >1.0: CPU is slower than base line system,
  *   <1.0: CPU is faster than base line system. */
 double test_rusage_cpu_calibration = 1.0;
-static const char *tests_to_run    = NULL; /* all */
-static const char *skip_tests_till = NULL; /* all */
-static const char *subtests_to_run = NULL; /* all */
-static const char *tests_to_skip   = NULL; /* none */
+static char *tests_to_run          = NULL; /* all */
+static char *skip_tests_till       = NULL; /* all */
+static char *subtests_to_run       = NULL; /* all */
+static char *tests_to_skip         = NULL; /* none */
 int test_write_report              = 0;    /**< Write test report file */
 
 static int show_summary = 1;
@@ -157,6 +171,8 @@ _TEST_DECL(0045_subscribe_update_topic_remove);
 _TEST_DECL(0045_subscribe_update_non_exist_and_partchange);
 _TEST_DECL(0045_subscribe_update_mock);
 _TEST_DECL(0045_subscribe_update_racks_mock);
+_TEST_DECL(0045_resubscribe_with_regex);
+_TEST_DECL(0045_subscribe_many_updates);
 _TEST_DECL(0046_rkt_cache);
 _TEST_DECL(0047_partial_buf_tmout);
 _TEST_DECL(0048_partitioner);
@@ -168,6 +184,7 @@ _TEST_DECL(0053_stats_timing);
 _TEST_DECL(0053_stats);
 _TEST_DECL(0054_offset_time);
 _TEST_DECL(0055_producer_latency);
+_TEST_DECL(0055_producer_latency_mock);
 _TEST_DECL(0056_balanced_group_mt);
 _TEST_DECL(0057_invalid_topic);
 _TEST_DECL(0058_log);
@@ -262,7 +279,44 @@ _TEST_DECL(0143_exponential_backoff_mock);
 _TEST_DECL(0144_idempotence_mock);
 _TEST_DECL(0145_pause_resume_mock);
 _TEST_DECL(0146_metadata_mock);
+_TEST_DECL(0147_consumer_group_consumer_mock);
+_TEST_DECL(0148_offset_fetch_commit_error_mock);
+_TEST_DECL(0149_broker_same_host_port_mock);
 _TEST_DECL(0150_telemetry_mock);
+_TEST_DECL(0151_purge_brokers_mock);
+_TEST_DECL(0152_rebootstrap_local);
+_TEST_DECL(0153_memberid);
+_TEST_DECL(0155_share_group_heartbeat_mock);
+_TEST_DECL(0156_share_consumer_fetch_mock);
+_TEST_DECL(0157_share_consumer_ack_mock);
+_TEST_DECL(0158_share_consumer_transactions_mock);
+_TEST_DECL(0170_share_consumer_subscription);
+_TEST_DECL(0171_share_consumer_consume);
+_TEST_DECL(0172_share_consumer_acknowledge);
+_TEST_DECL(0173_share_consumer_commit_async_local);
+_TEST_DECL(0173_share_consumer_commit_async);
+_TEST_DECL(0174_share_consumer_concurrency);
+_TEST_DECL(0175_share_consumer_groups);
+_TEST_DECL(0176_share_consumer_commit_sync);
+_TEST_DECL(0176_share_consumer_commit_sync_local);
+_TEST_DECL(0177_share_consumer_transactions);
+_TEST_DECL(0178_share_consumer_close);
+_TEST_DECL(0178_share_consumer_close_local);
+_TEST_DECL(0179_share_consumer_destroy);
+_TEST_DECL(0179_share_consumer_destroy_local);
+_TEST_DECL(0180_share_consumer_config);
+_TEST_DECL(0180_share_consumer_config_local);
+_TEST_DECL(0181_share_consumer_topic_delete);
+_TEST_DECL(0182_share_consumer_error_handling_mock);
+_TEST_DECL(0183_share_consumer_leader_change_mock);
+_TEST_DECL(0184_share_consumer_topic_recreate);
+_TEST_DECL(0184_share_consumer_topic_recreate_local);
+_TEST_DECL(0185_share_consumer_max_poll_interval);
+_TEST_DECL(0186_share_consumer_fatal_error);
+_TEST_DECL(0187_legacy_msgset_fetch_mock);
+_TEST_DECL(0190_share_consumer_telemetry);
+_TEST_DECL(0191_ipv6_nodename_mock);
+_TEST_DECL(0192_cgrp_static_session_timeout_mock);
 
 /* Manual tests */
 _TEST_DECL(8000_idle);
@@ -379,6 +433,8 @@ struct test tests[] = {
           .scenario = "noautocreate"),
     _TEST(0045_subscribe_update_mock, TEST_F_LOCAL),
     _TEST(0045_subscribe_update_racks_mock, TEST_F_LOCAL),
+    _TEST(0045_resubscribe_with_regex, 0, TEST_BRKVER(0, 9, 0, 0)),
+    _TEST(0045_subscribe_many_updates, 0, TEST_BRKVER(0, 10, 2, 0)),
     _TEST(0046_rkt_cache, TEST_F_LOCAL),
     _TEST(0047_partial_buf_tmout, TEST_F_KNOWN_ISSUE),
     _TEST(0048_partitioner,
@@ -395,6 +451,7 @@ struct test tests[] = {
     _TEST(0053_stats, 0),
     _TEST(0054_offset_time, 0, TEST_BRKVER(0, 10, 1, 0)),
     _TEST(0055_producer_latency, TEST_F_KNOWN_ISSUE_WIN32),
+    _TEST(0055_producer_latency_mock, TEST_F_LOCAL),
     _TEST(0056_balanced_group_mt, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0057_invalid_topic, 0, TEST_BRKVER(0, 9, 0, 0)),
     _TEST(0058_log, TEST_F_LOCAL),
@@ -521,8 +578,46 @@ struct test tests[] = {
     _TEST(0144_idempotence_mock, TEST_F_LOCAL, TEST_BRKVER(0, 11, 0, 0)),
     _TEST(0145_pause_resume_mock, TEST_F_LOCAL),
     _TEST(0146_metadata_mock, TEST_F_LOCAL),
+    _TEST(0147_consumer_group_consumer_mock, TEST_F_LOCAL),
+    _TEST(0148_offset_fetch_commit_error_mock, TEST_F_LOCAL),
+    _TEST(0149_broker_same_host_port_mock, TEST_F_LOCAL),
     _TEST(0150_telemetry_mock, 0),
-
+    _TEST(0151_purge_brokers_mock, TEST_F_LOCAL),
+    _TEST(0152_rebootstrap_local, TEST_F_LOCAL),
+    _TEST(0153_memberid, TEST_F_LOCAL),
+    _TEST(0155_share_group_heartbeat_mock, TEST_F_LOCAL),
+    _TEST(0156_share_consumer_fetch_mock, TEST_F_LOCAL),
+    _TEST(0157_share_consumer_ack_mock, TEST_F_LOCAL),
+    _TEST(0158_share_consumer_transactions_mock, TEST_F_LOCAL),
+    _TEST(0170_share_consumer_subscription, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0171_share_consumer_consume, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0172_share_consumer_acknowledge, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0173_share_consumer_commit_async_local, TEST_F_LOCAL),
+    _TEST(0173_share_consumer_commit_async, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0174_share_consumer_concurrency, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0175_share_consumer_groups, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0176_share_consumer_commit_sync, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0176_share_consumer_commit_sync_local, TEST_F_LOCAL),
+    _TEST(0177_share_consumer_transactions, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0178_share_consumer_close, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0178_share_consumer_close_local, TEST_F_LOCAL),
+    _TEST(0179_share_consumer_destroy, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0179_share_consumer_destroy_local, TEST_F_LOCAL),
+    _TEST(0180_share_consumer_config, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0180_share_consumer_config_local, TEST_F_LOCAL),
+    _TEST(0181_share_consumer_topic_delete, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0182_share_consumer_error_handling_mock, TEST_F_LOCAL),
+    _TEST(0183_share_consumer_leader_change_mock, TEST_F_LOCAL),
+    _TEST(0184_share_consumer_topic_recreate, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0184_share_consumer_topic_recreate_local, TEST_F_LOCAL),
+    _TEST(0185_share_consumer_max_poll_interval, 0, TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0186_share_consumer_fatal_error, TEST_F_LOCAL),
+    _TEST(0187_legacy_msgset_fetch_mock, TEST_F_LOCAL),
+    _TEST(0190_share_consumer_telemetry,
+          TEST_F_MANUAL,
+          TEST_BRKVER(4, 2, 0, 0)),
+    _TEST(0191_ipv6_nodename_mock, TEST_F_LOCAL),
+    _TEST(0192_cgrp_static_session_timeout_mock, TEST_F_LOCAL),
 
     /* Manual tests */
     _TEST(8000_idle, TEST_F_MANUAL),
@@ -544,6 +639,14 @@ static void test_socket_add(struct test *test, sockem_t *skm) {
         TEST_LOCK();
         rd_list_add(&test->sockets, skm);
         TEST_UNLOCK();
+}
+
+void *test_socket_find(struct test *test, sockem_t *skm) {
+        void *ret;
+        TEST_LOCK();
+        ret = rd_list_find(&test->sockets, skm, rd_list_cmp_ptr);
+        TEST_UNLOCK();
+        return ret;
 }
 
 static void test_socket_del(struct test *test, sockem_t *skm, int do_lock) {
@@ -759,7 +862,8 @@ static void test_init(void) {
         if ((tmp = test_getenv("TEST_SCENARIO", NULL)))
                 strncpy(test_scenario, tmp, sizeof(test_scenario) - 1);
         if ((tmp = test_getenv("TEST_SOCKEM", NULL)))
-                test_sockem_conf = tmp;
+                test_sockem_conf = (char *)tmp;
+        test_sockem_conf = rd_strdup(test_sockem_conf);
         if ((tmp = test_getenv("TEST_SEED", NULL)))
                 seed = atoi(tmp);
         else
@@ -775,7 +879,10 @@ static void test_init(void) {
                 }
         }
         test_consumer_group_protocol_str =
-            test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+            (char *)test_getenv("TEST_CONSUMER_GROUP_PROTOCOL", NULL);
+        if (test_consumer_group_protocol_str)
+                test_consumer_group_protocol_str =
+                    rd_strdup(test_consumer_group_protocol_str);
 
 
 #ifdef _WIN32
@@ -964,6 +1071,16 @@ static void test_read_conf_file(const char *conf_path,
 }
 
 /**
+ * @brief Log interceptor opaque holding the registered log callback.
+ */
+typedef struct test_conf_log_interceptor_s {
+        void (*log_cb)(const rd_kafka_t *rk,
+                       int level,
+                       const char *fac,
+                       const char *buf);
+} test_conf_log_interceptor_t;
+
+/**
  * @brief Get path to test config file
  */
 const char *test_conf_get_path(void) {
@@ -974,10 +1091,81 @@ const char *test_getenv(const char *env, const char *def) {
         return rd_getenv(env, def);
 }
 
+/**
+ * @brief Check if debug logging should be enabled for the current test.
+ *
+ * If TESTS_TO_DEBUG environment variable is set with comma-separated test
+ * numbers (e.g., "0172,0171"), only enable debug for those tests.
+ * Otherwise, enable debug for all tests if TEST_DEBUG is set.
+ *
+ * @returns 1 if debug should be enabled, 0 otherwise.
+ */
+static int test_should_enable_debug(void) {
+        const char *tests_to_debug;
+        const char *test_debug;
+        int should_debug = 0;
+
+        /* If TEST_DEBUG is not set, no debug logging */
+        test_debug = test_getenv("TEST_DEBUG", NULL);
+        if (!test_debug)
+                return 0;
+
+        /* If TESTS_TO_DEBUG is not set, enable for all tests */
+        tests_to_debug = test_getenv("TESTS_TO_DEBUG", NULL);
+        if (!tests_to_debug)
+                return 1;
+
+        /* Extract test number from current test name (e.g., "0172" from
+         * "0172-share_consumer_acknowledge") */
+        if (!test_curr || !test_curr->name)
+                return 1; /* Enable by default if test name not available */
+
+        /* Simple comma-separated parsing */
+        const char *p = tests_to_debug;
+        while (*p) {
+                const char *comma;
+                size_t token_len;
+
+                /* Skip leading whitespace */
+                while (*p && isspace((unsigned char)*p))
+                        p++;
+
+                if (!*p)
+                        break;
+
+                /* Find next comma or end of string */
+                comma = strchr(p, ',');
+                if (comma)
+                        token_len = (size_t)(comma - p);
+                else
+                        token_len = strlen(p);
+
+                /* Trim trailing whitespace */
+                while (token_len > 0 &&
+                       isspace((unsigned char)p[token_len - 1]))
+                        token_len--;
+
+                /* Check if current test name starts with this token */
+                if (token_len > 0 &&
+                    strncmp(test_curr->name, p, token_len) == 0) {
+                        should_debug = 1;
+                        break;
+                }
+
+                /* Move to next token */
+                if (comma)
+                        p = comma + 1;
+                else
+                        break;
+        }
+
+        return should_debug;
+}
+
 void test_conf_common_init(rd_kafka_conf_t *conf, int timeout) {
         if (conf) {
                 const char *tmp = test_getenv("TEST_DEBUG", NULL);
-                if (tmp)
+                if (tmp && test_should_enable_debug())
                         test_conf_set(conf, "debug", tmp);
         }
 
@@ -1035,13 +1223,92 @@ void test_conf_init(rd_kafka_conf_t **conf,
         test_conf_common_init(conf ? *conf : NULL, timeout);
 }
 
+/**
+ * @brief Log callback calls the
+ *        interceptor and logs the message if the TEST_DEBUG environment
+ *        was set, allowing to see the debug messages when requested.
+ *
+ * @remark The interceptor shouldn't log the message again but do test related
+ *         actions such as checking if string is present, adding a sleep or
+ *         signaling a condition variable to continue with the next step of
+ *         the test.
+ */
+static void test_conf_log_interceptor_log_cb(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf) {
+        int secs, msecs;
+        struct timeval tv;
+        test_conf_log_interceptor_t *interceptor = rd_kafka_opaque(rk);
+        interceptor->log_cb(rk, level, fac, buf);
+        const char *test_debug = test_getenv("TEST_DEBUG", NULL);
+
+        if (test_debug) {
+                rd_gettimeofday(&tv, NULL);
+                secs  = (int)tv.tv_sec;
+                msecs = (int)(tv.tv_usec / 1000);
+                fprintf(stderr, "%%%i|%u.%03u|%s|%s| %s\n", level, secs, msecs,
+                        fac, rk ? rd_kafka_name(rk) : "", buf);
+        }
+}
+
+/**
+ * @brief Set test log interceptor with NULL terminated `debug_contexts`
+ *        string array.
+ *        When debug log doesn't contain `all` and the debug contexts aren't
+ *        included, they are added to the debug configuration.
+ *        The interceptor is set as opaque in `rk` so the generic test log
+ *        callback can call the provided \p log_cb .
+ *
+ * @remark The returned interceptor structure set as opaque must be destroyed
+ * after destroying the client instance.
+ */
+test_conf_log_interceptor_t *
+test_conf_set_log_interceptor(rd_kafka_conf_t *conf,
+                              void (*log_cb)(const rd_kafka_t *rk,
+                                             int level,
+                                             const char *fac,
+                                             const char *buf),
+                              const char **debug_contexts) {
+        const char *test_debug = test_getenv("TEST_DEBUG", NULL);
+        test_conf_log_interceptor_t *interceptor =
+            rd_calloc(1, sizeof(*interceptor));
+        interceptor->log_cb = log_cb;
+        rd_kafka_conf_set_opaque(conf, interceptor);
+        rd_kafka_conf_set_log_cb(conf, test_conf_log_interceptor_log_cb);
+
+        if (!test_debug || !strstr(test_debug, "all")) {
+                char debug_with_contexts[256] = {0};
+                size_t i                      = rd_snprintf(debug_with_contexts,
+                                                            sizeof(debug_with_contexts), "%s",
+                                       test_debug ? test_debug : "");
+                /* Add all debug contexts and set debug configuration */
+                while (
+                    *debug_contexts &&
+                    i + strlen(*debug_contexts) +
+                            (i > 0 ? 2 : 1) /* 1 for the comma + 1 for the \0 */
+                        <= sizeof(debug_with_contexts)) {
+                        if (!strstr(debug_with_contexts, *debug_contexts)) {
+                                if (i > 0)
+                                        debug_with_contexts[i++] = ',';
+                                i +=
+                                    rd_snprintf(&debug_with_contexts[i],
+                                                sizeof(debug_with_contexts) - i,
+                                                "%s", *debug_contexts);
+                        }
+                        debug_contexts++;
+                }
+                test_conf_set(conf, "debug", debug_with_contexts);
+        }
+        return interceptor;
+}
 
 static RD_INLINE unsigned int test_rand(void) {
         unsigned int r;
 #ifdef _WIN32
         rand_s(&r);
 #else
-        r     = rand();
+        r = rand();
 #endif
         return r;
 }
@@ -1407,9 +1674,10 @@ static void run_tests(int argc, char **argv) {
                 } else if (tests_to_skip && strstr(tests_to_skip, testnum))
                         skip_reason = "included in TESTS_SKIP list";
                 else if (skip_tests_till) {
-                        if (!strcmp(skip_tests_till, testnum))
+                        if (!strcmp(skip_tests_till, testnum)) {
+                                rd_free(skip_tests_till);
                                 skip_tests_till = NULL;
-                        else
+                        } else
                                 skip_reason =
                                     "ignoring test before TESTS_SKIP_BEFORE";
                 }
@@ -1715,8 +1983,15 @@ static void test_cleanup(void) {
                 test->report_arr = NULL;
         }
 
-        if (test_sql_cmd)
-                rd_free(test_sql_cmd);
+        RD_IF_FREE(test_sql_cmd, rd_free);
+        RD_IF_FREE(test_consumer_group_protocol_str, rd_free);
+        RD_IF_FREE(tests_to_run, rd_free);
+        RD_IF_FREE(subtests_to_run, rd_free);
+        RD_IF_FREE(tests_to_skip, rd_free);
+        RD_IF_FREE(skip_tests_till, rd_free);
+        RD_IF_FREE(test_broker_version_str, rd_free);
+        RD_IF_FREE(test_git_version, rd_free);
+        RD_IF_FREE(test_sockem_conf, rd_free);
 }
 
 
@@ -1734,17 +2009,23 @@ int main(int argc, char **argv) {
 #ifndef _WIN32
         signal(SIGINT, test_sig_term);
 #endif
-        tests_to_run    = test_getenv("TESTS", NULL);
-        subtests_to_run = test_getenv("SUBTESTS", NULL);
-        tests_to_skip   = test_getenv("TESTS_SKIP", NULL);
-        tmpver          = test_getenv("TEST_KAFKA_VERSION", NULL);
-        skip_tests_till = test_getenv("TESTS_SKIP_BEFORE", NULL);
-
+        tests_to_run = (char *)test_getenv("TESTS", NULL);
+        if (tests_to_run)
+                tests_to_run = rd_strdup(tests_to_run);
+        subtests_to_run = (char *)test_getenv("SUBTESTS", NULL);
+        if (subtests_to_run)
+                subtests_to_run = rd_strdup(subtests_to_run);
+        tests_to_skip = (char *)test_getenv("TESTS_SKIP", NULL);
+        if (tests_to_skip)
+                tests_to_skip = rd_strdup(tests_to_skip);
+        skip_tests_till = (char *)test_getenv("TESTS_SKIP_BEFORE", NULL);
+        if (skip_tests_till)
+                skip_tests_till = rd_strdup(skip_tests_till);
+        tmpver = test_getenv("TEST_KAFKA_VERSION", NULL);
         if (!tmpver)
                 tmpver = test_getenv("KAFKA_VERSION", test_broker_version_str);
-        test_broker_version_str = tmpver;
-
-        test_git_version = test_getenv("RDKAFKA_GITVER", "HEAD");
+        test_broker_version_str = rd_strdup(tmpver);
+        test_git_version = rd_strdup(test_getenv("RDKAFKA_GITVER", "HEAD"));
 
         /* Are we running on CI? */
         if (test_getenv("CI", NULL)) {
@@ -1939,7 +2220,7 @@ int main(int argc, char **argv) {
 #ifdef _WIN32
                 pcwd = _getcwd(cwd, sizeof(cwd) - 1);
 #else
-                pcwd   = getcwd(cwd, sizeof(cwd) - 1);
+                pcwd = getcwd(cwd, sizeof(cwd) - 1);
 #endif
                 if (pcwd)
                         TEST_SAY("Current directory: %s\n", cwd);
@@ -2581,7 +2862,6 @@ void test_rebalance_cb(rd_kafka_t *rk,
 }
 
 
-
 rd_kafka_t *test_create_consumer(
     const char *group_id,
     void (*rebalance_cb)(rd_kafka_t *rk,
@@ -2618,6 +2898,30 @@ rd_kafka_t *test_create_consumer(
                 rd_kafka_poll_set_consumer(rk);
 
         return rk;
+}
+
+
+/**
+ * @brief Produce messages to a topic using a specific producer handle.
+ *
+ * This is a convenience wrapper that creates a producer topic, produces
+ * messages, and cleans up. Commonly used with a shared producer instance
+ * across multiple test cases.
+ *
+ * @param rk Producer handle to use.
+ * @param topic Topic name.
+ * @param partition Partition to produce to.
+ * @param msgcnt Number of messages to produce.
+ */
+void test_produce_msgs_simple(rd_kafka_t *rk,
+                              const char *topic,
+                              int32_t partition,
+                              int msgcnt) {
+        rd_kafka_topic_t *rkt;
+
+        rkt = test_create_producer_topic(rk, topic, NULL);
+        test_produce_msgs(rk, rkt, 0, partition, 0, msgcnt, NULL, 0);
+        rd_kafka_topic_destroy(rkt);
 }
 
 rd_kafka_topic_t *test_create_consumer_topic(rd_kafka_t *rk,
@@ -3003,6 +3307,106 @@ void test_consumer_verify_assignment0(const char *func,
         rd_kafka_topic_partition_list_destroy(assignment);
 }
 
+/**
+ * @brief Verify that the consumer's assignment matches the expected assignment.
+ *        passed as a topic partition list in \p expected_assignment .
+ */
+rd_bool_t test_consumer_verify_assignment_topic_partition_list0(
+    const char *func,
+    int line,
+    rd_kafka_t *rk,
+    const rd_kafka_topic_partition_list_t *expected_assignment) {
+        rd_kafka_topic_partition_list_t *assignment,
+            *expected_assignment_copy = NULL;
+        rd_kafka_resp_err_t err;
+        int i;
+        rd_bool_t ret = rd_true;
+
+        if ((err = rd_kafka_assignment(rk, &assignment)))
+                TEST_FAIL("%s:%d: Failed to get assignment for %s: %s", func,
+                          line, rd_kafka_name(rk), rd_kafka_err2str(err));
+
+        TEST_SAYL(4, "%s assignment (%d partition(s)):\n", rd_kafka_name(rk),
+                  assignment->cnt);
+        for (i = 0; i < assignment->cnt; i++)
+                TEST_SAYL(4, " %s [%" PRId32 "]\n", assignment->elems[i].topic,
+                          assignment->elems[i].partition);
+
+        if (assignment->cnt != expected_assignment->cnt) {
+                ret = rd_false;
+                goto done;
+        }
+
+        expected_assignment_copy =
+            rd_kafka_topic_partition_list_copy(expected_assignment);
+        rd_kafka_topic_partition_list_sort(assignment, NULL, NULL);
+        rd_kafka_topic_partition_list_sort(expected_assignment_copy, NULL,
+                                           NULL);
+
+        for (i = 0; i < assignment->cnt; i++) {
+                if (strcmp(assignment->elems[i].topic,
+                           expected_assignment_copy->elems[i].topic) ||
+                    assignment->elems[i].partition !=
+                        expected_assignment_copy->elems[i].partition) {
+                        ret = rd_false;
+                        goto done;
+                }
+        }
+
+done:
+        RD_IF_FREE(expected_assignment_copy,
+                   rd_kafka_topic_partition_list_destroy);
+        rd_kafka_topic_partition_list_destroy(assignment);
+        return ret;
+}
+
+/**
+ * @brief Wait until the consumer's assignment matches the expected assignment.
+ *        passed as a topic partition list in \p expected_assignment .
+ *        Polling if \p do_poll is true, otherwise sleeps.
+ *        Until \p timeout_ms milliseconds.
+ */
+void test_consumer_wait_assignment_topic_partition_list0(
+    const char *func,
+    int line,
+    rd_kafka_t *rk,
+    rd_bool_t do_poll,
+    const rd_kafka_topic_partition_list_t *expected_assignment,
+    int timeout_ms) {
+        int i;
+        rd_ts_t end        = test_clock() + timeout_ms * 1000;
+        rd_bool_t verified = rd_false;
+
+        TEST_SAY("Verifying assignment\n");
+        TEST_SAYL(4, "%s expected assignment (%d partition(s)):\n",
+                  rd_kafka_name(rk), expected_assignment->cnt);
+        for (i = 0; i < expected_assignment->cnt; i++)
+                TEST_SAYL(4, " %s [%" PRId32 "]\n",
+                          expected_assignment->elems[i].topic,
+                          expected_assignment->elems[i].partition);
+
+        do {
+                verified =
+                    test_consumer_verify_assignment_topic_partition_list0(
+                        func, line, rk, expected_assignment);
+                if (verified)
+                        break;
+
+                if (do_poll)
+                        test_consumer_poll_once(rk, NULL, 100);
+                else
+                        rd_usleep(100 * 1000, NULL);
+
+        } while (test_clock() < end);
+
+        if (!verified) {
+                TEST_FAIL(
+                    "%s:%d: Expected assignment not found in %s's "
+                    "assignment within timeout %d",
+                    func, line, rd_kafka_name(rk), timeout_ms);
+        }
+        TEST_SAY("Verified assignment\n");
+}
 
 
 /**
@@ -3023,6 +3427,33 @@ void test_consumer_subscribe(rd_kafka_t *rk, const char *topic) {
         rd_kafka_topic_partition_list_destroy(topics);
 }
 
+
+/**
+ * @brief Start subscribing for multiple topics
+ */
+void test_consumer_subscribe_multi(rd_kafka_t *rk, int topic_count, ...) {
+        rd_kafka_topic_partition_list_t *topics;
+        rd_kafka_resp_err_t err;
+        va_list ap;
+        int i;
+
+        topics = rd_kafka_topic_partition_list_new(topic_count);
+
+        va_start(ap, topic_count);
+        for (i = 0; i < topic_count; i++) {
+                const char *topic = va_arg(ap, const char *);
+                rd_kafka_topic_partition_list_add(topics, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+        va_end(ap);
+
+        err = rd_kafka_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
+                          rd_kafka_name(rk), rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+}
 
 void test_consumer_assign(const char *what,
                           rd_kafka_t *rk,
@@ -3098,6 +3529,44 @@ void test_consumer_incremental_unassign(
         } else
                 TEST_SAY("%s: incremental unassign of %d partition(s) done\n",
                          what, partitions->cnt);
+}
+
+
+void test_consumer_assign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts) {
+        const char *protocol = rd_kafka_rebalance_protocol(rk);
+        if (!strcmp(protocol, "NONE")) {
+                TEST_FAIL(
+                    "Assign not supported with "
+                    "rebalance protocol NONE\n");
+        } else if (!strcmp(protocol, "EAGER")) {
+                TEST_SAY("Assign: %d partition(s)\n", parts->cnt);
+                test_consumer_assign(what, rk, parts);
+        } else {
+                TEST_SAY("Assign: %d partition(s)\n", parts->cnt);
+                test_consumer_incremental_assign(what, rk, parts);
+        }
+}
+
+
+void test_consumer_unassign_by_rebalance_protocol(
+    const char *what,
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *parts) {
+        const char *protocol = rd_kafka_rebalance_protocol(rk);
+        if (!strcmp(protocol, "NONE")) {
+                TEST_FAIL(
+                    "Unassign not supported with "
+                    "rebalance protocol NONE\n");
+        } else if (!strcmp(protocol, "EAGER")) {
+                TEST_SAY("Unassign all partition(s)\n");
+                test_consumer_unassign(what, rk);
+        } else {
+                TEST_SAY("Unassign: %d partition(s)\n", parts->cnt);
+                test_consumer_incremental_unassign(what, rk, parts);
+        }
 }
 
 
@@ -4475,9 +4944,29 @@ void test_flush(rd_kafka_t *rk, int timeout_ms) {
                           rd_kafka_outq_len(rk));
 }
 
+int test_is_forbidden_conf_group_protocol_consumer(const char *name) {
+        char *forbidden_conf[] = {
+            "session.timeout.ms", "partition.assignment.strategy",
+            "heartbeat.interval.ms", "group.protocol.type", NULL};
+        int i;
+        if (test_consumer_group_protocol_classic())
+                return 0;
+        for (i = 0; forbidden_conf[i]; i++) {
+                if (!strcmp(name, forbidden_conf[i]))
+                        return 1;
+        }
+        return 0;
+}
 
 void test_conf_set(rd_kafka_conf_t *conf, const char *name, const char *val) {
         char errstr[512];
+        if (test_is_forbidden_conf_group_protocol_consumer(name)) {
+                TEST_SAY(
+                    "Skipping setting forbidden configuration %s for CONSUMER "
+                    "protocol.\n",
+                    name);
+                return;
+        }
         if (rd_kafka_conf_set(conf, name, val, errstr, sizeof(errstr)) !=
             RD_KAFKA_CONF_OK)
                 TEST_FAIL("Failed to set config \"%s\"=\"%s\": %s\n", name, val,
@@ -5025,10 +5514,40 @@ static void test_admin_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
  * @brief Delete a topic
  */
 void test_delete_topic(rd_kafka_t *use_rk, const char *topicname) {
+        if (!strcmp(test_getenv("TEST_BROKER_OS", ""), "windows")) {
+                TEST_SAY(
+                    "Skipping deletion of topic \"%s\": broker on Windows "
+                    "(NTFS file locking causes broker shutdown on rename)\n",
+                    topicname);
+                return;
+        }
         if (test_broker_version < TEST_BRKVER(0, 10, 2, 0))
                 test_delete_topic_sh(topicname);
         else
                 test_admin_delete_topic(use_rk, topicname);
+}
+
+
+/**
+ * @brief Alter group configurations using a dedicated producer handle.
+ *        Admin client APIs should not reuse consumer handles.
+ *        Works for both share groups and regular consumer groups.
+ */
+void test_alter_group_configurations(const char *group_name,
+                                     const char **cfg,
+                                     size_t cfg_cnt) {
+        rd_kafka_t *admin;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        admin = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        TEST_ASSERT(admin, "Failed to create admin client: %s", errstr);
+
+        test_IncrementalAlterConfigs_simple(admin, RD_KAFKA_RESOURCE_GROUP,
+                                            group_name, cfg, cfg_cnt);
+
+        rd_kafka_destroy(admin);
 }
 
 
@@ -5551,7 +6070,8 @@ void test_headers_dump(const char *what,
 
 
 /**
- * @brief Retrieve and return the list of broker ids in the cluster.
+ * @brief Retrieve and return the list of broker ids in the cluster by
+ *        sending a Metadata request.
  *
  * @param rk Optional instance to use.
  * @param cntp Will be updated to the number of brokers returned.
@@ -5861,6 +6381,14 @@ void test_wait_metadata_update(rd_kafka_t *rk,
         test_timing_t t_md;
         rd_kafka_t *our_rk = NULL;
 
+        /* Wait an additional second for the topic to propagate in
+         * the cluster. This is not perfect but a cheap workaround for
+         * the asynchronous nature of topic creations in Kafka.
+         * Sleeping comes before the full metadata requests because otherwise
+         * those requests can trigger rejoins in case of
+         * regex subscriptions. */
+        rd_sleep(1);
+
         if (!rk)
                 rk = our_rk = test_create_handle(RD_KAFKA_PRODUCER, NULL);
 
@@ -5901,11 +6429,6 @@ void test_wait_topic_exists(rd_kafka_t *rk, const char *topic, int tmout) {
         rd_kafka_metadata_topic_t topics = {.topic = (char *)topic};
 
         test_wait_metadata_update(rk, &topics, 1, NULL, 0, tmout);
-
-        /* Wait an additional second for the topic to propagate in
-         * the cluster. This is not perfect but a cheap workaround for
-         * the asynchronous nature of topic creations in Kafka. */
-        rd_sleep(1);
 }
 
 
@@ -7231,7 +7754,7 @@ rd_kafka_mock_cluster_t *test_mock_cluster_new(int broker_cnt,
  *        received by mock cluster \p mcluster, matching
  *        function \p match , called with opaque \p opaque .
  */
-static size_t test_mock_get_matching_request_cnt(
+size_t test_mock_get_matching_request_cnt(
     rd_kafka_mock_cluster_t *mcluster,
     rd_bool_t (*match)(rd_kafka_mock_request_t *request, void *opaque),
     void *opaque) {
@@ -7276,8 +7799,14 @@ size_t test_mock_wait_matching_requests(
         while (matching_request_cnt < expected_cnt) {
                 matching_request_cnt =
                     test_mock_get_matching_request_cnt(mcluster, match, opaque);
-                if (matching_request_cnt < expected_cnt)
+                if (matching_request_cnt < expected_cnt) {
+                        TEST_SAYL(3,
+                                  "Still waiting to see %" PRIusz
+                                  " requests"
+                                  ", got %" PRIusz " \n",
+                                  expected_cnt, matching_request_cnt);
                         rd_usleep(100 * 1000, 0);
+                }
         }
 
         rd_usleep(confidence_interval_ms * 1000, 0);
@@ -7468,7 +7997,386 @@ int test_consumer_group_protocol_classic() {
                !strcmp(test_consumer_group_protocol_str, "classic");
 }
 
-int test_consumer_group_protocol_consumer() {
-        return test_consumer_group_protocol_str &&
-               !strcmp(test_consumer_group_protocol_str, "consumer");
+
+/****************************************************************************
+ * Share Consumer helpers
+ ****************************************************************************/
+
+/**
+ * @brief Get underlying rd_kafka_t handle from share consumer.
+ *
+ * @param rkshare Share consumer handle.
+ * @returns The underlying rd_kafka_t handle.
+ */
+rd_kafka_t *test_share_consumer_get_rk(rd_kafka_share_t *rkshare) {
+        return rkshare->rkshare_rk;
+}
+
+
+/**
+ * @brief Create a share consumer with standard configuration.
+ *
+ * @param group_id The share group ID.
+ *
+ * @returns A new share consumer instance.
+ *
+ * @remark TODO: Remove explicit group.id and enable.auto.commit settings
+ *         once these properties are added as defaults to
+ *         rd_kafka_share_consumer_new().
+ */
+rd_kafka_share_t *test_create_share_consumer(const char *group_id,
+                                             const char *ack_mode) {
+        rd_kafka_share_t *rk;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+
+        if (ack_mode) {
+                rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode,
+                                  errstr, sizeof(errstr));
+        }
+
+        rk = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rk, "Failed to create share consumer: %s", errstr);
+
+        return rk;
+}
+
+
+/**
+ * @brief Consume share messages and verify they come from expected topics.
+ *
+ * @param rk Share consumer handle.
+ * @param timeout_ms Poll timeout in milliseconds.
+ * @param expected_topics Array of topic names that are valid sources
+ *                        (NULL to skip verification).
+ * @param expected_topic_cnt Number of topics in expected_topics array.
+ * @param out_valid Output: count of valid (non-error) messages received.
+ *
+ * @returns 0 on success, -1 if message from unexpected topic received.
+ */
+int test_share_poll(rd_kafka_share_t *rk,
+                    int timeout_ms,
+                    const char **expected_topics,
+                    int expected_topic_cnt,
+                    int *out_valid) {
+        rd_kafka_messages_t *batch = NULL;
+        rd_kafka_error_t *err;
+        size_t rcvd, i;
+        int valid = 0;
+        int j;
+        int ret = 0;
+
+        err = rd_kafka_share_poll(rk, timeout_ms, &batch);
+        if (err) {
+                rd_kafka_error_destroy(err);
+                rd_kafka_messages_destroy(batch);
+                *out_valid = 0;
+                return 0;
+        }
+
+        rcvd = rd_kafka_messages_count(batch);
+        for (i = 0; i < rcvd; i++) {
+                rd_kafka_message_t *msg = rd_kafka_messages_get(batch, i);
+
+                if (msg->err) {
+                        /* Skip error messages (destroyed by
+                         * rd_kafka_messages_destroy() below) */
+                        continue;
+                }
+
+                if (expected_topics) {
+                        const char *msg_topic = rd_kafka_topic_name(msg->rkt);
+                        int found             = 0;
+
+                        /* Verify message is from expected topic */
+                        for (j = 0; j < expected_topic_cnt; j++) {
+                                if (strcmp(msg_topic, expected_topics[j]) ==
+                                    0) {
+                                        found = 1;
+                                        break;
+                                }
+                        }
+
+                        if (!found) {
+                                TEST_SAY(
+                                    "ERROR: Received message from "
+                                    "unexpected topic '%s'\n",
+                                    msg_topic);
+                                ret = -1;
+                        }
+                }
+                valid++;
+        }
+
+        rd_kafka_messages_destroy(batch);
+        *out_valid = valid;
+        return ret;
+}
+
+
+/**
+ * @brief Consume share messages until expected count or max attempts.
+ *
+ * @param rk Share consumer handle.
+ * @param expected Number of messages to consume.
+ * @param max_attempts Maximum poll attempts.
+ * @param timeout_ms Timeout per poll in milliseconds.
+ * @param expected_topics Array of valid topic names (NULL to skip
+ * verification).
+ * @param expected_topic_cnt Number of topics in expected_topics.
+ *
+ * @returns Number of messages consumed, or -1 if message from wrong topic.
+ */
+int test_share_consume_msgs(rd_kafka_share_t *rk,
+                            int expected,
+                            int max_attempts,
+                            int timeout_ms,
+                            const char **expected_topics,
+                            int expected_topic_cnt) {
+        int total = 0;
+
+        while (total < expected && max_attempts-- > 0) {
+                int batch_cnt = 0;
+                int ret;
+
+                ret = test_share_poll(rk, timeout_ms, expected_topics,
+                                      expected_topic_cnt, &batch_cnt);
+                if (ret < 0)
+                        return -1; /* Wrong topic detected */
+
+                total += batch_cnt;
+        }
+
+        return total;
+}
+
+
+/**
+ * @brief Start subscribing for multiple topics (share consumers).
+ */
+void test_share_consumer_subscribe_multi(rd_kafka_share_t *rk,
+                                         int topic_count,
+                                         ...) {
+        rd_kafka_topic_partition_list_t *topics;
+        rd_kafka_resp_err_t err;
+        va_list ap;
+        int i;
+
+        topics = rd_kafka_topic_partition_list_new(topic_count);
+
+        va_start(ap, topic_count);
+        for (i = 0; i < topic_count; i++) {
+                const char *topic = va_arg(ap, const char *);
+                rd_kafka_topic_partition_list_add(topics, topic,
+                                                  RD_KAFKA_PARTITION_UA);
+        }
+        va_end(ap);
+
+        err = rd_kafka_share_subscribe(rk, topics);
+        if (err)
+                TEST_FAIL("%s: Failed to subscribe to topics: %s\n",
+                          rd_kafka_name(test_share_consumer_get_rk(rk)),
+                          rd_kafka_err2str(err));
+
+        rd_kafka_topic_partition_list_destroy(topics);
+}
+
+
+/**
+ * @brief Get current subscription list for share consumers.
+ *
+ * @returns The subscription list. Caller must destroy with
+ *          rd_kafka_topic_partition_list_destroy().
+ */
+rd_kafka_topic_partition_list_t *test_get_subscription(rd_kafka_share_t *rk) {
+        rd_kafka_topic_partition_list_t *subscription = NULL;
+        rd_kafka_resp_err_t err;
+
+        err = rd_kafka_share_subscription(rk, &subscription);
+        if (err)
+                TEST_FAIL("%s: Failed to get subscription: %s\n",
+                          rd_kafka_name(test_share_consumer_get_rk(rk)),
+                          rd_kafka_err2str(err));
+
+        TEST_ASSERT(subscription != NULL,
+                    "%s: subscription() returned NULL list",
+                    rd_kafka_name(test_share_consumer_get_rk(rk)));
+
+        return subscription;
+}
+
+
+/**
+ * @brief Set share.auto.offset.reset configuration for a share group.
+ *
+ * @param group_name The share group name.
+ * @param reset_policy The offset reset policy ("earliest" or "latest").
+ */
+void test_share_set_auto_offset_reset(const char *group_name,
+                                      const char *reset_policy) {
+        const char *cfg[] = {"share.auto.offset.reset", "SET", reset_policy};
+        test_alter_group_configurations(group_name, cfg, 1);
+}
+
+
+/**
+ * @brief Set share.isolation.level configuration for a share group.
+ *
+ * @param group_name The share group name.
+ * @param isolation_level The isolation level ("read_committed" or
+ * "read_uncommitted").
+ */
+void test_share_set_isolation_level(const char *group_name,
+                                    const char *isolation_level) {
+        const char *cfg[] = {"share.isolation.level", "SET", isolation_level};
+        test_alter_group_configurations(group_name, cfg, 1);
+}
+
+/**
+ * @brief Close a share consumer.
+ *
+ * @param rkshare The share consumer to close.
+ */
+void test_share_consumer_close(rd_kafka_share_t *rkshare) {
+        rd_kafka_error_t *error;
+
+        TEST_SAY("Calling rd_kafka_share_consumer_close\n");
+        error = rd_kafka_share_consumer_close(rkshare);
+        TEST_SAY("Completed rd_kafka_share_consumer_close\n");
+
+        if (error)
+                TEST_FAIL("Failed to close share consumer: %s\n",
+                          rd_kafka_error_string(error));
+}
+
+/**
+ * @brief Destroy a share consumer.
+ *
+ * @param rkshare The share consumer to destroy.
+ */
+void test_share_destroy(rd_kafka_share_t *rkshare) {
+
+        TEST_SAY("Calling rd_kafka_share_destroy\n");
+        rd_kafka_share_destroy(rkshare);
+        TEST_SAY("Completed rd_kafka_share_destroy\n");
+}
+
+/**
+ * @brief Standard share acknowledgement callback.
+ *
+ * Tracks callback invocations, offsets acknowledged, and errors.
+ * Opaque must be a pointer to test_ack_cb_state_t.
+ */
+void test_ack_cb_state_push_err(test_ack_cb_state_t *state,
+                                rd_kafka_resp_err_t err) {
+        state->errs = rd_realloc(state->errs, sizeof(*state->errs) *
+                                                  (state->callback_cnt + 1));
+        state->errs[state->callback_cnt] = err;
+        state->callback_cnt++;
+}
+
+void test_ack_cb_state_destroy(test_ack_cb_state_t *state) {
+        if (state->errs)
+                rd_free(state->errs);
+        state->errs          = NULL;
+        state->callback_cnt  = 0;
+        state->total_offsets = 0;
+}
+
+rd_kafka_resp_err_t
+test_ack_cb_state_first_err(const test_ack_cb_state_t *state) {
+        int i;
+        for (i = 0; i < state->callback_cnt; i++) {
+                if (state->errs[i] != RD_KAFKA_RESP_ERR_NO_ERROR)
+                        return state->errs[i];
+        }
+        return RD_KAFKA_RESP_ERR_NO_ERROR;
+}
+
+void test_share_ack_cb(rd_kafka_share_t *rkshare,
+                       rd_kafka_share_partition_offsets_list_t *partitions,
+                       rd_kafka_resp_err_t err,
+                       void *opaque) {
+        test_ack_cb_state_t *state = (test_ack_cb_state_t *)opaque;
+        const rd_kafka_share_partition_offsets_t *entry;
+
+        (void)rkshare;
+
+        test_ack_cb_state_push_err(state, err);
+
+        entry = rd_kafka_share_partition_offsets_list_get(partitions, 0);
+        if (entry)
+                state->total_offsets +=
+                    rd_kafka_share_partition_offsets_offsets_cnt(entry);
+}
+
+/**
+ * @brief Create share consumer with callback and custom acknowledgement mode.
+ */
+rd_kafka_share_t *test_create_share_consumer_with_cb(
+    const char *group_id,
+    const char *ack_mode,
+    test_ack_cb_state_t *state,
+    void (*cb)(rd_kafka_share_t *,
+               rd_kafka_share_partition_offsets_list_t *,
+               rd_kafka_resp_err_t,
+               void *)) {
+        rd_kafka_share_t *rkshare;
+        rd_kafka_conf_t *conf;
+        char errstr[512];
+
+        test_conf_init(&conf, NULL, 0);
+        rd_kafka_conf_set(conf, "group.id", group_id, errstr, sizeof(errstr));
+        rd_kafka_conf_set(conf, "share.acknowledgement.mode", ack_mode, errstr,
+                          sizeof(errstr));
+
+        rkshare = rd_kafka_share_consumer_new(conf, errstr, sizeof(errstr));
+        TEST_ASSERT(rkshare, "Failed to create share consumer: %s", errstr);
+
+        /* Register acknowledgement callback at runtime */
+        rd_kafka_error_t *error = rd_kafka_share_set_acknowledgement_commit_cb(
+            rkshare, cb ? cb : test_share_ack_cb, state);
+        TEST_ASSERT(error == NULL,
+                    "Failed to set acknowledgement commit callback: %s",
+                    rd_kafka_error_string(error));
+        return rkshare;
+}
+
+/**
+ * @brief Wait for acknowledgement callbacks while polling.
+ */
+rd_bool_t test_wait_for_cb_with_poll(test_ack_cb_state_t *state,
+                                     rd_kafka_share_t *rkshare,
+                                     int min_callbacks,
+                                     int timeout_ms) {
+        rd_bool_t success = rd_false;
+        int elapsed       = 0;
+        int poll_interval = 100;
+
+        while (elapsed < timeout_ms) {
+                rd_kafka_messages_t *batch = NULL;
+                rd_kafka_error_t *error =
+                    rd_kafka_share_poll(rkshare, poll_interval, &batch);
+                if (error) {
+                        TEST_SAY(
+                            "test_wait_for_cb_with_poll: "
+                            "share_poll err=%s (%s) rcvd=%zu\n",
+                            rd_kafka_err2name(rd_kafka_error_code(error)),
+                            rd_kafka_error_string(error),
+                            rd_kafka_messages_count(batch));
+                        rd_kafka_error_destroy(error);
+                }
+                rd_kafka_messages_destroy(batch);
+
+                if (state->callback_cnt >= min_callbacks) {
+                        success = rd_true;
+                        break;
+                }
+                elapsed += poll_interval;
+        }
+        return success;
 }

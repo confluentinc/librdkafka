@@ -2,6 +2,7 @@
  * librdkafka - Apache Kafka C library
  *
  * Copyright (c) 2012-2022, Magnus Edenhill
+ *               2025, Confluent Inc.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,10 +92,7 @@ static void rebalance_cb(rd_kafka_t *rk,
                     rd_kafka_name(cons->rk), cons->rebalance_cnt,
                     cons->max_rebalance_cnt);
 
-        if (err == RD_KAFKA_RESP_ERR__ASSIGN_PARTITIONS)
-                rd_kafka_assign(rk, parts);
-        else
-                rd_kafka_assign(rk, NULL);
+        test_rebalance_cb(rk, err, parts, opaque);
 }
 
 
@@ -116,6 +114,11 @@ int main_0093_holb_consumer(int argc, char **argv) {
 
         test_conf_set(conf, "session.timeout.ms", "6000");
         test_conf_set(conf, "max.poll.interval.ms", "20000");
+        /* Socket timeout must be greater than
+         * 10s: the interval during which group rebalance is hold
+         * when the first consumer isn't polling below.
+         * 10s corresponds to the duration of the JoinGroup call.
+         * on the second consumer. */
         test_conf_set(conf, "socket.timeout.ms", "3000");
         test_conf_set(conf, "auto.offset.reset", "earliest");
         /* Trigger other requests often */

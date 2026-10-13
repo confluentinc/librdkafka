@@ -1,3 +1,26 @@
+# librdkafka v2.x.x (Unreleased)
+
+## Fixes
+
+### Producer fixes
+
+* Reject malformed Produce response record-error counts before allocating
+  memory (#5580, @shoemoney).
+
+* Guard the Produce response `record_errors` allocation and the
+  GetTelemetrySubscriptions `requested_metrics` and
+  `accepted_compression_types` allocations against allocation failure,
+  and only assign each count once its allocation has succeeded, so a
+  failed allocation can never leave a non-zero count beside a `NULL`
+  pointer (#5580, @shoemoney).
+
+* The idempotent producer kept only one ProduceRequest in flight per
+  partition once a batch carried five or more messages, instead of using
+  the full `max.in.flight.requests.per.connection` allowance. The
+  five-request de-duplication window was compared against a count of
+  in-flight messages; it is now compared against the number of requests
+  awaiting a response on the connection (#4989, @marcin-krystianc).
+
 # librdkafka v2.16.0
 
 librdkafka v2.16.0 is a feature release:

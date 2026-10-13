@@ -4215,21 +4215,7 @@ void rd_kafka_topic_partition_list_query_leaders_async(
 }
 
 
-/**
- * @brief Get leaders for all partitions in \p rktparlist, querying metadata
- *        if needed.
- *
- * @param leaders is a pre-initialized (empty) list which will be populated
- *        with the leader brokers and their partitions
- *        (struct rd_kafka_partition_leader *)
- *
- * @remark Will not trigger topic auto creation (unless configured).
- *
- * @returns an error code on error.
- *
- * @locks rd_kafka_*lock() MUST NOT be held
- */
-rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
+static rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders0(
     rd_kafka_t *rk,
     rd_kafka_topic_partition_list_t *rktparlist,
     rd_list_t *leaders,
@@ -4248,6 +4234,9 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
         do {
                 rd_list_t query_topics;
                 int query_intvl;
+
+                if (rd_kafka_terminating(rk))
+                        return RD_KAFKA_RESP_ERR__DESTROY;
 
                 rd_list_init(&query_topics, rktparlist->cnt, rd_free);
 
@@ -4310,6 +4299,37 @@ rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
                 return RD_KAFKA_RESP_ERR__ALL_BROKERS_DOWN;
 
         return RD_KAFKA_RESP_ERR__TIMED_OUT;
+}
+
+/**
+ * @brief Get leaders for all partitions in \p rktparlist, querying metadata
+ *        if needed.
+ *
+ * @param leaders is a pre-initialized (empty) list which will be populated
+ *        with the leader brokers and their partitions
+ *        (struct rd_kafka_partition_leader *)
+ *
+ * @remark Will not trigger topic auto creation (unless configured).
+ *
+ * @returns an error code on error, RD_KAFKA_RESP_ERR__DESTROY if the
+ *          client is being destroyed.
+ *
+ * @locks rd_kafka_*lock() MUST NOT be held
+ * @locality application thread
+ */
+rd_kafka_resp_err_t rd_kafka_topic_partition_list_query_leaders(
+    rd_kafka_t *rk,
+    rd_kafka_topic_partition_list_t *rktparlist,
+    rd_list_t *leaders,
+    int timeout_ms) {
+        rd_kafka_resp_err_t err;
+
+        rd_kafka_metadata_cache_wait_begin(rk);
+        err = rd_kafka_topic_partition_list_query_leaders0(rk, rktparlist,
+                                                           leaders, timeout_ms);
+        rd_kafka_metadata_cache_wait_end(rk);
+
+        return err;
 }
 
 

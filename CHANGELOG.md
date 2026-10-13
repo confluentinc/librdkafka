@@ -7,6 +7,18 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+### Producer fixes
+
+* Reject malformed Produce response record-error counts before allocating
+  memory (#5580, @shoemoney).
+
+* Guard the Produce response `record_errors` allocation and the
+  GetTelemetrySubscriptions `requested_metrics` and
+  `accepted_compression_types` allocations against allocation failure,
+  and only assign each count once its allocation has succeeded, so a
+  failed allocation can never leave a non-zero count beside a `NULL`
+  pointer (#5580, @shoemoney).
+
 
 # librdkafka v2.16.0
 
@@ -15,6 +27,7 @@ librdkafka v2.16.0 is a feature release:
 * Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected, or kept an already connected bootstrap broker without re-resolving its address (#5560).
 * The `ALL_BROKERS_DOWN` error is now reported only once every `reconnect.backoff.max.ms` or when the outage restarts (#5600).
 * Avoid duplicate `FETCH_STOP` for the same toppar during assignment removal (#5574).
+* Fix `rd_kafka_clusterid()`, `rd_kafka_query_watermark_offsets()` and `rd_kafka_offsets_for_times()` waiting until their timeout and accessing the freed client instance when it's destroyed during the call (#5616).
 * Upgraded bundled OpenSSL to 3.5.8 and libcurl to 8.22.0 (#5598).
 
 
@@ -54,6 +67,13 @@ callers retry them instead of treating them as a hard failure.
   outage. It is now reported once per outage, re-armed when a broker connection
   comes up, and at most once every `reconnect.backoff.max.ms` while it lasts.
   Happening since 2.11.1 (#5600).
+* `rd_kafka_clusterid()`, `rd_kafka_query_watermark_offsets()` and
+  `rd_kafka_offsets_for_times()` now return immediately, with `NULL` or
+  `RD_KAFKA_RESP_ERR__DESTROY`, when the client is destroyed during the call.
+  Previously they kept waiting for metadata until their timeout and then
+  accessed the client instance after it was freed. `rd_kafka_destroy()` now
+  waits for these calls to return before freeing it.
+  Happening since 0.11.3 (#5616).
 
 ### Consumer fixes
 

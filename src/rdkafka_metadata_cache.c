@@ -941,20 +941,91 @@ void rd_kafka_metadata_cache_wait_state_change_async(
 
 
 /**
- * @brief Wait for cache update, or timeout.
+ * @brief Register a call that may wait with
+ *        rd_kafka_metadata_cache_wait_change().
+ *        rd_kafka_destroy() waits for it to call
+ *        rd_kafka_metadata_cache_wait_end() before destroying \p rk.
  *
- * @returns 1 on cache update or 0 on timeout.
  * @locks none
- * @locality any
+ * @locks_acquired rkmc_cnd_lock
+ * @locality application thread
+ */
+void rd_kafka_metadata_cache_wait_begin(rd_kafka_t *rk) {
+        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        rk->rk_metadata_cache.rkmc_waiters++;
+        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+}
+
+
+/**
+ * @brief Unregister a call registered with
+ *        rd_kafka_metadata_cache_wait_begin().
+ *
+ * @warning This must be the caller's last access to \p rk,
+ *          as it may be destroyed right after.
+ *
+ * @locks none
+ * @locks_acquired rkmc_cnd_lock
+ * @locality application thread
+ */
+void rd_kafka_metadata_cache_wait_end(rd_kafka_t *rk) {
+        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        rd_assert(rk->rk_metadata_cache.rkmc_waiters > 0);
+        if (--rk->rk_metadata_cache.rkmc_waiters == 0 &&
+            rd_kafka_terminating(rk))
+                cnd_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
+        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+}
+
+
+/**
+ * @brief Wake up calls waiting in rd_kafka_metadata_cache_wait_change()
+ *        and wait for all registered calls to return.
+ *
+ * @remark Must be called after the terminate flag is set.
+ *
+ * @locks none
+ * @locks_acquired rkmc_cnd_lock
+ * @locality application thread calling rd_kafka_destroy()
+ */
+void rd_kafka_metadata_cache_wait_terminate(rd_kafka_t *rk) {
+        rd_assert(rd_kafka_terminating(rk));
+
+        mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+        cnd_broadcast(&rk->rk_metadata_cache.rkmc_cnd);
+        while (rk->rk_metadata_cache.rkmc_waiters > 0)
+                cnd_wait(&rk->rk_metadata_cache.rkmc_cnd,
+                         &rk->rk_metadata_cache.rkmc_cnd_lock);
+        mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
+}
+
+
+/**
+ * @brief Wait for cache update, termination or timeout.
+ *
+ * Must be called between rd_kafka_metadata_cache_wait_begin() and
+ * rd_kafka_metadata_cache_wait_end(). Callers must check
+ * rd_kafka_terminating() after it returns.
+ *
+ * @returns 1 on cache update notification or 0 on timeout or ongoing client
+ * termination.
+ * @locks none
+ * @locality application thread
  */
 int rd_kafka_metadata_cache_wait_change(rd_kafka_t *rk, int timeout_ms) {
-        int r;
+        int r = thrd_timedout;
 #if ENABLE_DEVEL
         rd_ts_t ts_start = rd_clock();
 #endif
         mtx_lock(&rk->rk_metadata_cache.rkmc_cnd_lock);
-        r = cnd_timedwait_ms(&rk->rk_metadata_cache.rkmc_cnd,
-                             &rk->rk_metadata_cache.rkmc_cnd_lock, timeout_ms);
+        rd_dassert(rk->rk_metadata_cache.rkmc_waiters > 0);
+        /* The terminate flag is set before the broadcast in
+         * rd_kafka_metadata_cache_wait_terminate(), checking it
+         * under the lock ensures the wakeup isn't missed. */
+        if (!rd_kafka_terminating(rk))
+                r = cnd_timedwait_ms(&rk->rk_metadata_cache.rkmc_cnd,
+                                     &rk->rk_metadata_cache.rkmc_cnd_lock,
+                                     timeout_ms);
         mtx_unlock(&rk->rk_metadata_cache.rkmc_cnd_lock);
 
 #if ENABLE_DEVEL

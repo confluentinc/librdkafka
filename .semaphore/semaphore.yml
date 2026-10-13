@@ -356,7 +356,7 @@ blocks:
             # A trigger failure/timeout must not block or fail the release.
             - >
               timeout 60 sem-trigger -p appsec-semaphore-workflows -t mend-source-scan
-              -i "REPO:librdkafka"
+              -i "REPO:confluentinc/librdkafka"
               -i "REF:${SEMAPHORE_GIT_TAG_NAME}"
               -i "VERSION:${SEMAPHORE_GIT_TAG_NAME#v}"
               -i "PRODUCT_FAMILY:COSS"

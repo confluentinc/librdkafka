@@ -1,24 +1,26 @@
-# librdkafka v2.16.1
-
-librdkafka v2.16.1 is a maintenance release:
-
-* Idempotent producer: allow up to 5 in-flight ProduceRequests per partition
-  regardless of how many messages each one carries (#5632).
-
+# librdkafka v2.x.x (Unreleased)
 
 ## Fixes
 
 ### Producer fixes
 
-* Issues: #5632.
-  The idempotent producer limits the number of in-flight ProduceRequests
+* The idempotent producer limits the number of in-flight ProduceRequests
   per partition to 5, the broker's sequence de-duplication window, but
   compared that limit against the number of in-flight messages.
   Any batch of 5 or more messages therefore left room for only one
   ProduceRequest in flight per partition, capping per-partition throughput
   at one batch per round-trip. The limit now counts ProduceRequests.
-  Happening since 1.0.0.
+  Happening since 1.0.0. (#5632, @andreascasapu-imc)
 
+* Reject malformed Produce response record-error counts before allocating
+  memory (#5580, @shoemoney).
+
+* Guard the Produce response `record_errors` allocation and the
+  GetTelemetrySubscriptions `requested_metrics` and
+  `accepted_compression_types` allocations against allocation failure,
+  and only assign each count once its allocation has succeeded, so a
+  failed allocation can never leave a non-zero count beside a `NULL`
+  pointer (#5580, @shoemoney).
 
 
 # librdkafka v2.16.0

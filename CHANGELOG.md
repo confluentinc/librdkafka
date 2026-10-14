@@ -2,6 +2,11 @@
 
 ## Fixes
 
+### Admin fixes
+
+* Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
+  to a client without a configured consumer group (@dprotaso, #5611).
+
 ### Producer fixes
 
 * Reject malformed Produce response record-error counts before allocating

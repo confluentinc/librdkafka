@@ -1804,6 +1804,17 @@ void rd_kafka_topic_partitions_remove(rd_kafka_topic_t *rkt) {
                 rd_kafka_toppar_purge_and_disable_queues(rktp);
                 rd_kafka_toppar_unlock(rktp);
 
+                /* Stop the consumer lag timer and release its reference.
+                 * For cgrp partitions the timer was already stopped in
+                 * rd_kafka_cgrp_partition_del so timer_stop returns 0.
+                 * This call runs on the main thread after the main loop
+                 * has exited, so no timer callback can be in flight. */
+                if (rd_kafka_timer_stop(&rkt->rkt_rk->rk_timers,
+                                        &rktp->rktp_consumer_lag_tmr,
+                                        1 /*lock*/))
+                        rd_kafka_toppar_destroy(rktp); /* refcnt from
+                                                        * timer keep */
+
                 rd_kafka_toppar_destroy(rktp);
         }
         rd_list_destroy(partitions);

@@ -33,7 +33,7 @@
 #ifndef _WIN32
 #include <netdb.h>
 #else
-#define WIN32_MEAN_AND_LEAN
+#define WIN32_LEAN_AND_MEAN
 #include <winsock2.h>
 #include <ws2ipdef.h>
 #include <ws2tcpip.h>

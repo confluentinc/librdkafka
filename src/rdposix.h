@@ -57,6 +57,7 @@
 
 #define RD_UNUSED             __attribute__((unused))
 #define RD_INLINE             inline
+#define RD_NOINLINE           __attribute__((noinline))
 #define RD_WARN_UNUSED_RESULT __attribute__((warn_unused_result))
 #define RD_NORETURN           __attribute__((noreturn))
 #define RD_IS_CONSTANT(p)     __builtin_constant_p((p))

@@ -806,7 +806,8 @@ int rd_kafka_metadata_cache_hint(rd_kafka_t *rk,
                                  rd_kafka_resp_err_t err) {
         const char *topic;
         rd_ts_t now        = rd_clock();
-        rd_ts_t ts_expires = now + (rk->rk_conf.socket_timeout_ms * 1000);
+        rd_ts_t ts_expires =
+            now + ((rd_ts_t)rk->rk_conf.socket_timeout_ms * 1000);
         int i;
         int cnt = 0;
 

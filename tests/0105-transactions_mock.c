@@ -1228,6 +1228,47 @@ static void do_test_txn_req_cnt(void) {
 
 
 /**
+ * @brief Test that a large transaction.timeout.ms, which also sets the
+ *        default socket.timeout.ms, doesn't overflow request timeouts
+ *        and transactions can be committed.
+ */
+static void do_test_txn_large_timeout(void) {
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *txnid = "myTxnId";
+        const char *topic = "mytopic";
+        int i;
+
+        SUB_TEST();
+
+        /* socket.timeout.ms defaults to transaction.timeout.ms - 100,
+         * whose value in microseconds doesn't fit in an int. */
+        rk = create_txn_producer(&mcluster, txnid, 3, "transaction.timeout.ms",
+                                 "3600000", NULL);
+
+        TEST_CALL_ERR__(rd_kafka_mock_topic_create(mcluster, topic, 1, 3));
+
+        /* Keep requests in-flight across the broker threads'
+         * request timeout scans. */
+        for (i = 1; i <= 3; i++)
+                TEST_CALL_ERR__(
+                    rd_kafka_mock_broker_set_rtt(mcluster, i, 1500));
+
+        TEST_CALL_ERROR__(rd_kafka_init_transactions(rk, 60 * 1000));
+
+        TEST_CALL_ERROR__(rd_kafka_begin_transaction(rk));
+
+        test_produce_msgs2(rk, topic, 0, RD_KAFKA_PARTITION_UA, 0, 10, NULL, 0);
+
+        TEST_CALL_ERROR__(rd_kafka_commit_transaction(rk, 60 * 1000));
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
+
+/**
  * @brief Test abortable errors using mock broker error injections
  *        and code coverage checks.
  */
@@ -4084,6 +4125,8 @@ int main_0105_transactions_mock(int argc, char **argv) {
         do_test_txn_endtxn_timeout();
 
         do_test_txn_endtxn_timeout_inflight();
+
+        do_test_txn_large_timeout();
 
         /* Bring down the coordinator */
         do_test_txn_broker_down_in_txn(rd_true);

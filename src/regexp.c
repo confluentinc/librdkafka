@@ -189,10 +189,10 @@ static int lexcount(Restate *g) {
         g->yychar = *g->source++;
         while (g->yychar != ',' && g->yychar != '}') {
                 g->yymin  = g->yymin * 10 + dec(g, g->yychar);
+                if (g->yymin >= REPINF)
+                        die(g, "numeric overflow");
                 g->yychar = *g->source++;
         }
-        if (g->yymin >= REPINF)
-                die(g, "numeric overflow");
 
         if (g->yychar == ',') {
                 g->yychar = *g->source++;
@@ -203,10 +203,10 @@ static int lexcount(Restate *g) {
                         g->yychar = *g->source++;
                         while (g->yychar != '}') {
                                 g->yymax  = g->yymax * 10 + dec(g, g->yychar);
+                                if (g->yymax >= REPINF)
+                                        die(g, "numeric overflow");
                                 g->yychar = *g->source++;
                         }
-                        if (g->yymax >= REPINF)
-                                die(g, "numeric overflow");
                 }
         } else {
                 g->yymax = g->yymin;

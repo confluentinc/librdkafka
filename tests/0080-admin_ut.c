@@ -637,6 +637,170 @@ destroy:
 }
 
 /**
+ * @brief ListGroups tests
+ *
+ *
+ *
+ */
+static void do_test_ListGroups(const char *what,
+                               rd_kafka_t *rk,
+                               rd_kafka_queue_t *useq,
+                               int with_options,
+                               rd_bool_t destroy) {
+        rd_kafka_queue_t *q;
+        rd_kafka_AdminOptions_t *options = NULL;
+        int exp_timeout                  = MY_SOCKET_TIMEOUT_MS;
+        char errstr[512];
+        const char *errstr2;
+        rd_kafka_resp_err_t err;
+        test_timing_t timing;
+        rd_kafka_event_t *rkev;
+        const rd_kafka_ListGroups_result_t *res;
+        const rd_kafka_error_t **errors;
+        size_t errors_cnt, valid_cnt;
+        void *my_opaque = NULL, *opaque;
+
+        SUB_TEST_QUICK("%s ListGroups with %s, timeout %dms", rd_kafka_name(rk),
+                       what, exp_timeout);
+
+        q = useq ? useq : rd_kafka_queue_new(rk);
+
+        if (with_options) {
+                rd_kafka_error_t *error;
+                rd_kafka_group_state_t duplicate_states[2] = {
+                    RD_KAFKA_GROUP_STATE_EMPTY, RD_KAFKA_GROUP_STATE_EMPTY};
+                rd_kafka_group_type_t duplicate_types[2] = {
+                    RD_KAFKA_GROUP_TYPE_CLASSIC, RD_KAFKA_GROUP_TYPE_CLASSIC};
+                rd_kafka_group_type_t unknown_type[1] = {
+                    RD_KAFKA_GROUP_TYPE_UNKNOWN};
+                const char *duplicate_protocol_types[2] = {"consumer",
+                                                           "consumer"};
+                const char *empty_protocol_type[1]      = {""};
+                const char *streams_protocol_type[1]    = {"streams"};
+
+                options =
+                    rd_kafka_AdminOptions_new(rk, RD_KAFKA_ADMIN_OP_LISTGROUPS);
+
+                /* Test duplicate error on match states */
+                error = rd_kafka_AdminOptions_set_match_group_states(
+                    options, duplicate_states, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate states,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test duplicate error on match group types */
+                error = rd_kafka_AdminOptions_set_match_group_types(
+                    options, duplicate_types, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate group types,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test invalid args error on setting UNKNOWN group type in
+                 * match group types */
+                error = rd_kafka_AdminOptions_set_match_group_types(
+                    options, unknown_type, 1);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on Unknown group type,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test duplicate error on match protocol types */
+                error = rd_kafka_AdminOptions_set_match_protocol_types(
+                    options, duplicate_protocol_types, 2);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on duplicate protocol types,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test invalid args error on setting an empty string in
+                 * match protocol types */
+                error = rd_kafka_AdminOptions_set_match_protocol_types(
+                    options, empty_protocol_type, 1);
+                TEST_ASSERT(error && rd_kafka_error_code(error), "%s",
+                            "Expected error on empty protocol type,"
+                            " got no error");
+                rd_kafka_error_destroy(error);
+
+                /* Test that a valid protocol type is accepted */
+                error = rd_kafka_AdminOptions_set_match_protocol_types(
+                    options, streams_protocol_type, 1);
+                TEST_ASSERT(!error,
+                            "Expected no error on valid protocol"
+                            " type, got: %s",
+                            error ? rd_kafka_error_string(error) : "");
+                rd_kafka_error_destroy(error);
+
+                exp_timeout = MY_SOCKET_TIMEOUT_MS * 2;
+                TEST_CALL_ERR__(rd_kafka_AdminOptions_set_request_timeout(
+                    options, exp_timeout, errstr, sizeof(errstr)));
+
+                if (useq) {
+                        my_opaque = (void *)456;
+                        rd_kafka_AdminOptions_set_opaque(options, my_opaque);
+                }
+        }
+
+        TIMING_START(&timing, "ListGroups");
+        TEST_SAY("Call ListGroups, timeout is %dms\n", exp_timeout);
+        rd_kafka_ListGroups(rk, options, q);
+        TIMING_ASSERT_LATER(&timing, 0, 50);
+
+        if (destroy)
+                goto destroy;
+
+        /* Poll result queue */
+        TIMING_START(&timing, "ListGroups.queue_poll");
+        rkev = rd_kafka_queue_poll(q, exp_timeout + 1000);
+        TIMING_ASSERT_LATER(&timing, exp_timeout - 100, exp_timeout + 100);
+        TEST_ASSERT(rkev != NULL, "expected result in %dms", exp_timeout);
+        TEST_SAY("ListGroups: got %s in %.3fs\n", rd_kafka_event_name(rkev),
+                 TIMING_DURATION(&timing) / 1000.0f);
+
+        /* Convert event to proper result */
+        res = rd_kafka_event_ListGroups_result(rkev);
+        TEST_ASSERT(res, "expected ListGroups_result, not %s",
+                    rd_kafka_event_name(rkev));
+
+        opaque = rd_kafka_event_opaque(rkev);
+        TEST_ASSERT(opaque == my_opaque, "expected opaque to be %p, not %p",
+                    my_opaque, opaque);
+
+        /* Expecting no error here, the real error will be in the error array */
+        err     = rd_kafka_event_error(rkev);
+        errstr2 = rd_kafka_event_error_string(rkev);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                    "expected ListGroups to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR_NO_ERROR),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        errors = rd_kafka_ListGroups_result_errors(rkev, &errors_cnt);
+        TEST_ASSERT(errors_cnt == 1, "expected one error, got %" PRIusz,
+                    errors_cnt);
+        rd_kafka_ListGroups_result_valid(rkev, &valid_cnt);
+        TEST_ASSERT(valid_cnt == 0, "expected zero valid groups, got %" PRIusz,
+                    valid_cnt);
+
+        err     = rd_kafka_error_code(errors[0]);
+        errstr2 = rd_kafka_error_string(errors[0]);
+        TEST_ASSERT(err == RD_KAFKA_RESP_ERR__TIMED_OUT,
+                    "expected ListGroups to return error %s, not %s (%s)",
+                    rd_kafka_err2str(RD_KAFKA_RESP_ERR__TIMED_OUT),
+                    rd_kafka_err2str(err), err ? errstr2 : "n/a");
+
+        rd_kafka_event_destroy(rkev);
+
+destroy:
+        if (options)
+                rd_kafka_AdminOptions_destroy(options);
+
+        if (!useq)
+                rd_kafka_queue_destroy(q);
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief DescribeConsumerGroups tests
  *
  *
@@ -2965,6 +3129,10 @@ static void do_test_apis(rd_kafka_type_t cltype) {
         do_test_ListConsumerGroups("temp queue, options", rk, NULL, 1,
                                    rd_false);
         do_test_ListConsumerGroups("main queue", rk, mainq, 0, rd_false);
+
+        do_test_ListGroups("temp queue, no options", rk, NULL, 0, rd_false);
+        do_test_ListGroups("temp queue, options", rk, NULL, 1, rd_false);
+        do_test_ListGroups("main queue", rk, mainq, 0, rd_false);
 
         do_test_DescribeConsumerGroups("temp queue, no options", rk, NULL, 0,
                                        rd_false);

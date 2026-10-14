@@ -4404,7 +4404,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                                     rkb, QUEUE, "TOPPAR",
                                     "%.*s [%" PRId32
                                     "] waiting for "
-                                    "%d in-flight request(s) to drain "
+                                    "%d in-flight message(s) to drain "
                                     "from queue before continuing "
                                     "to produce",
                                     RD_KAFKAP_STR_PR(rktp->rktp_rkt->rkt_topic),
@@ -4434,8 +4434,10 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
 
                 /* Limit the number of in-flight requests (per partition)
                  * to the broker's sequence de-duplication window. */
-                max_requests = RD_MIN(max_requests,
-                                      RD_KAFKA_IDEMP_MAX_INFLIGHT - inflight);
+                max_requests =
+                    RD_MIN(max_requests,
+                           RD_KAFKA_IDEMP_MAX_INFLIGHT -
+                               rd_atomic32_get(&rktp->rktp_reqs_inflight));
         }
 
 

@@ -4,10 +4,11 @@
  *   * global hw/sw initialization to be called once per process
  *   * HW support is determined by configure's WITH_CRC32C_HW
  *   * Windows porting (no hardware support on Windows yet)
+ *   * Hardware support on little-endian AArch64 with the ARMv8 CRC32
+ *     instructions, selected at build time or, on Linux, at runtime
  *
  * FIXME:
  *   * Hardware support on Windows (MSVC assembler)
- *   * Hardware support on ARM
  */
 
 /* crc32c.c -- compute CRC-32C using the Intel crc32 instruction
@@ -349,10 +350,75 @@ static uint32_t crc32c_hw(uint32_t crc, const void *buf, size_t len)
 
 #endif /* WITH_CRC32C_HW */
 
+/* Hardware CRC-32C on little-endian AArch64 with the ARMv8 CRC32 instructions
+   (optional in ARMv8.0, mandatory from ARMv8.1).  A build that targets the CRC
+   extension (__ARM_FEATURE_CRC32) always uses them.  Otherwise, on Linux, the
+   function is compiled for "+crc" and used only when the kernel reports
+   HWCAP_CRC32. */
+#if defined(__aarch64__) && defined(__BYTE_ORDER__) &&                         \
+    __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__ &&                               \
+    (defined(__ARM_FEATURE_CRC32) ||                                           \
+     (defined(__linux__) && (defined(__GNUC__) || defined(__clang__))))
+#define RD_CRC32C_ARMV8 1
+#endif
+
+#ifdef RD_CRC32C_ARMV8
+#include <arm_acle.h>
+
+#ifdef __ARM_FEATURE_CRC32
+#define RD_CRC32C_ARMV8_TARGET
+#else
+#include <sys/auxv.h>
+#ifndef HWCAP_CRC32
+#define HWCAP_CRC32 (1 << 7)
+#endif
+#define RD_CRC32C_ARMV8_TARGET __attribute__((target("+crc")))
+#endif
+
+static int armv8_crc32;  /* Cached ARMv8 CRC32 support */
+
+/* Compute CRC-32C with the ARMv8 CRC32 instructions: single bytes up to an
+   8-byte boundary, then 8-byte words, then the remaining bytes. */
+RD_CRC32C_ARMV8_TARGET
+static uint32_t crc32c_armv8(uint32_t crc, const void *buf, size_t len)
+{
+    const unsigned char *next = buf;
+    uint32_t crc0 = crc ^ 0xffffffff;
+
+    while (len && ((uintptr_t)next & 7) != 0) {
+        crc0 = __crc32cb(crc0, *next++);
+        len--;
+    }
+    while (len >= 8) {
+        uint64_t word;
+        memcpy(&word, next, sizeof(word));
+        crc0 = __crc32cd(crc0, word);
+        next += 8;
+        len -= 8;
+    }
+    while (len--)
+        crc0 = __crc32cb(crc0, *next++);
+    return crc0 ^ 0xffffffff;
+}
+
+static int crc32c_armv8_supported(void)
+{
+#ifdef __ARM_FEATURE_CRC32
+    return 1;
+#else
+    return (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
+#endif
+}
+#endif /* RD_CRC32C_ARMV8 */
+
 /* Compute a CRC-32C.  If the crc32 instruction is available, use the hardware
    version.  Otherwise, use the software version. */
 uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
 {
+#ifdef RD_CRC32C_ARMV8
+        if (armv8_crc32)
+                return crc32c_armv8(crc, buf, len);
+#endif
 #if WITH_CRC32C_HW
         if (sse42)
                 return crc32c_hw(crc, buf, len);
@@ -370,6 +436,9 @@ uint32_t rd_crc32c(uint32_t crc, const void *buf, size_t len)
  * @brief Populate shift tables once
  */
 void rd_crc32c_global_init (void) {
+#ifdef RD_CRC32C_ARMV8
+        armv8_crc32 = crc32c_armv8_supported();
+#endif
 #if WITH_CRC32C_HW
         SSE42(sse42);
         if (sse42)
@@ -400,7 +469,13 @@ int unittest_rd_crc32c (void) {
         uint32_t crc;
         const char *how;
 
-#if WITH_CRC32C_HW
+#ifdef RD_CRC32C_ARMV8
+        if (armv8_crc32)
+                how = "hardware (ARMv8 CRC32)";
+        else
+                how = "software (ARMv8 CRC32 supported in build but not at "
+                      "runtime)";
+#elif WITH_CRC32C_HW
         if (sse42)
                 how = "hardware (SSE42)";
         else
@@ -425,6 +500,36 @@ int unittest_rd_crc32c (void) {
                      "Calculated CRC (software) 0x%"PRIx32
                      " not matching expected CRC 0x%"PRIx32,
                      crc, expected_crc);
+
+#ifdef RD_CRC32C_ARMV8
+        /* The ARMv8 path handles an unaligned head, 8-byte words and a tail
+         * separately: compare it with the software version for every start
+         * offset within a word, every length up to 1 KiB and a non-zero
+         * initial CRC, as chained calls pass. */
+        if (armv8_crc32) {
+                unsigned char data[1024 + 8];
+                size_t off, len, i;
+
+                for (i = 0; i < sizeof(data); i++)
+                        data[i] = (unsigned char)(i * 131 + 7);
+                for (off = 0; off < 8; off++) {
+                        for (len = 0; len <= 1024; len++) {
+                                uint32_t hw =
+                                    crc32c_armv8(0x1234abcd, data + off, len);
+                                uint32_t sw =
+                                    crc32c_sw(0x1234abcd, data + off, len);
+                                RD_UT_ASSERT(hw == sw,
+                                             "ARMv8 CRC32C 0x%" PRIx32
+                                             " != software 0x%" PRIx32
+                                             " at offset %" PRIusz
+                                             " length %" PRIusz,
+                                             hw, sw, off, len);
+                        }
+                }
+                RD_UT_SAY("ARMv8 CRC32C matches software for offsets 0-7 "
+                          "and lengths 0-1024");
+        }
+#endif
 
         RD_UT_PASS();
 }

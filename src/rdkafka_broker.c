@@ -4263,6 +4263,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         int inflight              = 0;
         uint64_t epoch_base_msgid = 0;
         rd_bool_t batch_ready     = rd_false;
+        rd_ts_t batch_wakeup      = RD_TS_MAX;
 
         /* By limiting the number of not-yet-sent buffers (rkb_outbufs) we
          * provide a backpressure mechanism to the producer loop
@@ -4348,12 +4349,7 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                  * Unless flushing in which case immediate
                  * wakeups are allowed. */
                 batch_ready = rd_kafka_msgq_allow_wakeup_at(
-                    &rktp->rktp_msgq, &rktp->rktp_xmit_msgq,
-                    /* Only update the broker thread wakeup time
-                     * if connection is up and messages can actually be
-                     * sent, otherwise the wakeup can't do much. */
-                    rkb->rkb_state == RD_KAFKA_BROKER_STATE_UP ? next_wakeup
-                                                               : NULL,
+                    &rktp->rktp_msgq, &rktp->rktp_xmit_msgq, &batch_wakeup,
                     now, flushing ? 1 : rkb->rkb_rk->rk_conf.buffering_max_us,
                     /* Batch message count threshold */
                     rkb->rkb_rk->rk_conf.batch_num_messages,
@@ -4491,6 +4487,10 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
                 return 0;
         }
 
+        /* Only once producing is possible, else the thread spins (#5617). */
+        if (batch_wakeup != RD_TS_MAX)
+                rd_kafka_set_next_wakeup(next_wakeup, batch_wakeup);
+
         /* Attempt to fill the batch size, but limit our waiting
          * to queue.buffering.max.ms, batch.num.messages, and batch.size. */
         if (!batch_ready) {
@@ -4514,7 +4514,8 @@ static int rd_kafka_toppar_producer_serve(rd_kafka_broker_t *rkb,
         if (cnt > 0) {
                 rd_kafka_toppar_lock(rktp);
                 batch_ready = rd_kafka_msgq_allow_wakeup_at(
-                    &rktp->rktp_msgq, &rktp->rktp_xmit_msgq, next_wakeup, now,
+                    &rktp->rktp_msgq, &rktp->rktp_xmit_msgq,
+                    reqcnt < max_requests ? next_wakeup : NULL, now,
                     flushing ? 1 : rkb->rkb_rk->rk_conf.buffering_max_us,
                     /* Batch message count threshold */
                     rkb->rkb_rk->rk_conf.batch_num_messages,

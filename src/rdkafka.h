@@ -49,6 +49,10 @@
 #include <inttypes.h>
 #include <sys/types.h>
 
+#if defined(__QNXNTO__)
+#include <netinet/in.h>
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #if 0

@@ -262,6 +262,50 @@ static void rd_kafka_msgset_reader_init(rd_kafka_msgset_reader_t *msetr,
 
 
 /**
+ * @brief Propagate a MessageSet-level error, including the MessageSet's last
+ *        offset so the application can seek past the MessageSet.
+ *
+ * @param offset_verified rd_false if \p LastOffsetDelta may be corrupt.
+ * @remark Regular consumer only, see rd_kafka_share_msgset_err_ops().
+ */
+static void RD_FORMAT(printf, 6, 7)
+    rd_kafka_msgset_reader_batch_err(rd_kafka_msgset_reader_t *msetr,
+                                     rd_kafka_resp_err_t err,
+                                     int64_t BaseOffset,
+                                     int32_t LastOffsetDelta,
+                                     rd_bool_t offset_verified,
+                                     const char *fmt,
+                                     ...) {
+        char reason[512];
+        va_list ap;
+
+        va_start(ap, fmt);
+        rd_vsnprintf(reason, sizeof(reason), fmt, ap);
+        va_end(ap);
+
+        /* A corrupt LastOffsetDelta must not yield an end offset that
+         * overflows or precedes the start of the MessageSet. */
+        if (unlikely(LastOffsetDelta < 0 ||
+                     BaseOffset > INT64_MAX - LastOffsetDelta)) {
+                rd_kafka_consumer_err(
+                    &msetr->msetr_rkq, msetr->msetr_broker_id, err,
+                    msetr->msetr_tver->version, NULL, msetr->msetr_rktp,
+                    BaseOffset,
+                    "%s: MessageSet end offset could not be determined",
+                    reason);
+                return;
+        }
+
+        rd_kafka_consumer_err(
+            &msetr->msetr_rkq, msetr->msetr_broker_id, err,
+            msetr->msetr_tver->version, NULL, msetr->msetr_rktp, BaseOffset,
+            "%s: MessageSet ends at offset %" PRId64 "%s", reason,
+            BaseOffset + LastOffsetDelta,
+            offset_verified ? "" : " (unverified)");
+}
+
+
+/**
  * @brief Decompress MessageSet, pass the uncompressed MessageSet to
  *        the MessageSet reader.
  */
@@ -519,12 +563,23 @@ err:
          * Create op and push on temporary queue. */
         if (!RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk)) {
                 /* Regular consumer */
-                rd_kafka_consumer_err(
-                    &msetr->msetr_rkq, msetr->msetr_broker_id, err,
-                    msetr->msetr_tver->version, NULL, rktp, Offset,
-                    "Decompression (codec 0x%x) of message at %" PRIu64
-                    " of %" PRIusz " bytes failed: %s",
-                    codec, Offset, compressed_size, rd_kafka_err2str(err));
+                if (msetr->msetr_v2_hdr) {
+                        /* The entire MessageSet is compressed as one unit */
+                        rd_kafka_msgset_reader_batch_err(
+                            msetr, err, msetr->msetr_v2_hdr->BaseOffset,
+                            msetr->msetr_v2_hdr->LastOffsetDelta, rd_true,
+                            "Decompression (codec 0x%x) of MessageSet of "
+                            "%" PRIusz " bytes failed: %s",
+                            codec, compressed_size, rd_kafka_err2str(err));
+                } else {
+                        rd_kafka_consumer_err(
+                            &msetr->msetr_rkq, msetr->msetr_broker_id, err,
+                            msetr->msetr_tver->version, NULL, rktp, Offset,
+                            "Decompression (codec 0x%x) of message at %" PRIu64
+                            " of %" PRIusz " bytes failed: %s",
+                            codec, Offset, compressed_size,
+                            rd_kafka_err2str(err));
+                }
                 return err;
         } else {
                 /**
@@ -1043,6 +1098,25 @@ err_parse:
 
 
 /**
+ * @brief Propagate a record-level parse failure within a MessageSet v2 as a
+ *        MessageSet-level error, the remaining records can't be parsed.
+ */
+static void rd_kafka_msgset_reader_records_err(rd_kafka_msgset_reader_t *msetr,
+                                               rd_kafka_resp_err_t err) {
+        /* Underflow is a partial response from the broker, not a corruption */
+        if (err == RD_KAFKA_RESP_ERR__UNDERFLOW || !msetr->msetr_v2_hdr ||
+            RD_KAFKA_IS_SHARE_CONSUMER(msetr->msetr_rkb->rkb_rk))
+                return;
+
+        rd_kafka_msgset_reader_batch_err(
+            msetr, err, msetr->msetr_v2_hdr->BaseOffset,
+            msetr->msetr_v2_hdr->LastOffsetDelta, rd_true,
+            "Failed to parse messages in MessageSet: %s",
+            rd_kafka_err2str(err));
+}
+
+
+/**
  * @brief Read v2 messages from current buffer position.
  */
 static rd_kafka_resp_err_t
@@ -1091,8 +1165,10 @@ rd_kafka_msgset_reader_msgs_v2(rd_kafka_msgset_reader_t *msetr) {
         while (rd_kafka_buf_read_remain(msetr->msetr_rkbuf)) {
                 rd_kafka_resp_err_t err;
                 err = rd_kafka_msgset_reader_msg_v2(msetr);
-                if (unlikely(err))
+                if (unlikely(err)) {
+                        rd_kafka_msgset_reader_records_err(msetr, err);
                         return err;
+                }
         }
 
         return RD_KAFKA_RESP_ERR_NO_ERROR;
@@ -1100,6 +1176,7 @@ rd_kafka_msgset_reader_msgs_v2(rd_kafka_msgset_reader_t *msetr) {
 err_parse:
         /* Count all parse errors as partial message errors. */
         rd_atomic64_add(&msetr->msetr_rkb->rkb_c.rx_partial, 1);
+        rd_kafka_msgset_reader_records_err(msetr, rkbuf->rkbuf_err);
         msetr->msetr_v2_hdr = NULL;
         return rkbuf->rkbuf_err;
 }
@@ -1163,19 +1240,25 @@ rd_kafka_msgset_reader_v2(rd_kafka_msgset_reader_t *msetr) {
                          * continue with next message. */
                         if (!RD_KAFKA_IS_SHARE_CONSUMER(
                                 msetr->msetr_rkb->rkb_rk)) {
-                                rd_kafka_consumer_err(
-                                    &msetr->msetr_rkq, msetr->msetr_broker_id,
-                                    RD_KAFKA_RESP_ERR__BAD_MSG,
-                                    msetr->msetr_tver->version, NULL, rktp,
-                                    hdr.BaseOffset,
-                                    "MessageSet at offset %" PRId64 " (%" PRId32
-                                    " bytes) "
-                                    "failed CRC32C check "
+                                int32_t LastOffsetDelta;
+
+                                /* LastOffsetDelta follows the Attributes
+                                 * (2 bytes) at the current read position.
+                                 * It is CRC-covered, hence unverified. */
+                                rd_kafka_buf_peek_i32(
+                                    rkbuf,
+                                    rd_slice_offset(&rkbuf->rkbuf_reader) + 2,
+                                    &LastOffsetDelta);
+
+                                rd_kafka_msgset_reader_batch_err(
+                                    msetr, RD_KAFKA_RESP_ERR__BAD_MSG,
+                                    hdr.BaseOffset, LastOffsetDelta, rd_false,
+                                    "MessageSet (%" PRId32
+                                    " bytes) failed CRC32C check "
                                     "(original 0x%" PRIx32
                                     " != "
                                     "calculated 0x%" PRIx32 ")",
-                                    hdr.BaseOffset, hdr.Length, hdr.Crc,
-                                    calc_crc);
+                                    hdr.Length, hdr.Crc, calc_crc);
                                 /* Skip to end of MessageSet */
                                 /**
                                  * FIXME: `crc_len` is a byte *length*

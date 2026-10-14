@@ -47,6 +47,7 @@
 
 #include <openssl/x509.h>
 #include <openssl/x509_vfy.h>
+#include <openssl/hmac.h>
 
 #if OPENSSL_VERSION_NUMBER >= 0x30000000
 #include <openssl/provider.h>
@@ -1628,6 +1629,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
         /*
          * ssl.keystore.location
          */
+#if !defined(OPENSSL_IS_BORINGSSL)
         if (rk->rk_conf.ssl.keystore_location) {
                 EVP_PKEY *pkey     = NULL;
                 X509 *cert         = NULL;
@@ -1689,6 +1691,7 @@ static int rd_kafka_ssl_set_certs(rd_kafka_t *rk,
 
                 check_pkey = rd_true;
         }
+#endif
 
 #if WITH_SSL_ENGINE
         /*

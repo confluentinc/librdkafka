@@ -44,6 +44,13 @@
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
+#if defined(__APPLE__)
+#include "TargetConditionals.h"
+#if TARGET_OS_IPHONE==0
+#define HAS_SYSTEM_CALL
+#endif
+#endif
+
 #include <sasl/sasl.h>
 
 /**
@@ -225,11 +232,13 @@ static int rd_kafka_sasl_cyrus_kinit_refresh(rd_kafka_t *rk) {
 
         ts_start = rd_clock();
 
+        #ifdef HAS_SYSTEM_CALL
         /* Prevent multiple simultaneous refreshes by the same process to
          * avoid Kerberos credential cache corruption. */
         mtx_lock(&rd_kafka_sasl_cyrus_kinit_lock);
         r = system(cmd);
         mtx_unlock(&rd_kafka_sasl_cyrus_kinit_lock);
+        #endif
 
         duration = (int)((rd_clock() - ts_start) / 1000);
         if (duration > 5000)

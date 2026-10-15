@@ -126,6 +126,37 @@ static RD_INLINE int rd_kafka_broker_needs_connection(rd_kafka_broker_t *rkb) {
 }
 
 
+/**
+ * @returns true if a broker in INIT, which has no connection, has no work
+ *          that a timer could start: sparse connections, not the internal
+ *          broker, no partitions delegated to it and no requests queued, in
+ *          flight or waiting for a retry.
+ *
+ * Its thread then waits on its ops queue without a timeout. With the regular
+ * rd_kafka_max_block_ms wait it wakes every second only to scan empty
+ * request queues, and a client starts a thread for every broker of the
+ * cluster, so a process with many clients on a large cluster spends a
+ * measurable share of its CPU on those wakeups. Everything that ends the idle
+ * state arrives as an op: OP_CONNECT (persistent connection, any-broker or
+ * leader selection), OP_XMIT_BUF and OP_XMIT_RETRY, OP_PARTITION_JOIN and
+ * OP_TERMINATE (decommission, which also sets termination_in_progress, and
+ * rd_kafka_destroy()). Other ops, such as OP_NODE_UPDATE, are served and the
+ * thread waits again.
+ *
+ * @locality broker thread, in the INIT state
+ * @locks none
+ */
+static RD_INLINE rd_bool_t
+rd_kafka_broker_idle_unconnected(rd_kafka_broker_t *rkb) {
+        return rkb->rkb_rk->rk_conf.sparse_connections &&
+               rkb->rkb_source != RD_KAFKA_INTERNAL &&
+               rkb->rkb_toppar_cnt == 0 &&
+               !rd_kafka_broker_or_instance_terminating(rkb) &&
+               rd_kafka_bufq_cnt(&rkb->rkb_outbufs) == 0 &&
+               rd_kafka_bufq_cnt(&rkb->rkb_waitresps) == 0 &&
+               rd_kafka_bufq_cnt(&rkb->rkb_retrybufs) == 0;
+}
+
 static void rd_kafka_broker_handle_purge_queues(rd_kafka_broker_t *rkb,
                                                 rd_kafka_op_t *rko);
 static void rd_kafka_broker_trigger_monitors(rd_kafka_broker_t *rkb);
@@ -4965,8 +4996,15 @@ static int rd_kafka_broker_thread_main(void *arg) {
                         /* Check if there is demand for a connection
                          * to this broker, if so jump to TRY_CONNECT state. */
                         if (!rd_kafka_broker_needs_connection(rkb)) {
-                                rd_kafka_broker_serve(rkb,
-                                                      rd_kafka_max_block_ms);
+                                if (rd_kafka_broker_idle_unconnected(rkb)) {
+                                        if (rd_kafka_broker_ops_serve(
+                                                rkb, RD_POLL_INFINITE) > 0)
+                                                rd_atomic64_add(
+                                                    &rkb->rkb_c.wakeups, 1);
+                                } else {
+                                        rd_kafka_broker_serve(
+                                            rkb, rd_kafka_max_block_ms);
+                                }
                                 break;
                         }
 

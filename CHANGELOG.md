@@ -1,5 +1,13 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Enhancements
+
+* Broker threads without a connection, partitions or requests wait for an op
+  instead of waking up every second (`enable.sparse.connections=true`, the
+  default). A client starts a thread for every broker in the cluster, so with
+  many clients on a large cluster these wakeups used measurable CPU
+  (#5639, @atsarevskiy).
+
 ## Fixes
 
 ### Admin fixes

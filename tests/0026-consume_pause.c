@@ -322,7 +322,7 @@ static void consume_pause_resume_after_reassign(void) {
         toppar->offset = (int64_t)(msgcnt / 2);
         TEST_SAY("Committing (yet unread) offset %" PRId64 "\n",
                  toppar->offset);
-        if ((err = rd_kafka_commit(rk, partitions, 0 /*sync*/)))
+        if ((err = rd_kafka_commit(rk, partitions, 0 /*sync*/, -1 /*infinite*/)))
                 TEST_FAIL("Commit failed: %s", rd_kafka_err2str(err));
 
 

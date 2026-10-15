@@ -4222,7 +4222,7 @@ static void do_test_DeleteConsumerGroupOffsets(const char *what,
                                                   i % MY_TOPIC_CNT)
                     ->offset = (i + 1) * 10;
 
-        TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/));
+        TEST_CALL_ERR__(rd_kafka_commit(consumer, orig_offsets, 0 /*sync*/, -1 /*infinite*/));
 
         /* Verify committed offsets match */
         committed = rd_kafka_topic_partition_list_copy(orig_offsets);

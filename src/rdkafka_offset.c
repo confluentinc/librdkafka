@@ -371,9 +371,21 @@ rd_kafka_commit0(rd_kafka_t *rk,
         if (rktp)
                 rko->rko_rktp = rd_kafka_toppar_keep(rktp);
 
-        if (offsets)
+        if (offsets){
                 rko->rko_u.offset_commit.partitions =
                     rd_kafka_topic_partition_list_copy(offsets);
+        }
+        else if (!rko->rko_u.offset_commit.partitions && rkcg->rkcg_rk->rk_consumer.assignment.all->cnt > 0 && !rd_kafka_cgrp_assignment_is_lost(rkcg)){
+                // We take the assigned offsets now to make sure we don't get any additional update.
+                rko->rko_u.offset_commit.partitions =
+                    rd_kafka_topic_partition_list_copy(
+                        rkcg->rkcg_rk->rk_consumer.assignment.all);
+                rd_kafka_topic_partition_list_set_offsets(
+                            rkcg->rkcg_rk, rko->rko_u.offset_commit.partitions,
+                            1, RD_KAFKA_OFFSET_INVALID /* def */,
+                            1 /* is commit */);
+        }
+
 
         rd_kafka_q_enq(rkcg->rkcg_ops, rko);
 

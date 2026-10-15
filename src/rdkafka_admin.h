@@ -284,10 +284,13 @@ struct rd_kafka_ConfigResource_result_s {
  * @brief Resource type specific to config apis.
  */
 typedef enum rd_kafka_ConfigResourceType_t {
-        RD_KAFKA_CONFIG_RESOURCE_UNKNOWN = 0,
-        RD_KAFKA_CONFIG_RESOURCE_TOPIC   = 2,
-        RD_KAFKA_CONFIG_RESOURCE_BROKER  = 4,
-        RD_KAFKA_CONFIG_RESOURCE_GROUP   = 32,
+        RD_KAFKA_CONFIG_RESOURCE_UNKNOWN        = 0,
+        RD_KAFKA_CONFIG_RESOURCE_TOPIC          = 2,
+        RD_KAFKA_CONFIG_RESOURCE_BROKER         = 4,
+        RD_KAFKA_CONFIG_RESOURCE_BROKER_LOGGER  = 8,
+        RD_KAFKA_CONFIG_RESOURCE_CLIENT_METRICS = 16,
+        RD_KAFKA_CONFIG_RESOURCE_GROUP          = 32,
+        RD_KAFKA_CONFIG_RESOURCE__END,
 } rd_kafka_ConfigResourceType_t;
 
 /**
@@ -311,6 +314,9 @@ rd_kafka_ResourceType_to_ConfigResourceType(rd_kafka_ResourceType_t restype);
 rd_kafka_ResourceType_t rd_kafka_ConfigResourceType_to_ResourceType(
     rd_kafka_ConfigResourceType_t config_resource_type);
 
+
+const char *rd_kafka_ConfigResourceType_name(
+    rd_kafka_ConfigResourceType_t config_resource_type);
 
 /**@}*/
 

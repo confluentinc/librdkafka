@@ -96,12 +96,32 @@
 #endif
 
 
+#ifndef __COVERITY__
+#ifdef NDEBUG
+#define rd_assert(EXPR)                                                        \
+        do {                                                                   \
+                (void)sizeof(EXPR);                                            \
+        } while (0)
+#else
+#define rd_assert(EXPR) assert(EXPR)
+#endif  /* NDEBUG */
+#else
+extern void __coverity_panic__(void);
+#define rd_assert(EXPR)                                                        \
+        do {                                                                   \
+                if (!(EXPR))                                                   \
+                        __coverity_panic__();                                  \
+        } while (0)
+#endif  /* __COVERITY__ */
+
+
 /* Debug assert, only enabled with --enable-devel */
 #if ENABLE_DEVEL == 1
 #define rd_dassert(cond) rd_assert(cond)
 #else
 #define rd_dassert(cond)                                                       \
         do {                                                                   \
+                (void)sizeof(cond);                                            \
         } while (0)
 #endif
 

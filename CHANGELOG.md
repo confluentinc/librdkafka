@@ -1,5 +1,35 @@
 # librdkafka v2.x.x (Unreleased)
 
+## Enhancements
+
+* Windows (vcpkg-based) packages now bundle OpenSSL from the 3.5 LTS line,
+  the same release as source/autoconf builds, instead of the non-LTS 3.6
+  line, which reaches end of life on 2026-11-01. The vcpkg registry only
+  provides the 3.6 line, so OpenSSL now comes from an overlay port in
+  `win32/vcpkg-overlay-ports`. The bundled DLL names are unchanged (#5635).
+
+
+## Security considerations
+
+Bundled OpenSSL was upgraded to 3.5.9 (LTS) on all platforms:
+3.5.8 → 3.5.9 for source/autoconf builds, and 3.6.3 → 3.5.9 for
+vcpkg-based packages.
+
+ * OpenSSL upgrade addresses:
+   * All packages: CVE-2026-35189, CVE-2026-35191, CVE-2026-42772,
+     CVE-2026-54872, CVE-2026-54873, CVE-2026-54875, CVE-2026-72897,
+     CVE-2026-75804, CVE-2026-75805, CVE-2026-75806, CVE-2026-77696,
+     CVE-2026-84782, CVE-2026-84784.
+   * Only vcpkg-based packages (source/autoconf builds already had these
+     fixes from 3.5.8): CVE-2026-14456, CVE-2026-14457, CVE-2026-18798,
+     CVE-2026-54874, CVE-2026-63072, CVE-2026-63073, CVE-2026-63074,
+     CVE-2026-63075, CVE-2026-63076, CVE-2026-75803.
+
+ * Moving vcpkg-based packages from 3.6.3 to 3.5.9 drops no security fixes:
+   the three CVEs fixed in 3.6.x but not in 3.5.x (CVE-2026-28386,
+   CVE-2026-35188, CVE-2026-42765) only affected code added in OpenSSL 3.6.
+
+
 ## Fixes
 
 ### Admin fixes

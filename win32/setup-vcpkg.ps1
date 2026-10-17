@@ -1,6 +1,11 @@
 # Set up vcpkg and install required packages.
 $version = "2026.07.29"
-$vpkgHash=(Get-FileHash ".\librdkafka\vcpkg.json").Hash
+# Hash everything that decides what vcpkg installs: the manifest, its
+# configuration and the overlay ports.
+$vpkgInputs = @(Get-Item ".\librdkafka\vcpkg.json", ".\librdkafka\vcpkg-configuration.json") +
+              @(Get-ChildItem ".\librdkafka\win32\vcpkg-overlay-ports" -Recurse -File | Sort-Object FullName)
+$vpkgHashes = ($vpkgInputs | Get-FileHash).Hash -join ""
+$vpkgHash = (Get-FileHash -InputStream ([IO.MemoryStream]::new([Text.Encoding]::UTF8.GetBytes($vpkgHashes)))).Hash
 $cacheKey = "vcpkg-$version-$Env:triplet-$vpkgHash-$Env:CACHE_TAG"
 $librdkafkaPath = ".\librdkafka";
 

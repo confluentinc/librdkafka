@@ -1,0 +1,6 @@
+# Keep the port files byte-for-byte as in microsoft/vcpkg, which stores them
+# with "* -text": no line-ending conversion, so the patches still apply on
+# Windows checkouts that use core.autocrlf=true.
+* -text
+*.diff -whitespace
+*.patch -whitespace

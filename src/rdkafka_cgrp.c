@@ -4454,15 +4454,20 @@ static void rd_kafka_cgrp_op_handle_OffsetCommit(rd_kafka_t *rk,
 
         /* An unsent request can retry without advancing its retry counter.
          * Expire only that request after the existing group-close budget.
+         * _DESTROY callbacks can run on the broker thread during teardown:
+         * they cannot retry and must not read main-thread-owned group state.
          * Keep ordinary error handling, including fatal fencing, enabled. */
-        const rd_ts_t close_deadline =
-            rkcg->rkcg_ts_terminate +
-            ((rd_ts_t)rk->rk_conf.group_session_timeout_ms * 1000);
-        const rd_bool_t close_budget_expired =
-            request && (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE) &&
-            rd_clock() > close_deadline;
-        if (close_budget_expired)
-                rd_kafka_buf_set_abs_timeout(request, 0, close_deadline);
+        rd_bool_t close_budget_expired = rd_false;
+        if (err != RD_KAFKA_RESP_ERR__DESTROY && request &&
+            (rkcg->rkcg_flags & RD_KAFKA_CGRP_F_TERMINATE)) {
+                const rd_ts_t close_deadline =
+                    rkcg->rkcg_ts_terminate +
+                    ((rd_ts_t)rk->rk_conf.group_session_timeout_ms * 1000);
+                close_budget_expired = rd_clock() > close_deadline;
+                if (close_budget_expired)
+                        rd_kafka_buf_set_abs_timeout(request, 0,
+                                                     close_deadline);
+        }
         err = rd_kafka_handle_OffsetCommit(rk, rkb, err, rkbuf, request,
                                            offsets, rd_false);
         if (close_budget_expired && err != RD_KAFKA_RESP_ERR_NO_ERROR)

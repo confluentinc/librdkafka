@@ -23,5 +23,13 @@ joined on success. Logs and JSON results stay under the chosen output path.
 
 Use `--library /path/to/librdkafka.so.1` to compare an unpatched build. The
 unpatched held-send case fails its close-before-release assertion; the repaired
-library passes all four modes. This network fault test is intentionally
+library passes all five modes. This network fault test is intentionally
 Linux-only; the library change uses existing portable APIs.
+
+The `destroy-pending` control observes an unsent OffsetCommit before calling
+`rd_kafka_destroy_flags(..., RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE)` while the
+send fault remains active. It checks bounded destruction and joins all client
+threads. Destruction callbacks bypass the new deadline-state reads because
+those callbacks may execute directly on a broker thread; ordinary response
+handling and cleanup still run. This functional control does not by itself
+prove absence of every data race.

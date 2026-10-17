@@ -30,7 +30,7 @@ subprocess.run([cc, '-std=gnu11', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
 env = dict(os.environ, LD_PRELOAD=str(out / 'unsent-send.so'),
            LD_LIBRARY_PATH=str(library.parent))
 results = []
-for mode in ['normal', 'fatal-immediate', 'fatal-late', 'held-send']:
+for mode in ['normal', 'fatal-immediate', 'fatal-late', 'held-send', 'destroy-pending']:
     try:
         result = subprocess.run([str(out / 'probe'), mode], env=env, text=True,
                                 capture_output=True, timeout=60)

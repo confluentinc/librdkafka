@@ -80,12 +80,15 @@ static void *release_send_fault(void *unused) {
  * teardown. */
 int main(int argc, char **argv) {
         require(argc == 2,
-                "select normal, held-send, fatal-immediate or fatal-late");
+                "select normal, held-send, destroy-pending, fatal-immediate or "
+                "fatal-late");
+        const int pending   = !strcmp(argv[1], "destroy-pending");
         const int held      = !strcmp(argv[1], "held-send");
         const int immediate = !strcmp(argv[1], "fatal-immediate");
         const int late      = !strcmp(argv[1], "fatal-late");
         const int normal    = !strcmp(argv[1], "normal");
-        require(held || immediate || late || normal, "unknown probe mode");
+        require(held || pending || immediate || late || normal,
+                "unknown probe mode");
         hold_commits = dlsym(RTLD_DEFAULT, "hold_offset_commits");
         commits_held = dlsym(RTLD_DEFAULT, "offset_commits_held");
         held_sends   = dlsym(RTLD_DEFAULT, "held_offset_commit_sends");
@@ -141,7 +144,7 @@ int main(int argc, char **argv) {
         require(assignment && assignment->cnt == 1,
                 "observe one assigned partition");
         assignment->elems[0].offset = 1;
-        if (held)
+        if (held || pending)
                 hold_commits(1);
         if (immediate || late) {
                 rd_kafka_mock_push_request_errors(
@@ -165,22 +168,44 @@ int main(int argc, char **argv) {
                          seconds() < deadline);
                 require(assignment->elems[0].offset == 1,
                         "preserve normal offset persistence");
-        } else if (held || immediate) {
+        } else if (held || pending || immediate) {
                 const double deadline = seconds() + 5;
                 while (seconds() < deadline) {
                         poll_consumer(consumer);
-                        if (held ? held_sends() > 0
-                                 : rd_kafka_fatal_error(consumer, error,
-                                                        sizeof(error)) != 0)
+                        if ((held || pending)
+                                ? held_sends() > 0
+                                : rd_kafka_fatal_error(consumer, error,
+                                                       sizeof(error)) != 0)
                                 break;
                 }
-                require(held ? held_sends() > 0
-                             : rd_kafka_fatal_error(consumer, error,
-                                                    sizeof(error)) ==
-                                   RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
+                require((held || pending)
+                            ? held_sends() > 0
+                            : rd_kafka_fatal_error(consumer, error,
+                                                   sizeof(error)) ==
+                                  RD_KAFKA_RESP_ERR_FENCED_INSTANCE_ID,
                         "observe the injected send/fatal condition");
         }
         rd_kafka_topic_partition_list_destroy(assignment);
+
+        if (pending) {
+                /* Leave an observed unsent commit outstanding while broker
+                 * destruction overlaps consumer-group termination. */
+                const double started = seconds();
+                rd_kafka_destroy_flags(consumer,
+                                       RD_KAFKA_DESTROY_F_NO_CONSUMER_CLOSE);
+                const double elapsed = seconds() - started;
+                require(
+                    commits_held() && elapsed < 20,
+                    "destroy pending commit without waiting for fault release");
+                hold_commits(0);
+                rd_kafka_mock_cluster_destroy(cluster);
+                rd_kafka_destroy(owner);
+                require(rd_kafka_wait_destroyed(10000) == 0,
+                        "join all native client threads after pending destroy");
+                printf("{\"mode\":\"%s\",\"destroy_seconds\":%.3f}\n", argv[1],
+                       elapsed);
+                return 0;
+        }
 
         pthread_t restoration;
         if (held)

@@ -7,6 +7,16 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+### General fixes
+
+* Issues: #5630.
+  The `librdkafka.redist` NuGet package shipped the GSSAPI build for
+  linux-arm64 Alpine (`alpine-librdkafka.so`), which links `libsasl2`
+  dynamically and fails to load on Alpine images without it. The Alpine
+  mappings now exclude the GSSAPI builds, so the package again contains the
+  build without external dependencies.
+  Happening since 2.16.0 (#5631, @GBNikola).
+
 ### Producer fixes
 
 * Reject malformed Produce response record-error counts before allocating

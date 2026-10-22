@@ -5737,11 +5737,11 @@ struct rd_kafka_UserScramCredentialsDescription_s {
 };
 
 rd_kafka_UserScramCredentialsDescription_t *
-rd_kafka_UserScramCredentialsDescription_new(const char *username,
+rd_kafka_UserScramCredentialsDescription_new(const rd_kafkap_str_t *username,
                                              size_t num_credentials) {
         rd_kafka_UserScramCredentialsDescription_t *description;
         description                      = rd_calloc(1, sizeof(*description));
-        description->user                = rd_strdup(username);
+        description->user                = RD_KAFKAP_STR_DUP(username);
         description->error               = NULL;
         description->credential_info_cnt = num_credentials;
         description->credential_infos    = NULL;
@@ -5771,9 +5771,13 @@ void rd_kafka_UserScramCredentialsDescription_destroy_free(void *description) {
 void rd_kafka_UserScramCredentailsDescription_set_error(
     rd_kafka_UserScramCredentialsDescription_t *description,
     rd_kafka_resp_err_t errorcode,
-    const char *err) {
+    const rd_kafkap_str_t *err) {
         rd_kafka_error_destroy(description->error);
-        description->error = rd_kafka_error_new(errorcode, "%s", err);
+        if (RD_KAFKAP_STR_LEN(err) > 0)
+                description->error = rd_kafka_error_new(errorcode, "%.*s",
+                                                        RD_KAFKAP_STR_PR(err));
+        else
+                description->error = rd_kafka_error_new(errorcode, NULL);
 }
 
 const char *rd_kafka_UserScramCredentialsDescription_user(
@@ -5875,14 +5879,11 @@ rd_kafka_DescribeUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
 
         /* ErrorMessage */
         rd_kafka_buf_read_str(reply, &ErrorMessage);
-        if (ErrorCode) {
-                if (RD_KAFKAP_STR_LEN(&ErrorMessage) == 0)
-                        errstr = (char *)rd_kafka_err2str(ErrorCode);
-                else
-                        RD_KAFKAP_STR_DUPA(&errstr, &ErrorMessage);
+        /* Request Level Error string: without one the event's error string
+         * is the error code's. */
+        if (ErrorCode && RD_KAFKAP_STR_LEN(&ErrorMessage) > 0)
                 rko_result->rko_u.admin_result.errstr =
-                    errstr; /* Request Level Error string*/
-        }
+                    RD_KAFKAP_STR_DUP(&ErrorMessage);
 
         /* #Results */
         rd_kafka_buf_read_arraycnt(reply, &num_users, 10000);
@@ -5896,6 +5897,8 @@ rd_kafka_DescribeUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
                 size_t itr;
                 /* User */
                 rd_kafka_buf_read_str(reply, &User);
+                if (RD_KAFKAP_STR_IS_NULL(&User))
+                        rd_kafka_buf_parse_fail(reply, "Invalid null User");
                 /* ErrorCode */
                 rd_kafka_buf_read_i16(reply, &ErrorCode);
                 /* ErrorMessage */
@@ -5904,11 +5907,16 @@ rd_kafka_DescribeUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
                 int32_t num_credentials;
                 /* #CredentialInfos */
                 rd_kafka_buf_read_arraycnt(reply, &num_credentials, 10000);
+                if (num_credentials < 0)
+                        rd_kafka_buf_parse_fail(reply,
+                                                "Invalid null CredentialInfos");
                 rd_kafka_UserScramCredentialsDescription_t *description =
                     rd_kafka_UserScramCredentialsDescription_new(
-                        User.str, num_credentials);
+                        &User, num_credentials);
                 rd_kafka_UserScramCredentailsDescription_set_error(
-                    description, ErrorCode, ErrorMessage.str);
+                    description, ErrorCode, &ErrorMessage);
+                rd_list_add(&rko_result->rko_u.admin_result.results,
+                            description);
                 for (itr = 0; itr < (size_t)num_credentials; itr++) {
                         int8_t Mechanism;
                         int32_t Iterations;
@@ -5923,8 +5931,6 @@ rd_kafka_DescribeUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
                         scram_credential->iterations = Iterations;
                 }
                 rd_kafka_buf_skip_tags(reply);
-                rd_list_add(&rko_result->rko_u.admin_result.results,
-                            description);
         }
         *rko_resultp = rko_result;
 
@@ -6139,10 +6145,11 @@ struct rd_kafka_AlterUserScramCredentials_result_response_s {
 };
 
 rd_kafka_AlterUserScramCredentials_result_response_t *
-rd_kafka_AlterUserScramCredentials_result_response_new(const char *username) {
+rd_kafka_AlterUserScramCredentials_result_response_new(
+    const rd_kafkap_str_t *username) {
         rd_kafka_AlterUserScramCredentials_result_response_t *response;
         response        = rd_calloc(1, sizeof(*response));
-        response->user  = rd_strdup(username);
+        response->user  = RD_KAFKAP_STR_DUP(username);
         response->error = NULL;
         return response;
 }
@@ -6163,9 +6170,13 @@ void rd_kafka_AlterUserScramCredentials_result_response_destroy_free(
 void rd_kafka_AlterUserScramCredentials_result_response_set_error(
     rd_kafka_AlterUserScramCredentials_result_response_t *response,
     rd_kafka_resp_err_t errorcode,
-    const char *errstr) {
+    const rd_kafkap_str_t *errstr) {
         rd_kafka_error_destroy(response->error);
-        response->error = rd_kafka_error_new(errorcode, "%s", errstr);
+        if (RD_KAFKAP_STR_LEN(errstr) > 0)
+                response->error = rd_kafka_error_new(errorcode, "%.*s",
+                                                     RD_KAFKAP_STR_PR(errstr));
+        else
+                response->error = rd_kafka_error_new(errorcode, NULL);
 }
 
 const char *rd_kafka_AlterUserScramCredentials_result_response_user(
@@ -6361,6 +6372,8 @@ rd_kafka_AlterUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
 
                 /* User */
                 rd_kafka_buf_read_str(reply, &User);
+                if (RD_KAFKAP_STR_IS_NULL(&User))
+                        rd_kafka_buf_parse_fail(reply, "Invalid null User");
 
                 /* ErrorCode */
                 rd_kafka_buf_read_i16(reply, &ErrorCode);
@@ -6372,9 +6385,9 @@ rd_kafka_AlterUserScramCredentialsResponse_parse(rd_kafka_op_t *rko_req,
 
                 rd_kafka_AlterUserScramCredentials_result_response_t *response =
                     rd_kafka_AlterUserScramCredentials_result_response_new(
-                        User.str);
+                        &User);
                 rd_kafka_AlterUserScramCredentials_result_response_set_error(
-                    response, ErrorCode, ErrorMessage.str);
+                    response, ErrorCode, &ErrorMessage);
                 rd_list_add(&rko_result->rko_u.admin_result.results, response);
         }
         *rko_resultp = rko_result;
@@ -10165,9 +10178,357 @@ static int ut_ListConsumerGroups_response_merge(void) {
         RD_UT_PASS();
 }
 
+/**
+ * @brief Parse the \p size bytes of response \p resp with the \p parse
+ *        callback of a \p optype admin request.
+ *
+ * The response is read from a buffer of its exact size, as when received.
+ */
+static rd_kafka_resp_err_t
+ut_admin_response_parse(rd_kafka_t *rk,
+                        rd_kafka_op_type_t optype,
+                        rd_kafka_admin_Response_parse_cb_t *parse,
+                        const unsigned char *resp,
+                        size_t size,
+                        rd_kafka_op_t **rko_resultp) {
+        rd_kafka_op_t *rko_req;
+        rd_kafka_buf_t *reply;
+        rd_kafka_resp_err_t err;
+        char errstr[512];
+        void *ptr;
+
+        rko_req         = rd_kafka_op_new(optype);
+        rko_req->rko_rk = rk;
+        rd_kafka_AdminOptions_init(rk, &rko_req->rko_u.admin_request.options);
+        rd_list_init(&rko_req->rko_u.admin_request.args, 0, NULL);
+
+        ptr = rd_malloc(size);
+        memcpy(ptr, resp, size);
+        reply              = rd_kafka_buf_new_shadow(ptr, size, rd_free);
+        reply->rkbuf_rkb   = rd_kafka_broker_add_logical(rk, "unittest");
+        reply->rkbuf_flags = RD_KAFKA_OP_F_FLEXVER;
+
+        *rko_resultp = NULL;
+        err = parse(rko_req, rko_resultp, reply, errstr, sizeof(errstr));
+
+        rd_kafka_buf_destroy(reply);
+        rd_kafka_op_destroy(rko_req);
+
+        return err;
+}
+
+/**
+ * @brief Verify that the DescribeUserScramCredentials response parser copies
+ *        each result's user name and error message by their length, as these
+ *        are not nul-terminated in the response buffer.
+ */
+static int ut_DescribeUserScramCredentials_response_parse(void) {
+        /* The bytes following the last result's User and ErrorMessage are
+         * all non-zero up to the end of the buffer. */
+        static const unsigned char resp[] = {
+            0,    0,    0,   0,                  /* ThrottleTimeMs */
+            0,    0,                             /* ErrorCode */
+            0,                                   /* ErrorMessage: null */
+            3,                                   /* #Results */
+            4,    'b',  'o', 'b',                /* User */
+            0,    91,                            /* ErrorCode */
+            0,                                   /* ErrorMessage: null */
+            1,                                   /* #CredentialInfos */
+            0,                                   /* Result tags */
+            6,    'a',  'l', 'i', 'c', 'e',      /* User */
+            0xff, 0xff,                          /* ErrorCode */
+            7,    'd',  'e', 'n', 'i', 'e', 'd', /* ErrorMessage */
+            1,                                   /* #CredentialInfos */
+            1,    1,    1,   1, /* Result tags: one tag of one byte */
+            1,    1,    1,   1  /* Response tags: one tag of one byte */
+        };
+        rd_kafka_t *rk;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_UserScramCredentialsDescription_t *description;
+        const rd_kafka_error_t *error;
+        const char *user;
+
+        RD_UT_BEGIN();
+
+        rk  = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+        err = ut_admin_response_parse(
+            rk, RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+            rd_kafka_DescribeUserScramCredentialsResponse_parse, resp,
+            sizeof(resp), &rko_result);
+        RD_UT_ASSERT(!err, "Parse failed: %s", rd_kafka_err2str(err));
+        RD_UT_ASSERT(rd_list_cnt(&rko_result->rko_u.admin_result.results) == 2,
+                     "Expected 2 results");
+
+        description = rd_list_elem(&rko_result->rko_u.admin_result.results, 0);
+        user = rd_kafka_UserScramCredentialsDescription_user(description);
+        RD_UT_ASSERT(!strcmp(user, "bob"), "Expected user \"bob\", got \"%s\"",
+                     user);
+        error = rd_kafka_UserScramCredentialsDescription_error(description);
+        RD_UT_ASSERT(
+            rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND &&
+                !strcmp(rd_kafka_error_string(error),
+                        rd_kafka_err2str(RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND)),
+            "Expected the error code's string, got %s: \"%s\"",
+            rd_kafka_err2name(rd_kafka_error_code(error)),
+            rd_kafka_error_string(error));
+
+        description = rd_list_elem(&rko_result->rko_u.admin_result.results, 1);
+        user = rd_kafka_UserScramCredentialsDescription_user(description);
+        RD_UT_ASSERT(!strcmp(user, "alice"),
+                     "Expected user \"alice\", got \"%s\"", user);
+        error = rd_kafka_UserScramCredentialsDescription_error(description);
+        RD_UT_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN &&
+                         !strcmp(rd_kafka_error_string(error), "denied"),
+                     "Expected error \"denied\", got %s: \"%s\"",
+                     rd_kafka_err2name(rd_kafka_error_code(error)),
+                     rd_kafka_error_string(error));
+
+        rd_kafka_op_destroy(rko_result);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Verify the request level error of a DescribeUserScramCredentials
+ *        response, with and without an error message.
+ */
+static int ut_DescribeUserScramCredentials_response_parse_error(void) {
+        static const unsigned char resp[] = {
+            0, 0,   0,   0,                  /* ThrottleTimeMs */
+            0, 31,                           /* ErrorCode */
+            7, 'd', 'e', 'n', 'i', 'e', 'd', /* ErrorMessage */
+            1,                               /* #Results */
+            0                                /* Response tags */
+        };
+        static const unsigned char resp_no_message[] = {
+            0, 0,  0, 0, /* ThrottleTimeMs */
+            0, 31,       /* ErrorCode */
+            0,           /* ErrorMessage: null */
+            1,           /* #Results */
+            0            /* Response tags */
+        };
+        rd_kafka_t *rk;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+
+        err = ut_admin_response_parse(
+            rk, RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+            rd_kafka_DescribeUserScramCredentialsResponse_parse, resp,
+            sizeof(resp), &rko_result);
+        RD_UT_ASSERT(!err, "Parse failed: %s", rd_kafka_err2str(err));
+        RD_UT_ASSERT(
+            rd_kafka_event_error(rko_result) ==
+                    RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED &&
+                !strcmp(rd_kafka_event_error_string(rko_result), "denied"),
+            "Expected error \"denied\", got %s: \"%s\"",
+            rd_kafka_err2name(rd_kafka_event_error(rko_result)),
+            rd_kafka_event_error_string(rko_result));
+        rd_kafka_op_destroy(rko_result);
+
+        err = ut_admin_response_parse(
+            rk, RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+            rd_kafka_DescribeUserScramCredentialsResponse_parse,
+            resp_no_message, sizeof(resp_no_message), &rko_result);
+        RD_UT_ASSERT(!err, "Parse failed: %s", rd_kafka_err2str(err));
+        RD_UT_ASSERT(
+            rd_kafka_event_error(rko_result) ==
+                    RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED &&
+                !strcmp(rd_kafka_event_error_string(rko_result),
+                        rd_kafka_err2str(
+                            RD_KAFKA_RESP_ERR_CLUSTER_AUTHORIZATION_FAILED)),
+            "Expected the error code's string, got %s: \"%s\"",
+            rd_kafka_err2name(rd_kafka_event_error(rko_result)),
+            rd_kafka_event_error_string(rko_result));
+        rd_kafka_op_destroy(rko_result);
+
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Verify that the AlterUserScramCredentials response parser copies
+ *        each result's user name and error message by their length, as these
+ *        are not nul-terminated in the response buffer.
+ */
+static int ut_AlterUserScramCredentials_response_parse(void) {
+        /* The bytes following the last result's User and ErrorMessage are
+         * all non-zero up to the end of the buffer. */
+        static const unsigned char resp[] = {
+            0,    0,    0,   0,                  /* ThrottleTimeMs */
+            3,                                   /* #Results */
+            4,    'b',  'o', 'b',                /* User */
+            0,    91,                            /* ErrorCode */
+            0,                                   /* ErrorMessage: null */
+            0,                                   /* Result tags */
+            6,    'a',  'l', 'i', 'c', 'e',      /* User */
+            0xff, 0xff,                          /* ErrorCode */
+            7,    'd',  'e', 'n', 'i', 'e', 'd', /* ErrorMessage */
+            1,    1,    1,   1, /* Result tags: one tag of one byte */
+            1,    1,    1,   1  /* Response tags: one tag of one byte */
+        };
+        rd_kafka_t *rk;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+        const rd_kafka_AlterUserScramCredentials_result_response_t *response;
+        const rd_kafka_error_t *error;
+        const char *user;
+
+        RD_UT_BEGIN();
+
+        rk  = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+        err = ut_admin_response_parse(
+            rk, RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,
+            rd_kafka_AlterUserScramCredentialsResponse_parse, resp,
+            sizeof(resp), &rko_result);
+        RD_UT_ASSERT(!err, "Parse failed: %s", rd_kafka_err2str(err));
+        RD_UT_ASSERT(rd_list_cnt(&rko_result->rko_u.admin_result.results) == 2,
+                     "Expected 2 results");
+
+        response = rd_list_elem(&rko_result->rko_u.admin_result.results, 0);
+        user =
+            rd_kafka_AlterUserScramCredentials_result_response_user(response);
+        RD_UT_ASSERT(!strcmp(user, "bob"), "Expected user \"bob\", got \"%s\"",
+                     user);
+        error =
+            rd_kafka_AlterUserScramCredentials_result_response_error(response);
+        RD_UT_ASSERT(
+            rd_kafka_error_code(error) ==
+                    RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND &&
+                !strcmp(rd_kafka_error_string(error),
+                        rd_kafka_err2str(RD_KAFKA_RESP_ERR_RESOURCE_NOT_FOUND)),
+            "Expected the error code's string, got %s: \"%s\"",
+            rd_kafka_err2name(rd_kafka_error_code(error)),
+            rd_kafka_error_string(error));
+
+        response = rd_list_elem(&rko_result->rko_u.admin_result.results, 1);
+        user =
+            rd_kafka_AlterUserScramCredentials_result_response_user(response);
+        RD_UT_ASSERT(!strcmp(user, "alice"),
+                     "Expected user \"alice\", got \"%s\"", user);
+        error =
+            rd_kafka_AlterUserScramCredentials_result_response_error(response);
+        RD_UT_ASSERT(rd_kafka_error_code(error) == RD_KAFKA_RESP_ERR_UNKNOWN &&
+                         !strcmp(rd_kafka_error_string(error), "denied"),
+                     "Expected error \"denied\", got %s: \"%s\"",
+                     rd_kafka_err2name(rd_kafka_error_code(error)),
+                     rd_kafka_error_string(error));
+
+        rd_kafka_op_destroy(rko_result);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+/**
+ * @brief Verify that malformed Describe- and AlterUserScramCredentials
+ *        responses fail the parse: a null User or CredentialInfos, which are
+ *        not nullable, or a truncated CredentialInfo.
+ */
+static int ut_UserScramCredentials_response_parse_malformed(void) {
+        static const unsigned char describe_null_user[] = {
+            0, 0, 0, 0, /* ThrottleTimeMs */
+            0, 0,       /* ErrorCode */
+            0,          /* ErrorMessage: null */
+            2,          /* #Results */
+            0,          /* User: null */
+            0, 0,       /* ErrorCode */
+            0,          /* ErrorMessage: null */
+            1,          /* #CredentialInfos */
+            0,          /* Result tags */
+            0           /* Response tags */
+        };
+        static const unsigned char describe_null_credentials[] = {
+            0, 0,   0,   0,   /* ThrottleTimeMs */
+            0, 0,             /* ErrorCode */
+            0,                /* ErrorMessage: null */
+            2,                /* #Results */
+            4, 'b', 'o', 'b', /* User */
+            0, 0,             /* ErrorCode */
+            0,                /* ErrorMessage: null */
+            0,                /* #CredentialInfos: null */
+            0,                /* Result tags */
+            0                 /* Response tags */
+        };
+        static const unsigned char describe_truncated_credential[] = {
+            0, 0,   0,   0,   /* ThrottleTimeMs */
+            0, 0,             /* ErrorCode */
+            0,                /* ErrorMessage: null */
+            2,                /* #Results */
+            4, 'b', 'o', 'b', /* User */
+            0, 0,             /* ErrorCode */
+            0,                /* ErrorMessage: null */
+            2,                /* #CredentialInfos */
+            1                 /* Mechanism, then nothing */
+        };
+        static const unsigned char alter_null_user[] = {
+            0, 0, 0, 0, /* ThrottleTimeMs */
+            2,          /* #Results */
+            0,          /* User: null */
+            0, 0,       /* ErrorCode */
+            0,          /* ErrorMessage: null */
+            0,          /* Result tags */
+            0           /* Response tags */
+        };
+        static const struct {
+                const char *what;
+                rd_kafka_op_type_t optype;
+                rd_kafka_admin_Response_parse_cb_t *parse;
+                const unsigned char *resp;
+                size_t size;
+        } cases[] = {
+            {"Describe null User", RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+             rd_kafka_DescribeUserScramCredentialsResponse_parse,
+             describe_null_user, sizeof(describe_null_user)},
+            {"Describe null CredentialInfos",
+             RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+             rd_kafka_DescribeUserScramCredentialsResponse_parse,
+             describe_null_credentials, sizeof(describe_null_credentials)},
+            {"Describe truncated CredentialInfo",
+             RD_KAFKA_OP_DESCRIBEUSERSCRAMCREDENTIALS,
+             rd_kafka_DescribeUserScramCredentialsResponse_parse,
+             describe_truncated_credential,
+             sizeof(describe_truncated_credential)},
+            {"Alter null User", RD_KAFKA_OP_ALTERUSERSCRAMCREDENTIALS,
+             rd_kafka_AlterUserScramCredentialsResponse_parse, alter_null_user,
+             sizeof(alter_null_user)},
+        };
+        rd_kafka_t *rk;
+        rd_kafka_op_t *rko_result;
+        rd_kafka_resp_err_t err;
+        size_t i;
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, NULL, NULL, 0);
+
+        for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                err = ut_admin_response_parse(rk, cases[i].optype,
+                                              cases[i].parse, cases[i].resp,
+                                              cases[i].size, &rko_result);
+                RD_UT_ASSERT(err && !rko_result,
+                             "%s: expected the parse to fail", cases[i].what);
+        }
+
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
 int unittest_admin(void) {
         int fails = 0;
         fails += ut_ListConsumerGroups_response_merge();
+        fails += ut_DescribeUserScramCredentials_response_parse();
+        fails += ut_DescribeUserScramCredentials_response_parse_error();
+        fails += ut_AlterUserScramCredentials_response_parse();
+        fails += ut_UserScramCredentials_response_parse_malformed();
         return fails;
 }
 

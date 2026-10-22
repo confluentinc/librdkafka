@@ -7,6 +7,12 @@
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned
   to a client without a configured consumer group (@dprotaso, #5611).
 
+### Consumer fixes
+
+* Fix a crash when a Fetch response reports a leader change (KIP-951)
+  without a valid leader for some of a topic's partitions, and skip
+  negative partition ids in leader change updates (#5280).
+
 ### Producer fixes
 
 * Reject malformed Produce response record-error counts before allocating

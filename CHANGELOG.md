@@ -44,6 +44,10 @@
   immediately or in quick bursts instead of after `retry.backoff.max.ms`.
   Happening since 2.4.0, and since 2.15.0 for share consumers (#5656).
 
+* Fix a crash when a Fetch response reports a leader change (KIP-951)
+  without a valid leader for some of a topic's partitions, and skip
+  negative partition ids in leader change updates (#5280).
+
 
 # librdkafka v2.16.0
 

@@ -267,6 +267,7 @@ static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
 
         const char *inbuf = compressed;
         size_t inlen      = compressed_size;
+        size_t max_size   = (size_t)rkb->rkb_rk->rk_conf.recv_max_msg_size;
         int r;
         static const unsigned char snappy_java_magic[] = {0x82, 'S', 'N', 'A',
                                                           'P',  'P', 'Y', 0};
@@ -287,7 +288,8 @@ static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
                 inbuf = inbuf + snappy_java_hdrlen;
                 inlen -= snappy_java_hdrlen;
                 iov.iov_base = rd_kafka_snappy_java_uncompress(
-                    inbuf, inlen, &iov.iov_len, errstr, sizeof(errstr));
+                    inbuf, inlen, max_size, &iov.iov_len, errstr,
+                    sizeof(errstr));
 
                 if (unlikely(!iov.iov_base)) {
                         rd_rkb_dbg(
@@ -312,6 +314,17 @@ static int rd_kafka_snappy_decompress(rd_kafka_broker_t *rkb,
                             " bytes): "
                             "ignoring message",
                             inlen);
+                        return -1;  // Indicates decompression error
+                }
+
+                if (unlikely(iov.iov_len > max_size)) {
+                        rd_rkb_dbg(rkb, MSG, "SNAPPY",
+                                   "Snappy compressed payload (%" PRIusz
+                                   " bytes) would uncompress to %" PRIusz
+                                   " bytes, more than "
+                                   "receive.message.max.bytes %" PRIusz
+                                   ": ignoring message",
+                                   inlen, iov.iov_len, max_size);
                         return -1;  // Indicates decompression error
                 }
 
@@ -366,8 +379,9 @@ int rd_kafka_telemetry_uncompress_metrics_payload(
 #if WITH_ZLIB
         case RD_KAFKA_COMPRESSION_GZIP:
                 *uncompressed_payload = rd_gz_decompress(
-                    compressed_payload, (int)compressed_payload_size,
-                    (uint64_t *)uncompressed_payload_size);
+                    compressed_payload, compressed_payload_size,
+                    (size_t)rkb->rkb_rk->rk_conf.recv_max_msg_size,
+                    uncompressed_payload_size);
                 if (*uncompressed_payload == NULL)
                         r = -1;
                 else

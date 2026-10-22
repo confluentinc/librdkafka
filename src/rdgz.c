@@ -34,87 +34,84 @@
 
 #define RD_GZ_CHUNK 262144
 
-void *rd_gz_decompress(const void *compressed,
-                       int compressed_len,
-                       uint64_t *decompressed_lenp) {
-        int pass           = 1;
-        char *decompressed = NULL;
+/**
+ * @brief Inflate \p compressed, which must hold one complete gzip or zlib
+ *        stream, into \p out, or only count the inflated length if \p out
+ *        is NULL.
+ *
+ * @param max_len the size of \p out, or when counting the most the stream
+ *                may inflate to.
+ * @param lenp the inflated length is returned here.
+ *
+ * @returns true on success, false if the stream is corrupt, ends early,
+ *          or inflates to more than \p max_len bytes.
+ */
+static rd_bool_t rd_gz_inflate(const void *compressed,
+                               size_t compressed_len,
+                               char *out,
+                               size_t max_len,
+                               size_t *lenp) {
+        z_stream strm = RD_ZERO_INIT;
+        char buf[512];
+        int r;
 
-        /* First pass (1): calculate decompressed size.
-         *                 (pass-1 is skipped if *decompressed_lenp is
-         *                  non-zero).
-         * Second pass (2): perform actual decompression.
-         */
+        if (compressed_len > UINT_MAX || inflateInit2(&strm, 15 + 32) != Z_OK)
+                return rd_false;
 
-        if (*decompressed_lenp != 0LLU)
-                pass++;
+        strm.next_in  = (void *)compressed;
+        strm.avail_in = (uInt)compressed_len;
 
-        for (; pass <= 2; pass++) {
-                z_stream strm = RD_ZERO_INIT;
-                char buf[512];
-                char *p;
-                int len;
-                int r;
-
-                if ((r = inflateInit2(&strm, 15 + 32)) != Z_OK)
-                        goto fail;
-
-                strm.next_in  = (void *)compressed;
-                strm.avail_in = compressed_len;
-
-                if (pass == 1) {
-                        /* Use dummy output buffer */
-                        p   = buf;
-                        len = sizeof(buf);
+        do {
+                if (out) {
+                        /* Inflate into what is left of the output buffer */
+                        strm.next_out = (unsigned char *)out + strm.total_out;
+                        strm.avail_out =
+                            (uInt)RD_MIN(max_len - strm.total_out, UINT_MAX);
                 } else {
-                        /* Use real output buffer */
-                        p   = decompressed;
-                        len = (int)*decompressed_lenp;
+                        /* Only count: inflate into a scratch buffer */
+                        strm.next_out  = (unsigned char *)buf;
+                        strm.avail_out = sizeof(buf);
                 }
 
-                do {
-                        strm.next_out  = (unsigned char *)p;
-                        strm.avail_out = len;
+                /* inflate() returns Z_OK only when it made progress, and
+                 * Z_BUF_ERROR when it can make none, such as when the input
+                 * ends before the stream does or the output buffer is full:
+                 * so this loop ends. */
+                r = inflate(&strm, Z_NO_FLUSH);
+        } while (r == Z_OK && strm.total_out <= max_len);
 
-                        r = inflate(&strm, Z_NO_FLUSH);
-                        switch (r) {
-                        case Z_STREAM_ERROR:
-                        case Z_NEED_DICT:
-                        case Z_DATA_ERROR:
-                        case Z_MEM_ERROR:
-                                inflateEnd(&strm);
-                                goto fail;
-                        }
+        *lenp = strm.total_out;
+        inflateEnd(&strm);
 
-                        if (pass == 2) {
-                                /* Advance output pointer (in pass 2). */
-                                p += len - strm.avail_out;
-                                len -= len - strm.avail_out;
-                        }
-
-                } while (strm.avail_out == 0 && r != Z_STREAM_END);
+        return r == Z_STREAM_END && *lenp <= max_len;
+}
 
 
-                if (pass == 1) {
-                        *decompressed_lenp = strm.total_out;
-                        if (!(decompressed = rd_malloc(
-                                  (size_t)(*decompressed_lenp) + 1))) {
-                                inflateEnd(&strm);
-                                return NULL;
-                        }
-                        /* For convenience of the caller we nul-terminate
-                         * the buffer. If it happens to be a string there
-                         * is no need for extra copies. */
-                        decompressed[*decompressed_lenp] = '\0';
-                }
+void *rd_gz_decompress(const void *compressed,
+                       size_t compressed_len,
+                       size_t max_len,
+                       size_t *decompressed_lenp) {
+        char *decompressed;
+        size_t len;
 
-                inflateEnd(&strm);
+        /* First pass: calculate the decompressed size. */
+        if (!rd_gz_inflate(compressed, compressed_len, NULL, max_len, &len))
+                return NULL;
+
+        /* For convenience of the caller we nul-terminate
+         * the buffer. If it happens to be a string there
+         * is no need for extra copies. */
+        decompressed      = rd_malloc(len + 1);
+        decompressed[len] = '\0';
+
+        /* Second pass: perform the actual decompression. */
+        if (!rd_gz_inflate(compressed, compressed_len, decompressed, len,
+                           &len)) {
+                rd_free(decompressed);
+                return NULL;
         }
 
-        return decompressed;
+        *decompressed_lenp = len;
 
-fail:
-        if (decompressed)
-                rd_free(decompressed);
-        return NULL;
+        return decompressed;
 }

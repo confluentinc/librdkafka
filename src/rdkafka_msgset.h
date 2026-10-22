@@ -101,5 +101,6 @@ rd_kafka_resp_err_t rd_kafka_snappy_compress_slice(rd_kafka_broker_t *rkb,
 #endif
 
 int unittest_aborted_txns(void);
+int unittest_msgset_decompress(void);
 
 #endif /* _RDKAFKA_MSGSET_H_ */

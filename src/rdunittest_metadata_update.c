@@ -27,7 +27,7 @@
  */
 
 /**
- * @name Unit tests for rd_kafka_metadata_update_op()
+ * @name Unit tests for rd_kafka_metadata_update_op() and the metadata cache
  * @{
  */
 
@@ -56,11 +56,13 @@ static void ut_mdupd_log_cb(const rd_kafka_t *rk,
 
 /**
  * @brief Seed the metadata cache with \p partition_cnt partitions for
- *        \p topic, each with leader \p leader_id. Mirrors
+ *        \p topic, each with leader \p leader_id. Their ids are the sorted
+ *        \p partition_ids, or 0 to partition_cnt-1 if NULL. Mirrors
  *        rd_ut_kafka_topic_set_topic_exists().
  */
 static void ut_mdupd_seed_cache(rd_kafka_t *rk,
                                 const char *topic,
+                                const int32_t *partition_ids,
                                 int partition_cnt,
                                 int32_t leader_id) {
         rd_kafka_metadata_partition_internal_t *mdpi =
@@ -74,10 +76,11 @@ static void ut_mdupd_seed_cache(rd_kafka_t *rk,
         mdt.partition_cnt = partition_cnt;
         mdt.partitions    = rd_alloca(sizeof(*mdt.partitions) * partition_cnt);
         for (i = 0; i < partition_cnt; i++) {
+                int32_t id = partition_ids ? partition_ids[i] : i;
                 memset(&mdt.partitions[i], 0, sizeof(mdt.partitions[i]));
-                mdt.partitions[i].id     = i;
+                mdt.partitions[i].id     = id;
                 mdt.partitions[i].leader = leader_id;
-                mdpi[i].id               = i;
+                mdpi[i].id               = id;
                 mdpi[i].leader_epoch     = 0;
         }
 
@@ -153,7 +156,7 @@ static int unittest_metadata_update_partition_out_of_range(void) {
         RD_UT_ASSERT(rk != NULL, "rd_kafka_new failed: %s", errstr);
 
         /* Cache: topic with 4 partitions, current leader broker id 1. */
-        ut_mdupd_seed_cache(rk, topic, 4, 1);
+        ut_mdupd_seed_cache(rk, topic, NULL, 4, 1);
 
         /* The update's leader must be a known broker. */
         rd_kafka_broker_update(rk, rk->rk_conf.security_protocol, &mdb, NULL);
@@ -200,10 +203,85 @@ static int unittest_metadata_update_partition_out_of_range(void) {
 }
 
 
+/**
+ * @brief rd_kafka_metadata_cache_topic_partition_get() must return the
+ *        internal metadata at the partition's position in the cache entry,
+ *        which is not its id when partition ids are sparse.
+ */
+static int unittest_metadata_cache_topic_partition_get_sparse_ids(void) {
+        rd_kafka_t *rk;
+        rd_kafka_conf_t *conf;
+        char errstr[256];
+        const char *topic             = "ut-md-cache-sparse";
+        const int32_t partition_ids[] = {0, 2};
+        const struct rd_kafka_metadata_cache_entry *rkmce;
+        const rd_kafka_metadata_topic_t *mtopic;
+        const rd_kafka_metadata_partition_t *mpart;
+        const rd_kafka_metadata_partition_internal_t *mdpi;
+        int found[2]          = {-1, -1};
+        rd_bool_t mpart_ok[2] = {rd_false, rd_false};
+        rd_bool_t mdpi_ok[2]  = {rd_false, rd_false};
+        rd_bool_t cache_found = rd_false;
+        int i;
+
+        RD_UT_SAY(
+            "Verifying rd_kafka_metadata_cache_topic_partition_get() "
+            "returns the internal metadata of sparse partition ids");
+
+        conf = rd_kafka_conf_new();
+        rk   = rd_kafka_new(RD_KAFKA_PRODUCER, conf, errstr, sizeof(errstr));
+        RD_UT_ASSERT(rk != NULL, "rd_kafka_new failed: %s", errstr);
+
+        /* Cache: topic with partitions 0 and 2. */
+        ut_mdupd_seed_cache(rk, topic, partition_ids, 2, 1);
+
+        rd_kafka_rdlock(rk);
+        rkmce = rd_kafka_metadata_cache_find(rk, topic, 1);
+        if (rkmce) {
+                cache_found = rd_true;
+                for (i = 0; i < 2; i++) {
+                        found[i] = rd_kafka_metadata_cache_topic_partition_get(
+                            rk, &mtopic, &mpart, &mdpi, topic, partition_ids[i],
+                            1 /*valid*/);
+                        mpart_ok[i] =
+                            mpart == &rkmce->rkmce_mtopic.partitions[i];
+                        mdpi_ok[i] =
+                            mdpi ==
+                            &rkmce->rkmce_metadata_internal_topic.partitions[i];
+                }
+        }
+        rd_kafka_rdunlock(rk);
+
+        rd_kafka_destroy(rk);
+
+        RD_UT_ASSERT(cache_found, "expected topic %s in cache", topic);
+        for (i = 0; i < 2; i++) {
+                RD_UT_ASSERT(found[i] == 1,
+                             "partition %" PRId32
+                             ": expected topic and partition to be found, "
+                             "got %d",
+                             partition_ids[i], found[i]);
+                RD_UT_ASSERT(mpart_ok[i],
+                             "partition %" PRId32
+                             ": expected the partition metadata at "
+                             "position %d",
+                             partition_ids[i], i);
+                RD_UT_ASSERT(mdpi_ok[i],
+                             "partition %" PRId32
+                             ": expected the internal partition metadata at "
+                             "position %d",
+                             partition_ids[i], i);
+        }
+
+        RD_UT_PASS();
+}
+
+
 int unittest_metadata_update(void) {
         int fails = 0;
 
         fails += unittest_metadata_update_partition_out_of_range();
+        fails += unittest_metadata_cache_topic_partition_get_sparse_ids();
 
         return fails;
 }

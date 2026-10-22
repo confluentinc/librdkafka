@@ -12,6 +12,10 @@
 * Fix a crash when a Fetch response reports a leader change (KIP-951)
   without a valid leader for some of a topic's partitions, and skip
   negative partition ids in leader change updates (#5280).
+* Fix `rd_kafka_query_watermark_offsets()`, `rd_kafka_offsets_for_times()`,
+  `ListOffsets` and `DeleteRecords` using the leader epoch of another
+  partition, or reading past the cached partitions, when a topic's
+  partition ids in the metadata are not contiguous.
 
 ### Producer fixes
 

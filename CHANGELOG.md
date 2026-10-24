@@ -57,6 +57,10 @@ callers retry them instead of treating them as a hard failure.
 
 ### General fixes
 
+* Issues: #5650.
+  Fix build failure on platforms without `fenv.h` (e.g., uClibc toolchains without FENV support).
+  `fenv.h` is now detected at configure time (`HAVE_FENV`) and only used by the histogram unit test when available.
+  Happening since 2.16.0.
 * Issues: #5600.
   Fix re-bootstrap cases that never reached a bootstrap broker while the learned brokers were still connected, or kept an already connected bootstrap broker.
   The client kept asking the very brokers that reported its metadata as stale. Learned and bootstrap brokers are now decommissioned when a re-bootstrap sequence starts, so the bootstrap servers are re-created and connected again, re-resolving their addresses, and only they are used until a Metadata response rebuilds the broker list. The transaction coordinator is reset too when its broker is decommissioned, so the coordinator connection is re-established and its address re-resolved, as already done for the group coordinator. Queued messages are handed back to their partitions and re-sent once new leaders are known. Admin requests in flight on a decommissioned broker now fail with `RD_KAFKA_RESP_ERR__TRANSPORT` (previously

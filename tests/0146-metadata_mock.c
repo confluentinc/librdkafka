@@ -477,6 +477,105 @@ static void do_test_metadata_update_operation(rd_bool_t producer,
         SUB_TEST_PASS();
 }
 
+static void log_cb_metadata_update(const rd_kafka_t *rk,
+                                   int level,
+                                   const char *fac,
+                                   const char *buf) {
+        rd_atomic32_t *warning_cntp = rd_kafka_opaque(rk);
+        rd_bool_t matched =
+            level <= LOG_WARNING && !strcmp(fac, "METADATAUPDATE");
+
+        TEST_SAY("%sLog: %s level %d fac %s: %s\n", matched ? _C_YEL : "",
+                 rd_kafka_name(rk), level, fac, buf);
+
+        if (matched)
+                rd_atomic32_add(warning_cntp, 1);
+}
+
+/**
+ * @brief A leader change in a Fetch response for a partition without
+ *        a valid leader must be left out of the metadata update operation,
+ *        while the other partitions of the topic are still updated.
+ *        See issue #5280.
+ */
+static void do_test_metadata_update_operation_no_leader(void) {
+        rd_kafka_t *rk;
+        const char *bootstraps;
+        rd_kafka_mock_cluster_t *mcluster;
+        const char *topic = test_mk_topic_name(__FUNCTION__, 1);
+        rd_kafka_conf_t *conf;
+        rd_kafka_topic_partition_list_t *assignment;
+        rd_atomic32_t warning_cnt;
+        int32_t new_leader_id = 2;
+
+        SUB_TEST_QUICK();
+
+        mcluster = test_mock_cluster_new(2, &bootstraps);
+        rd_kafka_mock_topic_create(mcluster, topic, 2, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 1);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 1);
+
+        test_produce_msgs_easy_v(topic, 0, 0, 0, 1, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
+        test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
+
+        rd_atomic32_init(&warning_cnt, 0);
+        test_conf_init(&conf, NULL, 20);
+        test_conf_set(conf, "bootstrap.servers", bootstraps);
+        test_conf_set(conf, "group.id", topic);
+        test_conf_set(conf, "fetch.wait.max.ms", "100");
+        test_conf_set(conf, "auto.offset.reset", "earliest");
+        rd_kafka_conf_set_log_cb(conf, log_cb_metadata_update);
+        rd_kafka_conf_set_opaque(conf, &warning_cnt);
+
+        rk = test_create_handle(RD_KAFKA_CONSUMER, conf);
+
+        assignment = rd_kafka_topic_partition_list_new(2);
+        rd_kafka_topic_partition_list_add(assignment, topic, 0);
+        rd_kafka_topic_partition_list_add(assignment, topic, 1);
+        test_consumer_assign("2 partitions", rk, assignment);
+        rd_kafka_topic_partition_list_destroy(assignment);
+
+        /* Both partitions are fetched from leader 1 */
+        test_consumer_poll_timeout("initial leader", rk, 0, -1, -1, 2, NULL,
+                                   5000);
+
+        /* Move both partitions to broker 2: the next Fetch response from
+         * broker 1 reports the leader change of both partitions, without
+         * a valid leader for partition 0.
+         * The leader response is also used by Metadata responses,
+         * so nothing else is produced until the partitions have moved. */
+        rd_kafka_mock_start_request_tracking(mcluster);
+        rd_kafka_mock_partition_push_leader_response(mcluster, topic, 0, -1,
+                                                     -1);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 0, 2);
+        rd_kafka_mock_partition_set_leader(mcluster, topic, 1, 2);
+
+        test_mock_wait_matching_requests(mcluster, 1, 500, is_fetch_request,
+                                         &new_leader_id);
+        rd_kafka_mock_stop_request_tracking(mcluster);
+
+        /* Consume from the new leader */
+        test_produce_msgs_easy_v(topic, 0, 0, 0, 1, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
+        test_produce_msgs_easy_v(topic, 0, 1, 0, 1, 0, "bootstrap.servers",
+                                 bootstraps, NULL);
+        test_consumer_poll_timeout("changed leader", rk, 0, -1, -1, 2, NULL,
+                                   5000);
+
+        /* Only the partition with a valid leader is in the update,
+         * so none of them must be reported as not found. */
+        TEST_ASSERT(rd_atomic32_get(&warning_cnt) == 0,
+                    "Expected no METADATAUPDATE warnings, got %" PRId32,
+                    rd_atomic32_get(&warning_cnt));
+
+        rd_kafka_destroy(rk);
+        test_mock_cluster_destroy(mcluster);
+
+        SUB_TEST_PASS();
+}
+
 /**
  * @brief cluster_id must be copied by its exact wire length,
  *        not via strlen() during DescribeCluster parsing.
@@ -582,6 +681,8 @@ int main_0146_metadata_mock(int argc, char **argv) {
                         variation % 2  /* 1-3: second leader change,
                                         * 0-2: single leader change */);
         }
+
+        do_test_metadata_update_operation_no_leader();
 
         return 0;
 }

@@ -3197,7 +3197,11 @@ void rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(rd_kafka_t *rk,
 
         rd_kafka_buf_read_str(rkbuf, &member_id);
         if (!RD_KAFKAP_STR_IS_NULL(&member_id)) {
-                rd_kafka_cgrp_set_member_id(rkcg, member_id.str);
+                /* member_id.str points into the response buffer and is
+                 * not nul-terminated. */
+                char *member_id_str = RD_KAFKAP_STR_DUP(&member_id);
+                rd_kafka_cgrp_set_member_id(rkcg, member_id_str);
+                rd_free(member_id_str);
         }
 
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
@@ -3531,7 +3535,11 @@ void rd_kafka_cgrp_handle_ShareGroupHeartbeat(rd_kafka_t *rk,
 
         rd_kafka_buf_read_str(rkbuf, &member_id);
         if (!RD_KAFKAP_STR_IS_NULL(&member_id)) {
-                rd_kafka_cgrp_set_member_id(rkcg, member_id.str);
+                /* member_id.str points into the response buffer and is
+                 * not nul-terminated. */
+                char *member_id_str = RD_KAFKAP_STR_DUP(&member_id);
+                rd_kafka_cgrp_set_member_id(rkcg, member_id_str);
+                rd_free(member_id_str);
         }
 
         rd_kafka_buf_read_i32(rkbuf, &member_epoch);
@@ -8352,6 +8360,74 @@ int unittest_member_metadata_serdes(void) {
 
 
 /**
+ * @brief Verify that the ConsumerGroupHeartbeat (or ShareGroupHeartbeat)
+ *        response handler uses exactly the MemberId bytes from the
+ *        response, which are not nul-terminated in the response buffer.
+ */
+static int unittest_heartbeat_member_id(rd_bool_t share) {
+        /* Heartbeat response (flexible version) where all the bytes
+         * following MemberId are non-zero up to the end of the buffer. */
+        static const unsigned char resp[] = {
+            0,    0,    0,    0, /* ThrottleTimeMs */
+            0,    0,             /* ErrorCode */
+            0,                   /* ErrorMessage: null */
+            9,    'm',  'e',  'm',  'b', 'e', 'r', '-', '1', /* MemberId */
+            0x01, 0x01, 0x01, 0x01,                          /* MemberEpoch */
+            0x01, 0x01, 0x01, 0x01, /* HeartbeatIntervalMs */
+            0xff                    /* Assignment: null */
+        };
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_cgrp_t *rkcg;
+        rd_kafka_broker_t *rkb;
+        rd_kafka_buf_t *rkbuf;
+        void *ptr;
+
+        RD_UT_SAY("Verifying %s response member id",
+                  share ? "ShareGroupHeartbeat" : "ConsumerGroupHeartbeat");
+
+        conf = rd_kafka_conf_new();
+        rd_kafka_conf_set(conf, "group.id", "unittest", NULL, 0);
+        rd_kafka_conf_set(conf, "group.protocol", "consumer", NULL, 0);
+        rk = rd_kafka_new(RD_KAFKA_CONSUMER, conf, NULL, 0);
+        RD_UT_ASSERT(rk && rk->rk_cgrp, "Failed to create consumer");
+        rkcg = rk->rk_cgrp;
+        rkb  = rd_kafka_broker_add_logical(rk, "unittest");
+
+        /* Received responses are read from a buffer of their exact size. */
+        ptr = rd_malloc(sizeof(resp));
+        memcpy(ptr, resp, sizeof(resp));
+        rkbuf            = rd_kafka_buf_new_shadow(ptr, sizeof(resp), rd_free);
+        rkbuf->rkbuf_rkb = rkb;
+        rkbuf->rkbuf_flags = RD_KAFKA_OP_F_FLEXVER;
+
+        /* The handler runs on this thread rather than the main thread: with no
+         * bootstrap servers and no subscription the main thread leaves the
+         * group alone. */
+        rkcg->rkcg_flags |= RD_KAFKA_CGRP_F_HEARTBEAT_IN_TRANSIT;
+        if (share)
+                rd_kafka_cgrp_handle_ShareGroupHeartbeat(
+                    rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, NULL, NULL);
+        else
+                rd_kafka_cgrp_handle_ConsumerGroupHeartbeat(
+                    rk, rkb, RD_KAFKA_RESP_ERR_NO_ERROR, rkbuf, NULL, NULL);
+
+        RD_UT_ASSERT(rkbuf->rkbuf_err == RD_KAFKA_RESP_ERR_NO_ERROR,
+                     "Expected the response to parse, got %s",
+                     rd_kafka_err2str(rkbuf->rkbuf_err));
+        RD_UT_ASSERT(rkcg->rkcg_member_id, "Expected a member id");
+        RD_UT_ASSERT(!rd_kafkap_str_cmp_str(rkcg->rkcg_member_id, "member-1"),
+                     "Expected member id \"member-1\", got \"%.*s\"",
+                     RD_KAFKAP_STR_PR(rkcg->rkcg_member_id));
+
+        rd_kafka_buf_destroy(rkbuf);
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
+
+/**
  * @brief Consumer group unit tests
  */
 int unittest_cgrp(void) {
@@ -8363,6 +8439,8 @@ int unittest_cgrp(void) {
         fails += unittest_map_to_list();
         fails += unittest_list_to_map();
         fails += unittest_member_metadata_serdes();
+        fails += unittest_heartbeat_member_id(rd_false);
+        fails += unittest_heartbeat_member_id(rd_true);
 
         return fails;
 }

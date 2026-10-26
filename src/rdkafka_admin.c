@@ -5398,6 +5398,10 @@ rd_kafka_AlterClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
 
         rd_kafka_buf_read_throttle_time(reply);
         rd_kafka_buf_read_arraycnt(reply, &entry_cnt, 100000);
+        if (entry_cnt < 0)
+                rd_kafka_buf_parse_fail(
+                    reply, "AlterClientQuotas response entries must not be "
+                           "null");
 
         rko_result = rd_kafka_admin_result_new(rko_req);
         rd_list_init(&rko_result->rko_u.admin_result.results, entry_cnt,
@@ -5423,11 +5427,17 @@ rd_kafka_AlterClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
                 }
 
                 entry = rd_kafka_ClientQuotaEntry_new();
+                rd_list_set(&rko_result->rko_u.admin_result.results, i, entry);
                 if (error_code)
                         entry->error =
                             rd_kafka_error_new(error_code, "%s", entry_errstr);
 
                 rd_kafka_buf_read_arraycnt(reply, &entity_cnt, 10000);
+                if (entity_cnt < 0)
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "AlterClientQuotas response entity array must "
+                            "not be null");
                 for (j = 0; j < (int)entity_cnt; j++) {
                         rd_kafkap_str_t ktype, kname;
                         char *etype, *ename = NULL;
@@ -5445,8 +5455,6 @@ rd_kafka_AlterClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
                 }
                 if (rd_kafka_buf_ApiVersion(reply) >= 1)
                         rd_kafka_buf_skip_tags(reply);
-
-                rd_list_set(&rko_result->rko_u.admin_result.results, i, entry);
         }
         if (rd_kafka_buf_ApiVersion(reply) >= 1)
                 rd_kafka_buf_skip_tags(reply);
@@ -5728,8 +5736,14 @@ rd_kafka_DescribeClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
                 rd_kafka_DescribeClientQuotas_result_entry_t *entry;
 
                 entry = rd_kafka_DescribeClientQuotas_result_entry_new();
+                rd_list_set(&rko_result->rko_u.admin_result.results, i, entry);
 
                 rd_kafka_buf_read_arraycnt(reply, &entity_cnt, 10000);
+                if (entity_cnt < 0)
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "DescribeClientQuotas response entity array "
+                            "must not be null");
                 for (j = 0; j < (int)entity_cnt; j++) {
                         rd_kafkap_str_t ktype, kname;
                         char *etype, *ename = NULL;
@@ -5747,6 +5761,11 @@ rd_kafka_DescribeClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
                 }
 
                 rd_kafka_buf_read_arraycnt(reply, &value_cnt, 10000);
+                if (value_cnt < 0)
+                        rd_kafka_buf_parse_fail(
+                            reply,
+                            "DescribeClientQuotas response value array must "
+                            "not be null");
                 for (k = 0; k < (int)value_cnt; k++) {
                         rd_kafkap_str_t kname;
                         char *vname;
@@ -5763,8 +5782,6 @@ rd_kafka_DescribeClientQuotasResponse_parse(rd_kafka_op_t *rko_req,
 
                 if (rd_kafka_buf_ApiVersion(reply) >= 1)
                         rd_kafka_buf_skip_tags(reply);
-
-                rd_list_set(&rko_result->rko_u.admin_result.results, i, entry);
         }
 
         if (rd_kafka_buf_ApiVersion(reply) >= 1)
@@ -10845,10 +10862,116 @@ static int ut_ListConsumerGroups_response_merge(void) {
         RD_UT_PASS();
 }
 
+
+static rd_kafka_buf_t *ut_ClientQuotas_reply(rd_kafka_t *rk,
+                                             const unsigned char *data,
+                                             size_t size) {
+        rd_kafka_buf_t *reply = rd_kafka_buf_new_shadow(data, size, NULL);
+
+        reply->rkbuf_rkb = rd_kafka_broker_internal(rk);
+        rd_kafka_buf_ApiVersion_set(reply, 0, 0);
+        return reply;
+}
+
+
+static int ut_ClientQuotas_malformed_responses(void) {
+        static const unsigned char alter_truncated_entry[] = {
+            0, 0, 0, 0, /* throttle_time_ms */
+            0, 0, 0, 1, /* entries */
+            0, 0,       /* error_code */
+            0xff, 0xff, /* error_message: null */
+            0, 0, 0, 1  /* entity array, followed by missing entity */
+        };
+        static const unsigned char alter_null_entries[] = {
+            0, 0, 0, 0,                   /* throttle_time_ms */
+            0xff, 0xff, 0xff, 0xff        /* entries: illegal null */
+        };
+        static const unsigned char describe_null_entities[] = {
+            0, 0, 0, 0,             /* throttle_time_ms */
+            0, 0,                   /* error_code */
+            0xff, 0xff,             /* error_message: null */
+            0, 0, 0, 1,             /* entries */
+            0xff, 0xff, 0xff, 0xff  /* entity array: illegal null */
+        };
+        static const unsigned char describe_null_values[] = {
+            0, 0, 0, 0,             /* throttle_time_ms */
+            0, 0,                   /* error_code */
+            0xff, 0xff,             /* error_message: null */
+            0, 0, 0, 1,             /* entries */
+            0, 0, 0, 0,             /* entity array */
+            0xff, 0xff, 0xff, 0xff  /* value array: illegal null */
+        };
+        struct {
+                const char *name;
+                rd_kafka_op_type_t request_type;
+                const unsigned char *data;
+                size_t size;
+                rd_kafka_resp_err_t expected_error;
+        } cases[] = {
+            {"truncated alter entry", RD_KAFKA_OP_ALTERCLIENTQUOTAS,
+             alter_truncated_entry, sizeof(alter_truncated_entry),
+             RD_KAFKA_RESP_ERR__UNDERFLOW},
+            {"null alter entries", RD_KAFKA_OP_ALTERCLIENTQUOTAS,
+             alter_null_entries, sizeof(alter_null_entries),
+             RD_KAFKA_RESP_ERR__BAD_MSG},
+            {"null describe entities", RD_KAFKA_OP_DESCRIBECLIENTQUOTAS,
+             describe_null_entities, sizeof(describe_null_entities),
+             RD_KAFKA_RESP_ERR__BAD_MSG},
+            {"null describe values", RD_KAFKA_OP_DESCRIBECLIENTQUOTAS,
+             describe_null_values, sizeof(describe_null_values),
+             RD_KAFKA_RESP_ERR__BAD_MSG},
+        };
+        rd_kafka_t *rk;
+        size_t i;
+        char client_errstr[512];
+
+        RD_UT_BEGIN();
+
+        rk = rd_kafka_new(RD_KAFKA_PRODUCER, rd_kafka_conf_new(),
+                          client_errstr, sizeof(client_errstr));
+        RD_UT_ASSERT(rk != NULL, "failed to create test client: %s",
+                     client_errstr);
+
+        for (i = 0; i < RD_ARRAYSIZE(cases); i++) {
+                rd_kafka_op_t *request =
+                    rd_kafka_op_new(cases[i].request_type);
+                rd_kafka_op_t *result = NULL;
+                rd_kafka_buf_t *reply =
+                    ut_ClientQuotas_reply(rk, cases[i].data, cases[i].size);
+                rd_kafka_resp_err_t err;
+                char errstr[256];
+
+                rd_list_init(&request->rko_u.admin_request.args, 0, NULL);
+                rd_kafka_confval_init_ptr(
+                    &request->rko_u.admin_request.options.opaque, "opaque");
+
+                if (cases[i].request_type == RD_KAFKA_OP_ALTERCLIENTQUOTAS)
+                        err = rd_kafka_AlterClientQuotasResponse_parse(
+                            request, &result, reply, errstr, sizeof(errstr));
+                else
+                        err = rd_kafka_DescribeClientQuotasResponse_parse(
+                            request, &result, reply, errstr, sizeof(errstr));
+
+                RD_UT_ASSERT(err == cases[i].expected_error,
+                             "%s: expected %s, got %s", cases[i].name,
+                             rd_kafka_err2str(cases[i].expected_error),
+                             rd_kafka_err2str(err));
+                RD_UT_ASSERT(result == NULL,
+                             "%s: parser returned a partial result",
+                             cases[i].name);
+
+                rd_kafka_buf_destroy(reply);
+                rd_kafka_op_destroy(request);
+        }
+
+        rd_kafka_destroy(rk);
+
+        RD_UT_PASS();
+}
+
 int unittest_admin(void) {
-        int fails = 0;
-        fails += ut_ListConsumerGroups_response_merge();
-        return fails;
+        return ut_ListConsumerGroups_response_merge() +
+               ut_ClientQuotas_malformed_responses();
 }
 
 /**@}*/

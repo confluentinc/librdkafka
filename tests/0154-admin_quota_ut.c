@@ -420,6 +420,43 @@ static void do_test_apis(rd_kafka_type_t cltype) {
 }
 
 
+static void check_AlterClientQuotas_result(rd_kafka_event_t *event) {
+        const rd_kafka_AlterClientQuotas_result_t *result;
+        const rd_kafka_ClientQuotaEntry_t **results;
+        const rd_kafka_error_t *error;
+        rd_kafka_resp_err_t err;
+        size_t result_cnt;
+
+        err = rd_kafka_event_error(event);
+        if (err) {
+                TEST_FAIL_LATER("AlterClientQuotas failed: %s",
+                                rd_kafka_err2str(err));
+                return;
+        }
+
+        result = rd_kafka_event_AlterClientQuotas_result(event);
+        if (!result) {
+                TEST_FAIL_LATER("Expected AlterClientQuotasResult, got %s",
+                                rd_kafka_event_name(event));
+                return;
+        }
+        results =
+            rd_kafka_AlterClientQuotas_result_entries(result, &result_cnt);
+        if (result_cnt != 1) {
+                TEST_FAIL_LATER(
+                    "Expected one AlterClientQuotas result, got %" PRIusz,
+                    result_cnt);
+                return;
+        }
+        error = rd_kafka_ClientQuotaEntry_error(results[0]);
+        err   = error ? rd_kafka_error_code(error) : RD_KAFKA_RESP_ERR_NO_ERROR;
+        if (err)
+                TEST_FAIL_LATER("AlterClientQuotas entry failed: %s",
+                                error ? rd_kafka_error_string(error)
+                                      : rd_kafka_err2str(err));
+}
+
+
 static void do_test_AlterClientQuotas_broker(rd_kafka_t *rk,
                                              const char *user,
                                              const char *second_entity_type,
@@ -432,11 +469,6 @@ static void do_test_AlterClientQuotas_broker(rd_kafka_t *rk,
         rd_kafka_AdminOptions_t *options;
         rd_kafka_queue_t *queue;
         rd_kafka_event_t *event;
-        const rd_kafka_AlterClientQuotas_result_t *result;
-        const rd_kafka_ClientQuotaEntry_t **results;
-        const rd_kafka_error_t *error;
-        rd_kafka_resp_err_t err;
-        size_t result_cnt;
         char errstr[512];
 
         entry = rd_kafka_ClientQuotaEntry_new();
@@ -462,22 +494,10 @@ static void do_test_AlterClientQuotas_broker(rd_kafka_t *rk,
         rd_kafka_AdminOptions_destroy(options);
 
         event = rd_kafka_queue_poll(queue, 15 * 1000);
-        TEST_ASSERT(event, "AlterClientQuotas result event missing");
-        TEST_CALL_ERR__(rd_kafka_event_error(event));
-
-        result = rd_kafka_event_AlterClientQuotas_result(event);
-        TEST_ASSERT(result, "Expected AlterClientQuotasResult, got %s",
-                    rd_kafka_event_name(event));
-        results =
-            rd_kafka_AlterClientQuotas_result_entries(result, &result_cnt);
-        TEST_ASSERT(result_cnt == 1,
-                    "Expected one AlterClientQuotas result, got %" PRIusz,
-                    result_cnt);
-        error = rd_kafka_ClientQuotaEntry_error(results[0]);
-        err   = error ? rd_kafka_error_code(error) : RD_KAFKA_RESP_ERR_NO_ERROR;
-        TEST_ASSERT(!err, "AlterClientQuotas entry failed: %s",
-                    error ? rd_kafka_error_string(error)
-                          : rd_kafka_err2str(err));
+        if (event)
+                check_AlterClientQuotas_result(event);
+        else
+                TEST_FAIL_LATER("AlterClientQuotas result event missing");
 
         rd_kafka_event_destroy(event);
         rd_kafka_queue_destroy(queue);
@@ -520,11 +540,21 @@ retry_describe:
         rd_kafka_AdminOptions_destroy(options);
 
         event = rd_kafka_queue_poll(queue, 15 * 1000);
-        TEST_ASSERT(event, "DescribeClientQuotas result event missing");
-        TEST_CALL_ERR__(rd_kafka_event_error(event));
+        if (!event) {
+                TEST_FAIL_LATER("DescribeClientQuotas result event missing");
+                goto done;
+        }
+        if (rd_kafka_event_error(event)) {
+                TEST_FAIL_LATER("DescribeClientQuotas failed: %s",
+                                rd_kafka_event_error_string(event));
+                goto done;
+        }
         result = rd_kafka_event_DescribeClientQuotas_result(event);
-        TEST_ASSERT(result, "Expected DescribeClientQuotasResult, got %s",
-                    rd_kafka_event_name(event));
+        if (!result) {
+                TEST_FAIL_LATER("Expected DescribeClientQuotasResult, got %s",
+                                rd_kafka_event_name(event));
+                goto done;
+        }
         entries =
             rd_kafka_DescribeClientQuotas_result_entries(result, &entry_cnt);
 
@@ -556,11 +586,11 @@ retry_describe:
                                     expected_key)) {
                                 actual =
                                     rd_kafka_ClientQuotaValue_value(values[j]);
-                                TEST_ASSERT(actual > expected_value - 0.001 &&
-                                                actual < expected_value + 0.001,
-                                            "Expected %s=%f, got %f",
-                                            expected_key, expected_value,
-                                            actual);
+                                TEST_ASSERT_LATER(
+                                    actual > expected_value - 0.001 &&
+                                        actual < expected_value + 0.001,
+                                    "Expected %s=%f, got %f", expected_key,
+                                    expected_value, actual);
                                 found = rd_true;
                         }
                 }
@@ -575,9 +605,11 @@ retry_describe:
                 goto retry_describe;
         }
 
-        TEST_ASSERT(found == expected_found,
-                    "Expected quota %s for user %s to be %s", expected_key,
-                    expected_user, expected_found ? "present" : "absent");
+        TEST_ASSERT_LATER(found == expected_found,
+                          "Expected quota %s for user %s to be %s",
+                          expected_key, expected_user,
+                          expected_found ? "present" : "absent");
+done:
         rd_kafka_event_destroy(event);
         rd_kafka_queue_destroy(queue);
 }
@@ -647,6 +679,7 @@ static void do_test_broker_roundtrip(void) {
 
         rd_kafka_destroy(rk);
         rd_free(user);
+        TEST_LATER_CHECK("Quota assertions failed after cleanup.");
         SUB_TEST_PASS();
 }
 

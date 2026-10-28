@@ -135,16 +135,24 @@ $(LIBNAME)-static.a: $(LIBNAME).a
 ifeq ($(HAS_LIBTOOL_STATIC),y)
 	$(LIBTOOL) -static -o $@ - $(LIBNAME).a $(MKL_STATIC_LIBS)
 else ifeq ($(HAS_GNU_AR),y)
+# ar's MRI script parser rejects some characters in file names, such as the
+# '@' in npm scoped package paths, so each input archive is added through a
+# symlink with a plain name.
 	(_tmp=$$(mktemp arstaticXXXXXX) ; \
+	_dir=$$(mktemp -d arstaticXXXXXX) ; \
 	echo "CREATE $@" > $$_tmp ; \
+	_i=0 ; \
 	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
-		echo "ADDLIB $$_f" >> $$_tmp ; \
+		_i=$$((_i + 1)) ; \
+		case $$_f in /*) ;; *) _f="$(CURDIR)/$$_f" ;; esac ; \
+		ln -s "$$_f" $$_dir/$$_i.a ; \
+		echo "ADDLIB $$_dir/$$_i.a" >> $$_tmp ; \
 	done ; \
 	echo "SAVE" >> $$_tmp ; \
 	echo "END" >> $$_tmp ; \
 	cat $$_tmp ; \
 	ar -M < $$_tmp || exit 1 ; \
-	rm $$_tmp)
+	rm -rf $$_tmp $$_dir)
 else
 	for _f in $(LIBNAME).a $(MKL_STATIC_LIBS) ; do \
 		ar -r $@ $$_f ; \

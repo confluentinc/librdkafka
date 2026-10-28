@@ -19,6 +19,12 @@
   failed allocation can never leave a non-zero count beside a `NULL`
   pointer (#5580, @shoemoney).
 
+* Fix an integer overflow in the exponential backoff between retries of a
+  produced message: from its 26th retry (with the default
+  `retry.backoff.ms`) the backoff could become negative or too short, so the
+  message was retried immediately instead of after `retry.backoff.max.ms`
+  (#5646).
+
 
 # librdkafka v2.16.0
 

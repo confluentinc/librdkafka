@@ -2247,6 +2247,58 @@ static int unittest_msgq_order(const char *what,
 }
 
 /**
+ * @brief Verify that the exponential backoff set by rd_kafka_retry_msgq()
+ *        stays within \p retry_max_ms for any retry count (#5646).
+ *
+ * @param first_capped_retry First retry whose backoff is capped at
+ *                           \p retry_max_ms even with the lowest jitter.
+ */
+static int unittest_msgq_retry_backoff(int retry_ms,
+                                       int retry_max_ms,
+                                       int first_capped_retry) {
+        const rd_ts_t max_us = (rd_ts_t)retry_max_ms * 1000;
+        int retries;
+
+        for (retries = 1; retries <= 64; retries++) {
+                rd_kafka_msgq_t srcq  = RD_KAFKA_MSGQ_INITIALIZER(srcq);
+                rd_kafka_msgq_t destq = RD_KAFKA_MSGQ_INITIALIZER(destq);
+                rd_kafka_msg_t *rkm   = ut_rd_kafka_msg_new(0);
+                rd_ts_t min_us, before, after, backoff_us;
+
+                /* Incremented to retries by rd_kafka_retry_msgq() */
+                rkm->rkm_u.producer.retries = retries - 1;
+                rd_kafka_msgq_enq(&srcq, rkm);
+
+                before = rd_clock();
+                rd_kafka_retry_msgq(&destq, &srcq, 1, INT32_MAX, 0,
+                                    RD_KAFKA_MSG_STATUS_NOT_PERSISTED,
+                                    rd_kafka_msg_cmp_msgid, rd_true, retry_ms,
+                                    retry_max_ms);
+                after = rd_clock();
+
+                RD_UT_ASSERT(rd_kafka_msgq_len(&destq) == 1,
+                             "retry %d: message should have been retried",
+                             retries);
+
+                /* The backoff must be in the future and at most
+                 * retry_max_ms, exactly retry_max_ms once capped. */
+                min_us     = retries >= first_capped_retry ? max_us : 1;
+                backoff_us = rkm->rkm_u.producer.ts_backoff - before;
+                RD_UT_ASSERT(backoff_us >= min_us &&
+                                 backoff_us <= max_us + (after - before),
+                             "retry.backoff.ms=%d, retry.backoff.max.ms=%d: "
+                             "retry %d backoff %" PRId64
+                             "us not in range %" PRId64 "..%" PRId64 "us",
+                             retry_ms, retry_max_ms, retries, backoff_us,
+                             min_us, max_us);
+
+                ut_rd_kafka_msgq_purge(&destq);
+        }
+
+        RD_UT_PASS();
+}
+
+/**
  * @brief Verify that rd_kafka_seq_wrap() works.
  */
 static int unittest_msg_seq_wrap(void) {
@@ -2546,6 +2598,10 @@ int unittest_msg(void) {
         double insert_baseline = 0.0;
 
         fails += unittest_msgq_order("FIFO", 1, rd_kafka_msg_cmp_msgid);
+        /* Defaults: capped from 2^4 * 100ms * 80% (lowest jitter) > 1000ms */
+        fails += unittest_msgq_retry_backoff(100, 1000, 5);
+        /* Maximum values: capped from 2^1 * 300000ms * 80% > 300000ms */
+        fails += unittest_msgq_retry_backoff(300000, 300000, 2);
         fails += unittest_msg_seq_wrap();
 
         fails += unittest_msgq_insert_sort(

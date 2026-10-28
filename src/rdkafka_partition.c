@@ -1000,11 +1000,17 @@ int rd_kafka_retry_msgq(rd_kafka_msgq_t *destq,
                         /* In some cases, like failed Produce requests do not
                          * increment the retry count, see
                          * rd_kafka_handle_Produce_error. */
-                        if (rkm->rkm_u.producer.retries > 0)
-                                backoff =
-                                    (1 << (rkm->rkm_u.producer.retries - 1)) *
-                                    retry_ms;
-                        else
+                        if (rkm->rkm_u.producer.retries > 0) {
+                                int shift = rkm->rkm_u.producer.retries - 1;
+
+                                /* Cap shift at 34 to prevent overflow in final
+                                 * calculation, as in
+                                 * rd_kafka_broker_buf_retry(). */
+                                if (shift > 34)
+                                        shift = 34;
+
+                                backoff = ((int64_t)1 << shift) * retry_ms;
+                        } else
                                 backoff = retry_ms;
                         /* Multiplied by 10 as backoff should be in nano
                          * seconds. */

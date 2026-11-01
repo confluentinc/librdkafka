@@ -97,6 +97,7 @@ int main_0006_symbols(int argc, char **argv) {
                 rd_kafka_message_destroy(NULL);
                 rd_kafka_message_errstr(NULL);
                 rd_kafka_message_timestamp(NULL, NULL);
+                rd_kafka_message_topic_id(NULL);
                 rd_kafka_consume_start(NULL, 0, 0);
                 rd_kafka_consume_stop(NULL, 0);
                 rd_kafka_consume(NULL, 0, 0);

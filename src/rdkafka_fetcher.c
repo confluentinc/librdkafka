@@ -1103,6 +1103,10 @@ rd_kafka_share_build_response_rko(rd_kafka_broker_t *rkb,
                         entry->types[offset - entry->start_offset] =
                             rd_kafka_share_ack_type_from_msg_op(msg_rko);
 
+                        if (msg_rko->rko_type == RD_KAFKA_OP_FETCH)
+                                msg_rko->rko_u.fetch.topic_id =
+                                    parpriv->topic_id;
+
                         /**
                          * The per message error ops (Decompression error, CRC
                          * error, or MagicByte Errors are tracked in the same

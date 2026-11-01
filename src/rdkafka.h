@@ -1776,6 +1776,22 @@ RD_EXPORT int16_t
 rd_kafka_message_delivery_count(const rd_kafka_message_t *rkmessage);
 
 
+/**
+ * @brief Get the topic UUID from the response that delivered a share-consumer
+ *        message.
+ *
+ * @returns The topic UUID, or NULL for NULL, errored, producer, or non-share
+ *          messages, or if the UUID is unavailable.
+ *
+ * @remark The UUID remains unchanged if the topic is deleted and recreated.
+ *         It is owned by the message and valid until the message or its
+ *         containing rd_kafka_messages_t is destroyed. Use rd_kafka_Uuid_copy()
+ *         to retain it longer. Do not destroy the returned UUID.
+ */
+RD_EXPORT const rd_kafka_Uuid_t *
+rd_kafka_message_topic_id(const rd_kafka_message_t *rkmessage);
+
+
 /**@}*/
 
 

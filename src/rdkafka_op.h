@@ -357,6 +357,7 @@ struct rd_kafka_op_s {
                         rd_kafka_buf_t *rkbuf;
                         rd_kafka_msg_t rkm;
                         int evidx;
+                        rd_kafka_Uuid_t topic_id; /**< Acquired topic UUID. */
                 } fetch;
 
                 struct {

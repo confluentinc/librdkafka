@@ -1738,7 +1738,7 @@ static void rd_kafka_mock_cgrp_consumer_session_tmr_cb(rd_kafka_timers_t *rkts,
         rd_ts_t now                       = rd_clock();
         rd_kafka_mock_cluster_t *mcluster = mcgrp->cluster;
 
-        mtx_unlock(&mcluster->lock);
+        mtx_lock(&mcluster->lock);
         TAILQ_FOREACH_SAFE(member, &mcgrp->members, link, tmp) {
                 if (member->ts_last_activity +
                         (mcgrp->session_timeout_ms * 1000) >

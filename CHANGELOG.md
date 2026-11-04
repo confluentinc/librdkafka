@@ -2,6 +2,15 @@
 
 ## Fixes
 
+### Consumer fixes
+
+* Fix a data race with `group.protocol=consumer` (KIP-848) and the share
+  consumer: polling read the consumer group flags and expedited the next
+  heartbeat from the application thread, while the main thread updates them
+  without a lock. Polling now only records the poll time, and the main thread
+  resumes heartbeats after a `max.poll.interval.ms` timeout on its own
+  (@rorylshanks).
+
 ### Admin fixes
 
 * Fix a crash in `ListConsumerGroupOffsets` when a coordinator error is returned

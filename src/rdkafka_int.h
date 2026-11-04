@@ -1407,16 +1407,11 @@ static RD_INLINE RD_UNUSED void rd_kafka_app_polled(rd_kafka_t *rk,
         if (rk->rk_type == RD_KAFKA_CONSUMER &&
             !RD_KAFKA_IS_SHARE_CONSUMER(rk)) {
                 rd_ts_t now = rd_clock();
+                /* Do not touch rk_cgrp here: it is owned by the main
+                 * thread, which resumes heartbeats after a
+                 * max.poll.interval.ms timeout on its next serve once it
+                 * sees the updated rk_ts_last_poll. */
                 rd_atomic64_set(&rk->rk_ts_last_poll, now);
-                if (unlikely(rk->rk_cgrp &&
-                             rk->rk_cgrp->rkcg_group_protocol ==
-                                 RD_KAFKA_GROUP_PROTOCOL_CONSUMER &&
-                             rk->rk_cgrp->rkcg_flags &
-                                 RD_KAFKA_CGRP_F_MAX_POLL_EXCEEDED)) {
-                        rd_kafka_cgrp_consumer_expedite_next_heartbeat(
-                            rk->rk_cgrp,
-                            "app polled after poll interval exceeded");
-                }
                 if (!rkq->rkq_ts_last_poll_end)
                         rkq->rkq_ts_last_poll_end = now;
                 rd_dassert(rkq->rkq_ts_last_poll_end >=

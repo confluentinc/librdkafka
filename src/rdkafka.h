@@ -8609,7 +8609,7 @@ rd_kafka_NewTopic_set_replica_assignment(rd_kafka_NewTopic_t *new_topic,
  * @remark The name and value are not validated by the client, the validation
  *         takes place on the broker.
  *
- * @remark On Confluent Server and Confluent Cloud, the topic configs
+ * @remark On Confluent Platform and Confluent Cloud, the topic configs
  *         \c confluent.value.association and \c confluent.key.association
  *         can be set here to associate the topic's value and/or key with a
  *         Schema Registry subject at creation time. Apache Kafka doesn't
@@ -9237,7 +9237,7 @@ rd_kafka_AlterConfigs_result_resources(
  *
  * @remark Requires broker version >=2.3.0
  *
- * @remark On Confluent Server and Confluent Cloud, a topic's Schema
+ * @remark On Confluent Platform and Confluent Cloud, a topic's Schema
  *         Registry subject association can be set or updated with a SET
  *         operation on \c confluent.value.association or
  *         \c confluent.key.association, and removed with a DELETE
@@ -9312,7 +9312,7 @@ rd_kafka_IncrementalAlterConfigs_result_resources(
  * Synonym configuration entries are returned if the broker supports
  * it (broker version >= 1.1.0). See rd_kafka_ConfigEntry_synonyms().
  *
- * @remark On Confluent Server and Confluent Cloud, the result for a topic
+ * @remark On Confluent Platform and Confluent Cloud, the result for a topic
  *         with a Schema Registry subject association includes
  *         \c confluent.value.association and/or
  *         \c confluent.key.association entries. Apache Kafka doesn't

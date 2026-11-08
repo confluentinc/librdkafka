@@ -3395,6 +3395,9 @@ void rd_kafka_mock_cluster_destroy(rd_kafka_mock_cluster_t *mcluster) {
         if (thrd_join(mcluster->thread, &res) != thrd_success)
                 rd_assert(!*"failed to join mock thread");
 
+        if (mcluster->rk->rk_mock.cluster == mcluster)
+                mcluster->rk->rk_mock.cluster = NULL;
+
         rd_free(mcluster);
 }
 

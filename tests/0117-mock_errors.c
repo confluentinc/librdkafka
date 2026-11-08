@@ -313,6 +313,33 @@ static void do_test_joingroup_coordinator_load_in_progress() {
         SUB_TEST_PASS();
 }
 
+static void do_test_auto_created_mock_cluster_destroy(void) {
+        rd_kafka_conf_t *conf;
+        rd_kafka_t *rk;
+        rd_kafka_mock_cluster_t *mcluster;
+
+        SUB_TEST_QUICK();
+
+        test_conf_init(&conf, NULL, 10);
+
+        test_conf_set(conf, "test.mock.num.brokers", "3");
+
+        rk = test_create_handle(RD_KAFKA_PRODUCER, conf);
+
+        mcluster = rd_kafka_handle_mock_cluster(rk);
+        TEST_ASSERT(mcluster, "missing mock cluster");
+
+        rd_kafka_mock_cluster_destroy(mcluster);
+
+        TEST_ASSERT(!rd_kafka_handle_mock_cluster(rk),
+                    "mock cluster pointer should be cleared after "
+                    "rd_kafka_mock_cluster_destroy()");
+
+        rd_kafka_destroy(rk);
+
+        SUB_TEST_PASS();
+}
+
 int main_0117_mock_errors(int argc, char **argv) {
 
         TEST_SKIP_MOCK_CLUSTER(0);
@@ -326,6 +353,8 @@ int main_0117_mock_errors(int argc, char **argv) {
         do_test_offset_commit_request_timed_out(rd_false);
 
         do_test_joingroup_coordinator_load_in_progress();
+
+        do_test_auto_created_mock_cluster_destroy();
 
         return 0;
 }

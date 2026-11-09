@@ -507,6 +507,156 @@ static void test_fetch_fast_leader_query(rd_kafka_mock_cluster_t *mcluster,
 }
 
 /**
+ * @brief Check that each of the first \p failed_cnt + 1 requests of type
+ *        \p ApiKey was sent after at least the shortest possible backoff
+ *        since the previous one: \p backoff_ms * 2^(n - 1) with -20% jitter
+ *        after the n-th failure, capped at \p backoff_max_ms.
+ *
+ * The backoff only ever delays a retry, so checking just the lower bound
+ * doesn't make the test flaky on a slow machine.
+ */
+static void check_min_backoff(rd_kafka_mock_cluster_t *mcluster,
+                              int16_t ApiKey,
+                              int failed_cnt,
+                              int backoff_ms,
+                              int backoff_max_ms) {
+        rd_kafka_mock_request_t **requests;
+        size_t request_cnt, i;
+        const int64_t max_us = (int64_t)backoff_max_ms * 1000;
+        int64_t min_us       = RD_MIN((int64_t)backoff_ms * 800, max_us);
+        int64_t previous_ts  = -1;
+        int cnt              = 0;
+
+        requests = rd_kafka_mock_get_requests(mcluster, &request_cnt);
+        for (i = 0; i < request_cnt && cnt <= failed_cnt; i++) {
+                int64_t ts;
+
+                if (rd_kafka_mock_request_api_key(requests[i]) != ApiKey)
+                        continue;
+
+                ts = rd_kafka_mock_request_timestamp(requests[i]);
+                cnt++;
+                if (previous_ts != -1) {
+                        TEST_SAY("Request %d sent %" PRId64
+                                 "us after the previous one, "
+                                 "expected at least %" PRId64 "us\n",
+                                 cnt, ts - previous_ts, min_us);
+                        TEST_ASSERT(ts - previous_ts >= min_us,
+                                    "Request %d, after %d failures, was "
+                                    "sent %" PRId64
+                                    "us after the previous one, "
+                                    "expected at least %" PRId64 "us",
+                                    cnt, cnt - 1, ts - previous_ts, min_us);
+                        min_us = RD_MIN(min_us * 2, max_us);
+                }
+                previous_ts = ts;
+        }
+        rd_kafka_mock_request_destroy_array(requests, request_cnt);
+
+        TEST_ASSERT(cnt == failed_cnt + 1,
+                    "Expected at least %d requests, got %d", failed_cnt + 1,
+                    cnt);
+}
+
+/**
+ * @brief produce test with many retries (#5646)
+ * The first 40 Produce requests fail with RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS
+ * so the same message is retried 40 times. Each retry must be backed off
+ * exponentially from retry.backoff.ms up to retry.backoff.max.ms. The backoff
+ * used to overflow from the 32nd retry with retry.backoff.ms=1 (from the 26th
+ * with the default of 100ms): some retries were then sent immediately and the
+ * backoff started over from retry.backoff.ms.
+ */
+static void test_produce_many_retries(rd_kafka_mock_cluster_t *mcluster,
+                                      const char *topic,
+                                      rd_kafka_conf_t *conf,
+                                      rd_bool_t idempotence) {
+        rd_kafka_resp_err_t errors[40];
+        const int error_cnt = (int)RD_ARRAYSIZE(errors);
+        rd_kafka_t *producer;
+        rd_kafka_topic_t *rkt;
+        int i;
+
+        SUB_TEST_QUICK("idempotence=%s", idempotence ? "true" : "false");
+        /* Restart the timeout: this runs after the other subtests. */
+        test_timeout_set(30);
+
+        test_conf_set(conf, "retry.backoff.ms", "1");
+        test_conf_set(conf, "retry.backoff.max.ms", "50");
+        test_conf_set(conf, "enable.idempotence",
+                      idempotence ? "true" : "false");
+        rd_kafka_conf_set_dr_msg_cb(conf, test_dr_msg_cb);
+
+        producer = test_create_handle(RD_KAFKA_PRODUCER, conf);
+        rkt      = test_create_producer_topic(producer, topic, NULL);
+        test_wait_topic_exists(producer, topic, 5000);
+
+        for (i = 0; i < error_cnt; i++)
+                errors[i] = RD_KAFKA_RESP_ERR_NOT_ENOUGH_REPLICAS;
+        rd_kafka_mock_push_request_errors_array(mcluster, RD_KAFKAP_Produce,
+                                                error_cnt, errors);
+        rd_kafka_mock_clear_requests(mcluster);
+
+        /* Waits for the message to be delivered. */
+        test_produce_msgs(producer, rkt, 0, RD_KAFKA_PARTITION_UA, 0, 1,
+                          "hello", 5);
+
+        check_min_backoff(mcluster, RD_KAFKAP_Produce, error_cnt, 1, 50);
+
+        rd_kafka_topic_destroy(rkt);
+        rd_kafka_destroy(producer);
+        rd_kafka_mock_clear_requests(mcluster);
+        SUB_TEST_PASS();
+}
+
+/**
+ * @brief heartbeat test with many consecutive failures (KIP 848, #5646)
+ * The first 40 ConsumerGroupHeartbeat requests fail with
+ * RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH. After each failure the consumer
+ * rejoins, and the next heartbeat must be backed off exponentially from 1ms up
+ * to retry.backoff.max.ms. The backoff used to overflow at the 32nd
+ * consecutive failure: the next heartbeat was then sent immediately and the
+ * backoff started over from 1ms.
+ */
+static void test_heartbeat_many_failures(rd_kafka_mock_cluster_t *mcluster,
+                                         const char *topic,
+                                         rd_kafka_conf_t *conf) {
+        rd_kafka_resp_err_t errors[40];
+        const int error_cnt = (int)RD_ARRAYSIZE(errors);
+        char group_id[256];
+        rd_kafka_t *consumer;
+        int i;
+
+        SUB_TEST_QUICK();
+        /* Restart the timeout: this runs after the other subtests. */
+        test_timeout_set(30);
+
+        test_conf_set(conf, "retry.backoff.max.ms", "100");
+
+        /* A new group, with no members left by the other subtests. */
+        rd_snprintf(group_id, sizeof(group_id), "%s_heartbeat_many_failures",
+                    topic);
+        consumer = test_create_consumer(group_id, NULL, conf, NULL);
+
+        for (i = 0; i < error_cnt; i++)
+                errors[i] = RD_KAFKA_RESP_ERR_FENCED_MEMBER_EPOCH;
+        rd_kafka_mock_push_request_errors_array(
+            mcluster, RD_KAFKAP_ConsumerGroupHeartbeat, error_cnt, errors);
+        rd_kafka_mock_clear_requests(mcluster);
+
+        test_consumer_subscribe(consumer, topic);
+        /* The assignment comes with the first successful heartbeat. */
+        test_consumer_wait_assignment(consumer, rd_true);
+
+        check_min_backoff(mcluster, RD_KAFKAP_ConsumerGroupHeartbeat, error_cnt,
+                          1, 100);
+
+        rd_kafka_destroy(consumer);
+        rd_kafka_mock_clear_requests(mcluster);
+        SUB_TEST_PASS();
+}
+
+/**
  * @brief Exponential Backoff (KIP 580)
  * We test all the pipelines which affect the retry mechanism for both
  * intervalled queries where jitter is added and backed off queries where both
@@ -545,6 +695,15 @@ int main_0143_exponential_backoff_mock(int argc, char **argv) {
                 test_joingroup_find_coordinator(mcluster, topic,
                                                 rd_kafka_conf_dup(conf));
         }
+
+        test_produce_many_retries(mcluster, topic, rd_kafka_conf_dup(conf),
+                                  rd_false);
+        test_produce_many_retries(mcluster, topic, rd_kafka_conf_dup(conf),
+                                  rd_true);
+        /* The heartbeat backoff only applies to the KIP 848 protocol. */
+        if (!test_consumer_group_protocol_classic())
+                test_heartbeat_many_failures(mcluster, topic,
+                                             rd_kafka_conf_dup(conf));
 
         test_mock_cluster_destroy(mcluster);
         rd_kafka_conf_destroy(conf);

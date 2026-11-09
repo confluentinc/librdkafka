@@ -1188,6 +1188,42 @@ const char *rd_kafka_purge_flags2str(int flags);
 /* Jitter Percent for exponential retry backoff */
 #define RD_KAFKA_RETRY_JITTER_PERCENT 20
 
+/**
+ * @brief Calculate the exponential backoff for a retry:
+ *        \p backoff_ms * 2^(\p retries - 1) scaled by \p jitter percent,
+ *        capped at \p backoff_max_ms.
+ *
+ * @param retries Retry count: 0 and 1 both give \p backoff_ms.
+ * @param backoff_ms Initial backoff in milliseconds (at most 300000).
+ * @param backoff_max_ms Maximum backoff in milliseconds.
+ * @param jitter Jitter in percent (at most
+ *               100 + RD_KAFKA_RETRY_JITTER_PERCENT).
+ *
+ * @returns the backoff in microseconds.
+ */
+static RD_INLINE RD_UNUSED rd_ts_t rd_kafka_retry_backoff_us(int retries,
+                                                             int backoff_ms,
+                                                             int backoff_max_ms,
+                                                             int jitter) {
+        int shift = retries > 1 ? retries - 1 : 0;
+        rd_ts_t backoff;
+
+        /* Cap shift at 34 to prevent overflow in final calculation.
+         * Accounts for multiplication by backoff_ms (max 300000)
+         * and jitter (max 1200). */
+        if (shift > 34)
+                shift = 34;
+
+        /* We are multiplying by 10 as (backoff_ms * percent * 1000)/100 ->
+         * backoff_ms * jitter * 10 */
+        backoff = ((rd_ts_t)1 << shift) * backoff_ms * jitter * 10;
+
+        if (backoff > (rd_ts_t)backoff_max_ms * 1000)
+                backoff = (rd_ts_t)backoff_max_ms * 1000;
+
+        return backoff;
+}
+
 void rd_kafka_log0(const rd_kafka_conf_t *conf,
                    const rd_kafka_t *rk,
                    const char *extra,
